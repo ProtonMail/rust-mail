@@ -4,7 +4,6 @@ mod draft_error;
 mod error_reason;
 mod event_error;
 mod login_error;
-pub(crate) mod login_flow;
 mod proton_error;
 mod session_error;
 pub(crate) mod unexpected;

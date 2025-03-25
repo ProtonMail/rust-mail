@@ -1,0 +1,104 @@
+use crate::consts::CoreBundle::HumanVerificationRequired;
+use crate::services::proton::HumanVerificationChallenge;
+use crate::services::proton::common::ApiErrorInfo;
+use crate::verification::notifier::ChallengeResponse;
+use crate::verification::{ChallengePayload, DynChallengeNotifier};
+use muon::common::{BoxFut, Sender, SenderLayer};
+use muon::util::ProtonRequestExt;
+use muon::{ProtonRequest, ProtonResponse, Result as MuonResult, Status};
+use tracing::{error, info, trace, warn};
+
+/// A type that wraps a [`ChallengeObserver`] and to implement the [`SenderLayer`] trait.
+pub struct ChallengeNotifierLayer {
+    notifier: DynChallengeNotifier,
+}
+
+#[allow(clippy::similar_names)]
+impl ChallengeNotifierLayer {
+    #[must_use]
+    pub fn new(notifier: DynChallengeNotifier) -> Self {
+        Self { notifier }
+    }
+
+    async fn on_send<S>(&self, inner: &S, req: ProtonRequest) -> MuonResult<ProtonResponse>
+    where
+        S: Sender<ProtonRequest, ProtonResponse> + ?Sized,
+    {
+        let res = match req.clone().send_with(inner).await? {
+            res if res.is(Status::UNPROCESSABLE_ENTITY) => res,
+            res => return Ok(res),
+        };
+
+        let Ok(err): MuonResult<ApiErrorInfo> = res.body_json() else {
+            error!("failed to parse API error response");
+            return Ok(res);
+        };
+
+        if err.code != HumanVerificationRequired as u32 {
+            trace!("human verification not required");
+            return Ok(res);
+        }
+
+        self.on_challenge(inner, req, res, err).await
+    }
+
+    async fn on_challenge<S>(
+        &self,
+        inner: &S,
+        req: ProtonRequest,
+        res: ProtonResponse,
+        err: ApiErrorInfo,
+    ) -> MuonResult<ProtonResponse>
+    where
+        S: Sender<ProtonRequest, ProtonResponse> + ?Sized,
+    {
+        warn!(?err, "human verification required");
+
+        let Some(details) = err.details else {
+            error!("missing human verification challenge details");
+            return Ok(res);
+        };
+
+        let Ok(challenge) = HumanVerificationChallenge::from_value(details) else {
+            error!("failed to parse human verification challenge details");
+            return Ok(res);
+        };
+
+        let Ok(payload) = ChallengePayload::try_from(challenge) else {
+            error!("failed to convert human verification challenge to payload");
+            return Ok(res);
+        };
+
+        let (token, ttype) = match self.notifier.on_challenge(payload).await {
+            ChallengeResponse::Success { token, ttype } => {
+                info!("challenge succeeded");
+                (token, ttype)
+            }
+
+            ChallengeResponse::Failure => {
+                error!("challenge failed");
+                return Ok(res);
+            }
+
+            ChallengeResponse::Cancelled => {
+                warn!("challenge cancelled");
+                return Ok(res);
+            }
+        };
+
+        req.header(("x-pm-human-verification-token", token))
+            .header(("x-pm-human-verification-token-type", ttype))
+            .send_with(inner)
+            .await
+    }
+}
+
+impl SenderLayer<ProtonRequest, ProtonResponse> for ChallengeNotifierLayer {
+    fn on_send<'a: 'fut, 'fut>(
+        &'a self,
+        inner: &'a dyn Sender<ProtonRequest, ProtonResponse>,
+        req: ProtonRequest,
+    ) -> BoxFut<'fut, MuonResult<ProtonResponse>> {
+        Box::pin(self.on_send(inner, req))
+    }
+}

@@ -30,6 +30,7 @@ use serde::Deserialize;
 #[cfg(any(test, debug_assertions))]
 use serde::Serialize;
 use serde_aux::field_attributes::deserialize_default_from_null;
+use serde_json::Error as JsonError;
 use serde_json::Value as JsonValue;
 use serde_repr::Deserialize_repr;
 #[cfg(any(test, debug_assertions))]
@@ -673,11 +674,18 @@ pub struct HighSecurity {
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct HumanVerificationChallenge {
-    /// Types of supported verification.
-    pub methods: Vec<HumanVerificationType>,
+    pub description: String,
+    pub direct: u8,
+    pub expires_at: u64,
+    pub human_verification_methods: Vec<String>,
+    pub human_verification_token: String,
+    pub web_url: String,
+}
 
-    /// Token for the verification request.
-    pub token: String,
+impl HumanVerificationChallenge {
+    pub fn from_value(value: JsonValue) -> Result<Self, JsonError> {
+        serde_json::from_value(value)
+    }
 }
 
 /// TODO: Document this struct.

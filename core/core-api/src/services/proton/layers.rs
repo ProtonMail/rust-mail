@@ -1,9 +1,12 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::DateTime;
+use cookie::{Cookie, CookieJar};
 use muon::common::{BoxFut, Sender, SenderLayer, ServiceType};
 use muon::{ProtonRequest, ProtonResponse, Result as MuonResult};
 use proton_crypto_account::proton_crypto::crypto::UnixTimestamp;
+use tokio::sync::RwLock;
 
 use crate::crypto_clock::server_crypto_clock;
 
@@ -80,7 +83,7 @@ impl SetDefaultTimeoutLayer {
         // NOTE: This is not a bug! Muon logs a warning if no timeout is explicitly set;
         // this workaround sets the timeout explicitly if it was not already set to a
         // non-default value earlier in the layer stack.
-        let req = if req.get_allowed_time() == &DEFAULT_TIMEOUT {
+        let req = if req.get_allowed_time() == DEFAULT_TIMEOUT {
             req.allowed_time(DEFAULT_TIMEOUT)
         } else {
             req
@@ -91,6 +94,53 @@ impl SetDefaultTimeoutLayer {
 }
 
 impl SenderLayer<ProtonRequest, ProtonResponse> for SetDefaultTimeoutLayer {
+    fn on_send<'a: 'fut, 'fut>(
+        &'a self,
+        inner: &'a dyn Sender<ProtonRequest, ProtonResponse>,
+        req: ProtonRequest,
+    ) -> BoxFut<'fut, MuonResult<ProtonResponse>> {
+        Box::pin(self.on_send(inner, req))
+    }
+}
+
+pub struct CookieJarLayer {
+    jar: Arc<RwLock<CookieJar>>,
+}
+
+impl CookieJarLayer {
+    /// Create a new cookie jar layer.
+    pub fn new(jar: CookieJar) -> Self {
+        Self {
+            jar: Arc::new(RwLock::new(jar)),
+        }
+    }
+}
+
+#[allow(clippy::similar_names)]
+impl CookieJarLayer {
+    async fn on_send<S>(&self, inner: &S, mut req: ProtonRequest) -> MuonResult<ProtonResponse>
+    where
+        S: Sender<ProtonRequest, ProtonResponse> + ?Sized,
+    {
+        for cookie in self.jar.read().await.iter() {
+            req = req.header(("cookie", cookie.value()));
+        }
+
+        let res = inner.send(req).await?;
+
+        for cookie in res.headers().get_all("set-cookie") {
+            if let Ok(cookie) = cookie.to_str() {
+                if let Ok(cookie) = Cookie::parse(cookie) {
+                    self.jar.write().await.add(cookie.into_owned());
+                }
+            }
+        }
+
+        Ok(res)
+    }
+}
+
+impl SenderLayer<ProtonRequest, ProtonResponse> for CookieJarLayer {
     fn on_send<'a: 'fut, 'fut>(
         &'a self,
         inner: &'a dyn Sender<ProtonRequest, ProtonResponse>,

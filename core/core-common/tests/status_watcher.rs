@@ -27,8 +27,16 @@ async fn shared_status() {
     let mock_server = MockServer::start().await;
     let mock_env = MockApiEnv::new(mock_server.uri()).with_path("/api");
     let api_config = Config::custom(mock_env);
-    let api_1 = Session::builder().with_config(&api_config).build().unwrap();
-    let api_2 = Session::builder().with_config(&api_config).build().unwrap();
+    let api_1 = Session::builder()
+        .with_config(&api_config)
+        .build()
+        .await
+        .unwrap();
+    let api_2 = Session::builder()
+        .with_config(&api_config)
+        .build()
+        .await
+        .unwrap();
     let api_3 = api_1.clone();
 
     Mock::given(method("GET"))
@@ -79,6 +87,7 @@ async fn make_another_request_when_stale() {
         .with_config(api_config)
         .with_status(status)
         .build()
+        .await
         .unwrap();
 
     Mock::given(method("GET"))
@@ -108,6 +117,7 @@ async fn very_bad_connection_but_responding_in_under_a_second() {
         .with_config(api_config)
         .with_status(status)
         .build()
+        .await
         .unwrap();
 
     Mock::given(method("GET"))
@@ -139,6 +149,7 @@ async fn wait_for_online() {
         .with_config(api_config)
         .with_status(status)
         .build()
+        .await
         .unwrap();
 
     Mock::given(method("GET"))
@@ -177,6 +188,7 @@ async fn multiple_subscribers() {
         .with_config(api_config)
         .with_status(status)
         .build()
+        .await
         .unwrap();
 
     Mock::given(method("GET"))
@@ -243,6 +255,7 @@ async fn status_reflected_in_response_http_code(http_code: u16, expected_status:
         .with_config(api_config)
         .with_status(status_watcher(500).await)
         .build()
+        .await
         .unwrap();
 
     Mock::given(method("GET"))

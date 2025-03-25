@@ -1,4 +1,3 @@
-use super::login_flow::HumanChallenge;
 use crate::UniffiEnum;
 use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ContextErrorReason as RealContextErrorReason,
@@ -60,7 +59,6 @@ impl From<RealContextErrorReason> for SessionErrorReason {
 /// information to the user.
 #[derive(Debug, UniffiEnum)]
 pub enum LoginErrorReason {
-    HumanVerificationChallenge(HumanChallenge),
     InvalidCredentials,
     UnsupportedTfa,
     CantUnlockUserKey,
@@ -69,9 +67,6 @@ pub enum LoginErrorReason {
 impl From<RealLoginErrorReason> for LoginErrorReason {
     fn from(reason: RealLoginErrorReason) -> Self {
         match reason {
-            RealLoginErrorReason::HumanVerificationChallenge(challenge) => {
-                LoginErrorReason::HumanVerificationChallenge(challenge.into())
-            }
             RealLoginErrorReason::InvalidCredentials => LoginErrorReason::InvalidCredentials,
             RealLoginErrorReason::UnsupportedTfa => LoginErrorReason::UnsupportedTfa,
             RealLoginErrorReason::CantUnlockUserKey => LoginErrorReason::CantUnlockUserKey,

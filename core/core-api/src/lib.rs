@@ -11,7 +11,6 @@ pub mod auth;
 pub mod connection_status;
 pub mod consts;
 pub mod crypto_clock;
-pub mod human_verification;
 pub mod login;
 pub mod service;
 pub mod services;
@@ -19,6 +18,7 @@ pub mod session;
 pub mod status_observer;
 pub mod status_watcher;
 pub mod store;
+pub mod verification;
 
 pub const MAX_PAGE_ELEMENT_COUNT: usize = 200;
 pub const SYNC_CONTACT_PAGE_SIZE: usize = 1000;

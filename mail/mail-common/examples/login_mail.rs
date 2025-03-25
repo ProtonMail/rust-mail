@@ -1,26 +1,44 @@
+use async_trait::async_trait;
 use clap::{Args, Parser, Subcommand};
 use futures::TryFutureExt;
 use proton_api_core::login::Flow;
 use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_api_core::services::proton::muon::util::BoxErrExt;
 use proton_api_core::session::Config;
+use proton_api_core::verification::ChallengeLoader;
+use proton_api_core::verification::ChallengeNotifier;
+use proton_api_core::verification::ChallengePayload;
+use proton_api_core::verification::ChallengeResponse;
 use proton_core_common::CoreAccountState;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::{KeyChain, KeyChainEntryKind, KeyChainError};
+use proton_mail_common::MailContextError;
+use proton_mail_common::MailUserContextInitializationCallback;
+use proton_mail_common::MailUserContextLoadingStage;
 use proton_mail_common::{MailContext, MailUserContext};
 use secrecy::{ExposeSecret, SecretString};
+use std::error::Error as StdError;
 use std::fs;
 use std::io::{Result as IoResult, Write, stdin, stdout};
 use std::path::{Path, PathBuf};
+use std::result::Result as StdResult;
 use std::sync::Arc;
 use tracing::{error, info};
+use tracing_subscriber::{EnvFilter, fmt};
 
-type Result<T, E = Box<dyn std::error::Error>> = std::result::Result<T, E>;
+type Result<T, E = Box<dyn StdError>> = StdResult<T, E>;
+
+const CACHE_SIZE: u64 = 1 << 20;
+
+#[ctor::ctor]
+fn init() {
+    let filter = EnvFilter::from_default_env();
+
+    fmt().with_env_filter(filter).pretty().init();
+}
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt().pretty().init();
-
     Cli::parse().run().inspect_err(|e| error!("{e}")).await?;
 
     Ok(())
@@ -123,19 +141,19 @@ async fn new_mail_ctx<T: KeyChain + 'static>(
     kch: T,
     cfg: Config,
 ) -> Result<Arc<MailContext>> {
-    let kch = Arc::new(kch);
-    let cache_path = dir.join("cache");
-    let cache_size = 1 << 20;
+    let keychain = Arc::new(kch);
+    let notifier = Arc::new(HvNotifier::new(cfg.clone()));
 
     Ok(MailContext::new(
         dir.join("session"),
         dir.join("user"),
-        cache_path.join("core"),
-        cache_path.join("mail"),
-        cache_size,
+        dir.join("cache").join("core"),
+        dir.join("cache").join("mail"),
+        CACHE_SIZE,
         None,
-        kch,
+        keychain,
         cfg,
+        Some(notifier),
         None,
     )
     .await?)
@@ -154,10 +172,10 @@ async fn new_login_flow(ctx: &MailContext, username: &str) -> Result<Flow> {
             _ => continue,
         };
 
-        return Ok(ctx.resume_login_flow(acc.remote_id, session, None).await?);
+        return Ok(ctx.resume_login_flow(acc.remote_id, session).await?);
     }
 
-    Ok(ctx.new_login_flow(None)?)
+    Ok(ctx.new_login_flow().await?)
 }
 
 #[allow(clippy::print_stdout)]
@@ -217,18 +235,41 @@ impl KeyChain for OnDiskKeyChain {
 
 struct InitCb;
 
-const _: () = {
-    use proton_mail_common::{
-        MailContextError, MailUserContextInitializationCallback, MailUserContextLoadingStage,
-    };
-
-    impl MailUserContextInitializationCallback for InitCb {
-        fn on_stage(&self, stage: MailUserContextLoadingStage) {
-            info!("reached user init stage: {stage:?}");
-        }
-
-        fn on_stage_err(&self, stage: MailUserContextLoadingStage, err: MailContextError) {
-            info!("error at user init stage {stage:?}: {err}");
-        }
+impl MailUserContextInitializationCallback for InitCb {
+    fn on_stage(&self, stage: MailUserContextLoadingStage) {
+        info!("reached user init stage: {stage:?}");
     }
-};
+
+    fn on_stage_err(&self, stage: MailUserContextLoadingStage, err: MailContextError) {
+        error!("error at user init stage {stage:?}: {err}");
+    }
+}
+
+struct HvNotifier {
+    cfg: Config,
+}
+
+impl HvNotifier {
+    fn new(cfg: Config) -> Self {
+        Self { cfg }
+    }
+
+    async fn handle_challenge(&self, challenge: ChallengePayload) -> Result<ChallengeResponse> {
+        let _ = ChallengeLoader::new(self.cfg.clone())
+            .await?
+            .get(challenge.base(), challenge.path(), challenge.query(), [])
+            .await?;
+
+        Ok(ChallengeResponse::success("111111", "email"))
+    }
+}
+
+#[async_trait]
+impl ChallengeNotifier for HvNotifier {
+    async fn on_challenge(&self, payload: ChallengePayload) -> ChallengeResponse {
+        self.handle_challenge(payload)
+            .inspect_err(|e| error!("failed to handle challenge: {e:?}"))
+            .unwrap_or_else(|_| ChallengeResponse::Failure)
+            .await
+    }
+}

@@ -1,4 +1,4 @@
-use derive_more::Debug;
+use derive_more::{Debug, Deref};
 use muon::client::flow::ForkFlowResult;
 use std::borrow::Borrow;
 use std::sync::Arc;
@@ -7,13 +7,13 @@ use tokio::sync::{RwLock, watch};
 use crate::auth::UserKeySecret;
 use crate::connection_status::ConnectionStatus;
 use crate::crypto_clock::init_server_crypto_clock;
-use crate::human_verification::ChallengeObserver;
 use crate::service::ApiServiceResult;
 use crate::services::observability::store::InMemoryMetricStore;
 use crate::services::observability::{ObservabilityManager, ObservabilityMetric};
 use crate::services::proton::{self, BuildError, Proton};
 use crate::status_watcher::{StatusWatcher, StatusWatcherSubscriber};
 use crate::store::{BoxStore, DynStore, Store, TempStore};
+use crate::verification::{DynChallengeNotifier, FailNotifier};
 
 pub use muon::app::AppVersion;
 pub use muon::common::{Endpoint, Server};
@@ -44,6 +44,9 @@ pub struct Config {
 
     /// The environment to connect to.
     pub env_id: EnvId,
+
+    /// A proxy to use.
+    pub proxy: Option<String>,
 }
 
 impl Config {
@@ -78,6 +81,7 @@ impl Default for Config {
             app_version: String::from("Other"),
             user_agent: None,
             env_id: EnvId::new_prod(),
+            proxy: None,
         }
     }
 }
@@ -89,7 +93,7 @@ pub struct Builder {
     config: Config,
     store: Option<BoxStore>,
     status: Option<StatusWatcher>,
-    challenge: Option<ChallengeObserver>,
+    notifier: Option<DynChallengeNotifier>,
 }
 
 impl Builder {
@@ -122,6 +126,12 @@ impl Builder {
         self
     }
 
+    /// Set the proxy to use.
+    pub fn with_proxy(mut self, proxy: impl AsRef<str>) -> Self {
+        self.config.proxy = Some(String::from(proxy.as_ref()));
+        self
+    }
+
     /// Use the Atlas environment.
     pub fn with_atlas_env(mut self) -> Self {
         self.config.env_id = EnvId::new_atlas();
@@ -146,25 +156,26 @@ impl Builder {
         self
     }
 
-    /// Set the challenge observer.
-    pub fn with_challenge(mut self, challenge: ChallengeObserver) -> Self {
-        self.challenge = Some(challenge);
+    /// Set the challenge notifier.
+    pub fn with_notifier(mut self, notifier: DynChallengeNotifier) -> Self {
+        self.notifier = Some(notifier);
         self
     }
 
     /// Build the session from the builder.
-    pub fn build(self) -> Result<Session, BuildError> {
+    pub async fn build(self) -> Result<Session, BuildError> {
         init_server_crypto_clock();
 
         let store = self.store.unwrap_or_else(TempStore::boxed);
         let status = self.status.unwrap_or_default();
-        let challenge = self.challenge.unwrap_or_default();
+        let notifier = self.notifier.unwrap_or_else(FailNotifier::arced);
 
         let config = Arc::new(self.config);
         let store = Arc::new(RwLock::new(store));
-        let client = proton::build(&config, &store, status.observer(), challenge.clone())?;
+        let client = proton::build(&config, &store, &status, notifier).await?;
 
         status.initialize(client.clone());
+
         let observability = ObservabilityManager::create_and_start(
             client.clone(),
             InMemoryMetricStore::new(),
@@ -178,21 +189,20 @@ impl Builder {
             config,
             store,
             status,
-            challenge,
             observability,
         })
     }
 }
 
 /// An API session, capable of making requests to the API on behalf of a user.
-#[derive(Debug, Clone)]
+#[derive(Debug, Deref, Clone)]
 #[debug("Session {{ client: {client:?}, config: {config:?} }}")]
 pub struct Session {
+    #[deref]
     client: Proton,
     config: Arc<Config>,
     store: DynStore,
     status: StatusWatcher,
-    challenge: ChallengeObserver,
     observability: ObservabilityManager,
 }
 
@@ -202,8 +212,8 @@ impl Session {
     /// # Errors
     ///
     /// Returns error if the API service failed to initialize.
-    pub fn new() -> Result<Self, BuildError> {
-        Self::builder().build()
+    pub async fn new() -> Result<Self, BuildError> {
+        Self::builder().build().await
     }
 
     /// Create a new session builder.
@@ -311,7 +321,6 @@ pub(crate) struct SessionParts {
     pub(crate) config: Arc<Config>,
     pub(crate) store: DynStore,
     pub(crate) status: StatusWatcher,
-    pub(crate) challenge: ChallengeObserver,
     pub(crate) observability: ObservabilityManager,
 }
 
@@ -325,7 +334,6 @@ impl Session {
             config: self.config,
             store: self.store,
             status: self.status,
-            challenge: self.challenge,
             observability: self.observability,
         };
 
@@ -338,7 +346,6 @@ impl Session {
             config: parts.config,
             store: parts.store,
             status: parts.status,
-            challenge: parts.challenge,
             observability: parts.observability,
         }
     }

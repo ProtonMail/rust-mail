@@ -1,6 +1,7 @@
 use crate::services::proton::common::ApiErrorInfo;
 use crate::store::StoreError;
 use muon::Status;
+use muon::error::ParseEndpointErr;
 use serde_qs::Error as QueryStringError;
 use std::fmt::{Debug, Display};
 use std::string::FromUtf8Error;
@@ -132,6 +133,10 @@ pub enum ApiServiceError {
 
     //  DATA ERRORS
     //==========================================================================
+    /// There has been a failure in parsing a URL.
+    #[error("Endpoint parsing error: {0}")]
+    ParseEndpoint(#[from] ParseEndpointErr),
+
     /// There has been a failure in encoding the query parameters to be sent with
     /// an outgoing HTTP request.
     #[error("Query encoding error: {0}")]
@@ -150,7 +155,7 @@ pub enum ApiServiceError {
     /// There has been a failure in decoding the data returned from the external
     /// API into valid UTF8 text.
     #[error("UTF8 decoding error: {0}")]
-    Utf8DecodingError(FromUtf8Error),
+    Utf8DecodingError(#[from] FromUtf8Error),
 
     //  LOGIC ERRORS
     //==========================================================================

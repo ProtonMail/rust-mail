@@ -70,9 +70,6 @@ impl From<ApiServiceError> for ProtonMailError {
 impl From<LoginError> for ProtonMailError {
     fn from(error: LoginError) -> Self {
         match error {
-            LoginError::HumanVerificationRequired(human_verification_challenge) => Self::reason(
-                LoginErrorReason::HumanVerificationChallenge(human_verification_challenge),
-            ),
             LoginError::InvalidState => Self::Unexpected(Unexpected::Internal),
             LoginError::FlowLogin(api_service_error)
             | LoginError::FlowTotp(api_service_error)

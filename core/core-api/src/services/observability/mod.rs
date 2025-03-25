@@ -203,10 +203,12 @@ impl From<&ApiServiceError> for ApiServiceObservabilityResponse {
             | ApiServiceError::NotFound(..)
             | ApiServiceError::UnprocessableEntity(..)
             | ApiServiceError::TooManyRequests(..) => ApiServiceObservabilityResponse::Http4xx,
+
             ApiServiceError::InternalServerError(..)
             | ApiServiceError::NotImplemented(..)
             | ApiServiceError::ServiceUnavailable(..)
             | ApiServiceError::BadGateway(..) => ApiServiceObservabilityResponse::Http5xx,
+
             ApiServiceError::OtherHttpError(..)
             | ApiServiceError::UnknownError(..)
             | ApiServiceError::AuthStore(..)
@@ -218,6 +220,7 @@ impl From<&ApiServiceError> for ApiServiceObservabilityResponse {
 
             ApiServiceError::Utf8DecodingError(..)
             | ApiServiceError::QueryStringError(..)
+            | ApiServiceError::ParseEndpoint(..)
             | ApiServiceError::RequestError(..)
             | ApiServiceError::ResponseError(..) => {
                 ApiServiceObservabilityResponse::SerializationError

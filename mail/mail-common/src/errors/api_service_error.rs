@@ -63,7 +63,7 @@ impl TryFrom<ApiServiceError> for UserApiServiceError {
             }
 
             QueryStringError(_) | RequestError(_) | ResponseError(_) | Utf8DecodingError(_)
-            | AuthStore(_) | UnknownError(_) => Err(Unexpected::Internal),
+            | ParseEndpoint(_) | AuthStore(_) | UnknownError(_) => Err(Unexpected::Internal),
         }
     }
 }

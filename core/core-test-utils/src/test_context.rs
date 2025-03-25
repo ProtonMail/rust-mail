@@ -2,7 +2,6 @@ use crate::account::{TEST_USER_ID, TEST_USER_MAIL, testdata_user_secret};
 use crate::utils::catch_all;
 use async_trait::async_trait;
 use proton_api_core::auth::{Tokens, UserKeySecret};
-use proton_api_core::human_verification::ChallengeObserver;
 use proton_api_core::services::proton::GetEventResponse;
 use proton_api_core::services::proton::{
     Action as ApiAction, AddressEvent as ApiAddressEvent,
@@ -197,6 +196,7 @@ impl TestContext {
             keychain.clone(),
             all_initializers,
             api_config.clone(),
+            None,
             tmp_dir.path().join("core-cache"),
             None,
             Some(tmp_dir.path().join("logs")),
@@ -262,7 +262,6 @@ impl TestContext {
             .user_context_from_session(
                 &self.core_session,
                 Some(StatusWatcher::with_observer(StatusObserver::test())),
-                Some(ChallengeObserver::default()),
             )
             .await
             .expect("failed to create user context")

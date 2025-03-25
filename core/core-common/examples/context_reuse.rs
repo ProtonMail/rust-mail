@@ -39,6 +39,7 @@ async fn main() {
         Arc::new(key_chain),
         [],
         config,
+        None,
         cache_dir,
         None,
         None,
@@ -46,7 +47,7 @@ async fn main() {
     .await
     .unwrap();
 
-    let mut flow = context.new_login_flow(None).unwrap();
+    let mut flow = context.new_login_flow().await.unwrap();
 
     flow.login(
         username.clone(),
@@ -62,7 +63,7 @@ async fn main() {
         .unwrap();
 
     // Create a new login for this context will fail.
-    let mut flow = context.new_login_flow(None).unwrap();
+    let mut flow = context.new_login_flow().await.unwrap();
 
     flow.login(username, password, LoginExtraInfo::default())
         .await
@@ -82,7 +83,7 @@ async fn main() {
         .await
         .unwrap();
     let ctx2 = context
-        .user_context_from_session(&sessions[0], None, None)
+        .user_context_from_session(&sessions[0], None)
         .await
         .unwrap();
 
