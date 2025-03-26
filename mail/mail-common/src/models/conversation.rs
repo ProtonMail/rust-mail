@@ -12,8 +12,8 @@ use crate::actions::{
 };
 use crate::datatypes::{
     AttachmentMetadata, ConversationLabelsCount, CustomLabel, Disposition, ExclusiveLocation,
-    InitializedComponentKey, LocalMessageId, MessageAttachmentInfos, MessageLabelsCount,
-    MessageRecipients, MessageSenders, ReadFilter, SystemLabelId,
+    LocalMessageId, MessageAttachmentInfos, MessageLabelsCount, MessageRecipients, MessageSenders,
+    ReadFilter, SystemLabelId,
 };
 use crate::find_in_query;
 use crate::models::*;
@@ -21,7 +21,6 @@ use crate::{AppError, actions::conversations::Delete};
 use anyhow::{Context, anyhow};
 use futures::future;
 use indoc::{formatdoc, indoc};
-use initialized_components::InitializedComponent;
 use itertools::Itertools;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
 use proton_api_core::service::ApiServiceError;
@@ -36,8 +35,12 @@ use proton_api_mail::services::proton::response_data::{
     Conversation as ApiConversation, ConversationLabel as ApiConversationLabel,
     MessageMetadata as ApiMessageMetadata, OperationResult,
 };
-use proton_core_common::datatypes::{LabelType, LocalLabelId, SystemLabel};
-use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
+use proton_core_common::datatypes::{
+    InitializedComponentKey, LabelType, LocalLabelId, SystemLabel,
+};
+use proton_core_common::models::{
+    InitializationError, InitializedComponent, Label, ModelExtension, ModelIdExtension,
+};
 use proton_core_common::utils::MapVec as _;
 use proton_mail_ids::LocalConversationId;
 use sqlite_watcher::watcher::TableObserver;

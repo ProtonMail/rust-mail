@@ -2,12 +2,14 @@ use std::collections::BTreeSet;
 
 use crate::AppError;
 use crate::datatypes::{
-    AlmostAllMail, ComposerDirection, ComposerMode, InitializedComponentKey, MailSettingsId,
-    MessageButtons, MimeType, MobileSettings, NextMessageOnMove, PgpScheme, PmSignature,
-    ShowImages, ShowMoved, SpamAction, SwipeAction, ViewLayout, ViewMode,
+    AlmostAllMail, ComposerDirection, ComposerMode, MailSettingsId, MessageButtons, MimeType,
+    MobileSettings, NextMessageOnMove, PgpScheme, PmSignature, ShowImages, ShowMoved, SpamAction,
+    SwipeAction, ViewLayout, ViewMode,
 };
 use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::services::proton::response_data::MailSettings as ApiMailSettings;
+use proton_core_common::datatypes::InitializedComponentKey;
+use proton_core_common::models::{InitializationError, InitializedComponent};
 use proton_crypto_inbox::keys::CryptoMailSettings;
 use smart_default::SmartDefault;
 use sqlite_watcher::watcher::TableObserver;
@@ -15,8 +17,6 @@ use stash::macros::Model;
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use tracing::debug;
-
-use super::{InitializationError, InitializedComponent};
 
 /// Mail related use settings.
 ///

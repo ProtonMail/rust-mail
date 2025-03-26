@@ -1,7 +1,7 @@
 use std::time::Duration;
 
+use crate::models::ModelExtension;
 use itertools::Itertools;
-use proton_core_common::models::ModelExtension;
 use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
 use stash::orm::Model;
@@ -26,7 +26,7 @@ pub struct InitializedComponent {
     state: InitializedComponentState,
 
     /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
+    /// `SQLite`, and is used as a consistent identifier for records when
     /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
@@ -337,7 +337,7 @@ impl TableObserver for InitializedDependenciesWatcher {
         self.sender
             .send(())
             .inspect_err(|e| {
-                tracing::error!("Failed to send notification for InitializedComponent: {e:?}")
+                tracing::error!("Failed to send notification for InitializedComponent: {e:?}");
             })
             .ok();
     }

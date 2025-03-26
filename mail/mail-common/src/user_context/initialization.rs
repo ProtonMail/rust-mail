@@ -1,17 +1,16 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::datatypes::InitializedComponentKey;
-use crate::models::{
-    InitializationError, InitializedComponent, LabelWithCounters, MailSettings, StoreLabelCounters,
-};
+use crate::models::{LabelWithCounters, MailSettings, StoreLabelCounters};
 use crate::{MailContextError, MailUserContext};
 use futures::try_join;
 use proton_api_core::services::proton::Proton;
 use proton_core_common::CoreContextError;
 use proton_core_common::async_task::AsyncTaskResult;
+use proton_core_common::datatypes::InitializedComponentKey;
 use proton_core_common::models::{
-    Address, Contact, SyncedAddresses, SyncedContacts, SyncedUserSettings, User,
+    Address, Contact, InitializationError, InitializedComponent, SyncedAddresses, SyncedContacts,
+    SyncedUserSettings, User,
 };
 use proton_event_loop::EventLoopError;
 use stash::stash::Stash;

@@ -4,8 +4,8 @@ mod labels_with_counters;
 
 use indoc::formatdoc;
 use proton_api_core::services::proton::{LabelId, ProtonCore};
-use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId};
-use proton_core_common::models::{Label, LabelError};
+use proton_core_common::datatypes::{InitializedComponentKey, LabelColor, LabelType, LocalLabelId};
+use proton_core_common::models::{InitializationError, InitializedComponent, Label, LabelError};
 use sqlite_watcher::watcher::TableObserver;
 use stash::stash::{Stash, WatcherHandle};
 use stash::{
@@ -16,10 +16,7 @@ use stash::{
     stash::{StashError, Tether},
 };
 
-use crate::datatypes::InitializedComponentKey;
-
-use super::initialized_components::InitializedComponent;
-use super::{ConversationCounters, InitializationError, MessageCounters};
+use super::{ConversationCounters, MessageCounters};
 
 /// Helper data structure until we move from Stash to existing, mature ORM.
 ///

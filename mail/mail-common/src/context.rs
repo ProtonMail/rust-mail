@@ -1,5 +1,4 @@
 use crate::actions::MailActionError;
-use crate::models::InitializationError;
 use crate::{AppError, MailUserContext, draft};
 use futures::executor::block_on;
 use proton_action_queue::action::{Action, WriterGuardError};
@@ -17,6 +16,7 @@ use proton_core_common::action_queue::{
 };
 use proton_core_common::async_task::{AsyncTaskResult, TaskSpawner};
 use proton_core_common::db::account::{CoreAccount, CoreSession};
+use proton_core_common::models::InitializationError;
 use proton_core_common::models::LabelError;
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::{

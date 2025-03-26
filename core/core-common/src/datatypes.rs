@@ -761,6 +761,73 @@ impl From<DeviceEnvironment> for ApiDeviceEnvironment {
     }
 }
 
+/// Key that identifies components used in the initialization.
+/// Used to determine if something was already initialized or not.
+///
+#[derive(Clone, Copy, Debug, PartialEq, Eq, TryFrom, PartialOrd, Ord)]
+#[try_from(repr)]
+#[repr(u8)]
+pub enum InitializedComponentKey {
+    // If one component needs more than one transaction to initialize, one needs to split the key into multiple stages
+    /// Fetching labels
+    Labels = 0,
+    /// Fetching contact book
+    Contacts = 1,
+    /// Fetching label counters
+    Counters = 2,
+    /// Initializing event loop
+    Events = 3,
+    /// Fetching user settings
+    UserSettings = 4,
+    /// Fetching mail settings
+    MailSettings = 5,
+    /// Fetching addresses
+    Addresses = 6,
+}
+
+impl FromSql for InitializedComponentKey {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
+    }
+}
+
+impl ToSql for InitializedComponentKey {
+    fn to_sql(&self) -> proton_sqlite3::rusqlite::Result<ToSqlOutput<'_>> {
+        Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
+    }
+}
+
+/// State in which component is in the initialization.
+/// Used to determine if something was already initialized or not.
+///
+#[derive(Clone, Copy, Debug, PartialEq, Eq, TryFrom, Default)]
+#[try_from(repr)]
+#[repr(u8)]
+pub enum InitializedComponentState {
+    /// Component needs initializing. Default state.
+    #[default]
+    NotInitialized = 0,
+    /// Component failed to initialize. Can cascade on other components.
+    Failed = 1,
+    /// Component has been sucesfully initialized. Does not require repetetive
+    /// initialization.
+    Succeeded = 2,
+}
+
+impl FromSql for InitializedComponentState {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        let val = u8::column_result(value)?;
+        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
+    }
+}
+
+impl ToSql for InitializedComponentState {
+    fn to_sql(&self) -> proton_sqlite3::rusqlite::Result<ToSqlOutput<'_>> {
+        Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
+    }
+}
+
 //  STRUCTS
 //==============================================================================
 
