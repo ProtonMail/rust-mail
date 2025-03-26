@@ -15,7 +15,7 @@ use stash::stash::{Bond, Stash};
 
 use crate::models::ModelIdExtension;
 
-use super::{InitializationError, InitializedComponent};
+use super::{InitializationError, InitializationWatcherHandle, InitializedComponent};
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
@@ -141,6 +141,7 @@ impl Address {
     /// This function is idempotent. If successfully initialized in the past.
     ///
     pub async fn initialize<API>(
+        watcher: InitializationWatcherHandle,
         api: &API,
         stash: &Stash,
     ) -> Result<(), InitializationError<CoreContextError>>
@@ -148,6 +149,7 @@ impl Address {
         API: ProtonCore,
     {
         InitializedComponent::initialize::<CoreContextError, SyncedAddresses>(
+            watcher,
             Self::INIT_KEY,
             &[],
             stash.connection(),

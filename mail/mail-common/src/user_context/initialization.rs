@@ -7,7 +7,8 @@ use futures::try_join;
 use proton_core_common::async_task::AsyncTaskResult;
 use proton_core_common::datatypes::InitializationKey;
 use proton_core_common::models::{
-    Address, Contact, InitializationError, InitializedComponent, User,
+    Address, Contact, InitializationError, InitializationWatcher, InitializationWatcherHandle,
+    InitializedComponent, User,
 };
 use proton_event_loop::EventLoopError;
 use tokio::task::JoinHandle;
@@ -15,6 +16,7 @@ use tracing::{Level, debug, error, warn};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum MailUserContextLoadingStage {
+    Initialization,
     UserSettings,
     MailSettings,
     Addresses,
@@ -88,36 +90,50 @@ impl MailUserContext {
         ctx: Arc<Self>,
         cb: &dyn MailUserContextInitializationCallback,
     ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
+        let watcher = InitializationWatcher::new(ctx.user_stash())
+            .map_err(|e| (MailUserContextLoadingStage::Initialization, e.into()))?;
+        let watcher_clone = watcher.clone();
+        let watcher_task_handle = ctx.spawn(async move { watcher_clone.task().await });
+
         let t0 = Instant::now();
         let ctx_clone = ctx.clone();
+        let watcher_handle = watcher.subscribe();
         let labels = ctx.spawn(async move {
-            LabelWithCounters::initialize(ctx_clone.api(), ctx_clone.user_stash()).await
+            LabelWithCounters::initialize(watcher_handle, ctx_clone.api(), ctx_clone.user_stash())
+                .await
         });
         let ctx_clone = ctx.clone();
+        let watcher_handle = watcher.subscribe();
         let counters = ctx.spawn(async move {
-            StoreLabelCounters::initialize(ctx_clone.api(), ctx_clone.user_stash()).await
+            StoreLabelCounters::initialize(watcher_handle, ctx_clone.api(), ctx_clone.user_stash())
+                .await
         });
         let ctx_clone = ctx.clone();
-        let contacts =
-            ctx.spawn(
-                async move { Contact::initialize(ctx_clone.api(), ctx_clone.user_stash()).await },
-            );
+        let watcher_handle = watcher.subscribe();
+        let contacts = ctx.spawn(async move {
+            Contact::initialize(watcher_handle, ctx_clone.api(), ctx_clone.user_stash()).await
+        });
 
         let ctx_clone = ctx.clone();
-        let event_loop = ctx.spawn(async move { initialize_event_loop(ctx_clone.as_ref()).await });
+        let watcher_handle = watcher.subscribe();
+        let event_loop = ctx
+            .spawn(async move { initialize_event_loop(watcher_handle, ctx_clone.as_ref()).await });
         let ctx_clone = ctx.clone();
+        let watcher_handle = watcher.subscribe();
         let user_settings = ctx.spawn(async move {
-            User::initialize_with_settings(ctx_clone.api(), ctx_clone.user_stash()).await
+            User::initialize_with_settings(watcher_handle, ctx_clone.api(), ctx_clone.user_stash())
+                .await
         });
         let ctx_clone = ctx.clone();
+        let watcher_handle = watcher.subscribe();
         let mail_settings = ctx.spawn(async move {
-            MailSettings::initialize(ctx_clone.api(), ctx_clone.user_stash()).await
+            MailSettings::initialize(watcher_handle, ctx_clone.api(), ctx_clone.user_stash()).await
         });
         let ctx_clone = ctx.clone();
-        let addresses =
-            ctx.spawn(
-                async move { Address::initialize(ctx_clone.api(), ctx_clone.user_stash()).await },
-            );
+        let watcher_handle = watcher.subscribe();
+        let addresses = ctx.spawn(async move {
+            Address::initialize(watcher_handle, ctx_clone.api(), ctx_clone.user_stash()).await
+        });
 
         try_join!(
             Self::initial_sync_for(MailUserContextLoadingStage::Labels, labels, cb),
@@ -130,6 +146,7 @@ impl MailUserContext {
         )?;
 
         debug!("Syncing Complete in {:?}", t0.elapsed());
+        watcher_task_handle.abort();
         cb.on_stage(MailUserContextLoadingStage::Finished);
 
         Ok(())
@@ -142,10 +159,12 @@ impl MailUserContext {
 const EVENT_INIT_KEY: InitializationKey = InitializationKey::new("events");
 
 async fn initialize_event_loop(
+    watcher: InitializationWatcherHandle,
     ctx_clone: &MailUserContext,
 ) -> Result<(), InitializationError<EventLoopError>> {
     let stash = ctx_clone.user_stash();
     InitializedComponent::initialize::<EventLoopError, ()>(
+        watcher,
         EVENT_INIT_KEY,
         &[],
         stash.connection(),

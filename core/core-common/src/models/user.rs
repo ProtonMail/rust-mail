@@ -10,7 +10,10 @@ use stash::orm::Model;
 use stash::stash::StashError;
 use stash::stash::{Bond, Stash};
 
-use super::{InitializationError, InitializedComponent, ModelExtension as _, UserSettings};
+use super::{
+    InitializationError, InitializationWatcherHandle, InitializedComponent, ModelExtension as _,
+    UserSettings,
+};
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
@@ -209,6 +212,7 @@ impl User {
     /// This function is idempotent. If successfully initialized in the past.
     ///
     pub async fn initialize_with_settings<API>(
+        watcher: InitializationWatcherHandle,
         api: &API,
         stash: &Stash,
     ) -> Result<(), InitializationError<CoreContextError>>
@@ -216,6 +220,7 @@ impl User {
         API: ProtonCore,
     {
         InitializedComponent::initialize::<CoreContextError, SyncedUserSettings>(
+            watcher,
             Self::INIT_KEY,
             &[],
             stash.connection(),

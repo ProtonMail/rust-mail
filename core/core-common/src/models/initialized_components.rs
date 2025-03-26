@@ -1,12 +1,11 @@
-use std::time::Duration;
+use std::sync::Arc;
 
 use crate::models::ModelExtension;
 use itertools::Itertools;
 use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::stash::{Bond, StashError, Tether};
-use tokio::time::timeout;
+use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 
 use crate::datatypes::{InitializationKey, InitializedComponentState};
 
@@ -134,8 +133,9 @@ impl InitializedComponent {
     ///
     /// Returns an error if the database query fails.
     ///
-    #[tracing::instrument(skip(tether, fetch, store))]
+    #[tracing::instrument(skip(tether, fetch, store, watcher))]
     pub async fn initialize<E, CTX>(
+        watcher: InitializationWatcherHandle,
         key: InitializationKey,
         dependencies: &[InitializationKey],
         mut tether: Tether,
@@ -169,8 +169,7 @@ impl InitializedComponent {
         };
 
         tracing::debug!("Fetched");
-
-        if let Err(e) = Self::wait_for_dependencies(key, dependencies, &tether).await {
+        if let Err(e) = Self::wait_for_dependencies(key, dependencies, watcher, &tether).await {
             tracing::error!("Component dependencies error: {e:?}");
             Self::fail(key, &mut tether).await?;
             return Err(e.into());
@@ -226,6 +225,7 @@ impl InitializedComponent {
     async fn wait_for_dependencies(
         key: InitializationKey,
         dependencies: &[InitializationKey],
+        mut watcher: InitializationWatcherHandle,
         tether: &Tether,
     ) -> Result<(), DependencyInitializationError> {
         tracing::debug!("Waiting for dependencies: {dependencies:?}");
@@ -235,26 +235,16 @@ impl InitializedComponent {
             return Ok(());
         }
 
-        let handle =
-            tether.subscribe_to(|sender| Box::new(InitializedDependenciesWatcher { sender }))?;
-
         // We already have a handle, but let's also check dependencies at least once, in case something is already initialized.
         if Self::check_dependencies(key, dependencies, tether).await? {
             return Ok(());
         }
 
-        let receiver = &handle.receiver;
         loop {
-            // Just in case watcher does not react to table change, we still want to periodically check.
-            let fut = timeout(Duration::from_secs(1), async {
-                receiver
-                    .recv_async()
-                    .await
-                    .map_err(|_| StashError::WatcherError("Connection lost".to_owned()))
-            })
-            .await;
-            if let Ok(Err(e)) = fut {
-                return Err(e.into());
+            if let Err(tokio::sync::broadcast::error::RecvError::Closed) = watcher.recv().await {
+                return Err(
+                    StashError::WatcherError("Watcher closed prematurely".to_owned()).into(),
+                );
             }
             if Self::check_dependencies(key, dependencies, tether).await? {
                 return Ok(());
@@ -321,11 +311,81 @@ pub enum DependencyInitializationError {
     Stash(#[from] StashError),
 }
 
-struct InitializedDependenciesWatcher {
+/// Watches for the changes in table and notifies multiple threads.
+pub struct InitializationWatcher {
+    /// Receives information about changes in the database
+    handle: WatcherHandle,
+
+    /// Broadcasts received notification further to components
+    sender: tokio::sync::broadcast::Sender<()>,
+}
+
+/// Handle that allows component to wait for dependency
+pub struct InitializationWatcherHandle(tokio::sync::broadcast::Receiver<()>);
+
+impl std::ops::Deref for InitializationWatcherHandle {
+    type Target = tokio::sync::broadcast::Receiver<()>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl std::ops::DerefMut for InitializationWatcherHandle {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl InitializationWatcher {
+    pub fn new(stash: &Stash) -> Result<Arc<Self>, StashError> {
+        let handle = stash
+            .subscribe_to(|sender| Box::new(InitializedDependenciesTableWatcher { sender }))?;
+        let (tx, _rx) = tokio::sync::broadcast::channel(1);
+
+        let this = Self { handle, sender: tx };
+
+        Ok(Arc::new(this))
+    }
+
+    /// Subscribe to changes in that table
+    #[must_use]
+    pub fn subscribe(&self) -> InitializationWatcherHandle {
+        InitializationWatcherHandle(self.sender.subscribe())
+    }
+
+    /// Tokio task
+    pub async fn task(self: Arc<Self>) -> Result<(), StashError> {
+        let receiver = &self.handle.receiver;
+
+        loop {
+            receiver
+                .recv_async()
+                .await
+                .inspect_err(|e| {
+                    tracing::error!("Initialization watcher failed to observe table: {e:?}");
+                })
+                .map_err(|_| StashError::WatcherError("Connection lost".to_owned()))?;
+
+            if self
+                .sender
+                .send(())
+                .inspect_err(|e| {
+                    tracing::warn!("Initialization watcher failed to notify about change: {e:?}");
+                })
+                .is_err()
+            {
+                // No one was listening
+                return Ok(());
+            }
+        }
+    }
+}
+
+struct InitializedDependenciesTableWatcher {
     sender: flume::Sender<()>,
 }
 
-impl TableObserver for InitializedDependenciesWatcher {
+impl TableObserver for InitializedDependenciesTableWatcher {
     fn tables(&self) -> Vec<String> {
         vec![InitializedComponent::table_name().to_string()]
     }

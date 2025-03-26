@@ -31,7 +31,7 @@ use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use tokio::task::JoinSet;
 use tracing::{debug, error};
 
-use super::{InitializationError, InitializedComponent, Label};
+use super::{InitializationError, InitializationWatcherHandle, InitializedComponent, Label};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("contacts")]
@@ -326,10 +326,12 @@ impl Contact {
     /// This function is idempotent. If successfully initialized in the past.
     ///
     pub async fn initialize(
+        watcher: InitializationWatcherHandle,
         api: &Proton,
         stash: &Stash,
     ) -> Result<(), InitializationError<CoreContextError>> {
         InitializedComponent::initialize::<CoreContextError, SyncedContacts>(
+            watcher,
             Self::INIT_KEY,
             &[Label::INIT_KEY],
             stash.connection(),

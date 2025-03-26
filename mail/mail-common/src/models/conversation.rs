@@ -37,7 +37,8 @@ use proton_api_mail::services::proton::response_data::{
 };
 use proton_core_common::datatypes::{InitializationKey, LabelType, LocalLabelId, SystemLabel};
 use proton_core_common::models::{
-    InitializationError, InitializedComponent, Label, ModelExtension, ModelIdExtension,
+    InitializationError, InitializationWatcherHandle, InitializedComponent, Label, ModelExtension,
+    ModelIdExtension,
 };
 use proton_core_common::utils::MapVec as _;
 use proton_mail_ids::LocalConversationId;
@@ -3574,10 +3575,12 @@ impl StoreLabelCounters {
     /// This function is idempotent. If successfully initialized in the past.
     ///
     pub async fn initialize(
+        watcher: InitializationWatcherHandle,
         api: &impl ProtonMail,
         stash: &Stash,
     ) -> Result<(), InitializationError<AppError>> {
         InitializedComponent::initialize::<AppError, Self>(
+            watcher,
             Self::INIT_KEY,
             &[Label::INIT_KEY],
             stash.connection(),

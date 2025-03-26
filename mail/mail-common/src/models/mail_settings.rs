@@ -9,7 +9,9 @@ use crate::datatypes::{
 use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::services::proton::response_data::MailSettings as ApiMailSettings;
 use proton_core_common::datatypes::InitializationKey;
-use proton_core_common::models::{InitializationError, InitializedComponent};
+use proton_core_common::models::{
+    InitializationError, InitializationWatcherHandle, InitializedComponent,
+};
 use proton_crypto_inbox::keys::CryptoMailSettings;
 use smart_default::SmartDefault;
 use sqlite_watcher::watcher::TableObserver;
@@ -226,10 +228,12 @@ impl MailSettings {
     /// This function is idempotent. If successfully initialized in the past.
     ///
     pub async fn initialize<PM: ProtonMail>(
+        watcher: InitializationWatcherHandle,
         api: &PM,
         stash: &Stash,
     ) -> Result<(), InitializationError<AppError>> {
         InitializedComponent::initialize::<AppError, SyncedMailSettings>(
+            watcher,
             Self::INIT_KEY,
             &[],
             stash.connection(),
