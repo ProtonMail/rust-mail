@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - [ET-2438] PGP/Mime attachment forward + Reply support.
   - Expose user settings via `MailUserSession::user_settings` method
+  - [ET-736] Human Verification
+  - `SystemLabel` have their values again.
 
 ### Fixed
 
