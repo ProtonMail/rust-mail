@@ -5,7 +5,7 @@ use crate::models::{LabelWithCounters, MailSettings, StoreLabelCounters};
 use crate::{MailContextError, MailUserContext};
 use futures::try_join;
 use proton_core_common::async_task::AsyncTaskResult;
-use proton_core_common::datatypes::InitializedComponentKey;
+use proton_core_common::datatypes::InitializationKey;
 use proton_core_common::models::{
     Address, Contact, InitializationError, InitializedComponent, User,
 };
@@ -136,12 +136,17 @@ impl MailUserContext {
     }
 }
 
+/// Key used to distinguish between components in the initialization.
+/// It is a string, not an enum for making it open for additional changes from different BU.
+///
+const EVENT_INIT_KEY: InitializationKey = InitializationKey::new("events");
+
 async fn initialize_event_loop(
     ctx_clone: &MailUserContext,
 ) -> Result<(), InitializationError<EventLoopError>> {
     let stash = ctx_clone.user_stash();
     InitializedComponent::initialize::<EventLoopError, ()>(
-        InitializedComponentKey::Events,
+        EVENT_INIT_KEY,
         &[],
         stash.connection(),
         async || {

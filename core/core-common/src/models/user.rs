@@ -1,5 +1,5 @@
 use crate::datatypes::{
-    Flags, InitializedComponentKey, ProductUsedSpace, UserKeys, UserMnemonicStatus, UserType,
+    Flags, InitializationKey, ProductUsedSpace, UserKeys, UserMnemonicStatus, UserType,
 };
 use crate::{CoreContextError, CoreContextResult};
 use proton_api_core::services::proton::ProtonCore;
@@ -198,6 +198,11 @@ impl User {
         Ok(SyncedUserSettings { user, settings })
     }
 
+    /// Key used to distinguish between components in the initialization.
+    /// It is a string, not an enum for making it open for additional changes from different BU.
+    ///
+    pub const INIT_KEY: InitializationKey = InitializationKey::new("user_settings");
+
     /// It initializes user and settings by syncing with the Backend.
     /// In case of successful initialization, it marks it in the [`InitializedComponents`].
     ///
@@ -211,7 +216,7 @@ impl User {
         API: ProtonCore,
     {
         InitializedComponent::initialize::<CoreContextError, SyncedUserSettings>(
-            InitializedComponentKey::UserSettings,
+            Self::INIT_KEY,
             &[],
             stash.connection(),
             async move || Self::sync_user_and_settings(api).await,

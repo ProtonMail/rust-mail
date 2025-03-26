@@ -8,18 +8,18 @@ use stash::orm::Model;
 use stash::stash::{Bond, StashError, Tether};
 use tokio::time::timeout;
 
-use crate::datatypes::{InitializedComponentKey, InitializedComponentState};
+use crate::datatypes::{InitializationKey, InitializedComponentState};
 
 /// A table that stores information about which component/service/provider is initialized and ready to work.
 /// It prevents us from double-initialization, as well as informs when the application is ready for user interactions or events from the network.
 /// If the entry exists, it means it has been initialized
 ///
-#[derive(Debug, Eq, Model, PartialEq, Clone, Copy)]
+#[derive(Debug, Eq, Model, PartialEq, Clone)]
 #[TableName("initialized_components")]
 pub struct InitializedComponent {
     /// Key which defines which component has been initialized
     #[IdField]
-    key: InitializedComponentKey,
+    key: String,
 
     /// State which defined whether component has been initialized or not.
     #[DbField]
@@ -46,7 +46,7 @@ impl InitializedComponent {
     /// Returns an error if the query fails
     ///
     async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(existing) = Self::find_by_id(self.key, bond).await? {
+        if let Some(existing) = Self::find_by_id(self.key.clone(), bond).await? {
             self.row_id = existing.row_id;
         }
 
@@ -56,10 +56,10 @@ impl InitializedComponent {
     /// Returns a list of states for all dependencies with a single SQL query
     ///
     async fn states_for_deps(
-        keys: &[InitializedComponentKey],
+        keys: &[InitializationKey],
         tether: &Tether,
     ) -> Result<Vec<InitializedComponentState>, StashError> {
-        let states = Self::find_by_ids(keys.iter().copied(), tether)
+        let states = Self::find_by_ids(keys.iter().copied().map(From::from), tether)
             .await?
             .into_iter()
             .map(|c| c.state)
@@ -95,10 +95,10 @@ impl InitializedComponent {
     }
 
     async fn state(
-        key: InitializedComponentKey,
+        key: InitializationKey,
         tether: &Tether,
     ) -> Result<InitializedComponentState, StashError> {
-        let state = Self::find_by_id(key, tether)
+        let state = Self::find_by_id(key.into(), tether)
             .await?
             .map(|c| c.state)
             .unwrap_or_default();
@@ -110,10 +110,7 @@ impl InitializedComponent {
     ///
     /// Returns an error if the database query fails.
     ///
-    async fn is_initialized(
-        key: InitializedComponentKey,
-        tether: &Tether,
-    ) -> Result<bool, StashError> {
+    async fn is_initialized(key: InitializationKey, tether: &Tether) -> Result<bool, StashError> {
         let state = Self::state(key, tether).await?;
         Ok(matches!(state, InitializedComponentState::Succeeded))
     }
@@ -139,8 +136,8 @@ impl InitializedComponent {
     ///
     #[tracing::instrument(skip(tether, fetch, store))]
     pub async fn initialize<E, CTX>(
-        key: InitializedComponentKey,
-        dependencies: &[InitializedComponentKey],
+        key: InitializationKey,
+        dependencies: &[InitializationKey],
         mut tether: Tether,
         fetch: impl AsyncFnOnce() -> Result<CTX, E> + '_,
         store: impl AsyncFnOnce(&Bond<'_>, CTX) -> Result<(), E> + '_,
@@ -195,7 +192,7 @@ impl InitializedComponent {
         tracing::debug!("Marking as {state:?}");
 
         Self {
-            key,
+            key: key.into(),
             state,
             row_id: None,
         }
@@ -209,10 +206,10 @@ impl InitializedComponent {
         res.map_err(InitializationError::InitializationFailed)
     }
 
-    async fn fail(key: InitializedComponentKey, tether: &mut Tether) -> Result<(), StashError> {
+    async fn fail(key: InitializationKey, tether: &mut Tether) -> Result<(), StashError> {
         let tx = tether.transaction().await?;
         Self {
-            key,
+            key: key.into(),
             state: InitializedComponentState::Failed,
             row_id: None,
         }
@@ -227,8 +224,8 @@ impl InitializedComponent {
     /// That creates a cascade effect.
     ///
     async fn wait_for_dependencies(
-        key: InitializedComponentKey,
-        dependencies: &[InitializedComponentKey],
+        key: InitializationKey,
+        dependencies: &[InitializationKey],
         tether: &Tether,
     ) -> Result<(), DependencyInitializationError> {
         tracing::debug!("Waiting for dependencies: {dependencies:?}");
@@ -270,8 +267,8 @@ impl InitializedComponent {
     /// If all succeeed, it returns true.
     /// Otherwise, false
     async fn check_dependencies(
-        key: InitializedComponentKey,
-        dependencies: &[InitializedComponentKey],
+        key: InitializationKey,
+        dependencies: &[InitializationKey],
         tether: &Tether,
     ) -> Result<bool, DependencyInitializationError> {
         let states = Self::states_for_deps(dependencies, tether).await?;
@@ -281,7 +278,7 @@ impl InitializedComponent {
 
         match state {
             InitializedComponentState::Failed => {
-                Err(DependencyInitializationError::DependencyFailed(key))
+                Err(DependencyInitializationError::DependencyFailed(key.into()))
             }
             InitializedComponentState::Succeeded => Ok(true),
             InitializedComponentState::NotInitialized => Ok(false),
@@ -296,8 +293,8 @@ pub enum InitializationError<E> {
     #[error("Initialization failed: {0:?}")]
     InitializationFailed(E),
 
-    #[error("Initialization of the dependency {0:?} failed")]
-    DependencyFailed(InitializedComponentKey),
+    #[error("Initialization of the dependency {0} failed")]
+    DependencyFailed(String),
 
     #[error(transparent)]
     Stash(#[from] StashError),
@@ -317,8 +314,8 @@ impl<E> From<DependencyInitializationError> for InitializationError<E> {
 /// Error that happened while waiting for the dependency
 #[derive(Debug, thiserror::Error)]
 pub enum DependencyInitializationError {
-    #[error("Initialization of the dependency for {0:?} failed")]
-    DependencyFailed(InitializedComponentKey),
+    #[error("Initialization of the dependency for {0} failed")]
+    DependencyFailed(String),
 
     #[error(transparent)]
     Stash(#[from] StashError),

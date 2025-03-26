@@ -761,40 +761,22 @@ impl From<DeviceEnvironment> for ApiDeviceEnvironment {
     }
 }
 
-/// Key that identifies components used in the initialization.
-/// Used to determine if something was already initialized or not.
+/// Key used to distinguish between components in the initialization.
+/// It is a string, not an enum for making it open for additional changes from different BU.
 ///
-#[derive(Clone, Copy, Debug, PartialEq, Eq, TryFrom, PartialOrd, Ord)]
-#[try_from(repr)]
-#[repr(u8)]
-pub enum InitializedComponentKey {
-    // If one component needs more than one transaction to initialize, one needs to split the key into multiple stages
-    /// Fetching labels
-    Labels = 0,
-    /// Fetching contact book
-    Contacts = 1,
-    /// Fetching label counters
-    Counters = 2,
-    /// Initializing event loop
-    Events = 3,
-    /// Fetching user settings
-    UserSettings = 4,
-    /// Fetching mail settings
-    MailSettings = 5,
-    /// Fetching addresses
-    Addresses = 6,
-}
-
-impl FromSql for InitializedComponentKey {
-    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        let val = u8::column_result(value)?;
-        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct InitializationKey(&'static str);
+impl InitializationKey {
+    /// Creates a new key.
+    #[must_use]
+    pub const fn new(s: &'static str) -> Self {
+        Self(s)
     }
 }
 
-impl ToSql for InitializedComponentKey {
-    fn to_sql(&self) -> proton_sqlite3::rusqlite::Result<ToSqlOutput<'_>> {
-        Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
+impl From<InitializationKey> for String {
+    fn from(value: InitializationKey) -> Self {
+        value.0.to_owned()
     }
 }
 

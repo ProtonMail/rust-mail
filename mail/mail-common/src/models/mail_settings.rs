@@ -8,7 +8,7 @@ use crate::datatypes::{
 };
 use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::services::proton::response_data::MailSettings as ApiMailSettings;
-use proton_core_common::datatypes::InitializedComponentKey;
+use proton_core_common::datatypes::InitializationKey;
 use proton_core_common::models::{InitializationError, InitializedComponent};
 use proton_crypto_inbox::keys::CryptoMailSettings;
 use smart_default::SmartDefault;
@@ -215,6 +215,11 @@ pub struct MailSettings {
 }
 
 impl MailSettings {
+    /// Key used to distinguish between components in the initialization.
+    /// It is a string, not an enum for making it open for additional changes from different BU.
+    ///
+    pub const INIT_KEY: InitializationKey = InitializationKey::new("mail_settings");
+
     /// It initializes mail settings by syncing with the Backend.
     /// In case of successful initialization, it marks it in the [`InitializedComponents`].
     ///
@@ -225,7 +230,7 @@ impl MailSettings {
         stash: &Stash,
     ) -> Result<(), InitializationError<AppError>> {
         InitializedComponent::initialize::<AppError, SyncedMailSettings>(
-            InitializedComponentKey::MailSettings,
+            Self::INIT_KEY,
             &[],
             stash.connection(),
             async move || Self::sync_mail_settings(api).await,

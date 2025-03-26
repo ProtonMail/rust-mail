@@ -35,9 +35,7 @@ use proton_api_mail::services::proton::response_data::{
     Conversation as ApiConversation, ConversationLabel as ApiConversationLabel,
     MessageMetadata as ApiMessageMetadata, OperationResult,
 };
-use proton_core_common::datatypes::{
-    InitializedComponentKey, LabelType, LocalLabelId, SystemLabel,
-};
+use proton_core_common::datatypes::{InitializationKey, LabelType, LocalLabelId, SystemLabel};
 use proton_core_common::models::{
     InitializationError, InitializedComponent, Label, ModelExtension, ModelIdExtension,
 };
@@ -3565,6 +3563,11 @@ impl ConversationCounters {
 /// Used to initialize counters by syncing it with the Backend
 pub struct StoreLabelCounters(Vec<ConversationLabelsCount>, Vec<MessageLabelsCount>);
 impl StoreLabelCounters {
+    /// Key used to distinguish between components in the initialization.
+    /// It is a string, not an enum for making it open for additional changes from different BU.
+    ///
+    pub const INIT_KEY: InitializationKey = InitializationKey::new("counters");
+
     /// It initializes counters by syncing with the Backend.
     /// In case of successful initialization, it marks it in the [`InitializedComponents`].
     ///
@@ -3575,8 +3578,8 @@ impl StoreLabelCounters {
         stash: &Stash,
     ) -> Result<(), InitializationError<AppError>> {
         InitializedComponent::initialize::<AppError, Self>(
-            InitializedComponentKey::Counters,
-            &[InitializedComponentKey::Labels],
+            Self::INIT_KEY,
+            &[Label::INIT_KEY],
             stash.connection(),
             async || {
                 let (a, b) =

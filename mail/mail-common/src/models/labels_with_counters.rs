@@ -4,7 +4,7 @@ mod labels_with_counters;
 
 use indoc::formatdoc;
 use proton_api_core::services::proton::{LabelId, ProtonCore};
-use proton_core_common::datatypes::{InitializedComponentKey, LabelColor, LabelType, LocalLabelId};
+use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId};
 use proton_core_common::models::{InitializationError, InitializedComponent, Label, LabelError};
 use sqlite_watcher::watcher::TableObserver;
 use stash::stash::{Stash, WatcherHandle};
@@ -122,7 +122,7 @@ impl LabelWithCounters {
         API: ProtonCore,
     {
         InitializedComponent::initialize::<LabelError, Vec<Label>>(
-            InitializedComponentKey::Labels,
+            Label::INIT_KEY,
             &[],
             stash.connection(),
             async || {

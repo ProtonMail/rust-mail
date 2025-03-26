@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use crate::actions::contacts::Delete as ContactsDelete;
 use crate::datatypes::{
-    ContactSuggestions, DeviceContact, GroupedContacts, InitializedComponentKey, LabelType, Labels,
+    ContactSuggestions, DeviceContact, GroupedContacts, InitializationKey, LabelType, Labels,
     LocalContactId,
 };
 use crate::models::{ContactCard, ContactEmail, ModelExtension, ModelIdExtension};
@@ -316,6 +316,10 @@ impl Contact {
         })
     }
 
+    /// Key used to distinguish between components in the initialization.
+    /// It is a string, not an enum for making it open for additional changes from different BU.
+    ///
+    pub const INIT_KEY: InitializationKey = InitializationKey::new("contacts");
     /// It initializes contats by syncing with the Backend.
     /// In case of successful initialization, it marks it in the [`InitializedComponents`].
     ///
@@ -326,8 +330,8 @@ impl Contact {
         stash: &Stash,
     ) -> Result<(), InitializationError<CoreContextError>> {
         InitializedComponent::initialize::<CoreContextError, SyncedContacts>(
-            InitializedComponentKey::Contacts,
-            &[InitializedComponentKey::Labels],
+            Self::INIT_KEY,
+            &[Label::INIT_KEY],
             stash.connection(),
             async move || Self::sync(api).await,
             async |tx, res| {

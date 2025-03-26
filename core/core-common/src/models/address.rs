@@ -1,5 +1,5 @@
 use crate::datatypes::{
-    AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, InitializedComponentKey,
+    AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, InitializationKey,
     LocalAddressId,
 };
 use crate::{CoreContextError, CoreContextResult};
@@ -131,6 +131,10 @@ impl Address {
         <Self as Model>::save(self, bond).await
     }
 
+    /// Key used to distinguish between components in the initialization.
+    /// It is a string, not an enum for making it open for additional changes from different BU.
+    ///
+    pub const INIT_KEY: InitializationKey = InitializationKey::new("addresses");
     /// It initializes addresses by syncing with the Backend.
     /// In case of successful initialization, it marks it in the [`InitializedComponents`].
     ///
@@ -144,7 +148,7 @@ impl Address {
         API: ProtonCore,
     {
         InitializedComponent::initialize::<CoreContextError, SyncedAddresses>(
-            InitializedComponentKey::Addresses,
+            Self::INIT_KEY,
             &[],
             stash.connection(),
             async || Self::sync(api).await,
