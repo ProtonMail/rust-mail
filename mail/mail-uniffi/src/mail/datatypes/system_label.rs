@@ -5,30 +5,31 @@ use uniffi::Enum as UniffiEnum;
 /// This enum represents the system labels that are available in ProtonMail.
 /// Their values corresponds to the remote ids of the labels in the core API database.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, UniffiEnum)]
+#[repr(u8)]
 pub enum SystemLabel {
-    Inbox,
-    AllDrafts,
-    AllSent,
-    Trash,
-    Spam,
-    AllMail,
-    Archive,
-    Sent,
-    Drafts,
-    Outbox,
+    Inbox = 0,
+    AllDrafts = 1,
+    AllSent = 2,
+    Trash = 3,
+    Spam = 4,
+    AllMail = 5,
+    Archive = 6,
+    Sent = 7,
+    Drafts = 8,
+    Outbox = 9,
 
-    Starred,
-    Scheduled,
-    Blocked,
-    AlmostAllMail,
-    Snoozed,
-    Pinned,
+    Starred = 10,
+    Scheduled = 12,
+    Blocked = 14,
+    AlmostAllMail = 15,
+    Snoozed = 16,
+    Pinned = 17,
 
-    CategorySocial,
-    CategoryPromotions,
-    CatergoryUpdates,
-    CategoryForums,
-    CategoryDefault,
+    CategorySocial = 20,
+    CategoryPromotions = 21,
+    CatergoryUpdates = 22,
+    CategoryForums = 23,
+    CategoryDefault = 24,
 }
 
 impl SystemLabel {
