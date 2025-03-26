@@ -585,6 +585,8 @@ impl TableObserver for ContactListWatcher {
 /// This is a manual implementation of `Contact::sync` async closure.
 ///
 /// We keep it as it is until Rust allows us to use `impl Trait` in generics etc.
+#[must_use]
+#[derive(Debug)]
 pub struct SyncedContacts {
     contacts: Vec<Contact>,
     emails: Vec<ContactEmail>,
@@ -599,6 +601,7 @@ impl SyncedContacts {
     ///
     /// Panics if the local id does exist
     ///
+    #[tracing::instrument(skip(tx))]
     pub async fn store(self, tx: &Bond<'_>) -> CoreContextResult<()> {
         let Self {
             contacts,

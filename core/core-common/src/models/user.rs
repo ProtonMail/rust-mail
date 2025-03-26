@@ -196,10 +196,11 @@ impl User {
     }
 }
 
-#[must_use]
 /// This is a manual implementation of `User::sync_user_and_settings` async closure.
 ///
 /// We keep it as it is until Rust allows us to use `impl Trait` in generics etc.
+#[must_use]
+#[derive(Debug)]
 pub struct SyncedUserSettings {
     user: User,
     settings: UserSettings,
@@ -208,6 +209,7 @@ pub struct SyncedUserSettings {
 impl SyncedUserSettings {
     /// Consume this manual closure by storing data in the Database.
     ///
+    #[tracing::instrument(skip(tx))]
     pub async fn store(self, tx: &Bond<'_>) -> CoreContextResult<()> {
         let Self {
             mut user,

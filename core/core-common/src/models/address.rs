@@ -195,6 +195,8 @@ impl From<ApiAddress> for Address {
 /// This is a manual implementation of `Address::sync` async closure.
 ///
 /// We keep it as it is until Rust allows us to use `impl Trait` in generics etc.
+#[must_use]
+#[derive(Debug)]
 pub struct SyncedAddresses {
     addresses: Vec<Address>,
 }
@@ -202,6 +204,7 @@ pub struct SyncedAddresses {
 impl SyncedAddresses {
     /// Consume this manual closure by storing data in the Database.
     ///
+    #[tracing::instrument(skip(tx))]
     pub async fn store(self, tx: &Bond<'_>) -> CoreContextResult<()> {
         for mut address in self.addresses {
             address.save(tx).await?;

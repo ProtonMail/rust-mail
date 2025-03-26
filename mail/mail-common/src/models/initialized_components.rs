@@ -53,16 +53,29 @@ impl InitializedComponent {
         <Self as Model>::save(self, bond).await
     }
 
-    /// Returns a state of all dependencies with a single SQL query
+    /// Returns a list of states for all dependencies with a single SQL query
     ///
-    async fn state_for_deps(
+    async fn states_for_deps(
         keys: &[InitializedComponentKey],
         tether: &Tether,
-    ) -> Result<InitializedComponentState, StashError> {
-        let state = Self::find_by_ids(keys.iter().copied(), tether)
+    ) -> Result<Vec<InitializedComponentState>, StashError> {
+        let states = Self::find_by_ids(keys.iter().copied(), tether)
             .await?
             .into_iter()
             .map(|c| c.state)
+            .collect();
+        Ok(states)
+    }
+
+    /// Merges states together to produce an information if the component does still depend on some other components
+    ///
+    /// If the input iterator is empty, it returns `NotInitialized` state.
+    ///
+    fn coalesce_states(
+        states: impl IntoIterator<Item = InitializedComponentState>,
+    ) -> InitializedComponentState {
+        states
+            .into_iter()
             .coalesce(|a, b| match (a, b) {
                 // If at least one of them failed, we consider it a failure
                 (_, InitializedComponentState::Failed) | (InitializedComponentState::Failed, _) => {
@@ -78,8 +91,7 @@ impl InitializedComponent {
                 _ => Ok(InitializedComponentState::Succeeded),
             })
             .next()
-            .unwrap_or_default();
-        Ok(state)
+            .unwrap_or_default()
     }
 
     async fn state(
@@ -137,9 +149,9 @@ impl InitializedComponent {
         E: std::fmt::Debug,
         CTX: Send,
     {
-        tracing::debug!("Initializing {key:?}");
+        tracing::debug!("Initializing");
         if Self::is_initialized(key, &tether).await? {
-            tracing::debug!("{key:?} is already initialized");
+            tracing::debug!("Already initialized");
             // We already initialized it
             return Ok(());
         }
@@ -149,7 +161,7 @@ impl InitializedComponent {
         // other component.
         //
         // Then we store the data, which depends on other components.
-        tracing::debug!("Fetching {key:?}");
+        tracing::debug!("Fetching");
         let fetched = match fetch().await {
             Ok(o) => o,
             Err(e) => {
@@ -159,7 +171,7 @@ impl InitializedComponent {
             }
         };
 
-        tracing::debug!("Fetched {key:?}");
+        tracing::debug!("Fetched");
 
         if let Err(e) = Self::wait_for_dependencies(key, dependencies, &tether).await {
             tracing::error!("Component dependencies error: {e:?}");
@@ -167,19 +179,20 @@ impl InitializedComponent {
             return Err(e.into());
         }
 
-        tracing::debug!("Storing {key:?}. Creating a transaction");
+        tracing::trace!("Storing. Creating a transaction");
         let tx = tether.transaction().await?;
 
-        tracing::debug!("Storing {key:?}");
-        tracing::debug!("Stored {key:?}");
+        tracing::trace!("Storing");
         let res = store(&tx, fetched).await;
+        tracing::trace!("Stored");
+
         let state = if res.is_err() {
             InitializedComponentState::Failed
         } else {
             InitializedComponentState::Succeeded
         };
 
-        tracing::debug!("Marking {key:?} as {state:?}");
+        tracing::debug!("Marking as {state:?}");
 
         Self {
             key,
@@ -189,9 +202,9 @@ impl InitializedComponent {
         .save(&tx)
         .await?;
 
-        tracing::debug!("Committing transaction");
+        tracing::trace!("Committing transaction");
         tx.commit().await?;
-        tracing::debug!("Committed");
+        tracing::trace!("Committed");
 
         res.map_err(InitializationError::InitializationFailed)
     }
@@ -261,7 +274,9 @@ impl InitializedComponent {
         dependencies: &[InitializedComponentKey],
         tether: &Tether,
     ) -> Result<bool, DependencyInitializationError> {
-        let state = Self::state_for_deps(dependencies, tether).await?;
+        let states = Self::states_for_deps(dependencies, tether).await?;
+        let state = Self::coalesce_states(states);
+
         tracing::debug!("Checking state of dependencies: {state:?}");
 
         match state {

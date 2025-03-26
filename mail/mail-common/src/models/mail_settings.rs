@@ -381,6 +381,8 @@ impl From<ApiMailSettings> for MailSettings {
 /// This is a manual implementation of `MailSettings::sync_mail_settings` async closure.
 ///
 /// We keep it as it is until Rust allows us to use `impl Trait` in generics etc.
+#[must_use]
+#[derive(Debug)]
 pub struct SyncedMailSettings {
     settings: MailSettings,
 }
@@ -388,6 +390,7 @@ pub struct SyncedMailSettings {
 impl SyncedMailSettings {
     /// Consume this manual closure by storing data in the Database.
     ///
+    #[tracing::instrument(skip(tx))]
     pub async fn store(mut self, tx: &Bond<'_>) -> Result<(), AppError> {
         self.settings.save(tx).await?;
         Ok(())
