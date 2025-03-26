@@ -54,12 +54,14 @@ pub use avatar::*;
 pub use connection_status::*;
 pub use contact_list::*;
 pub use issue_report::*;
+use itertools::Itertools;
 use muon::client::flow::LoginFlowData;
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::store::UserData;
 use proton_api_mail::services::proton::common::MessageId;
 use secrecy::SecretString;
 use stash::stash::Tether;
+use tracing::error;
 
 use core::fmt;
 use proton_api_core::auth::PasswordMode as RealPasswordMode;
@@ -1714,12 +1716,13 @@ impl From<RealPlan> for Plan {
         let offers = plan
             .offers
             .into_iter()
-            .map(|offer| serde_json::to_string(&offer).unwrap())
-            .collect();
+            .map(|offer| serde_json::to_string(&offer))
+            .try_collect()
+            .inspect_err(|e| error!("failed to serialize offer: {e:?}"))
+            .unwrap();
 
         Self {
             id: plan.id.into_inner(),
-
             description: plan.description,
             name: plan.name,
             title: plan.title,
@@ -1854,10 +1857,11 @@ pub enum PlanEntitlement {
     },
     Progress {
         text: String,
+        title: Option<String>,
         min: u64,
         max: u64,
         current: u64,
-        icon_name: String,
+        icon_name: Option<String>,
     },
 }
 
@@ -1875,12 +1879,14 @@ impl From<RealPlanEntitlement> for PlanEntitlement {
             },
             RealPlanEntitlement::Progress {
                 text,
+                title,
                 min,
                 max,
                 current,
                 icon_name,
             } => Self::Progress {
                 text,
+                title,
                 min,
                 max,
                 current,

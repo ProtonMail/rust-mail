@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Draft body not being saved
 
+### Fixed
+
+  - Made `icon_name` optional in `Entitlement::Progress`
 
 ## [0.63.0] - 2025-03-24
 

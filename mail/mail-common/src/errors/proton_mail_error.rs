@@ -17,6 +17,7 @@ use proton_core_common::ContactError;
 use proton_core_common::models::LabelError;
 use proton_event_loop::EventLoopError;
 use proton_event_loop::subscriber::SubscriberError;
+use tracing::error;
 
 /// Categories of errors that can be returned by the ProtonMail SDK.
 ///
@@ -62,7 +63,11 @@ impl From<ApiServiceError> for ProtonMailError {
 
         match UserApiServiceError::try_from(error) {
             Ok(api_service_error) => Self::ServerError(api_service_error),
-            Err(unexpected) => Self::from(unexpected),
+
+            Err(unexpected) => {
+                error!("unexpected error from ApiServiceError: {unexpected:?}");
+                Self::from(unexpected)
+            }
         }
     }
 }

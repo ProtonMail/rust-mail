@@ -124,10 +124,11 @@ pub enum PlanEntitlement {
     #[serde(rename_all = "PascalCase", rename = "progress")]
     Progress {
         text: String,
+        title: Option<String>,
         min: u64,
         max: u64,
         current: u64,
-        icon_name: String,
+        icon_name: Option<String>,
     },
 }
 

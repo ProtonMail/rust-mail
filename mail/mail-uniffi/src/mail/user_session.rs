@@ -294,12 +294,10 @@ impl MailUserSession {
             let current = res.subscriptions.into_iter().map(Into::into);
             let upcoming = res.upcoming_subscriptions.into_iter().map(Into::into);
 
-            let subscriptions = Subscriptions {
+            Result::<_, RealProtonMailError>::Ok(Subscriptions {
                 current: current.collect(),
                 upcoming: upcoming.collect(),
-            };
-
-            Result::<_, RealProtonMailError>::Ok(subscriptions)
+            })
         })
         .await
         .map_err(UserSessionError::from)
