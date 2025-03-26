@@ -5,7 +5,8 @@ use std::time::Instant;
 
 use crate::actions::contacts::Delete as ContactsDelete;
 use crate::datatypes::{
-    ContactSuggestions, DeviceContact, GroupedContacts, LabelType, Labels, LocalContactId,
+    ContactSuggestions, DeviceContact, GroupedContacts, InitializedComponentKey, LabelType, Labels,
+    LocalContactId,
 };
 use crate::models::{ContactCard, ContactEmail, ModelExtension, ModelIdExtension};
 use crate::{ContactError, CoreContextError, CoreContextResult};
@@ -30,7 +31,7 @@ use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use tokio::task::JoinSet;
 use tracing::{debug, error};
 
-use super::Label;
+use super::{InitializationError, InitializedComponent, Label};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("contacts")]
@@ -313,6 +314,28 @@ impl Contact {
             emails,
             t0,
         })
+    }
+
+    /// It initializes contats by syncing with the Backend.
+    /// In case of successful initialization, it marks it in the [`InitializedComponents`].
+    ///
+    /// This function is idempotent. If successfully initialized in the past.
+    ///
+    pub async fn initialize(
+        api: &Proton,
+        stash: &Stash,
+    ) -> Result<(), InitializationError<CoreContextError>> {
+        InitializedComponent::initialize::<CoreContextError, SyncedContacts>(
+            InitializedComponentKey::Contacts,
+            &[InitializedComponentKey::Labels],
+            stash.connection(),
+            async move || Self::sync(api).await,
+            async |tx, res| {
+                res.store(tx).await?;
+                Ok(())
+            },
+        )
+        .await
     }
 
     /// Updates the full contact with the given ID including its emails and

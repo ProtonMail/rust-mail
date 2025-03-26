@@ -1,19 +1,21 @@
-use crate::CoreContextResult;
 use crate::datatypes::{
-    AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, LocalAddressId,
+    AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, InitializedComponentKey,
+    LocalAddressId,
 };
+use crate::{CoreContextError, CoreContextResult};
 use proton_api_core::services::proton::Address as ApiAddress;
 use proton_api_core::services::proton::AddressId;
-use proton_api_core::services::proton::Proton;
 use proton_api_core::services::proton::ProtonCore;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::Bond;
 use stash::stash::StashError;
 use stash::stash::Tether;
+use stash::stash::{Bond, Stash};
 
 use crate::models::ModelIdExtension;
+
+use super::{InitializationError, InitializedComponent};
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
@@ -129,6 +131,31 @@ impl Address {
         <Self as Model>::save(self, bond).await
     }
 
+    /// It initializes addresses by syncing with the Backend.
+    /// In case of successful initialization, it marks it in the [`InitializedComponents`].
+    ///
+    /// This function is idempotent. If successfully initialized in the past.
+    ///
+    pub async fn initialize<API>(
+        api: &API,
+        stash: &Stash,
+    ) -> Result<(), InitializationError<CoreContextError>>
+    where
+        API: ProtonCore,
+    {
+        InitializedComponent::initialize::<CoreContextError, SyncedAddresses>(
+            InitializedComponentKey::Addresses,
+            &[],
+            stash.connection(),
+            async || Self::sync(api).await,
+            async |tx, res| {
+                res.store(tx).await?;
+                Ok(())
+            },
+        )
+        .await
+    }
+
     /// Download user addresses. Returns an object that can be stored in DB.
     ///
     /// # Parameters
@@ -139,7 +166,7 @@ impl Address {
     ///
     /// TODO: Document the errors.
     ///
-    pub async fn sync(api: &Proton) -> CoreContextResult<SyncedAddresses> {
+    pub async fn sync(api: &impl ProtonCore) -> CoreContextResult<SyncedAddresses> {
         let addresses = api
             .get_addresses()
             .await?

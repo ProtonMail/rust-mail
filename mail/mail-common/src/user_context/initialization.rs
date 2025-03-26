@@ -4,16 +4,12 @@ use std::time::{Duration, Instant};
 use crate::models::{LabelWithCounters, MailSettings, StoreLabelCounters};
 use crate::{MailContextError, MailUserContext};
 use futures::try_join;
-use proton_api_core::services::proton::Proton;
-use proton_core_common::CoreContextError;
 use proton_core_common::async_task::AsyncTaskResult;
 use proton_core_common::datatypes::InitializedComponentKey;
 use proton_core_common::models::{
-    Address, Contact, InitializationError, InitializedComponent, SyncedAddresses, SyncedContacts,
-    SyncedUserSettings, User,
+    Address, Contact, InitializationError, InitializedComponent, User,
 };
 use proton_event_loop::EventLoopError;
-use stash::stash::Stash;
 use tokio::task::JoinHandle;
 use tracing::{Level, debug, error, warn};
 
@@ -104,23 +100,24 @@ impl MailUserContext {
         let ctx_clone = ctx.clone();
         let contacts =
             ctx.spawn(
-                async move { initialize_contacts(ctx_clone.api(), ctx_clone.user_stash()).await },
+                async move { Contact::initialize(ctx_clone.api(), ctx_clone.user_stash()).await },
             );
 
         let ctx_clone = ctx.clone();
         let event_loop = ctx.spawn(async move { initialize_event_loop(ctx_clone.as_ref()).await });
         let ctx_clone = ctx.clone();
         let user_settings = ctx.spawn(async move {
-            initialize_user_settings(ctx_clone.api(), ctx_clone.user_stash()).await
+            User::initialize_with_settings(ctx_clone.api(), ctx_clone.user_stash()).await
         });
         let ctx_clone = ctx.clone();
         let mail_settings = ctx.spawn(async move {
             MailSettings::initialize(ctx_clone.api(), ctx_clone.user_stash()).await
         });
         let ctx_clone = ctx.clone();
-        let addresses = ctx.spawn(async move {
-            initialize_addresses(ctx_clone.api(), ctx_clone.user_stash()).await
-        });
+        let addresses =
+            ctx.spawn(
+                async move { Address::initialize(ctx_clone.api(), ctx_clone.user_stash()).await },
+            );
 
         try_join!(
             Self::initial_sync_for(MailUserContextLoadingStage::Labels, labels, cb),
@@ -137,23 +134,6 @@ impl MailUserContext {
 
         Ok(())
     }
-}
-
-async fn initialize_contacts(
-    api: &Proton,
-    stash: &Stash,
-) -> Result<(), InitializationError<CoreContextError>> {
-    InitializedComponent::initialize::<CoreContextError, SyncedContacts>(
-        InitializedComponentKey::Contacts,
-        &[InitializedComponentKey::Labels],
-        stash.connection(),
-        async move || Contact::sync(api).await,
-        async |tx, res| {
-            res.store(tx).await?;
-            Ok(())
-        },
-    )
-    .await
 }
 
 async fn initialize_event_loop(
@@ -177,40 +157,6 @@ async fn initialize_event_loop(
             Ok(())
         },
         async |_tx, ()| Ok(()),
-    )
-    .await
-}
-
-async fn initialize_user_settings(
-    api: &Proton,
-    stash: &Stash,
-) -> Result<(), InitializationError<CoreContextError>> {
-    InitializedComponent::initialize::<CoreContextError, SyncedUserSettings>(
-        InitializedComponentKey::UserSettings,
-        &[],
-        stash.connection(),
-        async move || User::sync_user_and_settings(api).await,
-        async |tx, res| {
-            res.store(tx).await?;
-            Ok(())
-        },
-    )
-    .await
-}
-
-async fn initialize_addresses(
-    api: &Proton,
-    stash: &Stash,
-) -> Result<(), InitializationError<CoreContextError>> {
-    InitializedComponent::initialize::<CoreContextError, SyncedAddresses>(
-        InitializedComponentKey::Addresses,
-        &[],
-        stash.connection(),
-        async move || Address::sync(api).await,
-        async |tx, res| {
-            res.store(tx).await?;
-            Ok(())
-        },
     )
     .await
 }

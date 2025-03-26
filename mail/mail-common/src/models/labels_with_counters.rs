@@ -109,7 +109,7 @@ pub struct LabelWithCounters {
 }
 
 impl LabelWithCounters {
-    /// It initializes labels by sincing with the Backend.
+    /// It initializes labels by syncing with the Backend.
     /// In case of successful initialization, it marks it in the [`InitializedComponents`].
     ///
     /// This function is idempotent. If successfully initialized in the past.
