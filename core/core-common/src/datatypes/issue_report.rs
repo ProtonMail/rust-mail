@@ -144,7 +144,8 @@ pub async fn report_an_issue(
     } else {
         None
     };
-    let payload = create_bug_report_payload(report, logs);
+    let account_details = user_ctx.account_details().await?;
+    let payload = create_bug_report_payload(report, account_details.email, logs);
 
     user_ctx.session().api().post_report_bug(payload).await?;
 
@@ -153,7 +154,11 @@ pub async fn report_an_issue(
 
 /// Form payload mirroring Proton's bug report API.
 ///
-fn create_bug_report_payload(report: IssueReport, logs: Option<ZippedFile>) -> PostReportBug {
+fn create_bug_report_payload(
+    report: IssueReport,
+    email: String,
+    logs: Option<ZippedFile>,
+) -> PostReportBug {
     let mut description = format!("SUMMARY\n{}", report.summary);
 
     if !report.steps_to_reproduce.is_empty() {
@@ -176,6 +181,7 @@ fn create_bug_report_payload(report: IssueReport, logs: Option<ZippedFile>) -> P
         title: report.title,
         description,
         username: String::new(),
+        email,
         logs,
     }
 }
