@@ -1,6 +1,6 @@
 use crate::MailUserContext;
 use crate::actions::MailActionError;
-use crate::datatypes::{LocalMessageId, RollbackItemType, SystemLabelId};
+use crate::datatypes::{LocalMessageId, MessageFlags, RollbackItemType, SystemLabelId};
 use crate::models::{Message, RollbackItem};
 use futures::future::try_join_all;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
@@ -65,6 +65,9 @@ impl ActionHandler for Handler {
             .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::spam()))?;
 
         Message::move_messages(spam, inbox, action.0.clone(), bond).await?;
+        for &id in &action.0 {
+            Message::set_flags(id, MessageFlags::HAM_MANUAL, bond).await?;
+        }
         Ok(())
     }
 
@@ -83,6 +86,10 @@ impl ActionHandler for Handler {
             .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::spam()))?;
 
         Message::move_messages(inbox, spam, action.0.clone(), bond).await?;
+
+        for &id in &action.0 {
+            Message::unset_flags(id, MessageFlags::HAM_MANUAL, bond).await?;
+        }
 
         let ids = Message::local_ids_counterpart(action.0.clone(), bond).await?;
         for id in ids {

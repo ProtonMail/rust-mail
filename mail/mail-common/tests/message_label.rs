@@ -15,7 +15,7 @@ use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::{Label, ModelIdExtension};
 use proton_core_test_utils::addresses::ApiAddressTestUtils;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as ApiUserKeys};
-use proton_mail_common::datatypes::SystemLabelId;
+use proton_mail_common::datatypes::{MessageFlags, SystemLabelId};
 use proton_mail_common::models::Message;
 use proton_mail_common::{MailUserContext, Mailbox};
 use proton_mail_test_utils::init::{NullCallback, Params as TestParams};
@@ -371,6 +371,7 @@ async fn message_action_ham() {
         let messages = Message::in_label(local_spam, &tether).await.unwrap();
         assert_eq!(messages.len(), 1);
         let message = &messages[0];
+        assert!(!message.flags.contains(MessageFlags::HAM_MANUAL));
 
         // Mark it as ham
         Message::action_ham(user_context.action_queue(), vec![message.local_id.unwrap()])
@@ -388,6 +389,7 @@ async fn message_action_ham() {
 
         let messages = Message::in_label(local_inbox, &tether).await.unwrap();
         assert_eq!(messages.len(), 1);
+        assert!(messages[0].flags.contains(MessageFlags::HAM_MANUAL));
     }
 }
 

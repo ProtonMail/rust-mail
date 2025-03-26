@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+### Fixed
+
+  - The spam banner will stop appearing after it's been marked as legitimate.
+
 ## [0.65.3] - 2025-03-27
 
 ### Fixed
