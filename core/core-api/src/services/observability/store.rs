@@ -58,7 +58,7 @@ impl MetricStore for InMemoryMetricStore {
     }
 
     fn remove_first_n(&mut self, count: usize) -> Result<(), anyhow::Error> {
-        self.metrics.drain(0..count);
+        self.metrics.drain(0..count.min(self.metrics.len()));
         Ok(())
     }
 }
@@ -151,5 +151,26 @@ mod tests {
         assert_eq!(batch[0].version, 3);
         assert_eq!(batch[1].version, 4);
         assert_eq!(batch[2].version, 5);
+    }
+
+    #[test]
+    fn test_inmemory_delete_more_values_than_max() {
+        let mut store = InMemoryMetricStore::new();
+        for i in 0..10 {
+            let element = PostMetricsRequestElement {
+                name: String::from("test"),
+                version: i,
+                timestamp: 33333,
+                data: PostMetricsRequestData {
+                    labels: json!({"status": "http2xx"}),
+                    value: 1,
+                },
+            };
+            store.store(element.clone()).unwrap();
+        }
+        assert_eq!(store.metrics.len(), 10);
+
+        store.remove_first_n(500).unwrap();
+        assert_eq!(store.metrics.len(), 0);
     }
 }
