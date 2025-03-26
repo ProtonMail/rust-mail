@@ -31,7 +31,6 @@ use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, StashError};
-use std::mem;
 use tracing::{debug, error, warn};
 
 /// Action which creates or updates a draft on the server.
@@ -333,8 +332,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             message
         };
 
-        let body = mem::take(&mut action.body);
-        Message::store_decrypted_message_body(message.local_id.unwrap(), body, bond)
+        Message::store_decrypted_message_body(message.local_id.unwrap(), action.body.clone(), bond)
             .await
             .inspect_err(|e| {
                 error!("Failed to store draft body in cache :{e:?}");
@@ -514,7 +512,7 @@ impl Save {
             // API always returns the same amount, but tests may not.
             debug_assert_eq!(
                 new_message_body_metadata.attachments.len(),
-                attachments.len()
+                attachments.iter().filter_map(|a| a.remote_id()).count()
             );
 
             for (index, original_attachment) in attachments

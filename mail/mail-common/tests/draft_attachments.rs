@@ -1,11 +1,14 @@
-use crate::drafts_common::{draft_message, draft_test_params, expected_create_draft_params};
+use crate::drafts_common::{
+    draft_message, draft_test_params, draft_test_params_with_mime_type,
+    expected_create_draft_params, expected_create_reply_draft_params,
+};
 use proton_api_core::consts::Mail;
 use proton_api_core::services::proton::UserId;
 use proton_api_core::services::proton::common::ApiErrorInfo;
 use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::prelude::{
-    AttachmentId, DraftAttachmentKeyPackets, MessageAttachmentHeaders, NewAttachmentDisposition,
-    NewAttachmentResponse, PostAttachmentResponse,
+    AttachmentId, DraftAction, DraftAttachmentKeyPackets, MessageAttachmentHeaders, MessageFlags,
+    NewAttachmentDisposition, NewAttachmentResponse, PostAttachmentResponse,
 };
 use proton_api_mail::services::proton::request_data::NewAttachmentParams;
 use proton_core_common::models::ModelExtension;
@@ -13,11 +16,15 @@ use proton_crypto_inbox::attachment::{
     BinaryAttachmentEncryptedSignature, BinaryAttachmentSignature, KeyPackets,
 };
 use proton_mail_common::MailUserContext;
-use proton_mail_common::datatypes::Disposition;
+use proton_mail_common::datatypes::{Disposition, MimeType};
 use proton_mail_common::draft::attachments::DraftAttachmentState;
-use proton_mail_common::draft::{Draft, DraftSyncStatus};
-use proton_mail_common::models::Attachment;
-use proton_mail_test_utils::message_body::{TEST_USER_ID, message_body_test_user_secret};
+use proton_mail_common::draft::{Draft, DraftSyncStatus, ReplyMode};
+use proton_mail_common::models::{
+    Attachment, DraftAttachmentMetadata, DraftAttachmentUploadState, Message,
+};
+use proton_mail_test_utils::message_body::{
+    TEST_USER_ID, message_body_test_message_mime, message_body_test_user_secret,
+};
 use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::stash::Tether;
 use std::path::Path;
@@ -325,6 +332,261 @@ async fn removing_uploaded_attachment() {
             .unwrap()
             .is_none()
     );
+}
+
+#[tokio::test]
+async fn draft_reply_or_forward_creates_new_attachments() {
+    let mime_type = MimeType::TextHtml;
+    let reply_mode = ReplyMode::Forward;
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params_with_mime_type(mime_type);
+    let user_ctx = ctx.mail_user_context().await;
+
+    // Create one message we can reply to.
+    let mut remote_existing_message = message_body_test_message_mime();
+    remote_existing_message.metadata.sender.address = "me@proton.me".to_owned();
+    remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
+
+    remote_existing_message.body.attachments.reverse();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.init_user(user_ctx.clone()).await;
+
+    let mut tether = user_ctx.user_stash().connection();
+    let (mut existing_message, _, _) =
+        Message::from_api_data(remote_existing_message.clone(), &tether)
+            .await
+            .unwrap();
+    let tx = tether.transaction().await.unwrap();
+    existing_message.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
+    let existing_message = existing_message;
+
+    let expected_draft_params =
+        expected_create_reply_draft_params(&existing_message, mime_type, reply_mode);
+    let mut message = draft_message();
+    message.body.attachments = remote_existing_message.body.attachments.clone();
+    if reply_mode != ReplyMode::Forward {
+        message.body.attachments.retain(|a| {
+            a.disposition == proton_api_mail::services::proton::prelude::Disposition::Inline
+        })
+    }
+    ctx.mock_get_message(
+        &remote_existing_message.metadata.id,
+        remote_existing_message.clone(),
+    )
+    .await;
+    ctx.mock_create_draft(
+        expected_draft_params.clone(),
+        Some(DraftAction::from(reply_mode)),
+        message.clone(),
+        Some(existing_message.remote_id.clone().unwrap()),
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+    // Get the message body - required to reply to draft.
+    let (_, remote_body) = Message::force_sync_message_and_body(
+        &user_ctx,
+        existing_message.remote_id.clone().unwrap(),
+        false,
+    )
+    .await
+    .unwrap();
+
+    let mut attachment_key_packets = DraftAttachmentKeyPackets::new();
+    for attachment in &remote_body.metadata.attachments {
+        let id = AttachmentId::from(uuid::Uuid::new_v4().to_string());
+        let new_key_packets = KeyPackets::from(format!("{id}-key-packets"));
+        attachment_key_packets.insert(id.clone(), new_key_packets.clone());
+        ctx.mock_create_attachment(
+            NewAttachmentParams {
+                filename: attachment.filename.clone(),
+                message_id: message.metadata.id.clone(),
+                mime_type: attachment.mime_type.to_string(),
+                disposition: match attachment.disposition {
+                    Disposition::Attachment => NewAttachmentDisposition::Attachment,
+                    Disposition::Inline => {
+                        NewAttachmentDisposition::Inline(attachment.content_id.clone().unwrap())
+                    }
+                },
+                key_packets: vec![],
+                signature: Some(BinaryAttachmentSignature::from(vec![])),
+                enc_signature: Some(BinaryAttachmentEncryptedSignature::from(vec![])),
+                data_packet: vec![],
+            },
+            Ok(PostAttachmentResponse {
+                attachment: NewAttachmentResponse {
+                    id,
+                    file_name: attachment.filename.clone(),
+                    file_size: attachment.size,
+                    disposition: match attachment.disposition {
+                        Disposition::Attachment => {
+                            proton_api_mail::services::proton::response_data::Disposition::Attachment
+                        }
+                        Disposition::Inline => {
+                            proton_api_mail::services::proton::response_data::Disposition::Inline
+                        }
+                    },
+                    key_packets: new_key_packets,
+                    signature: None,
+                    enc_signature: None,
+                    headers: MessageAttachmentHeaders {
+                        content_disposition: "disposition".to_string(),
+                        content_id: None,
+                        content_transfer_encoding: None,
+                        image_height: None,
+                        image_width: None,
+                    },
+                },
+            }),
+        )
+        .await;
+    }
+    ctx.mock_update_draft(
+        message.metadata.id.clone(),
+        expected_draft_params,
+        message.clone(),
+        attachment_key_packets,
+    )
+    .await;
+    ctx.catch_all().await;
+
+    // Create draft.
+    let mut draft = Draft::reply(
+        &user_ctx,
+        existing_message.local_id.unwrap(),
+        reply_mode,
+        true,
+    )
+    .await
+    .unwrap();
+    draft
+        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
+
+    // Execute actions.
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    draft
+        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
+
+    // Execute actions.
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    // Check attachment states.
+    let attachments = DraftAttachmentMetadata::find_by_metadata_id(
+        draft.metadata_id,
+        &user_ctx.user_stash().connection(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(attachments.len(), 3);
+    for attachment in attachments {
+        assert!(matches!(
+            attachment.state(),
+            DraftAttachmentUploadState::Uploaded
+        ));
+    }
+}
+
+#[tokio::test]
+async fn deleting_draft_metadata_cleans_not_uploaded_attachments() {
+    let mime_type = MimeType::TextHtml;
+    let reply_mode = ReplyMode::Forward;
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params_with_mime_type(mime_type);
+    let user_ctx = ctx.mail_user_context().await;
+
+    // Create one message we can reply to.
+    let mut remote_existing_message = message_body_test_message_mime();
+    remote_existing_message.metadata.sender.address = "me@proton.me".to_owned();
+    remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
+
+    remote_existing_message.body.attachments.reverse();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.init_user(user_ctx.clone()).await;
+
+    let mut tether = user_ctx.user_stash().connection();
+    let (mut existing_message, _, _) =
+        Message::from_api_data(remote_existing_message.clone(), &tether)
+            .await
+            .unwrap();
+    let tx = tether.transaction().await.unwrap();
+    existing_message.save(&tx).await.unwrap();
+    tx.commit().await.unwrap();
+    let existing_message = existing_message;
+
+    let mut message = draft_message();
+    message.body.attachments = remote_existing_message.body.attachments.clone();
+    if reply_mode != ReplyMode::Forward {
+        message.body.attachments.retain(|a| {
+            a.disposition == proton_api_mail::services::proton::prelude::Disposition::Inline
+        })
+    }
+    ctx.mock_get_message(
+        &remote_existing_message.metadata.id,
+        remote_existing_message.clone(),
+    )
+    .await;
+    ctx.catch_all().await;
+
+    Message::force_sync_message_and_body(
+        &user_ctx,
+        existing_message.remote_id.clone().unwrap(),
+        false,
+    )
+    .await
+    .unwrap();
+    // Create draft.
+    let draft = Draft::reply(
+        &user_ctx,
+        existing_message.local_id.unwrap(),
+        reply_mode,
+        true,
+    )
+    .await
+    .unwrap();
+
+    // Get attachments
+    let attachments = DraftAttachmentMetadata::find_by_metadata_id(
+        draft.metadata_id,
+        &user_ctx.user_stash().connection(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(attachments.len(), 3);
+
+    // delete draft.
+    draft.discard(user_ctx.action_queue()).await.unwrap();
+
+    // Execute actions.
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    for attachment in &attachments {
+        assert!(
+            Attachment::find_by_id(
+                attachment.local_attachment_id,
+                &user_ctx.user_stash().connection()
+            )
+            .await
+            .unwrap()
+            .is_none()
+        );
+    }
 }
 
 async fn create_and_add_attachment(

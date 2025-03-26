@@ -28,6 +28,8 @@ pub enum DraftAttachmentState {
     Uploaded,
     /// An error occurred during upload.
     Error(DraftAttachmentError),
+    /// Attachment is awaiting upload
+    Pending,
 }
 
 impl From<RealDraftAttachmentState> for DraftAttachmentState {
@@ -37,6 +39,7 @@ impl From<RealDraftAttachmentState> for DraftAttachmentState {
             RealDraftAttachmentState::Uploaded => Self::Uploaded,
             RealDraftAttachmentState::Error(e) => Self::Error(e.into()),
             RealDraftAttachmentState::Offline => Self::Offline,
+            RealDraftAttachmentState::Pending => Self::Pending,
         }
     }
 }

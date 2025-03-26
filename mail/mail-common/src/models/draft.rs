@@ -747,8 +747,8 @@ pub struct DraftAttachmentMetadata {
 impl DraftAttachmentMetadata {
     /// Create a new instance
     pub fn new(
-        local_attachment_id: LocalAttachmentId,
         metadata_id: MetadataId,
+        local_attachment_id: LocalAttachmentId,
         display_order: usize,
     ) -> Self {
         Self {
@@ -756,6 +756,29 @@ impl DraftAttachmentMetadata {
             metadata_id,
             timestamp: Utc::now().timestamp(),
             state: DraftAttachmentUploadState::Uploading,
+            action_id: None,
+            error: None,
+            ownership: DraftAttachmentOwnership::Owned,
+            display_order,
+            row_id: None,
+            deleted: false,
+        }
+    }
+
+    /// Create a new pending attachment.
+    ///
+    /// Pending attachments are attachments that automatically trigger upload actions
+    /// when the draft is saved.
+    pub fn pending(
+        metadata_id: MetadataId,
+        local_attachment_id: LocalAttachmentId,
+        display_order: usize,
+    ) -> Self {
+        Self {
+            local_attachment_id,
+            metadata_id,
+            timestamp: Utc::now().timestamp(),
+            state: DraftAttachmentUploadState::Pending,
             action_id: None,
             error: None,
             ownership: DraftAttachmentOwnership::Owned,
@@ -987,6 +1010,20 @@ impl DraftAttachmentMetadata {
     ) -> Result<usize, StashError> {
         tether.query_value::<_,usize>(formatdoc! {"SELECT IFNULL(MAX(display_order),0) AS value FROM {} WHERE metadata_id = ?", Self::table_name()}, params![metadata_id]).await
     }
+
+    /// Get the attachments id of attachments for a draft with `metadata_id` which
+    /// are in the pending state.
+    ///
+    /// # Errors
+    ///
+    /// Returns error on failure
+    ///
+    pub async fn pending_attachments(
+        metadata_id: MetadataId,
+        tether: &Tether,
+    ) -> Result<Vec<LocalAttachmentId>, StashError> {
+        tether.query_values(formatdoc! {"SELECT local_attachment_id AS value FROM {} WHERE metadata_id = ? AND state =?", Self::table_name()}, params![metadata_id, DraftAttachmentUploadState::Pending]).await
+    }
 }
 
 /// Contains the state of the attachment.
@@ -1001,6 +1038,8 @@ pub enum DraftAttachmentUploadState {
     Error = 2,
     /// Could not upload due to lack of network,
     Offline = 3,
+    /// This attachment needs an upload triggered by a save action.
+    Pending = 4,
 }
 
 impl ToSql for DraftAttachmentUploadState {
@@ -1016,6 +1055,7 @@ impl FromSql for DraftAttachmentUploadState {
             1 => Ok(DraftAttachmentUploadState::Uploaded),
             2 => Ok(DraftAttachmentUploadState::Error),
             3 => Ok(DraftAttachmentUploadState::Offline),
+            4 => Ok(DraftAttachmentUploadState::Pending),
             v => Err(FromSqlError::OutOfRange(v)),
         }
     }
@@ -1033,8 +1073,6 @@ pub enum DraftAttachmentOwnership {
     /// This is an attachment that we have full control over.
     #[default]
     Owned = 1,
-    /// This attachments originated from a PGP/Mime message
-    PgpMime = 2,
 }
 
 impl ToSql for DraftAttachmentOwnership {
@@ -1048,7 +1086,6 @@ impl FromSql for DraftAttachmentOwnership {
         match value.as_i64()? {
             0 => Ok(Self::Inherited),
             1 => Ok(Self::Owned),
-            2 => Ok(Self::PgpMime),
             v => Err(FromSqlError::OutOfRange(v)),
         }
     }
