@@ -7,7 +7,8 @@ use proton_mail_common::errors::{
     DraftSaveSendErrorReason as RealDraftSaveSendErrorReason,
     DraftUndoSendErrorReason as RealDraftUndoSendErrorReason,
     EventErrorReason as RealEventErrorReason, LoginErrorReason as RealLoginErrorReason,
-    OtherErrorReason as RealOtherErrorReason,
+    OtherErrorReason as RealOtherErrorReason, PinAuthErrorReason as RealPinAuthErrorReason,
+    PinSetErrorReason as RealPinSetErrorReason,
 };
 
 /// Specific Reason for error occurrence within ActionQueue
@@ -269,6 +270,44 @@ impl From<RealEventErrorReason> for EventErrorReason {
         match reason {
             RealEventErrorReason::Subscriber => EventErrorReason::Subscriber,
             RealEventErrorReason::Refresh => EventErrorReason::Refresh,
+        }
+    }
+}
+
+/// Specific Reason for error occurrence while creating user's PIN
+///
+#[derive(Debug, UniffiEnum)]
+pub enum PinSetErrorReason {
+    TooShort,
+    TooLong,
+    Malformed,
+}
+
+impl From<RealPinSetErrorReason> for PinSetErrorReason {
+    fn from(value: RealPinSetErrorReason) -> Self {
+        match value {
+            RealPinSetErrorReason::TooShort => Self::TooShort,
+            RealPinSetErrorReason::TooLong => Self::TooLong,
+            RealPinSetErrorReason::Malformed => Self::Malformed,
+        }
+    }
+}
+
+/// Specific Reason for error occurrence while authenticating user with PIN
+///
+#[derive(Debug, UniffiEnum)]
+pub enum PinAuthErrorReason {
+    TooManyAttempts,
+    TooFrequentAttempts,
+    IncorrectPin,
+}
+
+impl From<RealPinAuthErrorReason> for PinAuthErrorReason {
+    fn from(value: RealPinAuthErrorReason) -> Self {
+        match value {
+            RealPinAuthErrorReason::TooManyAttempts => Self::TooManyAttempts,
+            RealPinAuthErrorReason::TooFrequentAttempts => Self::TooFrequentAttempts,
+            RealPinAuthErrorReason::IncorrectPin => Self::IncorrectPin,
         }
     }
 }

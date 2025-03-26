@@ -1,8 +1,8 @@
-use crate::core::datatypes::{ApiConfig, Id};
+use crate::core::datatypes::{ApiConfig, AppProtection, Id};
 use crate::core::verification::{ChallengeNotifierWrap, DynChallengeNotifier};
 use crate::core::{FFIKeyChain, StoredAccountState, StoredSession, StoredSessionState};
 use crate::core::{OSKeyChain, StoredAccount};
-use crate::errors::{LoginError, UserSessionError, VoidSessionResult};
+use crate::errors::{LoginError, PinAuthError, PinSetError, UserSessionError, VoidSessionResult};
 use crate::mail::logging::init_log;
 use crate::mail::state::MailUserContextMap;
 use crate::mail::{LoginFlow, MailUserSession};
@@ -14,7 +14,9 @@ use crate::{
 use futures::TryFutureExt;
 use itertools::Itertools;
 use proton_core_common::db::account::SessionEncryptionKey;
+use proton_core_common::models::AppSettings;
 use proton_core_common::os::KeyChainExt;
+use proton_core_common::pin_code::PinCode;
 use proton_core_common::{CoreAccountState, CoreSessionState};
 use proton_mail_common::actions::draft::Send;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
@@ -743,6 +745,43 @@ impl MailSession {
         })
         .await
         .map_err(UserSessionError::from)
+    }
+
+    pub async fn app_protection(&self) -> Result<AppProtection, UserSessionError> {
+        let ctx = self.mail_ctx.clone();
+
+        uniffi_async(async move {
+            let tether = ctx.core_context().account_stash().connection();
+            let app_settings = AppSettings::get_or_default(&tether).await;
+
+            Result::<_, RealProtonMailError>::Ok(app_settings.protection.into())
+        })
+        .await
+        .map_err(UserSessionError::from)
+    }
+
+    pub async fn set_pin_code(&self, pin: Vec<u8>) -> Result<(), PinSetError> {
+        let ctx = self.mail_ctx.core_context().clone();
+
+        uniffi_async(async move {
+            PinCode::create_pin(&ctx, pin).await?;
+
+            Result::<_, RealProtonMailError>::Ok(())
+        })
+        .await
+        .map_err(PinSetError::from)
+    }
+
+    pub async fn verify_pin_code(&self, pin: Vec<u8>) -> Result<(), PinAuthError> {
+        let ctx = self.mail_ctx.core_context().clone();
+
+        uniffi_async(async move {
+            PinCode::validate_pin(&ctx, pin).await?;
+
+            Result::<_, RealProtonMailError>::Ok(())
+        })
+        .await
+        .map_err(PinAuthError::from)
     }
 }
 

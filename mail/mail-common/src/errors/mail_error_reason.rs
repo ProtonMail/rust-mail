@@ -14,6 +14,8 @@ pub enum MailErrorReason {
     DraftDiscardReason(DraftDiscardErrorReason),
     DraftAttachmentReason(DraftAttachmentErrorReason),
     EventReason(EventErrorReason),
+    PinSetReson(PinSetErrorReason),
+    PinAuthReson(PinAuthErrorReason),
     OtherReason(OtherErrorReason),
 }
 
@@ -50,6 +52,18 @@ impl From<DraftSaveSendErrorReason> for MailErrorReason {
 impl From<DraftUndoSendErrorReason> for MailErrorReason {
     fn from(value: DraftUndoSendErrorReason) -> Self {
         Self::DraftUndoSendReason(value)
+    }
+}
+
+impl From<PinSetErrorReason> for MailErrorReason {
+    fn from(reason: PinSetErrorReason) -> Self {
+        Self::PinSetReson(reason)
+    }
+}
+
+impl From<PinAuthErrorReason> for MailErrorReason {
+    fn from(reason: PinAuthErrorReason) -> Self {
+        Self::PinAuthReson(reason)
     }
 }
 
@@ -212,6 +226,24 @@ pub enum DraftDiscardErrorReason {
 pub enum EventErrorReason {
     Refresh,
     Subscriber,
+}
+
+/// Specific Reason for error occurrence while creating user's PIN
+///
+#[derive(Debug)]
+pub enum PinSetErrorReason {
+    TooShort,
+    TooLong,
+    Malformed,
+}
+
+/// Specific Reason for error occurrence while authenticating user with PIN
+///
+#[derive(Debug)]
+pub enum PinAuthErrorReason {
+    TooManyAttempts,
+    TooFrequentAttempts,
+    IncorrectPin,
 }
 
 /// Specific Reason for error occurrence within the application.

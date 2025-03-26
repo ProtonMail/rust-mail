@@ -26,7 +26,7 @@ pub enum PinError {
     #[error("Too frequent attempts, attempts can be made at least one second appart")]
     TooFrequentAttempts,
     #[error("Incorrect PIN")]
-    ValidationFailed,
+    IncorrectPin,
     #[error("Could not encrypt the PIN, details: `{0}`")]
     HashError(#[from] HashingError),
     #[error("Error while interacting with keychain, details: `{0}`")]
@@ -137,7 +137,7 @@ impl PinCode {
                 pin_protection.save(&bond).await?;
                 bond.commit().await?;
 
-                Err(PinError::ValidationFailed)
+                Err(PinError::IncorrectPin)
             }
         } else {
             Ok(())
