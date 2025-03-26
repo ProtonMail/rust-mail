@@ -47,7 +47,7 @@ impl EventLoop {
     /// publishing it all the registered subscribers and storing the event id for the next
     /// iteration.
     /// The execution of the loop is aborted on the first error.
-    #[tracing::instrument(name="event_poll",level=Level::DEBUG, skip(self, store, provider, subscribers))]
+    #[tracing::instrument(name="event_poll",level=Level::DEBUG, skip_all)]
     pub async fn poll<T: Event + From<<T as Event>::Response>>(
         &self,
         store: &dyn Store,

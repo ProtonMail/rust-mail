@@ -5,13 +5,14 @@ use proton_api_core::services::proton::LabelId;
 use proton_api_core::services::proton::Proton;
 use proton_api_core::services::proton::muon::util::ProtonRequestExt;
 use proton_api_core::services::proton::muon::{GET, POST, PUT, serde_to_query};
+use serde_json::json;
 use std::io::Cursor;
 use std::time::Duration;
 
 use crate::services::proton::prelude::*;
 use crate::services::proton::{MAIL_V4, Package, PostSendRequest};
 use crate::services::proton::{PostSendMessageResponse, ProtonMail};
-use crate::{MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_COUNT_U64};
+use crate::{INCOMING_DEFAULTS_PAGE_SIZE, MAX_LIMIT_VALUE_U64, MAX_PAGE_ELEMENT_COUNT_U64};
 
 impl ProtonMail for Proton {
     async fn get_attachment(&self, attachment_id: AttachmentId) -> ApiServiceResult<Bytes> {
@@ -28,6 +29,22 @@ impl ProtonMail for Proton {
         attachment_id: AttachmentId,
     ) -> ApiServiceResult<GetAttachmentMetadataResponse> {
         Ok(GET!("{MAIL_V4}/attachments/{attachment_id}/metadata")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn get_incoming_defaults(
+        &self,
+        page: u64,
+    ) -> ApiServiceResult<GetIncomingDefaultResponse> {
+        let query = json!({
+            "Page": page,
+            "PageSize": INCOMING_DEFAULTS_PAGE_SIZE,
+        });
+        Ok(GET!("{MAIL_V4}/incomingdefaults")
+            .query(serde_to_query(query)?)
             .send_with(self)
             .await?
             .ok()?

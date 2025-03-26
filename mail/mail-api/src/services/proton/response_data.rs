@@ -559,56 +559,44 @@ pub struct ConversationLabel {
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct MailEvent {
-    /// TODO: Document this field.
     #[serde(rename = "EventID")]
     pub event_id: EventId,
 
-    /// TODO: Document this field.
     pub addresses: Option<Vec<AddressEvent>>,
 
-    /// TODO: Document this field.
     pub conversation_counts: Option<Vec<ConversationCount>>,
 
-    /// TODO: Document this field.
     pub conversations: Option<Vec<ConversationEvent>>,
 
-    /// TODO: Document this field.
-    #[serde(rename = "More")]
-    #[serde_as(as = "BoolFromInt")]
-    pub has_more: bool,
+    pub incoming_defaults: Option<Vec<IncomingDefault>>,
 
-    /// TODO: Document this field.
     pub labels: Option<Vec<LabelEvent>>,
 
-    /// TODO: Document this field.
     pub mail_settings: Option<MailSettings>,
 
-    /// TODO: Document this field.
     pub message_counts: Option<Vec<MessageCount>>,
 
-    /// TODO: Document this field.
     pub messages: Option<Vec<MessageEvent>>,
 
-    /// TODO: Document this field.
     pub product_used_space: Option<ProductUsedSpace>,
 
-    /// TODO: Document this field.
     pub used_space: Option<i64>,
 
-    /// TODO: Document this field.
     pub user: Option<User>,
 
-    /// TODO: Document this field.
     pub user_settings: Option<UserSettings>,
 
-    /// TODO: Document this field.
     pub contacts: Option<Vec<ContactEvent>>,
 
-    /// TODO: Document this field.
     pub contact_emails: Option<Vec<ContactEmailEvent>>,
 
     /// Indicates whether to refresh.
     pub refresh: u8,
+
+    /// Whether we need to request more events after this.
+    #[serde(rename = "More")]
+    #[serde_as(as = "BoolFromInt")]
+    pub has_more: bool,
 }
 
 impl GetEventResponse for MailEvent {}
@@ -1316,4 +1304,41 @@ pub struct NewAttachmentResponse {
     pub enc_signature: Option<AttachmentEncryptedSignature>,
     /// Attachment headers.
     pub headers: MessageAttachmentHeaders,
+}
+
+/// The response from an incoming default, can come either in the event loop or by calling
+/// `incomingdefaults`
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct IncomingDefault {
+    /// Which label messages from this address go to
+    pub location: Option<IncomingDefaultLocation>,
+    /// What to do with this response
+    #[serde(rename = "Type")]
+    pub action: Option<Action>,
+
+    pub email: Option<String>,
+    // These are unused
+    //
+    // #[serde(rename = "ID")]
+    // pub id: String,
+    // domain: String,
+    // time: u64,
+}
+
+/// Where do messages from a sender go by default. This is handled by the backend, but we sometimes
+/// want this informaton for things like banners.
+#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[repr(u8)]
+pub enum IncomingDefaultLocation {
+    /// The messages are allowed and go to inbox
+    /// Email marked initially as spam by Proton, but marked as "OK" by the user.
+    Inbox = 0,
+    /// Marked as spam by the user, next incoming messages goes to spam directly
+    Spam = 4,
+    /// email address blocked by the user, going to permanent deleted immediately (not to trash, not to spam)
+    /// The messages are not received and are deleted automatically
+    Blocked = 14,
 }

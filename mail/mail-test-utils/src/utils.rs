@@ -365,12 +365,14 @@ pub async fn create_address(tether: &mut Tether) -> Address {
     address
 }
 
+pub const TEST_ADDRESS_EMAIL: &str = "hello@world";
+
 #[must_use]
 pub fn test_address() -> Address {
     Address {
         local_id: None,
         remote_id: Some(MY_ADDRESS_ID.clone()),
-        email: "hello@world".to_owned(),
+        email: TEST_ADDRESS_EMAIL.to_owned(),
         send: Default::default(),
         receive: Default::default(),
         status: AddressStatus::Enabled,

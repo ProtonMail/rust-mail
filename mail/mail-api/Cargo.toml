@@ -32,6 +32,7 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 wiremock = { workspace = true }
+insta = { workspace = true }
 
 [lints]
 workspace = true

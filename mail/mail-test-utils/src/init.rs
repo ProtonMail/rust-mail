@@ -20,6 +20,7 @@ use proton_api_core::services::proton::{
     GetUsersResponse,
 };
 use proton_api_mail::services::proton::common::{ConversationId, MessageId};
+use proton_api_mail::services::proton::prelude::GetIncomingDefaultResponse;
 use proton_api_mail::services::proton::response_data::MessageMetadata;
 use proton_api_mail::services::proton::response_data::{
     AlmostAllMail, Attachment as ApiAttachment, ComposerDirection, ComposerMode,
@@ -477,6 +478,21 @@ impl MailTestContext {
                 .mock_get_keys_all(&email, response)
                 .await;
         }
+
+        // Conversation counts
+        Mock::given(method("GET"))
+            .and(path("/api/mail/v4/incomingdefaults"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(GetIncomingDefaultResponse {
+                    total: 0,
+                    global_total: 0,
+                    incoming_defaults: vec![],
+                }),
+            )
+            .expect(number_of_calls)
+            .named("Setup user get conversations count")
+            .mount(self.mock_server())
+            .await;
     }
 
     /// Generate new mock expectations for retrieving conversations.

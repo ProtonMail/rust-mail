@@ -9,6 +9,8 @@ pub const MAX_PAGE_ELEMENT_COUNT_U64: u64 = 200;
 pub const MAX_LIMIT_VALUE: usize = 150;
 pub const MAX_LIMIT_VALUE_U64: u64 = 150;
 
+pub const INCOMING_DEFAULTS_PAGE_SIZE: u64 = 100;
+
 pub use proton_api_core;
 pub use session::*;
 

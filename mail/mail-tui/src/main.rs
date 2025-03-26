@@ -57,6 +57,10 @@ struct CliArgs {
     /// Default password
     #[arg(long, short)]
     password: Option<String>,
+
+    /// The event loop poll time
+    #[arg(long)]
+    event_loop_time: Option<u64>,
 }
 
 impl CliArgs {

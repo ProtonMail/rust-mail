@@ -72,6 +72,16 @@ pub trait ProtonMail {
         attachment_id: AttachmentId,
     ) -> ApiServiceResult<GetAttachmentMetadataResponse>;
 
+    /// GETs incoming defaults
+    ///
+    /// Calls the API to get a page of the incoming defaults.
+    ///
+    /// For more details see [the API documentation](https://protonmail.gitlab-pages.protontech.ch/Slim-API/mail/#tag/IncomingDefaults/operation/get_mail-%7B_version%7D-incomingdefaults).
+    async fn get_incoming_defaults(
+        &self,
+        page: u64,
+    ) -> ApiServiceResult<GetIncomingDefaultResponse>;
+
     /// Upload attachment data with the given `params`.
     ///
     /// # Errors

@@ -30,6 +30,7 @@
 mod attachment;
 pub mod attachment_cache;
 mod conversation;
+pub mod default_location;
 mod draft;
 mod labels_with_counters;
 mod mail_scroller;

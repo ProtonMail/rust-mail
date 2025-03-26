@@ -39,6 +39,7 @@ use crate::models::{Conversation, MailSettings};
 use proton_api_core::services::proton::LabelEvent as ApiLabelEvent;
 use proton_api_core::services::proton::{EventId, LabelId};
 use proton_api_mail::services::proton::common::{ConversationId, MessageId};
+use proton_api_mail::services::proton::prelude::IncomingDefault;
 use proton_api_mail::services::proton::response_data::{
     ConversationEvent as ApiConversationEvent, MailEvent as ApiMailEvent,
     MessageEvent as ApiMessageEvent, MessageMetadata,
@@ -114,6 +115,8 @@ pub struct MailEvent {
 
     /// TODO: Document this field.
     pub has_more: bool,
+
+    pub incoming_defaults: Option<Vec<IncomingDefault>>,
 
     /// TODO: Document this field.
     pub labels: Option<Vec<LabelEvent>>,
@@ -254,6 +257,7 @@ impl From<ApiMailEvent> for MailEvent {
                     .collect()
             }),
             refresh: value.refresh,
+            incoming_defaults: value.incoming_defaults,
         }
     }
 }
