@@ -9,18 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-  - [ET-736] Human Verification
   - [ET-2438] PGP/Mime attachment forward + Reply support.
   - Expose user settings via `MailUserSession::user_settings` method
-
 
 ### Fixed
 
   - Draft body not being saved
-
-### Fixed
-
   - Made `icon_name` optional in `Entitlement::Progress`
+
+## [0.64.0] - 2025-03-25
+
+### Added
+
+  - [ET-736] Human Verification
 
 ## [0.63.0] - 2025-03-24
 
