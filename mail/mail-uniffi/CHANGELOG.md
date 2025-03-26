@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - [ET-736] Human Verification
   - [ET-2438] PGP/Mime attachment forward + Reply support.
 
+### Fixed
+
+  - Draft body not being saved
+
 
 ## [0.63.0] - 2025-03-24
 
