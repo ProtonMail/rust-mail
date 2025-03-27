@@ -1,5 +1,5 @@
 use crate::actions::MailActionError;
-use crate::{AppError, MailUserContext, MailUserContextLoadingStage, draft};
+use crate::{AppError, MailUserContext, draft};
 use futures::executor::block_on;
 use proton_action_queue::action::{Action, WriterGuardError};
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
@@ -15,7 +15,6 @@ use proton_core_common::action_queue::{
     CheckNetworkStatusSubscriber, WaitForOnlineSubscribtionExt,
 };
 use proton_core_common::db::account::{CoreAccount, CoreSession};
-use proton_core_common::models::InitializationError;
 use proton_core_common::models::LabelError;
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::{
@@ -116,9 +115,6 @@ pub enum MailContextError {
     #[error("Could not start transaction: {0}")]
     IntoTransactionError(anyhow::Error),
 
-    #[error("Could not initialize user context in stage {1:?}: {0}")]
-    InitializationFailed(anyhow::Error, MailUserContextLoadingStage),
-
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -179,22 +175,6 @@ impl From<CoreContextError> for MailContextError {
             CoreContextError::Action(core_action_error) => Self::Action(core_action_error.into()),
             CoreContextError::QueuedAction(queued_error) => Self::QueuedAction(queued_error),
             CoreContextError::ActionQueue(error) => Self::ActionQueue(error),
-        }
-    }
-}
-
-impl<E> From<(InitializationError<E>, MailUserContextLoadingStage)> for MailContextError
-where
-    E: std::fmt::Debug + Send + Sync + 'static,
-    MailContextError: From<E>,
-{
-    fn from((value, stage): (InitializationError<E>, MailUserContextLoadingStage)) -> Self {
-        match value {
-            InitializationError::InitializationFailed(e) => e.into(),
-            InitializationError::DependencyFailed(_) => {
-                Self::InitializationFailed(anyhow::Error::from(value), stage)
-            }
-            InitializationError::Stash(stash_error) => Self::Stash(stash_error),
         }
     }
 }

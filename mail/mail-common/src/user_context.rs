@@ -10,7 +10,6 @@ use crate::models::{Conversation, Message};
 use crate::prefetch::{Prefetch, PrefetchNotify};
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
-pub use initialization::*;
 use proton_action_queue::action::ActionId;
 use proton_action_queue::queue::{Queue, QueueAutoExecutor, QueueAutoExecutorPool};
 use proton_api_core::auth::UserKeySecret;

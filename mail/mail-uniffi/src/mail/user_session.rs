@@ -1,6 +1,5 @@
 mod events;
 mod images;
-pub mod initialization;
 mod labels;
 
 use crate::core::datatypes::{
@@ -29,9 +28,14 @@ use super::datatypes::AttachmentMetadata;
 /// with [`crate::mail::MailSession::user_context_from_session`].
 ///
 /// # Initialization
-/// [`MailUserSession`] *needs to be initialized ([`MailUserSession::initialize`]) once after a
-/// new session is created*. This is required in order pre-load all the relevant user state.
-/// No [`crate::mail::Mailbox`] instances should be created until then.
+///
+/// Note, obtaining MailUserSession for the first time calls initialization, which:
+///
+/// * Might take a while (calling API over spotty network)
+/// * Might fail (calling API while no network)
+///
+/// After succesful initialization app will remember the initialization stage and prevent
+/// redundant calls.
 ///
 /// # Lifetime
 /// This object needs to be kept alive for the duration of an active user session.
