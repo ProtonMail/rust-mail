@@ -132,6 +132,15 @@ pub async fn report_an_issue(
     report: IssueReport,
     user_ctx: &UserContext,
 ) -> Result<(), CoreContextError> {
+    let email = user_ctx.account_details().await?.email;
+
+    if email.is_empty() {
+        tracing::error!("Email address in account details is empty cannot send the bug report");
+        return Err(CoreContextError::Other(anyhow!(
+            "Email address cannot be empty"
+        )));
+    }
+
     let logs: Option<ZippedFile> = if report.logs {
         if let Some(log_path) = user_ctx.get_log_path() {
             Some(zip_file_in_memory(log_path, Utc::now(), MAX_LOG_BYTES).await?)
@@ -144,14 +153,6 @@ pub async fn report_an_issue(
     } else {
         None
     };
-    let email = user_ctx.account_details().await?.email;
-
-    if email.is_empty() {
-        tracing::error!("Email address in account details is empty cannot send the bug report");
-        return Err(CoreContextError::Other(anyhow!(
-            "Email address cannot be empty"
-        )));
-    }
 
     let payload = create_bug_report_payload(report, email, logs);
 
