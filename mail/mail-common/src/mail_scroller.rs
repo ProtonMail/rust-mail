@@ -2,8 +2,8 @@ use crate::datatypes::{ReadFilter, SearchOptions};
 use crate::models::{ConversationScrollData, MessageScrollData};
 use crate::{MailContextError, MailUserContext};
 use anyhow::anyhow;
-use proton_core_common::async_task::AsyncTaskResult;
 use proton_core_common::datatypes::LocalLabelId;
+use proton_task_service::AsyncTaskResult;
 use stash::stash::WatcherHandle;
 use std::sync::Weak;
 

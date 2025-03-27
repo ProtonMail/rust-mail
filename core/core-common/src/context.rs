@@ -1,7 +1,6 @@
 //! Core context contains all the necessary information to retrieve or create new accounts and sessions.
 
 use crate::action_queue::CoreActionError;
-use crate::async_task::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner, spawn_task};
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::datatypes::{
     LocalContactId, PasswordMode, StoredDevicePrivateKey, StoredDevicePublicKey, TfaStatus,
@@ -27,6 +26,8 @@ use proton_api_core::verification::DynChallengeNotifier;
 use proton_crypto_account::keys::PGPDeviceKey;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_sqlite3::MigratorError;
+use proton_task_service::TaskService;
+use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner, spawn_task};
 use proton_vcard::VcardValidationError;
 use secrecy::ExposeSecret;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
@@ -242,6 +243,7 @@ pub struct Context {
     api_config: ApiConfig,
     hv_notifier: Option<DynChallengeNotifier>,
     cancellation_token: CancellationToken,
+    task_service: TaskService,
 }
 
 impl Context {
@@ -288,6 +290,8 @@ impl Context {
         let account_stash = Stash::new(stash_config)?;
         migrate_account_db(&account_stash).await?;
 
+        let task_service = TaskService::new()?;
+
         Ok(Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             user_db_path,
@@ -300,6 +304,7 @@ impl Context {
             api_config,
             hv_notifier,
             cancellation_token: CancellationToken::new(),
+            task_service,
         }))
     }
 
@@ -887,7 +892,7 @@ impl Context {
         S: TaskSpawner + 'static,
     {
         let token = self.cancellation_token.clone();
-        spawn_task::<_, S>(token, task)
+        spawn_task::<_, S>(&self.task_service, token, task)
     }
 
     /// Returns a cancellation token that is a child of the the one owned by the context.
@@ -900,6 +905,10 @@ impl Context {
     /// This will also cancel all child token created with [`child_cancellation_token()`]
     pub fn cancel_all_tasks(&self) {
         self.cancellation_token.cancel();
+    }
+
+    pub fn task_service(&self) -> &TaskService {
+        &self.task_service
     }
 }
 

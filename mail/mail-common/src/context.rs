@@ -14,7 +14,6 @@ use proton_core_common::UserDatabaseInitializer;
 use proton_core_common::action_queue::{
     CheckNetworkStatusSubscriber, WaitForOnlineSubscribtionExt,
 };
-use proton_core_common::async_task::{AsyncTaskResult, TaskSpawner};
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::models::InitializationError;
 use proton_core_common::models::LabelError;
@@ -27,6 +26,7 @@ use proton_crypto_inbox::attachment::AttachmentEncryptionError;
 use proton_crypto_inbox::keys::EncryptionPreferencesError;
 use proton_event_loop::EventLoopError;
 use proton_sqlite3::MigratorError;
+use proton_task_service::{AsyncTaskResult, TaskSpawner};
 use stash::stash::{Stash, StashError, WatcherHandle};
 use std::collections::HashMap;
 use std::future::Future;

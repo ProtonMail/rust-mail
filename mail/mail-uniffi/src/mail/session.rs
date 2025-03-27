@@ -865,6 +865,20 @@ impl MailSession {
     pub fn get_primary_account_blocking(&self) -> MailSessionGetPrimaryAccountResult {
         async_runtime().block_on(self.get_primary_account())
     }
+
+    /// Pause all background work
+    ///
+    /// This should be called once the application enters the background.
+    pub fn pause_work(&self) {
+        self.mail_ctx.core_context().task_service().pause();
+    }
+
+    /// Resume all background work
+    ///
+    /// This should be called once the application enters the foreground.
+    pub fn resume_work(&self) {
+        self.mail_ctx.core_context().task_service().resume();
+    }
 }
 
 impl MailSession {

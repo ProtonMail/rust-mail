@@ -1,6 +1,6 @@
 use std::future::Future;
 
-use proton_core_common::async_task::AsyncTaskResult;
+use proton_task_service::AsyncTaskResult;
 use tokio::task::JoinHandle;
 
 use crate::{MailContextError, MailUserContext};

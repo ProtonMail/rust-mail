@@ -4,12 +4,12 @@ use std::time::{Duration, Instant};
 use crate::models::{LabelWithCounters, MailSettings, StoreLabelCounters};
 use crate::{MailContextError, MailUserContext};
 use futures::try_join;
-use proton_core_common::async_task::AsyncTaskResult;
 use proton_core_common::datatypes::InitializationKey;
 use proton_core_common::models::{
     Address, Contact, InitializationError, InitializationWatcher, InitializedComponent, User,
 };
 use proton_event_loop::EventLoopError;
+use proton_task_service::AsyncTaskResult;
 use tokio::task::JoinHandle;
 use tracing::{Level, debug, error, warn};
 

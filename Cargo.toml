@@ -7,7 +7,7 @@ members = [
     "core/core-common",
     "core/core-test-utils",
     "core/event-loop",
-    "core/proton-canonical-email",
+    "core/proton-canonical-email", "core/task-service",
     "core/sqlite3",
     "core/stash",
     "core/stash-macros",
@@ -219,6 +219,13 @@ registry = "proton"
 version = "0.1"
 path = "mail/mail-test-utils"
 registry = "proton"
+
+[workspace.dependencies.proton-task-service]
+version = "0.1"
+path = "core/task-service"
+registry = "proton"
+
+
 
 [workspace.lints.rust]
 trivial_numeric_casts = "warn"
