@@ -271,6 +271,7 @@ async fn zip_file_in_memory(
         CoreContextError::Other(anyhow!("Could not close stream zip writer, details: `{e}`"))
     })?;
 
+    let out_name = format!("{out_name}.zip");
     let zipped_bytes = zip_writer
         .close()
         .await
