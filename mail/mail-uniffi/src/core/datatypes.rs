@@ -45,6 +45,7 @@
 
 mod account_details;
 mod app_protection;
+mod app_settings;
 mod avatar;
 mod connection_status;
 mod contact_list;
@@ -52,6 +53,7 @@ mod issue_report;
 
 pub use account_details::*;
 pub use app_protection::*;
+pub use app_settings::*;
 pub use avatar::*;
 pub use connection_status::*;
 pub use contact_list::*;

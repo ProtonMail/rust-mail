@@ -13,11 +13,11 @@ pub struct AppSettings {
     #[IdField]
     pub local_id: SingleEntryId,
     #[DbField]
-    pub appearance: AppApearance,
+    pub appearance: AppAppearance,
     #[DbField]
     pub protection: AppProtection,
     #[DbField]
-    auto_lock: ProtectionAutoLock,
+    pub auto_lock: ProtectionAutoLock,
     #[DbField]
     pub use_combine_contacts: bool,
     #[DbField]
@@ -69,21 +69,21 @@ impl AppSettings {
 #[derive(Debug, Copy, Clone, PartialEq, Default, TryFrom)]
 #[try_from(repr)]
 #[repr(u8)]
-pub enum AppApearance {
+pub enum AppAppearance {
     #[default]
     System = 0,
     DarkMode = 1,
     LightMode = 2,
 }
 
-impl FromSql for AppApearance {
+impl FromSql for AppAppearance {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         let val = u8::column_result(value)?;
         Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
-impl ToSql for AppApearance {
+impl ToSql for AppAppearance {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
     }
