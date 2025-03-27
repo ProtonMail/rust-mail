@@ -258,6 +258,8 @@ pub struct PostReportBug {
     pub os_version: String,
     /// Client application name
     pub client: String,
+    /// Version of client application
+    pub client_version: String,
     /// Client application type (1 = Email)
     pub client_type: u8,
     /// Generic title
