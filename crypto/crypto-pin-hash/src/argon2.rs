@@ -7,6 +7,7 @@ use argon2::{
 };
 use std::{fmt::Display, str::FromStr};
 use thiserror::Error;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 #[derive(Debug, Error)]
 pub enum Argon2HashingError {
@@ -22,7 +23,7 @@ impl From<Argon2Error> for Argon2HashingError {
 
 /// Struct representing hash string.
 ///
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub struct ProtonArgon2Hash(String);
 
 impl Display for ProtonArgon2Hash {
