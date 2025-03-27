@@ -1,4 +1,4 @@
-use crate::core::datatypes::{ApiConfig, AppProtection, Id};
+use crate::core::datatypes::{ApiConfig, AppProtection, AppSettings, Id};
 use crate::core::verification::{ChallengeNotifierWrap, DynChallengeNotifier};
 use crate::core::{FFIKeyChain, StoredAccountState, StoredSession, StoredSessionState};
 use crate::core::{OSKeyChain, StoredAccount};
@@ -14,7 +14,7 @@ use crate::{
 use futures::TryFutureExt;
 use itertools::Itertools;
 use proton_core_common::db::account::SessionEncryptionKey;
-use proton_core_common::models::AppSettings;
+use proton_core_common::models::AppSettings as RealAppSettings;
 use proton_core_common::os::KeyChainExt;
 use proton_core_common::pin_code::PinCode;
 use proton_core_common::{CoreAccountState, CoreSessionState};
@@ -752,7 +752,7 @@ impl MailSession {
 
         uniffi_async(async move {
             let tether = ctx.core_context().account_stash().connection();
-            let app_settings = AppSettings::get_or_default(&tether).await;
+            let app_settings = RealAppSettings::get_or_default(&tether).await;
 
             Result::<_, RealProtonMailError>::Ok(app_settings.protection.into())
         })
@@ -782,6 +782,25 @@ impl MailSession {
         })
         .await
         .map_err(PinAuthError::from)
+    }
+
+    pub async fn change_app_settings(&self, settings: AppSettings) -> Result<(), UserSessionError> {
+        let ctx = self.mail_ctx.core_context().clone();
+
+        uniffi_async(async move {
+            let mut tether = ctx.account_stash().connection();
+            let real_app_settings = RealAppSettings::get_or_default(&tether).await;
+            let mut real_app_settings = settings.merge_with_current(real_app_settings);
+            let bond = tether.transaction().await?;
+
+            real_app_settings.save(&bond).await?;
+            bond.commit().await?;
+
+            Result::<_, RealProtonMailError>::Ok(())
+        })
+        .await
+        .map_err(UserSessionError::from)
+        .into()
     }
 }
 
