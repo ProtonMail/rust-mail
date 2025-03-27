@@ -169,7 +169,7 @@ impl InitializedComponent {
         };
 
         tracing::debug!("Fetched");
-        if let Err(e) = Self::wait_for_dependencies(key, dependencies, watcher, &tether).await {
+        if let Err(e) = Self::wait_for_dependencies(key, dependencies, &watcher, &tether).await {
             tracing::error!("Component dependencies error: {e:?}");
             Self::fail(key, &mut tether).await?;
             return Err(e.into());
@@ -225,7 +225,7 @@ impl InitializedComponent {
     async fn wait_for_dependencies(
         key: InitializationKey,
         dependencies: &[InitializationKey],
-        watcher: Arc<InitializationWatcher>,
+        watcher: &InitializationWatcher,
         tether: &Tether,
     ) -> Result<(), DependencyInitializationError> {
         tracing::debug!("Waiting for dependencies: {dependencies:?}");
