@@ -2638,16 +2638,19 @@ impl Message {
 
         let flags = self.flags;
 
-        if flags.intersects(
-            MessageFlags::FLAG_SUSPICIOUS
-                | MessageFlags::PHISHING_AUTO
-                | MessageFlags::PHISHING_MANUAL,
-        ) {
-            banners.push(MessageBanner::PhishingAttempt);
-        }
-
-        if flags.intersects(MessageFlags::SPAM_AUTO | MessageFlags::SPAM_MANUAL) {
-            banners.push(MessageBanner::Spam);
+        // The user might have marked it manually as not spam, skip that case
+        if !flags.contains(MessageFlags::HAM_MANUAL) {
+            // Phising
+            if flags.intersects(
+                MessageFlags::FLAG_SUSPICIOUS
+                    | MessageFlags::PHISHING_AUTO
+                    | MessageFlags::PHISHING_MANUAL,
+            ) {
+                banners.push(MessageBanner::PhishingAttempt);
+            // Regular old spam
+            } else if flags.intersects(MessageFlags::SPAM_AUTO | MessageFlags::SPAM_MANUAL) {
+                banners.push(MessageBanner::Spam);
+            }
         }
 
         if self.expiration_time != 0 {
@@ -2676,6 +2679,38 @@ impl Message {
 
         banners.sort_unstable();
         banners
+    }
+
+    /// Set the flags without loading the whole model
+    pub async fn set_flags(
+        local_id: LocalMessageId,
+        flags: MessageFlags,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        bond.execute(
+            indoc! {
+                "UPDATE messages SET flags = flags | ? WHERE local_id = ?"
+            },
+            params![flags, local_id],
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Unset the flags without loading the whole model
+    pub async fn unset_flags(
+        local_id: LocalMessageId,
+        flags: MessageFlags,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        bond.execute(
+            indoc! {
+                "UPDATE messages SET flags = flags & ~? WHERE local_id = ?"
+            },
+            params![flags, local_id],
+        )
+        .await?;
+        Ok(())
     }
 }
 
