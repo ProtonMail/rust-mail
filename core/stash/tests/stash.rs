@@ -118,6 +118,71 @@ mod concurrency_basic_sync {
         assert_eq!(result[0], "test".to_owned());
     }
 
+    #[tokio::test]
+    async fn basic_query_with_transaction_closure() {
+        let db_dir = tempfile::tempdir().unwrap();
+        let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
+        let mut conn = stash.connection();
+        let result = conn
+            .tx(async |tx| {
+                // Create a table
+                tx.execute(r#"CREATE TABLE test_kv (value TEXT NOT NULL)"#, vec![])
+                    .await
+                    .unwrap();
+
+                // Insert some data
+                tx.execute(r#"INSERT INTO test_kv (value) VALUES ("test")"#, vec![])
+                    .await
+                    .unwrap();
+
+                // Query the data
+                tx.query_values::<_, String>(
+                    r#"SELECT value FROM test_kv WHERE value = "test""#,
+                    vec![],
+                )
+                .await
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], "test".to_owned());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn basic_query_with_transaction_closure_spawnd() {
+        let db_dir = tempfile::tempdir().unwrap();
+        let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
+        let result = tokio::spawn(async move {
+            let mut conn = stash.connection();
+            conn.tx(async |tx| {
+                // Create a table
+                tx.execute(r#"CREATE TABLE test_kv (value TEXT NOT NULL)"#, vec![])
+                    .await
+                    .unwrap();
+
+                // Insert some data
+                tx.execute(r#"INSERT INTO test_kv (value) VALUES ("test")"#, vec![])
+                    .await
+                    .unwrap();
+
+                // Query the data
+                tx.query_values::<_, String>(
+                    r#"SELECT value FROM test_kv WHERE value = "test""#,
+                    vec![],
+                )
+                .await
+            })
+            .await
+            .unwrap()
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], "test".to_owned());
+    }
+
     // This test is ignored for now, because of the change to obtain a lock
     // on the database immediately when starting a transaction. This means that
     // when running in the same thread or task, the second transaction will not

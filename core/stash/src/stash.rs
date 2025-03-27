@@ -956,6 +956,57 @@ impl Tether {
             .await
     }
 
+    /// Same as [`transaction()`] but wraps the steps in a closure.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a transaction step failed or the closure failed.
+    pub async fn tx<F, T, E>(&mut self, closure: F) -> Result<T, E>
+    where
+        F: AsyncFnOnce(&Bond<'_>) -> Result<T, E>,
+        E: From<StashError>,
+    {
+        self.tx_impl(TransactionTrackingPolicy::Tracking, closure)
+            .await
+    }
+
+    /// Same as [`quiet_transaction()`] but wraps the steps in a closure.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a transaction step failed or the closure failed.
+    pub async fn quiet_tx<F, T, E>(&mut self, closure: F) -> Result<T, E>
+    where
+        F: AsyncFnOnce(&Bond<'_>) -> Result<T, E>,
+        E: From<StashError>,
+    {
+        self.tx_impl(TransactionTrackingPolicy::Quiet, closure)
+            .await
+    }
+
+    async fn tx_impl<F, T, E>(
+        &mut self,
+        policy: TransactionTrackingPolicy,
+        closure: F,
+    ) -> Result<T, E>
+    where
+        F: AsyncFnOnce(&Bond<'_>) -> Result<T, E>,
+        E: From<StashError>,
+    {
+        let tx = self.transaction_impl(policy).await?;
+        let r = closure(&tx).await;
+        if r.is_err() {
+            if let Err(e) = tx.rollback().await {
+                error!("Failed to rollback transaction: {e:?}");
+            }
+            return r;
+        }
+        tx.commit()
+            .await
+            .inspect_err(|e| error!("Failed to commit transaction: {e:?}"))?;
+        r
+    }
+
     /// The transaction will produce no any notifications.
     ///
     /// This method is used to start a transaction without listening for changes.
