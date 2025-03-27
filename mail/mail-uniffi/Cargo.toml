@@ -24,6 +24,7 @@ proton-core-common = { workspace = true }
 proton-crypto-account = { workspace = true }
 proton-event-loop = { workspace = true }
 proton-mail-common = { workspace = true, features = ["uniffi"] }
+proton-task-service = { workspace = true }
 proton-uniffi-macros = { workspace = true }
 serde_json = { workspace = true }
 smart-default = { workspace = true }

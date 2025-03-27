@@ -1,4 +1,4 @@
-use crate::async_task::AsyncTaskResult;
+use proton_task_service::AsyncTaskResult;
 use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use tokio::task::{AbortHandle, JoinHandle};
 

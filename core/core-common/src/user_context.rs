@@ -1,5 +1,4 @@
 pub use self::keys::*;
-use crate::async_task::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner, spawn_task};
 use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
@@ -11,6 +10,7 @@ use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::services::proton::{SessionId, UserId};
 use proton_api_core::session::Session;
 use proton_sqlite3::MigratorError;
+use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner, spawn_task};
 use stash::orm::Model;
 use stash::stash::{Stash, StashConfiguration};
 use std::fmt::{Debug, Formatter};
@@ -230,7 +230,7 @@ impl UserContext {
         S: TaskSpawner + 'static,
     {
         let token = self.cancellation_token.clone();
-        spawn_task::<_, S>(token, task)
+        spawn_task::<_, S>(self.context.task_service(), token, task)
     }
 
     /// Cancel all tasks which are bound to this context.

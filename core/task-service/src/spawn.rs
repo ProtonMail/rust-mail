@@ -1,3 +1,5 @@
+use crate::IntoPausableFuture;
+use crate::service::TaskService;
 use std::future::Future;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -37,6 +39,7 @@ impl TaskSpawner for DefaultTaskSpawner {
 /// If the tasks completes before it gets cancelled, the output will be returned with
 ///[`AsyncTaskResult::Completed`], otherwise [`AsyncTaskResult::Cancelled` will be returned.
 pub fn spawn_task<F, S>(
+    task_service: &TaskService,
     cancellation_token: CancellationToken,
     task: F,
 ) -> JoinHandle<AsyncTaskResult<F::Output>>
@@ -45,7 +48,10 @@ where
     <F as Future>::Output: Send,
     S: TaskSpawner + 'static,
 {
-    S::spawn::<_>(cancelable_task(cancellation_token, task))
+    S::spawn::<_>(cancelable_task(
+        cancellation_token,
+        task.into_pausable(task_service),
+    ))
 }
 
 /// Utility wrapper that races a `task` against a `cancellation_token`.

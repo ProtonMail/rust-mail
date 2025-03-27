@@ -31,6 +31,7 @@ proton-crypto-inbox = { workspace = true }
 proton-event-loop = { workspace = true }
 proton-mail-html-transformer = { version = "0.2.0", path = "../mail-html-transformer", registry = "proton" }
 proton-sqlite3 = { workspace = true }
+proton-task-service = { workspace = true }
 rmp = { workspace = true }
 rmp-serde = { workspace = true }
 serde = { workspace = true }

@@ -146,10 +146,10 @@ use stash::stash::WatcherHandle;
 // Reexport renamed items from the `uniffi` crate.
 pub use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
 
-use proton_core_common::async_task::{AsyncTaskResult, TaskSpawner};
 use proton_core_common::watch_handle::WatchHandle as RealWatchHandle;
 use proton_mail_common::datatypes::SearchOptions as RealSearchOptions;
 use proton_mail_common::{MailContext, MailUserContext};
+use proton_task_service::{AsyncTaskResult, TaskSpawner};
 use std::future::Future;
 use std::sync::{Arc, OnceLock};
 use tokio::runtime::Runtime;

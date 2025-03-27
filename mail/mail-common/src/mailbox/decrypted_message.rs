@@ -8,8 +8,8 @@ use crate::models::{
 };
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use parking_lot::Mutex;
-use proton_core_common::async_task::AsyncTaskResult;
 use proton_mail_html_transformer::Transformer;
+use proton_task_service::AsyncTaskResult;
 use serde_json::Value;
 use smart_default::SmartDefault;
 use stash::orm::Model;

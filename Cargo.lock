@@ -4326,15 +4326,14 @@ dependencies = [
  "proton-crypto-notifications",
  "proton-event-loop",
  "proton-sqlite3",
+ "proton-task-service",
  "proton-vcard",
- "quick_cache",
  "rand 0.8.5",
  "secrecy",
  "serde",
  "sqlite-watcher",
  "stash",
  "tempdir",
- "tempfile",
  "test-case",
  "thiserror 1.0.69",
  "tokio",
@@ -4342,8 +4341,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "unicode-segmentation",
- "url",
- "uuid",
  "wiremock",
  "zeroize",
 ]
@@ -4531,6 +4528,7 @@ dependencies = [
  "proton-mail-ids",
  "proton-mail-test-utils",
  "proton-sqlite3",
+ "proton-task-service",
  "rmp",
  "rmp-serde",
  "secrecy",
@@ -4694,6 +4692,7 @@ dependencies = [
  "proton-event-loop",
  "proton-mail-common",
  "proton-mail-test-utils",
+ "proton-task-service",
  "proton-uniffi-macros",
  "secrecy",
  "serde_json",
@@ -4756,6 +4755,16 @@ dependencies = [
  "sha2",
  "thiserror 1.0.69",
  "zeroize",
+]
+
+[[package]]
+name = "proton-task-service"
+version = "0.1.0"
+dependencies = [
+ "pin-project",
+ "tokio",
+ "tokio-util",
+ "tracing",
 ]
 
 [[package]]
