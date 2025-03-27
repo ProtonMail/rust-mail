@@ -16,6 +16,7 @@ use proton_core_common::action_queue::{
 };
 use proton_core_common::async_task::{AsyncTaskResult, TaskSpawner};
 use proton_core_common::db::account::{CoreAccount, CoreSession};
+use proton_core_common::models::InitializationError;
 use proton_core_common::models::LabelError;
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::{
@@ -102,6 +103,9 @@ pub enum MailContextError {
     #[error("Could not start transaction: {0}")]
     IntoTransactionError(anyhow::Error),
 
+    #[error("Could not initialize user context: {0}")]
+    InitializationFailed(anyhow::Error),
+
     #[error("{0}")]
     Other(anyhow::Error),
 }
@@ -165,6 +169,19 @@ impl From<CoreContextError> for MailContextError {
         }
     }
 }
+
+impl<E: std::fmt::Debug + Send + Sync + 'static> From<InitializationError<E>> for MailContextError {
+    fn from(value: InitializationError<E>) -> Self {
+        match value {
+            InitializationError::InitializationFailed(_)
+            | InitializationError::DependencyFailed(_) => {
+                Self::InitializationFailed(anyhow::Error::from(value))
+            }
+            InitializationError::Stash(stash_error) => Self::Stash(stash_error),
+        }
+    }
+}
+
 pub type MailContextResult<T> = Result<T, MailContextError>;
 
 impl<T: Action<Error: Into<MailContextError>>> From<QueueActionError<T>> for MailContextError {

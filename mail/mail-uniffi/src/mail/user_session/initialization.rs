@@ -33,12 +33,14 @@ impl MailUserSession {
 /// Stage of the initialization that is currently being handled.
 #[derive(Debug, Copy, Clone, Eq, PartialEq, uniffi::Enum)]
 pub enum MailUserSessionInitializationStage {
+    /// Before components started to initialize, it already failed.
+    Initialization,
     User,
     MailSettings,
     Addresses,
     Events,
-    /// This will be split into Labels and Contacts in a future release
-    LabelsAndContacts,
+    Labels,
+    Contacts,
     Counters,
     Finished,
 }
@@ -56,11 +58,11 @@ impl From<proton_mail_common::MailUserContextLoadingStage> for MailUserSessionIn
             proton_mail_common::MailUserContextLoadingStage::MailSettings => Self::MailSettings,
             proton_mail_common::MailUserContextLoadingStage::Addresses => Self::Addresses,
             proton_mail_common::MailUserContextLoadingStage::Events => Self::Events,
-            proton_mail_common::MailUserContextLoadingStage::LabelsAndContacts => {
-                Self::LabelsAndContacts
-            }
+            proton_mail_common::MailUserContextLoadingStage::Labels => Self::Labels,
+            proton_mail_common::MailUserContextLoadingStage::Contacts => Self::Contacts,
             proton_mail_common::MailUserContextLoadingStage::Counters => Self::Counters,
             proton_mail_common::MailUserContextLoadingStage::Finished => Self::Finished,
+            proton_mail_common::MailUserContextLoadingStage::Initialization => Self::Initialization,
         }
     }
 }

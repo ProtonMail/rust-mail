@@ -1,4 +1,5 @@
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use crate::AppError;
 use crate::datatypes::{
@@ -8,6 +9,10 @@ use crate::datatypes::{
 };
 use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::services::proton::response_data::MailSettings as ApiMailSettings;
+use proton_core_common::datatypes::InitializationKey;
+use proton_core_common::models::{
+    InitializationError, InitializationWatcher, InitializedComponent,
+};
 use proton_crypto_inbox::keys::CryptoMailSettings;
 use smart_default::SmartDefault;
 use sqlite_watcher::watcher::TableObserver;
@@ -213,6 +218,35 @@ pub struct MailSettings {
 }
 
 impl MailSettings {
+    /// Key used to distinguish between components in the initialization.
+    /// It is a string, not an enum for making it open for additional changes from different BU.
+    ///
+    pub const INIT_KEY: InitializationKey = InitializationKey::new("mail_settings");
+
+    /// It initializes mail settings by syncing with the Backend.
+    /// In case of successful initialization, it marks it in the [`InitializedComponents`].
+    ///
+    /// This function is idempotent. If successfully initialized in the past.
+    ///
+    pub async fn initialize<PM: ProtonMail>(
+        watcher: Arc<InitializationWatcher>,
+        api: &PM,
+        stash: &Stash,
+    ) -> Result<(), InitializationError<AppError>> {
+        InitializedComponent::initialize::<AppError, SyncedMailSettings>(
+            watcher,
+            Self::INIT_KEY,
+            &[],
+            stash.connection(),
+            async move || Self::sync_mail_settings(api).await,
+            async |tx, res| {
+                res.store(tx).await?;
+                Ok(())
+            },
+        )
+        .await
+    }
+
     /// TODO: Document this function.
     ///
     /// # Parameters
@@ -226,16 +260,11 @@ impl MailSettings {
     ///
     pub async fn sync_mail_settings<PM: ProtonMail>(
         api: &PM,
-        stash: &Stash,
-    ) -> Result<(), AppError> {
+    ) -> Result<SyncedMailSettings, AppError> {
         debug!("Storing settings into database");
-        let mut settings = MailSettings::from(api.get_mail_settings().await?.mail_settings);
+        let settings = MailSettings::from(api.get_mail_settings().await?.mail_settings);
 
-        let mut tether = stash.connection();
-        let tx = tether.transaction().await?;
-        settings.save(&tx).await?;
-        tx.commit().await?;
-        Ok(())
+        Ok(SyncedMailSettings { settings })
     }
 
     /// Get the mail settings from database
@@ -356,6 +385,25 @@ impl From<ApiMailSettings> for MailSettings {
             view_mode: value.view_mode.into(),
             row_id: None,
         }
+    }
+}
+
+/// This is a manual implementation of `MailSettings::sync_mail_settings` async closure.
+///
+/// We keep it as it is until Rust allows us to use `impl Trait` in generics etc.
+#[must_use]
+#[derive(Debug)]
+pub struct SyncedMailSettings {
+    settings: MailSettings,
+}
+
+impl SyncedMailSettings {
+    /// Consume this manual closure by storing data in the Database.
+    ///
+    #[tracing::instrument(skip(tx))]
+    pub async fn store(mut self, tx: &Bond<'_>) -> Result<(), AppError> {
+        self.settings.save(tx).await?;
+        Ok(())
     }
 }
 

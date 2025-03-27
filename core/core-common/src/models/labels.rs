@@ -6,7 +6,7 @@ mod labels;
 
 use std::collections::BTreeSet;
 
-use crate::datatypes::{ALL_LABEL_TYPES, LabelColor, LabelType, LocalLabelId};
+use crate::datatypes::{ALL_LABEL_TYPES, InitializationKey, LabelColor, LabelType, LocalLabelId};
 use crate::models::ModelIdExtension;
 use itertools::Itertools;
 use proton_api_core::service::ApiServiceError;
@@ -115,6 +115,11 @@ impl ModelIdExtension for Label {
 }
 
 impl Label {
+    /// Key used to distinguish between components in the initialization.
+    /// It is a string, not an enum for making it open for additional changes from different BU.
+    ///
+    pub const INIT_KEY: InitializationKey = InitializationKey::new("labels");
+
     /// Save or update a Label.
     ///
     /// It's imperative that you use this method over [`Model::save()`] to

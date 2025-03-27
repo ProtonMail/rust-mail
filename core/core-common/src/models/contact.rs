@@ -1,12 +1,13 @@
 use crate::utils::MapVec as _;
 use std::collections::{BTreeSet, HashMap};
-use std::future::Future;
 use std::iter;
+use std::sync::Arc;
 use std::time::Instant;
 
 use crate::actions::contacts::Delete as ContactsDelete;
 use crate::datatypes::{
-    ContactSuggestions, DeviceContact, GroupedContacts, LabelType, Labels, LocalContactId,
+    ContactSuggestions, DeviceContact, GroupedContacts, InitializationKey, LabelType, Labels,
+    LocalContactId,
 };
 use crate::models::{ContactCard, ContactEmail, ModelExtension, ModelIdExtension};
 use crate::{ContactError, CoreContextError, CoreContextResult};
@@ -31,7 +32,7 @@ use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use tokio::task::JoinSet;
 use tracing::{debug, error};
 
-use super::Label;
+use super::{InitializationError, InitializationWatcher, InitializedComponent, Label};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("contacts")]
@@ -207,11 +208,7 @@ impl Contact {
 
     /// Updates all user contacts including their emails without their cards.
     ///
-    /// You might have noticed that this function returns another future. This future, when polled
-    /// will reset the database AND store all of the contacts.
-    ///
-    /// This future MUST ONLY be polled after syncing contact labels.
-    /// FIXME: Assert this invariant via the type system in 1.85
+    /// The result of this function MUST ONLY be used (as in [`SyncedContacts::store`]) after syncing contact labels.
     ///
     /// # Parameters
     ///
@@ -222,13 +219,10 @@ impl Contact {
     ///
     /// Errors when the API request fails or when the database query fails.
     ///
-    #[tracing::instrument(skip(api, stash))]
+    #[tracing::instrument(skip(api))]
     #[allow(clippy::too_many_lines)]
     #[must_use]
-    pub async fn sync(
-        api: &Proton,
-        stash: &Stash,
-    ) -> CoreContextResult<impl Future<Output = CoreContextResult<()>> + use<>> {
+    pub async fn sync(api: &Proton) -> CoreContextResult<SyncedContacts> {
         // In order to maximize throughput we do as follows:
         // 1. We download the first batch
         // 2. We calculate how many batches are left and request them all in parallel.
@@ -303,7 +297,7 @@ impl Contact {
 
         let emails = emails_joinset.join_all().await;
         // We don't need the data afterwards so we don't need to Arc it.
-        let mut emails: Vec<ContactEmail> = iter::once(Ok(first_emails.contact_emails))
+        let emails: Vec<ContactEmail> = iter::once(Ok(first_emails.contact_emails))
             .chain(emails)
             .flatten()
             .flatten()
@@ -315,62 +309,40 @@ impl Contact {
             t0.elapsed()
         );
 
-        let mut tether = stash.connection();
         // We are splitting the store and download functions in two so that it's faster.
-        Ok(async move {
-            // Let's start with a clean database
-            let tx = tether.transaction().await?;
-            tx.execute("DELETE FROM contacts", vec![]).await?;
-            tx.execute("DELETE FROM contact_emails", vec![]).await?;
-            tx.execute("DELETE FROM contact_cards", vec![]).await?;
-            tx.execute("DELETE FROM contact_email_labels", vec![])
-                .await?;
-
-            // We will use this to map the contact_emails to the contacts without having to
-            // query the db each time we instert one.
-            // We require this to happen since the contact_emails need the local id of its contact.
-            let mut id_map = HashMap::new();
-
-            let t1 = Instant::now();
-            for mut cont in contacts {
-                cont.save(&tx).await?;
-                id_map.insert(cont.remote_id.clone().unwrap(), cont.local_id.unwrap());
-            }
-            debug!(
-                "Stored {} contacts to the db in {:?}",
-                id_map.len(),
-                t1.elapsed()
-            );
-
-            emails.retain_mut(|em| {
-                let Some(contact_id) = &em.remote_contact_id else {
-                    error!("a contact_email has no contact");
-                    return false;
-                };
-                let Some(local_id) = id_map.get(contact_id) else {
-                    error!("a contact_email has no saved local contact");
-                    return false;
-                };
-                em.local_contact_id = Some(*local_id);
-                true
-            });
-
-            let t2 = Instant::now();
-            let count = emails.len();
-            for mut em in emails {
-                em.save(&tx).await?;
-            }
-
-            debug!(
-                "Stored {count} contacts_emails to the db in {:?}",
-                t2.elapsed()
-            );
-
-            debug!("Stored all to the db in {:?}", t1.elapsed());
-            tx.commit().await?;
-            debug!("Synced all contacts in {:?}", t0.elapsed());
-            Ok::<(), CoreContextError>(())
+        Ok(SyncedContacts {
+            contacts,
+            emails,
+            t0,
         })
+    }
+
+    /// Key used to distinguish between components in the initialization.
+    /// It is a string, not an enum for making it open for additional changes from different BU.
+    ///
+    pub const INIT_KEY: InitializationKey = InitializationKey::new("contacts");
+    /// It initializes contats by syncing with the Backend.
+    /// In case of successful initialization, it marks it in the [`InitializedComponents`].
+    ///
+    /// This function is idempotent. If successfully initialized in the past.
+    ///
+    pub async fn initialize(
+        watcher: Arc<InitializationWatcher>,
+        api: &Proton,
+        stash: &Stash,
+    ) -> Result<(), InitializationError<CoreContextError>> {
+        InitializedComponent::initialize::<CoreContextError, SyncedContacts>(
+            watcher,
+            Self::INIT_KEY,
+            &[Label::INIT_KEY],
+            stash.connection(),
+            async move || Self::sync(api).await,
+            async |tx, res| {
+                res.store(tx).await?;
+                Ok(())
+            },
+        )
+        .await
     }
 
     /// Updates the full contact with the given ID including its emails and
@@ -637,5 +609,84 @@ impl TableObserver for ContactListWatcher {
             .send(())
             .inspect_err(|e| error!("Failed to send notification for ContactListWatcher: {e:?}"))
             .ok();
+    }
+}
+
+/// This is a manual implementation of `Contact::sync` async closure.
+///
+/// We keep it as it is until Rust allows us to use `impl Trait` in generics etc.
+#[must_use]
+#[derive(Debug)]
+pub struct SyncedContacts {
+    contacts: Vec<Contact>,
+    emails: Vec<ContactEmail>,
+    t0: Instant,
+}
+
+impl SyncedContacts {
+    /// Consume this manual closure by storing data in the Database.
+    /// Attention: This function should be executed only after Labels are synchronized
+    ///
+    /// # Panics
+    ///
+    /// Panics if the local id does exist
+    ///
+    #[tracing::instrument(skip(tx))]
+    pub async fn store(self, tx: &Bond<'_>) -> CoreContextResult<()> {
+        let Self {
+            contacts,
+            mut emails,
+            t0,
+        } = self;
+        // Let's start with a clean database
+        tx.execute("DELETE FROM contacts", vec![]).await?;
+        tx.execute("DELETE FROM contact_emails", vec![]).await?;
+        tx.execute("DELETE FROM contact_cards", vec![]).await?;
+        tx.execute("DELETE FROM contact_email_labels", vec![])
+            .await?;
+
+        // We will use this to map the contact_emails to the contacts without having to
+        // query the db each time we instert one.
+        // We require this to happen since the contact_emails need the local id of its contact.
+        let mut id_map = HashMap::new();
+
+        let t1 = Instant::now();
+        for mut cont in contacts {
+            cont.save(tx).await?;
+            id_map.insert(cont.remote_id.clone().unwrap(), cont.local_id.unwrap());
+        }
+        debug!(
+            "Stored {} contacts to the db in {:?}",
+            id_map.len(),
+            t1.elapsed()
+        );
+
+        emails.retain_mut(|em| {
+            let Some(contact_id) = &em.remote_contact_id else {
+                error!("a contact_email has no contact");
+                return false;
+            };
+            let Some(local_id) = id_map.get(contact_id) else {
+                error!("a contact_email has no saved local contact");
+                return false;
+            };
+            em.local_contact_id = Some(*local_id);
+            true
+        });
+
+        let t2 = Instant::now();
+        let count = emails.len();
+        for mut em in emails {
+            em.save(tx).await?;
+        }
+
+        debug!(
+            "Stored {count} contacts_emails to the db in {:?}",
+            t2.elapsed()
+        );
+
+        debug!("Stored all to the db in {:?}", t1.elapsed());
+        debug!("Synced all contacts in {:?}", t0.elapsed());
+        Ok::<(), CoreContextError>(())
     }
 }

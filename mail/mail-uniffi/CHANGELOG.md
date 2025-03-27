@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+## [0.65.3] - 2025-03-27
+
+### Fixed
+
+  -  [ET-548] Issue report now add client version field to the API request
+
+## [0.65.2] - 2025-03-26
+
+### Fixed
+
+  -  [ET-548] Issue report now add email field to the API request
+
+## [0.65.1] - 2025-03-26
+
+### Fixed
+
+  - Crash in observability code.
+
 ## [0.65.0] - 2025-03-26
 
 ### Added

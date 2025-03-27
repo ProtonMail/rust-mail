@@ -87,11 +87,18 @@ async fn test_sync_and_load_contacts() {
     ctx.catch_all().await;
 
     // Sync contacts
-    Contact::sync(user_ctx.session().api(), user_ctx.stash())
+    let mut tether = user_ctx.stash().connection();
+    let tx = tether
+        .transaction()
+        .await
+        .expect("Failed to create a transaction");
+    Contact::sync(user_ctx.session().api())
         .await
         .expect("failed to download contacts")
+        .store(&tx)
         .await
         .expect("failed to load contacts in db");
+    tx.commit().await.expect("Failed to commit transaction");
 
     // Check database
     let conn = user_ctx.stash().connection();
@@ -407,11 +414,18 @@ async fn prepare_sync_test_data_contacts(
 
     // Sync contacts
     let mut tether = user_ctx.stash().connection();
-    Contact::sync(user_ctx.session().api(), user_ctx.stash())
+    let tx = tether
+        .transaction()
+        .await
+        .expect("Failed to create a transaction");
+    Contact::sync(user_ctx.session().api())
         .await
         .expect("failed to download contacts")
+        .store(&tx)
         .await
         .expect("failed to load contacts in db");
+    tx.commit().await.expect("Failed to commit transaction");
+
     let local_id = Contact::remote_id_counterpart(remote_contact_id, &tether)
         .await
         .unwrap()

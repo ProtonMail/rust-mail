@@ -10,9 +10,9 @@ use proton_crypto_account::keys::APIPublicAddressKeys;
 use serde::Deserialize;
 
 use crate::service::ApiServiceResult;
-use crate::services::proton::core::{ProtonCore, CORE_V4, CORE_V5};
-use crate::services::proton::prelude::*;
 use crate::services::proton::Proton;
+use crate::services::proton::core::{CORE_V4, CORE_V5, ProtonCore};
+use crate::services::proton::prelude::*;
 
 impl ProtonCore for Proton {
     async fn get_addresses(&self) -> ApiServiceResult<GetAddressesResponse> {
@@ -253,10 +253,12 @@ impl ProtonCore for Proton {
                 form.add_text("OS", body.os);
                 form.add_text("OSVersion", body.os_version);
                 form.add_text("Client", body.client);
+                form.add_text("ClientVersion", body.client_version);
                 form.add_text("ClientType", body.client_type.to_string());
                 form.add_text("Title", body.title);
                 form.add_text("Description", body.description);
                 form.add_text("Username", body.username);
+                form.add_text("Email", body.email);
                 if let Some((file_name, logs)) = body.logs {
                     form.add_reader_file_with_mime(
                         "ApplicationLogs",

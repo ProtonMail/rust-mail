@@ -1,24 +1,28 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::models::{ConversationCounters, MailSettings, MessageCounters, StoreLabelCounters};
+use crate::models::{LabelWithCounters, MailSettings, StoreLabelCounters};
 use crate::{MailContextError, MailUserContext};
-use futures::future::try_join;
 use futures::try_join;
 use proton_core_common::async_task::AsyncTaskResult;
-use proton_core_common::models::{Address, Contact, Label, User};
+use proton_core_common::datatypes::InitializationKey;
+use proton_core_common::models::{
+    Address, Contact, InitializationError, InitializationWatcher, InitializedComponent, User,
+};
+use proton_event_loop::EventLoopError;
 use tokio::task::JoinHandle;
 use tracing::{Level, debug, error, warn};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum MailUserContextLoadingStage {
+    Initialization,
     UserSettings,
     MailSettings,
     Addresses,
     Events,
-    /// TODO: Split into Labels and Contacts
-    LabelsAndContacts,
+    Labels,
     Counters,
+    Contacts,
     Finished,
 }
 pub trait MailUserContextInitializationCallback: Send + Sync + 'static {
@@ -29,9 +33,11 @@ pub trait MailUserContextInitializationCallback: Send + Sync + 'static {
 impl MailUserContext {
     /// Initialize a component.
     #[tracing::instrument(level = Level::DEBUG, skip(handle, cb))]
-    async fn initial_sync_for<E: Into<MailContextError> + Send + 'static>(
+    async fn initial_sync_for<
+        E: Into<MailContextError> + std::fmt::Debug + Send + Sync + 'static,
+    >(
         stage: MailUserContextLoadingStage,
-        handle: JoinHandle<AsyncTaskResult<Result<(), E>>>,
+        handle: JoinHandle<AsyncTaskResult<Result<(), InitializationError<E>>>>,
         cb: &dyn MailUserContextInitializationCallback,
     ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
         let t = Instant::now();
@@ -83,75 +89,55 @@ impl MailUserContext {
         ctx: Arc<Self>,
         cb: &dyn MailUserContextInitializationCallback,
     ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
+        let watcher = InitializationWatcher::new(ctx.user_stash())
+            .map_err(|e| (MailUserContextLoadingStage::Initialization, e.into()))?;
+        let watcher_clone = watcher.clone();
+        let watcher_task_handle = ctx.spawn(async move { watcher_clone.task().await });
+
         let t0 = Instant::now();
         let ctx_clone = ctx.clone();
-        let labels_and_contacts = ctx.spawn(async move {
-            // Since contact syncing is the slowest part let's leave it downloading in parallel while we
-            // setup all of the rest of the futures.
-            let ctx_clone2 = ctx_clone.clone();
-            let contact_sync_dl_fut = ctx_clone.spawn(async move {
-                Contact::sync(ctx_clone2.api(), ctx_clone2.user_stash()).await
-            });
-
-            let labels = Label::all_labels(ctx_clone.api()).await?;
-
-            let api = ctx_clone.api().to_owned();
-            let counters = ctx_clone.spawn(async move { StoreLabelCounters::new(&api).await });
-            let mut tether = ctx_clone.user_stash().connection();
-            let tx = tether.transaction().await?;
-            let label_ids = Label::sync_labels(&tx, labels).await?;
-            for local_id in label_ids {
-                ConversationCounters::new(local_id).save(&tx).await?;
-                MessageCounters::new(local_id).save(&tx).await?;
-            }
-
-            tx.commit().await?;
-
-            let (contact_fut, counters) = try_join(contact_sync_dl_fut, counters)
-                .await
-                .expect("Can't fail to join");
-
-            // FIXME:(perf): This should be a different future that requests contact
-            // group labels
-            match contact_fut {
-                AsyncTaskResult::Completed(f) => f?.await?,
-                AsyncTaskResult::Cancelled => return Err(MailContextError::TaskCancelled),
-            }
-            match counters {
-                AsyncTaskResult::Completed(counters) => {
-                    counters?.store(ctx_clone.user_stash()).await?
-                }
-                AsyncTaskResult::Cancelled => return Err(MailContextError::TaskCancelled),
-            }
-
-            Ok::<_, MailContextError>(())
-        });
-
-        let ctx_clone = ctx.clone();
-        let event_loop = ctx.spawn(async move {
-            ctx_clone
-                .event_loop
-                .initialize(ctx_clone.as_ref(), ctx_clone.as_ref())
+        let watcher_clone = watcher.clone();
+        let labels = ctx.spawn(async move {
+            LabelWithCounters::initialize(watcher_clone, ctx_clone.api(), ctx_clone.user_stash())
                 .await
         });
         let ctx_clone = ctx.clone();
+        let watcher_clone = watcher.clone();
+        let counters = ctx.spawn(async move {
+            StoreLabelCounters::initialize(watcher_clone, ctx_clone.api(), ctx_clone.user_stash())
+                .await
+        });
+        let ctx_clone = ctx.clone();
+        let watcher_clone = watcher.clone();
+        let contacts = ctx.spawn(async move {
+            Contact::initialize(watcher_clone, ctx_clone.api(), ctx_clone.user_stash()).await
+        });
+
+        let ctx_clone = ctx.clone();
+        let watcher_clone = watcher.clone();
+        let event_loop = ctx
+            .spawn(async move { initialize_event_loop(watcher_clone, ctx_clone.as_ref()).await });
+        let ctx_clone = ctx.clone();
+        let watcher_clone = watcher.clone();
         let user_settings = ctx.spawn(async move {
-            User::sync_user_and_settings(ctx_clone.api(), ctx_clone.user_stash()).await
+            User::initialize_with_settings(watcher_clone, ctx_clone.api(), ctx_clone.user_stash())
+                .await
         });
         let ctx_clone = ctx.clone();
+        let watcher_clone = watcher.clone();
         let mail_settings = ctx.spawn(async move {
-            MailSettings::sync_mail_settings(ctx_clone.api(), ctx_clone.user_stash()).await
+            MailSettings::initialize(watcher_clone, ctx_clone.api(), ctx_clone.user_stash()).await
         });
         let ctx_clone = ctx.clone();
-        let addresses =
-            ctx.spawn(async move { Address::sync(ctx_clone.api(), ctx_clone.user_stash()).await });
+        let watcher_clone = watcher.clone();
+        let addresses = ctx.spawn(async move {
+            Address::initialize(watcher_clone, ctx_clone.api(), ctx_clone.user_stash()).await
+        });
 
         try_join!(
-            Self::initial_sync_for(
-                MailUserContextLoadingStage::LabelsAndContacts,
-                labels_and_contacts,
-                cb
-            ),
+            Self::initial_sync_for(MailUserContextLoadingStage::Labels, labels, cb),
+            Self::initial_sync_for(MailUserContextLoadingStage::Contacts, contacts, cb),
+            Self::initial_sync_for(MailUserContextLoadingStage::Counters, counters, cb),
             Self::initial_sync_for(MailUserContextLoadingStage::Events, event_loop, cb),
             Self::initial_sync_for(MailUserContextLoadingStage::UserSettings, user_settings, cb),
             Self::initial_sync_for(MailUserContextLoadingStage::MailSettings, mail_settings, cb),
@@ -159,8 +145,41 @@ impl MailUserContext {
         )?;
 
         debug!("Syncing Complete in {:?}", t0.elapsed());
+        watcher_task_handle.abort();
         cb.on_stage(MailUserContextLoadingStage::Finished);
 
         Ok(())
     }
+}
+
+/// Key used to distinguish between components in the initialization.
+/// It is a string, not an enum for making it open for additional changes from different BU.
+///
+const EVENT_INIT_KEY: InitializationKey = InitializationKey::new("events");
+
+async fn initialize_event_loop(
+    watcher: Arc<InitializationWatcher>,
+    ctx_clone: &MailUserContext,
+) -> Result<(), InitializationError<EventLoopError>> {
+    let stash = ctx_clone.user_stash();
+    InitializedComponent::initialize::<EventLoopError, ()>(
+        watcher,
+        EVENT_INIT_KEY,
+        &[],
+        stash.connection(),
+        async || {
+            // This is a little bit of a hack. The way of how this
+            // event loop initialization is currently written,
+            // there is no way of initializing it with already having transaction.
+            // We want to avoid the deadlock, and we do not depend on any dependencies.
+            // So initializing it here is not really harmful, just weird.
+            ctx_clone
+                .event_loop
+                .initialize(ctx_clone, ctx_clone)
+                .await?;
+            Ok(())
+        },
+        async |_tx, ()| Ok(()),
+    )
+    .await
 }

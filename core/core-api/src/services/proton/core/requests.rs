@@ -20,10 +20,10 @@
 //! used by both requests and responses.
 //!
 
-use crate::services::proton::prelude::*;
 use crate::MAX_PAGE_ELEMENT_COUNT;
+use crate::services::proton::prelude::*;
 use serde::Serialize;
-use serde_with::{serde_as, BoolFromInt};
+use serde_with::{BoolFromInt, serde_as};
 use smart_default::SmartDefault;
 
 use super::{DeviceEnvironment, LabelType};
@@ -258,6 +258,8 @@ pub struct PostReportBug {
     pub os_version: String,
     /// Client application name
     pub client: String,
+    /// Version of client application
+    pub client_version: String,
     /// Client application type (1 = Email)
     pub client_type: u8,
     /// Generic title
@@ -266,6 +268,8 @@ pub struct PostReportBug {
     pub description: String,
     /// Username (empty for no username)
     pub username: String,
+    /// Email, must be a valid email address
+    pub email: String,
     /// Logs (filename, zipped bytes)
     pub logs: Option<(String, Vec<u8>)>,
 }
