@@ -1,1 +1,1 @@
-pub mod bcrypt;
+pub mod argon2;

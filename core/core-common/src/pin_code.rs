@@ -1,5 +1,5 @@
 use chrono::Utc;
-use proton_crypto_pin_hash::bcrypt::{HashingError, ProtonHash, hash, verify};
+use proton_crypto_pin_hash::argon2::{Argon2HashingError, ProtonArgon2Hash, hash, verify};
 use secrecy::{ExposeSecret, SecretString};
 use stash::stash::StashError;
 use thiserror::Error;
@@ -28,7 +28,7 @@ pub enum PinError {
     #[error("Incorrect PIN")]
     IncorrectPin,
     #[error("Could not encrypt the PIN, details: `{0}`")]
-    HashError(#[from] HashingError),
+    HashError(#[from] Argon2HashingError),
     #[error("Error while interacting with keychain, details: `{0}`")]
     Keychain(#[from] CoreContextError),
     #[error("Could not store data in database, details: `{0}`")]
@@ -145,7 +145,7 @@ impl PinCode {
     }
 }
 
-struct PinHash(ProtonHash);
+struct PinHash(ProtonArgon2Hash);
 
 impl StoreInKeyChain for PinHash {
     fn kind() -> crate::os::KeyChainEntryKind {

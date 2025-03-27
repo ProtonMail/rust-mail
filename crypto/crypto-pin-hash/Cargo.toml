@@ -5,7 +5,7 @@ edition.workspace = true
 
 [dependencies]
 thiserror = { workspace = true }
-bcrypt = { workspace = true }
+argon2 = { workspace = true }
 
 [lints]
 workspace = true

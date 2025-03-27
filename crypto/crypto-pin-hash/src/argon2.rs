@@ -1,19 +1,31 @@
-use bcrypt::{BcryptError, DEFAULT_COST, hash as bchash, verify as bcverify};
+use argon2::{
+    Argon2,
+    password_hash::{
+        Error as Argon2Error, PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
+        rand_core::OsRng,
+    },
+};
 use std::{fmt::Display, str::FromStr};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum HashingError {
+pub enum Argon2HashingError {
     #[error("Failed to hash the password, details: `{0}`")]
-    Hash(#[from] BcryptError),
+    Hash(String),
 }
 
-/// Struct representing Hash
+impl From<Argon2Error> for Argon2HashingError {
+    fn from(value: Argon2Error) -> Self {
+        Self::Hash(value.to_string())
+    }
+}
+
+/// Struct representing hash string.
 ///
 #[derive(Clone, Debug, PartialEq)]
-pub struct ProtonHash(String);
+pub struct ProtonArgon2Hash(String);
 
-impl Display for ProtonHash {
+impl Display for ProtonArgon2Hash {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let hash = &self.0;
 
@@ -21,10 +33,10 @@ impl Display for ProtonHash {
     }
 }
 
-impl FromStr for ProtonHash {
+impl FromStr for ProtonArgon2Hash {
     /// Parsing hash never throw an error
-    /// Its here just for the type match
-    type Err = HashingError;
+    /// It's here just for the type match
+    type Err = Argon2HashingError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(Self(s.to_string()))
@@ -33,19 +45,25 @@ impl FromStr for ProtonHash {
 
 /// Hashes the password for authentication.
 ///
-/// bcrypt already uses salt and BASE64 transformation
-/// So we just wrap String in the newtype
+/// It's using Argon2 hashing algorithm.
 ///
-pub fn hash<P: AsRef<[u8]>>(password: P) -> Result<ProtonHash, HashingError> {
-    let hash = bchash(password, DEFAULT_COST)?;
+pub fn hash<P: AsRef<[u8]>>(password: P) -> Result<ProtonArgon2Hash, Argon2HashingError> {
+    let salt = SaltString::generate(&mut OsRng);
+    let argon2 = Argon2::default();
+    let password_hash = argon2.hash_password(password.as_ref(), &salt)?.to_string();
 
-    Ok(ProtonHash(hash))
+    Ok(ProtonArgon2Hash(password_hash))
 }
 
-/// Verifies a password against a stored hash for authentication.
+/// Verifies a password against a stored Argon2 hash for authentication.
 ///
-pub fn verify<P: AsRef<[u8]>>(password: P, hash: &ProtonHash) -> Result<bool, HashingError> {
-    Ok(bcverify(password, &hash.0)?)
+pub fn verify<P: AsRef<[u8]>>(
+    password: P,
+    hash: &ProtonArgon2Hash,
+) -> Result<bool, Argon2HashingError> {
+    Ok(Argon2::default()
+        .verify_password(password.as_ref(), &PasswordHash::new(&hash.0)?)
+        .is_ok())
 }
 
 #[cfg(test)]

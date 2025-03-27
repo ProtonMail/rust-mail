@@ -417,19 +417,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bcrypt"
-version = "0.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92758ad6077e4c76a6cadbce5005f666df70d4f13b19976b1a8062eef880040f"
-dependencies = [
- "base64",
- "blowfish",
- "getrandom 0.3.2",
- "subtle",
- "zeroize",
-]
-
-[[package]]
 name = "bindgen"
 version = "0.70.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4489,7 +4476,7 @@ dependencies = [
 name = "proton-crypto-pin-hash"
 version = "0.1.0"
 dependencies = [
- "bcrypt 0.17.0",
+ "argon2",
  "thiserror 1.0.69",
 ]
 
@@ -4771,7 +4758,7 @@ source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
 checksum = "d92ea35f63d399e000929e1c19d25fb2026a40855494984a260e64c569f798b9"
 dependencies = [
  "base64",
- "bcrypt 0.15.1",
+ "bcrypt",
  "crypto-bigint",
  "pgp",
  "rand 0.8.5",
