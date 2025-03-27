@@ -104,8 +104,6 @@ async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize
     // Setup
     // * Create all conversations in stash
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
 
     let mut params = Params::default_basic();
     params.conversation_count[0].total = conversations.len() as u64;
@@ -129,7 +127,8 @@ async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize
     }
     ctx.catch_all().await;
 
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
 
     let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await
@@ -181,8 +180,6 @@ async fn mark_conversation_unread(conversations: &[TestItem], expected_read: usi
     // Setup
     // * Create all conversations in stash
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
 
     let mut params = Params::default_basic();
     params.conversation_count[0].total = conversations.len() as u64;
@@ -206,7 +203,8 @@ async fn mark_conversation_unread(conversations: &[TestItem], expected_read: usi
     }
     ctx.catch_all().await;
 
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
 
     let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await

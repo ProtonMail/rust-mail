@@ -12,8 +12,6 @@ use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestE
 #[tokio::test]
 async fn contact_list() {
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
-    let tether = user_ctx.user_stash().connection();
     let mut params = TestParams::default_basic();
 
     params.contacts = vec![ApiContactBasic {
@@ -44,8 +42,8 @@ async fn contact_list() {
 
     // Initialize Mocking
     ctx.catch_all().await;
-
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
+    let tether = user_ctx.user_stash().connection();
 
     let contact_list = Contact::contact_list(&tether).await.unwrap();
 
@@ -75,8 +73,6 @@ async fn contact_list() {
 #[tokio::test]
 async fn delete_contacts() {
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
-    let tether = user_ctx.user_stash().connection();
     let mut params = TestParams::default_basic();
 
     params.contacts = vec![ApiContactBasic {
@@ -110,7 +106,8 @@ async fn delete_contacts() {
 
     // Initialize Mocking
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
+    let tether = user_ctx.user_stash().connection();
 
     let contact = Contact::find_by_remote_id(ContactId::from("123"), &tether)
         .await

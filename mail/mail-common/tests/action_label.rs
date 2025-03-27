@@ -25,7 +25,7 @@ use velcro::hash_map;
 async fn test_labeling_conversation_with_custom_label() {
     // General setup
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     let tether = user_ctx.user_stash().connection();
 
     // Set up test data
@@ -66,7 +66,7 @@ async fn test_labeling_conversation_with_custom_label() {
     )
     .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     inbox_mailbox
         .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
@@ -153,7 +153,7 @@ async fn test_labeling_conversation_with_custom_label() {
 #[tokio::test]
 async fn test_labeling_conversation_with_starred_label() {
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     let tether = user_ctx.user_stash().connection();
 
     let remote_conversation_id = "first";
@@ -195,7 +195,7 @@ async fn test_labeling_conversation_with_starred_label() {
     )
     .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     inbox_mailbox
         .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
@@ -276,15 +276,9 @@ async fn test_labeling_conversation_with_starred_label() {
 async fn test_labeling_fails_when_labelling_folders() {
     // General setup
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
-    let tether = user_ctx.user_stash().connection();
 
     // Set up test data
     let remote_conversation_id = "first";
-    let inbox_mailbox =
-        Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
-            .await
-            .unwrap();
     let inbox_remote_label = ApiLabel::get_api_label_with_given_id(LabelId::inbox());
     let remote_conversation =
         ApiConversation::test_conversation(remote_conversation_id, vec![inbox_remote_label]);
@@ -294,7 +288,14 @@ async fn test_labeling_fails_when_labelling_folders() {
     ctx.setup_user(params).await;
     ctx.mock_get_conversations(conversations, 1).await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+
+    let user_ctx = ctx.mail_user_context().await;
+    let tether = user_ctx.user_stash().connection();
+
+    let inbox_mailbox =
+        Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
+            .await
+            .unwrap();
 
     // Sync the mailbox
     inbox_mailbox

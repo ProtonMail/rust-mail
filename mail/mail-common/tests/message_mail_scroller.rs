@@ -80,7 +80,7 @@ async fn test_message_mail_scroller_reads_correct_items_within_visible_range_for
  {
     const REMOTE_LABEL_ID: &str = "rid1";
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
 
     let mut data: BTreeMap<&str, Vec<Message>> = btreemap! {
@@ -136,9 +136,6 @@ async fn test_message_mail_scroller_reads_correct_items_within_visible_range_for
 #[tokio::test]
 async fn test_message_mail_scroller_reads_one_item_from_online_scroll_data() {
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
-    let tether = user_ctx.user_stash().connection();
-    let user_ctx = ctx.mail_user_context().await;
     let params = TestParams::default_basic();
     let conversation = params.conversations.first().cloned().unwrap();
     let address = params.addresses.first().cloned().unwrap();
@@ -151,8 +148,9 @@ async fn test_message_mail_scroller_reads_one_item_from_online_scroll_data() {
 
     ctx.mock_get_messages(vec![message]).await;
     ctx.setup_user(params.clone()).await;
-    ctx.init_user(user_ctx.clone()).await;
     ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+    let tether = user_ctx.user_stash().connection();
 
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let unread = ReadFilter::All;
@@ -180,7 +178,7 @@ async fn test_message_mail_scroller_reads_one_item_from_online_scroll_data() {
 #[tokio::test]
 async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
     let page_size = 5;
     let unread = ReadFilter::All;
@@ -188,10 +186,10 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
     // mocks
     mock_api_sync_prevous_messages_page(&ctx, "mymsg_9", 1).await;
     let params = setup_api_message_pages(&ctx, page_size, 3).await;
-    let user_ctx = ctx.mail_user_context().await;
 
     ctx.setup_user(params.clone()).await;
-    ctx.init_user(user_ctx.clone()).await;
+
+    ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Update the inbox label to have all messages
     let mut counters = MessageCounters::load(local_label_id, &tether)
@@ -307,17 +305,16 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
 #[tokio::test]
 async fn test_message_mail_scroller_notificate_about_changes() {
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
     let page_size = 5;
     let unread = ReadFilter::All;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let params = setup_api_message_pages(&ctx, page_size, 2).await;
-    let user_ctx = ctx.mail_user_context().await;
 
     ctx.setup_user(params.clone()).await;
-    ctx.init_user(user_ctx.clone()).await;
     ctx.catch_all().await;
+    ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Update the inbox label to have all messages
     let mut counters = MessageCounters::load(local_label_id, &tether)

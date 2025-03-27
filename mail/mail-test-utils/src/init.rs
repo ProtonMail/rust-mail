@@ -43,24 +43,10 @@ use proton_core_test_utils::addresses_public::{
     TEST_OTHER_USER_EMAIL, testdata_address_keys_other_user,
 };
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::{
-    MailContextError, MailUserContext, MailUserContextInitializationCallback,
-    MailUserContextLoadingStage,
-};
 use std::collections::{BTreeMap, HashMap};
-use std::sync::Arc;
 use velcro::hash_map;
 use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
-
-/// Mail user context init callback that does nothing.
-pub struct NullCallback {}
-
-impl MailUserContextInitializationCallback for NullCallback {
-    fn on_stage(&self, _: MailUserContextLoadingStage) {}
-
-    fn on_stage_err(&self, _: MailUserContextLoadingStage, _: MailContextError) {}
-}
 
 /// Initialization parameters.
 #[derive(Clone, Default)]
@@ -219,21 +205,6 @@ impl MailTestContext {
     ///
     pub async fn setup_user(&self, params: Params) {
         self.setup_user_repeated(params, 1).await;
-    }
-
-    /// Initialize user context.
-    ///
-    /// # Parameters
-    ///
-    /// * `params` - The parameters to use for the setup.
-    ///
-    /// # Panics
-    pub async fn init_user(&self, user_ctx: Arc<MailUserContext>) {
-        let cb = NullCallback {};
-
-        MailUserContext::initialize_async(user_ctx, &cb)
-            .await
-            .expect("failed to initialize");
     }
 
     /// Set up basic user data.

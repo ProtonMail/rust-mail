@@ -40,7 +40,6 @@ async fn attachment_not_removed_on_error() {
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     let attachment_file = tempfile::NamedTempFile::new().unwrap();
 
@@ -73,7 +72,7 @@ async fn attachment_not_removed_on_error() {
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
@@ -127,11 +126,10 @@ async fn remove_attachment_updates_attachment_list() {
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
@@ -170,7 +168,6 @@ async fn removing_non_uploaded_attachment() {
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     let attachment_file = tempfile::NamedTempFile::new().unwrap();
 
@@ -200,7 +197,7 @@ async fn removing_non_uploaded_attachment() {
     )
     .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
@@ -250,7 +247,6 @@ async fn removing_uploaded_attachment() {
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     let attachment_file = tempfile::NamedTempFile::new().unwrap();
 
@@ -293,7 +289,7 @@ async fn removing_uploaded_attachment() {
     .await;
     ctx.mock_delete_attachment(new_attachment_id).await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
@@ -345,7 +341,6 @@ async fn draft_reply_or_forward_creates_new_attachments() {
     )
     .await;
     let params = draft_test_params_with_mime_type(mime_type);
-    let user_ctx = ctx.mail_user_context().await;
 
     // Create one message we can reply to.
     let mut remote_existing_message = message_body_test_message_mime();
@@ -355,7 +350,7 @@ async fn draft_reply_or_forward_creates_new_attachments() {
     remote_existing_message.body.attachments.reverse();
 
     ctx.setup_user(params.clone()).await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let mut tether = user_ctx.user_stash().connection();
     let (mut existing_message, _, _) =
@@ -508,7 +503,6 @@ async fn deleting_draft_metadata_cleans_not_uploaded_attachments() {
     )
     .await;
     let params = draft_test_params_with_mime_type(mime_type);
-    let user_ctx = ctx.mail_user_context().await;
 
     // Create one message we can reply to.
     let mut remote_existing_message = message_body_test_message_mime();
@@ -518,7 +512,7 @@ async fn deleting_draft_metadata_cleans_not_uploaded_attachments() {
     remote_existing_message.body.attachments.reverse();
 
     ctx.setup_user(params.clone()).await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let mut tether = user_ctx.user_stash().connection();
     let (mut existing_message, _, _) =

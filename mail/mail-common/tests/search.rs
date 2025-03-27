@@ -7,7 +7,7 @@ use proton_mail_test_utils::test_context::MailTestContext;
 #[tokio::test]
 async fn unsynced_conversations() {
     let ctx = MailTestContext::new().await;
-    let user_context = ctx.mail_user_context().await;
+    let user_context = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_context.user_stash().connection();
     let api = user_context.api();
 
@@ -37,7 +37,7 @@ async fn unsynced_conversations() {
 #[tokio::test]
 async fn unsynced_messages() {
     let ctx = MailTestContext::new().await;
-    let user_context = ctx.mail_user_context().await;
+    let user_context = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_context.user_stash().connection();
     let api = user_context.api();
 

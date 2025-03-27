@@ -17,6 +17,7 @@ use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::KeyChainExt;
 use proton_core_common::{CoreAccountState, CoreSessionState};
 use proton_mail_common::actions::draft::Send;
+use proton_mail_common::context::ShouldInitializeMailUserContext;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::models::DraftMetadata;
@@ -256,11 +257,15 @@ impl MailSession {
 
         async_runtime()
             .block_on(async move {
-                ctx.user_context_from_session(session.session(), None)
-                    .map_ok(|ctx| self.user_ctx.insert(ctx))
-                    .map_ok(MailUserSession::new)
-                    .map_err(RealProtonMailError::from)
-                    .await
+                ctx.user_context_from_session(
+                    session.session(),
+                    None,
+                    ShouldInitializeMailUserContext::Yes,
+                )
+                .map_ok(|ctx| self.user_ctx.insert(ctx))
+                .map_ok(MailUserSession::new)
+                .map_err(RealProtonMailError::from)
+                .await
             })
             .map_err(UserSessionError::from)
     }
@@ -727,7 +732,13 @@ impl MailSession {
                         Some(CoreSessionState::Authenticated)
                     ) =>
                 {
-                    let user_ctx = ctx.user_context_from_session(&session, None).await?;
+                    let user_ctx = ctx
+                        .user_context_from_session(
+                            &session,
+                            None,
+                            ShouldInitializeMailUserContext::Yes,
+                        )
+                        .await?;
                     let tether = user_ctx.user_stash().connection();
 
                     DraftMetadata::messages_with_pending_send(&tether)
@@ -1054,7 +1065,9 @@ async fn get_all_logged_in_mail_user_contexts(
         tracing::warn!("No active session for primary account, skipping background execution");
         return Ok(vec![]);
     };
-    let primary_user_ctx = ctx.user_context_from_session(&session, None).await?;
+    let primary_user_ctx = ctx
+        .user_context_from_session(&session, None, ShouldInitializeMailUserContext::Yes)
+        .await?;
 
     let other_sessions_iter = ctx
         .get_sessions()
@@ -1085,7 +1098,9 @@ async fn get_all_logged_in_mail_user_contexts(
             continue;
         };
 
-        let user_ctx = ctx.user_context_from_session(&session, None).await?;
+        let user_ctx = ctx
+            .user_context_from_session(&session, None, ShouldInitializeMailUserContext::Yes)
+            .await?;
         all_user_ctxs.push(user_ctx);
     }
 

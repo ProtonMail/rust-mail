@@ -9,10 +9,9 @@ use proton_mail_test_utils::test_context::MailTestContext;
 async fn load_sending_preferences() {
     let ctx = MailTestContext::new().await;
     let params = TestParams::default_basic();
-    let user_ctx = ctx.mail_user_context().await;
     ctx.setup_user(params.clone()).await;
-    ctx.init_user(user_ctx.clone()).await;
     ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let pgp_provider = proton_crypto::new_pgp_provider();
     let recipient_email = params
@@ -60,10 +59,9 @@ async fn load_sending_preferences() {
 async fn load_sending_preferences_for_self() {
     let ctx = MailTestContext::new().await;
     let params = TestParams::default_basic();
-    let user_ctx = ctx.mail_user_context().await;
     ctx.setup_user(params.clone()).await;
-    ctx.init_user(user_ctx.clone()).await;
     ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let pgp_provider = proton_crypto::new_pgp_provider();
     let self_address = params.addresses.first().unwrap().email.as_str();

@@ -268,7 +268,7 @@ fn comprehensive() -> impl Iterator<Item = UsedVariables> {
 #[tokio::test]
 async fn integration() -> anyhow::Result<()> {
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     let tether = &mut user_ctx.user_stash().connection();
 
     let now = SystemTime::now()

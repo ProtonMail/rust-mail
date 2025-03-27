@@ -24,14 +24,13 @@ async fn discard_before_save_only_deletes_metadata() {
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     let mut message = message_body_test_message_simple();
     message.metadata.label_ids.push(LabelId::drafts());
 
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
@@ -57,14 +56,13 @@ async fn discard_by_message_id() {
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     let mut message = message_body_test_message_simple();
     message.metadata.label_ids.push(LabelId::drafts());
 
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
@@ -90,7 +88,6 @@ async fn discard_draft_after_save_marks_message_deleted() {
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     let mut message = message_body_test_message_simple();
     message.metadata.label_ids.clear();
@@ -123,7 +120,7 @@ async fn discard_draft_after_save_marks_message_deleted() {
     )
     .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
@@ -167,7 +164,6 @@ async fn discard_draft_by_message_id() {
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     let mut message = message_body_test_message_simple();
     message.metadata.label_ids.clear();
@@ -200,7 +196,7 @@ async fn discard_draft_by_message_id() {
     )
     .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
@@ -258,7 +254,6 @@ async fn discard_new_draft_after_cancelled_or_failed_save_action_deletes_local_d
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     let mut message = message_body_test_message_simple();
     message.metadata.label_ids.clear();
@@ -266,7 +261,7 @@ async fn discard_new_draft_after_cancelled_or_failed_save_action_deletes_local_d
 
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let tether = user_ctx.user_stash().connection();
 
@@ -330,7 +325,6 @@ async fn delete_new_draft_after_cancelled_or_failed_save_action_deletes_local_da
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     let mut message = message_body_test_message_simple();
     message.metadata.label_ids.clear();
@@ -338,7 +332,7 @@ async fn delete_new_draft_after_cancelled_or_failed_save_action_deletes_local_da
 
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let tether = user_ctx.user_stash().connection();
 
@@ -409,7 +403,6 @@ async fn discard_reply_draft_after_cancelled_or_failed_save_action_only_deletes_
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     let mut message = message_body_test_message_simple();
     message.metadata.label_ids.clear();
@@ -427,7 +420,7 @@ async fn discard_reply_draft_after_cancelled_or_failed_save_action_only_deletes_
     )
     .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let mut tether = user_ctx.user_stash().connection();
 
@@ -512,7 +505,6 @@ async fn delete_reply_draft_after_cancelled_or_failed_save_action_only_deletes_m
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     let mut message = message_body_test_message_simple();
     message.metadata.label_ids.clear();
@@ -534,7 +526,7 @@ async fn delete_reply_draft_after_cancelled_or_failed_save_action_only_deletes_m
             .await;
     }
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let mut tether = user_ctx.user_stash().connection();
 
@@ -623,7 +615,6 @@ async fn discard_draft_failure_undeletes_message() {
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     let mut message = message_body_test_message_simple();
     message.metadata.label_ids.clear();
@@ -656,7 +647,7 @@ async fn discard_draft_failure_undeletes_message() {
     )
     .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();

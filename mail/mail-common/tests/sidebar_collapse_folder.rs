@@ -23,7 +23,6 @@ async fn folder_expansion() {
 
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection();
-    ctx.init_user(user_ctx.clone()).await;
 
     let folder = get_folder("foo", &tether).await;
     assert!(!folder.expanded);
@@ -55,7 +54,6 @@ async fn folder_collapse() {
 
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection();
-    ctx.init_user(user_ctx.clone()).await;
 
     let folder = get_folder("foo", &tether).await;
     assert!(folder.expanded);

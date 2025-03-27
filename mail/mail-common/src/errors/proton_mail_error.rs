@@ -1,4 +1,5 @@
 use super::mail_error_reason::*;
+use crate::MailUserContextLoadingStage;
 use crate::actions::MailActionError;
 use crate::draft::{AttachmentError, PackageError, SaveOrSendError};
 use crate::errors::api_service_error::UserApiServiceError;
@@ -32,6 +33,8 @@ pub enum ProtonMailError {
     ServerError(UserApiServiceError),
     /// This error come form network (i.e. like can't connect to backend)
     Network,
+    /// This error is related to the mail context initialization. Application is unusable (usually until network is available).
+    InitializationFailed(MailUserContextLoadingStage),
     /// Something unexpected happened
     Unexpected(Unexpected),
 }
@@ -195,11 +198,7 @@ impl From<MailContextError> for ProtonMailError {
             MailContextError::DuplicateContext(_remote_id) => {
                 Self::reason(ContextErrorReason::DuplicateContext)
             }
-            MailContextError::InitializationFailed(_e) =>
-            // TODO (ET-2558) Use proper error message. Mobile app must handle it differently.
-            {
-                Self::Unexpected(Unexpected::Internal)
-            }
+            MailContextError::InitializationFailed(_e, stage) => Self::InitializationFailed(stage),
             MailContextError::Label(label_error) => Self::from(label_error),
             MailContextError::TaskCancelled => Self::Unexpected(Unexpected::Internal),
             MailContextError::MissingContext => Self::Unexpected(Unexpected::Internal),

@@ -38,7 +38,7 @@ async fn when_swipe_action_doesnt_require_any_extra_context(
     expected_action: AssignedSwipeAction,
 ) {
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     let tether = user_ctx.user_stash().connection();
     let current_label = Label::resolve_local_label_id(current_label, &tether)
         .await
@@ -64,7 +64,7 @@ async fn when_it_is_move_to_system_folder_action(
     expected_system_label: SystemLabel,
 ) {
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     let tether = user_ctx.user_stash().connection();
 
     let current_label = Label::resolve_local_label_id(current_label, &tether)

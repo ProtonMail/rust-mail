@@ -23,23 +23,19 @@ pub enum MailUserContextLoadingStage {
     Labels,
     Counters,
     Contacts,
-    Finished,
-}
-pub trait MailUserContextInitializationCallback: Send + Sync + 'static {
-    fn on_stage(&self, stage: MailUserContextLoadingStage);
-    fn on_stage_err(&self, stage: MailUserContextLoadingStage, err: MailContextError);
 }
 
 impl MailUserContext {
     /// Initialize a component.
-    #[tracing::instrument(level = Level::DEBUG, skip(handle, cb))]
-    async fn initial_sync_for<
-        E: Into<MailContextError> + std::fmt::Debug + Send + Sync + 'static,
-    >(
+    #[tracing::instrument(level = Level::DEBUG, skip(handle))]
+    async fn initial_sync_for<E>(
         stage: MailUserContextLoadingStage,
         handle: JoinHandle<AsyncTaskResult<Result<(), InitializationError<E>>>>,
-        cb: &dyn MailUserContextInitializationCallback,
-    ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
+    ) -> Result<(), MailContextError>
+    where
+        E: std::fmt::Debug + Send + Sync + 'static,
+        MailContextError: From<E>,
+    {
         let t = Instant::now();
         debug!("Begin syncing for {stage:?}");
 
@@ -51,22 +47,21 @@ impl MailUserContext {
             debug!("Syncing {stage:?} took {elapsed:?}");
         }
 
-        cb.on_stage(stage);
         match result {
             Ok(AsyncTaskResult::Completed(Ok(()))) => Ok(()),
             Ok(AsyncTaskResult::Completed(Err(e))) => {
-                let e = e.into();
-                error!("Failed to sync {stage:?}: {e:?}");
-                Err((stage, e))
+                let e = (e, stage).into();
+                error!("Failed to sync {e:?}");
+                Err(e)
             }
             Ok(AsyncTaskResult::Cancelled) => {
                 error!("Called while syncing {stage:?}");
-                Err((stage, MailContextError::TaskCancelled))
+                Err(MailContextError::TaskCancelled)
             }
             Err(e) => {
                 let e = e.into();
                 error!("Panicked while syncing {stage:?}: {e:?}");
-                Err((stage, e))
+                Err(e)
             }
         }
     }
@@ -74,23 +69,22 @@ impl MailUserContext {
     /// Initialize the mail user context, running all the necessary syncs to ensure the context is ready to be used.
     /// Syncs are mostly run in the parallel, but updating message & conversation count are dependent on labels, so it is run in sequence.
     ///
+    /// # Warning
+    ///
+    /// This function probably should not be called explicitly.
+    /// It is called automatically during user context session creation
+    ///
     /// # Arguments
     ///
     /// * `ctx` - The mail user context to initialize, it is vital to have it as Arc, as it will be cloned multiple times, and passed to the tokio::task.
-    /// * `cb` - The callback to notify the caller about the progress of the initialization.
     ///
     /// # Returns
     ///
-    /// * `Ok(())` - If the initialization is successful.
-    /// * `Err((MailUserContextLoadingStage, MailContextError))` - If the initialization fails at any stage, it will return the stage at which it failed and the error.
+    /// An error if the initialization failed for any reason
     ///
-    #[tracing::instrument(level = Level::DEBUG, skip(ctx, cb))]
-    pub async fn initialize_async(
-        ctx: Arc<Self>,
-        cb: &dyn MailUserContextInitializationCallback,
-    ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
-        let watcher = InitializationWatcher::new(ctx.user_stash())
-            .map_err(|e| (MailUserContextLoadingStage::Initialization, e.into()))?;
+    #[tracing::instrument(level = Level::DEBUG, skip(ctx))]
+    pub async fn initialize_async(ctx: Arc<Self>) -> Result<(), MailContextError> {
+        let watcher = InitializationWatcher::new(ctx.user_stash())?;
         let watcher_clone = watcher.clone();
         let watcher_task_handle = ctx.spawn(async move { watcher_clone.task().await });
 
@@ -135,18 +129,17 @@ impl MailUserContext {
         });
 
         try_join!(
-            Self::initial_sync_for(MailUserContextLoadingStage::Labels, labels, cb),
-            Self::initial_sync_for(MailUserContextLoadingStage::Contacts, contacts, cb),
-            Self::initial_sync_for(MailUserContextLoadingStage::Counters, counters, cb),
-            Self::initial_sync_for(MailUserContextLoadingStage::Events, event_loop, cb),
-            Self::initial_sync_for(MailUserContextLoadingStage::UserSettings, user_settings, cb),
-            Self::initial_sync_for(MailUserContextLoadingStage::MailSettings, mail_settings, cb),
-            Self::initial_sync_for(MailUserContextLoadingStage::Addresses, addresses, cb),
+            Self::initial_sync_for(MailUserContextLoadingStage::Labels, labels),
+            Self::initial_sync_for(MailUserContextLoadingStage::Contacts, contacts),
+            Self::initial_sync_for(MailUserContextLoadingStage::Counters, counters),
+            Self::initial_sync_for(MailUserContextLoadingStage::Events, event_loop),
+            Self::initial_sync_for(MailUserContextLoadingStage::UserSettings, user_settings),
+            Self::initial_sync_for(MailUserContextLoadingStage::MailSettings, mail_settings),
+            Self::initial_sync_for(MailUserContextLoadingStage::Addresses, addresses),
         )?;
 
         debug!("Syncing Complete in {:?}", t0.elapsed());
         watcher_task_handle.abort();
-        cb.on_stage(MailUserContextLoadingStage::Finished);
 
         Ok(())
     }

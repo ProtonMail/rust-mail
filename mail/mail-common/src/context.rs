@@ -1,5 +1,5 @@
 use crate::actions::MailActionError;
-use crate::{AppError, MailUserContext, draft};
+use crate::{AppError, MailUserContext, MailUserContextLoadingStage, draft};
 use futures::executor::block_on;
 use proton_action_queue::action::{Action, WriterGuardError};
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
@@ -34,6 +34,19 @@ use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use tokio::sync::Mutex;
 use tokio::task::{JoinError, JoinHandle};
+
+/// Whether we should initialize MailUserContext on creation
+#[derive(Debug, Clone, Copy)]
+pub enum ShouldInitializeMailUserContext {
+    /// When creating user context, it should be also initialized.
+    /// Initialization means calling APIs for the data which might fail.
+    Yes,
+
+    /// # Caution
+    /// Used only for tests - we want to postpone initialization but still
+    /// have an access to uninitialized context - in order to setup data for mocks etc.
+    No,
+}
 
 /// Errors that may occur while interacting with a MailContext.
 #[derive(Debug, thiserror::Error)]
@@ -103,8 +116,8 @@ pub enum MailContextError {
     #[error("Could not start transaction: {0}")]
     IntoTransactionError(anyhow::Error),
 
-    #[error("Could not initialize user context: {0}")]
-    InitializationFailed(anyhow::Error),
+    #[error("Could not initialize user context in stage {1:?}: {0}")]
+    InitializationFailed(anyhow::Error, MailUserContextLoadingStage),
 
     #[error("{0}")]
     Other(anyhow::Error),
@@ -170,12 +183,16 @@ impl From<CoreContextError> for MailContextError {
     }
 }
 
-impl<E: std::fmt::Debug + Send + Sync + 'static> From<InitializationError<E>> for MailContextError {
-    fn from(value: InitializationError<E>) -> Self {
+impl<E> From<(InitializationError<E>, MailUserContextLoadingStage)> for MailContextError
+where
+    E: std::fmt::Debug + Send + Sync + 'static,
+    MailContextError: From<E>,
+{
+    fn from((value, stage): (InitializationError<E>, MailUserContextLoadingStage)) -> Self {
         match value {
-            InitializationError::InitializationFailed(_)
-            | InitializationError::DependencyFailed(_) => {
-                Self::InitializationFailed(anyhow::Error::from(value))
+            InitializationError::InitializationFailed(e) => e.into(),
+            InitializationError::DependencyFailed(_) => {
+                Self::InitializationFailed(anyhow::Error::from(value), stage)
             }
             InitializationError::Stash(stash_error) => Self::Stash(stash_error),
         }
@@ -321,7 +338,10 @@ impl MailContext {
             .user_context_from_login_flow(login_flow)
             .await?;
         Arc::clone(self)
-            .new_user_context::<CheckNetworkStatusSubscriber>(ctx)
+            .new_user_context::<CheckNetworkStatusSubscriber>(
+                ctx,
+                ShouldInitializeMailUserContext::Yes,
+            )
             .await
     }
 
@@ -333,13 +353,14 @@ impl MailContext {
         self: &Arc<Self>,
         session: &CoreSession,
         status: Option<StatusWatcher>,
+        init: ShouldInitializeMailUserContext,
     ) -> MailContextResult<Arc<MailUserContext>> {
         let ctx = self
             .core_context
             .user_context_from_session(session, status)
             .await?;
         Arc::clone(self)
-            .new_user_context::<CheckNetworkStatusSubscriber>(ctx)
+            .new_user_context::<CheckNetworkStatusSubscriber>(ctx, init)
             .await
     }
 
@@ -538,6 +559,7 @@ impl MailContext {
     async fn new_user_context<WFO: WaitForOnlineSubscribtionExt>(
         self: Arc<Self>,
         core_context: Arc<UserContext>,
+        init: ShouldInitializeMailUserContext,
     ) -> Result<Arc<MailUserContext>, MailContextError> {
         let mut active_contexts = self.active_user_contexts.lock().await;
 
@@ -560,6 +582,10 @@ impl MailContext {
         let ctx = MailUserContext::new::<WFO>(self.clone(), core_context).await?;
 
         active_contexts.insert(ctx.user_id().clone(), Arc::downgrade(&ctx));
+
+        if matches!(init, ShouldInitializeMailUserContext::Yes) {
+            MailUserContext::initialize_async(ctx.clone()).await?;
+        }
 
         Ok(ctx)
     }

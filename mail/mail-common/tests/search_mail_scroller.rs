@@ -35,7 +35,6 @@ async fn save_single_message(label: &Label, message: &mut Message, bond: &Bond<'
 #[tokio::test]
 async fn test_search_mail_scroller_reads_one_item_from_online_scroll_data() {
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
     let params = TestParams::default_basic();
     let conversation = params.conversations.first().cloned().unwrap();
     let address = params.addresses.first().cloned().unwrap();
@@ -48,8 +47,8 @@ async fn test_search_mail_scroller_reads_one_item_from_online_scroll_data() {
     ctx.mock_get_messages_total_expect(vec![message], 1, 2)
         .await;
     ctx.setup_user(params.clone()).await;
-    ctx.init_user(user_ctx.clone()).await;
     ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let page_size = 5;
     let mut scroller =
@@ -78,10 +77,9 @@ async fn test_search_mail_scroller_reads_two_pages_from_online_scroll_data() {
     let page_size = 5;
     let search_phrase = "Invoice 2024";
     let params = setup_api_message_pages(&ctx, page_size, search_phrase, 2).await;
-    let user_ctx = ctx.mail_user_context().await;
 
     ctx.setup_user(params.clone()).await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Online
     let mut scroller = MailScroller::search(
@@ -196,7 +194,7 @@ async fn test_search_mail_scroller_reads_two_pages_from_online_scroll_data() {
 #[tokio::test]
 async fn test_search_mail_scroller_notificate_about_changes() {
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
     let page_size = 5;
     let search_phrase = "123";
@@ -206,11 +204,10 @@ async fn test_search_mail_scroller_notificate_about_changes() {
         .unwrap()
         .unwrap();
     let params = setup_api_message_pages(&ctx, page_size, search_phrase, 1).await;
-    let user_ctx = ctx.mail_user_context().await;
 
     ctx.setup_user(params.clone()).await;
-    ctx.init_user(user_ctx.clone()).await;
     ctx.catch_all().await;
+    ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     let mut scroller = MailScroller::search(
         user_ctx.as_weak(),

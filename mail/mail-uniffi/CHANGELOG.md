@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+### Removed
+
+- [ET-2558] MailUserContext initialization is no longer explicit. Function has been removed.
+
+### Changed
+
+- [ET-2558] MailUserContext is now initialized whenever client acquires a new one.
+  - It may fail if the device is in the offline mode.
+  - It is mobile dev responsibility to handle that.
+
 ### Fixed
 
   - The spam banner will stop appearing after it's been marked as legitimate.

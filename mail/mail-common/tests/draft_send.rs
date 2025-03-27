@@ -50,9 +50,6 @@ async fn basic_send_check() {
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
-
-    let tether = user_ctx.user_stash().connection();
 
     let mut message = message_body_test_message_simple();
     message.metadata.to_list.push(MessageRecipient {
@@ -129,7 +126,8 @@ async fn basic_send_check() {
         )
         .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
+    let tether = user_ctx.user_stash().connection();
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
@@ -289,7 +287,6 @@ async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_be
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     let mut message = message_body_test_message_simple();
     message.metadata.label_ids.push(LabelId::drafts());
@@ -306,7 +303,7 @@ async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_be
     )
     .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
@@ -344,7 +341,6 @@ async fn save_after_send_is_an_error() {
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     let mut message = message_body_test_message_simple();
     message.metadata.to_list.push(MessageRecipient {
@@ -356,7 +352,7 @@ async fn save_after_send_is_an_error() {
 
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
@@ -406,7 +402,6 @@ async fn send_fails_if_recipient_is_not_valid_impl(
     // * Draft is moved to sent folder
     // Set up a user and initialise the inbox
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     let mut message = message_body_test_message_simple();
     message.metadata.to_list.push(MessageRecipient {
@@ -444,7 +439,7 @@ async fn send_fails_if_recipient_is_not_valid_impl(
         )
         .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();

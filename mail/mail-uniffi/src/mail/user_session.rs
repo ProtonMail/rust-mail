@@ -1,6 +1,6 @@
 mod events;
 mod images;
-mod initialization;
+pub mod initialization;
 mod labels;
 
 use crate::core::datatypes::{
