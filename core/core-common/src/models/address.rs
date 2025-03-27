@@ -1,19 +1,23 @@
-use crate::CoreContextResult;
+use std::sync::Arc;
+
 use crate::datatypes::{
-    AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, LocalAddressId,
+    AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, InitializationKey,
+    LocalAddressId,
 };
+use crate::{CoreContextError, CoreContextResult};
 use proton_api_core::services::proton::Address as ApiAddress;
 use proton_api_core::services::proton::AddressId;
-use proton_api_core::services::proton::Proton;
 use proton_api_core::services::proton::ProtonCore;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::Bond;
+use stash::stash::StashError;
 use stash::stash::Tether;
-use stash::stash::{Stash, StashError};
+use stash::stash::{Bond, Stash};
 
 use crate::models::ModelIdExtension;
+
+use super::{InitializationError, InitializationWatcher, InitializedComponent};
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
@@ -129,33 +133,57 @@ impl Address {
         <Self as Model>::save(self, bond).await
     }
 
-    /// Download and store user addresses into the database
+    /// Key used to distinguish between components in the initialization.
+    /// It is a string, not an enum for making it open for additional changes from different BU.
+    ///
+    pub const INIT_KEY: InitializationKey = InitializationKey::new("addresses");
+    /// It initializes addresses by syncing with the Backend.
+    /// In case of successful initialization, it marks it in the [`InitializedComponents`].
+    ///
+    /// This function is idempotent. If successfully initialized in the past.
+    ///
+    pub async fn initialize<API>(
+        watcher: Arc<InitializationWatcher>,
+        api: &API,
+        stash: &Stash,
+    ) -> Result<(), InitializationError<CoreContextError>>
+    where
+        API: ProtonCore,
+    {
+        InitializedComponent::initialize::<CoreContextError, SyncedAddresses>(
+            watcher,
+            Self::INIT_KEY,
+            &[],
+            stash.connection(),
+            async || Self::sync(api).await,
+            async |tx, res| {
+                res.store(tx).await?;
+                Ok(())
+            },
+        )
+        .await
+    }
+
+    /// Download user addresses. Returns an object that can be stored in DB.
     ///
     /// # Parameters
     ///
     /// * `api`   - The API instance to use to download the addresses.
-    /// * `stash` - The database instance to store the addresses.
     ///
     /// # Errors
     ///
     /// TODO: Document the errors.
     ///
-    pub async fn sync(api: &Proton, stash: &Stash) -> CoreContextResult<()> {
+    pub async fn sync(api: &impl ProtonCore) -> CoreContextResult<SyncedAddresses> {
         let addresses = api
             .get_addresses()
             .await?
             .addresses
             .into_iter()
-            .map(Address::from);
+            .map(Address::from)
+            .collect();
 
-        let mut conn = stash.connection();
-        let tx = conn.transaction().await?;
-        for mut address in addresses {
-            address.save(&tx).await?;
-        }
-        tx.commit().await?;
-
-        Ok(())
+        Ok(SyncedAddresses { addresses })
     }
 
     /// Loads the address for the given e-mail from the database if any.
@@ -196,5 +224,26 @@ impl From<ApiAddress> for Address {
             status: value.status.into(),
             row_id: None,
         }
+    }
+}
+
+/// This is a manual implementation of `Address::sync` async closure.
+///
+/// We keep it as it is until Rust allows us to use `impl Trait` in generics etc.
+#[must_use]
+#[derive(Debug)]
+pub struct SyncedAddresses {
+    addresses: Vec<Address>,
+}
+
+impl SyncedAddresses {
+    /// Consume this manual closure by storing data in the Database.
+    ///
+    #[tracing::instrument(skip(tx))]
+    pub async fn store(self, tx: &Bond<'_>) -> CoreContextResult<()> {
+        for mut address in self.addresses {
+            address.save(tx).await?;
+        }
+        Ok(())
     }
 }

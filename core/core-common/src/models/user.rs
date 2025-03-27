@@ -1,15 +1,21 @@
-use crate::CoreContextResult;
-use crate::datatypes::{Flags, ProductUsedSpace, UserKeys, UserMnemonicStatus, UserType};
-use proton_api_core::services::proton::Proton;
+use std::sync::Arc;
+
+use crate::datatypes::{
+    Flags, InitializationKey, ProductUsedSpace, UserKeys, UserMnemonicStatus, UserType,
+};
+use crate::{CoreContextError, CoreContextResult};
 use proton_api_core::services::proton::ProtonCore;
 use proton_api_core::services::proton::User as ApiUser;
 use proton_api_core::services::proton::UserId;
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::stash::Bond;
-use stash::stash::{Stash, StashError};
+use stash::stash::StashError;
+use stash::stash::{Bond, Stash};
 
-use super::{ModelExtension as _, UserSettings};
+use super::{
+    InitializationError, InitializationWatcher, InitializedComponent, ModelExtension as _,
+    UserSettings,
+};
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
@@ -187,17 +193,70 @@ impl User {
     ///
     /// TODO: Document the errors.
     ///
-    pub async fn sync_user_and_settings(api: &Proton, stash: &Stash) -> CoreContextResult<()> {
-        let mut user = User::from(api.get_users().await?.user);
+    pub async fn sync_user_and_settings(
+        api: &impl ProtonCore,
+    ) -> CoreContextResult<SyncedUserSettings> {
+        let user = User::from(api.get_users().await?.user);
         let mut settings = UserSettings::from(api.get_settings().await?.user_settings);
         settings.remote_id.clone_from(&user.remote_id);
 
-        let mut conn = stash.connection();
-        let tx = conn.transaction().await?;
-        user.save(&tx).await?;
-        settings.save(&tx).await?;
-        tx.commit().await?;
+        Ok(SyncedUserSettings { user, settings })
+    }
 
+    /// Key used to distinguish between components in the initialization.
+    /// It is a string, not an enum for making it open for additional changes from different BU.
+    ///
+    pub const INIT_KEY: InitializationKey = InitializationKey::new("user_settings");
+
+    /// It initializes user and settings by syncing with the Backend.
+    /// In case of successful initialization, it marks it in the [`InitializedComponents`].
+    ///
+    /// This function is idempotent. If successfully initialized in the past.
+    ///
+    pub async fn initialize_with_settings<API>(
+        watcher: Arc<InitializationWatcher>,
+        api: &API,
+        stash: &Stash,
+    ) -> Result<(), InitializationError<CoreContextError>>
+    where
+        API: ProtonCore,
+    {
+        InitializedComponent::initialize::<CoreContextError, SyncedUserSettings>(
+            watcher,
+            Self::INIT_KEY,
+            &[],
+            stash.connection(),
+            async move || Self::sync_user_and_settings(api).await,
+            async |tx, res| {
+                res.store(tx).await?;
+                Ok(())
+            },
+        )
+        .await
+    }
+}
+
+/// This is a manual implementation of `User::sync_user_and_settings` async closure.
+///
+/// We keep it as it is until Rust allows us to use `impl Trait` in generics etc.
+#[must_use]
+#[derive(Debug)]
+pub struct SyncedUserSettings {
+    user: User,
+    settings: UserSettings,
+}
+
+impl SyncedUserSettings {
+    /// Consume this manual closure by storing data in the Database.
+    ///
+    #[tracing::instrument(skip(tx))]
+    pub async fn store(self, tx: &Bond<'_>) -> CoreContextResult<()> {
+        let Self {
+            mut user,
+            mut settings,
+        } = self;
+        user.save(tx).await?;
+        settings.save(tx).await?;
         Ok(())
     }
 }
