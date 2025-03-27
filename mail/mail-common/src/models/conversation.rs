@@ -37,7 +37,7 @@ use proton_api_mail::services::proton::response_data::{
 };
 use proton_core_common::datatypes::{InitializationKey, LabelType, LocalLabelId, SystemLabel};
 use proton_core_common::models::{
-    InitializationError, InitializationWatcherHandle, InitializedComponent, Label, ModelExtension,
+    InitializationError, InitializationWatcher, InitializedComponent, Label, ModelExtension,
     ModelIdExtension,
 };
 use proton_core_common::utils::MapVec as _;
@@ -53,6 +53,7 @@ use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::future::Future;
 use std::ops::AddAssign;
+use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
 #[derive(Clone, Debug, Default, Eq, Model, PartialEq)]
@@ -3567,7 +3568,7 @@ impl StoreLabelCounters {
     /// Key used to distinguish between components in the initialization.
     /// It is a string, not an enum for making it open for additional changes from different BU.
     ///
-    pub const INIT_KEY: InitializationKey = InitializationKey::new("counters");
+    pub const INIT_KEY: InitializationKey = InitializationKey::new("label_counters");
 
     /// It initializes counters by syncing with the Backend.
     /// In case of successful initialization, it marks it in the [`InitializedComponents`].
@@ -3575,7 +3576,7 @@ impl StoreLabelCounters {
     /// This function is idempotent. If successfully initialized in the past.
     ///
     pub async fn initialize(
-        watcher: InitializationWatcherHandle,
+        watcher: Arc<InitializationWatcher>,
         api: &impl ProtonMail,
         stash: &Stash,
     ) -> Result<(), InitializationError<AppError>> {

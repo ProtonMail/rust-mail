@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::datatypes::{
     Flags, InitializationKey, ProductUsedSpace, UserKeys, UserMnemonicStatus, UserType,
 };
@@ -11,7 +13,7 @@ use stash::stash::StashError;
 use stash::stash::{Bond, Stash};
 
 use super::{
-    InitializationError, InitializationWatcherHandle, InitializedComponent, ModelExtension as _,
+    InitializationError, InitializationWatcher, InitializedComponent, ModelExtension as _,
     UserSettings,
 };
 
@@ -212,7 +214,7 @@ impl User {
     /// This function is idempotent. If successfully initialized in the past.
     ///
     pub async fn initialize_with_settings<API>(
-        watcher: InitializationWatcherHandle,
+        watcher: Arc<InitializationWatcher>,
         api: &API,
         stash: &Stash,
     ) -> Result<(), InitializationError<CoreContextError>>

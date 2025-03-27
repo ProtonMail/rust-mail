@@ -135,7 +135,7 @@ impl InitializedComponent {
     ///
     #[tracing::instrument(skip(tether, fetch, store, watcher))]
     pub async fn initialize<E, CTX>(
-        watcher: InitializationWatcherHandle,
+        watcher: Arc<InitializationWatcher>,
         key: InitializationKey,
         dependencies: &[InitializationKey],
         mut tether: Tether,
@@ -225,7 +225,7 @@ impl InitializedComponent {
     async fn wait_for_dependencies(
         key: InitializationKey,
         dependencies: &[InitializationKey],
-        mut watcher: InitializationWatcherHandle,
+        watcher: Arc<InitializationWatcher>,
         tether: &Tether,
     ) -> Result<(), DependencyInitializationError> {
         tracing::debug!("Waiting for dependencies: {dependencies:?}");
@@ -235,13 +235,15 @@ impl InitializedComponent {
             return Ok(());
         }
 
+        let mut handle = watcher.subscribe();
+
         // We already have a handle, but let's also check dependencies at least once, in case something is already initialized.
         if Self::check_dependencies(key, dependencies, tether).await? {
             return Ok(());
         }
 
         loop {
-            if let Err(tokio::sync::broadcast::error::RecvError::Closed) = watcher.recv().await {
+            if let Err(tokio::sync::broadcast::error::RecvError::Closed) = handle.recv().await {
                 return Err(
                     StashError::WatcherError("Watcher closed prematurely".to_owned()).into(),
                 );
@@ -366,17 +368,16 @@ impl InitializationWatcher {
                 })
                 .map_err(|_| StashError::WatcherError("Connection lost".to_owned()))?;
 
-            if self
-                .sender
-                .send(())
-                .inspect_err(|e| {
-                    tracing::warn!("Initialization watcher failed to notify about change: {e:?}");
-                })
-                .is_err()
-            {
-                // No one was listening
-                return Ok(());
-            }
+            // We ignore errors if no one is listening.
+            // There are two cases:
+            // * Either all tasks finished or
+            // * None of the tasks subscribed yet.
+            //
+            // In first case we are going to abort this task anyway,
+            // In the second - we want to keep this task spinning - someone might start listening soon
+            _ = self.sender.send(()).inspect_err(|e| {
+                tracing::warn!("Initialization watcher failed to notify about change: {e:?}");
+            });
         }
     }
 }

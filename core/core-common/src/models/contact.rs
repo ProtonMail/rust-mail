@@ -1,6 +1,7 @@
 use crate::utils::MapVec as _;
 use std::collections::{BTreeSet, HashMap};
 use std::iter;
+use std::sync::Arc;
 use std::time::Instant;
 
 use crate::actions::contacts::Delete as ContactsDelete;
@@ -31,7 +32,7 @@ use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use tokio::task::JoinSet;
 use tracing::{debug, error};
 
-use super::{InitializationError, InitializationWatcherHandle, InitializedComponent, Label};
+use super::{InitializationError, InitializationWatcher, InitializedComponent, Label};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("contacts")]
@@ -326,7 +327,7 @@ impl Contact {
     /// This function is idempotent. If successfully initialized in the past.
     ///
     pub async fn initialize(
-        watcher: InitializationWatcherHandle,
+        watcher: Arc<InitializationWatcher>,
         api: &Proton,
         stash: &Stash,
     ) -> Result<(), InitializationError<CoreContextError>> {

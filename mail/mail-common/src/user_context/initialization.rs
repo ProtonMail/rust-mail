@@ -7,8 +7,7 @@ use futures::try_join;
 use proton_core_common::async_task::AsyncTaskResult;
 use proton_core_common::datatypes::InitializationKey;
 use proton_core_common::models::{
-    Address, Contact, InitializationError, InitializationWatcher, InitializationWatcherHandle,
-    InitializedComponent, User,
+    Address, Contact, InitializationError, InitializationWatcher, InitializedComponent, User,
 };
 use proton_event_loop::EventLoopError;
 use tokio::task::JoinHandle;
@@ -97,42 +96,42 @@ impl MailUserContext {
 
         let t0 = Instant::now();
         let ctx_clone = ctx.clone();
-        let watcher_handle = watcher.subscribe();
+        let watcher_clone = watcher.clone();
         let labels = ctx.spawn(async move {
-            LabelWithCounters::initialize(watcher_handle, ctx_clone.api(), ctx_clone.user_stash())
+            LabelWithCounters::initialize(watcher_clone, ctx_clone.api(), ctx_clone.user_stash())
                 .await
         });
         let ctx_clone = ctx.clone();
-        let watcher_handle = watcher.subscribe();
+        let watcher_clone = watcher.clone();
         let counters = ctx.spawn(async move {
-            StoreLabelCounters::initialize(watcher_handle, ctx_clone.api(), ctx_clone.user_stash())
+            StoreLabelCounters::initialize(watcher_clone, ctx_clone.api(), ctx_clone.user_stash())
                 .await
         });
         let ctx_clone = ctx.clone();
-        let watcher_handle = watcher.subscribe();
+        let watcher_clone = watcher.clone();
         let contacts = ctx.spawn(async move {
-            Contact::initialize(watcher_handle, ctx_clone.api(), ctx_clone.user_stash()).await
+            Contact::initialize(watcher_clone, ctx_clone.api(), ctx_clone.user_stash()).await
         });
 
         let ctx_clone = ctx.clone();
-        let watcher_handle = watcher.subscribe();
+        let watcher_clone = watcher.clone();
         let event_loop = ctx
-            .spawn(async move { initialize_event_loop(watcher_handle, ctx_clone.as_ref()).await });
+            .spawn(async move { initialize_event_loop(watcher_clone, ctx_clone.as_ref()).await });
         let ctx_clone = ctx.clone();
-        let watcher_handle = watcher.subscribe();
+        let watcher_clone = watcher.clone();
         let user_settings = ctx.spawn(async move {
-            User::initialize_with_settings(watcher_handle, ctx_clone.api(), ctx_clone.user_stash())
+            User::initialize_with_settings(watcher_clone, ctx_clone.api(), ctx_clone.user_stash())
                 .await
         });
         let ctx_clone = ctx.clone();
-        let watcher_handle = watcher.subscribe();
+        let watcher_clone = watcher.clone();
         let mail_settings = ctx.spawn(async move {
-            MailSettings::initialize(watcher_handle, ctx_clone.api(), ctx_clone.user_stash()).await
+            MailSettings::initialize(watcher_clone, ctx_clone.api(), ctx_clone.user_stash()).await
         });
         let ctx_clone = ctx.clone();
-        let watcher_handle = watcher.subscribe();
+        let watcher_clone = watcher.clone();
         let addresses = ctx.spawn(async move {
-            Address::initialize(watcher_handle, ctx_clone.api(), ctx_clone.user_stash()).await
+            Address::initialize(watcher_clone, ctx_clone.api(), ctx_clone.user_stash()).await
         });
 
         try_join!(
@@ -159,7 +158,7 @@ impl MailUserContext {
 const EVENT_INIT_KEY: InitializationKey = InitializationKey::new("events");
 
 async fn initialize_event_loop(
-    watcher: InitializationWatcherHandle,
+    watcher: Arc<InitializationWatcher>,
     ctx_clone: &MailUserContext,
 ) -> Result<(), InitializationError<EventLoopError>> {
     let stash = ctx_clone.user_stash();

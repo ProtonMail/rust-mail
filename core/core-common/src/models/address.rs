@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::datatypes::{
     AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, InitializationKey,
     LocalAddressId,
@@ -15,7 +17,7 @@ use stash::stash::{Bond, Stash};
 
 use crate::models::ModelIdExtension;
 
-use super::{InitializationError, InitializationWatcherHandle, InitializedComponent};
+use super::{InitializationError, InitializationWatcher, InitializedComponent};
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
@@ -141,7 +143,7 @@ impl Address {
     /// This function is idempotent. If successfully initialized in the past.
     ///
     pub async fn initialize<API>(
-        watcher: InitializationWatcherHandle,
+        watcher: Arc<InitializationWatcher>,
         api: &API,
         stash: &Stash,
     ) -> Result<(), InitializationError<CoreContextError>>

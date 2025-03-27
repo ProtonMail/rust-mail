@@ -2,11 +2,13 @@
 #[path = "../tests/models/labels_with_counters.rs"]
 mod labels_with_counters;
 
+use std::sync::Arc;
+
 use indoc::formatdoc;
 use proton_api_core::services::proton::{LabelId, ProtonCore};
 use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId};
 use proton_core_common::models::{
-    InitializationError, InitializationWatcherHandle, InitializedComponent, Label, LabelError,
+    InitializationError, InitializationWatcher, InitializedComponent, Label, LabelError,
 };
 use sqlite_watcher::watcher::TableObserver;
 use stash::stash::{Stash, WatcherHandle};
@@ -117,7 +119,7 @@ impl LabelWithCounters {
     /// This function is idempotent. If successfully initialized in the past.
     ///
     pub async fn initialize<API>(
-        watcher: InitializationWatcherHandle,
+        watcher: Arc<InitializationWatcher>,
         api: &API,
         stash: &Stash,
     ) -> Result<(), InitializationError<LabelError>>
