@@ -253,6 +253,7 @@ impl ProtonCore for Proton {
                 form.add_text("OS", body.os);
                 form.add_text("OSVersion", body.os_version);
                 form.add_text("Client", body.client);
+                form.add_text("ClientVersion", body.client_version);
                 form.add_text("ClientType", body.client_type.to_string());
                 form.add_text("Title", body.title);
                 form.add_text("Description", body.description);
