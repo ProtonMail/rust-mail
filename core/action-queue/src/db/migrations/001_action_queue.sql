@@ -39,3 +39,4 @@ CREATE TABLE action_queue_lock (
   permit_id INTEGER NOT NULL DEFAULT 0,
   CONSTRAINT action_queue_lock_action_id FOREIGN KEY (action_id) REFERENCES action_queue (id) ON DELETE CASCADE
 );
+

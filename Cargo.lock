@@ -1784,9 +1784,9 @@ dependencies = [
 
 [[package]]
 name = "fragile"
-version = "2.0.0"
+version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c2141d6d6c8512188a7891b4b01590a45f6dac67afb4f255c4124dbb86d4eaa"
+checksum = "28dd6caf6059519a65843af8fe2a3ae298b14b80179855aeb4adc2c1934ee619"
 
 [[package]]
 name = "fs-err"
@@ -4268,6 +4268,7 @@ dependencies = [
  "common-multipart-rfc7578",
  "futures-util",
  "indexmap 2.8.0",
+ "insta",
  "muon",
  "pretty_assertions",
  "proton-api-core",
@@ -4398,9 +4399,9 @@ dependencies = [
 
 [[package]]
 name = "proton-crypto"
-version = "0.4.13"
+version = "0.4.14"
 source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "93db7f8c93adc50afc202fd5e8f57e93203b8abf629e3dc0d6e964505731161a"
+checksum = "528c0b1afba1140278bc839c7a796d36c9bc8eafeb751df6622889988a99339e"
 dependencies = [
  "gopenpgp-sys",
  "hex",
@@ -4414,9 +4415,9 @@ dependencies = [
 
 [[package]]
 name = "proton-crypto-account"
-version = "0.9.0"
+version = "0.9.1"
 source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "353e54597e073c38ac8be7ba2813259c8c39062f9c01cec3fc11200ac7c2d0f6"
+checksum = "b51286eb4e2702a22186c8e5d14cc497769b0caf0d599044b936b268565a3b59"
 dependencies = [
  "base64",
  "derive_more 2.0.1",

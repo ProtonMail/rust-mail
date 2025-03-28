@@ -1,4 +1,5 @@
 use super::search::{Search, SearchStatusBar};
+use crate::CLI_ARGS;
 use crate::app::Command;
 use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::conversations::ConversationsState;
@@ -657,7 +658,8 @@ fn background_worker(
 ) -> Command<Messages> {
     Command::background_task(|sender| {
         async move {
-            let mut interval = tokio::time::interval(Duration::from_secs(15));
+            let event_loop_poll_time = CLI_ARGS.event_loop_time.unwrap_or(15);
+            let mut interval = tokio::time::interval(Duration::from_secs(event_loop_poll_time));
             loop {
                 tokio::select! {
                 () = cancel_token.cancelled() => {

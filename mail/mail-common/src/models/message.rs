@@ -67,6 +67,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::future::Future;
 use tracing::{debug, error, info, trace, warn};
 
+use super::default_location::IncomingDefaultLocation;
+
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("messages")]
 #[ModelActions(on_load, on_save)]
@@ -2652,11 +2654,10 @@ impl Message {
     /// Get message banners.
     ///
     /// Fails if time went backwards
-    pub fn get_banners(&self, settings: &MailSettings) -> Vec<MessageBanner> {
+    pub async fn get_banners(&self, tether: &Tether) -> Vec<MessageBanner> {
         let mut banners = vec![];
 
         let flags = self.flags;
-
         // The user might have marked it manually as not spam, skip that case
         if !flags.contains(MessageFlags::HAM_MANUAL) {
             // Phising
@@ -2678,6 +2679,7 @@ impl Message {
             });
         }
 
+        let settings = &MailSettings::get_or_default(tether).await;
         if let Some(days) = settings.auto_delete_spam_and_trash_days {
             let trash = LabelId::trash();
             let spam = LabelId::spam();
@@ -2693,8 +2695,11 @@ impl Message {
                 }
             }
         }
-
-        // TODO: blocked sender
+        if let Ok(Some(IncomingDefaultLocation::Blocked)) =
+            IncomingDefaultLocation::find(self.local_address_id, tether).await
+        {
+            banners.push(MessageBanner::BlockedSender);
+        }
 
         banners.sort_unstable();
         banners

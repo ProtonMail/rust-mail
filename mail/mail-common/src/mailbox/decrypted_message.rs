@@ -289,7 +289,7 @@ impl DecryptedMessageBody {
 
         let banners = if let Some(id) = self.metadata.local_message_id {
             if let Ok(Some(message)) = Message::load(id, tether).await {
-                message.get_banners(&MailSettings::get_or_default(tether).await)
+                message.get_banners(tether).await
             } else {
                 vec![]
             }

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use crate::models::default_location::IncomingDefaultLocation;
 use crate::models::{LabelWithCounters, MailSettings, StoreLabelCounters};
 use crate::{MailContextError, MailUserContext};
 use futures::try_join;
@@ -22,6 +23,7 @@ enum MailUserContextLoadingStage {
     Labels,
     Counters,
     Contacts,
+    IncomingDefaults,
 }
 
 impl MailUserContext {
@@ -70,6 +72,9 @@ impl MailUserContext {
         let addresses = ctx.spawn_init(&watcher, |ctx, watcher| async move {
             Address::initialize(watcher, ctx.api(), ctx.user_stash()).await
         });
+        let inc_defs = ctx.spawn_init(&watcher, |ctx, watcher| async move {
+            IncomingDefaultLocation::initialize(watcher, ctx.api(), ctx.user_stash()).await
+        });
 
         try_join!(
             Self::initial_sync_for(MailUserContextLoadingStage::Labels, labels),
@@ -78,7 +83,8 @@ impl MailUserContext {
             Self::initial_sync_for(MailUserContextLoadingStage::Events, event_loop),
             Self::initial_sync_for(MailUserContextLoadingStage::UserSettings, user_settings),
             Self::initial_sync_for(MailUserContextLoadingStage::MailSettings, mail_settings),
-            Self::initial_sync_for(MailUserContextLoadingStage::Addresses, addresses)
+            Self::initial_sync_for(MailUserContextLoadingStage::Addresses, addresses),
+            Self::initial_sync_for(MailUserContextLoadingStage::IncomingDefaults, inc_defs),
         )?;
 
         debug!("Syncing Complete in {:?}", t0.elapsed());
