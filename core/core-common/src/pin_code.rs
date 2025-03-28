@@ -90,10 +90,14 @@ impl PinCode {
 
         app_settings.protection = AppProtection::Pin;
 
-        let bond = tether.transaction().await?;
-        this.save(&bond).await?;
-        app_settings.save(&bond).await?;
-        bond.commit().await?;
+        tether
+            .tx(async |bond| -> Result<(), StashError> {
+                this.save(bond).await?;
+                app_settings.save(bond).await?;
+
+                Ok(())
+            })
+            .await?;
 
         Ok(())
     }
@@ -102,7 +106,7 @@ impl PinCode {
     ///
     /// This method will be utilized to verify user if he is eligible person to access the app.
     ///
-    pub async fn validate_pin<P: AsRef<[u8]>>(ctx: &Context, pin: P) -> Result<(), PinError> {
+    pub async fn validate_pin<P: AsRef<[u8]>>(ctx: Arc<Context>, pin: P) -> Result<(), PinError> {
         let mut tether = ctx.account_stash().connection();
         let app_settings = AppSettings::get_or_default(&tether).await;
 
@@ -122,29 +126,37 @@ impl PinCode {
                 return Err(PinError::TooFrequentAttempts);
             }
 
-            let Some(secret) = ctx.load_secret::<PinHash>()? else {
-                return Err(PinError::MissingPinHash);
-            };
-
-            let bond = tether.transaction().await?;
-            pin_protection.last_access_unixepoch = now;
-
             // We have no guarantees that hashing function will not block whole runtime
             // Better be safe than sorry.
             let pin = pin.as_ref().to_vec();
-            let success = tokio::task::spawn_blocking(move || secret.verify(pin)).await??;
+            let success = tokio::task::spawn_blocking(move || {
+                let Some(secret) = ctx.load_secret::<PinHash>()? else {
+                    return Err(PinError::MissingPinHash);
+                };
+
+                Ok(secret.verify(pin)?)
+            })
+            .await??;
+
+            tether
+                .tx(async |bond| -> Result<(), StashError> {
+                    pin_protection.last_access_unixepoch = now;
+
+                    if success {
+                        pin_protection.attempts = 0;
+                        pin_protection.save(bond).await?;
+                    } else {
+                        pin_protection.attempts += 1;
+                        pin_protection.save(bond).await?;
+                    }
+
+                    Ok(())
+                })
+                .await?;
 
             if success {
-                pin_protection.attempts = 0;
-                pin_protection.save(&bond).await?;
-                bond.commit().await?;
-
                 Ok(())
             } else {
-                pin_protection.attempts += 1;
-                pin_protection.save(&bond).await?;
-                bond.commit().await?;
-
                 Err(PinError::IncorrectPin)
             }
         } else {
@@ -170,13 +182,12 @@ impl StoreInKeyChain for PinHash {
     fn from_stored_string(
         s: SecretString,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        s.expose_secret()
-            .parse()
-            .map(PinHash)
-            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })
+        // unwrap safety: ProtonArgon2Hash::from_str returns `Infallible`
+        Ok(s.expose_secret().parse().map(PinHash).unwrap())
     }
 
     fn to_stored_string(&self) -> SecretString {
-        SecretString::new(self.0.to_string())
+        // unwrap safety: SecretString::from_str returns `Infallible`
+        self.as_ref().parse().unwrap()
     }
 }
