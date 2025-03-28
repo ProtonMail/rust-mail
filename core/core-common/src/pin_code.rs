@@ -9,7 +9,7 @@ use thiserror::Error;
 use tokio::task::JoinError;
 
 use crate::Context;
-use crate::models::{AppProtection, AppSettings, PinProtection};
+use crate::models::{AppProtection, AppSettings, ModelExtension, PinProtection};
 use crate::os::{KeyChainError, StoreInKeyChain};
 
 #[derive(Debug, Error)]
@@ -162,6 +162,39 @@ impl PinCode {
         } else {
             Ok(())
         }
+    }
+
+    /// Delete PIN
+    ///
+    /// This method validates correctness of the PIN code so it proceed when presented with proper value.
+    ///
+    /// Chosen order of the removal is to minimalize possibility of ending up in incorrect state
+    /// Firstly the database is updated and when successful the `PinHash` is removed from the `KeyChain`.
+    ///
+    pub async fn delete_pin<P: AsRef<[u8]>>(ctx: Arc<Context>, pin: P) -> Result<(), PinError> {
+        Self::validate_pin(ctx.clone(), pin).await?;
+
+        let mut tether = ctx.account_stash().connection();
+        let mut app_settings = AppSettings::get_or_default(&tether).await;
+        let pin_protection = PinProtection::get(&tether).await?;
+
+        app_settings.protection = AppProtection::None;
+
+        tether
+            .tx(async |bond| -> Result<(), StashError> {
+                app_settings.save(bond).await?;
+
+                if let Some(pin_protection) = pin_protection {
+                    pin_protection.delete(bond).await?;
+                }
+
+                Ok(())
+            })
+            .await?;
+
+        tokio::task::spawn_blocking(move || ctx.delete_secret::<PinHash>()).await??;
+
+        Ok(())
     }
 }
 
