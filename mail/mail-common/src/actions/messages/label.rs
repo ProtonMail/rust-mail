@@ -91,13 +91,16 @@ impl ActionHandler for Handler {
         if !failed_ids.is_empty() {
             error!("Label messages operation failed for: {failed_ids:?}");
 
-            let tx = guard.transaction().await?;
-            let local_ids = Message::remote_ids_counterpart(failed_ids.clone(), &tx).await?;
+            guard
+                .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
+                    let local_ids = Message::remote_ids_counterpart(failed_ids.clone(), tx).await?;
 
-            Message::remove_label(action.0.label_id, local_ids, &tx)
-                .await
-                .inspect_err(|e| error!("Failed to rollback label on messages: {e:?}"))?;
-            tx.commit().await?;
+                    Message::remove_label(action.0.label_id, local_ids, tx)
+                        .await
+                        .inspect_err(|e| error!("Failed to rollback label on messages: {e:?}"))?;
+                    Ok(())
+                })
+                .await?;
         }
         Ok(())
     }

@@ -21,7 +21,7 @@ use stash::exports::{SqliteError, ToSql};
 use stash::macros::Model;
 use stash::orm::Model as _;
 use stash::params;
-use stash::stash::IntoTransaction;
+use stash::stash::RunTransaction;
 use stash::stash::{Bond, StashError};
 use stash::utils::placeholders;
 use std::io::Read;
@@ -87,7 +87,7 @@ impl Attachment {
     pub async fn content_path(
         &self,
         ctx: &MailUserContext,
-        into_transaction: &mut impl IntoTransaction,
+        into_transaction: &mut impl RunTransaction,
     ) -> MailContextResult<PathBuf> {
         if let Some(path) = Self::path_from_cache_and_update_metadata_atomic(
             self.local_id.unwrap(),
@@ -103,21 +103,21 @@ impl Attachment {
         // While we were downlaoding, did someone win the race?
         // If so return it. Else store it.
         // TODO(orion): Replace this
-        let tx = into_transaction
-            .transaction()
-            .await
-            .map_err(MailContextError::IntoTransactionError)?;
-        if let Some(path) =
-            Self::path_from_cache_and_update_metadata(self.local_id.unwrap(), &tx).await?
-        {
-            tx.commit().await?;
-            return Ok(path);
-        };
+        into_transaction
+            .run_tx(async |tx| {
+                if let Some(path) =
+                    Self::path_from_cache_and_update_metadata(self.local_id.unwrap(), tx).await?
+                {
+                    return Ok(path);
+                };
 
-        let at =
-            Self::store_in_cache(ctx, &self.filename, self.local_id.unwrap(), data, &tx).await?;
-        tx.commit().await?;
-        Ok(at)
+                Ok(
+                    Self::store_in_cache(ctx, &self.filename, self.local_id.unwrap(), data, tx)
+                        .await?,
+                )
+            })
+            .await
+            .map_err(MailContextError::IntoTransactionError)
     }
 
     /// Tries to get the actual bytes of an attachment.
@@ -131,7 +131,7 @@ impl Attachment {
     pub async fn content_data(
         &self,
         ctx: &MailUserContext,
-        into_transaction: &mut impl IntoTransaction,
+        into_transaction: &mut impl RunTransaction,
     ) -> MailContextResult<Vec<u8>> {
         if let Some(path) = Self::path_from_cache_and_update_metadata_atomic(
             self.local_id.unwrap(),
@@ -147,30 +147,29 @@ impl Attachment {
         // While we were downlaoding, did someone win the race?
         // If so return it. Else store it.
         // TODO(orion): Replace this
-        let tx = into_transaction
-            .transaction()
+        into_transaction
+            .run_tx(async |tx| {
+                if let Some(path) =
+                    Self::path_from_cache_and_update_metadata(self.local_id.unwrap(), tx).await?
+                {
+                    return Ok(fs::read(path).await?);
+                };
+
+                if let Err(e) = Self::store_in_cache(
+                    ctx,
+                    &self.filename,
+                    self.local_id.unwrap(),
+                    data.clone(),
+                    tx,
+                )
+                .await
+                {
+                    error!("Could not save attachment to disk/database, but will continue: {e:?}");
+                }
+                Ok(data)
+            })
             .await
-            .map_err(MailContextError::IntoTransactionError)?;
-        if let Some(path) =
-            Self::path_from_cache_and_update_metadata(self.local_id.unwrap(), &tx).await?
-        {
-            return Ok(fs::read(path).await?);
-        };
-
-        if let Err(e) = Self::store_in_cache(
-            ctx,
-            &self.filename,
-            self.local_id.unwrap(),
-            data.clone(),
-            &tx,
-        )
-        .await
-        {
-            error!("Could not save attachment to disk/database, but will continue: {e:?}");
-        }
-
-        tx.commit().await?;
-        Ok(data)
+            .map_err(MailContextError::IntoTransactionError)
     }
 
     /// Loads the metadata and file path for the given local [`attachment_id`]
@@ -215,17 +214,17 @@ impl Attachment {
     /// Starts a transaction, returns the fs path to the attachment and updates hit/atime metadata
     async fn path_from_cache_and_update_metadata_atomic(
         id: LocalAttachmentId,
-        into_transaction: &mut impl IntoTransaction,
+        into_transaction: &mut impl RunTransaction,
     ) -> MailContextResult<Option<PathBuf>> {
-        let tx = into_transaction
-            .transaction()
+        into_transaction
+            .run_tx(async |tx| {
+                if let Some(path) = Self::path_from_cache_and_update_metadata(id, tx).await? {
+                    return Ok(Some(path));
+                };
+                Ok(None)
+            })
             .await
-            .map_err(MailContextError::IntoTransactionError)?;
-        if let Some(path) = Self::path_from_cache_and_update_metadata(id, &tx).await? {
-            tx.commit().await?;
-            return Ok(Some(path));
-        };
-        Ok(None)
+            .map_err(MailContextError::IntoTransactionError)
     }
 
     /// Returns a fs path to an attachment in the filesystem.

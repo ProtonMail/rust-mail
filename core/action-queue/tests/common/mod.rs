@@ -22,9 +22,9 @@ pub async fn new_queue_with_stash(stash: Stash, factory: Factory) -> Queue {
 pub async fn new_stash() -> Stash {
     let stash = Stash::new(StashConfiguration::test()).unwrap();
     let mut conn = stash.connection();
-    let tx = conn.transaction().await.unwrap();
-    tx.ext_create_table().await.unwrap();
-    tx.commit().await.unwrap();
+    conn.tx(async |tx| tx.ext_create_table().await)
+        .await
+        .unwrap();
     stash
 }
 

@@ -128,7 +128,7 @@ impl proton_action_queue::action::Handler for Handler {
         _: ActionId,
         ctx: &Self::Context,
         action: &mut Self::Action,
-        mut guard: WriterGuard<'_>,
+        guard: WriterGuard<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         let action_equal_original_state = action
             .original_state
@@ -142,8 +142,7 @@ impl proton_action_queue::action::Handler for Handler {
         let remote_id = match action.remote_id.clone() {
             Some(remote_id) => remote_id,
             None => {
-                let tx = guard.transaction().await?;
-                let label = Label::load(action.local_id, &tx)
+                let label = Label::load(action.local_id, guard.tether())
                     .await?
                     .ok_or_else(|| AppError::LabelNotFound(action.local_id))?;
 

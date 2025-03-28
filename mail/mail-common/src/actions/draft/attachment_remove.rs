@@ -175,28 +175,29 @@ impl proton_action_queue::action::Handler for Handler {
         }
 
         // Delete metadata & attachment record
-        let tx = writer_guard.transaction().await?;
+        writer_guard
+            .tx::<_, _, <Self::Action as Action>::Error>(async |tx: &Bond<'_>| {
+                // If we own the attachment, delete it.
+                if matches!(
+                    attachment_metadata.ownership,
+                    DraftAttachmentOwnership::Owned
+                ) {
+                    debug!("Deleting attachment locally");
+                    Attachment::delete_by_id(action.attachment_id, tx)
+                        .await
+                        .inspect_err(|e| {
+                            error!("Failed to delete attachment: {e:?}");
+                        })?;
+                }
 
-        // If we own the attachment, delete it.
-        if matches!(
-            attachment_metadata.ownership,
-            DraftAttachmentOwnership::Owned
-        ) {
-            debug!("Deleting attachment locally");
-            Attachment::delete_by_id(action.attachment_id, &tx)
-                .await
-                .inspect_err(|e| {
-                    error!("Failed to delete attachment: {e:?}");
-                })?;
-        }
+                debug!("Deleting draft attachment metadata");
+                attachment_metadata
+                    .delete(tx)
+                    .await
+                    .inspect_err(|e| error!("Failed to delete draft attachment metadata: {e:?}"))?;
 
-        debug!("Deleting draft attachment metadata");
-        attachment_metadata
-            .delete(&tx)
+                Ok(())
+            })
             .await
-            .inspect_err(|e| error!("Failed to delete draft attachment metadata: {e:?}"))?;
-        tx.commit().await?;
-
-        Ok(())
     }
 }

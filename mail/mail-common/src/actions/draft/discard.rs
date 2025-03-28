@@ -127,35 +127,38 @@ impl proton_action_queue::action::Handler for DiscardHandler {
         let Some(message_id) =
             Message::local_id_counterpart(local_message_id, guard.tether()).await?
         else {
-            let tx = guard.transaction().await?;
-            // No remote id, we can't issue the request, we should only delete the local data.
-            Message::delete_by_id(local_message_id, &tx)
-                .await
-                .inspect_err(|e| error!("Failed to delete message {local_message_id:?}:{e:?}"))?;
+            return guard
+                .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
+                    // No remote id, we can't issue the request, we should only delete the local data.
+                    Message::delete_by_id(local_message_id, tx)
+                        .await
+                        .inspect_err(|e| {
+                            error!("Failed to delete message {local_message_id:?}:{e:?}")
+                        })?;
 
-            // If we are not replying or forwarding, it means we have a new draft and we may
-            // have to delete the conversation id as well.
-            if let Some(local_conversation_id) = action.local_conversation_id {
-                if let Some(conversation) =
-                    Conversation::find_by_id(local_conversation_id, &tx).await?
-                {
-                    // Conversation has no remote id, so we need to do local cleanup, but only
-                    // if it only has no more messages.
-                    if conversation.num_messages == 0 && !conversation.is_synced() {
-                        Conversation::delete_by_id(local_conversation_id, &tx)
-                            .await
-                            .inspect_err(|e| {
-                                error!(
-                                    "Failed to delete conversation {}:{e}",
-                                    local_conversation_id
-                                )
-                            })?;
+                    // If we are not replying or forwarding, it means we have a new draft and we may
+                    // have to delete the conversation id as well.
+                    if let Some(local_conversation_id) = action.local_conversation_id {
+                        if let Some(conversation) =
+                            Conversation::find_by_id(local_conversation_id, tx).await?
+                        {
+                            // Conversation has no remote id, so we need to do local cleanup, but only
+                            // if it only has no more messages.
+                            if conversation.num_messages == 0 && !conversation.is_synced() {
+                                Conversation::delete_by_id(local_conversation_id, tx)
+                                    .await
+                                    .inspect_err(|e| {
+                                        error!(
+                                            "Failed to delete conversation {}:{e}",
+                                            local_conversation_id
+                                        )
+                                    })?;
+                            }
+                        }
                     }
-                }
-            }
-            tx.commit().await?;
-
-            return Ok(());
+                    Ok(())
+                })
+                .await;
         };
 
         // Server will take care of deleting orphaned conversations, we do not have

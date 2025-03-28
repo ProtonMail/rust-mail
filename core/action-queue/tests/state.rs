@@ -108,9 +108,11 @@ impl Handler for TestActionHandler {
         mut writer_guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         assert_eq!(action.v, ACTION_VALUE_AFTER_LOCAL_APPLY);
-        let tx = writer_guard.transaction().await?;
-        tx.ext_insert_value(ACTION_KEY, ACTION_VALUE_FINAL).await?;
-        tx.commit().await?;
+        writer_guard
+            .tx::<_, _, <Self::Action as Action>::Error>(async |tx: &Bond<'_>| {
+                Ok(tx.ext_insert_value(ACTION_KEY, ACTION_VALUE_FINAL).await?)
+            })
+            .await?;
 
         Ok(ACTION_VALUE_FINAL)
     }

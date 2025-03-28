@@ -241,36 +241,37 @@ impl AttachmentUpload {
         writer_guard: &mut WriterGuard<'_>,
         error: &MailContextError,
     ) -> Result<(), WriterGuardError> {
-        let tx = writer_guard.transaction().await?;
+        writer_guard
+            .tx(async |tx| {
+                let mut send_result = DraftSendResult::failure(
+                    self.local_message_id.expect("Should be set by now"),
+                    DraftSendResultOrigin::AttachmentUpload,
+                    DraftSendFailure::from_mail_context_error(error),
+                );
 
-        let mut send_result = DraftSendResult::failure(
-            self.local_message_id.expect("Should be set by now"),
-            DraftSendResultOrigin::AttachmentUpload,
-            DraftSendFailure::from_mail_context_error(error),
-        );
+                send_result
+                    .save(tx)
+                    .await
+                    .inspect_err(|e| error!("Failed to save send result: {e:?}"))?;
 
-        send_result
-            .save(&tx)
+                if let Some(mut attachment_metadata) =
+                    DraftAttachmentMetadata::find_by_id(self.attachment_id, tx).await?
+                {
+                    if error.is_network_failure() {
+                        attachment_metadata.set_offline_state();
+                    } else {
+                        attachment_metadata.set_error_state(
+                            DraftAttachmentUploadError::from_mail_context_error(error),
+                        );
+                    }
+                    attachment_metadata.save(tx).await.inspect_err(|e| {
+                        error!("Failed to save draft attachment metadata: {e:?}")
+                    })?;
+                }
+
+                Ok(())
+            })
             .await
-            .inspect_err(|e| error!("Failed to save send result: {e:?}"))?;
-
-        if let Some(mut attachment_metadata) =
-            DraftAttachmentMetadata::find_by_id(self.attachment_id, &tx).await?
-        {
-            if error.is_network_failure() {
-                attachment_metadata.set_offline_state();
-            } else {
-                attachment_metadata
-                    .set_error_state(DraftAttachmentUploadError::from_mail_context_error(error));
-            }
-            attachment_metadata
-                .save(&tx)
-                .await
-                .inspect_err(|e| error!("Failed to save draft attachment metadata: {e:?}"))?;
-        }
-
-        tx.commit().await?;
-        Ok(())
     }
 }
 
@@ -354,26 +355,29 @@ async fn encrypt_and_upload_attachment(
     attachment.remote_message_id = Some(message_id.clone());
 
     debug!("Updating database state");
-    let tx = writer_guard.transaction().await?;
-
-    // Mark attachment as uploaded.
-    let Some(mut draft_attachment_metadata) =
-        DraftAttachmentMetadata::find_by_id(attachment.local_id.unwrap(), &tx).await?
-    else {
-        return Err(
-            AttachmentError::AttachmentMetadataNotFound(attachment.local_id.unwrap()).into(),
-        );
-    };
-    draft_attachment_metadata.set_uploaded_state();
-    draft_attachment_metadata
-        .save(&tx)
-        .await
-        .inspect_err(|e| error!("Failed to update draft attachment metadata: {e:?}"))?;
-    attachment
-        .save(&tx)
-        .await
-        .inspect_err(|e| error!("Failed to save attachment: {e:?}"))?;
-    tx.commit().await?;
+    writer_guard
+        .tx::<_, _, MailContextError>(async |tx: &Bond<'_>| {
+            // Mark attachment as uploaded.
+            let Some(mut draft_attachment_metadata) =
+                DraftAttachmentMetadata::find_by_id(attachment.local_id.unwrap(), tx).await?
+            else {
+                return Err(AttachmentError::AttachmentMetadataNotFound(
+                    attachment.local_id.unwrap(),
+                )
+                .into());
+            };
+            draft_attachment_metadata.set_uploaded_state();
+            draft_attachment_metadata
+                .save(tx)
+                .await
+                .inspect_err(|e| error!("Failed to update draft attachment metadata: {e:?}"))?;
+            attachment
+                .save(tx)
+                .await
+                .inspect_err(|e| error!("Failed to save attachment: {e:?}"))?;
+            Ok(())
+        })
+        .await?;
     debug!("Done");
     Ok(())
 }

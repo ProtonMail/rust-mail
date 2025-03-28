@@ -108,13 +108,16 @@ impl ActionHandler for Handler {
         if !failed_ids.is_empty() {
             error!("Unread messages failed for: {failed_ids:?} ");
 
-            let tx = guard.transaction().await?;
-            let local_ids = Message::remote_ids_counterpart(failed_ids.clone(), &tx).await?;
+            guard
+                .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
+                    let local_ids = Message::remote_ids_counterpart(failed_ids.clone(), tx).await?;
 
-            Message::mark_read(local_ids, &tx)
-                .await
-                .inspect_err(|e| error!("Failed to rollback unread on messages: {e:?}"))?;
-            tx.commit().await?;
+                    Message::mark_read(local_ids, tx)
+                        .await
+                        .inspect_err(|e| error!("Failed to rollback unread on messages: {e:?}"))?;
+                    Ok(())
+                })
+                .await?;
         }
         Ok(())
     }

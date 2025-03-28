@@ -111,9 +111,9 @@ async fn revert_cancels_all_dependent_actions() {
 
     {
         let mut conn = queue.stash().connection();
-        let tx = conn.transaction().await.unwrap();
-        tx.ext_insert_value(key, value).await.unwrap();
-        tx.commit().await.unwrap();
+        conn.tx(async |tx| tx.ext_insert_value(key, value).await)
+            .await
+            .unwrap();
     }
 
     let action_id1 = queue

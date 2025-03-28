@@ -260,25 +260,29 @@ impl Send {
 
         let pgp_provider = new_pgp_provider();
 
-        let tx = guard.transaction().await?;
-        // Load send preferences for each recipient of the message.
-        let send_preferences = load_send_preferences_for_recipients(
-            context,
-            &pgp_provider,
-            &tx,
-            &action.recipients,
-            mail_settings.crypto_mail_settings(),
-        )
-        .await
-        .inspect_err(|err| error!("Failed to load send preferences for recipients: {err:?}"))?;
+        let (send_preferences, address_keys) = guard
+            .tx::<_, _, <Self as Action>::Error>(async |tx| {
+                // Load send preferences for each recipient of the message.
+                let send_preferences = load_send_preferences_for_recipients(
+                    context,
+                    &pgp_provider,
+                    tx,
+                    &action.recipients,
+                    mail_settings.crypto_mail_settings(),
+                )
+                .await
+                .inspect_err(|err| {
+                    error!("Failed to load send preferences for recipients: {err:?}")
+                })?;
 
-        // Unlock sender address keys
-        let address_keys = context
-            .unlocked_address_keys(&pgp_provider, &tx, &message_metadata.remote_address_id)
-            .await
-            .inspect_err(|err| error!("Failed to load address key for sending: {err:?}"))?;
-
-        tx.commit().await?;
+                // Unlock sender address keys
+                let address_keys = context
+                    .unlocked_address_keys(&pgp_provider, tx, &message_metadata.remote_address_id)
+                    .await
+                    .inspect_err(|err| error!("Failed to load address key for sending: {err:?}"))?;
+                Ok((send_preferences, address_keys))
+            })
+            .await?;
 
         let attachments =
             DraftAttachmentMetadata::attachment_for_draft(action.metadata_id, guard.tether())
@@ -329,66 +333,71 @@ impl Send {
         };
 
         // Update conversation
-        let tx = guard.transaction().await?;
-        let mut conversation: Conversation = response.conversation.into();
-        conversation
-            .save(&tx)
-            .await
-            .inspect_err(|err| error!("Failed to update conversation after send: {err:?}"))?;
+        let metadata = guard
+            .tx::<_, _, <Self as Action>::Error>(async |tx| {
+                let mut conversation: Conversation = response.conversation.into();
+                conversation.save(tx).await.inspect_err(|err| {
+                    error!("Failed to update conversation after send: {err:?}")
+                })?;
 
-        // Update message and body metadata
-        let (mut metadata, mut body_metadata, _) = Message::from_api_data(response.sent, &tx)
-            .await
-            .inspect_err(|e| {
-                error!("Failed to convert message from API response: {e:?}");
-            })?;
+                // Update message and body metadata
+                let (mut metadata, mut body_metadata, _) =
+                    Message::from_api_data(response.sent, tx)
+                        .await
+                        .inspect_err(|e| {
+                            error!("Failed to convert message from API response: {e:?}");
+                        })?;
 
-        metadata.save(&tx).await.inspect_err(|e| {
-            error!("Failed to update message metadata after send: {e:?}");
-        })?;
+                metadata.save(tx).await.inspect_err(|e| {
+                    error!("Failed to update message metadata after send: {e:?}");
+                })?;
 
-        body_metadata.save(&tx).await.inspect_err(|e| {
-            error!("Failed to update message body metadata after send: {e:?}");
-        })?;
+                body_metadata.save(tx).await.inspect_err(|e| {
+                    error!("Failed to update message body metadata after send: {e:?}");
+                })?;
 
-        // Update parent message's send flag. Only do this here since
-        // one message can be replied to/forwarded many times and undoing this
-        // can produce incorrect results.
-        if let (Some(parent_id), Some(reply_mode)) =
-            (draft_metadata.local_parent_id, draft_metadata.reply_mode)
-        {
-            if let Some(mut parent_message) = Message::find_by_id(parent_id, &tx)
-                .await
-                .inspect_err(|e| error!("Failed to load parent message {parent_id:?}: {e:?}"))?
-            {
-                match reply_mode {
-                    ReplyMode::Sender => parent_message.is_replied = true,
-                    ReplyMode::All => {
-                        parent_message.is_replied_all = true;
-                    }
-                    ReplyMode::Forward => {
-                        parent_message.is_forwarded = true;
-                    }
+                // Update parent message's send flag. Only do this here since
+                // one message can be replied to/forwarded many times and undoing this
+                // can produce incorrect results.
+                if let (Some(parent_id), Some(reply_mode)) =
+                    (draft_metadata.local_parent_id, draft_metadata.reply_mode)
+                {
+                    if let Some(mut parent_message) =
+                        Message::find_by_id(parent_id, tx).await.inspect_err(|e| {
+                            error!("Failed to load parent message {parent_id:?}: {e:?}")
+                        })?
+                    {
+                        match reply_mode {
+                            ReplyMode::Sender => parent_message.is_replied = true,
+                            ReplyMode::All => {
+                                parent_message.is_replied_all = true;
+                            }
+                            ReplyMode::Forward => {
+                                parent_message.is_forwarded = true;
+                            }
+                        }
+                    } else {
+                        error!(
+                            "Could not find parent message {parent_id:?}, perhaps it was deleted?"
+                        );
+                    };
                 }
-            } else {
-                error!("Could not find parent message {parent_id:?}, perhaps it was deleted?");
-            };
-        }
 
-        // Move message to sent folder
-        Message::remove_label(local_outbox_label_id, [local_message_id], &tx)
-            .await
-            .inspect_err(|e| error!("Failed to remove outbox label: {e:?}"))?;
-        Message::apply_label(local_sent_label_id, [local_message_id], &tx)
-            .await
-            .inspect_err(|e| error!("Failed to apply sent label: {e:?}"))?;
+                // Move message to sent folder
+                Message::remove_label(local_outbox_label_id, [local_message_id], tx)
+                    .await
+                    .inspect_err(|e| error!("Failed to remove outbox label: {e:?}"))?;
+                Message::apply_label(local_sent_label_id, [local_message_id], tx)
+                    .await
+                    .inspect_err(|e| error!("Failed to apply sent label: {e:?}"))?;
 
-        // Delete draft metadata
-        DraftMetadata::delete(action.metadata_id, &tx)
-            .await
-            .inspect_err(|e| error!("Failed to delete draft metadata after send: {e:?}"))?;
-
-        tx.commit().await?;
+                // Delete draft metadata
+                DraftMetadata::delete(action.metadata_id, tx)
+                    .await
+                    .inspect_err(|e| error!("Failed to delete draft metadata after send: {e:?}"))?;
+                Ok(metadata)
+            })
+            .await?;
 
         // try to delete staging path.
         let staging_path = draft_attachment_staging_path(context, action.metadata_id);
@@ -432,7 +441,7 @@ async fn save_send_status(
         }
     };
 
-    let tx = guard.transaction().await?;
-    send_result.save(&tx).await?;
-    Ok(tx.commit().await?)
+    guard
+        .tx::<_, _, WriterGuardError>(async |tx| Ok(send_result.save(tx).await?))
+        .await
 }

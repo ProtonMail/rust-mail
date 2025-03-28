@@ -951,6 +951,7 @@ impl Tether {
     ///
     /// * [`Stash::connection()`]
     ///
+    #[allow(dead_code)]
     pub async fn transaction(&mut self) -> Result<Bond<'_>, StashError> {
         self.transaction_impl(TransactionTrackingPolicy::Tracking)
             .await
@@ -1287,11 +1288,14 @@ impl Drop for Bond<'_> {
     }
 }
 
-impl IntoTransaction for Tether {
+impl RunTransaction for Tether {
     #[allow(clippy::manual_async_fn)]
-    fn transaction(&mut self) -> impl Future<Output = anyhow::Result<Bond<'_>>> + Send {
-        async {
-            self.transaction()
+    fn run_tx<T, F>(&mut self, closure: F) -> impl Future<Output = anyhow::Result<T>>
+    where
+        F: AsyncFnOnce(&Bond<'_>) -> Result<T, anyhow::Error>,
+    {
+        async move {
+            self.tx(closure)
                 .await
                 .context("Could not start transaction for tether")
         }
@@ -1301,9 +1305,11 @@ impl IntoTransaction for Tether {
 /// This trait should only be used in functions that have to create and commit several
 /// transactions.
 /// It exists so that you can pass either a `&mut Tether` or a `&mut WriterGuard`.
-pub trait IntoTransaction {
-    /// Creates a transaction. The error is boxed.
-    fn transaction(&mut self) -> impl Future<Output = anyhow::Result<Bond<'_>>> + Send;
+pub trait RunTransaction {
+    /// Creates a transaction and run the given `closure`.
+    fn run_tx<T, F>(&mut self, closure: F) -> impl Future<Output = anyhow::Result<T>>
+    where
+        F: AsyncFnOnce(&Bond<'_>) -> Result<T, anyhow::Error>;
 }
 
 /// This encapsulates the logic of handling [`TetherOperation`]s.

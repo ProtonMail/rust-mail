@@ -3,7 +3,7 @@
 mod tests;
 
 use crate::action;
-use crate::action::{Action, ActionId, Metadata, Priority, Resources};
+use crate::action::{Action, ActionId, Metadata, Priority, Resources, WriterGuardError};
 use chrono::{DateTime, Utc};
 use include_dir::{Dir, include_dir};
 use indoc::indoc;
@@ -422,30 +422,21 @@ impl StoredAction {
         action_group: &str,
         tether: &mut Tether,
     ) -> Result<Option<(ExecutionGuard, StoredAction)>, StashError> {
-        let tx = tether.transaction().await?;
-        ExecutionGuard::clear_slate_state(executor_id.clone(), &tx).await?;
-        let next_action = Self::next(action_group, &tx).await?;
+        tether
+            .tx(async |tx| {
+                ExecutionGuard::clear_slate_state(executor_id.clone(), tx).await?;
+                let next_action = Self::next(action_group, tx).await?;
 
-        let Some(next_action) = next_action else {
-            tx.rollback().await?;
-            return Ok(None);
-        };
+                let Some(next_action) = next_action else {
+                    return Ok(None);
+                };
 
-        let guard = ExecutionGuard::acquire(next_action.id.unwrap(), executor_id, &tx).await?;
-
-        tx.commit().await?;
-
-        Ok(Some((guard, next_action)))
+                let guard =
+                    ExecutionGuard::acquire(next_action.id.unwrap(), executor_id, tx).await?;
+                Ok(Some((guard, next_action)))
+            })
+            .await
     }
-}
-
-/// Potential errors that can pop when trying to acquire a transaction.
-#[derive(Debug, thiserror::Error)]
-pub enum ExecutionGuardError {
-    #[error("This executor lock has expired")]
-    Expired,
-    #[error("{0}")]
-    Stash(#[from] StashError),
 }
 
 /// An execution guard for Queue Executors to prevent an action to be executed more than
@@ -583,25 +574,52 @@ impl ExecutionGuard {
     ///
     /// # Errors
     ///
-    /// Returns [`StashError`] if the transaction failed to acquire and [`ExecutionGuardError::Expired`]
+    /// Returns [`StashError`] if the transaction failed to acquire and [`WriterGuardError::Expired`]
     /// if this execution lock has expired.
-    pub async fn transaction<'t>(
-        &self,
-        tether: &'t mut Tether,
-    ) -> Result<Bond<'t>, ExecutionGuardError> {
-        let tx = tether.transaction().await?;
+    pub async fn tx<F, T, E>(&self, tether: &mut Tether, closure: F) -> Result<T, E>
+    where
+        F: AsyncFnOnce(&Bond<'_>) -> Result<T, E>,
+        E: From<WriterGuardError> + From<StashError>,
+    {
+        tether.tx(async |tx| {
+                let changed = tx
+                    .execute(
+                        "UPDATE action_queue_lock SET acquired_at=? WHERE action_id=? AND permit_id =?",
+                        params![Utc::now(), self.action_id, self.permit_id],
+                    )
+                    .await?;
+                if changed == 0 {
+                    return Err(WriterGuardError::Expired.into());
+                }
+                closure(tx).await
+            }).await
+    }
 
-        let changed = tx
-            .execute(
-                "UPDATE action_queue_lock SET acquired_at=? WHERE action_id=? AND permit_id =?",
-                params![Utc::now(), self.action_id, self.permit_id],
-            )
-            .await?;
-        if changed == 0 {
-            return Err(ExecutionGuardError::Expired);
-        }
-
-        Ok(tx)
+    /// Same as [`transaction`], but releases the guard when finished.
+    pub(crate) async fn tx_and_release<F, T>(
+        self,
+        tether: &mut Tether,
+        closure: F,
+    ) -> Result<T, WriterGuardError>
+    where
+        F: AsyncFnOnce(&Bond<'_>) -> Result<T, StashError>,
+    {
+        tether
+            .tx(async |tx| {
+                let changed = tx
+                .execute(
+                    "UPDATE action_queue_lock SET acquired_at=? WHERE action_id=? AND permit_id =?",
+                    params![Utc::now(), self.action_id, self.permit_id],
+                )
+                .await?;
+                if changed == 0 {
+                    return Err(WriterGuardError::Expired);
+                }
+                let r = closure(tx).await;
+                self.release(tx).await?;
+                Ok(r?)
+            })
+            .await
     }
 }
 

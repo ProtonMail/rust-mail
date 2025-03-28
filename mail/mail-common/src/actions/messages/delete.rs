@@ -111,54 +111,55 @@ impl ActionHandler for Handler {
         if !failed_ids.is_empty() || !local_ids_without_remote_id.is_empty() {
             error!("Delete messages operation failed for: {failed_ids:?}");
 
-            let tx = guard.transaction().await?;
+            guard.tx::<_,_, <Self::Action as Action>::Error>(
+                async |tx| {
+                    if !failed_ids.is_empty() {
+                        let local_ids = Message::remote_ids_counterpart(failed_ids.clone(), tx).await?;
 
-            if !failed_ids.is_empty() {
-                let local_ids = Message::remote_ids_counterpart(failed_ids.clone(), &tx).await?;
-
-                Message::mark_undeleted(local_ids, &tx)
-                    .await
-                    .inspect_err(|e| error!("Failed to rollback delete on messages: {e:?}"))?;
-            }
-
-            for id in local_ids_without_remote_id {
-                if let Some(conv_id) = match tx.query_value::<_, LocalConversationId>(
-                    format!(
-                        "SELECT {} AS value FROM {} WHERE remote_id IS NULL AND {} IN (SELECT local_conversation_id FROM {} WHERE {} = ?)",
-                        Conversation::id_field_name(),
-                        Conversation::table_name(),
-                        Conversation::id_field_name(),
-                        Message::table_name(),
-                        Message::id_field_name()
-                    ),
-                    params![id],
-                )
-                .await {
-                    Ok(conv_id) => Some(conv_id),
-                    Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => None,
-                    Err(e) => return {
-                        error!("Failed to get conversation id: {e:?}");
-                        Err(e.into())
-                    },
-                } {
-                    // We should only delete orphaned conversations.
-                    let conversation_message_count = tx.query_value::<_, usize>(
-                        format!("SELECT COUNT(*) AS value FROM {} WHERE local_conversation_id=? AND deleted=0", Message::table_name()), params![conv_id]).await?;
-                    if conversation_message_count == 0 {
-                        Conversation::delete_by_id(conv_id, &tx)
+                        Message::mark_undeleted(local_ids, tx)
                             .await
-                            .inspect_err(|e| {
-                                error!("Failed to delete orphaned conversation: {e:?}")
-                            })?;
+                            .inspect_err(|e| error!("Failed to rollback delete on messages: {e:?}"))?;
                     }
+
+                    for id in local_ids_without_remote_id {
+                        if let Some(conv_id) = match tx.query_value::<_, LocalConversationId>(
+                            format!(
+                                "SELECT {} AS value FROM {} WHERE remote_id IS NULL AND {} IN (SELECT local_conversation_id FROM {} WHERE {} = ?)",
+                                Conversation::id_field_name(),
+                                Conversation::table_name(),
+                                Conversation::id_field_name(),
+                                Message::table_name(),
+                                Message::id_field_name()
+                            ),
+                            params![id],
+                        )
+                            .await {
+                            Ok(conv_id) => Some(conv_id),
+                            Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => None,
+                            Err(e) => return {
+                                error!("Failed to get conversation id: {e:?}");
+                                Err(e.into())
+                            },
+                        } {
+                            // We should only delete orphaned conversations.
+                            let conversation_message_count = tx.query_value::<_, usize>(
+                                format!("SELECT COUNT(*) AS value FROM {} WHERE local_conversation_id=? AND deleted=0", Message::table_name()), params![conv_id]).await?;
+                            if conversation_message_count == 0 {
+                                Conversation::delete_by_id(conv_id, tx)
+                                    .await
+                                    .inspect_err(|e| {
+                                        error!("Failed to delete orphaned conversation: {e:?}")
+                                    })?;
+                            }
+                        }
+
+                        Message::delete_by_id(id, tx)
+                            .await
+                            .inspect_err(|e| error!("Failed to delete message: {e:?}"))?;
+                    }
+                    Ok(())
                 }
-
-                Message::delete_by_id(id, &tx)
-                    .await
-                    .inspect_err(|e| error!("Failed to delete message: {e:?}"))?;
-            }
-
-            tx.commit().await?;
+            ).await?;
         }
         Ok(())
     }

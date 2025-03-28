@@ -94,11 +94,10 @@ async fn replace_updates_queues_if_action_is_executing() {
 
     // simulate action executing
     let mut tether = queue.stash().connection();
-    let tx = tether.transaction().await.unwrap();
-    ExecutionGuard::acquire(queued_output.id, "TEST", &tx)
+    tether
+        .tx(async |tx| ExecutionGuard::acquire(queued_output.id, "TEST", tx).await)
         .await
         .unwrap();
-    tx.commit().await.unwrap();
 
     // queue replacement
     let replaced_output = queue
@@ -221,10 +220,13 @@ impl Handler for TestActionHandler {
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         assert_eq!(action.v, ACTION_VALUE_AFTER_REPLACE);
-        let tx = guard.transaction().await?;
-        tx.ext_insert_value(ACTION_KEY, ACTION_VALUE_AFTER_REPLACE)
+        guard
+            .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
+                Ok(tx
+                    .ext_insert_value(ACTION_KEY, ACTION_VALUE_AFTER_REPLACE)
+                    .await?)
+            })
             .await?;
-        tx.commit().await?;
 
         Ok(ACTION_VALUE_AFTER_REPLACE)
     }
