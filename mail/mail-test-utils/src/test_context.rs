@@ -9,7 +9,7 @@ use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_test_utils::test_context::{BaseTestContext, TestContext};
 use proton_mail_common::actions::draft::SEND_ACTION_GROUP;
 use proton_mail_common::context::{MailUserDatabaseInitializer, ShouldInitializeMailUserContext};
-use proton_mail_common::{MailContext, MailUserContext};
+use proton_mail_common::{MailContext, MailContextResult, MailUserContext};
 pub use secrecy::{ExposeSecret, SecretString as RealSecretString};
 use std::sync::Arc;
 use tempdir::TempDir;
@@ -165,6 +165,28 @@ impl MailTestContext {
         ctx.terminate_queue_executors();
 
         ctx
+    }
+
+    /// Get the test user context.
+    /// Has to be called **AFTER** setting up the API mocks
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if context could not be initialized.
+    pub async fn try_mail_user_context(&self) -> MailContextResult<Arc<MailUserContext>> {
+        let ctx = self
+            .mail_context
+            .user_context_from_session(
+                &self.core_session,
+                Some(StatusWatcher::with_observer(StatusObserver::test())),
+                ShouldInitializeMailUserContext::Yes,
+            )
+            .await?;
+
+        // Disable auto queue executor as we don't want these to interfere with our test execution.
+        ctx.terminate_queue_executors();
+
+        Ok(ctx)
     }
 
     /// Set up a catch-all mock for the mock server.
