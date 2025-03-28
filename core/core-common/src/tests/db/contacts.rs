@@ -7,30 +7,33 @@ use proton_api_core::services::proton::{ContactEmailId, ContactId, ContactUID, L
 use proton_crypto_account::contacts::ContactCardType;
 use stash::orm::Model;
 use stash::params;
+use stash::stash::StashError;
 
 #[tokio::test]
 async fn test_full_contact() {
     let mut tether = new_core_test_connection().await.connection();
     let mut full_contact = create_test_full_contact();
-    let tx = tether
-        .transaction()
-        .await
-        .expect("failed to start transaction");
-    full_contact
-        .save(&tx)
-        .await
-        .expect("failed to create contact");
-    let id = full_contact.row_id.expect("failed to get contact id");
-    let local_id = full_contact.local_id.expect("failed to get contact id");
-    full_contact
-        .save(&tx)
-        .await
-        .expect("failed to overwrite contact");
-    let id_second = full_contact.row_id.expect("failed to get contact id");
-    tx.commit().await.expect("failed to commit transaction");
+    let local_id = tether
+        .tx::<_, _, StashError>(async |tx| {
+            full_contact
+                .save(tx)
+                .await
+                .expect("failed to create contact");
+            let id = full_contact.row_id.expect("failed to get contact id");
+            let local_id = full_contact.local_id.expect("failed to get contact id");
+            full_contact
+                .save(tx)
+                .await
+                .expect("failed to overwrite contact");
+            let id_second = full_contact.row_id.expect("failed to get contact id");
+            assert_eq!(id, 1);
+            assert_eq!(id, id_second);
 
-    assert_eq!(id, 1);
-    assert_eq!(id, id_second);
+            Ok(local_id)
+        })
+        .await
+        .unwrap();
+
     // Query the full contact with cards
     let mut contact_with_cards = Contact::load(local_id, &tether)
         .await
@@ -48,23 +51,25 @@ async fn test_partial_contact() {
     let mut tether = new_core_test_connection().await.connection();
     let mut partial_contacts = create_test_partial_contacts();
     let mut contact_emails = create_test_contact_emails();
-    let tx = tether
-        .transaction()
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            // Insert all partial contacts
+            for contact in &mut partial_contacts {
+                contact.save(tx).await.expect("failed to create contact");
+            }
+            // Insert all contact mails
+            for contact_email in &mut contact_emails {
+                contact_email.remote_contact_id =
+                    partial_contacts.first().unwrap().remote_id.clone();
+                contact_email
+                    .save(tx)
+                    .await
+                    .expect("failed to create contact email");
+            }
+            Ok(())
+        })
         .await
-        .expect("failed to start transaction");
-    // Insert all partial contacts
-    for contact in &mut partial_contacts {
-        contact.save(&tx).await.expect("failed to create contact");
-    }
-    // Insert all contact mails
-    for contact_email in &mut contact_emails {
-        contact_email.remote_contact_id = partial_contacts.first().unwrap().remote_id.clone();
-        contact_email
-            .save(&tx)
-            .await
-            .expect("failed to create contact email");
-    }
-    tx.commit().await.expect("failed to commit transaction");
+        .unwrap();
 
     assert_eq!(partial_contacts.first().unwrap().row_id.unwrap(), 1);
     assert_eq!(contact_emails.first().unwrap().row_id.unwrap(), 1);

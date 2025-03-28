@@ -10,66 +10,64 @@ use proton_crypto_account::keys::{
 };
 use stash::orm::Model;
 use stash::params;
+use stash::stash::StashError;
 
 #[tokio::test]
 async fn test_address_create() {
     let mut conn = new_core_test_connection().await.connection();
-    let tx = conn
-        .transaction()
-        .await
-        .expect("Failed to start transaction");
-    let mut address = create_test_address();
-    address.save(&tx).await.expect("failed to create address");
-    let db_address = Address::load(address.local_id.unwrap(), &tx)
-        .await
-        .expect("failed to get address")
-        .expect("should exist");
-    assert_eq!(address, db_address);
-    tx.commit().await.expect("Failed to commit transaction");
+    conn.tx::<_, _, StashError>(async |tx| {
+        let mut address = create_test_address();
+        address.save(tx).await.expect("failed to create address");
+        let db_address = Address::load(address.local_id.unwrap(), tx)
+            .await
+            .expect("failed to get address")
+            .expect("should exist");
+        assert_eq!(address, db_address);
+        Ok(())
+    })
+    .await
+    .unwrap();
 }
 
 #[tokio::test]
 async fn test_address_update() {
     let mut conn = new_core_test_connection().await.connection();
-    let tx = conn
-        .transaction()
-        .await
-        .expect("Failed to start transaction");
-    let mut address = create_test_address();
-    address.save(&tx).await.expect("failed to create address");
-    let mut address2 = create_test_address_updated();
-    address2
-        .save(&tx)
-        .await
-        .expect("failed to create duplicate");
-    let db_address = Address::load(address.local_id.unwrap(), &tx)
-        .await
-        .expect("failed to get address")
-        .expect("should exist");
-    assert_eq!(address, db_address);
-    tx.commit().await.expect("Failed to commit transaction");
+    conn.tx::<_, _, StashError>(async |tx| {
+        let mut address = create_test_address();
+        address.save(tx).await.expect("failed to create address");
+        let mut address2 = create_test_address_updated();
+        address2.save(tx).await.expect("failed to create duplicate");
+        let db_address = Address::load(address.local_id.unwrap(), tx)
+            .await
+            .expect("failed to get address")
+            .expect("should exist");
+        assert_eq!(address, db_address);
+        Ok(())
+    })
+    .await
+    .unwrap();
 }
 
 #[tokio::test]
 async fn test_address_delete() {
     let mut conn = new_core_test_connection().await.connection();
-    let tx = conn
-        .transaction()
+    conn.tx::<_, _, StashError>(async |tx| {
+        let mut address = create_test_address();
+        address.save(tx).await.expect("failed to create address");
+        tx.execute(
+            "DELETE FROM addresses WHERE remote_id=?",
+            params![address.remote_id.clone()],
+        )
         .await
-        .expect("Failed to start transaction");
-    let mut address = create_test_address();
-    address.save(&tx).await.expect("failed to create address");
-    tx.execute(
-        "DELETE FROM addresses WHERE remote_id=?",
-        params![address.remote_id.clone()],
-    )
+        .expect("failed to delete address");
+        let db_address = Address::load(address.local_id.unwrap(), tx)
+            .await
+            .expect("failed to get address");
+        assert_eq!(db_address, None);
+        Ok(())
+    })
     .await
-    .expect("failed to delete address");
-    let db_address = Address::load(address.local_id.unwrap(), &tx)
-        .await
-        .expect("failed to get address");
-    assert_eq!(db_address, None);
-    tx.commit().await.expect("Failed to commit transaction");
+    .unwrap();
 }
 
 fn create_test_address() -> Address {

@@ -10,7 +10,7 @@ use proton_api_core::services::proton::{SessionId, UserId};
 use secrecy::{ExposeSecret, SecretString};
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Stash, StashConfiguration, Tether};
+use stash::stash::{Stash, StashConfiguration, StashError, Tether};
 use std::io::stdout;
 use tracing::Level;
 use tracing::subscriber::set_global_default;
@@ -34,15 +34,13 @@ async fn new_test_connection() -> Stash {
 }
 
 async fn new_test_account(tether: &mut Tether) -> Result<CoreAccount> {
-    let tx = tether.transaction().await?;
-
-    let account = CoreAccount::new(UserId::from("user_id"), String::from("name_or_addr"))
-        .with_save(&tx)
-        .await?;
-
-    tx.commit().await?;
-
-    Ok(account)
+    Ok(tether
+        .tx(async |tx| {
+            CoreAccount::new(UserId::from("user_id"), String::from("name_or_addr"))
+                .with_save(tx)
+                .await
+        })
+        .await?)
 }
 
 /// Create test auth tokens with dummy data.
@@ -76,28 +74,24 @@ async fn test_session_store_load() {
 
     let mut session = CoreSession::new(account.remote_id, session_id, &tokens, &key).unwrap();
 
-    {
-        let tx = tether
-            .transaction()
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            session.save(tx).await.expect("failed to store session");
+
+            let db_session = CoreSession::find_first(
+                "WHERE account_id = ?",
+                params![session.account_id.clone()],
+                tx,
+            )
             .await
-            .expect("failed to start transaction");
+            .unwrap()
+            .unwrap();
 
-        session.save(&tx).await.expect("failed to store session");
-
-        let db_session = CoreSession::find_first(
-            "WHERE account_id = ?",
-            params![session.account_id.clone()],
-            &tx,
-        )
+            assert_eq!(session, db_session);
+            Ok(())
+        })
         .await
-        .unwrap()
-        .unwrap();
-
-        assert_eq!(session, db_session);
-
-        tx.commit().await
-    }
-    .expect("failed");
+        .expect("failed");
 }
 
 #[tokio::test]
@@ -113,46 +107,42 @@ async fn test_session_update() {
         .with_key_secret(&UserKeySecret::from(vec![1, 2, 3, 4]), &key)
         .unwrap();
 
-    {
-        let tx = tether
-            .transaction()
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            session.save(tx).await.expect("failed to store session");
+
+            // Back up the original session
+            let original_session = session.clone();
+
+            // Update the session's tokens and scopes.
+            session.access_token = EncryptedAccessToken::new("acc", &key).unwrap();
+            session.refresh_token = EncryptedRefreshToken::new("ref", &key).unwrap();
+            session.auth_scopes = AuthScopes::new(["baz", "qux"]);
+            session.save(tx).await.expect("failed to update");
+
+            // Load the updated session from the database
+            let db_session = CoreSession::find_first(
+                "WHERE account_id = ?",
+                params![original_session.account_id.clone()],
+                tx,
+            )
             .await
-            .expect("failed to start transaction");
+            .unwrap()
+            .unwrap();
 
-        session.save(&tx).await.expect("failed to store session");
+            // This data has changed
+            assert_eq!(db_session.access_token, session.access_token);
+            assert_eq!(db_session.refresh_token, session.refresh_token);
+            assert_eq!(db_session.auth_scopes, session.auth_scopes);
 
-        // Back up the original session
-        let original_session = session.clone();
-
-        // Update the session's tokens and scopes.
-        session.access_token = EncryptedAccessToken::new("acc", &key).unwrap();
-        session.refresh_token = EncryptedRefreshToken::new("ref", &key).unwrap();
-        session.auth_scopes = AuthScopes::new(["baz", "qux"]);
-        session.save(&tx).await.expect("failed to update");
-
-        // Load the updated session from the database
-        let db_session = CoreSession::find_first(
-            "WHERE account_id = ?",
-            params![original_session.account_id.clone()],
-            &tx,
-        )
+            // This data is unchanged
+            assert_eq!(db_session.remote_id, original_session.remote_id);
+            assert_eq!(db_session.account_id, original_session.account_id);
+            assert_eq!(db_session.key_secret, original_session.key_secret);
+            Ok(())
+        })
         .await
-        .unwrap()
-        .unwrap();
-
-        // This data has changed
-        assert_eq!(db_session.access_token, session.access_token);
-        assert_eq!(db_session.refresh_token, session.refresh_token);
-        assert_eq!(db_session.auth_scopes, session.auth_scopes);
-
-        // This data is unchanged
-        assert_eq!(db_session.remote_id, original_session.remote_id);
-        assert_eq!(db_session.account_id, original_session.account_id);
-        assert_eq!(db_session.key_secret, original_session.key_secret);
-
-        tx.commit().await
-    }
-    .expect("failed");
+        .expect("failed");
 }
 
 #[tokio::test]
@@ -165,32 +155,29 @@ async fn test_session_delete_user_id() {
 
     let mut session = CoreSession::new(account.remote_id, session_id, &tokens, &key).unwrap();
 
-    {
-        let tx = tether
-            .transaction()
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            session.save(tx).await.expect("failed to store session");
+
+            tx.execute(
+                "DELETE FROM core_sessions WHERE account_id =?",
+                params![session.account_id.clone()],
+            )
             .await
-            .expect("failed to start transaction");
+            .expect("expect failed to delete user");
 
-        session.save(&tx).await.expect("failed to store session");
-
-        tx.execute(
-            "DELETE FROM core_sessions WHERE account_id =?",
-            params![session.account_id.clone()],
-        )
+            let results = CoreSession::find(
+                "WHERE account_id = ?",
+                params![session.account_id.clone()],
+                tx,
+            )
+            .await
+            .unwrap();
+            assert_eq!(results.len(), 0);
+            Ok(())
+        })
         .await
-        .expect("expect failed to delete user");
-
-        let results = CoreSession::find(
-            "WHERE account_id = ?",
-            params![session.account_id.clone()],
-            &tx,
-        )
-        .await
-        .unwrap();
-        assert_eq!(results.len(), 0);
-        tx.commit().await
-    }
-    .expect("failed");
+        .expect("failed");
 }
 
 #[tokio::test]
@@ -203,30 +190,27 @@ async fn test_session_delete_session_id() {
 
     let mut session = CoreSession::new(account.remote_id, session_id, &tokens, &key).unwrap();
 
-    {
-        let tx = tether
-            .transaction()
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            session.save(tx).await.expect("failed to store session");
+
+            tx.execute(
+                "DELETE FROM core_sessions WHERE remote_id =?",
+                params![session.remote_id.clone()],
+            )
             .await
-            .expect("failed to start transaction");
+            .expect("expect failed to delete user");
 
-        session.save(&tx).await.expect("failed to store session");
-
-        tx.execute(
-            "DELETE FROM core_sessions WHERE remote_id =?",
-            params![session.remote_id.clone()],
-        )
+            let results = CoreSession::find(
+                "WHERE account_id = ?",
+                params![session.account_id.clone()],
+                tx,
+            )
+            .await
+            .unwrap();
+            assert_eq!(results.len(), 0);
+            Ok(())
+        })
         .await
-        .expect("expect failed to delete user");
-
-        let results = CoreSession::find(
-            "WHERE account_id = ?",
-            params![session.account_id.clone()],
-            &tx,
-        )
-        .await
-        .unwrap();
-        assert_eq!(results.len(), 0);
-        tx.commit().await
-    }
-    .expect("failed");
+        .expect("failed");
 }

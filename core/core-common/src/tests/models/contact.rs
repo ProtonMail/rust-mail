@@ -13,6 +13,7 @@ mod contact_list {
     };
     use pretty_assertions::assert_eq;
     use proton_api_core::services::proton::LabelId;
+    use stash::stash::StashError;
     use test_case::test_case;
 
     #[test_case(vec![], vec![], vec![]; "TEST 0 Empty")]
@@ -307,14 +308,18 @@ mod contact_list {
     ) {
         let mut tether = new_core_test_connection().await.connection();
         let mut contact = contact!(remote_id: cid!("123"), name: "Barbara Fox".to_string());
-        let tx = tether.transaction().await.unwrap();
-        contact.save(&tx).await.unwrap();
+        tether
+            .tx::<_, _, StashError>(async |tx| {
+                contact.save(tx).await?;
 
-        for mut email in emails {
-            email.remote_contact_id = contact.remote_id.clone();
-            email.save(&tx).await.unwrap();
-        }
-        tx.commit().await.expect("commit failed");
+                for mut email in emails {
+                    email.remote_contact_id = contact.remote_id.clone();
+                    email.save(tx).await?;
+                }
+                Ok(())
+            })
+            .await
+            .expect("commit failed");
 
         let result = Contact::contact_list(&tether).await.unwrap();
         assert_eq!(result, expected);
@@ -347,16 +352,18 @@ mod contact_list {
 
         let mut contact2_email = contact_email!(remote_id: ceid!("ceid2"), label_ids: Labels::new(vec![not_empty_group_id.clone()]), remote_contact_id: contact2.remote_id.clone());
 
-        let tx = tether.transaction().await.unwrap();
-
-        contact_group_empty.save(&tx).await.unwrap();
-        contact_group_not_empty.save(&tx).await.unwrap();
-        contact1.save(&tx).await.unwrap();
-        contact2.save(&tx).await.unwrap();
-        contact1_email.save(&tx).await.unwrap();
-        contact2_email.save(&tx).await.unwrap();
-
-        tx.commit().await.unwrap();
+        tether
+            .tx::<_, _, StashError>(async |tx| {
+                contact_group_empty.save(tx).await.unwrap();
+                contact_group_not_empty.save(tx).await.unwrap();
+                contact1.save(tx).await.unwrap();
+                contact2.save(tx).await.unwrap();
+                contact1_email.save(tx).await.unwrap();
+                contact2_email.save(tx).await.unwrap();
+                Ok(())
+            })
+            .await
+            .unwrap();
 
         assert_eq!(
             ContactEmail::count_in_contact_group(empty_group_id, &tether)
@@ -408,45 +415,54 @@ mod contact_watcher {
         let stash = new_core_test_connection().await;
         let mut tether = stash.connection();
         let mut contact = contact!(remote_id: cid!("123"), name: "Barbara Fox".to_string());
-        let tx = tether.transaction().await.unwrap();
-        contact.save(&tx).await.unwrap();
-        tx.commit().await.unwrap();
+        tether.tx(async |tx| contact.save(tx).await).await.unwrap();
         let (_, list_receiver) = Contact::watch_contact_list(&stash).await.unwrap();
         let list_receiver = list_receiver.receiver;
 
         // Rename contact
-        let tx = tether.transaction().await.unwrap();
-        contact.name = "Barbara Lox".to_string();
-        contact.save(&tx).await.unwrap();
-        tx.commit().await.unwrap();
+        tether
+            .tx(async |tx| {
+                contact.name = "Barbara Lox".to_string();
+                contact.save(tx).await
+            })
+            .await
+            .unwrap();
 
         assert!(list_receiver.recv_async().await.is_ok());
 
         // Soft delete contact
-        let tx = tether.transaction().await.unwrap();
-        contact.deleted = true;
-        contact.save(&tx).await.unwrap();
-        tx.commit().await.unwrap();
+        tether
+            .tx(async |tx| {
+                contact.deleted = true;
+                contact.save(tx).await
+            })
+            .await
+            .unwrap();
 
         assert!(list_receiver.recv_async().await.is_ok());
 
         // Soft undelete contact
-        let tx = tether.transaction().await.unwrap();
-        contact.deleted = false;
-        contact.save(&tx).await.unwrap();
-        tx.commit().await.unwrap();
+        tether
+            .tx(async |tx| {
+                contact.deleted = false;
+                contact.save(tx).await
+            })
+            .await
+            .unwrap();
 
         assert!(list_receiver.recv_async().await.is_ok());
 
         // Hard delete contact
-        let tx = tether.transaction().await.unwrap();
-        tx.execute(
-            "DELETE FROM contacts WHERE local_id = ?",
-            params![contact.local_id],
-        )
-        .await
-        .unwrap();
-        tx.commit().await.unwrap();
+        tether
+            .tx(async |tx| {
+                tx.execute(
+                    "DELETE FROM contacts WHERE local_id = ?",
+                    params![contact.local_id],
+                )
+                .await
+            })
+            .await
+            .unwrap();
         let all_contacts = Contact::find("", vec![], &tether).await.unwrap();
         assert_eq!(all_contacts.len(), 0);
 
@@ -1351,19 +1367,22 @@ mod contact_suggestions {
         mut test_case: TestCase,
     ) -> Vec<ContactSuggestion> {
         let mut tether = new_core_test_connection().await.connection();
-        let tx = tether.transaction().await.unwrap();
-        for contact in &mut test_case.contacts {
-            contact.save(&tx).await.unwrap();
-            for email in &mut contact.contact_emails {
-                email.remote_contact_id = contact.remote_id.clone();
-                email.save(&tx).await.unwrap();
-            }
-        }
-        for label in &mut test_case.contact_groups {
-            label.save(&tx).await.unwrap();
-        }
-
-        tx.commit().await.expect("commit failed");
+        tether
+            .tx::<_, _, stash::stash::StashError>(async |tx| {
+                for contact in &mut test_case.contacts {
+                    contact.save(tx).await.unwrap();
+                    for email in &mut contact.contact_emails {
+                        email.remote_contact_id = contact.remote_id.clone();
+                        email.save(tx).await.unwrap();
+                    }
+                }
+                for label in &mut test_case.contact_groups {
+                    label.save(tx).await.unwrap();
+                }
+                Ok(())
+            })
+            .await
+            .expect("commit failed");
 
         let suggestions = Contact::contact_suggestions(test_case.device_contacts, &tether)
             .await

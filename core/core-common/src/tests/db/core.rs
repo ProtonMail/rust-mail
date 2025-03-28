@@ -9,59 +9,56 @@ use crate::tests::common::new_core_test_connection;
 use proton_api_core::services::proton::UserId;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as RealUserKeys};
 use stash::orm::Model;
+use stash::stash::StashError;
 
 #[tokio::test]
 async fn test_core_store_and_load_user() {
     let mut tether = new_core_test_connection().await.connection();
-    let mut user = new_test_user();
-    {
-        let tx = tether
-            .transaction()
-            .await
-            .expect("failed to start transaction");
-        user.save(&tx).await.expect("failed to store user");
-        let db_user = User::load(user.remote_id.clone().unwrap(), &tx)
-            .await
-            .expect("failed to load user")
-            .expect("should have value");
-        assert_eq!(db_user, user);
-        tx.commit().await
-    }
-    .unwrap();
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            let mut user = new_test_user();
+            user.save(tx).await.expect("failed to store user");
+            let db_user = User::load(user.remote_id.clone().unwrap(), tx)
+                .await
+                .expect("failed to load user")
+                .expect("should have value");
+            assert_eq!(db_user, user);
+            Ok(())
+        })
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
 async fn test_core_user_space_updates() {
     let mut tether = new_core_test_connection().await.connection();
     let mut user = new_test_user();
-    {
-        let tx = tether
-            .transaction()
-            .await
-            .expect("failed to start transaction");
-        user.save(&tx).await.expect("failed to store user");
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            user.save(tx).await.expect("failed to store user");
 
-        user.used_space = 912_314_142;
-        user.save(&tx).await.expect("failed to update used space");
+            user.used_space = 912_314_142;
+            user.save(tx).await.expect("failed to update used space");
 
-        user.product_used_space = ProductUsedSpace {
-            calendar: 234_235_235_235,
-            contact: 2_342_342_111_231,
-            drive: 32_423_487_767_455,
-            mail: 10_202_042_014,
-            pass: 1_234_857_671,
-        };
+            user.product_used_space = ProductUsedSpace {
+                calendar: 234_235_235_235,
+                contact: 2_342_342_111_231,
+                drive: 32_423_487_767_455,
+                mail: 10_202_042_014,
+                pass: 1_234_857_671,
+            };
 
-        user.save(&tx).await.expect("failed to update used space");
+            user.save(tx).await.expect("failed to update used space");
 
-        let db_user = User::load(user.remote_id.clone().unwrap(), &tx)
-            .await
-            .expect("failed to load user")
-            .expect("should have value");
-        assert_eq!(db_user, user);
-        tx.commit().await
-    }
-    .unwrap();
+            let db_user = User::load(user.remote_id.clone().unwrap(), tx)
+                .await
+                .expect("failed to load user")
+                .expect("should have value");
+            assert_eq!(db_user, user);
+            Ok(())
+        })
+        .await
+        .unwrap();
 }
 #[tokio::test]
 async fn test_core_store_and_load_user_settings() {
@@ -117,20 +114,18 @@ async fn test_core_store_and_load_user_settings() {
         row_id: None,
     };
 
-    {
-        let tx = tether
-            .transaction()
-            .await
-            .expect("failed to start transaction");
-        settings.save(&tx).await.expect("failed to store settings");
-        let db_settings = UserSettings::load(user_id.clone(), &tx)
-            .await
-            .expect("failed to load user")
-            .expect("should have value");
-        assert_eq!(db_settings, settings);
-        tx.commit().await
-    }
-    .unwrap();
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            settings.save(tx).await.expect("failed to store settings");
+            let db_settings = UserSettings::load(user_id.clone(), tx)
+                .await
+                .expect("failed to load user")
+                .expect("should have value");
+            assert_eq!(db_settings, settings);
+            Ok(())
+        })
+        .await
+        .unwrap();
 }
 
 fn new_test_user() -> User {

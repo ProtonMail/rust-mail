@@ -16,7 +16,7 @@ use proton_core_common::models::Label;
 use proton_core_common::models::ModelIdExtension;
 use proton_crypto_account::keys::AddressKeys as CryptoAddressKeys;
 use proton_mail_common::datatypes::SystemLabelId;
-use stash::stash::Tether;
+use stash::stash::{StashError, Tether};
 use std::collections::BTreeMap;
 
 lazy_static! {
@@ -266,22 +266,23 @@ impl MailTestContext {
 /// # Panics
 pub async fn create_labels(tether: &mut Tether) -> Vec<LocalLabelId> {
     let mut labels = [test_label1(), test_label2()];
-    let tx = tether
-        .transaction()
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            for label in &mut labels {
+                label.save(tx).await.expect("failed to create labels");
+                assert!(
+                    Label::find_by_remote_id(label.remote_id.clone().unwrap(), tx)
+                        .await
+                        .expect("failed to resolve label ids")
+                        .unwrap()
+                        .local_id
+                        .is_some()
+                );
+            }
+            Ok(())
+        })
         .await
-        .expect("failed to create transaction");
-    for label in &mut labels {
-        label.save(&tx).await.expect("failed to create labels");
-        assert!(
-            Label::find_by_remote_id(label.remote_id.clone().unwrap(), &tx)
-                .await
-                .expect("failed to resolve label ids")
-                .unwrap()
-                .local_id
-                .is_some()
-        );
-    }
-    tx.commit().await.expect("failed to commit transaction");
+        .expect("failed to commit transaction");
 
     labels.into_iter().map(|l| l.local_id.unwrap()).collect()
 }

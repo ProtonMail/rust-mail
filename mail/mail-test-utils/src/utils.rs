@@ -13,7 +13,7 @@ use proton_mail_common::datatypes::{
 use proton_mail_common::models::{
     Conversation, ConversationCounters, ConversationLabel, Message, MessageCounters,
 };
-use stash::stash::Tether;
+use stash::stash::{StashError, Tether};
 use std::collections::{BTreeMap, HashMap};
 
 #[derive(Default, Clone, Debug)]
@@ -36,11 +36,15 @@ pub struct TestDBStateMap {
 /// # Panics
 pub async fn prepare_db_state_core(tether: &mut Tether, env: &mut [Address]) {
     // create addresses
-    let tx = tether.transaction().await.unwrap();
-    for address in env.iter_mut() {
-        address.save(&tx).await.unwrap();
-    }
-    tx.commit().await.expect("failed to commit transaction");
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            for address in env.iter_mut() {
+                address.save(tx).await.unwrap();
+            }
+            Ok(())
+        })
+        .await
+        .expect("failed to commit transaction");
 }
 
 pub async fn prepare_and_patch_db_state(
@@ -60,45 +64,51 @@ pub async fn prepare_and_patch_db_state_and_skip(
     let mut result = TestDBStateMap {
         ..Default::default()
     };
-    let tx = tether.transaction().await.unwrap();
-    // create labels
-    let mut local_label_ids = vec![];
-    for label in &mut env.labels {
-        let db_label =
-            Label::find_by_remote_id(label.remote_id.clone().expect("No remote id in label"), &tx)
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            // create labels
+            let mut local_label_ids = vec![];
+            for label in &mut env.labels {
+                let db_label = Label::find_by_remote_id(
+                    label.remote_id.clone().expect("No remote id in label"),
+                    tx,
+                )
                 .await
                 .expect("failed to find label");
-        let the_label = if let Some(ref l) = db_label {
-            l
-        } else {
-            label.save(&tx).await.expect("failed to create label");
-            label
-        };
-        local_label_ids.push(the_label.local_id);
-    }
-    for (idx, local_id) in local_label_ids.into_iter().enumerate() {
-        result.labels.insert(
-            env.labels[idx].clone().remote_id.unwrap(),
-            local_id.unwrap(),
-        );
-        result.conversation_counts.insert(
-            env.labels[idx].clone().remote_id.unwrap(),
-            ConversationLabelsCount {
-                label_id: env.labels[idx].clone().remote_id.unwrap(),
-                total: 0,
-                unread: 0,
-            },
-        );
-        result.message_counts.insert(
-            env.labels[idx].clone().remote_id.unwrap(),
-            MessageLabelsCount {
-                label_id: env.labels[idx].clone().remote_id.unwrap(),
-                total: 0,
-                unread: 0,
-            },
-        );
-    }
-    tx.commit().await.expect("failed to commit transaction");
+                let the_label = if let Some(ref l) = db_label {
+                    l
+                } else {
+                    label.save(tx).await.expect("failed to create label");
+                    label
+                };
+                local_label_ids.push(the_label.local_id);
+            }
+            for (idx, local_id) in local_label_ids.into_iter().enumerate() {
+                result.labels.insert(
+                    env.labels[idx].clone().remote_id.unwrap(),
+                    local_id.unwrap(),
+                );
+                result.conversation_counts.insert(
+                    env.labels[idx].clone().remote_id.unwrap(),
+                    ConversationLabelsCount {
+                        label_id: env.labels[idx].clone().remote_id.unwrap(),
+                        total: 0,
+                        unread: 0,
+                    },
+                );
+                result.message_counts.insert(
+                    env.labels[idx].clone().remote_id.unwrap(),
+                    MessageLabelsCount {
+                        label_id: env.labels[idx].clone().remote_id.unwrap(),
+                        total: 0,
+                        unread: 0,
+                    },
+                );
+            }
+            Ok(())
+        })
+        .await
+        .expect("failed to commit transaction");
     // update conversation labels with message data
     #[allow(clippy::items_after_statements)]
     fn find_conversation<'a>(
@@ -196,69 +206,72 @@ pub async fn prepare_and_patch_db_state_and_skip(
         conv.expiration_time = conv.expiration_time.max(message.expiration_time);
     }
 
-    let tx = tether.transaction().await.unwrap();
-    // create conversations
-    let local_conversation_ids =
-        Conversation::create_or_update_conversations(env.conversations.clone(), &tx)
-            .await
-            .expect("failed to create conversations");
-    for (idx, conversation) in env.conversations.iter().enumerate() {
-        result.conversations.insert(
-            conversation.remote_id.clone().unwrap(),
-            local_conversation_ids[idx],
-        );
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            // create conversations
+            let local_conversation_ids =
+                Conversation::create_or_update_conversations(env.conversations.clone(), tx)
+                    .await
+                    .expect("failed to create conversations");
+            for (idx, conversation) in env.conversations.iter().enumerate() {
+                result.conversations.insert(
+                    conversation.remote_id.clone().unwrap(),
+                    local_conversation_ids[idx],
+                );
 
-        for label in &conversation.labels {
-            let counts = result
-                .conversation_counts
-                .get_mut(&label.remote_label_id.clone().unwrap())
-                .unwrap();
-            if label.context_num_unread != 0 {
-                counts.unread += 1;
-            }
-            counts.total += 1;
-        }
-    }
-
-    // create messages
-    if !skip_messages {
-        let mut local_message_ids = vec![];
-        for message in &mut env.messages {
-            message.save(&tx).await.expect("failed to create message");
-            local_message_ids.push(message.local_id);
-            result.messages.insert(
-                message.remote_id.clone().unwrap(),
-                message.local_id.unwrap(),
-            );
-
-            for label_id in &message.label_ids {
-                let counts = result.message_counts.get_mut(label_id).unwrap();
-                if message.unread {
-                    counts.unread += 1;
+                for label in &conversation.labels {
+                    let counts = result
+                        .conversation_counts
+                        .get_mut(&label.remote_label_id.clone().unwrap())
+                        .unwrap();
+                    if label.context_num_unread != 0 {
+                        counts.unread += 1;
+                    }
+                    counts.total += 1;
                 }
-                counts.total += 1;
             }
-        }
-    }
 
-    // create conversation_counts
-    ConversationLabelsCount::create_or_update_conversation_counts(
-        result.conversation_counts.values().cloned().collect(),
-        &tx,
-    )
-    .await
-    .expect("failed to create conversation counts");
-    if !skip_messages {
-        MessageLabelsCount::create_or_update_message_counts(
-            result.message_counts.values().cloned().collect(),
-            &tx,
-        )
+            // create messages
+            if !skip_messages {
+                let mut local_message_ids = vec![];
+                for message in &mut env.messages {
+                    message.save(tx).await.expect("failed to create message");
+                    local_message_ids.push(message.local_id);
+                    result.messages.insert(
+                        message.remote_id.clone().unwrap(),
+                        message.local_id.unwrap(),
+                    );
+
+                    for label_id in &message.label_ids {
+                        let counts = result.message_counts.get_mut(label_id).unwrap();
+                        if message.unread {
+                            counts.unread += 1;
+                        }
+                        counts.total += 1;
+                    }
+                }
+            }
+
+            // create conversation_counts
+            ConversationLabelsCount::create_or_update_conversation_counts(
+                result.conversation_counts.values().cloned().collect(),
+                tx,
+            )
+            .await
+            .expect("failed to create conversation counts");
+            if !skip_messages {
+                MessageLabelsCount::create_or_update_message_counts(
+                    result.message_counts.values().cloned().collect(),
+                    tx,
+                )
+                .await
+                .expect("failed to create message counts");
+            }
+
+            Ok((env, result))
+        })
         .await
-        .expect("failed to create message counts");
-    }
-    tx.commit().await.expect("failed to commit transaction");
-
-    (env, result)
+        .unwrap()
 }
 
 /// # Panics
@@ -358,10 +371,10 @@ pub async fn msg_counts_as_map(tether: &Tether) -> BTreeMap<LocalLabelId, Messag
 /// # Panics
 pub async fn create_address(tether: &mut Tether) -> Address {
     let mut address = test_address();
-    let tx = tether.transaction().await.unwrap();
-    address.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
-
+    tether
+        .tx::<_, _, StashError>(async |tx| address.save(tx).await)
+        .await
+        .unwrap();
     address
 }
 

@@ -1,24 +1,28 @@
-use proton_api_core::services::proton::AddressId;
-use proton_crypto_account::keys::AddressKeys as RealAddressKeys;
-use stash::{orm::Model, params};
-
 use crate::{
     datatypes::{AddressKeys, AddressSignedKeyList, AddressStatus, AddressType},
     models::Address,
     tests::common::new_core_test_connection,
 };
+use proton_api_core::services::proton::AddressId;
+use proton_crypto_account::keys::AddressKeys as RealAddressKeys;
+use stash::stash::StashError;
+use stash::{orm::Model, params};
 
 #[tokio::test]
 async fn count_test() {
     let mut tether = new_core_test_connection().await.connection();
-    let tx = tether.transaction().await.unwrap();
-    for i in 0..10 {
-        let mut address = create_test_address(i);
-        address.save(&tx).await.expect("failed to create address");
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            for i in 0..10 {
+                let mut address = create_test_address(i);
+                address.save(tx).await.expect("failed to create address");
 
-        assert_eq!(Address::count("", vec![], &tx).await.unwrap(), i as u64 + 1);
-    }
-    tx.commit().await.unwrap();
+                assert_eq!(Address::count("", vec![], tx).await.unwrap(), i as u64 + 1);
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
 
     assert_eq!(
         Address::count("WHERE remote_id = ?", params!["address_id_1"], &tether)
