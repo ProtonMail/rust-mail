@@ -585,7 +585,7 @@ impl Context {
     ///
     /// Returns an error if the flow is not in the logged in state or if the user
     /// context could not be created.
-    #[tracing::instrument(level=Level::DEBUG, skip(self, flow))]
+    #[tracing::instrument(level=Level::DEBUG, skip_all)]
     pub async fn user_context_from_login_flow(
         &self,
         flow: &mut Flow,

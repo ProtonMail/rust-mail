@@ -24,6 +24,8 @@ Async tasks should be executed using the `Command::task()` function and
 long running background task (e.g.: EventLoop) should be launched via
 `Command::background_task()`.
 
+You can customize the interval with --event-loop-time.
+
 ## Local Data
 
 Stored in the OS's cache dir for the current user within the folder named

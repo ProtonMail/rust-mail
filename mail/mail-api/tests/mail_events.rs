@@ -1,20 +1,9 @@
-use pretty_assertions::assert_eq;
-use std::fs::{read_to_string, write};
-
 use proton_api_mail::services::proton::response_data::MailEvent;
 
 #[test]
 fn test_deserialize() {
-    let input = read_to_string("tests/data/mail_events/event.json").unwrap();
-    let mail_event: MailEvent = serde_json::from_str(&input).unwrap();
-    let actual = serde_json::to_string_pretty(&mail_event).unwrap();
-    let expected = read_to_string("tests/data/mail_events/expected.json").unwrap();
+    let event_json = include_str!("event.json");
+    let mail_event: MailEvent = serde_json::from_str(event_json).unwrap();
 
-    let actual = actual.trim();
-    let expected = expected.trim();
-    if actual != expected {
-        write("tests/data/mail_events/expected.json.new", actual).unwrap();
-    }
-
-    assert_eq!(expected, actual);
+    insta::assert_debug_snapshot!(mail_event);
 }

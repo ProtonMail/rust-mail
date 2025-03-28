@@ -26,6 +26,7 @@
 //! are used by both requests and responses.
 //!
 
+use crate::services::proton::IncomingDefault;
 use crate::services::proton::common::{ConversationId, MessageId};
 use crate::services::proton::prelude::NewAttachmentResponse;
 use crate::services::proton::response_data::{
@@ -299,4 +300,13 @@ pub struct PostCancelSendResponse {
 #[serde(rename_all = "PascalCase")]
 pub struct PostAttachmentResponse {
     pub attachment: NewAttachmentResponse,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct GetIncomingDefaultResponse {
+    pub incoming_defaults: Vec<IncomingDefault>,
+    pub total: u64,
+    pub global_total: u64,
 }

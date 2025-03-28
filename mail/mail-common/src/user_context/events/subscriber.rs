@@ -1,11 +1,13 @@
 use crate::MailUserContext;
 use crate::datatypes::MessageLabelsCount;
+use crate::models::default_location::IncomingDefaultLocation;
 use crate::user_context::events::conversations::handle_conversation_events;
 use crate::user_context::events::labels::handle_label_events;
 use crate::user_context::events::messages::handle_message_events;
 use crate::{datatypes::ConversationLabelsCount, events::MailEvent};
 use anyhow::anyhow;
 use async_trait::async_trait;
+use proton_api_core::services::proton::Action;
 use proton_event_loop::subscriber::{Subscriber, SubscriberError};
 use std::sync::Weak;
 use tracing::{debug, error};
@@ -80,13 +82,27 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
                     debug!("Handling mail settings");
                     mail_settings.save(&tx).await?;
                 }
+
+                if let Some(incoming_defaults) = event.incoming_defaults.take() {
+                    debug!("Handling incoming defaults");
+                    let (delete, insert): (Vec<_>, Vec<_>) = incoming_defaults
+                        .into_iter()
+                        .partition(|def| def.action == Some(Action::Delete));
+
+                    IncomingDefaultLocation::store(insert, &tx).await?;
+                    for default in delete {
+                        if let Some(email) = default.email {
+                            IncomingDefaultLocation::delete(email, &tx).await?;
+                        }
+                    }
+                }
             }
-            tx.commit().await.map(|_| ())
+
+            tx.commit().await.map_err(|e| {
+                let e = anyhow!("Failed to apply changes: {e}");
+                error!("{e:?}");
+                SubscriberError::Other(e)
+            })
         }
-        .map_err(|e| {
-            let e = anyhow!("Failed to apply changes: {e}");
-            error!("{e:?}");
-            SubscriberError::Other(e)
-        })
     }
 }
