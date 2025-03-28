@@ -550,9 +550,7 @@ impl Attachment {
             "DELETE FROM attachment_cache WHERE attachment_id IN ({})",
             placeholders(ids.len())
         );
-        let bond = tether.transaction().await?;
-        bond.execute(query, ids).await?;
-        bond.commit().await?;
+        tether.tx(async |tx| tx.execute(query, ids).await).await?;
 
         Ok(())
     }

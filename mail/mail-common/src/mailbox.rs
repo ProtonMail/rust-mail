@@ -151,12 +151,14 @@ impl Mailbox {
         }?;
 
         mailbox_label.initialized = true;
-        let tx = tether.transaction().await?;
-        mailbox_label.save(&tx).await.map_err(|e| {
-            error!("Failed to mark label as initialized: {e:?}");
-            MailContextError::Stash(e)
-        })?;
-        tx.commit().await?;
+        tether
+            .tx(async |tx| {
+                mailbox_label.save(tx).await.map_err(|e| {
+                    error!("Failed to mark label as initialized: {e:?}");
+                    MailContextError::Stash(e)
+                })
+            })
+            .await?;
 
         debug!("Syncing finished");
         Ok(())

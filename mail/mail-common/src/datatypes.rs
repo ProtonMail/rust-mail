@@ -1039,21 +1039,23 @@ impl EncryptedMessageBody {
                 }
 
                 let mut tether = ctx.user_stash().connection();
-                let tx = tether.transaction().await?;
-                for (mut att, data) in model_attachments {
-                    att.save(&tx).await?;
-                    Attachment::store_in_cache(
-                        &ctx,
-                        &att.filename,
-                        att.local_id.unwrap(),
-                        data,
-                        &tx,
-                    )
+                tether
+                    .tx::<_, _, MailContextError>(async |tx| {
+                        for (mut att, data) in model_attachments {
+                            att.save(tx).await?;
+                            Attachment::store_in_cache(
+                                &ctx,
+                                &att.filename,
+                                att.local_id.unwrap(),
+                                data,
+                                tx,
+                            )
+                            .await?;
+                            self.metadata.attachments.push(att);
+                        }
+                        Ok(self.metadata.save(tx).await?)
+                    })
                     .await?;
-                    self.metadata.attachments.push(att);
-                }
-                self.metadata.save(&tx).await?;
-                tx.commit().await?;
 
                 Ok(if with_attachment_prefetch {
                     DecryptedMessageBody::new_prefetching(

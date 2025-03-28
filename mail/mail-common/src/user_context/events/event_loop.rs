@@ -52,13 +52,15 @@ impl Store for MailUserContext {
     async fn store(&self, id: EventId) -> anyhow::Result<()> {
         {
             let mut tether = self.user_context.stash().connection();
-            let tx = tether.transaction().await?;
-            tx.execute(
-                "INSERT OR REPLACE INTO event_id_store (id, value) VALUES (?, ?)",
-                params![MAIL_EVENT_TYPE_ID, id],
-            )
-            .await?;
-            tx.commit().await?;
+            tether
+                .tx(async |tx| {
+                    tx.execute(
+                        "INSERT OR REPLACE INTO event_id_store (id, value) VALUES (?, ?)",
+                        params![MAIL_EVENT_TYPE_ID, id],
+                    )
+                    .await
+                })
+                .await?;
 
             Ok(())
         }

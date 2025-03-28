@@ -1450,11 +1450,14 @@ impl Message {
             }
         }
 
-        let tx = tether.transaction().await?;
-        for mut addr in addrs {
-            addr.save(&tx).await?;
-        }
-        tx.commit().await?;
+        tether
+            .tx::<_, _, StashError>(async |tx| {
+                for mut addr in addrs {
+                    addr.save(tx).await?;
+                }
+                Ok(())
+            })
+            .await?;
 
         let mut missing_labels_ids = vec![];
         for msg in messages {
@@ -1474,9 +1477,9 @@ impl Message {
                 missing_labels_ids.len()
             );
             let missing_labels = Label::get_labels_by_ids(api, missing_labels_ids).await?;
-            let tx = tether.transaction().await?;
-            Label::sync_labels(&tx, missing_labels).await?;
-            tx.commit().await?;
+            tether
+                .tx(async |tx| Label::sync_labels(tx, missing_labels).await)
+                .await?;
         }
 
         Ok(())
@@ -1517,9 +1520,9 @@ impl Message {
         // loaded.
         Self::sync_dependencies_from_metadata(&messages, api, tether).await?;
 
-        let tx = tether.transaction().await?;
-        let mut messages = Self::create_or_update_messages_from_metadata_vec(messages, &tx).await?;
-        tx.commit().await?;
+        let mut messages = tether
+            .tx(async |tx| Self::create_or_update_messages_from_metadata_vec(messages, tx).await)
+            .await?;
 
         messages.sort_unstable_by(|x, y| {
             x.time
@@ -1566,9 +1569,11 @@ impl Message {
             response.total
         );
 
-        let tx = tether.transaction().await?;
-        Self::create_or_update_messages_from_metadata(response.messages, &tx).await?;
-        tx.commit().await?;
+        tether
+            .tx(async |tx| {
+                Self::create_or_update_messages_from_metadata(response.messages, tx).await
+            })
+            .await?;
         Ok(())
     }
 
@@ -1832,10 +1837,16 @@ impl Message {
                 .await?;
         trace!("Message successfully decrypted. Caching...");
 
-        let tx = tether.transaction().await?;
-        Self::store_decrypted_message_body(self.local_id.unwrap(), decrypted.body.clone(), &tx)
+        tether
+            .tx(async |tx| {
+                Self::store_decrypted_message_body(
+                    self.local_id.unwrap(),
+                    decrypted.body.clone(),
+                    tx,
+                )
+                .await
+            })
             .await?;
-        tx.commit().await?;
 
         debug!("Message successfully synced.");
         Ok(decrypted)
@@ -1854,9 +1865,9 @@ impl Message {
         )
         .await?;
 
-        let tx = tether.transaction().await?;
-        Self::mark_deleted(ids, &tx).await?;
-        tx.commit().await?;
+        tether
+            .tx(async |tx| Self::mark_deleted(ids, tx).await)
+            .await?;
 
         Ok(())
     }
@@ -2466,10 +2477,16 @@ impl Message {
         )
         .await?;
 
-        let tx = tether.transaction().await?;
-        Self::store_decrypted_message_body(message.local_id.unwrap(), decrypted.body.clone(), &tx)
+        tether
+            .tx(async |tx| {
+                Self::store_decrypted_message_body(
+                    message.local_id.unwrap(),
+                    decrypted.body.clone(),
+                    tx,
+                )
+                .await
+            })
             .await?;
-        tx.commit().await?;
         Ok((message, decrypted))
     }
 
@@ -2493,15 +2510,17 @@ impl Message {
                 error!("Failed to convert message from api: {e:?}");
             })?;
 
-        let tx = tether.transaction().await?;
-        message.save(&tx).await.inspect_err(|e| {
-            error!("Failed to save message metadata: {e:?}");
-        })?;
+        tether
+            .tx(async |tx| {
+                message.save(tx).await.inspect_err(|e| {
+                    error!("Failed to save message metadata: {e:?}");
+                })?;
 
-        body_metadata.save(&tx).await.inspect_err(|e| {
-            error!("Failed to save message body metadata: {e:?}");
-        })?;
-        tx.commit().await?;
+                body_metadata.save(tx).await.inspect_err(|e| {
+                    error!("Failed to save message body metadata: {e:?}");
+                })
+            })
+            .await?;
 
         Ok((
             message,

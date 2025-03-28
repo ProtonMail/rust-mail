@@ -374,15 +374,21 @@ impl Draft {
                 save_action_id: None,
                 row_id: None,
             };
-            let tx = tether.transaction().await?;
-            metadata
-                .save(&tx)
-                .await
-                .inspect_err(|e| error!("Failed to create new metadata: {e:?}"))?;
-            tokio::fs::create_dir_all(draft_attachment_staging_path(context, metadata.id.unwrap()))
-                .await
-                .inspect_err(|e| error!("Failed to create attachment staging path: {e:?}"))?;
-            tx.commit().await?;
+            tether
+                .tx::<_, _, MailContextError>(async |tx| {
+                    metadata
+                        .save(tx)
+                        .await
+                        .inspect_err(|e| error!("Failed to create new metadata: {e:?}"))?;
+                    tokio::fs::create_dir_all(draft_attachment_staging_path(
+                        context,
+                        metadata.id.unwrap(),
+                    ))
+                    .await
+                    .inspect_err(|e| error!("Failed to create attachment staging path: {e:?}"))?;
+                    Ok(())
+                })
+                .await?;
             metadata
         };
 
@@ -400,14 +406,16 @@ impl Draft {
                     message = message_new;
 
                     debug!("Message synced, updating attachment metadata.");
-                    let tx = tether.transaction().await?;
-                    DraftAttachmentMetadata::reset_draft_attachments_after_sync(
-                        metadata.id.unwrap(),
-                        &decrypted.metadata,
-                        &tx,
-                    )
-                    .await?;
-                    tx.commit().await?;
+                    tether
+                        .tx(async |tx| {
+                            DraftAttachmentMetadata::reset_draft_attachments_after_sync(
+                                metadata.id.unwrap(),
+                                &decrypted.metadata,
+                                tx,
+                            )
+                            .await
+                        })
+                        .await?;
 
                     (Some(decrypted), DraftSyncStatus::Synced)
                 }
@@ -495,11 +503,13 @@ impl Draft {
 
         let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
         let address = &addresses[0];
-        let tx = tether.transaction().await?;
-        let metadata = DraftMetadata::empty(&tx)
-            .await
-            .inspect_err(|e| error!("Failed to create new empty draft metadata: {e:?}"))?;
-        tx.commit().await?;
+        let metadata = tether
+            .tx(async |tx| {
+                DraftMetadata::empty(tx)
+                    .await
+                    .inspect_err(|e| error!("Failed to create new empty draft metadata: {e:?}"))
+            })
+            .await?;
 
         Ok(Self::new_empty_draft(
             metadata.id.unwrap(),
@@ -583,68 +593,76 @@ impl Draft {
         };
 
         let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
-        let tx = tether.transaction().await?;
-        let metadata = DraftMetadata::reply(
-            reply_mode,
-            source_message.local_id.unwrap(),
-            source_message.local_conversation_id.unwrap(),
-            &tx,
-        )
-        .await
-        .inspect_err(|e| error!("Failed to create new reply draft metadata: {e:?}"))?;
-
-        tokio::fs::create_dir_all(draft_attachment_staging_path(context, metadata.id.unwrap()))
-            .await
-            .inspect_err(|e| error!("Failed to create attachment staging path: {e:?}"))?;
-
-        let contact_group_resolver = ProtonContactGroupResolver::new(&tx);
-
-        let (draft, attachments) = Self::new_draft_reply(
-            &contact_group_resolver,
-            metadata.id.unwrap(),
-            reply_mode,
-            &address,
-            &mail_settings,
-            &source_message,
-            source_message_body,
-            use_utc,
-        )
-        .await;
-
-        for (order, attachment) in attachments.into_iter().enumerate() {
-            let mut attachment_metadata =
-                if matches!(attachment.attachment_type, AttachmentType::Pgp) {
-                    // PGP attachments need to be cloned and uploaded to the server so it can be sent.
-                    debug!("Cloning PGP attachment {} ", attachment.local_id.unwrap());
-                    let new_attachment = Attachment::clone_attachment(
-                        context,
-                        address.remote_id.clone().unwrap(),
-                        attachment,
-                        &tx,
-                    )
-                    .await
-                    .inspect_err(|e| error!("Failed to clone pgp attachment: {e:?}",))?;
-                    debug!(
-                        "PGP attachment cloned as {} ",
-                        new_attachment.local_id.unwrap()
-                    );
-                    DraftAttachmentMetadata::pending(
-                        metadata.id.unwrap(),
-                        new_attachment.local_id.unwrap(),
-                        order,
-                    )
-                } else {
-                    DraftAttachmentMetadata::inherited(metadata.id.unwrap(), &attachment, order)
-                };
-
-            attachment_metadata
-                .save(&tx)
+        tether
+            .tx(async |tx| {
+                let metadata = DraftMetadata::reply(
+                    reply_mode,
+                    source_message.local_id.unwrap(),
+                    source_message.local_conversation_id.unwrap(),
+                    tx,
+                )
                 .await
-                .inspect_err(|e| error!("Failed to save attachment metadata: {e:?}"))?
-        }
-        tx.commit().await?;
+                .inspect_err(|e| error!("Failed to create new reply draft metadata: {e:?}"))?;
 
-        Ok(draft)
+                tokio::fs::create_dir_all(draft_attachment_staging_path(
+                    context,
+                    metadata.id.unwrap(),
+                ))
+                .await
+                .inspect_err(|e| error!("Failed to create attachment staging path: {e:?}"))?;
+
+                let contact_group_resolver = ProtonContactGroupResolver::new(tx);
+
+                let (draft, attachments) = Self::new_draft_reply(
+                    &contact_group_resolver,
+                    metadata.id.unwrap(),
+                    reply_mode,
+                    &address,
+                    &mail_settings,
+                    &source_message,
+                    source_message_body,
+                    use_utc,
+                )
+                .await;
+
+                for (order, attachment) in attachments.into_iter().enumerate() {
+                    let mut attachment_metadata =
+                        if matches!(attachment.attachment_type, AttachmentType::Pgp) {
+                            // PGP attachments need to be cloned and uploaded to the server so it can be sent.
+                            debug!("Cloning PGP attachment {} ", attachment.local_id.unwrap());
+                            let new_attachment = Attachment::clone_attachment(
+                                context,
+                                address.remote_id.clone().unwrap(),
+                                attachment,
+                                tx,
+                            )
+                            .await
+                            .inspect_err(|e| error!("Failed to clone pgp attachment: {e:?}",))?;
+                            debug!(
+                                "PGP attachment cloned as {} ",
+                                new_attachment.local_id.unwrap()
+                            );
+                            DraftAttachmentMetadata::pending(
+                                metadata.id.unwrap(),
+                                new_attachment.local_id.unwrap(),
+                                order,
+                            )
+                        } else {
+                            DraftAttachmentMetadata::inherited(
+                                metadata.id.unwrap(),
+                                &attachment,
+                                order,
+                            )
+                        };
+
+                    attachment_metadata
+                        .save(tx)
+                        .await
+                        .inspect_err(|e| error!("Failed to save attachment metadata: {e:?}"))?
+                }
+                Ok(draft)
+            })
+            .await
     }
 
     /// Create a draft reply.

@@ -26,7 +26,7 @@ use proton_core_common::{
 use proton_event_loop::Event;
 use proton_sqlite3::MigratorError;
 use serde::Deserialize;
-use stash::stash::{Stash, StashConfiguration};
+use stash::stash::{Stash, StashConfiguration, StashError};
 use std::io::stdout;
 use std::sync::Arc;
 use std::sync::Weak;
@@ -211,37 +211,34 @@ impl TestContext {
             let stash = Stash::new(StashConfiguration::test_with_path(&path))
                 .expect("failed to create stash");
             let mut tether = stash.connection();
-            let tx = tether
-                .transaction()
+            tether
+                .tx::<_, _, StashError>(async |tx| {
+                    // Create
+                    let account = CoreAccount::new(user_id.clone(), Self::test_user_mail())
+                        .with_save(tx)
+                        .await
+                        .expect("fake account should save");
+
+                    // Create a auth session.
+                    let tokens = Tokens::access(
+                        Self::test_acctok(),
+                        Self::test_reftok(),
+                        Self::test_scopes(),
+                    );
+
+                    // Create a fake session.
+                    let session =
+                        CoreSession::new(user_id.clone(), Self::test_uid(), &tokens, &key)
+                            .expect("session should be created")
+                            .with_key_secret(&user_key_secret, &key)
+                            .expect("key secret should be set")
+                            .with_save(tx)
+                            .await
+                            .expect("fake session should save");
+                    Ok((account, session))
+                })
                 .await
-                .expect("failed to create transaction");
-
-            // Create a fake account.
-            let account = CoreAccount::new(user_id.clone(), Self::test_user_mail())
-                .with_save(&tx)
-                .await
-                .expect("fake account should save");
-
-            // Create a auth session.
-            let tokens = Tokens::access(
-                Self::test_acctok(),
-                Self::test_reftok(),
-                Self::test_scopes(),
-            );
-
-            // Create a fake session.
-            let session = CoreSession::new(user_id.clone(), Self::test_uid(), &tokens, &key)
-                .expect("session should be created")
-                .with_key_secret(&user_key_secret, &key)
-                .expect("key secret should be set")
-                .with_save(&tx)
-                .await
-                .expect("fake session should save");
-
-            // Commit the transaction.
-            tx.commit().await.expect("transaction should commit");
-
-            (account, session)
+                .expect("failed to create transaction")
         };
 
         Arc::new_cyclic(|this| Self {

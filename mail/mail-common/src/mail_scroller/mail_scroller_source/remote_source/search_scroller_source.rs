@@ -275,9 +275,9 @@ impl MailScrollerSource for SearchScrollerSource {
         ctx: &MailUserContext,
     ) -> Result<(u64, MailPaginatorJoinHandle), MailContextError> {
         let mut tether = ctx.user_stash().connection();
-        let bond = tether.transaction().await?;
-        SearchScrollData::delete_all(&bond).await?;
-        bond.commit().await?;
+        tether
+            .tx(async |tx| SearchScrollData::delete_all(tx).await)
+            .await?;
 
         // Search will always operate on online data only
         debug!("Paginating for the first time, getting first page & spawning sync task.");
