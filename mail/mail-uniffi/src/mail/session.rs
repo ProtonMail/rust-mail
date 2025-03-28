@@ -804,7 +804,25 @@ impl MailSession {
         .map_err(PinAuthError::from)
     }
 
-    /// Change the settings of the application.
+    /// Delete stored PIN
+    ///
+    /// This method also carries verification of the PIN to remove, that is why
+    /// it returns PinAuthError type. If verification is unsuccessful it won't
+    /// remove the PIN and return proper Error Reason.
+    ///
+    pub async fn delete_pin_code(&self, pin: Vec<u8>) -> Result<(), PinAuthError> {
+        let ctx = self.mail_ctx.core_context().clone();
+
+        uniffi_async(async move {
+            PinCode::delete_pin(ctx, pin).await?;
+
+            Result::<_, RealProtonMailError>::Ok(())
+        })
+        .await
+        .map_err(PinAuthError::from)
+    }
+
+    /// Get current app settings
     ///
     pub async fn get_app_settings(&self) -> Result<AppSettings, UserSessionError> {
         let ctx = self.mail_ctx.core_context().clone();

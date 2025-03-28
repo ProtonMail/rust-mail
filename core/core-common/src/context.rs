@@ -744,6 +744,12 @@ impl Context {
         self.key_chain.load::<S>()
     }
 
+    /// Interact with `KeyChain` to delete a secret
+    ///
+    pub fn delete_secret<S: StoreInKeyChain>(&self) -> Result<(), KeyChainError> {
+        self.key_chain.delete::<S>()
+    }
+
     fn user_db_path(&self, user_id: &UserId) -> PathBuf {
         get_user_db_path(&self.user_db_path, user_id)
     }
