@@ -64,11 +64,13 @@ pub async fn register_and_save_device(
             .account_stash()
             .connection();
 
-        let tx = tether.transaction().await?;
-        real_device
-            .save(&tx, ctx.mail_context().core_context())
+        tether
+            .tx(async |tx| {
+                real_device
+                    .save(&tx, ctx.mail_context().core_context())
+                    .await
+            })
             .await?;
-        tx.commit().await?;
 
         real_device.register(ctx.api()).await?;
 
@@ -96,11 +98,9 @@ pub async fn save_registered_device(
     uniffi_async(async move {
         let mut real_device = RealRegisteredDevice::from(device);
         let mut tether = session.ctx().session_stash().connection();
-        let tx = tether.transaction().await?;
-
-        real_device.save(&tx, session.ctx().core_context()).await?;
-
-        tx.commit().await?;
+        tether
+            .tx(async |tx| real_device.save(&tx, session.ctx().core_context()).await)
+            .await?;
 
         Ok::<_, RealProtonMailError>(())
     })
