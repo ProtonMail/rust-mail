@@ -5,7 +5,7 @@ use argon2::{
         rand_core::OsRng,
     },
 };
-use std::{fmt::Display, str::FromStr};
+use std::str::FromStr;
 use thiserror::Error;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
@@ -26,18 +26,14 @@ impl From<Argon2Error> for Argon2HashingError {
 #[derive(Clone, Debug, PartialEq, Zeroize, ZeroizeOnDrop)]
 pub struct ProtonArgon2Hash(String);
 
-impl Display for ProtonArgon2Hash {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let hash = &self.0;
-
-        write!(f, "{hash}")
+impl AsRef<str> for ProtonArgon2Hash {
+    fn as_ref(&self) -> &str {
+        self.0.as_str()
     }
 }
 
 impl FromStr for ProtonArgon2Hash {
-    /// Parsing hash never throw an error
-    /// It's here just for the type match
-    type Err = Argon2HashingError;
+    type Err = core::convert::Infallible;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(Self(s.to_string()))
@@ -80,8 +76,8 @@ mod tests {
 
         assert_ne!(hash_1, hash_2);
 
-        let hash_1_parsed = hash_1.to_string().parse::<ProtonArgon2Hash>().unwrap();
-        let hash_2_parsed = hash_2.to_string().parse::<ProtonArgon2Hash>().unwrap();
+        let hash_1_parsed = hash_1.as_ref().parse::<ProtonArgon2Hash>().unwrap();
+        let hash_2_parsed = hash_2.as_ref().parse::<ProtonArgon2Hash>().unwrap();
 
         assert_eq!(hash_1_parsed, hash_1);
         assert_eq!(hash_2_parsed, hash_2);

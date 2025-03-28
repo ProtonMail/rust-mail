@@ -170,13 +170,12 @@ impl StoreInKeyChain for PinHash {
     fn from_stored_string(
         s: SecretString,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        s.expose_secret()
-            .parse()
-            .map(PinHash)
-            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })
+        // unwrap safety: ProtonArgon2Hash::from_str returns `Infallible`
+        Ok(s.expose_secret().parse().map(PinHash).unwrap())
     }
 
     fn to_stored_string(&self) -> SecretString {
-        SecretString::new(self.0.to_string())
+        // unwrap safety: SecretString::from_str returns `Infallible`
+        self.as_ref().parse().unwrap()
     }
 }
