@@ -351,53 +351,53 @@ impl RemoteConversationScrollerSource {
     ) -> Result<(), MailContextError> {
         // We do not want to notify the UI about the not visible items
         // downloaded in the background
-        let tx = tether.quiet_transaction().await?;
+        tether
+            .quiet_tx(async |tx| {
+                // Save all conversations.
+                for conversation in conversations.iter_mut() {
+                    conversation.create_or_get_local(tx).await?
+                }
 
-        // Save all conversations.
-        for conversation in conversations.iter_mut() {
-            conversation.create_or_get_local(&tx).await?
-        }
+                let Some((last, label)) = conversations
+                    .iter()
+                    .rev()
+                    .filter_map(|conv| {
+                        let conv_label = conv.label(local_label_id)?;
+                        Some((conv, conv_label))
+                    })
+                    .next()
+                else {
+                    return Err(MailContextError::Other(anyhow!(
+                        "There is no conversation with labels"
+                    )));
+                };
 
-        let Some((last, label)) = conversations
-            .iter()
-            .rev()
-            .filter_map(|conv| {
-                let conv_label = conv.label(local_label_id)?;
-                Some((conv, conv_label))
+                let context_time = context_time.unwrap_or(label.context_time);
+                // Unwrap safety: RemoteId is present as this method is called on conversation
+                // downloaded from API
+                let remote_id = last.remote_id.clone().unwrap();
+                let display_order = last.display_order;
+
+                if update_scroller {
+                    Self::update_scroller_data(
+                        local_label_id,
+                        remote_id.clone(),
+                        unread,
+                        context_time,
+                        display_order,
+                        tx,
+                    )
+                    .await?;
+                }
+
+                debug!(
+                    "New last element id={:?}, time={}, order={}",
+                    remote_id, context_time, display_order
+                );
+
+                Ok(())
             })
-            .next()
-        else {
-            return Err(MailContextError::Other(anyhow!(
-                "There is no conversation with labels"
-            )));
-        };
-
-        let context_time = context_time.unwrap_or(label.context_time);
-        // Unwrap safety: RemoteId is present as this method is called on conversation
-        // downloaded from API
-        let remote_id = last.remote_id.clone().unwrap();
-        let display_order = last.display_order;
-
-        if update_scroller {
-            Self::update_scroller_data(
-                local_label_id,
-                remote_id.clone(),
-                unread,
-                context_time,
-                display_order,
-                &tx,
-            )
-            .await?;
-        }
-
-        debug!(
-            "New last element id={:?}, time={}, order={}",
-            remote_id, context_time, display_order
-        );
-
-        tx.quiet_commit().await?;
-
-        Ok(())
+            .await
     }
 
     async fn update_scroller_data(
