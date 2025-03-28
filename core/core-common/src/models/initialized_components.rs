@@ -93,7 +93,14 @@ impl InitializedComponent {
             .unwrap_or_default()
     }
 
-    async fn state(
+    /// Returns a state matching given initialization key if exists.
+    /// Otherwise returns not initialized status
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if database query fails
+    ///
+    pub async fn state(
         key: InitializationKey,
         tether: &Tether,
     ) -> Result<InitializedComponentState, StashError> {
@@ -205,12 +212,26 @@ impl InitializedComponent {
         res.map_err(InitializationError::InitializationFailed)
     }
 
-    async fn fail(key: InitializationKey, tether: &mut Tether) -> Result<(), StashError> {
+    /// Sets state immediately
+    ///
+    /// # Warning
+    ///
+    /// This does not check whether the key was already initialized or not
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the query fails
+    ///
+    pub async fn set_state(
+        key: InitializationKey,
+        state: InitializedComponentState,
+        tether: &mut Tether,
+    ) -> Result<(), StashError> {
         tether
             .tx(async |tx| {
                 Self {
                     key: key.into(),
-                    state: InitializedComponentState::Failed,
+                    state,
                     row_id: None,
                 }
                 .save(tx)
@@ -218,6 +239,10 @@ impl InitializedComponent {
             })
             .await?;
         Ok(())
+    }
+
+    async fn fail(key: InitializationKey, tether: &mut Tether) -> Result<(), StashError> {
+        Self::set_state(key, InitializedComponentState::Failed, tether).await
     }
 
     /// Wait until dependencies are initialized.

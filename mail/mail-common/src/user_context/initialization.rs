@@ -5,7 +5,7 @@ use crate::models::default_location::IncomingDefaultLocation;
 use crate::models::{LabelWithCounters, MailSettings, StoreLabelCounters};
 use crate::{MailContextError, MailUserContext};
 use futures::try_join;
-use proton_core_common::datatypes::InitializationKey;
+use proton_core_common::datatypes::{InitializationKey, InitializedComponentState};
 use proton_core_common::models::{
     Address, Contact, InitializationError, InitializationWatcher, InitializedComponent, User,
 };
@@ -27,6 +27,7 @@ enum MailUserContextLoadingStage {
 }
 
 impl MailUserContext {
+    const CONTEXT_INIT_KEY: InitializationKey = InitializationKey::new("mail_user_context");
     /// Initialize the mail user context, running all the necessary syncs to ensure the context is ready to be used.
     /// Syncs are mostly run in the parallel, but updating message & conversation count are dependent on labels, so it is run in sequence.
     ///
@@ -105,14 +106,40 @@ impl MailUserContext {
 
         match res {
             Ok(_) => {
+                InitializedComponent::set_state(
+                    Self::CONTEXT_INIT_KEY,
+                    InitializedComponentState::Succeeded,
+                    &mut ctx.user_stash().connection(),
+                )
+                .await?;
+
                 debug!("Syncing Complete in {:?}", t0.elapsed());
                 Ok(())
             }
             Err(e) => {
+                InitializedComponent::set_state(
+                    Self::CONTEXT_INIT_KEY,
+                    InitializedComponentState::Failed,
+                    &mut ctx.user_stash().connection(),
+                )
+                .await?;
+
                 error!("Syncing Failed in {:?}", t0.elapsed());
                 Err(e)
             }
         }
+    }
+
+    /// Checks whether initialization process finished suscesfully.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if query to the database fails.
+    ///
+    pub async fn is_initialized(&self) -> Result<bool, MailContextError> {
+        let tether = self.user_stash().connection();
+        let state = InitializedComponent::state(Self::CONTEXT_INIT_KEY, &tether).await?;
+        Ok(matches!(state, InitializedComponentState::Succeeded))
     }
 
     /// Initialize a component.

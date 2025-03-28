@@ -189,6 +189,28 @@ impl MailTestContext {
         Ok(ctx)
     }
 
+    /// Get the test user context but only if its initialized
+    ///
+    /// # Panics
+    ///
+    /// Panics if couldnt retrieve context from session
+    ///
+    pub async fn initialized_mail_user_context(&self) -> Option<Arc<MailUserContext>> {
+        let ctx = self
+            .mail_context
+            .initialized_user_context_from_session(
+                &self.core_session,
+                Some(StatusWatcher::with_observer(StatusObserver::test())),
+            )
+            .await
+            .unwrap()?;
+
+        // Disable auto queue executor as we don't want these to interfere with our test execution.
+        ctx.terminate_queue_executors();
+
+        Some(ctx)
+    }
+
     /// Set up a catch-all mock for the mock server.
     ///
     /// Calls to this function need to come at the END of the test setup, AFTER
