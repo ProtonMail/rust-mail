@@ -131,18 +131,21 @@ impl ActionHandler for Handler {
 
         error!("Move operation failed for: {:?}", failed_ids);
 
-        let tx = guard.transaction().await?;
-        let local_ids = Conversation::remote_ids_counterpart(failed_ids.clone(), &tx).await?;
+        guard
+            .tx::<_, _, <Self::Action as Action>::Error>(async |tx: &Bond<'_>| {
+                let local_ids =
+                    Conversation::remote_ids_counterpart(failed_ids.clone(), tx).await?;
 
-        Conversation::move_conversations(
-            action.0.destination_label_id,
-            action.0.source_label_id,
-            local_ids,
-            &tx,
-        )
-        .await?;
-
-        tx.commit().await?;
+                Conversation::move_conversations(
+                    action.0.destination_label_id,
+                    action.0.source_label_id,
+                    local_ids,
+                    tx,
+                )
+                .await?;
+                Ok(())
+            })
+            .await?;
 
         Ok(())
     }

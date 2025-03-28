@@ -487,158 +487,157 @@ impl Save {
 
         // Note: This section will be generalized as part of ET-1353 when
         // we implement draft updates.
-        let bond = guard.transaction().await?;
-        // Update the remote conversation id.
-        Conversation::update_remote_id(
-            conversation_id,
-            new_message.metadata.conversation_id.clone(),
-            &bond,
-        )
-        .await
-        .inspect_err(|e| error!("Failed to update the conversation remote id: {e:?}"))?;
-
-        // Update message data
-        let (new_local_message, mut new_message_body_metadata, _) =
-            Message::from_api_data(new_message, &bond)
+        guard
+        .tx::<_, _, <Self as Action>::Error>(async |bond| {
+            // Update the remote conversation id.
+            Conversation::update_remote_id(
+                conversation_id,
+                new_message.metadata.conversation_id.clone(),
+                bond,
+            )
                 .await
-                .inspect_err(|e| {
-                    error!("Failed to convert api message: {e:?}");
-                })?;
+                .inspect_err(|e| error!("Failed to update the conversation remote id: {e:?}"))?;
 
-        if remote_message_id.is_none() {
-            // When we create a draft on the server, all inherited attachments get a new remote
-            // id. We need to remove and update those items for things to work correctly
+            // Update message data
+            let (new_local_message, mut new_message_body_metadata, _) =
+                Message::from_api_data(new_message, bond)
+                    .await
+                    .inspect_err(|e| {
+                        error!("Failed to convert api message: {e:?}");
+                    })?;
 
-            // API always returns the same amount, but tests may not.
-            debug_assert_eq!(
-                new_message_body_metadata.attachments.len(),
-                attachments.iter().filter_map(|a| a.remote_id()).count()
-            );
+            if remote_message_id.is_none() {
+                // When we create a draft on the server, all inherited attachments get a new remote
+                // id. We need to remove and update those items for things to work correctly
 
-            for (index, original_attachment) in attachments
-                .iter()
-                .enumerate()
-                .filter(|(_, a)| a.remote_id().is_some())
-            {
-                let Some(remote_id) = &original_attachment.remote_id() else {
-                    // We can't do this if the attachment has no remote id.
-                    continue;
-                };
-                let Some(attachment_metadata) = DraftAttachmentMetadata::find_by_id(
-                    original_attachment.local_id.unwrap(),
-                    &bond,
-                )
-                .await?
-                else {
-                    warn!(
-                        "Could not find attachment with id {}",
-                        original_attachment.local_id.unwrap()
-                    );
-                    continue;
-                };
+                // API always returns the same amount, but tests may not.
+                debug_assert_eq!(
+                    new_message_body_metadata.attachments.len(),
+                    attachments.iter().filter_map(|a| a.remote_id()).count()
+                );
 
-                if attachment_metadata.ownership == DraftAttachmentOwnership::Inherited {
-                    let new_attachment = &mut new_message_body_metadata.attachments[index];
-                    debug_assert_eq!(original_attachment.filename, new_attachment.filename);
-                    debug_assert_eq!(original_attachment.disposition, new_attachment.disposition);
-                    debug_assert_eq!(original_attachment.content_id, new_attachment.content_id);
-                    // Safe to unwrap, server responses always have remote id.
-                    debug_assert_ne!(
-                        original_attachment.remote_id().as_ref().unwrap(),
-                        new_attachment.remote_id().as_ref().unwrap()
-                    );
-                    //Inherited attachment will be removed and replaced by a new id.
-                    debug!(
-                        "Removing inherited attachment {}: {}",
+                for (index, original_attachment) in attachments
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, a)| a.remote_id().is_some())
+                {
+                    let Some(remote_id) = &original_attachment.remote_id() else {
+                        // We can't do this if the attachment has no remote id.
+                        continue;
+                    };
+                    let Some(attachment_metadata) = DraftAttachmentMetadata::find_by_id(
                         original_attachment.local_id.unwrap(),
-                        &remote_id,
-                    );
-                    // Unlink previous attachment.
-                    bond.execute(indoc! {
-                        "DELETE FROM message_attachments WHERE local_message_id=? AND local_attachment_id = ?",
-                    }, params![local_message_id, original_attachment.local_id.unwrap()]).await.inspect_err(|e|
-                        error!("Failed to unlink attachment from message: {e:?}"))?;
-                    // Remove attachment metadata
-                    let current_display_order = attachment_metadata.display_order;
-                    attachment_metadata.delete(&bond).await.inspect_err(|e| {
-                        error!("Failed to delete draft attachment metadata {e:?}")
-                    })?;
-
-                    // Create new attachment.
-                    new_attachment
-                        .save(&bond)
-                        .await
-                        .inspect_err(|e| error!("Failed to save attachment: {e}"))?;
-                    // Create link
-                    bond.execute("INSERT INTO message_attachments (local_message_id, local_attachment_id) VALUES (?,?)", params![local_message_id, new_attachment.local_id.unwrap()]).await.inspect_err(|e| error!("Failed to link new attachment: {e:?}"))?;
-                    // Creat new metadata entry
-                    let mut new_attachment_metadata = DraftAttachmentMetadata::owned_and_uploaded(
-                        action.metadata_id,
-                        new_attachment.local_id.unwrap(),
-                        current_display_order,
-                    );
-                    new_attachment_metadata.save(&bond).await.inspect_err(|e| {
-                        error!("Failed to save new draft attachment metadata: {e:?}")
-                    })?;
-
-                    // Ensure the newly created attachment has a data copy. This is required
-                    // for sending to external (non-proton) addresses. However, it is possible
-                    // the attachment has not been synced, so we can only do this if we have the
-                    // data.
-                    let original_attachment_id = original_attachment.local_id.unwrap();
-                    if let Some(path) = Attachment::path_from_cache_and_update_metadata(
-                        original_attachment_id,
-                        &bond,
+                        bond,
                     )
-                    .await?
-                    {
-                        debug!("Attachment present in cache, performing copy");
-                        Attachment::copy_attachment_to_cache(
-                            ctx,
-                            &new_attachment.filename,
+                        .await?
+                    else {
+                        warn!(
+                            "Could not find attachment with id {}",
+                            original_attachment.local_id.unwrap()
+                        );
+                        continue;
+                    };
+
+                    if attachment_metadata.ownership == DraftAttachmentOwnership::Inherited {
+                        let new_attachment = &mut new_message_body_metadata.attachments[index];
+                        debug_assert_eq!(original_attachment.filename, new_attachment.filename);
+                        debug_assert_eq!(original_attachment.disposition, new_attachment.disposition);
+                        debug_assert_eq!(original_attachment.content_id, new_attachment.content_id);
+                        // Safe to unwrap, server responses always have remote id.
+                        debug_assert_ne!(
+                            original_attachment.remote_id().as_ref().unwrap(),
+                            new_attachment.remote_id().as_ref().unwrap()
+                        );
+                        //Inherited attachment will be removed and replaced by a new id.
+                        debug!(
+                            "Removing inherited attachment {}: {}",
+                            original_attachment.local_id.unwrap(),
+                            &remote_id,
+                        );
+                        // Unlink previous attachment.
+                        bond.execute(indoc! {
+                            "DELETE FROM message_attachments WHERE local_message_id=? AND local_attachment_id = ?",
+                        }, params![local_message_id, original_attachment.local_id.unwrap()]).await.inspect_err(|e|
+                            error!("Failed to unlink attachment from message: {e:?}"))?;
+                        // Remove attachment metadata
+                        let current_display_order = attachment_metadata.display_order;
+                        attachment_metadata.delete(bond).await.inspect_err(|e| {
+                            error!("Failed to delete draft attachment metadata {e:?}")
+                        })?;
+
+                        // Create new attachment.
+                        new_attachment
+                            .save(bond)
+                            .await
+                            .inspect_err(|e| error!("Failed to save attachment: {e}"))?;
+                        // Create link
+                        bond.execute("INSERT INTO message_attachments (local_message_id, local_attachment_id) VALUES (?,?)", params![local_message_id, new_attachment.local_id.unwrap()]).await.inspect_err(|e| error!("Failed to link new attachment: {e:?}"))?;
+                        // Creat new metadata entry
+                        let mut new_attachment_metadata = DraftAttachmentMetadata::owned_and_uploaded(
+                            action.metadata_id,
                             new_attachment.local_id.unwrap(),
-                            &path,
-                            &bond,
+                            current_display_order,
+                        );
+                        new_attachment_metadata.save(bond).await.inspect_err(|e| {
+                            error!("Failed to save new draft attachment metadata: {e:?}")
+                        })?;
+
+                        // Ensure the newly created attachment has a data copy. This is required
+                        // for sending to external (non-proton) addresses. However, it is possible
+                        // the attachment has not been synced, so we can only do this if we have the
+                        // data.
+                        let original_attachment_id = original_attachment.local_id.unwrap();
+                        if let Some(path) = Attachment::path_from_cache_and_update_metadata(
+                            original_attachment_id,
+                            bond,
                         )
-                        .await?;
+                            .await?
+                        {
+                            debug!("Attachment present in cache, performing copy");
+                            Attachment::copy_attachment_to_cache(
+                                ctx,
+                                &new_attachment.filename,
+                                new_attachment.local_id.unwrap(),
+                                &path,
+                                bond,
+                            )
+                                .await?;
+                        }
                     }
                 }
             }
-        }
 
-        // Do not override all the data as it may override local data that we modified
-        // but is out of date when we are making this request. The only value we should
-        // care about is the display order. Everything else we control.
-        bond.execute(
-            formatdoc! {"
+            // Do not override all the data as it may override local data that we modified
+            // but is out of date when we are making this request. The only value we should
+            // care about is the display order. Everything else we control.
+            bond.execute(
+                formatdoc! {"
             UPDATE {} SET
                 display_order = ?,
                 remote_id =?,
                 remote_conversation_id =?
             WHERE local_id = ?
         ", Message::table_name()},
-            params![
-                new_local_message.display_order,
-                new_local_message.remote_id,
-                new_local_message.remote_conversation_id,
-                local_message_id
-            ],
-        )
-        .await
-        .inspect_err(|e| error!("Failed to update the message: {e:?}"))?;
+                params![
+                    new_local_message.display_order,
+                    new_local_message.remote_id,
+                    new_local_message.remote_conversation_id,
+                    local_message_id
+                ],
+            )
+                .await
+                .inspect_err(|e| error!("Failed to update the message: {e:?}"))?;
 
-        // Update only the headers that are produced by the api.
-        new_message_body_metadata.local_message_id = Some(local_message_id);
-        new_message_body_metadata
-            .update_fields_after_draft_create_or_update(&bond)
-            .await
-            .inspect_err(|e| {
-                error!("Failed to update message body metadata: {e:?}");
-            })?;
-
-        bond.commit().await?;
-
-        Ok(())
+            // Update only the headers that are produced by the api.
+            new_message_body_metadata.local_message_id = Some(local_message_id);
+            new_message_body_metadata
+                .update_fields_after_draft_create_or_update(bond)
+                .await
+                .inspect_err(|e| {
+                    error!("Failed to update message body metadata: {e:?}");
+                })?;
+            Ok(())
+        }).await
     }
     fn create_new_message(
         &self,
@@ -796,7 +795,8 @@ async fn save_send_error(
         action.save_origin,
         error,
     );
-    let tx = guard.transaction().await?;
-    send_result.save(&tx).await?;
-    Ok(tx.commit().await?)
+    guard
+        .tx::<_, _, WriterGuardError>(async |tx| Ok(send_result.save(tx).await?))
+        .await?;
+    Ok(())
 }

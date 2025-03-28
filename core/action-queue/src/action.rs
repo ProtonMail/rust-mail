@@ -1,4 +1,4 @@
-use crate::db::{ExecutionGuard, ExecutionGuardError, StoredAction};
+use crate::db::{ExecutionGuard, StoredAction};
 use crate::queue::{QueuedAction, QueuedMetadata, TypeErasedAction};
 use anyhow::Context;
 use derive_more::derive::TryFrom;
@@ -8,7 +8,7 @@ use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
 use stash::sql_using_serde;
-use stash::stash::{Bond, IntoTransaction, StashError, Tether};
+use stash::stash::{Bond, RunTransaction, StashError, Tether};
 use std::any::Any;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -264,8 +264,12 @@ impl<'t> WriterGuard<'t> {
     ///
     /// Returns [`StashError`] if the transaction failed to be created  and [`WriterGuardError::Expired`]
     /// if this execution lock has expired.
-    pub async fn transaction(&mut self) -> Result<Bond<'_>, WriterGuardError> {
-        Ok(self.execution_guard.transaction(self.tether).await?)
+    pub async fn tx<F, T, E>(&mut self, closure: F) -> Result<T, E>
+    where
+        F: AsyncFnOnce(&Bond<'_>) -> Result<T, E>,
+        E: From<WriterGuardError> + From<StashError>,
+    {
+        self.execution_guard.tx(self.tether, closure).await
     }
 
     /// Access the tether for read only db queries.
@@ -275,11 +279,15 @@ impl<'t> WriterGuard<'t> {
     }
 }
 
-impl IntoTransaction for WriterGuard<'_> {
+impl RunTransaction for WriterGuard<'_> {
     #[allow(clippy::manual_async_fn)]
-    fn transaction(&mut self) -> impl Future<Output = anyhow::Result<Bond<'_>>> + Send {
+    fn run_tx<T, F>(&mut self, closure: F) -> impl Future<Output = anyhow::Result<T>>
+    where
+        F: AsyncFnOnce(&Bond<'_>) -> Result<T, anyhow::Error>,
+    {
         async {
-            self.transaction()
+            self.tether
+                .tx(closure)
                 .await
                 .context("Could not create transaction for writerguard")
         }
@@ -293,15 +301,6 @@ pub enum WriterGuardError {
     Expired,
     #[error("{0}")]
     Stash(#[from] StashError),
-}
-
-impl From<ExecutionGuardError> for WriterGuardError {
-    fn from(value: ExecutionGuardError) -> Self {
-        match value {
-            ExecutionGuardError::Expired => Self::Expired,
-            ExecutionGuardError::Stash(v) => Self::Stash(v),
-        }
-    }
 }
 
 /// Defines how an action behaves.

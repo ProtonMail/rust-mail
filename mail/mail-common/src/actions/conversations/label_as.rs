@@ -220,26 +220,29 @@ impl ActionHandler for Handler {
             error!("LabelAs conversation operation failed for conversations: {failed_ids:?}");
             let failed_ids =
                 Conversation::remote_ids_counterpart(failed_ids, guard.tether()).await?;
-            let tx = guard.transaction().await?;
-            for conversation_id in failed_ids {
-                Self::revert_one_locally(
-                    conversation_id,
-                    action
-                        .data
-                        .added_labels
-                        .remove(&conversation_id)
-                        .unwrap_or_default(),
-                    action
-                        .data
-                        .removed_labels
-                        .remove(&conversation_id)
-                        .unwrap_or_default(),
-                    action.data.original_location.remove(&conversation_id),
-                    &tx,
-                )
+            guard
+                .tx::<_, _, <Self::Action as Action>::Error>(async |tx: &Bond<'_>| {
+                    for conversation_id in failed_ids {
+                        Self::revert_one_locally(
+                            conversation_id,
+                            action
+                                .data
+                                .added_labels
+                                .remove(&conversation_id)
+                                .unwrap_or_default(),
+                            action
+                                .data
+                                .removed_labels
+                                .remove(&conversation_id)
+                                .unwrap_or_default(),
+                            action.data.original_location.remove(&conversation_id),
+                            tx,
+                        )
+                        .await?;
+                    }
+                    Ok(())
+                })
                 .await?;
-            }
-            tx.commit().await?;
         }
 
         if action.data.must_archive {
@@ -260,20 +263,23 @@ impl ActionHandler for Handler {
             if !failed_ids.is_empty() {
                 error!("Archive conversation operation failed for : {failed_ids:?}");
 
-                let tx = guard.transaction().await?;
-                let archive_id = Label::remote_id_counterpart(LabelId::archive(), &tx)
-                    .await?
-                    .expect("Archive label must have a RemoteId");
-                let local_ids =
-                    Conversation::remote_ids_counterpart(failed_ids.clone(), &tx).await?;
-                Conversation::move_conversations(
-                    archive_id,
-                    action.data.source_label_id,
-                    local_ids,
-                    &tx,
-                )
-                .await?;
-                tx.commit().await?;
+                guard
+                    .tx::<_, _, <Self::Action as Action>::Error>(async |tx: &Bond<'_>| {
+                        let archive_id = Label::remote_id_counterpart(LabelId::archive(), tx)
+                            .await?
+                            .expect("Archive label must have a RemoteId");
+                        let local_ids =
+                            Conversation::remote_ids_counterpart(failed_ids.clone(), tx).await?;
+                        Conversation::move_conversations(
+                            archive_id,
+                            action.data.source_label_id,
+                            local_ids,
+                            tx,
+                        )
+                        .await?;
+                        Ok(())
+                    })
+                    .await?;
             }
         }
         Ok(())

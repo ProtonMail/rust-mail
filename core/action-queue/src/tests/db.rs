@@ -73,9 +73,7 @@ async fn action_store_and_retrieve() {
     let mut conn = stash.connection();
     let mut stored = StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
 
-    let tx = conn.transaction().await.unwrap();
-    stored.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    conn.tx(async |tx| stored.save(tx).await).await.unwrap();
 
     let first_action_id = stored.id.unwrap();
 
@@ -88,9 +86,7 @@ async fn action_store_and_retrieve() {
 
     let mut stored = StoredAction::new::<TestAction>(&state, metadata.clone()).unwrap();
 
-    let tx = conn.transaction().await.unwrap();
-    stored.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    conn.tx(async |tx| stored.save(tx).await).await.unwrap();
 
     let id = stored.id.unwrap();
     let db_action = StoredAction::load(id, &conn).await.unwrap().unwrap();
@@ -98,9 +94,9 @@ async fn action_store_and_retrieve() {
     assert_eq!(stored, db_action);
 
     // delete action should delete both actions
-    let tx = conn.transaction().await.unwrap();
-    StoredAction::delete(&tx, first_action_id).await.unwrap();
-    tx.commit().await.unwrap();
+    conn.tx(async |tx| StoredAction::delete(tx, first_action_id).await)
+        .await
+        .unwrap();
 
     let remaining = StoredAction::pending_count(&conn).await.unwrap();
 
@@ -129,9 +125,7 @@ async fn action_store_with_non_existent_action_dependency_is_accepted() {
 
     let mut stored = StoredAction::new::<TestAction>(&state, metadata.clone()).unwrap();
 
-    let tx = conn.transaction().await.unwrap();
-    stored.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    conn.tx(async |tx| stored.save(tx).await).await.unwrap();
 }
 
 #[tokio::test]
@@ -145,114 +139,126 @@ async fn action_execution_lock() {
     let mut conn = stash.connection();
     let mut stored = StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
 
-    let tx = conn.transaction().await.unwrap();
-    stored.save(&tx).await.unwrap();
+    let (first_action_id, second_action_id, third_action_id) = conn
+        .tx::<_, _, StashError>(async |tx| {
+            stored.save(tx).await.unwrap();
 
-    let first_action_id = stored.id.unwrap();
+            let first_action_id = stored.id.unwrap();
 
-    let metadata = MetadataBuilder::new()
-        .with_debug_string("my debug string")
-        .with_dependency(first_action_id)
-        .with_resource(&"Resource")
-        .unwrap()
-        .build();
+            let metadata = MetadataBuilder::new()
+                .with_debug_string("my debug string")
+                .with_dependency(first_action_id)
+                .with_resource(&"Resource")
+                .unwrap()
+                .build();
 
-    let mut stored = StoredAction::new::<TestAction>(&state, metadata.clone()).unwrap();
-    stored.save(&tx).await.unwrap();
+            let mut stored = StoredAction::new::<TestAction>(&state, metadata.clone()).unwrap();
+            stored.save(tx).await.unwrap();
 
-    let second_action_id = stored.id.unwrap();
+            let second_action_id = stored.id.unwrap();
 
-    let mut stored = StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
-    stored.save(&tx).await.unwrap();
+            let mut stored = StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
 
-    let third_action_id = stored.id.unwrap();
+            stored.save(tx).await.unwrap();
 
-    tx.commit().await.unwrap();
+            let third_action_id = stored.id.unwrap();
 
-    let tx = conn.transaction().await.unwrap();
-
-    let next_action = StoredAction::next(ActionGroup::default().as_ref(), &tx)
+            Ok((first_action_id, second_action_id, third_action_id))
+        })
         .await
-        .unwrap()
         .unwrap();
-    assert_eq!(next_action.id.unwrap(), first_action_id);
 
-    // Acquire lock
-    let _ =
-        ExecutionGuard::acquire_with_timestamp(first_action_id, "EXEC".to_owned(), Utc::now(), &tx)
+    conn.tx::<_, _, StashError>(async |tx: &Bond<'_>| {
+        let next_action = StoredAction::next(ActionGroup::default().as_ref(), tx)
             .await
+            .unwrap()
             .unwrap();
+        assert_eq!(next_action.id.unwrap(), first_action_id);
 
-    // Next action should be the third, since action 2 depends on action one.
-    let next_action = StoredAction::next(ActionGroup::default().as_ref(), &tx)
+        // Acquire lock
+        let _ = ExecutionGuard::acquire_with_timestamp(
+            first_action_id,
+            "EXEC".to_owned(),
+            Utc::now(),
+            tx,
+        )
         .await
-        .unwrap()
         .unwrap();
-    assert_eq!(next_action.id.unwrap(), third_action_id);
 
-    // Simulate timedout lock by setting timeout in the past.
-    let _ = ExecutionGuard::acquire_with_timestamp(
-        first_action_id,
-        "EXEC2".to_owned(),
-        Utc::now() - chrono::Duration::seconds(120),
-        &tx,
-    )
+        // Next action should be the third, since action 2 depends on action one.
+        let next_action = StoredAction::next(ActionGroup::default().as_ref(), tx)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(next_action.id.unwrap(), third_action_id);
+
+        // Simulate timedout lock by setting timeout in the past.
+        let _ = ExecutionGuard::acquire_with_timestamp(
+            first_action_id,
+            "EXEC2".to_owned(),
+            Utc::now() - chrono::Duration::seconds(120),
+            tx,
+        )
+        .await
+        .unwrap();
+
+        // Next action should be the first, since the execution lock timed out.
+        let next_action = StoredAction::next(ActionGroup::default().as_ref(), tx)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(next_action.id.unwrap(), first_action_id);
+
+        // Delete first action
+        StoredAction::delete(tx, first_action_id).await.unwrap();
+
+        // Next action should be the second, since there is no execution lock
+        let next_action = StoredAction::next(ActionGroup::default().as_ref(), tx)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(next_action.id.unwrap(), second_action_id);
+
+        // Acquire lock
+        let _ = ExecutionGuard::acquire_with_timestamp(
+            second_action_id,
+            "EXEC".to_owned(),
+            Utc::now(),
+            tx,
+        )
+        .await
+        .unwrap();
+
+        // We should now receive the last action.
+        let next_action = StoredAction::next(ActionGroup::default().as_ref(), tx)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(next_action.id.unwrap(), third_action_id);
+
+        // Acquire lock for the 3rd action
+        let lock = ExecutionGuard::acquire_with_timestamp(
+            second_action_id,
+            "EXEC2".to_owned(),
+            Utc::now(),
+            tx,
+        )
+        .await
+        .unwrap();
+
+        // Release the lock on the 2nd action
+        lock.release(tx).await.unwrap();
+
+        // We should receive the second action again.
+        let next_action = StoredAction::next(ActionGroup::default().as_ref(), tx)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(next_action.id.unwrap(), second_action_id);
+        Ok(())
+    })
     .await
     .unwrap();
-
-    // Next action should be the first, since the execution lock timed out.
-    let next_action = StoredAction::next(ActionGroup::default().as_ref(), &tx)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(next_action.id.unwrap(), first_action_id);
-
-    // Delete first action
-    StoredAction::delete(&tx, first_action_id).await.unwrap();
-
-    // Next action should be the second, since there is no execution lock
-    let next_action = StoredAction::next(ActionGroup::default().as_ref(), &tx)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(next_action.id.unwrap(), second_action_id);
-
-    // Acquire lock
-    let _ = ExecutionGuard::acquire_with_timestamp(
-        second_action_id,
-        "EXEC".to_owned(),
-        Utc::now(),
-        &tx,
-    )
-    .await
-    .unwrap();
-
-    // We should now receive the last action.
-    let next_action = StoredAction::next(ActionGroup::default().as_ref(), &tx)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(next_action.id.unwrap(), third_action_id);
-
-    // Acquire lock for the 3rd action
-    let lock = ExecutionGuard::acquire_with_timestamp(
-        second_action_id,
-        "EXEC2".to_owned(),
-        Utc::now(),
-        &tx,
-    )
-    .await
-    .unwrap();
-
-    // Release the lock on the 2nd action
-    lock.release(&tx).await.unwrap();
-
-    // We should receive the second action again.
-    let next_action = StoredAction::next(ActionGroup::default().as_ref(), &tx)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(next_action.id.unwrap(), second_action_id);
 }
 #[tokio::test]
 async fn leftover_execution_lock() {
@@ -269,20 +275,21 @@ async fn leftover_execution_lock() {
     let mut stored1 = StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
     let mut stored2 = StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
 
-    let tx = conn.transaction().await.unwrap();
-    stored1.save(&tx).await.unwrap();
-    stored2.save(&tx).await.unwrap();
-
-    // Simulate locking and never releasing.
-    let _ = ExecutionGuard::acquire_with_timestamp(
-        stored1.id.unwrap(),
-        "EXEC".to_owned(),
-        Utc::now(),
-        &tx,
-    )
+    conn.tx::<_, _, StashError>(async |tx| {
+        stored1.save(tx).await?;
+        stored2.save(tx).await?;
+        // Simulate locking and never releasing.
+        let _ = ExecutionGuard::acquire_with_timestamp(
+            stored1.id.unwrap(),
+            "EXEC".to_owned(),
+            Utc::now(),
+            tx,
+        )
+        .await?;
+        Ok(())
+    })
     .await
     .unwrap();
-    tx.commit().await.unwrap();
 
     // We should receive the first action.
     let (_, next_action) = StoredAction::pop(
@@ -307,39 +314,41 @@ async fn action_execution_group_selection() {
     let mut conn = stash.connection();
     let mut stored = StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
 
-    let tx = conn.transaction().await.unwrap();
-    stored.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    conn.tx(async |tx| stored.save(tx).await).await.unwrap();
 
-    let tx = conn.transaction().await.unwrap();
-    // Action has default group, so it should show up.
-    let action = StoredAction::next(ActionGroup::default().as_ref(), &tx)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(action.id.unwrap(), stored.id.unwrap());
+    conn.tx::<_, _, StashError>(async |tx| {
+        // Action has default group, so it should show up.
+        let action = StoredAction::next(ActionGroup::default().as_ref(), tx)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(action.id.unwrap(), stored.id.unwrap());
 
-    // This group does not exist and no action are assigned to it.
-    let unknown_group = ActionGroup::new("UNKNOWN");
-    let action = StoredAction::next(unknown_group.as_ref(), &tx)
-        .await
-        .unwrap();
-    assert!(action.is_none());
+        // This group does not exist and no action are assigned to it.
+        let unknown_group = ActionGroup::new("UNKNOWN");
+        let action = StoredAction::next(unknown_group.as_ref(), tx)
+            .await
+            .unwrap();
+        assert!(action.is_none());
 
-    // Save an action with this new group.
-    let metadata = MetadataBuilder::new()
-        .with_group_override(unknown_group.clone())
-        .build();
+        // Save an action with this new group.
+        let metadata = MetadataBuilder::new()
+            .with_group_override(unknown_group.clone())
+            .build();
 
-    let mut stored = StoredAction::new::<TestAction>(&state, metadata.clone()).unwrap();
-    stored.save(&tx).await.unwrap();
+        let mut stored = StoredAction::new::<TestAction>(&state, metadata.clone()).unwrap();
+        stored.save(tx).await.unwrap();
 
-    // We should now have an action.
-    let action = StoredAction::next(unknown_group.as_ref(), &tx)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(action.id.unwrap(), stored.id.unwrap());
+        // We should now have an action.
+        let action = StoredAction::next(unknown_group.as_ref(), tx)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(action.id.unwrap(), stored.id.unwrap());
+        Ok(())
+    })
+    .await
+    .unwrap();
 }
 
 #[tokio::test]
@@ -353,9 +362,7 @@ async fn action_replace_or_queue() {
     let mut conn = stash.connection();
     let mut stored = StoredAction::new::<TestAction>(&state, Metadata::default()).unwrap();
 
-    let tx = conn.transaction().await.unwrap();
-    stored.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    conn.tx(async |tx| stored.save(tx).await).await.unwrap();
 
     let first_action_id = stored.id.unwrap();
 
@@ -368,12 +375,9 @@ async fn action_replace_or_queue() {
 
     // Simulate same action update.
     let mut updated = StoredAction::new::<TestAction>(&state, metadata.clone()).unwrap();
-    let tx = conn.transaction().await.unwrap();
-    updated
-        .create_or_update(first_action_id, &tx)
+    conn.tx(async |tx| updated.create_or_update(first_action_id, tx).await)
         .await
         .unwrap();
-    tx.commit().await.unwrap();
     assert_eq!(stored.id, updated.id);
 
     // Compare against db value
@@ -384,12 +388,9 @@ async fn action_replace_or_queue() {
     // Simulate update with different type
     let mut updated = StoredAction::new::<TestAction>(&state, metadata.clone()).unwrap();
     updated.action_type = "unknown_action_type".to_owned();
-    let tx = conn.transaction().await.unwrap();
-    updated
-        .create_or_update(first_action_id, &tx)
+    conn.tx(async |tx| updated.create_or_update(first_action_id, tx).await)
         .await
         .unwrap();
-    tx.commit().await.unwrap();
     assert_ne!(stored.id, updated.id);
 }
 

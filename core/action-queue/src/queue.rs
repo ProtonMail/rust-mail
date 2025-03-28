@@ -4,9 +4,9 @@ mod tests;
 
 use crate::action::{
     Action, ActionGroup, ActionId, Error as ActionErrorTrait, Factory, FactoryError, FactoryResult,
-    Handler, Metadata, Priority, Resources, Type, WriterGuard,
+    Handler, Metadata, Priority, Resources, Type, WriterGuard, WriterGuardError,
 };
-use crate::db::{self, DEFAULT_LOCK_TIMEOUT, ExecutionGuard, ExecutionGuardError, StoredAction};
+use crate::db::{self, DEFAULT_LOCK_TIMEOUT, ExecutionGuard, StoredAction};
 use crate::network::{WaitForOnline, WaitForOnlineSubscribtion};
 use chrono::DateTime;
 use parking_lot::RwLock;
@@ -512,14 +512,16 @@ impl Queue {
     /// Returns error if the db operation failed or if the action is currently being executed.
     pub async fn delete_action(&self, action_id: ActionId) -> QueuedResult<()> {
         let mut tether = self.shared.stash.connection();
-        let tx = tether.transaction().await?;
-        // Safety: It's safe to perform this check without an executor guard as sqlite's
-        // single write transactions give us the freedom to safely validate this.
-        if ExecutionGuard::has_executor(action_id, &tx).await? {
-            return Err(QueuedError::ActionInExecution(action_id));
-        }
-        let existing_action_type = StoredAction::delete(&tx, action_id).await?;
-        tx.commit().await?;
+        let existing_action_type = tether
+            .tx(async |tx| {
+                // Safety: It's safe to perform this check without an executor guard as sqlite's
+                // single write transactions give us the freedom to safely validate this.
+                if ExecutionGuard::has_executor(action_id, tx).await? {
+                    return Err(QueuedError::ActionInExecution(action_id));
+                }
+                Ok(StoredAction::delete(tx, action_id).await?)
+            })
+            .await?;
         if let Some(existing_action_type) = existing_action_type {
             // Send only fails if there are no receivers, which is a valid state.
             let _ = self.shared.broadcast_sender.send(BroadcastMessage::Deleted(
@@ -577,14 +579,16 @@ impl Queue {
     /// is currently being executed.
     pub async fn cancel(&self, action_id: ActionId) -> QueuedResult<Vec<ActionId>> {
         let mut tether = self.shared.stash.connection();
-        let tx = tether.transaction().await?;
-        // Safety: It's safe to perform this check without an executor guard as sqlite's
-        // single write transactions give us the freedom to safely validate this.
-        if ExecutionGuard::has_executor(action_id, &tx).await? {
-            return Err(QueuedError::ActionInExecution(action_id));
-        }
-        let cancelled_actions = cancel_action_with_dependees(&self.shared, &tx, action_id).await?;
-        tx.commit().await?;
+        let cancelled_actions = tether
+            .tx(async |tx| {
+                // Safety: It's safe to perform this check without an executor guard as sqlite's
+                // single write transactions give us the freedom to safely validate this.
+                if ExecutionGuard::has_executor(action_id, tx).await? {
+                    return Err(QueuedError::ActionInExecution(action_id));
+                }
+                cancel_action_with_dependees(&self.shared, tx, action_id).await
+            })
+            .await?;
         let cancelled_ids = cancelled_actions.iter().map(|v| v.id).collect();
         for cancelled_action in cancelled_actions {
             // Send only fails if there are no receivers, which is a valid state.
@@ -829,9 +833,7 @@ impl QueueExecutor {
                     // Release execution guard if decode failed.
                     {
                         if let Err(e) = async {
-                            let tx = tether.transaction().await?;
-                            exec_guard.release(&tx).await?;
-                            tx.commit().await?;
+                            tether.tx(async |tx| exec_guard.release(tx).await).await?;
                             Ok::<_, StashError>(())
                         }
                         .await
@@ -1073,72 +1075,70 @@ async fn execute_action_local<T: Action>(
     existing_id: Option<ActionId>,
 ) -> std::result::Result<(T::LocalOutput, ActionId), ActionError<T>> {
     let mut tether = shared.stash.connection();
-    let tx = tether.transaction().await?;
+    tether
+        .tx::<_, _, ActionError<T>>(async |tx| {
+            let mut stored_action = StoredAction::without_state::<T>(metadata);
+            if let Some(exising_id) = existing_id {
+                stored_action
+                    .create_or_update(exising_id, tx)
+                    .await
+                    .map_err(|e| {
+                        error!("Failed to create or update action: {e:?}");
+                        e
+                    })?;
+            } else {
+                stored_action.save(tx).await.map_err(|e| {
+                    error!("Failed to store action: {e:?}");
+                    e
+                })?;
+            }
 
-    // Create the action record.
-    let mut stored_action = StoredAction::without_state::<T>(metadata);
-    if let Some(exising_id) = existing_id {
-        stored_action
-            .create_or_update(exising_id, &tx)
-            .await
-            .map_err(|e| {
-                error!("Failed to create or update action: {e:?}");
-                e
+            // Validate action dependencies for circular deps
+            {
+                let mut sorter = TopologicalSort::<ActionId>::new();
+                let mut pending_action_ids = vec![stored_action.id.unwrap()];
+                let mut visited = HashSet::new();
+                while let Some(action_id) = pending_action_ids.pop() {
+                    let deps = StoredAction::dependees(tx, action_id).await?;
+                    if !visited.insert(action_id) {
+                        continue;
+                    }
+                    if deps.is_empty() {
+                        continue;
+                    }
+                    for dep in &deps {
+                        sorter.add_dependency(action_id, *dep);
+                    }
+                    pending_action_ids.extend(deps);
+                }
+                if sorter.pop().is_none() && !sorter.is_empty() {
+                    return Err(Error::CyclicDependency.into());
+                }
+            }
+
+            // Execute the local changes
+            let local_output = handler
+                .apply_local(stored_action.id.unwrap(), context, action, tx)
+                .await
+                .map_err(|e| {
+                    error!("Failed to apply local changes: {e:?}");
+                    ActionError::Action(e)
+                })?;
+
+            // Update action state.
+            stored_action.set_action_state(action).map_err(|e| {
+                error!("Failed to set action state: {e:?}");
+                Error::from(e)
             })?;
-    } else {
-        stored_action.save(&tx).await.map_err(|e| {
-            error!("Failed to store action: {e:?}");
-            e
-        })?;
-    }
-
-    // Validate action dependencies for circular deps
-    {
-        let mut sorter = TopologicalSort::<ActionId>::new();
-        let mut pending_action_ids = vec![stored_action.id.unwrap()];
-        let mut visited = HashSet::new();
-        while let Some(action_id) = pending_action_ids.pop() {
-            let deps = StoredAction::dependees(&tx, action_id).await?;
-            if !visited.insert(action_id) {
-                continue;
-            }
-            if deps.is_empty() {
-                continue;
-            }
-            for dep in &deps {
-                sorter.add_dependency(action_id, *dep);
-            }
-            pending_action_ids.extend(deps);
-        }
-        if sorter.pop().is_none() && !sorter.is_empty() {
-            return Err(Error::CyclicDependency.into());
-        }
-    }
-
-    // Execute the local changes
-    let local_output = handler
-        .apply_local(stored_action.id.unwrap(), context, action, &tx)
+            stored_action
+                .update_action_state(tx)
+                .await
+                .inspect_err(|e| {
+                    error!("Failed to update action state: {e:?}");
+                })?;
+            Ok((local_output, stored_action.id.unwrap()))
+        })
         .await
-        .map_err(|e| {
-            error!("Failed to apply local changes: {e:?}");
-            ActionError::Action(e)
-        })?;
-
-    // Update action state.
-    stored_action.set_action_state(action).map_err(|e| {
-        error!("Failed to set action state: {e:?}");
-        Error::from(e)
-    })?;
-    stored_action
-        .update_action_state(&tx)
-        .await
-        .inspect_err(|e| {
-            error!("Failed to update action state: {e:?}");
-        })?;
-
-    tx.commit().await?;
-
-    Ok((local_output, stored_action.id.unwrap()))
 }
 /// Shared snippet to execute actions remotely.
 async fn execute_action_remote<T: Action>(
@@ -1158,55 +1158,58 @@ async fn execute_action_remote<T: Action>(
         .apply_remote(id, context, action, writer_guard)
         .await;
     let mut cancelled_actions = vec![];
-    let bond = match guard.transaction(tether).await {
-        Ok(tx) => tx,
-        Err(ExecutionGuardError::Expired) => {
+    let result = match guard
+        .tx_and_release(tether, async |tx| {
+            let result = async {
+                match result {
+                    Ok(result) => {
+                        StoredAction::delete(tx, id).await?;
+
+                        debug!("Action executed");
+                        Ok(ActionRemoteOutput::Executed(result))
+                    }
+                    Err(e) => {
+                        error!("Failed to apply on server: {e:?}");
+                        if e.is_network_failure() {
+                            debug!("Action remains in queue due to lack of network");
+                            // if this failed due to network error we should leave it in the queue.
+                            return Ok(ActionRemoteOutput::Queued(id, QueuedActionReason::Network));
+                        } else if e.is_writer_guard_expired() {
+                            debug!("Action remains in queue due to expired writer guard");
+                            return Ok(ActionRemoteOutput::Queued(
+                                id,
+                                QueuedActionReason::GuardExpired,
+                            ));
+                        }
+                        debug!("Reverting self and dependees");
+                        match cancel_action_with_dependees(shared, tx, id).await {
+                            Ok(ids) => {
+                                cancelled_actions = ids;
+                            }
+                            Err(e) => {
+                                error!("Failed to cancel action and depeendees: {e:?}");
+                            }
+                        }
+
+                        Err(ActionError::Action(e))
+                    }
+                }
+            }
+            .await;
+
+            Ok(result)
+        })
+        .await
+    {
+        Ok(v) => v,
+        Err(WriterGuardError::Expired) => {
             return Ok(ActionRemoteOutput::Queued(
                 id,
                 QueuedActionReason::GuardExpired,
             ));
         }
-        Err(ExecutionGuardError::Stash(e)) => return Err(e.into()),
+        Err(WriterGuardError::Stash(e)) => return Err(e.into()),
     };
-    let result = async {
-        match result {
-            Ok(result) => {
-                StoredAction::delete(&bond, id).await?;
-
-                debug!("Action executed");
-                Ok(ActionRemoteOutput::Executed(result))
-            }
-            Err(e) => {
-                error!("Failed to apply on server: {e:?}");
-                if e.is_network_failure() {
-                    debug!("Action remains in queue due to lack of network");
-                    // if this failed due to network error we should leave it in the queue.
-                    return Ok(ActionRemoteOutput::Queued(id, QueuedActionReason::Network));
-                } else if e.is_writer_guard_expired() {
-                    debug!("Action remains in queue due to expired writer guard");
-                    return Ok(ActionRemoteOutput::Queued(
-                        id,
-                        QueuedActionReason::GuardExpired,
-                    ));
-                }
-                debug!("Reverting self and dependees");
-                match cancel_action_with_dependees(shared, &bond, id).await {
-                    Ok(ids) => {
-                        cancelled_actions = ids;
-                    }
-                    Err(e) => {
-                        error!("Failed to cancel action and depeendees: {e:?}");
-                    }
-                }
-
-                Err(ActionError::Action(e))
-            }
-        }
-    }
-    .await;
-
-    guard.release(&bond).await?;
-    bond.commit().await?;
     for cancelled_action in cancelled_actions.into_iter().filter(|meta| {
         // We don't want to report cancellation of our own action, only of the dependees.
         meta.id != id

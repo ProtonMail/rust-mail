@@ -102,15 +102,18 @@ impl proton_action_queue::action::Handler for Handler {
         if !failed_ids.is_empty() {
             error!("Mark unread operation failed for: {:?}", failed_ids);
 
-            let tx = guard.transaction().await?;
-            let local_ids = Conversation::remote_ids_counterpart(failed_ids.clone(), &tx).await?;
+            guard
+                .tx::<_, _, <Self::Action as Action>::Error>(async |tx: &Bond<'_>| {
+                    let local_ids =
+                        Conversation::remote_ids_counterpart(failed_ids.clone(), tx).await?;
 
-            Conversation::mark_read(local_ids, &tx).await.map_err(|e| {
-                error!("Failed to rollback failed conversations: {e:?}");
-                e
-            })?;
-
-            tx.commit().await?;
+                    Conversation::mark_read(local_ids, tx).await.map_err(|e| {
+                        error!("Failed to rollback failed conversations: {e:?}");
+                        e
+                    })?;
+                    Ok(())
+                })
+                .await?;
         }
         Ok(())
     }

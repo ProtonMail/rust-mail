@@ -114,28 +114,31 @@ impl proton_action_queue::action::Handler for Handler {
         };
 
         if !failed_ids.is_empty() || !local_ids_without_remote_id.is_empty() {
-            let tx = guard.transaction().await?;
-            if !failed_ids.is_empty() {
-                error!("Delete operation failed for: {:?}", failed_ids);
-                let local_ids =
-                    Conversation::remote_ids_counterpart(failed_ids.clone(), &tx).await?;
+            guard
+                .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
+                    if !failed_ids.is_empty() {
+                        error!("Delete operation failed for: {:?}", failed_ids);
+                        let local_ids =
+                            Conversation::remote_ids_counterpart(failed_ids.clone(), tx).await?;
 
-                Conversation::remove_label(action.0.label_id, local_ids, &tx)
-                    .await
-                    .map_err(|e| {
-                        error!("Failed to rollback failed conversations: {e:?}");
-                        e
-                    })?;
-            }
+                        Conversation::remove_label(action.0.label_id, local_ids, tx)
+                            .await
+                            .map_err(|e| {
+                                error!("Failed to rollback failed conversations: {e:?}");
+                                e
+                            })?;
+                    }
 
-            for id in local_ids_without_remote_id {
-                // All messages associated with this conversation are also purged.
-                Conversation::delete_by_id(id, &tx)
-                    .await
-                    .inspect_err(|e| error!("Failed to delete local conversation: {e:?}"))?;
-            }
+                    for id in local_ids_without_remote_id {
+                        // All messages associated with this conversation are also purged.
+                        Conversation::delete_by_id(id, tx).await.inspect_err(|e| {
+                            error!("Failed to delete local conversation: {e:?}")
+                        })?;
+                    }
 
-            tx.commit().await?;
+                    Ok(())
+                })
+                .await?;
         }
         Ok(())
     }

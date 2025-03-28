@@ -72,9 +72,9 @@ async fn cancel_causes_revert_with_dependees() {
 
     {
         let mut conn = queue.stash().connection();
-        let tx = conn.transaction().await.unwrap();
-        tx.ext_insert_value(key, value).await.unwrap();
-        tx.commit().await.unwrap();
+        conn.tx(async |tx| tx.ext_insert_value(key, value).await)
+            .await
+            .unwrap();
     }
 
     let action_id1 = queue
@@ -172,9 +172,9 @@ async fn accidental_cyclic_dependency_with_replace() {
 
     {
         let mut conn = queue.stash().connection();
-        let tx = conn.transaction().await.unwrap();
-        tx.ext_insert_value("foo", 0).await.unwrap();
-        tx.commit().await.unwrap();
+        conn.tx(async |tx| tx.ext_insert_value("foo", 0).await)
+            .await
+            .unwrap();
     }
 
     let action_148_id = queue.queue_action(action_148).await.unwrap().id;

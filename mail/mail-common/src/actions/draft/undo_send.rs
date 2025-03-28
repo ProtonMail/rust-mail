@@ -177,19 +177,18 @@ impl proton_action_queue::action::Handler for UndoSendHandler {
             }
         };
 
-        let tx = guard.transaction().await?;
+        guard
+            .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
+                let mut message = Message::from_api_metadata(response.message, tx)
+                    .await
+                    .inspect_err(|e| error!("Failed to convert remote metadata:{e:?}"))?;
 
-        let mut message = Message::from_api_metadata(response.message, &tx)
+                message
+                    .save(tx)
+                    .await
+                    .inspect_err(|e| error!("Failed to save update message: {e:?}"))?;
+                Ok(())
+            })
             .await
-            .inspect_err(|e| error!("Failed to convert remote metadata:{e:?}"))?;
-
-        message
-            .save(&tx)
-            .await
-            .inspect_err(|e| error!("Failed to save update message: {e:?}"))?;
-
-        tx.commit().await?;
-
-        Ok(())
     }
 }
