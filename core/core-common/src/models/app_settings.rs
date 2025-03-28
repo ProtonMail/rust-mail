@@ -7,21 +7,41 @@ use stash::macros::Model;
 use stash::orm::Model;
 use stash::stash::{Bond, StashError, Tether};
 
+/// Struct Representing `AppSettings` - cross accounts settings of the application.
+///
+/// This model is stored in account (shared) database.
+///
 #[derive(Debug, Clone, PartialEq, Model, Default)]
 #[TableName("app_settings")]
 pub struct AppSettings {
+    /// There is only one entry of `AppSettings`
+    /// stored in database.
+    ///
     #[IdField]
     pub local_id: SingleEntryId,
+
+    /// The theme of the Application
     #[DbField]
     pub appearance: AppAppearance,
+
+    /// What additional protection of the app is in use.
     #[DbField]
     pub protection: AppProtection,
+
+    /// Autolock time for additional protection to kick in,
+    /// when app is running in bg for extended time.
     #[DbField]
     pub auto_lock: ProtectionAutoLock,
+
+    /// Do you want to share contacts between the accounts.
     #[DbField]
     pub use_combine_contacts: bool,
+
+    /// Use alternative routing, helpful for ppl leaving in
+    /// area where Proton servers are blocked for any reason.
     #[DbField]
     pub use_alternative_routing: bool,
+
     /// The internal row ID of the record in the database. This is assigned by
     /// `SQLite`, and is used as a consistent identifier for records when
     /// listening for change notifications.
@@ -66,6 +86,8 @@ impl AppSettings {
     }
 }
 
+/// Representation of available themes for the app.
+///
 #[derive(Debug, Copy, Clone, PartialEq, Default, TryFrom)]
 #[try_from(repr)]
 #[repr(u8)]
@@ -89,6 +111,8 @@ impl ToSql for AppAppearance {
     }
 }
 
+/// Supported additional protection for accessing app.
+///
 #[derive(Debug, Copy, Clone, PartialEq, Default, TryFrom)]
 #[try_from(repr)]
 #[repr(u8)]
@@ -112,6 +136,9 @@ impl ToSql for AppProtection {
     }
 }
 
+/// How much time till app in the background will require
+/// authentication when going to foreground.
+///
 #[derive(Debug, Copy, Clone, PartialEq, Default)]
 pub enum ProtectionAutoLock {
     #[default]
@@ -152,15 +179,25 @@ impl ToSql for ProtectionAutoLock {
     }
 }
 
+/// Struct keeping track of Pin authentication attempts
+///
 #[derive(Debug, Clone, PartialEq, Model)]
 #[TableName("pin_protection")]
 pub struct PinProtection {
+    /// There is only one entry of `PinProtection`
+    /// stored in database.
+    ///
     #[IdField]
     pub local_id: SingleEntryId,
+
+    /// How many unsuccessful attempts where made to authenticate
     #[DbField]
     pub attempts: u8,
+
+    /// When last attempt was made
     #[DbField]
     pub last_access_unixepoch: i64,
+
     /// The internal row ID of the record in the database. This is assigned by
     /// `SQLite`, and is used as a consistent identifier for records when
     /// listening for change notifications.
@@ -170,6 +207,8 @@ pub struct PinProtection {
 
 #[allow(clippy::new_without_default)]
 impl PinProtection {
+    /// Create new `PinProtection` model.
+    ///
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -208,8 +247,6 @@ impl PinProtection {
     }
 }
 
-// TODO: Add a common way to create single entry table ids
-
 /// An error during SQL deserialization.
 /// It means we expected [`MAGIC_ID`] but got {0}
 #[derive(Debug, thiserror::Error)]
@@ -219,8 +256,9 @@ struct NotAMagicLocalIdError {
     got: u32,
 }
 
-// Mail settings local id. This is a special value that ALWAYS must be equal the constant
-/// [`MAGIC_ID`]
+/// `SingleEntry` local id. This is a special value that ALWAYS must be equal the constant
+/// This local id type is shared between `AppSettings` & `PinProtection` to make sure there is
+/// only one entry stored. [`MAGIC_ID`]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
 pub struct SingleEntryId;
 

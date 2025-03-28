@@ -1,4 +1,4 @@
-use crate::core::datatypes::{ApiConfig, AppProtection, AppSettings, Id};
+use crate::core::datatypes::{ApiConfig, AppProtection, AppSettings, AppSettingsDiff, Id};
 use crate::core::verification::{ChallengeNotifierWrap, DynChallengeNotifier};
 use crate::core::{FFIKeyChain, StoredAccountState, StoredSession, StoredSessionState};
 use crate::core::{OSKeyChain, StoredAccount};
@@ -747,6 +747,8 @@ impl MailSession {
         .map_err(UserSessionError::from)
     }
 
+    /// What aditional protection of the App is configured.
+    ///
     pub async fn app_protection(&self) -> Result<AppProtection, UserSessionError> {
         let ctx = self.mail_ctx.clone();
 
@@ -760,6 +762,11 @@ impl MailSession {
         .map_err(UserSessionError::from)
     }
 
+    /// Create a PIN App protection.
+    ///
+    /// The same PIN will be required for authentication of the user
+    /// or when user want to change the way of authentication in the App.
+    ///
     pub async fn set_pin_code(&self, pin: Vec<u8>) -> Result<(), PinSetError> {
         let ctx = self.mail_ctx.core_context().clone();
 
@@ -772,6 +779,8 @@ impl MailSession {
         .map_err(PinSetError::from)
     }
 
+    /// Authenticate stored PIN
+    ///
     pub async fn verify_pin_code(&self, pin: Vec<u8>) -> Result<(), PinAuthError> {
         let ctx = self.mail_ctx.core_context().clone();
 
@@ -784,7 +793,28 @@ impl MailSession {
         .map_err(PinAuthError::from)
     }
 
-    pub async fn change_app_settings(&self, settings: AppSettings) -> Result<(), UserSessionError> {
+    /// Change the settings of the application.
+    ///
+    pub async fn get_app_settings(&self) -> Result<AppSettings, UserSessionError> {
+        let ctx = self.mail_ctx.core_context().clone();
+
+        uniffi_async(async move {
+            let tether = ctx.account_stash().connection();
+            let app_settings = RealAppSettings::get_or_default(&tether).await;
+
+            Result::<_, RealProtonMailError>::Ok(app_settings.into())
+        })
+        .await
+        .map_err(UserSessionError::from)
+        .into()
+    }
+
+    /// Change the settings of the application.
+    ///
+    pub async fn change_app_settings(
+        &self,
+        settings: AppSettingsDiff,
+    ) -> Result<(), UserSessionError> {
         let ctx = self.mail_ctx.core_context().clone();
 
         uniffi_async(async move {

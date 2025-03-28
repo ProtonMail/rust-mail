@@ -50,6 +50,7 @@ impl FromStr for ProtonArgon2Hash {
 ///
 pub fn hash<P: AsRef<[u8]>>(password: P) -> Result<ProtonArgon2Hash, Argon2HashingError> {
     let salt = SaltString::generate(&mut OsRng);
+    // Default parameters: memory = 19 MiB, iterations = 2, parallelism = 1
     let argon2 = Argon2::default();
     let password_hash = argon2.hash_password(password.as_ref(), &salt)?.to_string();
 
