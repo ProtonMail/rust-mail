@@ -1,13 +1,16 @@
+use std::ops::Deref;
+use std::sync::Arc;
+
 use chrono::Utc;
-use proton_crypto_pin_hash::argon2::{Argon2HashingError, ProtonArgon2Hash, hash, verify};
+use proton_crypto_pin_hash::argon2::{Argon2HashingError, ProtonArgon2Hash};
 use secrecy::{ExposeSecret, SecretString};
 use stash::stash::StashError;
 use thiserror::Error;
 use tokio::task::JoinError;
 
+use crate::Context;
 use crate::models::{AppProtection, AppSettings, PinProtection};
-use crate::os::StoreInKeyChain;
-use crate::{Context, CoreContextError};
+use crate::os::{KeyChainError, StoreInKeyChain};
 
 #[derive(Debug, Error)]
 pub enum PinError {
@@ -30,7 +33,7 @@ pub enum PinError {
     #[error("Could not encrypt the PIN, details: `{0}`")]
     HashError(#[from] Argon2HashingError),
     #[error("Error while interacting with keychain, details: `{0}`")]
-    Keychain(#[from] CoreContextError),
+    Keychain(#[from] KeyChainError),
     #[error("Could not store data in database, details: `{0}`")]
     StashError(#[from] StashError),
     #[error("Could not join future, details: `{0}`")]
@@ -54,7 +57,7 @@ impl PinCode {
     /// Method does not verify old PIN if existed it is up to client to make that
     /// verification.
     ///
-    pub async fn create_pin<P: AsRef<[u8]>>(ctx: &Context, pin: P) -> Result<(), PinError> {
+    pub async fn create_pin<P: AsRef<[u8]>>(ctx: Arc<Context>, pin: P) -> Result<(), PinError> {
         let pin = pin.as_ref().to_vec();
         let pin_len = pin.len();
 
@@ -72,9 +75,14 @@ impl PinCode {
 
         // We have no guarantees that hashing function will not block whole runtime
         // Better be safe than sorry.
-        let secret = tokio::task::spawn_blocking(move || hash(pin).map(PinHash)).await??;
+        let ctx_clone = ctx.clone();
+        tokio::task::spawn_blocking(move || {
+            let secret = ProtonArgon2Hash::hash(pin).map(PinHash)?;
+            ctx_clone.store_secret(secret)?;
 
-        ctx.store_secret(secret)?;
+            Result::<(), PinError>::Ok(())
+        })
+        .await??;
 
         let mut this = PinProtection::new();
         let mut tether = ctx.account_stash().connection();
@@ -124,7 +132,7 @@ impl PinCode {
             // We have no guarantees that hashing function will not block whole runtime
             // Better be safe than sorry.
             let pin = pin.as_ref().to_vec();
-            let success = tokio::task::spawn_blocking(move || verify(pin, &secret.0)).await??;
+            let success = tokio::task::spawn_blocking(move || secret.verify(pin)).await??;
 
             if success {
                 pin_protection.attempts = 0;
@@ -146,6 +154,14 @@ impl PinCode {
 }
 
 struct PinHash(ProtonArgon2Hash);
+
+impl Deref for PinHash {
+    type Target = ProtonArgon2Hash;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 impl StoreInKeyChain for PinHash {
     fn kind() -> crate::os::KeyChainEntryKind {

@@ -731,12 +731,16 @@ impl Context {
         Ok(StoredDevicePublicKey::from(public_key))
     }
 
-    pub fn store_secret<S: StoreInKeyChain>(&self, secret: S) -> CoreContextResult<()> {
-        Ok(self.key_chain.store::<S>(secret)?)
+    /// Interact with `KeyChain` to store a secret
+    ///
+    pub fn store_secret<S: StoreInKeyChain>(&self, secret: S) -> Result<(), KeyChainError> {
+        self.key_chain.store::<S>(secret)
     }
 
-    pub fn load_secret<S: StoreInKeyChain>(&self) -> CoreContextResult<Option<S>> {
-        Ok(self.key_chain.load::<S>()?)
+    /// Interact with `KeyChain` to load a secret
+    ///
+    pub fn load_secret<S: StoreInKeyChain>(&self) -> Result<Option<S>, KeyChainError> {
+        self.key_chain.load::<S>()
     }
 
     fn user_db_path(&self, user_id: &UserId) -> PathBuf {

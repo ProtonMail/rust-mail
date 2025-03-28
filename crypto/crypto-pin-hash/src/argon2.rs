@@ -44,28 +44,27 @@ impl FromStr for ProtonArgon2Hash {
     }
 }
 
-/// Hashes the password for authentication.
-///
-/// It's using Argon2 hashing algorithm.
-///
-pub fn hash<P: AsRef<[u8]>>(password: P) -> Result<ProtonArgon2Hash, Argon2HashingError> {
-    let salt = SaltString::generate(&mut OsRng);
-    // Default parameters: memory = 19 MiB, iterations = 2, parallelism = 1
-    let argon2 = Argon2::default();
-    let password_hash = argon2.hash_password(password.as_ref(), &salt)?.to_string();
+impl ProtonArgon2Hash {
+    /// Hashes the password for authentication.
+    ///
+    /// It's using Argon2 hashing algorithm.
+    ///
+    pub fn hash<P: AsRef<[u8]>>(password: P) -> Result<Self, Argon2HashingError> {
+        let salt = SaltString::generate(&mut OsRng);
+        // Default parameters: memory = 19 MiB, iterations = 2, parallelism = 1
+        let argon2 = Argon2::default();
+        let password_hash = argon2.hash_password(password.as_ref(), &salt)?.to_string();
 
-    Ok(ProtonArgon2Hash(password_hash))
-}
+        Ok(Self(password_hash))
+    }
 
-/// Verifies a password against a stored Argon2 hash for authentication.
-///
-pub fn verify<P: AsRef<[u8]>>(
-    password: P,
-    hash: &ProtonArgon2Hash,
-) -> Result<bool, Argon2HashingError> {
-    Ok(Argon2::default()
-        .verify_password(password.as_ref(), &PasswordHash::new(&hash.0)?)
-        .is_ok())
+    /// Verifies a password against a stored Argon2 hash for authentication.
+    ///
+    pub fn verify<P: AsRef<[u8]>>(&self, password: P) -> Result<bool, Argon2HashingError> {
+        Ok(Argon2::default()
+            .verify_password(password.as_ref(), &PasswordHash::new(&self.0)?)
+            .is_ok())
+    }
 }
 
 #[cfg(test)]
@@ -76,22 +75,22 @@ mod tests {
     fn test_hash_and_verify() {
         let password = "myfancyunbreakablepassword";
 
-        let hash_1 = hash(password).unwrap();
-        let hash_2 = hash(password).unwrap();
+        let hash_1 = ProtonArgon2Hash::hash(password).unwrap();
+        let hash_2 = ProtonArgon2Hash::hash(password).unwrap();
 
         assert_ne!(hash_1, hash_2);
 
-        let hash_1_parsed = hash_1.to_string().parse().unwrap();
-        let hash_2_parsed = hash_2.to_string().parse().unwrap();
+        let hash_1_parsed = hash_1.to_string().parse::<ProtonArgon2Hash>().unwrap();
+        let hash_2_parsed = hash_2.to_string().parse::<ProtonArgon2Hash>().unwrap();
 
         assert_eq!(hash_1_parsed, hash_1);
         assert_eq!(hash_2_parsed, hash_2);
-        assert!(verify(password, &hash_1).unwrap());
-        assert!(verify(password, &hash_2).unwrap());
-        assert!(verify(password, &hash_1_parsed).unwrap());
-        assert!(verify(password, &hash_2_parsed).unwrap());
+        assert!(hash_1.verify(password).unwrap());
+        assert!(hash_2.verify(password).unwrap());
+        assert!(hash_1_parsed.verify(password).unwrap());
+        assert!(hash_2_parsed.verify(password).unwrap());
 
         let incorrect_password = format!("{password}111mycatsatonthekeyboard111");
-        assert!(!verify(incorrect_password, &hash_1).unwrap());
+        assert!(!hash_1.verify(incorrect_password).unwrap());
     }
 }
