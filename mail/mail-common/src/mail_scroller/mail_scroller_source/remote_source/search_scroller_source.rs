@@ -225,45 +225,44 @@ impl SearchScrollerSource {
         messages: &mut [Message],
         tether: &mut Tether,
     ) -> Result<(), MailContextError> {
-        // We do not want to notify the UI about the not visible items
-        // downloaded in the background
-        let tx = tether.quiet_transaction().await?;
-
         if messages.is_empty() {
             return Ok(());
         }
+        // We do not want to notify the UI about the not visible items
+        // downloaded in the background
+        tether
+            .quiet_tx(async |tx| {
+                let mut display_order = SearchScrollData::last(tx)
+                    .await?
+                    .map(|s| s.display_order.saturating_add(1))
+                    .unwrap_or_default();
 
-        let mut display_order = SearchScrollData::last(&tx)
-            .await?
-            .map(|s| s.display_order.saturating_add(1))
-            .unwrap_or_default();
+                // Save all messages.
+                for message in messages.iter_mut() {
+                    message.create_or_get_local(tx).await?;
+                    SearchScrollData::builder()
+                        .local_message_id(message.local_id.unwrap())
+                        .display_order(display_order)
+                        .build()
+                        .with_save(tx)
+                        .await?;
+                    display_order = display_order.saturating_add(1);
+                }
 
-        // Save all messages.
-        for message in messages.iter_mut() {
-            message.create_or_get_local(&tx).await?;
-            SearchScrollData::builder()
-                .local_message_id(message.local_id.unwrap())
-                .display_order(display_order)
-                .build()
-                .with_save(&tx)
-                .await?;
-            display_order = display_order.saturating_add(1);
-        }
+                let last = messages.last().unwrap();
+                let time = last.time;
+                // Unwrap safety: RemoteId is present as this method is called on message
+                // downloaded from API
+                let remote_id = last.remote_id.clone().unwrap();
 
-        let last = messages.last().unwrap();
-        let time = last.time;
-        // Unwrap safety: RemoteId is present as this method is called on message
-        // downloaded from API
-        let remote_id = last.remote_id.clone().unwrap();
+                debug!(
+                    "New last element id={:?}, time={}, order={}",
+                    remote_id, time, display_order
+                );
 
-        debug!(
-            "New last element id={:?}, time={}, order={}",
-            remote_id, time, display_order
-        );
-
-        tx.quiet_commit().await?;
-
-        Ok(())
+                Ok(())
+            })
+            .await
     }
 }
 

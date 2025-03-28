@@ -970,11 +970,14 @@ impl Tether {
             .await
     }
 
-    /// Same as [`quiet_transaction()`] but wraps the steps in a closure.
+    /// The transaction will produce no any notifications.
+    ///
+    /// This method is used to start a transaction without listening for changes.
+    /// It is needed for internal implementation of the watch mechanism and scrollers.
     ///
     /// # Errors
     ///
-    /// Returns an error if a transaction step failed or the closure failed.
+    /// see [`Tether::tx()`]
     pub async fn quiet_tx<F, T, E>(&mut self, closure: F) -> Result<T, E>
     where
         F: AsyncFnOnce(&Bond<'_>) -> Result<T, E>,
@@ -1001,23 +1004,10 @@ impl Tether {
             }
             return r;
         }
-        tx.commit()
+        tx.commit_(policy)
             .await
             .inspect_err(|e| error!("Failed to commit transaction: {e:?}"))?;
         r
-    }
-
-    /// The transaction will produce no any notifications.
-    ///
-    /// This method is used to start a transaction without listening for changes.
-    /// It is needed for internal implementation of the watch mechanism and scrollers.
-    ///
-    /// # Errors
-    ///
-    /// see [`Tether::transaction()`]
-    pub async fn quiet_transaction(&mut self) -> Result<Bond<'_>, StashError> {
-        self.transaction_impl(TransactionTrackingPolicy::Quiet)
-            .await
     }
 
     async fn transaction_impl(
@@ -1207,20 +1197,6 @@ impl<'tether> Bond<'tether> {
     pub async fn commit(self) -> Result<(), StashError> {
         self.commit_(TransactionTrackingPolicy::Tracking).await
     }
-
-    /// Do not notify watchers about a changes, use in par with `quiet_transaction`.
-    ///
-    /// This method is used to commit a transaction without publishing changes.
-    /// It is needed for internal implementation of the watch mechanism and scrollers.
-    ///
-    /// # Errors
-    ///
-    /// see [`Bond::commit()`]
-    ///
-    pub async fn quiet_commit(self) -> Result<(), StashError> {
-        self.commit_(TransactionTrackingPolicy::Quiet).await
-    }
-
     #[allow(clippy::mem_forget)]
     /// Internal commit implementation.
     ///

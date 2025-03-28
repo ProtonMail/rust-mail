@@ -283,46 +283,45 @@ impl RemoteMessageScrollerSource {
         update_scroller: bool,
         tether: &mut Tether,
     ) -> Result<(), MailContextError> {
-        // We do not want to notify the UI about the not visible items
-        // downloaded in the background
-        let tx = tether.quiet_transaction().await?;
-
         if messages.is_empty() {
             return Ok(());
         }
+        // We do not want to notify the UI about the not visible items
+        // downloaded in the background
+        tether
+            .quiet_tx(async |tx| {
+                // Save all messages.
+                for message in messages.iter_mut() {
+                    message.create_or_get_local(tx).await?
+                }
 
-        // Save all messages.
-        for message in messages.iter_mut() {
-            message.create_or_get_local(&tx).await?
-        }
+                let last = messages.last().unwrap();
+                let time = last.time;
+                // Unwrap safety: RemoteId is present as this method is called on message
+                // downloaded from API
+                let remote_id = last.remote_id.clone().unwrap();
+                let display_order = last.display_order;
 
-        let last = messages.last().unwrap();
-        let time = last.time;
-        // Unwrap safety: RemoteId is present as this method is called on message
-        // downloaded from API
-        let remote_id = last.remote_id.clone().unwrap();
-        let display_order = last.display_order;
+                if update_scroller {
+                    Self::update_scroller_data(
+                        local_label_id,
+                        remote_id.clone(),
+                        unread,
+                        time,
+                        display_order,
+                        tx,
+                    )
+                    .await?;
+                }
 
-        if update_scroller {
-            Self::update_scroller_data(
-                local_label_id,
-                remote_id.clone(),
-                unread,
-                time,
-                display_order,
-                &tx,
-            )
-            .await?;
-        }
+                debug!(
+                    "New last element id={:?}, time={}, order={}",
+                    remote_id, time, display_order
+                );
 
-        debug!(
-            "New last element id={:?}, time={}, order={}",
-            remote_id, time, display_order
-        );
-
-        tx.quiet_commit().await?;
-
-        Ok(())
+                Ok(())
+            })
+            .await
     }
 
     async fn update_scroller_data(
