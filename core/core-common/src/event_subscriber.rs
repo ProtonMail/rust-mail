@@ -77,62 +77,57 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
             })?;
         {
             let mut conn = stash.connection();
-            let tx = conn.transaction().await.map_err(|e| {
-                error!("Failed to start transaction: {e:?}");
-                SubscriberError::Other(anyhow!("Failed to start transaction: {e}"))
-            })?;
-
-            for event in events.iter_mut() {
-                if let Some(user) = event.get_core_event_user_mut() {
-                    debug!("Handling user event");
-                    user.save(&tx).await.map_err(|e| {
-                        error!("Failed to update user: {e:?}");
-                        e
-                    })?;
+            conn.tx::<_, _, StashError>(async |tx| {
+                for event in events.iter_mut() {
+                    if let Some(user) = event.get_core_event_user_mut() {
+                        debug!("Handling user event");
+                        user.save(tx).await.map_err(|e| {
+                            error!("Failed to update user: {e:?}");
+                            e
+                        })?;
+                    }
+                    if let Some(settings) = event.get_core_event_user_settings_mut() {
+                        debug!("Handling user setting event");
+                        settings.remote_id = Some(user_id.clone());
+                        settings.save(tx).await.map_err(|e| {
+                            error!("Failed to update user settings:{e:?}");
+                            e
+                        })?;
+                    }
+                    if let Some(used_space) = event.get_core_event_used_space() {
+                        debug!("Handling user space event");
+                        let mut user = User::load(user_id.clone(), tx).await?.unwrap();
+                        user.used_space = used_space;
+                        user.save(tx).await.map_err(|e| {
+                            error!("Failed to update used space:{e:?}");
+                            e
+                        })?;
+                    }
+                    if let Some(used_product_space) = event.get_core_event_used_product_space() {
+                        debug!("Handling user product space event");
+                        let mut user = User::load(user_id.clone(), tx).await?.unwrap();
+                        user.product_used_space = used_product_space.clone();
+                        user.save(tx).await.map_err(|e| {
+                            error!("Failed to update used space:{e:?}");
+                            e
+                        })?;
+                    }
+                    if let Some(addresses) = event.get_core_event_addresses_mut() {
+                        debug!("Handling address event");
+                        handle_address_event(tx, addresses).await?;
+                    }
+                    if let Some(contacts) = event.get_core_event_contacts_mut() {
+                        debug!("Handling contact events");
+                        handle_contact_event(tx, contacts).await?;
+                    }
+                    if let Some(contact_emails) = event.get_core_event_contact_emails_mut() {
+                        debug!("Handling contact email events");
+                        handle_contact_email_event(tx, contact_emails).await?;
+                    }
                 }
-                if let Some(settings) = event.get_core_event_user_settings_mut() {
-                    debug!("Handling user setting event");
-                    settings.remote_id = Some(user_id.clone());
-                    settings.save(&tx).await.map_err(|e| {
-                        error!("Failed to update user settings:{e:?}");
-                        e
-                    })?;
-                }
-                if let Some(used_space) = event.get_core_event_used_space() {
-                    debug!("Handling user space event");
-                    let mut user = User::load(user_id.clone(), &tx).await?.unwrap();
-                    user.used_space = used_space;
-                    user.save(&tx).await.map_err(|e| {
-                        error!("Failed to update used space:{e:?}");
-                        e
-                    })?;
-                }
-                if let Some(used_product_space) = event.get_core_event_used_product_space() {
-                    debug!("Handling user product space event");
-                    let mut user = User::load(user_id.clone(), &tx).await?.unwrap();
-                    user.product_used_space = used_product_space.clone();
-                    user.save(&tx).await.map_err(|e| {
-                        error!("Failed to update used space:{e:?}");
-                        e
-                    })?;
-                }
-                if let Some(addresses) = event.get_core_event_addresses_mut() {
-                    debug!("Handling address event");
-                    handle_address_event(&tx, addresses).await?;
-                }
-                if let Some(contacts) = event.get_core_event_contacts_mut() {
-                    debug!("Handling contact events");
-                    handle_contact_event(&tx, contacts).await?;
-                }
-                if let Some(contact_emails) = event.get_core_event_contact_emails_mut() {
-                    debug!("Handling contact email events");
-                    handle_contact_email_event(&tx, contact_emails).await?;
-                }
-            }
-
-            tx.commit().await?;
-
-            Ok(())
+                Ok(())
+            })
+            .await
         }
         .map_err(|e: StashError| SubscriberError::Other(anyhow!("Failed apply changes: {e}")))
     }

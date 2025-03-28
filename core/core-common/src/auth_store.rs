@@ -141,52 +141,52 @@ impl Store for AuthStore {
 
         // We write twice, so do it in a transaction.
         let mut tether = self.stash.connection();
-        let tx = tether.transaction().await?;
+        tether
+            .tx(async |tx| {
+                // Load or create the account.
+                if (CoreAccount::find_by_id(user_id.clone(), tx).await?).is_none() {
+                    info!("creating account for {user_id}");
 
-        // Load or create the account.
-        if (CoreAccount::find_by_id(user_id.clone(), &tx).await?).is_none() {
-            info!("creating account for {user_id}");
+                    let name_or_addr = self.name_or_addr.take();
+                    let name_or_addr = name_or_addr.context("missing name or address")?;
 
-            let name_or_addr = self.name_or_addr.take();
-            let name_or_addr = name_or_addr.context("missing name or address")?;
+                    CoreAccount::new(user_id.clone(), name_or_addr)
+                        .save(tx)
+                        .inspect_err(|e| error!("failed to save account: {e:?}"))
+                        .await?;
+                }
 
-            CoreAccount::new(user_id.clone(), name_or_addr)
-                .save(&tx)
-                .inspect_err(|e| error!("failed to save account: {e:?}"))
-                .await?;
-        }
+                // Load or create the session.
+                if let Some(session) = CoreSession::find_by_id(session_id.clone(), tx).await? {
+                    session.with_tokens(tokens, &key)?.save(tx).await?;
+                } else {
+                    info!("creating session for {user_id}");
 
-        // Load or create the session.
-        if let Some(session) = CoreSession::find_by_id(session_id.clone(), &tx).await? {
-            session.with_tokens(tokens, &key)?.save(&tx).await?;
-        } else {
-            info!("creating session for {user_id}");
+                    CoreSession::new(user_id.clone(), session_id.clone(), tokens, &key)?
+                        .save(tx)
+                        .inspect_err(|e| error!("failed to save session: {e:?}"))
+                        .await?;
+                }
 
-            CoreSession::new(user_id.clone(), session_id.clone(), tokens, &key)?
-                .save(&tx)
-                .inspect_err(|e| error!("failed to save session: {e:?}"))
-                .await?;
-        }
+                // Set the user ID if it's not already set.
+                if let Some(cur_user_id) = &self.user_id {
+                    assert_eq!(cur_user_id, &user_id);
+                } else {
+                    info!("setting user ID to {user_id}");
+                    self.user_id = Some(user_id);
+                }
 
-        // Set the user ID if it's not already set.
-        if let Some(cur_user_id) = &self.user_id {
-            assert_eq!(cur_user_id, &user_id);
-        } else {
-            info!("setting user ID to {user_id}");
-            self.user_id = Some(user_id);
-        }
+                // Set the session ID if it's not already set.
+                if let Some(cur_session_id) = &self.session_id {
+                    assert_eq!(cur_session_id, &session_id);
+                } else {
+                    info!("setting session ID to {session_id}");
+                    self.session_id = Some(session_id);
+                }
 
-        // Set the session ID if it's not already set.
-        if let Some(cur_session_id) = &self.session_id {
-            assert_eq!(cur_session_id, &session_id);
-        } else {
-            info!("setting session ID to {session_id}");
-            self.session_id = Some(session_id);
-        }
-
-        tx.commit().await?;
-
-        Ok(())
+                Ok(())
+            })
+            .await
     }
 
     async fn set_auth_info(&mut self, info: AuthInfo) -> Result<(), StoreError> {
@@ -200,50 +200,50 @@ impl Store for AuthStore {
 
         // We write twice, so do it in a transaction.
         let mut tether = self.stash.connection();
-        let tx = tether.transaction().await?;
 
-        // Load or create the account.
-        if let Some(account) = CoreAccount::find_by_id(user_id.clone(), &tx).await? {
-            info!("updating account info for {user_id}");
+        tether
+            .tx(async |tx| {
+                // Load or create the account.
+                if let Some(account) = CoreAccount::find_by_id(user_id.clone(), tx).await? {
+                    info!("updating account info for {user_id}");
 
-            account
-                .with_tfa_mode(tfa_mode)
-                .with_mbp_mode(mbp_mode)
-                .save(&tx)
-                .await?;
-        } else {
-            info!("creating account for {user_id}");
+                    account
+                        .with_tfa_mode(tfa_mode)
+                        .with_mbp_mode(mbp_mode)
+                        .save(tx)
+                        .await?;
+                } else {
+                    info!("creating account for {user_id}");
 
-            let name_or_addr = self.name_or_addr.take();
-            let name_or_addr = name_or_addr.context("missing name or address")?;
+                    let name_or_addr = self.name_or_addr.take();
+                    let name_or_addr = name_or_addr.context("missing name or address")?;
 
-            CoreAccount::new(user_id.clone(), name_or_addr)
-                .with_tfa_mode(tfa_mode)
-                .with_mbp_mode(mbp_mode)
-                .save(&tx)
-                .inspect_err(|e| error!("failed to save account: {e:?}"))
-                .await?;
-        }
+                    CoreAccount::new(user_id.clone(), name_or_addr)
+                        .with_tfa_mode(tfa_mode)
+                        .with_mbp_mode(mbp_mode)
+                        .save(tx)
+                        .inspect_err(|e| error!("failed to save account: {e:?}"))
+                        .await?;
+                }
 
-        // Set the user ID if it's not already set.
-        if let Some(cur_user_id) = &self.user_id {
-            assert_eq!(cur_user_id, &user_id);
-        } else {
-            info!("setting user ID to {user_id}");
-            self.user_id = Some(user_id);
-        }
+                // Set the user ID if it's not already set.
+                if let Some(cur_user_id) = &self.user_id {
+                    assert_eq!(cur_user_id, &user_id);
+                } else {
+                    info!("setting user ID to {user_id}");
+                    self.user_id = Some(user_id);
+                }
 
-        // Set the session ID if it's not already set.
-        if let Some(cur_session_id) = &self.session_id {
-            assert_eq!(cur_session_id, &session_id);
-        } else {
-            info!("setting session ID to {session_id}");
-            self.session_id = Some(session_id);
-        }
-
-        tx.commit().await?;
-
-        Ok(())
+                // Set the session ID if it's not already set.
+                if let Some(cur_session_id) = &self.session_id {
+                    assert_eq!(cur_session_id, &session_id);
+                } else {
+                    info!("setting session ID to {session_id}");
+                    self.session_id = Some(session_id);
+                }
+                Ok(())
+            })
+            .await
     }
 
     async fn set_temp_pass(&mut self, pass: &str) -> Result<(), StoreError> {
@@ -251,21 +251,21 @@ impl Store for AuthStore {
 
         let key = self.encryption_key()?;
         let mut tether = self.stash.connection();
-        let tx = tether.transaction().await?;
+        tether
+            .tx(async |tx| {
+                let Some(user_id) = self.user_id.clone() else {
+                    bail!("failed to set temp pass: no user ID");
+                };
 
-        let Some(user_id) = self.user_id.clone() else {
-            bail!("failed to set temp pass: no user ID");
-        };
+                let Some(account) = CoreAccount::find_by_id(user_id.clone(), tx).await? else {
+                    bail!("failed to set temp pass: missing {user_id}");
+                };
 
-        let Some(account) = CoreAccount::find_by_id(user_id.clone(), &tx).await? else {
-            bail!("failed to set temp pass: missing {user_id}");
-        };
+                account.with_password(pass, &key)?.save(tx).await?;
 
-        account.with_password(pass, &key)?.save(&tx).await?;
-
-        tx.commit().await?;
-
-        Ok(())
+                Ok(())
+            })
+            .await
     }
 
     async fn set_user_data(&mut self, data: UserData) -> Result<(), StoreError> {
@@ -277,31 +277,31 @@ impl Store for AuthStore {
 
         // We write twice, so do it in a transaction.
         let mut tether = self.stash.connection();
-        let tx = tether.transaction().await?;
+        tether
+            .tx(async |tx| {
+                let Some(user_id) = self.user_id.clone() else {
+                    bail!("failed to set user data: no user ID");
+                };
 
-        let Some(user_id) = self.user_id.clone() else {
-            bail!("failed to set user data: no user ID");
-        };
+                let Some(account) = CoreAccount::find_by_id(user_id.clone(), tx).await? else {
+                    bail!("failed to set user data: missing {user_id}");
+                };
 
-        let Some(account) = CoreAccount::find_by_id(user_id.clone(), &tx).await? else {
-            bail!("failed to set user data: missing {user_id}");
-        };
+                for session in CoreSession::find_by_user_id(user_id, tx).await? {
+                    session.with_key_secret(&sec, &key)?.save(tx).await?;
+                }
 
-        for session in CoreSession::find_by_user_id(user_id, &tx).await? {
-            session.with_key_secret(&sec, &key)?.save(&tx).await?;
-        }
+                account
+                    .with_username(data.username)
+                    .with_display_name(data.display_name)
+                    .with_primary_addr(data.primary_addr)
+                    .with_ready()
+                    .save(tx)
+                    .await?;
 
-        account
-            .with_username(data.username)
-            .with_display_name(data.display_name)
-            .with_primary_addr(data.primary_addr)
-            .with_ready()
-            .save(&tx)
-            .await?;
-
-        tx.commit().await?;
-
-        Ok(())
+                Ok(())
+            })
+            .await
     }
 
     async fn expose_key_secret(&self) -> Option<UserKeySecret> {
@@ -318,21 +318,21 @@ impl Store for AuthStore {
         info!("clearing temp pass in store");
 
         let mut tether = self.stash.connection();
-        let tx = tether.transaction().await?;
+        tether
+            .tx(async |tx| {
+                let Some(user_id) = self.user_id.clone() else {
+                    bail!("failed to set temp pass: no user ID");
+                };
 
-        let Some(user_id) = self.user_id.clone() else {
-            bail!("failed to set temp pass: no user ID");
-        };
+                let Some(account) = CoreAccount::find_by_id(user_id.clone(), tx).await? else {
+                    bail!("failed to set temp pass: missing {user_id}");
+                };
 
-        let Some(account) = CoreAccount::find_by_id(user_id.clone(), &tx).await? else {
-            bail!("failed to set temp pass: missing {user_id}");
-        };
+                account.without_password().save(tx).await?;
 
-        account.without_password().save(&tx).await?;
-
-        tx.commit().await?;
-
-        Ok(())
+                Ok(())
+            })
+            .await
     }
 
     async fn clear(&mut self) -> Result<(), StoreError> {
@@ -341,9 +341,9 @@ impl Store for AuthStore {
         // Clear the session if it exists.
         if let Some(id) = &self.session_id {
             let mut tether = self.stash.connection();
-            let tx = tether.transaction().await?;
-            CoreSession::delete_by_id(id.clone(), &tx).await?;
-            tx.commit().await?;
+            tether
+                .tx(async |tx| CoreSession::delete_by_id(id.clone(), tx).await)
+                .await?;
         }
 
         // Clear the user and session IDs.
