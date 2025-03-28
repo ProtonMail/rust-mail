@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+## [0.66.0] - 2025-03-28
+
+### Added
+
+  - [ET-2552] `AppSettings`, `AppSettingsDiff`, `AppAppearance`, `AppProtection`, `AutoLock` datatypes to interact with `AppSettings`
+  - [ET-2552] `PinAuthError`, `PinAuthError` error types to propagate User friendly errors when interacting with PIN interface.
+  - [ET-2552] `MailSession::app_protection` method for checking current protection configuration.
+  - [ET-2552] `MailSession::set_pin_code` method for configuring new PIN code.
+  - [ET-2552] `MailSession::verify_pin_code` method for verifing existing PIN code.
+  - [ET-2552] `MailSession::delete_pin_code` method for deleting existing PIN code.
+  - [ET-2552] `MailSession::get_app_settings` method for fetching current `AppSettings`.
+  - [ET-2552] `MailSession::change_app_settings` method for modifing current `AppSettings`.
+
 ### Removed
 
 - [ET-2558] MailUserContext initialization is no longer explicit. Function has been removed.
