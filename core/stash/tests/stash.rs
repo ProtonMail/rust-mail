@@ -93,36 +93,6 @@ mod concurrency_basic_sync {
         let db_dir = tempfile::tempdir().unwrap();
         let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
         let mut conn = stash.connection();
-        let tx = conn
-            .transaction()
-            .await
-            .expect("Failed to start transaction");
-
-        // Create a table
-        tx.execute(r#"CREATE TABLE test_kv (value TEXT NOT NULL)"#, vec![])
-            .await
-            .unwrap();
-
-        // Insert some data
-        tx.execute(r#"INSERT INTO test_kv (value) VALUES ("test")"#, vec![])
-            .await
-            .unwrap();
-
-        // Query the data
-        let result = tx
-            .query_values::<_, String>(r#"SELECT value FROM test_kv WHERE value = "test""#, vec![])
-            .await
-            .unwrap();
-
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0], "test".to_owned());
-    }
-
-    #[tokio::test]
-    async fn basic_query_with_transaction_closure() {
-        let db_dir = tempfile::tempdir().unwrap();
-        let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
-        let mut conn = stash.connection();
         let result = conn
             .tx(async |tx| {
                 // Create a table
@@ -182,88 +152,12 @@ mod concurrency_basic_sync {
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], "test".to_owned());
     }
-
-    // This test is ignored for now, because of the change to obtain a lock
-    // on the database immediately when starting a transaction. This means that
-    // when running in the same thread or task, the second transaction will not
-    // be able to start until the first transaction has finished. As a result,
-    // at present this behaviour is not supported.
-    //
-    // This test can be re-enabled in the future once we establish a way to
-    // support this behaviour, which might be by implementation of a manual
-    // retry mechanism to get around the problem of SQLite ignoring the busy
-    // timeout in certain conditions.
-    #[ignore]
-    #[tokio::test]
-    async fn basic_query_with_two_simultaneous_transactions() {
-        let db_dir = tempfile::tempdir().unwrap();
-        let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
-        let conn = stash.connection();
-        let mut conn1 = stash.connection();
-        let mut conn2 = stash.connection();
-
-        // Start two transactions
-        let tx1 = conn1
-            .transaction()
-            .await
-            .expect("Failed to start transaction");
-        let tx2 = conn2
-            .transaction()
-            .await
-            .expect("Failed to start transaction");
-
-        // Create a table (not using transactions)
-        conn.execute(r#"CREATE TABLE test_kv (value TEXT NOT NULL)"#, vec![])
-            .await
-            .unwrap();
-
-        // Insert some data with transaction 1
-        tx1.execute(r#"INSERT INTO test_kv (value) VALUES ("test1")"#, vec![])
-            .await
-            .unwrap();
-
-        // Query the data, from the uncommitted transaction
-        let result1 = tx1
-            .query_values::<_, String>(r#"SELECT value FROM test_kv WHERE value = "test1""#, vec![])
-            .await
-            .unwrap();
-
-        // Commit the transaction
-        tx1.commit().await.expect("Failed to commit transaction");
-
-        // Insert some more data with transaction 2
-        tx2.execute(r#"INSERT INTO test_kv (value) VALUES ("test2")"#, vec![])
-            .await
-            .unwrap();
-
-        // Commit the transaction
-        tx2.commit().await.expect("Failed to commit transaction");
-
-        // Query the data, re-using the transaction connections
-        let result2 = conn2
-            .query_values::<_, String>(r#"SELECT value FROM test_kv WHERE value = "test2""#, vec![])
-            .await
-            .unwrap();
-
-        // Query the data, using the main Stash (no specific connection or transaction)
-        let result3 = conn
-            .query_values::<_, String>(r#"SELECT value FROM test_kv ORDER BY value"#, vec![])
-            .await
-            .unwrap();
-
-        assert_eq!(result1.len(), 1);
-        assert_eq!(result1[0], "test1".to_owned());
-        assert_eq!(result2.len(), 1);
-        assert_eq!(result2[0], "test2".to_owned());
-        assert_eq!(result3.len(), 2);
-        assert_eq!(result3[0], "test1".to_owned());
-        assert_eq!(result3[1], "test2".to_owned());
-    }
 }
 
 #[cfg(test)]
 mod concurrency_async_functions {
     use super::*;
+    use stash::stash::StashError;
 
     #[tokio::test]
     async fn basic_query_without_transactions() {
@@ -285,88 +179,24 @@ mod concurrency_async_functions {
         let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
         let mut conn = stash.connection();
 
-        let tx = conn
-            .transaction()
-            .await
-            .expect("Failed to start transaction");
-        create_table_tx(&tx).await;
-        insert_tx(&tx, "test").await;
-        let result = query_tx(&tx, "test").await;
-        tx.commit().await.expect("Failed to commit transaction");
-
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0], "test".to_owned());
-    }
-
-    // This test is ignored for now, because of the change to obtain a lock
-    // on the database immediately when starting a transaction. This means that
-    // when running in the same thread or task, the second transaction will not
-    // be able to start until the first transaction has finished. As a result,
-    // at present this behaviour is not supported.
-    //
-    // This test can be re-enabled in the future once we establish a way to
-    // support this behaviour, which might be by implementation of a manual
-    // retry mechanism to get around the problem of SQLite ignoring the busy
-    // timeout in certain conditions.
-    #[ignore]
-    #[tokio::test]
-    async fn basic_query_with_two_simultaneous_transactions() {
-        let db_dir = tempfile::tempdir().unwrap();
-        let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
-        let conn = stash.connection();
-        let mut conn1 = stash.connection();
-        let mut conn2 = stash.connection();
-
-        // Start two transactions
-        let tx1 = conn1
-            .transaction()
-            .await
-            .expect("Failed to start transaction");
-        let tx2 = conn2
-            .transaction()
-            .await
-            .expect("Failed to start transaction");
-
-        // Create a table (not using transactions)
-        create_table(&conn).await;
-
-        // Insert some data with transaction 1
-        insert_tx(&tx1, "test1").await;
-
-        // Query the data, from the uncommitted transaction
-        let result1 = query_tx(&tx1, "test1").await;
-
-        // Commit the transaction
-        tx1.commit().await.expect("Failed to commit transaction");
-
-        // Insert some more data with transaction 2
-        insert_tx(&tx2, "test2").await;
-
-        // Commit the transaction
-        tx2.commit().await.expect("Failed to commit transaction");
-
-        // Query the data, re-using the transaction connections
-        let result2 = query(&conn2, "test2").await;
-
-        // Query the data, using the main Stash (no specific connection or transaction)
-        let result3 = conn
-            .query_values::<_, String>(r#"SELECT value FROM test_kv ORDER BY value"#, vec![])
+        let result = conn
+            .tx::<_, _, StashError>(async |tx| {
+                create_table_tx(tx).await;
+                insert_tx(tx, "test").await;
+                Ok(query_tx(tx, "test").await)
+            })
             .await
             .unwrap();
 
-        assert_eq!(result1.len(), 1);
-        assert_eq!(result1[0], "test1".to_owned());
-        assert_eq!(result2.len(), 1);
-        assert_eq!(result2[0], "test2".to_owned());
-        assert_eq!(result3.len(), 2);
-        assert_eq!(result3[0], "test1".to_owned());
-        assert_eq!(result3[1], "test2".to_owned());
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], "test".to_owned());
     }
 }
 
 #[cfg(test)]
 mod concurrency_async_threads {
     use super::*;
+    use stash::stash::StashError;
 
     #[tokio::test]
     async fn basic_query_without_transactions() {
@@ -393,15 +223,13 @@ mod concurrency_async_threads {
 
         let result = async_spawn(async move {
             let mut conn = stash.connection();
-            let tx = conn
-                .transaction()
-                .await
-                .expect("Failed to start transaction");
-            create_table_tx(&tx).await;
-            insert_tx(&tx, "test").await;
-            let result = query_tx(&tx, "test").await;
-            tx.commit().await.expect("Failed to commit transaction");
-            result
+            conn.tx::<_, _, StashError>(async |tx| {
+                create_table_tx(tx).await;
+                insert_tx(tx, "test").await;
+                Ok(query_tx(tx, "test").await)
+            })
+            .await
+            .unwrap()
         })
         .await
         .unwrap();
@@ -423,27 +251,25 @@ mod concurrency_async_threads {
         // First thread, with first transaction
         let handle1 = async_spawn(async move {
             let mut conn1 = stash1.connection();
-            let tx1 = conn1
-                .transaction()
+            conn1
+                .tx::<_, _, StashError>(async |tx| {
+                    insert_tx(tx, "test1").await;
+                    Ok(query_tx(tx, "test1").await)
+                })
                 .await
-                .expect("Failed to start transaction");
-            insert_tx(&tx1, "test1").await;
-            let result = query_tx(&tx1, "test1").await;
-            tx1.commit().await.expect("Failed to commit transaction");
-            result
+                .unwrap()
         });
 
         // Second thread, with second transaction
         let handle2 = async_spawn(async move {
             let mut conn2 = stash2.connection();
-            let tx2 = conn2
-                .transaction()
+            conn2
+                .tx::<_, _, StashError>(async |tx| {
+                    insert_tx(tx, "test2").await;
+                    Ok(query_tx(tx, "test2").await)
+                })
                 .await
-                .expect("Failed to start transaction");
-            insert_tx(&tx2, "test2").await;
-            let result = query_tx(&tx2, "test2").await;
-            tx2.commit().await.expect("Failed to commit transaction");
-            result
+                .unwrap()
         });
 
         // Wait for the threads to complete
@@ -468,28 +294,9 @@ mod concurrency_async_threads {
 
 #[cfg(test)]
 mod concurrency_std_threads {
-    use tokio::runtime::Runtime;
-
     use super::*;
-
-    #[tokio::test]
-    async fn basic_query_with_transactions() {
-        let db_dir = tempfile::tempdir().unwrap();
-        let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
-
-        let mut conn = stash.connection();
-        let tx = conn
-            .transaction()
-            .await
-            .expect("Failed to start transaction");
-        create_table_tx(&tx).await;
-        insert_tx(&tx, "test").await;
-        let result = query_tx(&tx, "test").await;
-        tx.commit().await.expect("Failed to commit transaction");
-
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0], "test".to_owned());
-    }
+    use stash::stash::StashError;
+    use tokio::runtime::Runtime;
 
     #[tokio::test]
     async fn basic_query_with_two_simultaneous_transactions() {
@@ -506,14 +313,13 @@ mod concurrency_std_threads {
             let rt = Runtime::new().unwrap();
             rt.block_on(async {
                 let mut conn1 = stash1.connection();
-                let tx1 = conn1
-                    .transaction()
+                conn1
+                    .tx::<_, _, StashError>(async |tx| {
+                        insert_tx(tx, "test1").await;
+                        Ok(query_tx(tx, "test1").await)
+                    })
                     .await
-                    .expect("Failed to start transaction");
-                insert_tx(&tx1, "test1").await;
-                let result = query_tx(&tx1, "test1").await;
-                tx1.commit().await.expect("Failed to commit transaction");
-                result
+                    .unwrap()
             })
         });
 
@@ -522,13 +328,13 @@ mod concurrency_std_threads {
             let rt = Runtime::new().unwrap();
             rt.block_on(async {
                 let mut conn2 = stash2.connection();
-                let tx2 = conn2
-                    .transaction()
+                conn2
+                    .tx::<_, _, StashError>(async |tx| {
+                        insert_tx(tx, "test2").await;
+                        Ok(query_tx(tx, "test2").await)
+                    })
                     .await
-                    .expect("Failed to start transaction");
-                insert_tx(&tx2, "test2").await;
-                tx2.commit().await.expect("Failed to commit transaction");
-                query(&conn2, "test2").await
+                    .unwrap()
             })
         });
 
@@ -555,6 +361,7 @@ mod concurrency_std_threads {
 #[cfg(test)]
 mod concurrency_mixed {
     use super::*;
+    use stash::stash::StashError;
     use tokio::runtime::Runtime;
 
     #[tokio::test]
@@ -579,15 +386,15 @@ mod concurrency_mixed {
             let rt = Runtime::new().unwrap();
             rt.block_on(async {
                 let mut conn1 = stash1.connection();
-                let tx1 = conn1
-                    .transaction()
+                conn1
+                    .tx::<_, _, StashError>(async |tx| {
+                        insert_tx(tx, "test1").await;
+                        let result = query_tx(tx, "test1").await;
+                        sleep(Duration::from_millis(100)).await;
+                        Ok(result)
+                    })
                     .await
-                    .expect("Failed to start transaction");
-                insert_tx(&tx1, "test1").await;
-                let result = query_tx(&tx1, "test1").await;
-                sleep(Duration::from_millis(100)).await;
-                tx1.commit().await.expect("Failed to commit transaction");
-                result
+                    .unwrap()
             })
         });
 
@@ -596,13 +403,13 @@ mod concurrency_mixed {
             let rt = Runtime::new().unwrap();
             rt.block_on(async {
                 let mut conn2 = stash2.connection();
-                let tx2 = conn2
-                    .transaction()
+                conn2
+                    .tx::<_, _, StashError>(async |tx| {
+                        insert_tx(tx, "test2").await;
+                        Ok(query(tx, "test2").await)
+                    })
                     .await
-                    .expect("Failed to start transaction");
-                insert_tx(&tx2, "test2").await;
-                tx2.commit().await.expect("Failed to commit transaction");
-                query(&conn2, "test2").await
+                    .unwrap()
             })
         });
 
@@ -619,28 +426,28 @@ mod concurrency_mixed {
         // Fourth thread (async), with third transaction
         let handle4 = async_spawn(async move {
             let mut conn4 = stash4.connection();
-            let tx3 = conn4
-                .transaction()
+            conn4
+                .tx::<_, _, StashError>(async |tx| {
+                    insert_tx(tx, "test4").await;
+                    let result = query_tx(tx, "test4").await;
+                    sleep(Duration::from_millis(100)).await;
+                    Ok(result)
+                })
                 .await
-                .expect("Failed to start transaction");
-            insert_tx(&tx3, "test4").await;
-            let result = query_tx(&tx3, "test4").await;
-            sleep(Duration::from_millis(100)).await;
-            tx3.commit().await.expect("Failed to commit transaction");
-            result
+                .unwrap()
         });
 
         // Fifth thread (async), with fourth transaction
         let handle5 = async_spawn(async move {
             let mut conn5 = stash5.connection();
-            let tx4 = conn5
-                .transaction()
+            conn5
+                .tx::<_, _, StashError>(async |tx| {
+                    insert_tx(tx, "test5").await;
+                    sleep(Duration::from_millis(100)).await;
+                    Ok(query(tx, "test5").await)
+                })
                 .await
-                .expect("Failed to start transaction");
-            insert_tx(&tx4, "test5").await;
-            sleep(Duration::from_millis(100)).await;
-            tx4.commit().await.expect("Failed to commit transaction");
-            query(&conn5, "test5").await
+                .unwrap()
         });
 
         // Sixth thread (async), with no transaction
@@ -668,13 +475,13 @@ mod concurrency_mixed {
         let conn8 = stash8.connection();
         insert(&conn8, "test8").await;
         let mut conn9 = stash9.connection();
-        let tx5 = conn9
-            .transaction()
+        let result9 = conn9
+            .tx::<_, _, StashError>(async |tx| {
+                insert_tx(tx, "test9").await;
+                Ok(query_tx(tx, "test9").await)
+            })
             .await
-            .expect("Failed to start transaction");
-        insert_tx(&tx5, "test9").await;
-        let result9 = query_tx(&tx5, "test9").await;
-        tx5.commit().await.expect("Failed to commit transaction");
+            .unwrap();
 
         // Query the data, using the main Stash (no specific connection or transaction)
         let result7 = query(&conn, "test7").await;
@@ -775,24 +582,24 @@ mod orm_tests {
     async fn test_orm() -> anyhow::Result<()> {
         let stash = Stash::new(None)?;
         let mut tether = stash.connection();
-        let tx = tether.transaction().await?;
 
-        tx.execute(
-            r#"CREATE TABLE my_model 
+        tether
+            .tx::<_, _, StashError>(async |tx| {
+                tx.execute(
+                    r#"CREATE TABLE my_model
             (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 all_rustaceans INTEGER NOT NULL,
                 mascot TEXT NOT NULL,
                 rustacean TEXT NOT NULL
             )"#,
-            vec![],
-        )
-        .await
-        .unwrap();
+                    vec![],
+                )
+                .await
+            })
+            .await
+            .unwrap();
 
-        tx.commit().await?;
-
-        let tx = tether.transaction().await?;
         let mut boats = MyModel {
             id: None,
             row_id: None,
@@ -809,26 +616,32 @@ mod orm_tests {
             other_mascot: "ferris".to_owned(),
             rustacean: "niko matsakis".to_string(),
         };
-        boats.save(&tx).await?;
-        niko.save(&tx).await?;
 
-        // Expected it to be broken
-        assert_eq!(boats.all_rustaceans, 1);
-        assert_eq!(niko.all_rustaceans, 2);
+        tether
+            .tx::<_, _, StashError>(async |tx| {
+                boats.save(tx).await?;
+                niko.save(tx).await?;
 
-        let boats2 = MyModel::find_first("WHERE id = ?", params![boats.id], &tx)
-            .await?
+                // Expected it to be broken
+                assert_eq!(boats.all_rustaceans, 1);
+                assert_eq!(niko.all_rustaceans, 2);
+
+                let boats2 = MyModel::find_first("WHERE id = ?", params![boats.id], tx)
+                    .await?
+                    .unwrap();
+                let niko2 = MyModel::find_first("WHERE id = ?", params![niko.id], tx)
+                    .await?
+                    .unwrap();
+
+                // Manual update
+                boats.all_rustaceans = 2;
+
+                assert_eq!(boats, boats2);
+                assert_eq!(niko, niko2);
+                Ok(())
+            })
+            .await
             .unwrap();
-        let niko2 = MyModel::find_first("WHERE id = ?", params![niko.id], &tx)
-            .await?
-            .unwrap();
-
-        // Manual update
-        boats.all_rustaceans = 2;
-
-        assert_eq!(boats, boats2);
-        assert_eq!(niko, niko2);
-        tx.commit().await?;
         Ok(())
     }
 }

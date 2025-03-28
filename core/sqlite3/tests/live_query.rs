@@ -57,11 +57,12 @@ async fn test_tracker() {
         let stash_clone = stash.clone();
         let h = spawn_async(async move {
             let mut conn = stash_clone.connection();
-            let tx = conn.transaction().await.expect("failed tx");
-            tx.execute("INSERT INTO foo VALUES (null, 10)", vec![])
-                .await
-                .expect("failed tx");
-            tx.commit().await.expect("failed commit");
+            conn.tx(async |tx| {
+                tx.execute("INSERT INTO foo VALUES (null, 10)", vec![])
+                    .await
+            })
+            .await
+            .expect("failed commit");
         });
 
         join_handles.push(h);
