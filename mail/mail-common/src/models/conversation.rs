@@ -2139,9 +2139,9 @@ impl Conversation {
                 missing_labels_ids.len()
             );
             let missing_labels = Label::get_labels_by_ids(api, missing_labels_ids).await?;
-            let tx = tether.transaction().await?;
-            Label::sync_labels(&tx, missing_labels).await?;
-            tx.commit().await?;
+            tether
+                .tx(async |tx| Label::sync_labels(tx, missing_labels).await)
+                .await?;
         }
         Ok(())
     }
@@ -2183,9 +2183,9 @@ impl Conversation {
             .into_iter()
             .map(Conversation::from)
             .collect_vec();
-        let tx = tether.transaction().await?;
-        Self::create_or_update_conversations(conversations.clone(), &tx).await?;
-        tx.commit().await?;
+        tether
+            .tx(async |tx| Self::create_or_update_conversations(conversations.clone(), tx).await)
+            .await?;
         conversations.sort_unstable_by(|x, y| x.display_order.cmp(&y.display_order).reverse());
 
         Ok(conversations)
@@ -2226,17 +2226,19 @@ impl Conversation {
             response.conversations.len(),
             response.total
         );
-        let tx = tether.transaction().await?;
-        Self::create_or_update_conversations(
-            response
-                .conversations
-                .into_iter()
-                .map(Conversation::from)
-                .collect(),
-            &tx,
-        )
-        .await?;
-        tx.commit().await?;
+        tether
+            .tx(async |tx| {
+                Self::create_or_update_conversations(
+                    response
+                        .conversations
+                        .into_iter()
+                        .map(Conversation::from)
+                        .collect(),
+                    tx,
+                )
+                .await
+            })
+            .await?;
         Ok(())
     }
 
@@ -2594,9 +2596,9 @@ impl Conversation {
                 .local_id(tether)
                 .await?
                 .ok_or_else(|| StashError::IdNotSet)?;
-            let tx = tether.transaction().await?;
-            Self::mark_deleted(label_id, ids, &tx).await?;
-            tx.commit().await?;
+            tether
+                .tx(async |tx| Self::mark_deleted(label_id, ids, tx).await)
+                .await?;
         }
 
         Ok(len)
@@ -2797,28 +2799,31 @@ impl Conversation {
                 AppError::from(e)
             })?;
 
-            let tx = tether.transaction().await?;
+            tether
+                .tx::<_, _, AppError>(async |tx| {
+                    let message_metadata: Vec<ApiMessageMetadata> = conversation_response.messages;
+                    let mut new_conversation: Conversation =
+                        conversation_response.conversation.into();
 
-            let message_metadata: Vec<ApiMessageMetadata> = conversation_response.messages;
-            let mut new_conversation: Conversation = conversation_response.conversation.into();
+                    Message::create_or_update_messages_from_metadata(message_metadata, tx)
+                        .await
+                        .map_err(|e| {
+                            error!("Failed to write message metadata: {e:?}");
+                            e
+                        })?;
 
-            Message::create_or_update_messages_from_metadata(message_metadata, &tx)
-                .await
-                .map_err(|e| {
-                    error!("Failed to write message metadata: {e:?}");
-                    e
-                })?;
+                    new_conversation.local_id = conversation.local_id;
+                    new_conversation.row_id = conversation.row_id;
+                    new_conversation.has_messages = true;
 
-            new_conversation.local_id = conversation.local_id;
-            new_conversation.row_id = conversation.row_id;
-            new_conversation.has_messages = true;
+                    new_conversation.save(tx).await.map_err(|e| {
+                        error!("Failed to write conversation: {e:?}");
+                        e
+                    })?;
 
-            new_conversation.save(&tx).await.map_err(|e| {
-                error!("Failed to write conversation: {e:?}");
-                e
-            })?;
-
-            tx.commit().await?;
+                    Ok(())
+                })
+                .await?;
         } else {
             debug!("Conversation messages already synced")
         }

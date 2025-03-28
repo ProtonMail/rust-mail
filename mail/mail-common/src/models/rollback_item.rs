@@ -82,50 +82,50 @@ macro_rules! sync_any {
                 let mut tether = $stash.connection();
                 {
                     async move {
-                        let tx = tether.transaction().await?;
+                        tether
+                            .tx(async |tx| {
+                                for item in items.iter_mut() {
+                                    let result = $class::save(item, &tx).await;
 
-                        for item in items.iter_mut() {
-                            let result = $class::save(item, &tx).await;
+                                    if let Err(err) = result {
+                                        error!(
+                                            "Failed to save {} with remote ID {:?}: {:?}",
+                                            stringify!($item),
+                                            item.remote_id,
+                                            err
+                                        );
 
-                            if let Err(err) = result {
-                                error!(
-                                    "Failed to save {} with remote ID {:?}: {:?}",
-                                    stringify!($item),
-                                    item.remote_id,
-                                    err
-                                );
+                                        return Err(err.into());
+                                    }
 
-                                return Err(err.into());
-                            }
+                                    let result = Self::delete_by_rid_and_kind(
+                                        item.remote_id.clone().map(|v| v.into_inner()),
+                                        RollbackItemType::$item,
+                                        &tx,
+                                    )
+                                    .await;
 
-                            let result = Self::delete_by_rid_and_kind(
-                                item.remote_id.clone().map(|v| v.into_inner()),
-                                RollbackItemType::$item,
-                                &tx,
-                            )
-                            .await;
+                                    if let Err(err) = result {
+                                        error!(
+                                            "Failed to delete {} with remote ID {:?}: {:?}",
+                                            stringify!($item),
+                                            item.remote_id,
+                                            err
+                                        );
 
-                            if let Err(err) = result {
-                                error!(
-                                    "Failed to delete {} with remote ID {:?}: {:?}",
-                                    stringify!($item),
-                                    item.remote_id,
-                                    err
-                                );
+                                        return Err(err.into());
+                                    }
 
-                                return Err(err.into());
-                            }
+                                    debug!(
+                                        "Synced {} with remote ID {:?}",
+                                        stringify!($item),
+                                        item.remote_id
+                                    );
+                                }
 
-                            debug!(
-                                "Synced {} with remote ID {:?}",
-                                stringify!($item),
-                                item.remote_id
-                            );
-                        }
-
-                        tx.commit().await?;
-
-                        Result::<_, AppError>::Ok(())
+                                Result::<_, AppError>::Ok(())
+                            })
+                            .await
                     }
                 }
             })

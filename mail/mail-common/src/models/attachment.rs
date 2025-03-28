@@ -422,9 +422,7 @@ impl Attachment {
         let mut attachment = Self::from(Self::fetch_metadata(remote_id, api).await?.attachment);
         attachment.local_id = self.local_id;
         attachment.row_id = self.row_id;
-        let tx = tether.transaction().await?;
-        attachment.save(&tx).await?;
-        tx.commit().await?;
+        tether.tx(async |tx| attachment.save(tx).await).await?;
         *self = attachment;
         Ok(Some(()))
     }
@@ -719,22 +717,24 @@ impl Attachment {
             row_id: None,
         };
 
-        debug!("Saving new attachment record");
-        let tx = tether.transaction().await?;
-        attachment.save(&tx).await?;
+        tether
+            .tx(async |tx| {
+                debug!("Saving new attachment record");
+                attachment.save(tx).await?;
 
-        debug!("Storing attachment in cache");
+                debug!("Storing attachment in cache");
 
-        let data = tokio::fs::read(path).await?;
-        Attachment::store_in_cache(
-            ctx,
-            &attachment.filename,
-            attachment.local_id.unwrap(),
-            data,
-            &tx,
-        )
-        .await?;
-        tx.commit().await?;
+                let data = tokio::fs::read(path).await?;
+                Attachment::store_in_cache(
+                    ctx,
+                    &attachment.filename,
+                    attachment.local_id.unwrap(),
+                    data,
+                    tx,
+                )
+                .await
+            })
+            .await?;
 
         info!(
             "Attachment created with id {}",
