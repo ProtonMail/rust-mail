@@ -20,6 +20,7 @@ use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
 use stash::params;
+use stash::stash::StashError;
 use std::collections::HashMap;
 use velcro::hash_map;
 
@@ -73,17 +74,19 @@ async fn move_between_folders() {
         .unwrap()
         .unwrap();
 
-    let tx = tether.transaction().await.unwrap();
-
     let mut source_conv = ConversationCounters::new(source.local_id.expect("Local ID"));
     source_conv.total = 1;
 
     let mut source_msg = MessageCounters::new(source.local_id.expect("Local ID"));
     source_msg.total = 1;
-
-    source_conv.save(&tx).await.unwrap();
-    source_msg.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            source_conv.save(tx).await.unwrap();
+            source_msg.save(tx).await.unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
 
     let destination = Label::find_first("WHERE remote_id = ?", params!["destination"], &tether)
         .await
@@ -367,18 +370,20 @@ async fn move_out_of_spam_set_almost_all_mail() {
         .await
         .unwrap()
         .unwrap();
-    let tx = tether.transaction().await.unwrap();
 
     let mut spam_conv = ConversationCounters::new(spam.local_id.expect("Local ID"));
     spam_conv.total = 1;
-    spam_conv.save(&tx).await.unwrap();
 
     let mut spam_msg = MessageCounters::new(spam.local_id.expect("Local ID"));
     spam_msg.total = 1;
-    spam_conv.save(&tx).await.unwrap();
-    spam_msg.save(&tx).await.unwrap();
-
-    tx.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            spam_conv.save(tx).await.unwrap();
+            spam_msg.save(tx).await.unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
 
     let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
         .await

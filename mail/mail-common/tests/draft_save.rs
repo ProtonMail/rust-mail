@@ -21,6 +21,7 @@ use proton_mail_common::models::{
 use proton_mail_test_utils::message_body::*;
 use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
+use stash::stash::StashError;
 use uuid::Uuid;
 
 #[tokio::test]
@@ -288,9 +289,10 @@ async fn create_draft_reply_without_body_is_error() {
     let (mut existing_message, _, _) = Message::from_api_data(remote_existing_message, &tether)
         .await
         .unwrap();
-    let tx = tether.transaction().await.unwrap();
-    existing_message.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    tether
+        .tx(async |tx| existing_message.save(tx).await)
+        .await
+        .unwrap();
     let existing_message = existing_message;
 
     ctx.catch_all().await;
@@ -335,9 +337,10 @@ async fn create_draft_reply_should_fail_for_drafts() {
     let (mut existing_message, _, _) = Message::from_api_data(remote_existing_message, &tether)
         .await
         .unwrap();
-    let tx = tether.transaction().await.unwrap();
-    existing_message.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    tether
+        .tx(async |tx| existing_message.save(tx).await)
+        .await
+        .unwrap();
     let existing_message = existing_message;
 
     ctx.catch_all().await;
@@ -386,9 +389,7 @@ async fn metadata_is_create_for_existing_not_opened_draft() {
         .unwrap();
 
     // Save message.
-    let tx = tether.transaction().await.unwrap();
-    message.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    tether.tx(async |tx| message.save(tx).await).await.unwrap();
 
     assert!(
         DraftMetadata::find_by_message_id(message.local_id.unwrap(), &tether)
@@ -553,9 +554,10 @@ async fn create_draft_reply_impl(
         Message::from_api_data(remote_existing_message.clone(), &tether)
             .await
             .unwrap();
-    let tx = tether.transaction().await.unwrap();
-    existing_message.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    tether
+        .tx(async |tx| existing_message.save(tx).await)
+        .await
+        .unwrap();
     let existing_message = existing_message;
 
     let expected_draft_params =
@@ -615,24 +617,29 @@ async fn create_draft_reply_impl(
         .await
         .unwrap();
 
-    let tx = tether.transaction().await.unwrap();
-    // Insert attachment data into the cache.
-    for attachment in &remote_existing_message.body.attachments {
-        let local_attachment_id = Attachment::remote_id_counterpart(attachment.id.clone(), &tx)
-            .await
-            .unwrap()
-            .unwrap();
-        Attachment::store_in_cache(
-            &user_ctx,
-            &attachment.name,
-            local_attachment_id,
-            attachment.name.as_bytes().to_vec(),
-            &tx,
-        )
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            // Insert attachment data into the cache.
+            for attachment in &remote_existing_message.body.attachments {
+                let local_attachment_id =
+                    Attachment::remote_id_counterpart(attachment.id.clone(), tx)
+                        .await
+                        .unwrap()
+                        .unwrap();
+                Attachment::store_in_cache(
+                    &user_ctx,
+                    &attachment.name,
+                    local_attachment_id,
+                    attachment.name.as_bytes().to_vec(),
+                    tx,
+                )
+                .await
+                .unwrap();
+            }
+            Ok(())
+        })
         .await
         .unwrap();
-    }
-    tx.commit().await.unwrap();
 
     // Create draft.
     let mut draft = Draft::reply(

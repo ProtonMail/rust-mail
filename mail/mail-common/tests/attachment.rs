@@ -177,9 +177,10 @@ async fn load_attachment_content_first_time() {
     let mut attachment: Attachment = test_attachment.clone().into();
     let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
-    let tx = tether.transaction().await.unwrap();
-    attachment.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    tether
+        .tx(async |tx| attachment.save(tx).await)
+        .await
+        .unwrap();
 
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_attachment_data(test_attachment.id.clone(), testdata_attachment_data(), 1)

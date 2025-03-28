@@ -2615,10 +2615,10 @@ impl Conversation {
         expire_in: i64,
         tether: &mut Tether,
     ) -> Result<(), StashError> {
-        let tx = tether.transaction().await?;
-        let affected = tx
-            .execute(
-                r"
+        let affected = tether
+            .tx(async |tx| {
+                tx.execute(
+                    r"
             UPDATE
                 conversations
             SET
@@ -2626,10 +2626,11 @@ impl Conversation {
             WHERE
                 local_id = ?
             ",
-                params![expire_in, id],
-            )
+                    params![expire_in, id],
+                )
+                .await
+            })
             .await?;
-        tx.commit().await?;
         if affected != 1 {
             Err(StashError::Custom(anyhow!("No conversation found")))
         } else {

@@ -20,6 +20,7 @@ use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::{
     conv_id, conv_label, conversation, label, lbl_id, test_context::MailTestContext,
 };
+use stash::stash::StashError;
 use stash::{
     orm::Model,
     stash::{Bond, Tether, WatcherHandle},
@@ -54,21 +55,23 @@ async fn save_single_conversation(label: &Label, conversation: &mut Conversation
 }
 
 async fn save_to_database(data: &mut HashMap<&str, Vec<Conversation>>, tether: &mut Tether) {
-    let bond = tether.transaction().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            for (label_rid, conversations) in data.iter_mut() {
+                let mut label = label!(remote_id: lbl_id!(label_rid));
+                label.save(tx).await.unwrap();
+                let mut counters = ConversationCounters::new(label.local_id.unwrap());
+                counters.total = conversations.len() as u64;
+                counters.save(tx).await.unwrap();
 
-    for (label_rid, conversations) in data.iter_mut() {
-        let mut label = label!(remote_id: lbl_id!(label_rid));
-        label.save(&bond).await.unwrap();
-        let mut counters = ConversationCounters::new(label.local_id.unwrap());
-        counters.total = conversations.len() as u64;
-        counters.save(&bond).await.unwrap();
-
-        for conversation in conversations.iter_mut() {
-            save_single_conversation(&label, conversation, &bond).await;
-        }
-    }
-
-    bond.commit().await.unwrap()
+                for conversation in conversations.iter_mut() {
+                    save_single_conversation(&label, conversation, tx).await;
+                }
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
 }
 
 fn expected_conversations(
@@ -132,9 +135,10 @@ async fn test_conversation_mail_scroller_reads_correct_items_within_visible_rang
         .display_order(last_conversation.display_order)
         .build();
 
-    let bond = tether.transaction().await.unwrap();
-    scroller.save(&bond).await.unwrap();
-    bond.commit().await.unwrap();
+    tether
+        .tx(async |bond| scroller.save(bond).await)
+        .await
+        .unwrap();
 
     let page_size = 5;
     let mut scroller =
@@ -212,9 +216,10 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
     // Update the inbox label to have all conversations
     let mut counters = ConversationCounters::new(local_label_id);
     counters.total = page_size as u64 * 2;
-    let bond = tether.transaction().await.unwrap();
-    counters.save(&bond).await.unwrap();
-    bond.commit().await.unwrap();
+    tether
+        .tx(async |bond| counters.save(bond).await)
+        .await
+        .unwrap();
 
     // Online
     let mut scroller =
@@ -294,9 +299,10 @@ async fn test_conversation_mail_scroller_notificate_about_changes() {
     let label = Label::load(local_label_id, &tether).await.unwrap().unwrap();
     let mut counters = ConversationCounters::new(local_label_id);
     counters.total = page_size as u64 * 2;
-    let bond = tether.transaction().await.unwrap();
-    counters.save(&bond).await.unwrap();
-    bond.commit().await.unwrap();
+    tether
+        .tx(async |bond| counters.save(bond).await)
+        .await
+        .unwrap();
 
     let mut scroller =
         MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
@@ -340,9 +346,13 @@ async fn test_conversation_mail_scroller_notificate_about_changes() {
 
     // Lets create a new conversation and check if it is added to the scroller
     let test_conversation = test_conversations(1, 100).pop().unwrap();
-    let bond = tether.transaction().await.unwrap();
-    save_single_conversation(&label, &mut test_conversation.clone(), &bond).await;
-    bond.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |bond| {
+            save_single_conversation(&label, &mut test_conversation.clone(), bond).await;
+            Ok(())
+        })
+        .await
+        .unwrap();
     // Getting an update will trigger a notification
     receiver.recv_async().await.unwrap();
     assert_scroller_content(
@@ -379,9 +389,10 @@ async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let mut counters = ConversationCounters::new(local_label_id);
     counters.total = 1;
-    let bond = tether.transaction().await.unwrap();
-    counters.save(&bond).await.unwrap();
-    bond.commit().await.unwrap();
+    tether
+        .tx(async |bond| counters.save(bond).await)
+        .await
+        .unwrap();
 
     let page_size = 5;
     let mut scroller =
@@ -428,9 +439,10 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let mut counters = ConversationCounters::new(local_label_id);
     counters.total = 1;
-    let bond = tether.transaction().await.unwrap();
-    counters.save(&bond).await.unwrap();
-    bond.commit().await.unwrap();
+    tether
+        .tx(async |bond| counters.save(bond).await)
+        .await
+        .unwrap();
 
     let page_size = 5;
     let mut scroller =
@@ -492,9 +504,10 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let mut counters = ConversationCounters::new(local_label_id);
     counters.total = 10;
-    let bond = tether.transaction().await.unwrap();
-    counters.save(&bond).await.unwrap();
-    bond.commit().await.unwrap();
+    tether
+        .tx(async |bond| counters.save(bond).await)
+        .await
+        .unwrap();
 
     let page_size = 5;
     let mut scroller =
@@ -542,9 +555,10 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let mut counters = ConversationCounters::new(local_label_id);
     counters.total = 15;
-    let bond = tether.transaction().await.unwrap();
-    counters.save(&bond).await.unwrap();
-    bond.commit().await.unwrap();
+    tether
+        .tx(async |bond| counters.save(bond).await)
+        .await
+        .unwrap();
 
     let page_size = 5;
     let mut scroller =
@@ -756,9 +770,10 @@ async fn test_conversation_mail_scroller_reads_cached_data_and_return_error_on_o
         .display_order(last_conversation.display_order)
         .build();
 
-    let bond = tether.transaction().await.unwrap();
-    scroller.save(&bond).await.unwrap();
-    bond.commit().await.unwrap();
+    tether
+        .tx(async |bond| scroller.save(bond).await)
+        .await
+        .unwrap();
 
     // Mock offline
     mock_not_responsive_api(&ctx).await;
@@ -766,9 +781,10 @@ async fn test_conversation_mail_scroller_reads_cached_data_and_return_error_on_o
 
     let mut counters = ConversationCounters::new(local_label_id);
     counters.total = 150;
-    let bond = tether.transaction().await.unwrap();
-    counters.save(&bond).await.unwrap();
-    bond.commit().await.unwrap();
+    tether
+        .tx(async |bond| counters.save(bond).await)
+        .await
+        .unwrap();
 
     let page_size = 50;
     let mut scroller =

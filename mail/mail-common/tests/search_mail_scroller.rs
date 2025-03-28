@@ -16,6 +16,7 @@ use proton_mail_test_utils::api_message_meta;
 use proton_mail_test_utils::{init::Params as TestParams, test_context::MailTestContext};
 use proton_mail_test_utils::{message, msg_id};
 
+use stash::stash::StashError;
 use stash::{
     orm::Model,
     stash::{Bond, WatcherHandle},
@@ -299,10 +300,14 @@ async fn test_search_mail_scroller_notificate_about_changes() {
         time: 100
     );
 
-    let bond = tether.transaction().await.unwrap();
-    let label = Label::load(local_label_id, &bond).await.unwrap().unwrap();
-    save_single_message(&label, &mut test_message.clone(), &bond).await;
-    bond.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |bond| {
+            let label = Label::load(local_label_id, bond).await.unwrap().unwrap();
+            save_single_message(&label, &mut test_message.clone(), bond).await;
+            Ok(())
+        })
+        .await
+        .unwrap();
     // Getting an update will trigger a notification
     receiver.recv_async().await.unwrap();
 

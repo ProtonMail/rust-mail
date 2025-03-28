@@ -357,9 +357,10 @@ async fn draft_reply_or_forward_creates_new_attachments() {
         Message::from_api_data(remote_existing_message.clone(), &tether)
             .await
             .unwrap();
-    let tx = tether.transaction().await.unwrap();
-    existing_message.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    tether
+        .tx(async |tx| existing_message.save(tx).await)
+        .await
+        .unwrap();
     let existing_message = existing_message;
 
     let expected_draft_params =
@@ -519,9 +520,10 @@ async fn deleting_draft_metadata_cleans_not_uploaded_attachments() {
         Message::from_api_data(remote_existing_message.clone(), &tether)
             .await
             .unwrap();
-    let tx = tether.transaction().await.unwrap();
-    existing_message.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    tether
+        .tx(async |tx| existing_message.save(tx).await)
+        .await
+        .unwrap();
     let existing_message = existing_message;
 
     let mut message = draft_message();

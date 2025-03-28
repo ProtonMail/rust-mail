@@ -428,10 +428,11 @@ async fn discard_reply_draft_after_cancelled_or_failed_save_action_only_deletes_
         Message::from_api_data(remote_existing_message.clone(), &tether)
             .await
             .unwrap();
-    let tx = tether.transaction().await.unwrap();
-    existing_message.save(&tx).await.unwrap();
+    tether
+        .tx(async |tx| existing_message.save(tx).await)
+        .await
+        .unwrap();
     let existing_message = existing_message;
-    tx.commit().await.unwrap();
 
     // Get the message body - required to reply to draft.
     Message::message_body(&user_ctx, existing_message.local_id.unwrap())
@@ -534,11 +535,12 @@ async fn delete_reply_draft_after_cancelled_or_failed_save_action_only_deletes_m
         Message::from_api_data(remote_existing_message.clone(), &tether)
             .await
             .unwrap();
-    let tx = tether.transaction().await.unwrap();
-    existing_message.save(&tx).await.unwrap();
-    let existing_message = existing_message;
+    tether
+        .tx(async |tx| existing_message.save(tx).await)
+        .await
+        .unwrap();
     // Decrypted message downloads attachments.
-    tx.commit().await.unwrap();
+    let existing_message = existing_message;
 
     // Get the message body - required to reply to draft.
     Message::message_body(&user_ctx, existing_message.local_id.unwrap())

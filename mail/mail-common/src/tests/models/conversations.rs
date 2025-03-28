@@ -529,35 +529,39 @@ mod available_actions {
     async fn test_available_actions(test_case: &TestCase) {
         let mut tether = new_test_connection().await.connection();
         let mut conversation_ids = vec![];
-        let tx = tether.transaction().await.unwrap();
 
-        for ConversationWithLabels {
-            mut conversation,
-            labels,
-        } in test_case.conversations.clone()
-        {
-            conversation
-                .save(&tx)
-                .await
-                .expect("failed to create conversation");
+        tether
+            .tx::<_, _, StashError>(async |tx| {
+                for ConversationWithLabels {
+                    mut conversation,
+                    labels,
+                } in test_case.conversations.clone()
+                {
+                    conversation
+                        .save(tx)
+                        .await
+                        .expect("failed to create conversation");
 
-            conversation_ids.push(conversation.local_id.unwrap());
+                    conversation_ids.push(conversation.local_id.unwrap());
 
-            for mut label in labels {
-                label.save(&tx).await.expect("failed to create label");
+                    for mut label in labels {
+                        label.save(tx).await.expect("failed to create label");
 
-                let label_id = label.local_id.unwrap();
-                ConversationCounters::new(label_id)
-                    .save(&tx)
-                    .await
-                    .expect("failed to create conversation counters");
+                        let label_id = label.local_id.unwrap();
+                        ConversationCounters::new(label_id)
+                            .save(tx)
+                            .await
+                            .expect("failed to create conversation counters");
 
-                let ids = vec![conversation.local_id.unwrap()];
+                        let ids = vec![conversation.local_id.unwrap()];
 
-                Conversation::apply_label(label_id, ids, &tx).await.unwrap();
-            }
-        }
-        tx.commit().await.unwrap();
+                        Conversation::apply_label(label_id, ids, tx).await.unwrap();
+                    }
+                }
+                Ok(())
+            })
+            .await
+            .unwrap();
 
         let view = Label::find_by_remote_id(test_case.view.remote_id.clone().unwrap(), &tether)
             .await
@@ -892,43 +896,44 @@ mod available_move_to_actions {
         let mut conn = stash.connection();
 
         let mut settings = MailSettings::default();
-        let tx = conn.transaction().await.unwrap();
-        settings.save(&tx).await.unwrap();
-
-        for mut label in labels {
-            label.save(&tx).await.expect("failed to create label");
-        }
-
         let mut conversation_ids = vec![];
-
-        for ConversationWithLabels {
-            mut conversation,
-            labels: message_labels,
-        } in conversations
-        {
-            conversation
-                .save(&tx)
-                .await
-                .expect("failed to create conversation");
-
-            conversation_ids.push(conversation.local_id.unwrap());
-
-            for mut label in message_labels {
-                label.save(&tx).await.expect("failed to create label");
-
-                let label_id = label.local_id.unwrap();
-
-                ConversationCounters::new(label_id)
-                    .save(&tx)
-                    .await
-                    .expect("Failed to create counters");
-
-                let ids = vec![conversation.local_id.unwrap()];
-
-                Conversation::apply_label(label_id, ids, &tx).await.unwrap();
+        conn.tx::<_, _, StashError>(async |tx| {
+            settings.save(tx).await.unwrap();
+            for mut label in labels {
+                label.save(tx).await.expect("failed to create label");
             }
-        }
-        tx.commit().await.unwrap();
+
+            for ConversationWithLabels {
+                mut conversation,
+                labels: message_labels,
+            } in conversations
+            {
+                conversation
+                    .save(tx)
+                    .await
+                    .expect("failed to create conversation");
+
+                conversation_ids.push(conversation.local_id.unwrap());
+
+                for mut label in message_labels {
+                    label.save(tx).await.expect("failed to create label");
+
+                    let label_id = label.local_id.unwrap();
+
+                    ConversationCounters::new(label_id)
+                        .save(tx)
+                        .await
+                        .expect("Failed to create counters");
+
+                    let ids = vec![conversation.local_id.unwrap()];
+
+                    Conversation::apply_label(label_id, ids, tx).await.unwrap();
+                }
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
 
         let view = Label::find_by_remote_id(view.remote_id.clone().unwrap(), &conn)
             .await
@@ -2816,21 +2821,25 @@ async fn conversation_exclusive_location_on_save(
     let mut conversation = Conversation {
         ..Default::default()
     };
-    let tx = tether.transaction().await.unwrap();
-    conversation.save(&tx).await.unwrap();
     let mut conversation_labels = Vec::with_capacity(labels.len());
-    for mut label in labels {
-        label.save(&tx).await.unwrap();
-        conversation_labels.push(ConversationLabel {
-            remote_label_id: label.remote_id,
-            ..Default::default()
-        });
-    }
-    conversation.labels = conversation_labels;
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            conversation.save(tx).await.unwrap();
+            for mut label in labels {
+                label.save(tx).await.unwrap();
+                conversation_labels.push(ConversationLabel {
+                    remote_label_id: label.remote_id,
+                    ..Default::default()
+                });
+            }
+            conversation.labels = conversation_labels;
 
-    // Action
-    conversation.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+            // Action
+            conversation.save(tx).await.unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
 
     // Validation
     if let Some((is_system, expected)) = expected {

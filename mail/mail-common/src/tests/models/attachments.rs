@@ -27,9 +27,7 @@ async fn test_attachment_create_without_metadata() {
         .unwrap();
     let api_attachment = test_attachment();
     let mut attachment = Attachment::from(api_attachment.clone());
-    let tx = conn.transaction().await.unwrap();
-    attachment.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    conn.tx(async |tx| attachment.save(tx).await).await.unwrap();
     let local_id = attachment.local_id;
     assert!(attachment.has_complete_metadata());
     let mut expected = Attachment::from(api_attachment);
@@ -67,9 +65,7 @@ async fn test_attachment_create_with_metadata() {
     assert!(!db_attachment.has_complete_metadata());
 
     let mut attachment = Attachment::from(api_attachment.clone());
-    let tx = conn.transaction().await.unwrap();
-    attachment.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    conn.tx(async |tx| attachment.save(tx).await).await.unwrap();
     let local_id = attachment.local_id;
     assert!(attachment.has_complete_metadata());
     let mut expected = attachment.clone();
@@ -121,77 +117,77 @@ async fn create_attachment_dependencies(
     metadata: Option<ApiAttachmentMetadata>,
 ) -> Result<(AddressId, LocalConversationId, LocalMessageId), AppError> {
     let metadata = metadata.map(|v| vec![v]).unwrap_or_default();
-    let tx = tether.transaction().await.unwrap();
+    tether
+        .tx(async |tx| {
+            Address {
+                local_id: None,
+                remote_id: Some(address_id()),
+                email: String::new(),
+                send: false,
+                receive: false,
+                status: AddressStatus::Disabled,
+                domain_id: None,
+                address_type: AddressType::Original,
+                display_order: 0,
+                display_name: String::new(),
+                signature: String::new(),
+                keys: AddressKeys::default(),
+                catch_all: false,
+                proton_mx: false,
+                signed_key_list: Default::default(),
+                row_id: None,
+            }
+            .save(tx)
+            .await?;
 
-    Address {
-        local_id: None,
-        remote_id: Some(address_id()),
-        email: String::new(),
-        send: false,
-        receive: false,
-        status: AddressStatus::Disabled,
-        domain_id: None,
-        address_type: AddressType::Original,
-        display_order: 0,
-        display_name: String::new(),
-        signature: String::new(),
-        keys: AddressKeys::default(),
-        catch_all: false,
-        proton_mx: false,
-        signed_key_list: Default::default(),
-        row_id: None,
-    }
-    .save(&tx)
-    .await?;
+            let local_conv_ids = Conversation::create_or_update_conversations(
+                vec![Conversation {
+                    remote_id: Some(conversation_id()),
+                    attachments_metadata: metadata
+                        .clone()
+                        .into_iter()
+                        .map(AttachmentMetadata::from)
+                        .collect(),
+                    ..Default::default()
+                }],
+                tx,
+            )
+            .await?;
 
-    let local_conv_ids = Conversation::create_or_update_conversations(
-        vec![Conversation {
-            remote_id: Some(conversation_id()),
-            attachments_metadata: metadata
-                .clone()
-                .into_iter()
-                .map(AttachmentMetadata::from)
-                .collect(),
-            ..Default::default()
-        }],
-        &tx,
-    )
-    .await?;
-
-    let local_msg_ids = Message::create_or_update_messages_from_metadata(
-        vec![ApiMessageMetadata {
-            id: message_id(),
-            conversation_id: conversation_id(),
-            order: 0,
-            address_id: address_id(),
-            label_ids: vec![],
-            external_id: None,
-            subject: String::new(),
-            sender: Default::default(),
-            to_list: vec![],
-            cc_list: vec![],
-            bcc_list: vec![],
-            reply_tos: vec![],
-            flags: ApiMessageFlags::empty(),
-            time: 0,
-            size: 0,
-            unread: false,
-            is_replied: false,
-            is_replied_all: false,
-            is_forwarded: false,
-            expiration_time: 0,
-            snooze_time: 0,
-            num_attachments: 0,
-            attachments_metadata: metadata.clone(),
-        }],
-        &tx,
-    )
-    .await?;
-    tx.commit().await?;
-
-    Ok((
-        address_id(),
-        *local_conv_ids.first().unwrap(),
-        *local_msg_ids.first().unwrap(),
-    ))
+            let local_msg_ids = Message::create_or_update_messages_from_metadata(
+                vec![ApiMessageMetadata {
+                    id: message_id(),
+                    conversation_id: conversation_id(),
+                    order: 0,
+                    address_id: address_id(),
+                    label_ids: vec![],
+                    external_id: None,
+                    subject: String::new(),
+                    sender: Default::default(),
+                    to_list: vec![],
+                    cc_list: vec![],
+                    bcc_list: vec![],
+                    reply_tos: vec![],
+                    flags: ApiMessageFlags::empty(),
+                    time: 0,
+                    size: 0,
+                    unread: false,
+                    is_replied: false,
+                    is_replied_all: false,
+                    is_forwarded: false,
+                    expiration_time: 0,
+                    snooze_time: 0,
+                    num_attachments: 0,
+                    attachments_metadata: metadata.clone(),
+                }],
+                tx,
+            )
+            .await?;
+            Ok((
+                address_id(),
+                *local_conv_ids.first().unwrap(),
+                *local_msg_ids.first().unwrap(),
+            ))
+        })
+        .await
 }

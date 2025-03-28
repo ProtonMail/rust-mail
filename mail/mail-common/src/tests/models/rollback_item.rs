@@ -107,16 +107,20 @@ async fn test_store_and_delete_remote_items(
     // * RollbackItem is correctly stored *
     let (stash, _tempdir) = new_test_connection_file().await;
     let mut tether = stash.connection();
-    let tx = tether.transaction().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            for item in expected.iter_mut().flat_map(|x| x.iter_mut()) {
+                item.save(tx).await.unwrap();
+            }
 
-    for item in expected.iter_mut().flat_map(|x| x.iter_mut()) {
-        item.save(&tx).await.unwrap();
-    }
+            for item in input.iter_mut() {
+                item.save(tx).await.unwrap();
+            }
 
-    for item in input.iter_mut() {
-        item.save(&tx).await.unwrap();
-    }
-    tx.commit().await.unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
 
     let expected = expected.unwrap_or(input);
     let actual = RollbackItem::all(&tether).await.unwrap();
@@ -146,29 +150,41 @@ async fn setup_database(tether: &mut Tether) {
     let mut local_conversation_id = None;
     let mut remote_conversation_id = None;
 
-    let tx = tether.transaction().await.unwrap();
-    for conversation in conversations.iter_mut() {
-        conversation.save(&tx).await.unwrap();
-        local_conversation_id = conversation.local_id;
-        remote_conversation_id = conversation.remote_id.clone();
-    }
-    tx.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            for conversation in conversations.iter_mut() {
+                conversation.save(tx).await.unwrap();
+                local_conversation_id = conversation.local_id;
+                remote_conversation_id = conversation.remote_id.clone();
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
 
     let mut labels = labels(tether).await;
 
-    let tx = tether.transaction().await.unwrap();
-    for label in labels.iter_mut() {
-        label.save(&tx).await.unwrap();
-    }
-    tx.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            for label in labels.iter_mut() {
+                label.save(tx).await.unwrap();
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
 
     let mut messages = messages(local_conversation_id, remote_conversation_id, tether).await;
 
-    let tx = tether.transaction().await.unwrap();
-    for message in messages.iter_mut() {
-        message.save(&tx).await.unwrap();
-    }
-    tx.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            for message in messages.iter_mut() {
+                message.save(tx).await.unwrap();
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
 }
 
 async fn conversations(tether: &Tether) -> Vec<Conversation> {
