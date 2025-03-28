@@ -176,45 +176,47 @@ impl InitializedComponent {
         }
 
         tracing::trace!("Storing. Creating a transaction");
-        let tx = tether.transaction().await?;
+        let res = tether
+            .tx::<_, _, InitializationError<E>>(async move |tx| {
+                tracing::trace!("Storing");
+                let res = store(tx, fetched).await;
+                tracing::trace!("Stored");
 
-        tracing::trace!("Storing");
-        let res = store(&tx, fetched).await;
-        tracing::trace!("Stored");
+                let state = if res.is_err() {
+                    InitializedComponentState::Failed
+                } else {
+                    InitializedComponentState::Succeeded
+                };
 
-        let state = if res.is_err() {
-            InitializedComponentState::Failed
-        } else {
-            InitializedComponentState::Succeeded
-        };
+                tracing::debug!("Marking as {state:?}");
 
-        tracing::debug!("Marking as {state:?}");
-
-        Self {
-            key: key.into(),
-            state,
-            row_id: None,
-        }
-        .save(&tx)
-        .await?;
-
-        tracing::trace!("Committing transaction");
-        tx.commit().await?;
+                Self {
+                    key: key.into(),
+                    state,
+                    row_id: None,
+                }
+                .save(tx)
+                .await?;
+                Ok(res)
+            })
+            .await?;
         tracing::trace!("Committed");
 
         res.map_err(InitializationError::InitializationFailed)
     }
 
     async fn fail(key: InitializationKey, tether: &mut Tether) -> Result<(), StashError> {
-        let tx = tether.transaction().await?;
-        Self {
-            key: key.into(),
-            state: InitializedComponentState::Failed,
-            row_id: None,
-        }
-        .save(&tx)
-        .await?;
-        tx.commit().await?;
+        tether
+            .tx(async |tx| {
+                Self {
+                    key: key.into(),
+                    state: InitializedComponentState::Failed,
+                    row_id: None,
+                }
+                .save(tx)
+                .await
+            })
+            .await?;
         Ok(())
     }
 

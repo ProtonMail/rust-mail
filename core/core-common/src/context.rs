@@ -505,9 +505,7 @@ impl Context {
             .ok_or(CoreContextError::Other(anyhow!("account not found")))?
             .with_primary_now();
 
-        let tx = tether.transaction().await?;
-        account.save(&tx).await?;
-        tx.commit().await?;
+        tether.tx(async |tx| account.save(tx).await).await?;
 
         Ok(())
     }
@@ -667,11 +665,7 @@ impl Context {
             warn!("Orphan session found in database: {}", session.remote_id);
 
             let mut tether = self.account_stash().connection();
-            let tx = tether.transaction().await?;
-
-            session.delete(&tx).await?;
-
-            tx.commit().await?;
+            tether.tx(async |tx| session.delete(tx).await).await?;
         }
 
         info!("logged out all sessions for account {user_id}");
@@ -691,11 +685,13 @@ impl Context {
         // TODO(ET-231): User cache paths.
 
         let mut tether = self.account_stash().connection();
-        let tx = tether.transaction().await?;
-        CoreAccount::delete_by_id(user_id, &tx)
-            .inspect_err(|e| error!("Failed to delete account from db: {e:?}"))
+        tether
+            .tx(async |tx| {
+                CoreAccount::delete_by_id(user_id, tx)
+                    .inspect_err(|e| error!("Failed to delete account from db: {e:?}"))
+                    .await
+            })
             .await?;
-        tx.commit().await?;
 
         Ok(())
     }

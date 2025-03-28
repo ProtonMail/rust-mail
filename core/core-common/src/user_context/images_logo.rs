@@ -83,76 +83,75 @@ impl UserContext {
         // If the request fails we don't store anything into the database, let the clients handle
         // it.
         let image = self.session().api().get_images_logo(options).await?;
+        tether
+            .tx(async |tx| {
+                match find_sender_image_in_cache(
+                    tx,
+                    address.clone(),
+                    bimi_selector.clone(),
+                    format.clone(),
+                    mode,
+                    size,
+                )
+                .await
+                .with_context(|| format!("Error in finding sender image for {address}"))?
+                {
+                    ImageInCache::NotCached => (),
+                    // If you're wondering about the transaction, it's fine to rollback since
+                    // we only use it as a lock mechanism.
+                    ImageInCache::EmptyImage => return Ok(None),
+                    ImageInCache::Cached { path } => return Ok(Some(path)),
+                }
 
-        let tx = tether.transaction().await?;
+                // We don't insert the path as the image doesn't have one.
+                if image.is_empty() {
+                    insert(tx, address, bimi_selector, mode, size, format, None).await?;
+                    return Ok(None);
+                }
 
-        match find_sender_image_in_cache(
-            &tx,
-            address.clone(),
-            bimi_selector.clone(),
-            format.clone(),
-            mode,
-            size,
-        )
-        .await
-        .with_context(|| format!("Error in finding sender image for {address}"))?
-        {
-            ImageInCache::NotCached => (),
-            // If you're wondering about the transaction, it's fine to rollback since
-            // we only use it as a lock mechanism.
-            ImageInCache::EmptyImage => return Ok(None),
-            ImageInCache::Cached { path } => return Ok(Some(path)),
-        }
+                let image_format = format_from_bytes(&image);
+                // The path exists since it's created in UserContext::new
 
-        // We don't insert the path as the image doesn't have one.
-        if image.is_empty() {
-            insert(&tx, address, bimi_selector, mode, size, format, None).await?;
-            tx.commit().await?;
-            return Ok(None);
-        }
+                // Get the hash of the sender image.
+                // The hash is also the primary id of the sender image table.
+                let mut state = DefaultHasher::new();
+                bimi_selector.hash(&mut state);
+                image_format.hash(&mut state);
+                mode.hash(&mut state);
+                size.hash(&mut state);
+                #[allow(clippy::cast_possible_wrap)]
+                let opts_hash = state.finish() as i64;
 
-        let image_format = format_from_bytes(&image);
-        // The path exists since it's created in UserContext::new
+                // We will write the image to
+                // {CACHE_PATH}/sender_images/{hash in hex}.{svg/webp/png}
+                let path = self
+                    .sender_images_cache_path()
+                    .join(format!("{address}-{opts_hash:#x}.{image_format}"));
 
-        // Get the hash of the sender image.
-        // The hash is also the primary id of the sender image table.
-        let mut state = DefaultHasher::new();
-        bimi_selector.hash(&mut state);
-        image_format.hash(&mut state);
-        mode.hash(&mut state);
-        size.hash(&mut state);
-        #[allow(clippy::cast_possible_wrap)]
-        let opts_hash = state.finish() as i64;
+                let image_size = image.len();
+                safe_write_async(&path, image)
+                    .await
+                    .with_context(|| format!("Error saving {image_size} bytes to {path:?}"))?;
+                let path = path
+                    .into_os_string()
+                    .into_string()
+                    // This is infailable since all pieces exist as a string at some point.
+                    .map_err(|e| anyhow::anyhow!("Invalid utf8 somewhere in the path: {e:?}"))?;
 
-        // We will write the image to
-        // {CACHE_PATH}/sender_images/{hash in hex}.{svg/webp/png}
-        let path = self
-            .sender_images_cache_path()
-            .join(format!("{address}-{opts_hash:#x}.{image_format}"));
+                insert(
+                    tx,
+                    address,
+                    bimi_selector,
+                    mode,
+                    size,
+                    format,
+                    Some(path.clone()),
+                )
+                .await?;
 
-        let image_size = image.len();
-        safe_write_async(&path, image)
+                Ok(Some(path))
+            })
             .await
-            .with_context(|| format!("Error saving {image_size} bytes to {path:?}"))?;
-        let path = path
-            .into_os_string()
-            .into_string()
-            // This is infailable since all pieces exist as a string at some point.
-            .map_err(|e| anyhow::anyhow!("Invalid utf8 somewhere in the path: {e:?}"))?;
-
-        insert(
-            &tx,
-            address,
-            bimi_selector,
-            mode,
-            size,
-            format,
-            Some(path.clone()),
-        )
-        .await?;
-        tx.commit().await?;
-        info!("Inserted the sender image.");
-        Ok(Some(path))
     }
 }
 
