@@ -250,6 +250,29 @@ impl MailSession {
         .map_err(LoginError::from)
     }
 
+    /// Get initialized user context from stored session.
+    /// If context exists but it is not initialized yet, it returns `None`.
+    ///
+    /// This method **does NOT** initialize context itself. It also **does NOT**
+    /// create a new context.
+    ///
+    pub fn initialized_user_context_from_session(
+        &self,
+        session: Arc<StoredSession>,
+    ) -> Result<Option<Arc<MailUserSession>>, UserSessionError> {
+        let ctx = self.mail_ctx.clone();
+
+        async_runtime()
+            .block_on(async move {
+                ctx.initialized_user_context_from_session(session.session(), None)
+                    .map_ok(|ctx| ctx.map(|ctx| self.user_ctx.insert(ctx)))
+                    .map_ok(|ctx| ctx.map(MailUserSession::new))
+                    .map_err(RealProtonMailError::from)
+                    .await
+            })
+            .map_err(UserSessionError::from)
+    }
+
     /// Create an user context from a stored session.
     pub fn user_context_from_session(
         &self,

@@ -325,6 +325,29 @@ impl MailContext {
             .await
     }
 
+    /// Gets new initialized context from existing session.
+    ///
+    /// It does **NOT** initialize itself. Instead, it returns `None`
+    /// if context exists but is not initialized
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if we failed to decrypt the user session
+    /// or access the user database.
+    ///
+    pub async fn initialized_user_context_from_session(
+        self: &Arc<Self>,
+        session: &CoreSession,
+        status: Option<StatusWatcher>,
+    ) -> MailContextResult<Option<Arc<MailUserContext>>> {
+        let ctx = self
+            .core_context
+            .user_context_from_session(session, status)
+            .await?;
+
+        Arc::clone(self).new_initialized_user_context(ctx).await
+    }
+
     /// Create a new context from an existing session.
     ///
     /// # Errors
@@ -533,6 +556,40 @@ impl MailContext {
     /// Get the connection to the session database.
     pub fn session_stash(&self) -> &Stash {
         self.core_context.account_stash()
+    }
+
+    /// Retrieve initialized user context or return None.
+    ///
+    async fn new_initialized_user_context(
+        self: Arc<Self>,
+        core_context: Arc<UserContext>,
+    ) -> Result<Option<Arc<MailUserContext>>, MailContextError> {
+        let mut active_contexts = self.active_user_contexts.lock().await;
+
+        active_contexts.retain(|_, ctx| ctx.strong_count() != 0);
+
+        let Some(existing) = active_contexts.get(core_context.user_id()) else {
+            return Ok(None);
+        };
+
+        let Some(upgraded) = existing.upgrade() else {
+            return Ok(None);
+        };
+
+        // This should be handled by the core context creating,
+        // but if for some reason it slips through the cracks,
+        // catch it again.
+        if upgraded.session_id() != core_context.session_id() {
+            return Err(MailContextError::DuplicateContext(
+                core_context.user_id().clone(),
+            ));
+        }
+
+        if !upgraded.is_initialized().await? {
+            return Ok(None);
+        }
+
+        Ok(Some(upgraded))
     }
 
     /// Create a new user context or return an existing one.

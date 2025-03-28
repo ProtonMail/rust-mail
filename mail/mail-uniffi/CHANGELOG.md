@@ -21,6 +21,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - The spam banner will stop appearing after it's been marked as legitimate.
 
+### Added
+
+- [ET-2601] `initialized_user_context_from_session` - returns MailUserContext but only if it existed and was initialized before.
+
 ## [0.65.3] - 2025-03-27
 
 ### Fixed
