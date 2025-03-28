@@ -19,6 +19,7 @@ use proton_crypto_account::proton_crypto::new_pgp_provider;
 use proton_event_loop::subscriber::Subscriber;
 use stash::orm::Model;
 use stash::params;
+use stash::stash::StashError;
 use std::sync::Arc;
 
 macro_rules! prune_email {
@@ -88,17 +89,16 @@ async fn test_sync_and_load_contacts() {
 
     // Sync contacts
     let mut tether = user_ctx.stash().connection();
-    let tx = tether
-        .transaction()
-        .await
-        .expect("Failed to create a transaction");
-    Contact::sync(user_ctx.session().api())
-        .await
-        .expect("failed to download contacts")
-        .store(&tx)
+    tether
+        .tx(async |tx| {
+            Contact::sync(user_ctx.session().api())
+                .await
+                .expect("failed to download contacts")
+                .store(tx)
+                .await
+        })
         .await
         .expect("failed to load contacts in db");
-    tx.commit().await.expect("Failed to commit transaction");
 
     // Check database
     let conn = user_ctx.stash().connection();
@@ -336,16 +336,20 @@ async fn test_contact_load_public_address_keys() {
     let pgp_provider = new_pgp_provider();
     let unlocked_user_keys = unlocked_user_key(&pgp_provider);
     let mut tether = user_ctx.stash().connection();
-    let tx = tether
-        .transaction()
-        .await
-        .expect("Failed to start transaction");
-    let keys = user_ctx
-        .public_address_keys_from_contacts(&pgp_provider, &tx, &unlocked_user_keys, &contact_email)
+    let keys = tether
+        .tx(async |tx| {
+            user_ctx
+                .public_address_keys_from_contacts(
+                    &pgp_provider,
+                    tx,
+                    &unlocked_user_keys,
+                    &contact_email,
+                )
+                .await
+        })
         .await
         .expect("there should be no error or key extraction")
         .expect("key must be found");
-    tx.commit().await.expect("Failed to commit transaction");
 
     assert_eq!(keys.pinned_keys.len(), 2);
     assert!(keys.sign.unwrap());
@@ -378,20 +382,25 @@ async fn test_contact_load_public_address_keys() {
     // Check public address keys from contacts
     let pgp_provider = new_pgp_provider();
     let unlocked_user_keys = unlocked_user_key(&pgp_provider);
-    let tx = tether
-        .transaction()
+    let preferred_fingerprint_2 = tether
+        .tx::<_, _, StashError>(async |tx| {
+            Ok(user_ctx
+                .public_address_keys_from_contacts(
+                    &pgp_provider,
+                    tx,
+                    &unlocked_user_keys,
+                    &contact_email,
+                )
+                .await
+                .expect("there should be no error or key extraction")
+                .expect("key must be found")
+                .pinned_keys
+                .first()
+                .unwrap()
+                .key_fingerprint())
+        })
         .await
-        .expect("Failed to start transaction");
-    let preferred_fingerprint_2 = user_ctx
-        .public_address_keys_from_contacts(&pgp_provider, &tx, &unlocked_user_keys, &contact_email)
-        .await
-        .expect("there should be no error or key extraction")
-        .expect("key must be found")
-        .pinned_keys
-        .first()
-        .unwrap()
-        .key_fingerprint();
-    tx.commit().await.expect("Failed to commit transaction");
+        .expect("Failed to commit transaction");
 
     assert!(preferred_fingerprint_1 != preferred_fingerprint_2);
 }
@@ -414,30 +423,25 @@ async fn prepare_sync_test_data_contacts(
 
     // Sync contacts
     let mut tether = user_ctx.stash().connection();
-    let tx = tether
-        .transaction()
-        .await
-        .expect("Failed to create a transaction");
-    Contact::sync(user_ctx.session().api())
-        .await
-        .expect("failed to download contacts")
-        .store(&tx)
+    tether
+        .tx(async |tx| {
+            Contact::sync(user_ctx.session().api())
+                .await
+                .expect("failed to download contacts")
+                .store(tx)
+                .await
+        })
         .await
         .expect("failed to load contacts in db");
-    tx.commit().await.expect("Failed to commit transaction");
 
     let local_id = Contact::remote_id_counterpart(remote_contact_id, &tether)
         .await
         .unwrap()
         .unwrap();
-    let tx = tether
-        .transaction()
-        .await
-        .expect("Failed to start transaction");
-    Contact::sync_with_card(local_id, user_ctx.session().api(), &tx)
+    tether
+        .tx(async |tx| Contact::sync_with_card(local_id, user_ctx.session().api(), tx).await)
         .await
         .expect("failed to sync contacts");
-    tx.commit().await.expect("Failed to commit transaction");
 }
 
 fn create_test_local_partial_contacts() -> Vec<Contact> {

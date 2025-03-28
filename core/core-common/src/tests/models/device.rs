@@ -27,13 +27,10 @@ async fn test_save_registered_device_and_retrieve_it() {
     };
 
     let mut tether = user_ctx.stash().connection();
-    let tx = tether.transaction().await.unwrap();
-    device_to_register
-        .save(&tx, ctx.core_context())
+    tether
+        .tx(async |tx| device_to_register.save(tx, ctx.core_context()).await)
         .await
         .unwrap();
-
-    tx.commit().await.unwrap();
 
     let cached_device = RegisteredDevice::get(&tether)
         .await
@@ -61,24 +58,27 @@ async fn only_last_device_token_can_be_retrieved() {
     let user_ctx = ctx.user_context().await;
 
     let mut tether = user_ctx.stash().connection();
-    let tx = tether.transaction().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            let mut first = RegisteredDevice {
+                device_token: "ABCD".to_string(),
 
-    let mut first = RegisteredDevice {
-        device_token: "ABCD".to_string(),
+                environment: DeviceEnvironment::Google,
 
-        environment: DeviceEnvironment::Google,
+                public_key: None,
 
-        public_key: None,
+                ping_notification_status: None,
 
-        ping_notification_status: None,
+                push_notification_status: None,
 
-        push_notification_status: None,
+                row_id: None,
+            };
 
-        row_id: None,
-    };
-
-    first.save(&tx, ctx.core_context()).await.unwrap();
-    tx.commit().await.unwrap();
+            first.save(tx, ctx.core_context()).await.unwrap();
+            Ok(first)
+        })
+        .await
+        .unwrap();
 
     // Crash
     //
@@ -86,25 +86,27 @@ async fn only_last_device_token_can_be_retrieved() {
     //
     // Recovery
     let mut tether = user_ctx.stash().connection();
-    let tx = tether.transaction().await.unwrap();
+    let second = tether
+        .tx::<_, _, StashError>(async |tx| {
+            let mut second = RegisteredDevice {
+                device_token: "ABCD".to_string(),
 
-    let mut second = RegisteredDevice {
-        device_token: "ABCD".to_string(),
+                environment: DeviceEnvironment::Google,
 
-        environment: DeviceEnvironment::Google,
+                public_key: None,
 
-        public_key: None,
+                ping_notification_status: None,
 
-        ping_notification_status: None,
+                push_notification_status: None,
 
-        push_notification_status: None,
+                row_id: None,
+            };
 
-        row_id: None,
-    };
-
-    second.save(&tx, ctx.core_context()).await.unwrap();
-
-    tx.commit().await.unwrap();
+            second.save(tx, ctx.core_context()).await.unwrap();
+            Ok(second)
+        })
+        .await
+        .unwrap();
 
     let cached_device = RegisteredDevice::get(&tether)
         .await
@@ -143,24 +145,27 @@ async fn should_trigger_db_guard_if_incorrectly_used_trait_method() {
         let user_ctx = ctx.user_context().await;
 
         let mut tether = user_ctx.stash().connection();
-        let tx = tether.transaction().await.unwrap();
+        tether
+            .tx::<_, _, StashError>(async |tx| {
+                let mut first = RegisteredDevice {
+                    device_token: "ABCD".to_string(),
 
-        let mut first = RegisteredDevice {
-            device_token: "ABCD".to_string(),
+                    environment: DeviceEnvironment::Google,
 
-            environment: DeviceEnvironment::Google,
+                    public_key: None,
 
-            public_key: None,
+                    ping_notification_status: None,
 
-            ping_notification_status: None,
+                    push_notification_status: None,
 
-            push_notification_status: None,
+                    row_id: None,
+                };
 
-            row_id: None,
-        };
-
-        Model::save(&mut first, &tx).await.unwrap();
-        tx.commit().await.unwrap();
+                Model::save(&mut first, tx).await?;
+                Ok(first)
+            })
+            .await
+            .unwrap();
 
         // Crash
         //
@@ -168,24 +173,26 @@ async fn should_trigger_db_guard_if_incorrectly_used_trait_method() {
         //
         // Recovery
         let mut tether = user_ctx.stash().connection();
-        let tx = tether.transaction().await.unwrap();
+        let stash_error = tether
+            .tx::<_, _, StashError>(async |tx| {
+                let mut second = RegisteredDevice {
+                    device_token: "ABCD".to_string(),
 
-        let mut second = RegisteredDevice {
-            device_token: "ABCD".to_string(),
+                    environment: DeviceEnvironment::Google,
 
-            environment: DeviceEnvironment::Google,
+                    public_key: None,
 
-            public_key: None,
+                    ping_notification_status: None,
 
-            ping_notification_status: None,
+                    push_notification_status: None,
 
-            push_notification_status: None,
+                    row_id: None,
+                };
 
-            row_id: None,
-        };
-
-        let stash_error = Model::save(&mut second, &tx).await.unwrap_err();
-        tx.rollback().await.expect("Rolled back");
+                Model::save(&mut second, tx).await
+            })
+            .await
+            .unwrap_err();
 
         let StashError::DeserializationError(stash::orm::ConversionError::SqliteError(
             sqlite_error,

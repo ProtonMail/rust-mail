@@ -18,11 +18,15 @@ use stash::stash::Tether;
 async fn test_remote_label_add() {
     let mut tether = new_core_test_connection().await.connection();
     let labels = test_labels();
-    let tx = tether.transaction().await.unwrap();
-    for label in labels.clone() {
-        Label::from(label).save(&tx).await.unwrap();
-    }
-    tx.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            for label in labels.clone() {
+                Label::from(label).save(tx).await?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
     compare_remote_labels_with_local(&tether, labels).await;
 }
 
@@ -30,9 +34,10 @@ async fn test_remote_label_add() {
 async fn test_remote_label_add_1_char_long_name() {
     let mut tether = new_core_test_connection().await.connection();
     let label = test_label(random_string(1).as_str());
-    let tx = tether.transaction().await.unwrap();
-    Label::from(label.clone()).save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |tx| Label::from(label.clone()).save(tx).await)
+        .await
+        .unwrap();
     compare_remote_label_with_local(&tether, label).await;
 }
 
@@ -40,9 +45,10 @@ async fn test_remote_label_add_1_char_long_name() {
 async fn test_remote_label_add_100_char_long_name() {
     let mut tether = new_core_test_connection().await.connection();
     let label = test_label(random_string(100).as_str());
-    let tx = tether.transaction().await.unwrap();
-    Label::from(label.clone()).save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    tether
+        .tx(async |tx| Label::from(label.clone()).save(tx).await)
+        .await
+        .unwrap();
     compare_remote_label_with_local(&tether, label).await;
 }
 
@@ -54,46 +60,50 @@ async fn test_remote_label_update() {
         .into_iter()
         .map(Label::from)
         .collect::<Vec<_>>();
-    let tx = tether.transaction().await.unwrap();
-    for label in &mut labels {
-        label.save(&tx).await.unwrap();
-    }
-
     let mut remote_labels = test_labels();
-    // Perform Some Updates
-    remote_labels[0].color = "#xxxxx".into();
-    remote_labels[0].name = "FooBar".into();
-    remote_labels[1].sticky = true;
-    remote_labels[1].expanded = true;
-    remote_labels[1].notify = true;
-    remote_labels[1].display = true;
-    // Switch parents
-    remote_labels[2].parent_id = Some(remote_labels[3].id.clone());
-    remote_labels[2].order = 3;
-    remote_labels[2].path = Some("Folder2/Folder1".to_owned());
-    remote_labels[3].parent_id = None;
-    remote_labels[3].path = None;
-    remote_labels[3].order = 2;
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            for label in &mut labels {
+                label.save(tx).await.unwrap();
+            }
 
-    // Perform Some Updates
-    labels[0].color = "#xxxxx".into();
-    labels[0].name = "FooBar".into();
-    labels[1].sticky = true;
-    labels[1].expanded = true;
-    labels[1].notify = true;
-    labels[1].display = true;
-    // Switch parents
-    labels[2].remote_parent_id = labels[3].remote_id.clone();
-    labels[2].display_order = 3;
-    labels[2].path = Some("Folder2/Folder1".to_owned());
-    labels[3].remote_parent_id = None;
-    labels[3].path = None;
-    labels[3].display_order = 2;
+            // Perform Some Updates
+            remote_labels[0].color = "#xxxxx".into();
+            remote_labels[0].name = "FooBar".into();
+            remote_labels[1].sticky = true;
+            remote_labels[1].expanded = true;
+            remote_labels[1].notify = true;
+            remote_labels[1].display = true;
+            // Switch parents
+            remote_labels[2].parent_id = Some(remote_labels[3].id.clone());
+            remote_labels[2].order = 3;
+            remote_labels[2].path = Some("Folder2/Folder1".to_owned());
+            remote_labels[3].parent_id = None;
+            remote_labels[3].path = None;
+            remote_labels[3].order = 2;
 
-    for label in &mut labels {
-        label.save(&tx).await.expect("failed to update labels");
-    }
-    tx.commit().await.expect("failed to commit transaction");
+            // Perform Some Updates
+            labels[0].color = "#xxxxx".into();
+            labels[0].name = "FooBar".into();
+            labels[1].sticky = true;
+            labels[1].expanded = true;
+            labels[1].notify = true;
+            labels[1].display = true;
+            // Switch parents
+            labels[2].remote_parent_id = labels[3].remote_id.clone();
+            labels[2].display_order = 3;
+            labels[2].path = Some("Folder2/Folder1".to_owned());
+            labels[3].remote_parent_id = None;
+            labels[3].path = None;
+            labels[3].display_order = 2;
+
+            for label in &mut labels {
+                label.save(tx).await?;
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
 
     compare_remote_labels_with_local(&tether, remote_labels).await;
 }
@@ -103,26 +113,30 @@ async fn test_delete_remote() {
     let mut tether = new_core_test_connection().await.connection();
     let mut labels = test_labels();
 
-    let tx = tether.transaction().await.unwrap();
-    for label in labels.clone() {
-        let mut label = Label::from(label);
-        if let Some(parent_id) = label.remote_parent_id.clone() {
-            label.local_parent_id = Label::find_by_remote_id(parent_id, &tx)
-                .await
-                .expect("failed to get parent label")
-                .expect("parent label should exist")
-                .local_id;
-        }
-        label.save(&tx).await.unwrap();
-    }
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            for label in labels.clone() {
+                let mut label = Label::from(label);
+                if let Some(parent_id) = label.remote_parent_id.clone() {
+                    label.local_parent_id = Label::find_by_remote_id(parent_id, tx)
+                        .await
+                        .expect("failed to get parent label")
+                        .expect("parent label should exist")
+                        .local_id;
+                }
+                label.save(tx).await.unwrap();
+            }
 
-    tx.execute(
-        "DELETE FROM labels WHERE remote_id = ?",
-        params![labels[0].id.clone()],
-    )
-    .await
-    .expect("failed to delete local label");
-    tx.commit().await.unwrap();
+            tx.execute(
+                "DELETE FROM labels WHERE remote_id = ?",
+                params![labels[0].id.clone()],
+            )
+            .await
+            .expect("failed to delete local label");
+            Ok(())
+        })
+        .await
+        .unwrap();
 
     labels.remove(0);
 
@@ -134,223 +148,242 @@ async fn test_delete_remote() {
 #[tokio::test]
 async fn create_local_label() {
     let mut tether = new_core_test_connection().await.connection();
-    let tx = tether.transaction().await.unwrap();
-    for t in [
-        LabelType::Label,
-        LabelType::Folder,
-        LabelType::System,
-        LabelType::ContactGroup,
-    ] {
-        let mut new_label = Label {
-            local_id: None,
-            remote_id: Some(format!("Label-{t:?}").into()),
-            local_parent_id: None,
-            remote_parent_id: None,
-            color: LabelColor::purple(),
-            display: false,
-            display_order: 0,
-            expanded: false,
-            label_type: LabelType::Folder,
-            name: "Label".to_owned(),
-            notify: false,
-            path: None,
-            sticky: false,
-            row_id: None,
-        };
-        new_label.save(&tx).await.expect("failed to create label");
-        let db_label = Label::load(new_label.local_id.unwrap(), &tx)
-            .await
-            .expect("failed to load label")
-            .expect("should have a value");
-        assert_eq!(new_label, db_label, "Label of type {:?} does not match", t);
-    }
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            for t in [
+                LabelType::Label,
+                LabelType::Folder,
+                LabelType::System,
+                LabelType::ContactGroup,
+            ] {
+                let mut new_label = Label {
+                    local_id: None,
+                    remote_id: Some(format!("Label-{t:?}").into()),
+                    local_parent_id: None,
+                    remote_parent_id: None,
+                    color: LabelColor::purple(),
+                    display: false,
+                    display_order: 0,
+                    expanded: false,
+                    label_type: LabelType::Folder,
+                    name: "Label".to_owned(),
+                    notify: false,
+                    path: None,
+                    sticky: false,
+                    row_id: None,
+                };
+                new_label.save(tx).await.expect("failed to create label");
+                let db_label = Label::load(new_label.local_id.unwrap(), tx)
+                    .await
+                    .expect("failed to load label")
+                    .expect("should have a value");
+                assert_eq!(new_label, db_label, "Label of type {:?} does not match", t);
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
 async fn create_local_label_1_char_long_name() {
     let mut tether = new_core_test_connection().await.connection();
-    let tx = tether.transaction().await.unwrap();
-    for t in [LabelType::Label, LabelType::Folder] {
-        let label_name = random_string(1);
-        let mut new_label = Label {
-            local_id: None,
-            remote_id: Some(format!("Label-{t:?}").into()),
-            local_parent_id: None,
-            remote_parent_id: None,
-            color: LabelColor::purple(),
-            display: false,
-            display_order: 0,
-            expanded: false,
-            label_type: LabelType::Folder,
-            name: label_name.clone(),
-            notify: false,
-            path: None,
-            sticky: false,
-            row_id: None,
-        };
-        new_label.save(&tx).await.expect("failed to create label");
-        let db_label = Label::load(new_label.local_id.unwrap(), &tx)
-            .await
-            .expect("failed to load label")
-            .expect("should have a value");
-        assert_eq!(new_label, db_label, "Label of type {:?} does not match", t);
-    }
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            for t in [LabelType::Label, LabelType::Folder] {
+                let label_name = random_string(1);
+                let mut new_label = Label {
+                    local_id: None,
+                    remote_id: Some(format!("Label-{t:?}").into()),
+                    local_parent_id: None,
+                    remote_parent_id: None,
+                    color: LabelColor::purple(),
+                    display: false,
+                    display_order: 0,
+                    expanded: false,
+                    label_type: LabelType::Folder,
+                    name: label_name.clone(),
+                    notify: false,
+                    path: None,
+                    sticky: false,
+                    row_id: None,
+                };
+                new_label.save(tx).await.expect("failed to create label");
+                let db_label = Label::load(new_label.local_id.unwrap(), tx)
+                    .await
+                    .expect("failed to load label")
+                    .expect("should have a value");
+                assert_eq!(new_label, db_label, "Label of type {:?} does not match", t);
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
 async fn create_local_label_100_char_long_name() {
     let mut tether = new_core_test_connection().await.connection();
-    let tx = tether.transaction().await.unwrap();
-    for t in [LabelType::Label, LabelType::Folder] {
-        let label_name = random_string(100);
-        let mut new_label = Label {
-            local_id: None,
-            remote_id: Some(format!("Label-{t:?}").into()),
-            local_parent_id: None,
-            remote_parent_id: None,
-            color: LabelColor::purple(),
-            display: false,
-            display_order: 0,
-            expanded: false,
-            label_type: LabelType::Folder,
-            name: label_name.clone(),
-            notify: false,
-            path: None,
-            sticky: false,
-            row_id: None,
-        };
-        new_label.save(&tx).await.expect("failed to create label");
-        let db_label = Label::load(new_label.local_id.unwrap(), &tx)
-            .await
-            .expect("failed to load label")
-            .expect("should have a value");
-        assert_eq!(new_label, db_label, "Label of type {:?} does not match", t);
-    }
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            for t in [LabelType::Label, LabelType::Folder] {
+                let label_name = random_string(100);
+                let mut new_label = Label {
+                    local_id: None,
+                    remote_id: Some(format!("Label-{t:?}").into()),
+                    local_parent_id: None,
+                    remote_parent_id: None,
+                    color: LabelColor::purple(),
+                    display: false,
+                    display_order: 0,
+                    expanded: false,
+                    label_type: LabelType::Folder,
+                    name: label_name.clone(),
+                    notify: false,
+                    path: None,
+                    sticky: false,
+                    row_id: None,
+                };
+                new_label.save(tx).await.expect("failed to create label");
+                let db_label = Label::load(new_label.local_id.unwrap(), tx)
+                    .await
+                    .expect("failed to load label")
+                    .expect("should have a value");
+                assert_eq!(new_label, db_label, "Label of type {:?} does not match", t);
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
 async fn create_local_label_has_ascending_order_per_type() {
     let mut tether = new_core_test_connection().await.connection();
-    let tx = tether.transaction().await.unwrap();
-    for t in [
-        LabelType::Label,
-        LabelType::Folder,
-        LabelType::System,
-        LabelType::ContactGroup,
-    ] {
-        let mut new_label1 = Label {
-            local_id: None,
-            remote_id: Some(format!("Label-{t:?}-01").into()),
-            local_parent_id: None,
-            remote_parent_id: None,
-            color: LabelColor::purple(),
-            display: false,
-            display_order: 0,
-            expanded: false,
-            label_type: LabelType::Folder,
-            name: "Label".to_owned(),
-            notify: false,
-            path: None,
-            sticky: false,
-            row_id: None,
-        };
-        new_label1.save(&tx).await.expect("failed to create label");
-        let mut new_label2 = Label {
-            local_id: None,
-            remote_id: Some(format!("Label-{t:?}-02").into()),
-            local_parent_id: None,
-            remote_parent_id: None,
-            color: LabelColor::purple(),
-            display: false,
-            display_order: 0,
-            expanded: false,
-            label_type: LabelType::Folder,
-            name: "Label".to_owned(),
-            notify: false,
-            path: None,
-            sticky: false,
-            row_id: None,
-        };
-        new_label2.save(&tx).await.expect("failed to create label");
-        // TODO
-        // assert_eq!(
-        //     new_label1.display_order + 1,
-        //     new_label2.display_order,
-        //     "Label order for type {:?} does not match",
-        //     t
-        // );
-    }
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            for t in [
+                LabelType::Label,
+                LabelType::Folder,
+                LabelType::System,
+                LabelType::ContactGroup,
+            ] {
+                let mut new_label1 = Label {
+                    local_id: None,
+                    remote_id: Some(format!("Label-{t:?}-01").into()),
+                    local_parent_id: None,
+                    remote_parent_id: None,
+                    color: LabelColor::purple(),
+                    display: false,
+                    display_order: 0,
+                    expanded: false,
+                    label_type: LabelType::Folder,
+                    name: "Label".to_owned(),
+                    notify: false,
+                    path: None,
+                    sticky: false,
+                    row_id: None,
+                };
+                new_label1.save(tx).await.expect("failed to create label");
+                let mut new_label2 = Label {
+                    local_id: None,
+                    remote_id: Some(format!("Label-{t:?}-02").into()),
+                    local_parent_id: None,
+                    remote_parent_id: None,
+                    color: LabelColor::purple(),
+                    display: false,
+                    display_order: 0,
+                    expanded: false,
+                    label_type: LabelType::Folder,
+                    name: "Label".to_owned(),
+                    notify: false,
+                    path: None,
+                    sticky: false,
+                    row_id: None,
+                };
+                new_label2.save(tx).await.expect("failed to create label");
+                // TODO
+                // assert_eq!(
+                //     new_label1.display_order + 1,
+                //     new_label2.display_order,
+                //     "Label order for type {:?} does not match",
+                //     t
+                // );
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
 async fn update_local_label() {
     let mut tether = new_core_test_connection().await.connection();
-    let tx = tether.transaction().await.unwrap();
-    let mut new_label = Label {
-        local_id: None,
-        remote_id: Some("MyLabel".into()),
-        local_parent_id: None,
-        remote_parent_id: None,
-        color: LabelColor::purple(),
-        display: false,
-        display_order: 0,
-        expanded: false,
-        label_type: LabelType::Folder,
-        name: "Label".to_owned(),
-        notify: false,
-        path: None,
-        sticky: false,
-        row_id: None,
-    };
-    new_label.save(&tx).await.expect("failed to create label");
-    let new_label2 = Label {
-        local_id: None,
-        remote_id: Some("MyOtherLabel".into()),
-        local_parent_id: None,
-        remote_parent_id: None,
-        color: LabelColor::purple(),
-        display: false,
-        display_order: 0,
-        expanded: false,
-        label_type: LabelType::Folder,
-        name: "Label".to_owned(),
-        notify: false,
-        path: None,
-        sticky: false,
-        row_id: None,
-    };
-    new_label.save(&tx).await.expect("failed to create label");
-    tx.commit().await.expect("failed to commit transaction");
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            let mut new_label = Label {
+                local_id: None,
+                remote_id: Some("MyLabel".into()),
+                local_parent_id: None,
+                remote_parent_id: None,
+                color: LabelColor::purple(),
+                display: false,
+                display_order: 0,
+                expanded: false,
+                label_type: LabelType::Folder,
+                name: "Label".to_owned(),
+                notify: false,
+                path: None,
+                sticky: false,
+                row_id: None,
+            };
+            new_label.save(tx).await.expect("failed to create label");
+            let new_label2 = Label {
+                local_id: None,
+                remote_id: Some("MyOtherLabel".into()),
+                local_parent_id: None,
+                remote_parent_id: None,
+                color: LabelColor::purple(),
+                display: false,
+                display_order: 0,
+                expanded: false,
+                label_type: LabelType::Folder,
+                name: "Label".to_owned(),
+                notify: false,
+                path: None,
+                sticky: false,
+                row_id: None,
+            };
+            new_label.save(tx).await.expect("failed to create label");
 
-    new_label.color = LabelColor::black();
-    let tx = tether.transaction().await.unwrap();
-    new_label.save(&tx).await.expect("failed to save label");
-    tx.commit().await.expect("failed to commit transaction");
-    compare_db_label(&tether, new_label.local_id.unwrap(), |l| {
-        assert_eq!(l.color, LabelColor::black());
-    })
-    .await;
+            new_label.color = LabelColor::black();
+            new_label.save(tx).await.expect("failed to save label");
+            compare_db_label(tx, new_label.local_id.unwrap(), |l| {
+                assert_eq!(l.color, LabelColor::black());
+            })
+            .await;
 
-    new_label.name = "NewName".to_owned();
-    let tx = tether.transaction().await.unwrap();
-    new_label.save(&tx).await.expect("failed to save label");
-    tx.commit().await.expect("failed to commit transaction");
+            new_label.name = "NewName".to_owned();
+            new_label.save(tx).await.expect("failed to save label");
 
-    compare_db_label(&tether, new_label.local_id.unwrap(), |l| {
-        assert_eq!(l.name, "NewName");
-    })
-    .await;
+            compare_db_label(tx, new_label.local_id.unwrap(), |l| {
+                assert_eq!(l.name, "NewName");
+            })
+            .await;
 
-    new_label.remote_parent_id = new_label2.remote_id.clone();
-    new_label.path = Some("MyLabel/NewName".into());
-    let tx = tether.transaction().await.unwrap();
-    new_label.save(&tx).await.expect("failed to save label");
-    tx.commit().await.expect("failed to commit transaction");
-    compare_db_label(&tether, new_label.local_id.unwrap(), |l| {
-        assert_eq!(l.remote_parent_id, new_label2.remote_id);
-        assert_eq!(l.path, Some("MyLabel/NewName".into()));
-    })
-    .await;
+            new_label.remote_parent_id = new_label2.remote_id.clone();
+            new_label.path = Some("MyLabel/NewName".into());
+            new_label.save(tx).await.expect("failed to save label");
+
+            compare_db_label(tx, new_label.local_id.unwrap(), |l| {
+                assert_eq!(l.remote_parent_id, new_label2.remote_id);
+                assert_eq!(l.path, Some("MyLabel/NewName".into()));
+            })
+            .await;
+            Ok(())
+        })
+        .await
+        .unwrap();
 }
 
 async fn compare_db_label(tx: &Tether, id: LocalLabelId, f: impl FnOnce(&Label)) {
@@ -365,25 +398,28 @@ async fn compare_db_label(tx: &Tether, id: LocalLabelId, f: impl FnOnce(&Label))
 async fn test_watch_label() {
     let stash = new_core_test_connection().await;
     let mut tether = stash.connection();
-    let tx = tether.transaction().await.unwrap();
+    let mut label = tether
+        .tx::<_, _, StashError>(async |tx| {
+            let mut label: Label = ApiLabel {
+                id: LabelId::from("label_id"),
+                parent_id: None,
+                name: "MyLabel".to_owned(),
+                path: None,
+                color: "#ffffff".to_owned(),
+                label_type: ApiLabelType::Label,
+                notify: false,
+                display: true,
+                sticky: false,
+                expanded: true,
+                order: 0,
+            }
+            .into();
 
-    let mut label: Label = ApiLabel {
-        id: LabelId::from("label_id"),
-        parent_id: None,
-        name: "MyLabel".to_owned(),
-        path: None,
-        color: "#ffffff".to_owned(),
-        label_type: ApiLabelType::Label,
-        notify: false,
-        display: true,
-        sticky: false,
-        expanded: true,
-        order: 0,
-    }
-    .into();
-
-    label.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+            label.save(tx).await.unwrap();
+            Ok(label)
+        })
+        .await
+        .unwrap();
 
     let db_label = Label::load(label.local_id.unwrap(), &tether)
         .await
@@ -395,9 +431,10 @@ async fn test_watch_label() {
     assert_eq!(db_label, label);
 
     label.display_order = 10;
-    let tx = tether.transaction().await.unwrap();
-    label.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |tx| label.save(tx).await)
+        .await
+        .unwrap();
 
     watcher.recv_async().await.unwrap();
 }
