@@ -555,6 +555,11 @@ impl MailContext {
                         core_context.user_id().clone(),
                     ));
                 }
+                // Initial context creation might have failed, lets re-initialize.
+                // In best case scenario it will just check that it was initialized before and then early exit.
+                if matches!(init, ShouldInitializeMailUserContext::Yes) {
+                    MailUserContext::initialize_async(upgraded.clone()).await?;
+                }
                 return Ok(upgraded);
             }
         }

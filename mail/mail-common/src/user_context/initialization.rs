@@ -76,7 +76,21 @@ impl MailUserContext {
             IncomingDefaultLocation::initialize(watcher, ctx.api(), ctx.user_stash()).await
         });
 
-        try_join!(
+        let abort_handles = [
+            watcher_task_handle.abort_handle(),
+            labels.abort_handle(),
+            contacts.abort_handle(),
+            counters.abort_handle(),
+            event_loop.abort_handle(),
+            user_settings.abort_handle(),
+            mail_settings.abort_handle(),
+            addresses.abort_handle(),
+            inc_defs.abort_handle(),
+        ]
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        let res = try_join!(
             Self::initial_sync_for(MailUserContextLoadingStage::Labels, labels),
             Self::initial_sync_for(MailUserContextLoadingStage::Contacts, contacts),
             Self::initial_sync_for(MailUserContextLoadingStage::Counters, counters),
@@ -85,12 +99,20 @@ impl MailUserContext {
             Self::initial_sync_for(MailUserContextLoadingStage::MailSettings, mail_settings),
             Self::initial_sync_for(MailUserContextLoadingStage::Addresses, addresses),
             Self::initial_sync_for(MailUserContextLoadingStage::IncomingDefaults, inc_defs),
-        )?;
+        );
 
-        debug!("Syncing Complete in {:?}", t0.elapsed());
-        watcher_task_handle.abort();
+        abort_handles.into_iter().for_each(|a| a.abort());
 
-        Ok(())
+        match res {
+            Ok(_) => {
+                debug!("Syncing Complete in {:?}", t0.elapsed());
+                Ok(())
+            }
+            Err(e) => {
+                error!("Syncing Failed in {:?}", t0.elapsed());
+                Err(e)
+            }
+        }
     }
 
     /// Initialize a component.
@@ -151,7 +173,6 @@ impl MailUserContext {
     ) -> JoinHandle<AsyncTaskResult<T>>
     where
         T: Send + 'static,
-        // F: AsyncFnOnce(Arc<Self>, Arc<InitializationWatcher>) -> T + Send + 'static,
         F: FnOnce(Arc<Self>, Arc<InitializationWatcher>) -> Fut,
         Fut: Future<Output = T> + Send + 'static,
     {
