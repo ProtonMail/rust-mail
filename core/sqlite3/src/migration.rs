@@ -106,30 +106,32 @@ impl Migrator {
         migrations: &mut [Box<dyn Migration>],
     ) -> Result<usize, MigratorError> {
         sort_migrations_and_check_for_conflicts(migrations);
+        tether
+            .tx(async |tx| {
+                let expected_version = version_from_migration_list(migrations);
+                // Check if version table exists, if not we are at version 0.
+                let current_version = if let Some(version) =
+                    get_current_table_version(tx, version_table_name).await?
+                {
+                    debug!("Found current version={version}");
+                    if version > expected_version {
+                        return Err(MigratorError::InvalidVersion(version));
+                    }
+                    version
+                } else {
+                    debug!("No version table found, initializing");
+                    create_version_table(tx).await?;
+                    set_version_table_version(tx, version_table_name, 0).await?;
+                    0
+                };
 
-        let tx = tether.transaction().await?;
-        let expected_version = version_from_migration_list(migrations);
-        // Check if version table exists, if not we are at version 0.
-        let current_version =
-            if let Some(version) = get_current_table_version(&tx, version_table_name).await? {
-                debug!("Found current version={version}");
-                if version > expected_version {
-                    return Err(MigratorError::InvalidVersion(version));
-                }
-                version
-            } else {
-                debug!("No version table found, initializing");
-                create_version_table(&tx).await?;
-                set_version_table_version(&tx, version_table_name, 0).await?;
-                0
-            };
-
-        debug!("Running migrations");
-        run_migrations(&tx, version_table_name, current_version, migrations).await?;
-        debug!("Migrations complete");
-        let version = version_from_migration_list(migrations);
-        tx.commit().await?;
-        Ok(version)
+                debug!("Running migrations");
+                run_migrations(tx, version_table_name, current_version, migrations).await?;
+                debug!("Migrations complete");
+                let version = version_from_migration_list(migrations);
+                Ok(version)
+            })
+            .await
     }
 }
 
