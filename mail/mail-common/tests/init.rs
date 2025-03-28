@@ -43,3 +43,35 @@ async fn test_second_init_works_if_first_fails() {
 
     let _user_ctx = ctx.mail_user_context().await;
 }
+
+#[tokio::test]
+async fn test_initialized_returns_none_when_no_context() {
+    let ctx = MailTestContext::new().await;
+    let user_ctx_opt = ctx.initialized_mail_user_context().await;
+    assert!(user_ctx_opt.is_none());
+}
+
+#[tokio::test]
+async fn test_initialized_returns_none_when_context_is_not_initialized() {
+    let ctx = MailTestContext::new().await;
+    let _ = ctx.uninitialized_mail_user_context().await;
+    let user_ctx_opt = ctx.initialized_mail_user_context().await;
+    assert!(user_ctx_opt.is_none());
+}
+
+#[tokio::test]
+async fn test_initialized_returns_some_if_context_is_initialized() {
+    let ctx = MailTestContext::new().await;
+
+    let init_params = TestParams::default_basic();
+    ctx.setup_user_repeated(init_params, 1).await;
+
+    let old_ctx = ctx.mail_user_context().await;
+    tracing::info!("Initialized");
+
+    let user_ctx_opt = ctx.initialized_mail_user_context().await;
+    assert!(user_ctx_opt.is_some());
+
+    // In order to have it retained
+    drop(old_ctx);
+}

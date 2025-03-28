@@ -569,10 +569,12 @@ impl MailContext {
         active_contexts.retain(|_, ctx| ctx.strong_count() != 0);
 
         let Some(existing) = active_contexts.get(core_context.user_id()) else {
+            tracing::debug!("There is no existing context");
             return Ok(None);
         };
 
         let Some(upgraded) = existing.upgrade() else {
+            tracing::debug!("Can't upgrade existing context");
             return Ok(None);
         };
 
@@ -586,6 +588,7 @@ impl MailContext {
         }
 
         if !upgraded.is_initialized().await? {
+            tracing::debug!("Existing context is not initialized");
             return Ok(None);
         }
 
