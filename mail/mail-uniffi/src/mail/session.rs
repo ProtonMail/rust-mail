@@ -1,8 +1,8 @@
-use crate::core::datatypes::{ApiConfig, Id};
+use crate::core::datatypes::{ApiConfig, AppProtection, AppSettings, AppSettingsDiff, Id};
 use crate::core::verification::{ChallengeNotifierWrap, DynChallengeNotifier};
 use crate::core::{FFIKeyChain, StoredAccountState, StoredSession, StoredSessionState};
 use crate::core::{OSKeyChain, StoredAccount};
-use crate::errors::{LoginError, UserSessionError, VoidSessionResult};
+use crate::errors::{LoginError, PinAuthError, PinSetError, UserSessionError, VoidSessionResult};
 use crate::mail::logging::init_log;
 use crate::mail::state::MailUserContextMap;
 use crate::mail::{LoginFlow, MailUserSession};
@@ -14,7 +14,9 @@ use crate::{
 use futures::TryFutureExt;
 use itertools::Itertools;
 use proton_core_common::db::account::SessionEncryptionKey;
+use proton_core_common::models::AppSettings as RealAppSettings;
 use proton_core_common::os::KeyChainExt;
+use proton_core_common::pin_code::PinCode;
 use proton_core_common::{CoreAccountState, CoreSessionState};
 use proton_mail_common::actions::draft::Send;
 use proton_mail_common::context::ShouldInitializeMailUserContext;
@@ -754,6 +756,92 @@ impl MailSession {
         })
         .await
         .map_err(UserSessionError::from)
+    }
+
+    /// What aditional protection of the App is configured.
+    ///
+    pub async fn app_protection(&self) -> Result<AppProtection, UserSessionError> {
+        let ctx = self.mail_ctx.clone();
+
+        uniffi_async(async move {
+            let tether = ctx.core_context().account_stash().connection();
+            let app_settings = RealAppSettings::get_or_default(&tether).await;
+
+            Result::<_, RealProtonMailError>::Ok(app_settings.protection.into())
+        })
+        .await
+        .map_err(UserSessionError::from)
+    }
+
+    /// Create a PIN App protection.
+    ///
+    /// The same PIN will be required for authentication of the user
+    /// or when user want to change the way of authentication in the App.
+    ///
+    pub async fn set_pin_code(&self, pin: Vec<u8>) -> Result<(), PinSetError> {
+        let ctx = self.mail_ctx.core_context().clone();
+
+        uniffi_async(async move {
+            PinCode::create_pin(ctx, pin).await?;
+
+            Result::<_, RealProtonMailError>::Ok(())
+        })
+        .await
+        .map_err(PinSetError::from)
+    }
+
+    /// Authenticate stored PIN
+    ///
+    pub async fn verify_pin_code(&self, pin: Vec<u8>) -> Result<(), PinAuthError> {
+        let ctx = self.mail_ctx.core_context().clone();
+
+        uniffi_async(async move {
+            PinCode::validate_pin(&ctx, pin).await?;
+
+            Result::<_, RealProtonMailError>::Ok(())
+        })
+        .await
+        .map_err(PinAuthError::from)
+    }
+
+    /// Change the settings of the application.
+    ///
+    pub async fn get_app_settings(&self) -> Result<AppSettings, UserSessionError> {
+        let ctx = self.mail_ctx.core_context().clone();
+
+        uniffi_async(async move {
+            let tether = ctx.account_stash().connection();
+            let app_settings = RealAppSettings::get_or_default(&tether).await;
+
+            Result::<_, RealProtonMailError>::Ok(app_settings.into())
+        })
+        .await
+        .map_err(UserSessionError::from)
+        .into()
+    }
+
+    /// Change the settings of the application.
+    ///
+    pub async fn change_app_settings(
+        &self,
+        settings: AppSettingsDiff,
+    ) -> Result<(), UserSessionError> {
+        let ctx = self.mail_ctx.core_context().clone();
+
+        uniffi_async(async move {
+            let mut tether = ctx.account_stash().connection();
+            let real_app_settings = RealAppSettings::get_or_default(&tether).await;
+            let mut real_app_settings = settings.merge_with_current(real_app_settings);
+            let bond = tether.transaction().await?;
+
+            real_app_settings.save(&bond).await?;
+            bond.commit().await?;
+
+            Result::<_, RealProtonMailError>::Ok(())
+        })
+        .await
+        .map_err(UserSessionError::from)
+        .into()
     }
 }
 

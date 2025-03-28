@@ -34,6 +34,7 @@ impl AppKeyChain {
         match kind {
             KeyChainEntryKind::EncryptionKey => &self.session_key,
             KeyChainEntryKind::DeviceKey => &self.device_key,
+            KeyChainEntryKind::PinHash => panic!("TUI does not support pin protection yet"),
         }
     }
 }

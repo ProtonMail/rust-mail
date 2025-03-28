@@ -4324,6 +4324,7 @@ dependencies = [
  "proton-crypto",
  "proton-crypto-account",
  "proton-crypto-notifications",
+ "proton-crypto-pin-hash",
  "proton-event-loop",
  "proton-sqlite3",
  "proton-task-service",
@@ -4466,6 +4467,15 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "proton-crypto-pin-hash"
+version = "0.1.0"
+dependencies = [
+ "argon2",
+ "thiserror 1.0.69",
+ "zeroize",
 ]
 
 [[package]]

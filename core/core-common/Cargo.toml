@@ -26,6 +26,7 @@ proton-action-queue = { workspace = true }
 proton-crypto = { workspace = true }
 proton-crypto-account = { workspace = true, features = ["sql"] }
 proton-crypto-notifications = { workspace = true }
+proton-crypto-pin-hash = { workspace = true }
 proton-event-loop = { workspace = true }
 proton-task-service = { workspace = true }
 proton-sqlite3 = { workspace = true }

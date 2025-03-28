@@ -4,6 +4,7 @@ mod draft_error;
 mod error_reason;
 mod event_error;
 mod login_error;
+mod pin_error;
 mod proton_error;
 mod session_error;
 pub(crate) mod unexpected;
@@ -15,6 +16,7 @@ pub use self::draft_error::*;
 pub use self::error_reason::*;
 pub use self::event_error::*;
 pub use self::login_error::*;
+pub use self::pin_error::*;
 pub use self::proton_error::*;
 pub use self::session_error::*;
 

@@ -15,6 +15,7 @@ use proton_api_core::login::LoginError;
 use proton_api_core::service::ApiServiceError;
 use proton_core_common::ContactError;
 use proton_core_common::models::LabelError;
+use proton_core_common::pin_code::PinError;
 use proton_event_loop::EventLoopError;
 use proton_event_loop::subscriber::SubscriberError;
 use tracing::error;
@@ -68,6 +69,25 @@ impl From<ApiServiceError> for ProtonMailError {
                 error!("unexpected error from ApiServiceError: {unexpected:?}");
                 Self::from(unexpected)
             }
+        }
+    }
+}
+
+impl From<PinError> for ProtonMailError {
+    fn from(value: PinError) -> Self {
+        match value {
+            PinError::TooShort => Self::reason(PinSetErrorReason::TooShort),
+            PinError::TooLong => Self::reason(PinSetErrorReason::TooLong),
+            PinError::Malformed => Self::reason(PinSetErrorReason::Malformed),
+            PinError::MissingPinMetadata => Self::Unexpected(Unexpected::Internal),
+            PinError::MissingPinHash => Self::Unexpected(Unexpected::Internal),
+            PinError::TooManyAttempts => Self::reason(PinAuthErrorReason::TooManyAttempts),
+            PinError::TooFrequentAttempts => Self::reason(PinAuthErrorReason::TooFrequentAttempts),
+            PinError::IncorrectPin => Self::reason(PinAuthErrorReason::IncorrectPin),
+            PinError::HashError(_hashing_error) => Self::Unexpected(Unexpected::Crypto),
+            PinError::Keychain(_core_context_error) => Self::Unexpected(Unexpected::Crypto),
+            PinError::StashError(_stash_error) => Self::Unexpected(Unexpected::Database),
+            PinError::JoinError(_join_error) => Self::Unexpected(Unexpected::Internal),
         }
     }
 }

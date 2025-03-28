@@ -38,6 +38,10 @@ pub enum OSKeyChainEntryKind {
     /// Shared key between all accounts, used to decrypt push notifications
     ///
     DeviceKey,
+
+    /// App protection - PIN hash
+    ///
+    PinHash,
 }
 
 impl From<KeyChainEntryKind> for OSKeyChainEntryKind {
@@ -45,6 +49,7 @@ impl From<KeyChainEntryKind> for OSKeyChainEntryKind {
         match value {
             KeyChainEntryKind::EncryptionKey => Self::EncryptionKey,
             KeyChainEntryKind::DeviceKey => Self::DeviceKey,
+            KeyChainEntryKind::PinHash => Self::PinHash,
         }
     }
 }
