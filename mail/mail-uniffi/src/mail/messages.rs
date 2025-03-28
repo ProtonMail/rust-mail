@@ -885,6 +885,30 @@ pub async fn mark_messages_ham(mailbox: Arc<Mailbox>, message_id: Id) -> Result<
     .into()
 }
 
+/// Mark multiple messages as ham (not spam) AKA as legitimate
+///
+/// # Parameters
+///
+/// * `session`  - The session to use for the request.
+/// * `id`       - The local ID of the message to mark as spam
+///
+/// # Errors
+///
+/// This will always error out as it's not yet implemented
+///
+#[allow(unused)]
+#[allow(clippy::unused_async)]
+#[uniffi_export]
+#[returns(VoidActionResult)]
+pub async fn phising_attempt(
+    mailbox: Arc<MailUserSession>,
+    message_id: Id,
+) -> Result<(), ActionError> {
+    Err(ActionError::Other(ProtonError::OtherReason(
+        crate::errors::OtherErrorReason::Other("Unimplemented!".into()),
+    )))
+}
+
 /// Struct returned by [`get_embedded_attachment`] representing the data of an embedded attachment.
 #[derive(Clone, uniffi::Record)]
 pub struct EmbeddedAttachmentInfo {
