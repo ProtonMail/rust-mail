@@ -32,7 +32,6 @@ async fn create_empty_draft() {
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     let mut message = draft_message();
 
@@ -54,7 +53,7 @@ async fn create_empty_draft() {
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
@@ -135,7 +134,6 @@ async fn create_empty_draft_and_save_twice() {
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     let mut message = draft_message();
     message.metadata.label_ids.push(LabelId::drafts());
@@ -233,7 +231,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
     ctx.mock_get_message(&updated_message.metadata.id, updated_message.clone())
         .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
@@ -278,7 +276,6 @@ async fn create_draft_reply_without_body_is_error() {
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     // Create one message we can reply to.
     let mut remote_existing_message = message_body_test_message_simple();
@@ -286,7 +283,7 @@ async fn create_draft_reply_without_body_is_error() {
     remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
 
     ctx.setup_user(params.clone()).await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
     let (mut existing_message, _, _) = Message::from_api_data(remote_existing_message, &tether)
         .await
@@ -324,7 +321,6 @@ async fn create_draft_reply_should_fail_for_drafts() {
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     // Create one message we can reply to.
     let mut remote_existing_message = message_body_test_message_simple();
@@ -334,7 +330,7 @@ async fn create_draft_reply_should_fail_for_drafts() {
     remote_existing_message.metadata.flags = MessageFlags::empty();
 
     ctx.setup_user(params.clone()).await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
     let (mut existing_message, _, _) = Message::from_api_data(remote_existing_message, &tether)
         .await
@@ -375,7 +371,6 @@ async fn metadata_is_create_for_existing_not_opened_draft() {
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     let mut message = draft_message();
     message.metadata.label_ids.push(LabelId::drafts());
@@ -384,7 +379,7 @@ async fn metadata_is_create_for_existing_not_opened_draft() {
     ctx.mock_get_message_with_expected(&message.metadata.id, message.clone(), 2)
         .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
     let mut message = Message::from_api_metadata(message.metadata, &tether)
         .await
@@ -456,7 +451,6 @@ async fn draft_save_failure_creates_send_result_with_correct_origin() {
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     let mut message = message_body_test_message_simple();
     message.metadata.label_ids.push(LabelId::drafts());
@@ -473,7 +467,7 @@ async fn draft_save_failure_creates_send_result_with_correct_origin() {
     )
     .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
@@ -542,7 +536,6 @@ async fn create_draft_reply_impl(
     )
     .await;
     let params = draft_test_params_with_mime_type(mime_type);
-    let user_ctx = ctx.mail_user_context().await;
 
     // Create one message we can reply to.
     let mut remote_existing_message = draft_message_with_attachments();
@@ -553,7 +546,7 @@ async fn create_draft_reply_impl(
     remote_existing_message.body.attachments.reverse();
 
     ctx.setup_user(params.clone()).await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let mut tether = user_ctx.user_stash().connection();
     let (mut existing_message, _, _) =
@@ -738,7 +731,6 @@ async fn open_draft_sync_status_success() {
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     let message = draft_message();
 
@@ -757,7 +749,7 @@ async fn open_draft_sync_status_success() {
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
@@ -790,7 +782,6 @@ async fn open_draft_sync_status_cached() {
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     let mut message = draft_message();
     message.metadata.label_ids.push(LabelId::drafts());
@@ -818,7 +809,7 @@ async fn open_draft_sync_status_cached() {
     )
     .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
@@ -851,14 +842,13 @@ async fn open_new_draft_which_was_not_saved_on_server_should_not_report_cached_s
     )
     .await;
     let params = draft_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     let mut message = message_body_test_message_simple();
     message.metadata.label_ids.push(LabelId::drafts());
 
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();

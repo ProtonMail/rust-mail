@@ -5,6 +5,7 @@ use crate::messages::Messages;
 use crate::widgets::{ScrollableList, ScrollableListState};
 use anyhow::{Context as _, anyhow};
 use proton_core_common::db::account::CoreAccount;
+use proton_mail_common::context::ShouldInitializeMailUserContext;
 use proton_mail_common::{MailContext, MailContextError};
 use ratatui::Frame;
 use ratatui::crossterm::event::{Event, KeyCode};
@@ -140,7 +141,11 @@ impl AppStateHandler for Model {
                             }
                             Some(sess) => {
                                 let context = ctx
-                                    .user_context_from_session(sess, None)
+                                    .user_context_from_session(
+                                        sess,
+                                        None,
+                                        ShouldInitializeMailUserContext::Yes,
+                                    )
                                     .await
                                     .context("Error creating MailUserContext")?;
                                 let message = mailbox::Model::new(context).await?;

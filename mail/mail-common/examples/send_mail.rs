@@ -7,28 +7,15 @@ use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_api_core::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::{InMemoryKeyChain, KeyChainExt};
+use proton_mail_common::MailContext;
 use proton_mail_common::datatypes::Disposition;
 use proton_mail_common::draft::Draft;
 use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry};
 use proton_mail_common::models::Attachment;
-use proton_mail_common::{
-    MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
-    MailUserContextLoadingStage,
-};
 use tempdir::TempDir;
 use tracing::{error, info};
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::filter::LevelFilter;
-
-struct InitCallback;
-
-impl MailUserContextInitializationCallback for InitCallback {
-    fn on_stage(&self, stage: MailUserContextLoadingStage) {
-        tracing::info!("Init: {stage:?}");
-    }
-
-    fn on_stage_err(&self, _: MailUserContextLoadingStage, _: MailContextError) {}
-}
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -97,12 +84,6 @@ async fn main() {
         .unwrap();
 
     let user_ctx = ctx.user_context_from_login_flow(&mut flow).await.unwrap();
-
-    // Sync initial data
-    let cb = InitCallback;
-    MailUserContext::initialize_async(user_ctx.clone(), &cb)
-        .await
-        .unwrap();
 
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
 

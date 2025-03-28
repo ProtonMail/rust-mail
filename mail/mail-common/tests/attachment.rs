@@ -16,7 +16,6 @@ use std::path::PathBuf;
 async fn test_load_attachment_buffer() {
     let ctx = MailTestContext::new().await;
     let params = TestParams::default_basic();
-    let user_ctx = ctx.mail_user_context().await;
 
     // Api mock.
     let conversations = params.conversations.clone();
@@ -28,7 +27,7 @@ async fn test_load_attachment_buffer() {
     ctx.mock_get_attachment_data(test_attachment.id.clone(), testdata_attachment_data(), 1)
         .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
     // Create a mailbox
     let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await
@@ -68,7 +67,6 @@ async fn test_load_attachment_buffer() {
 async fn concurrency() {
     let ctx = MailTestContext::new().await;
     let params = TestParams::default_basic();
-    let user_ctx = ctx.mail_user_context().await;
 
     // Api mock.
     let conversations = params.conversations.clone();
@@ -80,7 +78,7 @@ async fn concurrency() {
     ctx.mock_get_attachment_data(test_attachment.id.clone(), testdata_attachment_data(), 1..)
         .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
     // Create a mailbox
     let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await
@@ -124,7 +122,6 @@ async fn concurrency() {
 async fn load_attachment_from_cache() {
     let ctx = MailTestContext::new().await;
     let params = TestParams::default_basic();
-    let user_ctx = ctx.mail_user_context().await;
 
     // Api mock.
     let conversations = params.conversations.clone();
@@ -136,7 +133,7 @@ async fn load_attachment_from_cache() {
     ctx.mock_get_attachment_data(test_attachment.id.clone(), testdata_attachment_data(), 1)
         .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
     // Create a mailbox
     let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await
@@ -176,9 +173,9 @@ async fn load_attachment_content_first_time() {
     //   * Check cache is empty
     let ctx = MailTestContext::new().await;
     let params = TestParams::default_basic();
-    let user_ctx = ctx.mail_user_context().await;
     let test_attachment = params.attachments.first().unwrap();
     let mut attachment: Attachment = test_attachment.clone().into();
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
     let tx = tether.transaction().await.unwrap();
     attachment.save(&tx).await.unwrap();
@@ -187,8 +184,8 @@ async fn load_attachment_content_first_time() {
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_attachment_data(test_attachment.id.clone(), testdata_attachment_data(), 1)
         .await;
-    ctx.init_user(user_ctx.clone()).await;
     ctx.catch_all().await;
+    ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Action:
     //   * Get attachment

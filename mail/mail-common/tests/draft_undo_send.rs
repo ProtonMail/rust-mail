@@ -25,10 +25,6 @@ async fn draft_undo_send() {
 
     let params = message_body_test_params();
 
-    let user_ctx = ctx.mail_user_context().await;
-
-    let mut tether = user_ctx.user_stash().connection();
-
     let mut sent_message = message_body_test_message_simple();
     sent_message.metadata.label_ids.clear();
     sent_message.metadata.label_ids.push(LabelId::sent());
@@ -49,7 +45,9 @@ async fn draft_undo_send() {
     )
     .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
 
     let mut local_sent_message = Message::from_api_metadata(sent_message.metadata.clone(), &tether)
         .await
@@ -100,10 +98,6 @@ async fn draft_undo_send_failure() {
 
     let params = message_body_test_params();
 
-    let user_ctx = ctx.mail_user_context().await;
-
-    let mut tether = user_ctx.user_stash().connection();
-
     let mut sent_message = message_body_test_message_simple();
     sent_message.metadata.label_ids.clear();
     sent_message.metadata.label_ids.push(LabelId::sent());
@@ -120,7 +114,9 @@ async fn draft_undo_send_failure() {
     )
     .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
 
     let mut local_sent_message = Message::from_api_metadata(sent_message.metadata.clone(), &tether)
         .await

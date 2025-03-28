@@ -6,28 +6,15 @@ use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::models::Label;
 use proton_core_common::models::ModelIdExtension;
 use proton_core_common::os::{InMemoryKeyChain, KeyChainExt};
+use proton_mail_common::MailContext;
 use proton_mail_common::datatypes::{ReadFilter, SystemLabelId};
 use proton_mail_common::mail_scroller::{MailScroller, MailScrollerSource};
-use proton_mail_common::{
-    MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
-    MailUserContextLoadingStage,
-};
 use std::fmt::Debug;
 use std::sync::Arc;
 use tempdir::TempDir;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::filter::LevelFilter;
-
-struct InitCallback;
-
-impl MailUserContextInitializationCallback for InitCallback {
-    fn on_stage(&self, stage: MailUserContextLoadingStage) {
-        tracing::info!("Init: {stage:?}");
-    }
-
-    fn on_stage_err(&self, _: MailUserContextLoadingStage, _: MailContextError) {}
-}
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -88,12 +75,6 @@ async fn main() {
         .unwrap();
 
     let user_ctx = ctx.user_context_from_login_flow(&mut flow).await.unwrap();
-
-    // Sync initial data
-    let cb = InitCallback;
-    MailUserContext::initialize_async(user_ctx.clone(), &cb)
-        .await
-        .unwrap();
 
     let tether = user_ctx.user_stash().connection();
     let label = Label::find_by_remote_id(LabelId::inbox(), &tether)

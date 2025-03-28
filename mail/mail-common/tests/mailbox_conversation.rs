@@ -98,8 +98,6 @@ async fn test_new_mailbox_sync_conversations() {
     ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
 
-    ctx.init_user(user_ctx.clone()).await;
-
     // Create a mailbox
     let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await

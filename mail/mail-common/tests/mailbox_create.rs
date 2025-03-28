@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use proton_api_core::services::proton::Label as ApiLabel;
 use proton_api_core::services::proton::{LabelId, LabelType as ApiLabelType};
 use proton_api_mail::services::proton::common::MessageId;
@@ -41,7 +39,6 @@ async fn test_new_mailbox_sync_conversations() {
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
-    ctx.init_user(Arc::clone(&user_ctx)).await;
 
     // Create a mailbox
     let mailbox1 = Mailbox::with_remote_id(
@@ -146,7 +143,6 @@ async fn test_new_mailbox_sync_messages() {
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
-    ctx.init_user(Arc::clone(&user_ctx)).await;
 
     // Create a mailbox
     let mailbox1 = Mailbox::with_remote_id(
@@ -254,7 +250,6 @@ async fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
     ctx.catch_all().await;
 
     let user_ctx = ctx.mail_user_context().await;
-    ctx.init_user(Arc::clone(&user_ctx)).await;
 
     // Create a drafts mailbox
     let mailbox_drafts =

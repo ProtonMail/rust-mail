@@ -104,7 +104,7 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
     // Setup
     // * Create all given messages in stash
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
 
     let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
@@ -139,7 +139,7 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
     }
     ctx.catch_all().await;
 
-    ctx.init_user(user_ctx.clone()).await;
+    ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await
@@ -190,7 +190,7 @@ async fn mark_message_unread(messages: &[TestItem], expected_unread: usize) {
     // Setup
     // * Create all given messages in stash
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     let tether = user_ctx.user_stash().connection();
 
     let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
@@ -224,7 +224,7 @@ async fn mark_message_unread(messages: &[TestItem], expected_unread: usize) {
     }
     ctx.catch_all().await;
 
-    ctx.init_user(user_ctx.clone()).await;
+    ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await

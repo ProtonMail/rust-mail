@@ -5,7 +5,7 @@ use wiremock::{Mock, ResponseTemplate};
 #[tokio::test]
 async fn test_mock_context() {
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     Mock::given(method("GET"))
         .and(path("/api/core/v4/tests/ping"))
         .respond_with(ResponseTemplate::new(200))

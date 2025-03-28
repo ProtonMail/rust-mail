@@ -40,7 +40,6 @@ async fn single_recipient_validation(email: &str, response: Response, state: Val
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let user_ctx = ctx.mail_user_context().await;
 
     let (cb, receiver) = ChannelBackgroundValidationComplete::new(1);
     let list = ValidatingRecipientList::new(Some(cb));
@@ -60,7 +59,7 @@ async fn single_recipient_validation(email: &str, response: Response, state: Val
         }
     };
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     list.add_single(
         &user_ctx,
@@ -115,7 +114,6 @@ async fn group_recipient_validation(email: &str, response: Response, state: Vali
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let user_ctx = ctx.mail_user_context().await;
 
     let (cb, receiver) = ChannelBackgroundValidationComplete::new(1);
     let list = ValidatingRecipientList::new(Some(cb));
@@ -135,7 +133,7 @@ async fn group_recipient_validation(email: &str, response: Response, state: Vali
         }
     };
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     list.add_group(
         &user_ctx,

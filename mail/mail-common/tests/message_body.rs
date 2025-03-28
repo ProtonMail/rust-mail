@@ -26,7 +26,6 @@ async fn mailbox_message_body_simple() {
     )
     .await;
     let params = message_body_test_params();
-    let user_ctx = ctx.mail_user_context().await;
 
     let message = message_body_test_message_simple();
 
@@ -38,7 +37,7 @@ async fn mailbox_message_body_simple() {
     ctx.mock_get_messages_total_expect(vec![message.metadata.clone()], 1, 1)
         .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create a mailbox and sync.
     let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
@@ -98,7 +97,6 @@ async fn mailbox_message_body_mime() {
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let user_ctx = ctx.mail_user_context().await;
 
     let message = message_body_test_message_mime();
 
@@ -108,7 +106,7 @@ async fn mailbox_message_body_mime() {
         .await;
     ctx.mock_get_messages(vec![message.metadata.clone()]).await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await
@@ -199,7 +197,6 @@ async fn mailbox_message_retains_pgp_attachments() {
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let user_ctx = ctx.mail_user_context().await;
 
     let message = message_body_test_message_mime();
 
@@ -209,7 +206,7 @@ async fn mailbox_message_retains_pgp_attachments() {
         .await;
     ctx.mock_get_messages(vec![message.metadata.clone()]).await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
         .await

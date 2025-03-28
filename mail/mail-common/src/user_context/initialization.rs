@@ -14,8 +14,7 @@ use tokio::task::JoinHandle;
 use tracing::{Level, debug, error, warn};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum MailUserContextLoadingStage {
-    Initialization,
+enum MailUserContextLoadingStage {
     UserSettings,
     MailSettings,
     Addresses,
@@ -23,23 +22,81 @@ pub enum MailUserContextLoadingStage {
     Labels,
     Counters,
     Contacts,
-    Finished,
-}
-pub trait MailUserContextInitializationCallback: Send + Sync + 'static {
-    fn on_stage(&self, stage: MailUserContextLoadingStage);
-    fn on_stage_err(&self, stage: MailUserContextLoadingStage, err: MailContextError);
 }
 
 impl MailUserContext {
+    /// Initialize the mail user context, running all the necessary syncs to ensure the context is ready to be used.
+    /// Syncs are mostly run in the parallel, but updating message & conversation count are dependent on labels, so it is run in sequence.
+    ///
+    /// # Warning
+    ///
+    /// This function probably should not be called explicitly.
+    /// It is called automatically during user context session creation
+    ///
+    /// # Arguments
+    ///
+    /// * `ctx` - The mail user context to initialize, it is vital to have it as Arc, as it will be cloned multiple times, and passed to the tokio::task.
+    ///
+    /// # Returns
+    ///
+    /// An error if the initialization failed for any reason
+    ///
+    #[tracing::instrument(level = Level::DEBUG, skip(ctx))]
+    pub async fn initialize_async(ctx: Arc<Self>) -> Result<(), MailContextError> {
+        let watcher = InitializationWatcher::new(ctx.user_stash())?;
+        let watcher_clone = watcher.clone();
+        let watcher_task_handle = ctx.spawn(async move { watcher_clone.task().await });
+
+        let t0 = Instant::now();
+        let labels = ctx.spawn_init(&watcher, |ctx, watcher| async move {
+            LabelWithCounters::initialize(watcher, ctx.api(), ctx.user_stash()).await
+        });
+        let counters = ctx.spawn_init(&watcher, |ctx, watcher| async move {
+            StoreLabelCounters::initialize(watcher, ctx.api(), ctx.user_stash()).await
+        });
+        let contacts = ctx.spawn_init(&watcher, |ctx, watcher| async move {
+            Contact::initialize(watcher, ctx.api(), ctx.user_stash()).await
+        });
+
+        let event_loop = ctx.spawn_init(&watcher, |ctx, watcher| async move {
+            initialize_event_loop(watcher, ctx.as_ref()).await
+        });
+        let user_settings = ctx.spawn_init(&watcher, |ctx, watcher| async move {
+            User::initialize_with_settings(watcher, ctx.api(), ctx.user_stash()).await
+        });
+        let mail_settings = ctx.spawn_init(&watcher, |ctx, watcher| async move {
+            MailSettings::initialize(watcher, ctx.api(), ctx.user_stash()).await
+        });
+        let addresses = ctx.spawn_init(&watcher, |ctx, watcher| async move {
+            Address::initialize(watcher, ctx.api(), ctx.user_stash()).await
+        });
+
+        try_join!(
+            Self::initial_sync_for(MailUserContextLoadingStage::Labels, labels),
+            Self::initial_sync_for(MailUserContextLoadingStage::Contacts, contacts),
+            Self::initial_sync_for(MailUserContextLoadingStage::Counters, counters),
+            Self::initial_sync_for(MailUserContextLoadingStage::Events, event_loop),
+            Self::initial_sync_for(MailUserContextLoadingStage::UserSettings, user_settings),
+            Self::initial_sync_for(MailUserContextLoadingStage::MailSettings, mail_settings),
+            Self::initial_sync_for(MailUserContextLoadingStage::Addresses, addresses)
+        )?;
+
+        debug!("Syncing Complete in {:?}", t0.elapsed());
+        watcher_task_handle.abort();
+
+        Ok(())
+    }
+
     /// Initialize a component.
-    #[tracing::instrument(level = Level::DEBUG, skip(handle, cb))]
-    async fn initial_sync_for<
-        E: Into<MailContextError> + std::fmt::Debug + Send + Sync + 'static,
-    >(
+    #[tracing::instrument(level = Level::DEBUG, skip(handle))]
+    async fn initial_sync_for<E>(
         stage: MailUserContextLoadingStage,
         handle: JoinHandle<AsyncTaskResult<Result<(), InitializationError<E>>>>,
-        cb: &dyn MailUserContextInitializationCallback,
-    ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
+    ) -> Result<(), MailContextError>
+    where
+        E: std::fmt::Debug + Send + Sync + 'static,
+        MailContextError: From<E>,
+    {
         let t = Instant::now();
         debug!("Begin syncing for {stage:?}");
 
@@ -51,104 +108,50 @@ impl MailUserContext {
             debug!("Syncing {stage:?} took {elapsed:?}");
         }
 
-        cb.on_stage(stage);
         match result {
             Ok(AsyncTaskResult::Completed(Ok(()))) => Ok(()),
-            Ok(AsyncTaskResult::Completed(Err(e))) => {
-                let e = e.into();
-                error!("Failed to sync {stage:?}: {e:?}");
-                Err((stage, e))
-            }
+            Ok(AsyncTaskResult::Completed(Err(e))) => match e {
+                InitializationError::DependencyFailed(ref dep) => {
+                    error!("Failed to sync {e:?} - Dependency failed - {dep}");
+                    Ok(())
+                }
+                InitializationError::InitializationFailed(e) => {
+                    let e = e.into();
+                    error!("Failed to sync {e:?}");
+                    Err(e)
+                }
+                InitializationError::Stash(e) => {
+                    let e = e.into();
+                    error!("Failed to sync {e:?}");
+                    Err(e)
+                }
+            },
             Ok(AsyncTaskResult::Cancelled) => {
                 error!("Called while syncing {stage:?}");
-                Err((stage, MailContextError::TaskCancelled))
+                Err(MailContextError::TaskCancelled)
             }
             Err(e) => {
                 let e = e.into();
                 error!("Panicked while syncing {stage:?}: {e:?}");
-                Err((stage, e))
+                Err(e)
             }
         }
     }
 
-    /// Initialize the mail user context, running all the necessary syncs to ensure the context is ready to be used.
-    /// Syncs are mostly run in the parallel, but updating message & conversation count are dependent on labels, so it is run in sequence.
-    ///
-    /// # Arguments
-    ///
-    /// * `ctx` - The mail user context to initialize, it is vital to have it as Arc, as it will be cloned multiple times, and passed to the tokio::task.
-    /// * `cb` - The callback to notify the caller about the progress of the initialization.
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` - If the initialization is successful.
-    /// * `Err((MailUserContextLoadingStage, MailContextError))` - If the initialization fails at any stage, it will return the stage at which it failed and the error.
-    ///
-    #[tracing::instrument(level = Level::DEBUG, skip(ctx, cb))]
-    pub async fn initialize_async(
-        ctx: Arc<Self>,
-        cb: &dyn MailUserContextInitializationCallback,
-    ) -> Result<(), (MailUserContextLoadingStage, MailContextError)> {
-        let watcher = InitializationWatcher::new(ctx.user_stash())
-            .map_err(|e| (MailUserContextLoadingStage::Initialization, e.into()))?;
+    fn spawn_init<'a, T, F, Fut>(
+        self: &'a Arc<Self>,
+        watcher: &'a Arc<InitializationWatcher>,
+        f: F,
+    ) -> JoinHandle<AsyncTaskResult<T>>
+    where
+        T: Send + 'static,
+        // F: AsyncFnOnce(Arc<Self>, Arc<InitializationWatcher>) -> T + Send + 'static,
+        F: FnOnce(Arc<Self>, Arc<InitializationWatcher>) -> Fut,
+        Fut: Future<Output = T> + Send + 'static,
+    {
+        let ctx_clone = self.clone();
         let watcher_clone = watcher.clone();
-        let watcher_task_handle = ctx.spawn(async move { watcher_clone.task().await });
-
-        let t0 = Instant::now();
-        let ctx_clone = ctx.clone();
-        let watcher_clone = watcher.clone();
-        let labels = ctx.spawn(async move {
-            LabelWithCounters::initialize(watcher_clone, ctx_clone.api(), ctx_clone.user_stash())
-                .await
-        });
-        let ctx_clone = ctx.clone();
-        let watcher_clone = watcher.clone();
-        let counters = ctx.spawn(async move {
-            StoreLabelCounters::initialize(watcher_clone, ctx_clone.api(), ctx_clone.user_stash())
-                .await
-        });
-        let ctx_clone = ctx.clone();
-        let watcher_clone = watcher.clone();
-        let contacts = ctx.spawn(async move {
-            Contact::initialize(watcher_clone, ctx_clone.api(), ctx_clone.user_stash()).await
-        });
-
-        let ctx_clone = ctx.clone();
-        let watcher_clone = watcher.clone();
-        let event_loop = ctx
-            .spawn(async move { initialize_event_loop(watcher_clone, ctx_clone.as_ref()).await });
-        let ctx_clone = ctx.clone();
-        let watcher_clone = watcher.clone();
-        let user_settings = ctx.spawn(async move {
-            User::initialize_with_settings(watcher_clone, ctx_clone.api(), ctx_clone.user_stash())
-                .await
-        });
-        let ctx_clone = ctx.clone();
-        let watcher_clone = watcher.clone();
-        let mail_settings = ctx.spawn(async move {
-            MailSettings::initialize(watcher_clone, ctx_clone.api(), ctx_clone.user_stash()).await
-        });
-        let ctx_clone = ctx.clone();
-        let watcher_clone = watcher.clone();
-        let addresses = ctx.spawn(async move {
-            Address::initialize(watcher_clone, ctx_clone.api(), ctx_clone.user_stash()).await
-        });
-
-        try_join!(
-            Self::initial_sync_for(MailUserContextLoadingStage::Labels, labels, cb),
-            Self::initial_sync_for(MailUserContextLoadingStage::Contacts, contacts, cb),
-            Self::initial_sync_for(MailUserContextLoadingStage::Counters, counters, cb),
-            Self::initial_sync_for(MailUserContextLoadingStage::Events, event_loop, cb),
-            Self::initial_sync_for(MailUserContextLoadingStage::UserSettings, user_settings, cb),
-            Self::initial_sync_for(MailUserContextLoadingStage::MailSettings, mail_settings, cb),
-            Self::initial_sync_for(MailUserContextLoadingStage::Addresses, addresses, cb),
-        )?;
-
-        debug!("Syncing Complete in {:?}", t0.elapsed());
-        watcher_task_handle.abort();
-        cb.on_stage(MailUserContextLoadingStage::Finished);
-
-        Ok(())
+        self.spawn(f(ctx_clone, watcher_clone))
     }
 }
 

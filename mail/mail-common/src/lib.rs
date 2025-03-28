@@ -21,9 +21,7 @@ pub use context::{MailContext, MailContextError, MailContextResult};
 pub use mailbox::{DecryptedAttachment, Mailbox, MailboxError, MailboxResult, decrypted_message};
 use proton_core_common::models::LabelError;
 pub use sidebar::{Sidebar, SidebarError, SidebarResult};
-pub use user_context::{
-    MailUserContext, MailUserContextInitializationCallback, MailUserContextLoadingStage,
-};
+pub use user_context::MailUserContext;
 
 // re-exports
 use crate::datatypes::{LocalAttachmentId, LocalMessageId};

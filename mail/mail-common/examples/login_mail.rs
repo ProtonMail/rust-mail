@@ -15,10 +15,9 @@ use proton_api_core::verification::ChallengeResponse;
 use proton_core_common::CoreAccountState;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::{KeyChain, KeyChainEntryKind, KeyChainError};
-use proton_mail_common::MailContextError;
-use proton_mail_common::MailUserContextInitializationCallback;
-use proton_mail_common::MailUserContextLoadingStage;
-use proton_mail_common::{MailContext, MailUserContext};
+use proton_mail_common::MailContext;
+use proton_mail_common::MailUserContext;
+use proton_mail_common::context::ShouldInitializeMailUserContext;
 use secrecy::{ExposeSecret, SecretString};
 use std::error::Error as StdError;
 use std::fs;
@@ -116,14 +115,9 @@ impl LoginCmd {
             flow.submit_mailbox_password(read("2nd password")?).await?;
         }
 
-        let user_ctx = ctx
+        _ = ctx
             .user_context_from_login_flow(&mut flow)
             .inspect_err(|err| error!("failed to create user context: {err:?}"))
-            .await?;
-
-        MailUserContext::initialize_async(Arc::clone(&user_ctx), &InitCb)
-            .inspect_err(|(stage, err)| error!("user init failed at stage {stage:?}: {err:?}"))
-            .map_err(|(_, err)| err)
             .await?;
 
         Ok(())
@@ -180,7 +174,9 @@ impl SubscriptionPaymentsCmd {
                 continue;
             };
 
-            return Ok(ctx.user_context_from_session(&session, None).await?);
+            return Ok(ctx
+                .user_context_from_session(&session, None, ShouldInitializeMailUserContext::Yes)
+                .await?);
         }
 
         Err("account not found")?
@@ -295,18 +291,6 @@ impl KeyChain for OnDiskKeyChain {
             .box_map_err(KeyChainError::new)?;
 
         Ok(Some(entry))
-    }
-}
-
-struct InitCb;
-
-impl MailUserContextInitializationCallback for InitCb {
-    fn on_stage(&self, stage: MailUserContextLoadingStage) {
-        info!("reached user init stage: {stage:?}");
-    }
-
-    fn on_stage_err(&self, stage: MailUserContextLoadingStage, err: MailContextError) {
-        error!("error at user init stage {stage:?}: {err}");
     }
 }
 

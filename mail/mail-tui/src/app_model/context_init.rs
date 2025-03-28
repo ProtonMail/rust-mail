@@ -3,10 +3,7 @@ use crate::app_model::{AppState, AppStateHandler, mailbox};
 use crate::messages::Messages;
 use crate::widgets::CenteredThrobber;
 use anyhow::anyhow;
-use proton_mail_common::{
-    MailContext, MailContextError, MailUserContext, MailUserContextInitializationCallback,
-    MailUserContextLoadingStage,
-};
+use proton_mail_common::{MailContext, MailContextError, MailUserContext};
 use ratatui::crossterm::event::Event;
 use ratatui::prelude::*;
 use std::sync::Arc;
@@ -49,11 +46,8 @@ impl AppStateHandler for Model {
                 let user_ctx = self.ctx.clone();
                 Command::task(async move {
                     tracing::info!("Initializing user account");
-                    let cb = InitCallback {};
-                    let msg = if let Err((stage, e)) =
-                        MailUserContext::initialize_async(user_ctx, &cb).await
-                    {
-                        tracing::error!("Failed to initialize account ({:?}): {e:?}", stage);
+                    let msg = if let Err(e) = MailUserContext::initialize_async(user_ctx).await {
+                        tracing::error!("Failed to initialize account {e:?}");
                         Message::InitFailed(e).into()
                     } else {
                         Message::InitComplete.into()
@@ -92,18 +86,6 @@ impl AppStateHandler for Model {
     fn view_help_bar(&mut self, _: &mut Frame, _: Rect) {}
 
     fn view_status_bar(&mut self, _: &mut Frame, _: Rect) {}
-}
-
-struct InitCallback {}
-
-impl MailUserContextInitializationCallback for InitCallback {
-    fn on_stage(&self, stage: MailUserContextLoadingStage) {
-        tracing::info!("Initializing {:?}", stage);
-    }
-
-    fn on_stage_err(&self, stage: MailUserContextLoadingStage, err: MailContextError) {
-        tracing::error!("Failed to initialize account ({:?}): {err:?}", stage);
-    }
 }
 
 impl From<Model> for AppState {

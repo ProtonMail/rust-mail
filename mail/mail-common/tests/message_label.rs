@@ -15,14 +15,13 @@ use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::{Label, ModelIdExtension};
 use proton_core_test_utils::addresses::ApiAddressTestUtils;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as ApiUserKeys};
+use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::{MessageFlags, SystemLabelId};
 use proton_mail_common::models::Message;
-use proton_mail_common::{MailUserContext, Mailbox};
-use proton_mail_test_utils::init::{NullCallback, Params as TestParams};
+use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
 use stash::params;
-use std::sync::Arc;
 use velcro::hash_map;
 
 const TEST_USER_ID: &str =
@@ -36,8 +35,6 @@ async fn label_message() {
     //  * Create a Label
     //  * Create a Message
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
-    let tether = user_ctx.user_stash().connection();
 
     let label_id = LabelId::from("mylabel");
     let label = test_label(&label_id);
@@ -51,7 +48,8 @@ async fn label_message() {
         .await;
     ctx.catch_all().await;
 
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
+    let tether = user_ctx.user_stash().connection();
 
     // Create a mailbox and sync.
     let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
@@ -98,8 +96,6 @@ async fn unlabel_message() {
     //  * Create a Label
     //  * Create a Message with this label
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
-    let tether = user_ctx.user_stash().connection();
 
     let label_id = LabelId::from("mylabel");
     let label = test_label(&label_id);
@@ -114,7 +110,8 @@ async fn unlabel_message() {
     ctx.mock_unlabel_messages(&label_id.clone(), vec![message.metadata.id.clone()], vec![])
         .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
+    let tether = user_ctx.user_stash().connection();
 
     // Create a mailbox and sync.
     let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
@@ -171,8 +168,6 @@ async fn message_action_read_unread() {
     //  * Create a Label
     //  * Create a Message
     let ctx = MailTestContext::new().await;
-    let user_context = ctx.mail_user_context().await;
-    let tether = user_context.user_stash().connection();
 
     let label_id = LabelId::from("mylabel");
     let label = test_label(&label_id);
@@ -185,10 +180,8 @@ async fn message_action_read_unread() {
     ctx.mock_get_messages(vec![message.metadata.clone()]).await;
     ctx.mock_messages_ok().await;
     ctx.catch_all().await;
-
-    MailUserContext::initialize_async(Arc::clone(&user_context), &NullCallback {})
-        .await
-        .expect("failed to initialize");
+    let user_context = ctx.mail_user_context().await;
+    let tether = user_context.user_stash().connection();
 
     // Create a mailbox and sync.
     let mailbox =
@@ -256,8 +249,6 @@ async fn message_action_delete() {
     //  * Create a Label
     //  * Create a Message
     let ctx = MailTestContext::new().await;
-    let user_context = ctx.mail_user_context().await;
-    let tether = user_context.user_stash().connection();
 
     let label_id = LabelId::from("mylabel");
     let label = test_label(&label_id);
@@ -270,9 +261,8 @@ async fn message_action_delete() {
     ctx.mock_messages_ok().await;
     ctx.catch_all().await;
 
-    MailUserContext::initialize_async(Arc::clone(&user_context), &NullCallback {})
-        .await
-        .expect("failed to initialize");
+    let user_context = ctx.mail_user_context().await;
+    let tether = user_context.user_stash().connection();
 
     // Create a mailbox and sync.
     let mailbox =
@@ -317,8 +307,6 @@ async fn message_action_delete() {
 #[tokio::test]
 async fn message_action_ham() {
     let ctx = MailTestContext::new().await;
-    let user_context = ctx.mail_user_context().await;
-    let tether = user_context.user_stash().connection();
 
     let label_id = LabelId::spam();
     let label = test_label(&label_id);
@@ -334,9 +322,8 @@ async fn message_action_ham() {
     ctx.mock_put_message_ham(&message.metadata.id).await;
     ctx.catch_all().await;
 
-    MailUserContext::initialize_async(Arc::clone(&user_context), &NullCallback {})
-        .await
-        .expect("failed to initialize");
+    let user_context = ctx.mail_user_context().await;
+    let tether = user_context.user_stash().connection();
 
     let spam = LabelId::spam();
     // Create a mailbox and sync.

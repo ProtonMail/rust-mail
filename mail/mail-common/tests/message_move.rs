@@ -34,8 +34,6 @@ async fn move_between_folders() {
     // * create 2 folder labels
     // * create a message in one of those folders
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
 
     let source_label_id = LabelId::from("source");
     let source_label = test_label(&source_label_id, ApiLabelType::Folder, "source");
@@ -57,7 +55,8 @@ async fn move_between_folders() {
     .await;
     ctx.catch_all().await;
 
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
 
     // Create a mailbox and sync.
     let mailbox =
@@ -124,8 +123,6 @@ async fn move_from_label_does_not_unlabel() {
     // * create 2 custom labels
     // * create a message in one of those label
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
-    let tether = user_ctx.user_stash().connection();
 
     let source_label_id = LabelId::from("source");
     let source_label = test_label(&source_label_id, ApiLabelType::Label, "source");
@@ -147,7 +144,8 @@ async fn move_from_label_does_not_unlabel() {
     .await;
     ctx.catch_all().await;
 
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
+    let tether = user_ctx.user_stash().connection();
 
     // Create a mailbox and sync.
     let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
@@ -205,7 +203,7 @@ async fn move_into_trash_remove_label_and_mark_read() {
     // * add the label to the message
     // * the message is unread
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     let tether = user_ctx.user_stash().connection();
 
     let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
@@ -239,7 +237,7 @@ async fn move_into_trash_remove_label_and_mark_read() {
         .await;
     ctx.catch_all().await;
 
-    ctx.init_user(user_ctx.clone()).await;
+    ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Create a mailbox and sync.
     let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
@@ -285,7 +283,7 @@ async fn move_into_spam_remove_labels() {
     // * create a message in inbox (or any non-spam mailbox)
     // * add the label to the message
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     let tether = user_ctx.user_stash().connection();
 
     let spam = Label::find_first("WHERE remote_id = ?", params![LabelId::spam()], &tether)
@@ -315,7 +313,7 @@ async fn move_into_spam_remove_labels() {
         .await;
     ctx.catch_all().await;
 
-    ctx.init_user(user_ctx.clone()).await;
+    ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Create a mailbox and sync.
     let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
@@ -362,7 +360,7 @@ async fn move_out_of_spam_set_almost_all_mail() {
     // * create a message in spam
     // * the message doesn't have `almost_all_mail` label
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
 
     let spam = Label::find_first("WHERE remote_id = ?", params![LabelId::spam()], &tether)
@@ -397,7 +395,7 @@ async fn move_out_of_spam_set_almost_all_mail() {
         .await;
     ctx.catch_all().await;
 
-    ctx.init_user(user_ctx.clone()).await;
+    ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Create a mailbox and sync.
     let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::spam())

@@ -14,7 +14,6 @@ async fn get_sender_image() {
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::new().await;
     let mut params = TestParams::default_basic();
-    let user_ctx = ctx.mail_user_context().await;
     params
         .labels
         .get_mut(&ApiLabelType::Label)
@@ -39,7 +38,7 @@ async fn get_sender_image() {
     ctx.mock_get_image_for_conversation(b"abcdef".to_vec())
         .await;
     ctx.catch_all().await;
-    ctx.init_user(user_ctx.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
 
     // Create a mailbox
     let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())

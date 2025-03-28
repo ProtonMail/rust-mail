@@ -87,9 +87,11 @@ impl Mailbox {
     }
 
     pub async fn with_remote_id(tether: &Tether, label_id: LabelId) -> MailboxResult<Self> {
-        let label = Label::find_by_remote_id(label_id, tether).await?.unwrap();
+        let label = Label::find_by_remote_id(label_id, tether)
+            .await?
+            .expect("Label not found");
 
-        let label_id = label.local_id.unwrap();
+        let label_id = label.local_id.expect("Label has no local id");
         let view_mode = label.view_mode(tether).await?;
         debug!("Creating Mailbox ({}, view_mode={:?})", label_id, view_mode);
 

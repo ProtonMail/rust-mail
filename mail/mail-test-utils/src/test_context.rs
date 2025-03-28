@@ -8,7 +8,7 @@ use proton_core_common::UserDatabaseInitializer;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_test_utils::test_context::{BaseTestContext, TestContext};
 use proton_mail_common::actions::draft::SEND_ACTION_GROUP;
-use proton_mail_common::context::MailUserDatabaseInitializer;
+use proton_mail_common::context::{MailUserDatabaseInitializer, ShouldInitializeMailUserContext};
 use proton_mail_common::{MailContext, MailUserContext};
 pub use secrecy::{ExposeSecret, SecretString as RealSecretString};
 use std::sync::Arc;
@@ -104,7 +104,49 @@ impl MailTestContext {
         }
     }
 
+    /// User context that is not initialized. Use to setup the mocks.
+    ///
+    /// # Warning
+    ///
+    /// Since asking for a new context does not initialize it (we are reusing them),
+    /// it is programmers responsibility to initialize context manually afterwards.
+    ///
+    /// # Panics
+    /// Get the test user mail context.
+    ///
+    pub async fn uninitialized_mail_user_context(&self) -> Arc<MailUserContext> {
+        let ctx = self
+            .mail_context
+            .user_context_from_session(
+                &self.core_session,
+                Some(StatusWatcher::with_observer(StatusObserver::test())),
+                ShouldInitializeMailUserContext::No,
+            )
+            .await
+            .expect("failed to create user context");
+
+        // Disable auto queue executor as we don't want these to interfere with our test execution.
+        ctx.terminate_queue_executors();
+
+        ctx
+    }
+
+    /// Initialize context that was previously not initialized.
+    ///
+    /// Only use in the pair with [`Self::uninitialized_mail_user_context`].
+    ///
+    /// # Panics
+    ///
+    /// If the initialization fails
+    ///
+    pub async fn initialize_uninitialized_ctx(&self, ctx: &Arc<MailUserContext>) {
+        MailUserContext::initialize_async(ctx.clone())
+            .await
+            .expect("Failed to initialize");
+    }
+
     /// Get the test user context.
+    /// Has to be called **AFTER** setting up the API mocks
     ///
     /// # Panics
     /// Get the test user mail context.
@@ -114,6 +156,7 @@ impl MailTestContext {
             .user_context_from_session(
                 &self.core_session,
                 Some(StatusWatcher::with_observer(StatusObserver::test())),
+                ShouldInitializeMailUserContext::Yes,
             )
             .await
             .expect("failed to create user context");

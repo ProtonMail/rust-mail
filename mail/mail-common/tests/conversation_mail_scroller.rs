@@ -102,7 +102,7 @@ async fn test_conversation_mail_scroller_reads_correct_items_within_visible_rang
  {
     const REMOTE_LABEL_ID: &str = "rid1";
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
 
     let mut data: HashMap<&str, Vec<Conversation>> = hashmap! {
@@ -161,15 +161,14 @@ async fn test_conversation_mail_scroller_reads_correct_items_within_visible_rang
 #[tokio::test]
 async fn test_conversation_mail_scroller_reads_one_item_from_online_scroll_data() {
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
-    let tether = user_ctx.user_stash().connection();
     let params = TestParams::default_basic();
     let conversations = params.conversations.clone();
 
     ctx.mock_get_conversations(conversations, 1_u64).await;
     ctx.setup_user(params.clone()).await;
-    ctx.init_user(user_ctx.clone()).await;
     ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+    let tether = user_ctx.user_stash().connection();
 
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let unread = ReadFilter::All;
@@ -200,17 +199,15 @@ async fn test_conversation_mail_scroller_reads_one_item_from_online_scroll_data(
 #[tokio::test]
 async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data() {
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
     let page_size = 5;
     let unread = ReadFilter::All;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     setup_api_sync_previous_page(&ctx, "myconv_9", 1).await;
     let params = setup_api_conversation_pages(&ctx, page_size, 0, 3).await;
-    let user_ctx = ctx.mail_user_context().await;
-
     ctx.setup_user(params.clone()).await;
-    ctx.init_user(user_ctx.clone()).await;
+    ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Update the inbox label to have all conversations
     let mut counters = ConversationCounters::new(local_label_id);
@@ -282,17 +279,16 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
 #[tokio::test]
 async fn test_conversation_mail_scroller_notificate_about_changes() {
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
     let page_size = 5;
     let unread = ReadFilter::All;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let params = setup_api_conversation_pages(&ctx, page_size, 0, 2).await;
-    let user_ctx = ctx.mail_user_context().await;
 
     ctx.setup_user(params.clone()).await;
-    ctx.init_user(user_ctx.clone()).await;
     ctx.catch_all().await;
+    ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
     // Update the inbox label to have all conversations
     let label = Label::load(local_label_id, &tether).await.unwrap().unwrap();
@@ -373,7 +369,7 @@ async fn test_conversation_mail_scroller_notificate_about_changes() {
 async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_when_get_an_error_on_request()
  {
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
     let unread = ReadFilter::All;
 
@@ -422,7 +418,7 @@ async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_
 async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time_and_cache_is_empty()
  {
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
     let unread = ReadFilter::All;
 
@@ -479,7 +475,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
 async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time_and_cache_has_one_item()
  {
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
     let unread = ReadFilter::All;
     // Set up cached data
@@ -529,7 +525,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
 async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time_and_cache_has_multiple_pages()
  {
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
     let unread = ReadFilter::All;
     // Set up cached data
@@ -733,7 +729,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
 async fn test_conversation_mail_scroller_reads_cached_data_and_return_error_on_offline_fetch_more()
 {
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.mail_user_context().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
     let unread = ReadFilter::All;
 
