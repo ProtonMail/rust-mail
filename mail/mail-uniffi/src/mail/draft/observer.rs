@@ -179,10 +179,15 @@ pub async fn draft_send_result_mark_seen(
     let ctx = session.ctx()?;
     uniffi_async(async move {
         let mut connection = ctx.user_stash().connection();
-        let tx = connection.transaction().await?;
-        RealDraftSendResult::mark_seen(message_ids.into_iter().map(LocalMessageId::from), &tx)
+        connection
+            .tx(async |tx| {
+                RealDraftSendResult::mark_seen(
+                    message_ids.into_iter().map(LocalMessageId::from),
+                    &tx,
+                )
+                .await
+            })
             .await?;
-        tx.commit().await?;
         Ok(())
     })
     .await
@@ -204,9 +209,12 @@ pub async fn draft_send_result_delete(
     let ctx = session.ctx()?;
     uniffi_async(async move {
         let mut connection = ctx.user_stash().connection();
-        let tx = connection.transaction().await?;
-        RealDraftSendResult::delete(message_ids.into_iter().map(LocalMessageId::from), &tx).await?;
-        tx.commit().await?;
+        connection
+            .tx(async |tx| {
+                RealDraftSendResult::delete(message_ids.into_iter().map(LocalMessageId::from), &tx)
+                    .await
+            })
+            .await?;
         Ok(())
     })
     .await

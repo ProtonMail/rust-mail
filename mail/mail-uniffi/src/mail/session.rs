@@ -832,10 +832,10 @@ impl MailSession {
             let mut tether = ctx.account_stash().connection();
             let real_app_settings = RealAppSettings::get_or_default(&tether).await;
             let mut real_app_settings = settings.merge_with_current(real_app_settings);
-            let bond = tether.transaction().await?;
 
-            real_app_settings.save(&bond).await?;
-            bond.commit().await?;
+            tether
+                .tx(async |tx| real_app_settings.save(tx).await)
+                .await?;
 
             Result::<_, RealProtonMailError>::Ok(())
         })
