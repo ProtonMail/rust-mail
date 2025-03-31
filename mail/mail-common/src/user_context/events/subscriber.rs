@@ -88,10 +88,10 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
                             .into_iter()
                             .partition(|def| def.action == Some(Action::Delete));
 
-                        IncomingDefaultLocation::store(insert, tx).await?;
+                        IncomingDefaultLocation::store_by_email(insert, tx).await?;
                         for default in delete {
                             if let Some(email) = default.email {
-                                IncomingDefaultLocation::delete(email, tx).await?;
+                                IncomingDefaultLocation::delete_by_email(email, tx).await?;
                             }
                         }
                     }

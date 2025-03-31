@@ -2,6 +2,7 @@ use std::{iter, sync::Arc, time::Instant};
 
 use derive_more::TryFrom;
 use indoc::indoc;
+use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
 use proton_api_core::services::proton::Proton;
 
 use proton_api_mail::services::proton::response_data::IncomingDefault;
@@ -20,6 +21,7 @@ use tokio::task::JoinSet;
 use tracing::{Level, debug};
 
 use crate::MailContextError;
+use crate::actions::addresses::block::Block;
 
 /// Where do messages from a sender go by default. This is handled by the backend, but we sometimes
 /// want this informaton for things like banners.
@@ -56,8 +58,12 @@ impl IncomingDefaultLocation {
     /// Stores or modifies an IncomingDefaultLocation into the database.
     pub async fn save(self, id: LocalAddressId, bond: &Bond<'_>) -> Result<(), StashError> {
         bond.execute(
-            "INSERT OR REPLACE INTO incoming_default (local_address_id, location) 
-                 VALUES (?, ?)",
+            indoc! {
+                "INSERT INTO incoming_default (local_address_id, location)
+                VALUES (?, ?)
+                ON CONFLICT(local_address_id) DO UPDATE SET
+                  location = excluded.location"
+            },
             params![id, self],
         )
         .await?;
@@ -79,7 +85,7 @@ impl IncomingDefaultLocation {
             stash.connection(),
             async || Self::sync(api).await,
             async |tx, res| {
-                Self::store(res, tx).await?;
+                Self::store_by_email(res, tx).await?;
                 Ok(())
             },
         )
@@ -124,7 +130,7 @@ impl IncomingDefaultLocation {
     }
 
     /// Stores all `IncomingDefault`s into the database
-    pub async fn store(
+    pub async fn store_by_email(
         items: impl IntoIterator<Item = IncomingDefault>,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
@@ -147,7 +153,35 @@ impl IncomingDefaultLocation {
     }
 
     /// Stores all `IncomingDefault`s into the database
-    pub async fn delete(email: String, bond: &Bond<'_>) -> Result<(), StashError> {
+    pub async fn store_by_id(
+        id: LocalAddressId,
+        location: IncomingDefaultLocation,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        bond.execute(
+            indoc! {"
+                INSERT OR REPLACE INTO incoming_default 
+                    (local_address_id, location)
+                VALUES (?, ?);"
+            },
+            params![id, location],
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Deletes an incoming default locally by id
+    pub async fn delete_by_id(id: LocalAddressId, bond: &Bond<'_>) -> Result<(), StashError> {
+        bond.execute(
+            "DELETE FROM incoming_default WHERE local_address_id = ?",
+            params![id],
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Stores all `IncomingDefault`s into the database
+    pub async fn delete_by_email(email: String, bond: &Bond<'_>) -> Result<(), StashError> {
         bond.execute(
             indoc! {
                 "DELETE FROM incoming_default
@@ -159,6 +193,44 @@ impl IncomingDefaultLocation {
         )
         .await?;
         Ok(())
+    }
+
+    /// Block an address
+    ///
+    /// # Parameters
+    ///
+    /// * `queue`       - The action queue.
+    /// * `address_id`  - The ID of the address to block.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API request failed.
+    ///
+    pub async fn action_block(
+        queue: &Queue,
+        address_id: LocalAddressId,
+    ) -> Result<QueuedActionOutput<Block>, QueueActionError<Block>> {
+        let action = Block::block(address_id);
+        queue.queue_action(action).await
+    }
+
+    /// Unblock an address
+    ///
+    /// # Parameters
+    ///
+    /// * `queue`       - The action queue.
+    /// * `address_id`  - The ID of the address to block.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API request failed.
+    ///
+    pub async fn action_unblock(
+        queue: &Queue,
+        address_id: LocalAddressId,
+    ) -> Result<QueuedActionOutput<Block>, QueueActionError<Block>> {
+        let action = Block::unblock(address_id);
+        queue.queue_action(action).await
     }
 }
 

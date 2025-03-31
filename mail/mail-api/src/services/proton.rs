@@ -82,6 +82,28 @@ pub trait ProtonMail {
         page: u64,
     ) -> ApiServiceResult<GetIncomingDefaultResponse>;
 
+    /// POSTs incoming default, creates a new one.
+    ///
+    /// Calls the API to get a page of the incoming defaults.
+    ///
+    /// For more details see [the API documentation](https://protonmail.gitlab-pages.protontech.ch/Slim-API/mail/#tag/IncomingDefaults/operation/post_mail-%7B_version%7D-incomingdefaults).
+    async fn post_incoming_default(
+        &self,
+        location: IncomingDefaultLocation,
+        email: &str,
+    ) -> ApiServiceResult<()>;
+
+    /// PUTs incoming defaults, updating it.
+    ///
+    /// Calls the API to get a page of the incoming defaults.
+    ///
+    /// For more details see [the API documentation](https://protonmail.gitlab-pages.protontech.ch/Slim-API/mail/#tag/IncomingDefaults/operation/put_mail-%7B_version%7D-incomingdefaults-%7Bid%7D)
+    async fn update_incoming_default(
+        &self,
+        location: IncomingDefaultLocation,
+        email: &str,
+    ) -> ApiServiceResult<()>;
+
     /// Upload attachment data with the given `params`.
     ///
     /// # Errors

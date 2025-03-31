@@ -526,6 +526,34 @@ impl MailTestContext {
         .mount(self.mock_server())
         .await;
     }
+
+    /// Generate a new mock expectation that accpets an incomingdefault PUT
+    /// but doesn't actually do anything
+    #[allow(clippy::doc_markdown)]
+    #[function_name::named]
+    pub async fn mock_put_incoming_default(&self) {
+        Mock::given(method("PUT"))
+            .and(path("/api/mail/v4/incomingdefaults"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(()))
+            .expect(1)
+            .named(function_name!())
+            .mount(self.mock_server())
+            .await;
+    }
+
+    /// Generate a new mock expectation that accpets an incomingdefault POST
+    /// but doesn't actually do anything
+    #[allow(clippy::doc_markdown)]
+    #[function_name::named]
+    pub async fn mock_post_incoming_default(&self) {
+        Mock::given(method("POST"))
+            .and(path("/api/mail/v4/incomingdefaults"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(()))
+            .expect(1)
+            .named(function_name!())
+            .mount(self.mock_server())
+            .await;
+    }
 }
 
 /// Build a list of message responses.

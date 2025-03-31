@@ -36,9 +36,7 @@ use proton_crypto_inbox::attachment::{
 };
 use serde::Deserialize;
 use serde::Serialize;
-use serde_repr::Deserialize_repr;
-#[cfg(any(test, debug_assertions))]
-use serde_repr::Serialize_repr;
+use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_with::{BoolFromInt, DefaultOnNull, serde_as};
 use smart_default::SmartDefault;
 use std::collections::{BTreeMap, HashMap};
@@ -1329,8 +1327,7 @@ pub struct IncomingDefault {
 
 /// Where do messages from a sender go by default. This is handled by the backend, but we sometimes
 /// want this informaton for things like banners.
-#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[derive(Clone, Copy, Debug, Deserialize_repr, Serialize_repr, Eq, PartialEq)]
 #[repr(u8)]
 pub enum IncomingDefaultLocation {
     /// The messages are allowed and go to inbox
