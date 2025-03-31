@@ -9,15 +9,18 @@ use proton_core_common::datatypes::{AddressStatus, AddressType};
 use proton_core_common::models::Address;
 use proton_mail_ids::LocalMessageId;
 use proton_mail_test_utils::db::new_test_connection_file;
-use stash::stash::Bond;
+use stash::stash::{Bond, StashError};
 #[tokio::test]
 async fn draft_send_observer_only_triggers_for_new_items_empty_db() {
     let (stash, _db_dir) = new_test_connection_file().await;
 
     let mut conn = stash.connection();
-    let tx = conn.transaction().await.unwrap();
-    create_test_messages(2, &tx).await;
-    tx.commit().await.unwrap();
+    conn.tx::<_, _, StashError>(async |tx| {
+        create_test_messages(2, tx).await;
+        Ok(())
+    })
+    .await
+    .unwrap();
 
     let mut watcher = DraftSendResultWatcher::new(stash.clone()).await.unwrap();
 
@@ -33,9 +36,12 @@ async fn draft_send_observer_only_triggers_for_new_items_empty_db() {
     );
 
     // insert first record
-    let tx = conn.transaction().await.unwrap();
-    v1.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    conn.tx::<_, _, StashError>(async |tx| {
+        v1.save(tx).await.unwrap();
+        Ok(())
+    })
+    .await
+    .unwrap();
 
     let new_values = tokio::time::timeout(std::time::Duration::from_secs(5), watcher.next())
         .await
@@ -44,9 +50,12 @@ async fn draft_send_observer_only_triggers_for_new_items_empty_db() {
     assert_eq!(new_values, vec![v1.clone()]);
 
     // insert second record
-    let tx = conn.transaction().await.unwrap();
-    v2.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    conn.tx::<_, _, StashError>(async |tx| {
+        v2.save(tx).await.unwrap();
+        Ok(())
+    })
+    .await
+    .unwrap();
 
     let new_values = tokio::time::timeout(std::time::Duration::from_secs(5), watcher.next())
         .await
@@ -55,10 +64,13 @@ async fn draft_send_observer_only_triggers_for_new_items_empty_db() {
     assert_eq!(new_values, vec![v2.clone()]);
 
     // Mark first record as seen.
-    let tx = conn.transaction().await.unwrap();
-    v1.seen = true;
-    v1.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    conn.tx::<_, _, StashError>(async |tx| {
+        v1.seen = true;
+        v1.save(tx).await.unwrap();
+        Ok(())
+    })
+    .await
+    .unwrap();
 
     // There should be no changes.
     tokio::time::timeout(std::time::Duration::from_secs(2), watcher.next())
@@ -71,19 +83,22 @@ async fn draft_send_observer_only_triggers_for_new_items_with_existing() {
     let (stash, _db_dir) = new_test_connection_file().await;
 
     let mut conn = stash.connection();
-    let tx = conn.transaction().await.unwrap();
-    create_test_messages(5, &tx).await;
+    conn.tx::<_, _, StashError>(async |tx| {
+        create_test_messages(5, tx).await;
 
-    for i in 1..3_u64 {
-        let mut existing = DraftSendResult::failure(
-            LocalMessageId::from(i),
-            DraftSendResultOrigin::Save,
-            DraftSendFailure::Internal,
-        );
+        for i in 1..3_u64 {
+            let mut existing = DraftSendResult::failure(
+                LocalMessageId::from(i),
+                DraftSendResultOrigin::Save,
+                DraftSendFailure::Internal,
+            );
 
-        existing.save(&tx).await.unwrap();
-    }
-    tx.commit().await.unwrap();
+            existing.save(tx).await.unwrap();
+        }
+        Ok(())
+    })
+    .await
+    .unwrap();
 
     let mut watcher = DraftSendResultWatcher::new(stash.clone()).await.unwrap();
 
@@ -99,9 +114,12 @@ async fn draft_send_observer_only_triggers_for_new_items_with_existing() {
     );
 
     // insert first record
-    let tx = conn.transaction().await.unwrap();
-    v1.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    conn.tx::<_, _, StashError>(async |tx| {
+        v1.save(tx).await.unwrap();
+        Ok(())
+    })
+    .await
+    .unwrap();
 
     let new_values = tokio::time::timeout(std::time::Duration::from_secs(5), watcher.next())
         .await
@@ -110,9 +128,12 @@ async fn draft_send_observer_only_triggers_for_new_items_with_existing() {
     assert_eq!(new_values, vec![v1.clone()]);
 
     // insert second record
-    let tx = conn.transaction().await.unwrap();
-    v2.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    conn.tx::<_, _, StashError>(async |tx| {
+        v2.save(tx).await.unwrap();
+        Ok(())
+    })
+    .await
+    .unwrap();
 
     let new_values = tokio::time::timeout(std::time::Duration::from_secs(5), watcher.next())
         .await
@@ -121,11 +142,14 @@ async fn draft_send_observer_only_triggers_for_new_items_with_existing() {
     assert_eq!(new_values, vec![v2.clone()]);
 
     // Mark first record as seen.
-    let tx = conn.transaction().await.unwrap();
-    DraftSendResult::mark_seen(std::iter::once(v1.local_message_id), &tx)
-        .await
-        .unwrap();
-    tx.commit().await.unwrap();
+    conn.tx::<_, _, StashError>(async |tx| {
+        DraftSendResult::mark_seen(std::iter::once(v1.local_message_id), tx)
+            .await
+            .unwrap();
+        Ok(())
+    })
+    .await
+    .unwrap();
 
     // There should be no changes.
     tokio::time::timeout(std::time::Duration::from_secs(2), watcher.next())
@@ -133,11 +157,14 @@ async fn draft_send_observer_only_triggers_for_new_items_with_existing() {
         .unwrap_err();
 
     // Delete second record
-    let tx = conn.transaction().await.unwrap();
-    DraftSendResult::mark_seen(std::iter::once(v2.local_message_id), &tx)
-        .await
-        .unwrap();
-    tx.commit().await.unwrap();
+    conn.tx::<_, _, StashError>(async |tx| {
+        DraftSendResult::mark_seen(std::iter::once(v2.local_message_id), tx)
+            .await
+            .unwrap();
+        Ok(())
+    })
+    .await
+    .unwrap();
 
     // There should be no changes.
     tokio::time::timeout(std::time::Duration::from_secs(2), watcher.next())
@@ -150,9 +177,12 @@ async fn draft_send_observer_re_triggers_for_same_message_with_different_error()
     let (stash, _db_dir) = new_test_connection_file().await;
 
     let mut conn = stash.connection();
-    let tx = conn.transaction().await.unwrap();
-    create_test_messages(2, &tx).await;
-    tx.commit().await.unwrap();
+    conn.tx::<_, _, StashError>(async |tx| {
+        create_test_messages(2, tx).await;
+        Ok(())
+    })
+    .await
+    .unwrap();
 
     let mut watcher = DraftSendResultWatcher::new(stash.clone()).await.unwrap();
 
@@ -168,9 +198,12 @@ async fn draft_send_observer_re_triggers_for_same_message_with_different_error()
     );
 
     // insert first record
-    let tx = conn.transaction().await.unwrap();
-    v1.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    conn.tx::<_, _, StashError>(async |tx| {
+        v1.save(tx).await.unwrap();
+        Ok(())
+    })
+    .await
+    .unwrap();
 
     let new_values = tokio::time::timeout(std::time::Duration::from_secs(5), watcher.next())
         .await
@@ -179,9 +212,12 @@ async fn draft_send_observer_re_triggers_for_same_message_with_different_error()
     assert_eq!(new_values, vec![v1.clone()]);
 
     // insert second record
-    let tx = conn.transaction().await.unwrap();
-    v2.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    conn.tx::<_, _, StashError>(async |tx| {
+        v2.save(tx).await.unwrap();
+        Ok(())
+    })
+    .await
+    .unwrap();
 
     let new_values = tokio::time::timeout(std::time::Duration::from_secs(5), watcher.next())
         .await
@@ -195,7 +231,6 @@ async fn draft_attachment_observer_updates_when_attachment_is_removed() {
     let (stash, _db_dir) = new_test_connection_file().await;
 
     let mut conn = stash.connection();
-    let tx = conn.transaction().await.unwrap();
     let mut attachment = Attachment {
         local_id: None,
         attachment_type: Default::default(),
@@ -220,9 +255,13 @@ async fn draft_attachment_observer_updates_when_attachment_is_removed() {
         image_height: None,
         row_id: None,
     };
-    attachment.save(&tx).await.unwrap();
-    let metadata = DraftMetadata::empty(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    let metadata = conn
+        .tx::<_, _, StashError>(async |tx| {
+            attachment.save(tx).await.unwrap();
+            DraftMetadata::empty(tx).await
+        })
+        .await
+        .unwrap();
 
     let mut watcher = DraftAttachmentObserver::new(metadata.id.unwrap(), stash.clone())
         .await
@@ -231,9 +270,12 @@ async fn draft_attachment_observer_updates_when_attachment_is_removed() {
     let mut attachment_metadata =
         DraftAttachmentMetadata::new(metadata.id.unwrap(), attachment.local_id.unwrap(), 0);
     // Create metadata.
-    let tx = conn.transaction().await.unwrap();
-    attachment_metadata.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    conn.tx::<_, _, StashError>(async |tx| {
+        attachment_metadata.save(tx).await.unwrap();
+        Ok(())
+    })
+    .await
+    .unwrap();
 
     // Trigger for new attachment.
     tokio::time::timeout(std::time::Duration::from_secs(5), watcher.next())
@@ -242,10 +284,13 @@ async fn draft_attachment_observer_updates_when_attachment_is_removed() {
         .unwrap();
 
     // Simulate delete
-    let tx = conn.transaction().await.unwrap();
-    attachment_metadata.deleted = true;
-    attachment_metadata.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    conn.tx::<_, _, StashError>(async |tx| {
+        attachment_metadata.deleted = true;
+        attachment_metadata.save(tx).await.unwrap();
+        Ok(())
+    })
+    .await
+    .unwrap();
 
     // Trigger for update.
     tokio::time::timeout(std::time::Duration::from_secs(5), watcher.next())

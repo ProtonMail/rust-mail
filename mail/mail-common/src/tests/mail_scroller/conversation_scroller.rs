@@ -13,7 +13,7 @@ use proton_mail_ids::LocalConversationId;
 use proton_mail_test_utils::db::new_test_connection;
 use proton_mail_test_utils::{conv_id, conv_label, conversation, label, lbl_id};
 use stash::orm::Model;
-use stash::stash::{Bond, Tether};
+use stash::stash::{Bond, StashError, Tether};
 
 fn test_conversations(n: usize, order_shift: u64) -> Vec<Conversation> {
     (0..n)
@@ -38,15 +38,19 @@ async fn save_single_conversation(label: &Label, conversation: &mut Conversation
 }
 
 async fn save_to_database(data: &mut BTreeMap<&str, Vec<Conversation>>, tether: &mut Tether) {
-    let bond = tether.transaction().await.unwrap();
-    for (label_rid, conversations) in data.iter_mut() {
-        let mut label = label!(remote_id: lbl_id!(label_rid));
-        label.save(&bond).await.unwrap();
-        for conversation in conversations.iter_mut() {
-            save_single_conversation(&label, conversation, &bond).await;
-        }
-    }
-    bond.commit().await.unwrap()
+    tether
+        .tx::<_, _, StashError>(async |bond| {
+            for (label_rid, conversations) in data.iter_mut() {
+                let mut label = label!(remote_id: lbl_id!(label_rid));
+                label.save(bond).await.unwrap();
+                for conversation in conversations.iter_mut() {
+                    save_single_conversation(&label, conversation, bond).await;
+                }
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
 }
 
 fn expected_conversations(
@@ -108,9 +112,10 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
         .display_order(last_conversation.display_order)
         .build();
 
-    let bond = tether.transaction().await.unwrap();
-    scroller.save(&bond).await.unwrap();
-    bond.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |bond| scroller.save(bond).await)
+        .await
+        .unwrap();
     let scroller = ScrollCursor::from(scroller);
 
     // Test if the scroller can read visible elements
@@ -141,12 +146,15 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
     assert_eq!(actual, expected);
 
     // Store new conversation outside of the visible view
-    let bond = tether.transaction().await.unwrap();
+
     let mut conversation = conversation!(remote_id: conv_id!(0), display_order: 0);
-
-    save_single_conversation(&local_label, &mut conversation, &bond).await;
-
-    bond.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |bond| {
+            save_single_conversation(&local_label, &mut conversation, bond).await;
+            Ok(())
+        })
+        .await
+        .unwrap();
 
     let expected = expected_conversations(expected_count, REMOTE_LABEL_ID, &data).unwrap();
     let actual = scroller.visible_elements(&tether).await.unwrap();
@@ -156,12 +164,14 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
 
     // Store new conversation inside of the visible view
     // & make sure both scrollers "see" the change
-    let bond = tether.transaction().await.unwrap();
     let mut conversation = conversation!(remote_id: conv_id!(100), display_order: 200);
-
-    save_single_conversation(&local_label, &mut conversation, &bond).await;
-
-    bond.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |bond| {
+            save_single_conversation(&local_label, &mut conversation, bond).await;
+            Ok(())
+        })
+        .await
+        .unwrap();
 
     let count = new_scroller.visible_element_count(&tether).await.unwrap();
     assert_eq!(count, expected_count as u64 + 1);
@@ -177,9 +187,10 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
     assert_eq!(actual_conv, &expected_conv);
 
     // Remove just added coversation from inside of the visible view
-    let bond = tether.transaction().await.unwrap();
-    conversation.delete(&bond).await.unwrap();
-    bond.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |bond| conversation.delete(bond).await)
+        .await
+        .unwrap();
 
     let expected = expected_conversations(expected_count, REMOTE_LABEL_ID, &data).unwrap();
     let actual = scroller.visible_elements(&tether).await.unwrap();
@@ -221,9 +232,10 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
         .display_order(last_conversation.display_order)
         .build();
 
-    let bond = tether.transaction().await.unwrap();
-    scroller.save(&bond).await.unwrap();
-    bond.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |bond| scroller.save(bond).await)
+        .await
+        .unwrap();
 
     let scroller = ScrollCursor::from(scroller);
     let all_count = 50;
@@ -251,12 +263,14 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
     assert_eq!(actual, expected);
 
     // Store new conversation outside of the visible view
-    let bond = tether.transaction().await.unwrap();
     let mut conversation = conversation!(remote_id: conv_id!(0), display_order: 0);
-
-    save_single_conversation(&local_label, &mut conversation, &bond).await;
-
-    bond.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |bond| {
+            save_single_conversation(&local_label, &mut conversation, bond).await;
+            Ok(())
+        })
+        .await
+        .unwrap();
 
     let expected = expected_conversations(expected_count, REMOTE_LABEL_ID, &data).unwrap();
     let actual = cached_scroller.visible_elements(&tether).await.unwrap();
@@ -266,12 +280,14 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
 
     // Store new conversation inside of the visible view
     // & make sure cached scroller "see" the change
-    let bond = tether.transaction().await.unwrap();
     let mut conversation = conversation!(remote_id: conv_id!(100), display_order: 200);
-
-    save_single_conversation(&local_label, &mut conversation, &bond).await;
-
-    bond.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |bond| {
+            save_single_conversation(&local_label, &mut conversation, bond).await;
+            Ok(())
+        })
+        .await
+        .unwrap();
 
     let count = cached_scroller
         .visible_element_count(&tether)
@@ -311,9 +327,10 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
     assert_eq!(actual, expected);
 
     // Remove just added coversation from inside of the visible view
-    let bond = tether.transaction().await.unwrap();
-    conversation.delete(&bond).await.unwrap();
-    bond.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |bond| conversation.delete(bond).await)
+        .await
+        .unwrap();
 
     let expected = scroller.visible_elements(&tether).await.unwrap();
     let actual = cached_scroller.visible_elements(&tether).await.unwrap();
@@ -346,13 +363,15 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
 
     // Delete whole first page
     let convs = data.get(REMOTE_LABEL_ID).unwrap();
-    let bond = tether.transaction().await.unwrap();
-
-    for conv_to_delete in convs.iter().rev().take(page_size).cloned() {
-        conv_to_delete.delete(&bond).await.unwrap();
-    }
-
-    bond.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |bond| {
+            for conv_to_delete in convs.iter().rev().take(page_size).cloned() {
+                conv_to_delete.delete(bond).await.unwrap();
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
 
     let actual_count = cached_scroller
         .visible_element_count(&tether)
@@ -371,19 +390,21 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
     assert_eq!(actual, expected);
 
     // Delete next 3 pages and prove we can progress to the next page
-    let bond = tether.transaction().await.unwrap();
-
-    for conv_to_delete in convs
-        .iter()
-        .rev()
-        .skip(page_size)
-        .take(page_size * 3)
-        .cloned()
-    {
-        conv_to_delete.delete(&bond).await.unwrap();
-    }
-
-    bond.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |bond| {
+            for conv_to_delete in convs
+                .iter()
+                .rev()
+                .skip(page_size)
+                .take(page_size * 3)
+                .cloned()
+            {
+                conv_to_delete.delete(bond).await.unwrap();
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
 
     let actual_count = cached_scroller
         .visible_element_count(&tether)
@@ -402,27 +423,30 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
 
     // Undelete previous 4 pages
     let convs = data.get_mut(REMOTE_LABEL_ID).unwrap();
-    let bond = tether.transaction().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |bond| {
+            for conv in convs.iter_mut().rev().take(page_size * 4) {
+                conv.local_id = None;
+                conv.row_id = None;
+                let mut labels = vec![];
+                std::mem::swap(&mut conv.labels, &mut labels);
 
-    for conv in convs.iter_mut().rev().take(page_size * 4) {
-        conv.local_id = None;
-        conv.row_id = None;
-        let mut labels = vec![];
-        std::mem::swap(&mut conv.labels, &mut labels);
+                conv.save(bond).await.unwrap();
 
-        conv.save(&bond).await.unwrap();
+                for label in labels.iter_mut() {
+                    label.local_id = None;
+                    label.row_id = None;
+                    label.local_conversation_id = conv.local_id;
+                    label.save(bond).await.unwrap();
+                }
 
-        for label in labels.iter_mut() {
-            label.local_id = None;
-            label.row_id = None;
-            label.local_conversation_id = conv.local_id;
-            label.save(&bond).await.unwrap();
-        }
+                conv.reload(bond).await.unwrap();
+            }
 
-        conv.reload(&bond).await.unwrap();
-    }
-
-    bond.commit().await.unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
 
     let actual = cached_scroller.visible_elements(&tether).await.unwrap();
     let expected = expected_conversations(page_size * 5, REMOTE_LABEL_ID, &data).unwrap();
@@ -460,9 +484,10 @@ async fn test_cashed_scroller_reads_last_two_pages_together_when_last_page_is_no
         .display_order(last_conversation.display_order)
         .build();
 
-    let bond = tether.transaction().await.unwrap();
-    scroller.save(&bond).await.unwrap();
-    bond.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |bond| scroller.save(bond).await)
+        .await
+        .unwrap();
 
     let page_size = 2;
     let mut cached_scroller =
@@ -526,21 +551,25 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .display_order(0)
         .build();
 
-    let bond = tether.transaction().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |bond| {
+            scroller_all.save(bond).await.unwrap();
+            scroller_read.save(bond).await.unwrap();
+            scroller_unread.save(bond).await.unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
 
-    scroller_all.save(&bond).await.unwrap();
-    scroller_read.save(&bond).await.unwrap();
-    scroller_unread.save(&bond).await.unwrap();
-
-    bond.commit().await.unwrap();
-
-    let bond = tether.transaction().await.unwrap();
-
-    scroller_all.save(&bond).await.unwrap();
-    scroller_read.save(&bond).await.unwrap();
-    scroller_unread.save(&bond).await.unwrap();
-
-    bond.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |bond| {
+            scroller_all.save(bond).await.unwrap();
+            scroller_read.save(bond).await.unwrap();
+            scroller_unread.save(bond).await.unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
 
     let mut scroller_all = ConversationScrollData::builder()
         .local_label_id(local_label_id)
@@ -566,13 +595,15 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .display_order(0)
         .build();
 
-    let bond = tether.transaction().await.unwrap();
-
-    scroller_all.save(&bond).await.unwrap();
-    scroller_read.save(&bond).await.unwrap();
-    scroller_unread.save(&bond).await.unwrap();
-
-    bond.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |bond| {
+            scroller_all.save(bond).await.unwrap();
+            scroller_read.save(bond).await.unwrap();
+            scroller_unread.save(bond).await.unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
 
     let mut scroller_all = ConversationScrollData::builder()
         .local_label_id(local_label_id)
@@ -598,13 +629,15 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .display_order(2)
         .build();
 
-    let bond = tether.transaction().await.unwrap();
-
-    scroller_all.save(&bond).await.unwrap();
-    scroller_read.save(&bond).await.unwrap();
-    scroller_unread.save(&bond).await.unwrap();
-
-    bond.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |bond| {
+            scroller_all.save(bond).await.unwrap();
+            scroller_read.save(bond).await.unwrap();
+            scroller_unread.save(bond).await.unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
 
     scroller_all.reload(&tether).await.unwrap();
     scroller_read.reload(&tether).await.unwrap();
