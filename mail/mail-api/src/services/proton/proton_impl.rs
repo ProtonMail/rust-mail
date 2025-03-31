@@ -44,7 +44,41 @@ impl ProtonMail for Proton {
             "PageSize": INCOMING_DEFAULTS_PAGE_SIZE,
         });
         Ok(GET!("{MAIL_V4}/incomingdefaults")
-            .query(serde_to_query(query)?)
+            .body_json(query)?
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn post_incoming_default(
+        &self,
+        location: IncomingDefaultLocation,
+        email: &str,
+    ) -> ApiServiceResult<()> {
+        let query = json!({
+            "Email": email,
+            "Location": location,
+        });
+        Ok(POST!("{MAIL_V4}/incomingdefaults")
+            .body_json(query)?
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn update_incoming_default(
+        &self,
+        location: IncomingDefaultLocation,
+        email: &str,
+    ) -> ApiServiceResult<()> {
+        let query = json!({
+            "Email": email,
+            "Location": location,
+        });
+        Ok(PUT!("{MAIL_V4}/incomingdefaults")
+            .body_json(query)?
             .send_with(self)
             .await?
             .ok()?

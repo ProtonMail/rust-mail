@@ -30,6 +30,7 @@ use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ProtonMailError as RealProtonMailError,
 };
 use proton_mail_common::mail_scroller::MailScroller;
+use proton_mail_common::models::default_location::IncomingDefaultLocation;
 use proton_mail_common::models::{self, Message as RealMessage};
 use stash::orm::Model as _;
 use std::sync::Arc;
@@ -876,6 +877,62 @@ pub async fn mark_messages_ham(mailbox: Arc<Mailbox>, message_id: Id) -> Result<
     let ctx = mailbox.ctx()?;
     uniffi_async(async move {
         RealMessage::action_ham(ctx.action_queue(), vec![message_id.into()])
+            .await
+            .map(|_| ())
+            .map_err(RealProtonMailError::from)
+    })
+    .await
+    .map_err(ActionError::from)
+    .into()
+}
+
+/// Blocks an address.
+///
+/// # Parameters
+///
+/// * `session`    - The session to use for the request.
+/// * `address_id` - The id of the address to block.
+///
+/// # Errors
+///
+/// Returns an error if the action can not be executed.
+///
+#[uniffi_export]
+#[returns(VoidActionResult)]
+pub async fn block_address(
+    session: Arc<MailUserSession>,
+    address_id: Id,
+) -> Result<(), ActionError> {
+    let ctx = session.ctx()?;
+    uniffi_async(async move {
+        IncomingDefaultLocation::action_block(ctx.action_queue(), address_id.into())
+            .await
+            .map(|_| ())
+            .map_err(RealProtonMailError::from)
+    })
+    .await
+    .map_err(ActionError::from)
+    .into()
+}
+
+/// Unblocks an address.
+/// This should not be used on addresses that aren't blocked.
+///
+/// # Parameters
+///
+/// * `mailbox`    - The session to use for the request.
+/// * `address_id` - The id of the address to block.
+///
+/// # Errors
+///
+/// Returns an error if the action can not be executed.
+///
+#[uniffi_export]
+#[returns(VoidActionResult)]
+pub async fn unblock_address(mailbox: Arc<Mailbox>, address_id: Id) -> Result<(), ActionError> {
+    let ctx = mailbox.ctx()?;
+    uniffi_async(async move {
+        IncomingDefaultLocation::action_unblock(ctx.action_queue(), address_id.into())
             .await
             .map(|_| ())
             .map_err(RealProtonMailError::from)

@@ -1,3 +1,4 @@
+pub mod addresses;
 mod available_action;
 pub mod conversations;
 pub mod draft;
@@ -9,6 +10,7 @@ pub use self::available_action::*;
 use crate::AppError;
 use crate::datatypes::{ExclusiveLocation, RollbackItemType};
 use crate::models::RollbackItem;
+use addresses::block;
 use indoc::formatdoc;
 use itertools::Itertools;
 use proton_action_queue::action::WriterGuardError;
@@ -92,6 +94,7 @@ pub(crate) fn register_mail_actions(queue: &Queue) {
     queue
         .register::<conversations::MarkUnread>()
         .expect(ERR_MSG);
+    queue.register::<block::Block>().expect(ERR_MSG);
     queue.register::<conversations::Move>().expect(ERR_MSG);
     queue.register::<messages::label::Label>().expect(ERR_MSG);
     queue
