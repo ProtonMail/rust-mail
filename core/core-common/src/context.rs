@@ -354,6 +354,34 @@ impl Context {
         Ok(CoreSession::all(&tether).await?)
     }
 
+    /// Get all authenticated Core User Contexts.
+    ///
+    /// The method is suppose to be able to grab all users data in one call.
+    /// The purpose is that there are few features which relay on being able to access
+    /// All logged in accounts such as `background execution` & `pin verifcation`.
+    ///
+    pub async fn get_all_logged_in_user_ctx(&self) -> CoreContextResult<Vec<Arc<UserContext>>> {
+        let sessions = self.get_sessions().await?;
+        let mut ctxs = Vec::with_capacity(sessions.len());
+
+        for session in sessions {
+            if let Some(CoreSessionState::Authenticated) =
+                self.get_session_state(session.remote_id.clone()).await?
+            {
+                ctxs.push(self.user_context_from_session(&session, None).await?);
+            } else {
+                tracing::warn!("Found unathenticated session");
+            }
+        }
+
+        Ok(ctxs)
+    }
+
+    #[must_use]
+    pub(crate) fn get_cache_path(&self) -> &Path {
+        self.cache_path.as_path()
+    }
+
     /// Watch the API sessions for changes.
     ///
     /// # Returns

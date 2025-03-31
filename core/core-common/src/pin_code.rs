@@ -1,16 +1,18 @@
+use std::io::Error as IoError;
 use std::ops::Deref;
 use std::sync::Arc;
 
 use chrono::Utc;
+use futures::future::try_join_all;
 use proton_crypto_pin_hash::argon2::{Argon2HashingError, ProtonArgon2Hash};
 use secrecy::{ExposeSecret, SecretString};
 use stash::stash::StashError;
 use thiserror::Error;
 use tokio::task::JoinError;
 
-use crate::Context;
 use crate::models::{AppProtection, AppSettings, ModelExtension, PinProtection};
 use crate::os::{KeyChainError, StoreInKeyChain};
+use crate::{Context, CoreContextError};
 
 #[derive(Debug, Error)]
 pub enum PinError {
@@ -38,6 +40,10 @@ pub enum PinError {
     StashError(#[from] StashError),
     #[error("Could not join future, details: `{0}`")]
     JoinError(#[from] JoinError),
+    #[error("Core context error, details: `{0}`")]
+    CoreContext(#[from] CoreContextError),
+    #[error("IO Error, details: `{0}`")]
+    IoError(#[from] IoError),
 }
 
 /// Struct to group PIN code functionality
@@ -45,7 +51,7 @@ pub enum PinError {
 pub struct PinCode;
 
 impl PinCode {
-    const MAX_ATTEMPTS: u8 = 10;
+    pub const MAX_ATTEMPTS: u8 = 9; // Counting from 0 -> 10 attmepts
     const MIN_PASSWD_LEN: usize = 4;
     const MAX_PASSWD_LEN: usize = 21;
     const HIGHEST_SINGLE_DIGIT: u8 = 9;
@@ -116,7 +122,11 @@ impl PinCode {
             };
 
             if pin_protection.attempts >= Self::MAX_ATTEMPTS {
-                tracing::error!("Nuking databases");
+                tracing::error!(
+                    "All attemps to validate PIN have been used, nuking application data"
+                );
+                nuke_application_data(ctx).await?;
+
                 return Err(PinError::TooManyAttempts);
             }
 
@@ -223,4 +233,75 @@ impl StoreInKeyChain for PinHash {
         // unwrap safety: SecretString::from_str returns `Infallible`
         self.as_ref().parse().unwrap()
     }
+}
+
+const QUERY_LIST_TABLES: &str = "SELECT name as value FROM sqlite_master WHERE type='table'";
+
+async fn nuke_application_data(ctx: Arc<Context>) -> Result<(), PinError> {
+    tracing::error!("Fetching all logged in users.");
+
+    let all_user_ctxs = ctx.get_all_logged_in_user_ctx().await?;
+
+    tracing::error!("Removing all user data");
+
+    let iter = all_user_ctxs.iter().map(|ctx| async {
+        let mut tether = ctx.stash().connection();
+
+        tether.execute("PRAGMA foreign_keys = OFF;", vec![]).await?;
+
+        let table_names = tether
+            .query_values::<_, String>(QUERY_LIST_TABLES, vec![])
+            .await?;
+
+        tether
+            .tx(async |tx| -> Result<(), StashError> {
+                for table in table_names {
+                    let query = format!("DROP TABLE IF EXISTS {table};");
+                    if let Err(e) = tx.execute(query, vec![]).await {
+                        tracing::error!("Could not drop table: `{table}`, details: `{e}`");
+                    }
+                }
+
+                Ok(())
+            })
+            .await?;
+
+        tether.execute("PRAGMA foreign_keys = ON;", vec![]).await?;
+
+        Result::<(), PinError>::Ok(())
+    });
+
+    try_join_all(iter).await?;
+
+    tracing::error!("Removing all account data");
+
+    let mut tether = ctx.account_stash().connection();
+    let table_names = tether
+        .query_values::<_, String>(QUERY_LIST_TABLES, vec![])
+        .await?;
+
+    tether.execute("PRAGMA foreign_keys = OFF;", vec![]).await?;
+
+    tether
+        .tx(async |tx| -> Result<(), StashError> {
+            for table in table_names {
+                let query = format!("DROP TABLE IF EXISTS {table};");
+                if let Err(e) = tx.execute(query, vec![]).await {
+                    tracing::error!("Could not drop table: `{table}`, details: `{e}`");
+                }
+            }
+
+            Ok(())
+        })
+        .await?;
+
+    tether.execute("PRAGMA foreign_keys = ON;", vec![]).await?;
+
+    tracing::error!("Removing all cached fs data");
+
+    tokio::fs::remove_dir_all(ctx.get_cache_path()).await?;
+
+    tracing::error!("Application's data has been cleared successfuly");
+
+    Ok(())
 }
