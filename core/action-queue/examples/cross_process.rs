@@ -27,6 +27,7 @@ use proton_action_queue::action::{
 };
 use proton_action_queue::network::DummyWaitForOnlineSubscribtion;
 use proton_action_queue::queue::{Queue, QueueAutoExecutorPool};
+use proton_task_service::TaskService;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, StashConfiguration};
 use std::num::NonZeroUsize;
@@ -106,11 +107,13 @@ async fn parent_main(process_count: usize, action_count: usize, consume: bool) {
         while executor.execute_one().await.unwrap().is_none() {}
         drop(executor);
         // we can now auto execute from here on forward.
+        let task_service = TaskService::new().unwrap();
         let _executors = QueueAutoExecutorPool::new(
             &queue,
             &ActionGroup::default(),
             NonZeroUsize::new(process_count * 2).unwrap(),
             &DummyWaitForOnlineSubscribtion,
+            &task_service,
         );
         wait_on_queue_empty(&queue).await;
     } else {
@@ -155,11 +158,13 @@ async fn child_main(directory: &Path, action_count: Option<usize>) {
             queue.queue_action(TestAction::new()).await.unwrap();
         }
     } else {
+        let task_service = TaskService::new().unwrap();
         let _executors = QueueAutoExecutorPool::new(
             &queue,
             &ActionGroup::default(),
             NonZeroUsize::new(2).unwrap(),
             &DummyWaitForOnlineSubscribtion,
+            &task_service,
         );
         notifier.notified().await;
     }
