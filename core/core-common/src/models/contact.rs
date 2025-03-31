@@ -631,7 +631,7 @@ impl SyncedContacts {
     ///
     /// Panics if the local id does exist
     ///
-    #[tracing::instrument(skip(tx))]
+    #[tracing::instrument(skip_all)]
     pub async fn store(self, tx: &Bond<'_>) -> CoreContextResult<()> {
         let Self {
             contacts,

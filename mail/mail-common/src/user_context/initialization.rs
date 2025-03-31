@@ -3,14 +3,14 @@ use std::time::{Duration, Instant};
 
 use crate::models::default_location::IncomingDefaultLocation;
 use crate::models::{LabelWithCounters, MailSettings, StoreLabelCounters};
-use crate::{MailContextError, MailUserContext};
+use crate::{MailContextError, MailContextResult, MailUserContext};
 use futures::try_join;
 use proton_core_common::datatypes::{InitializationKey, InitializedComponentState};
 use proton_core_common::models::{
     Address, Contact, InitializationError, InitializationWatcher, InitializedComponent, User,
 };
 use proton_event_loop::EventLoopError;
-use proton_task_service::AsyncTaskResult;
+use proton_task_service::{AsyncTaskResult, TaskService};
 use tokio::task::JoinHandle;
 use tracing::{Level, debug, error, warn};
 
@@ -46,88 +46,8 @@ impl MailUserContext {
     ///
     #[tracing::instrument(level = Level::DEBUG, skip(ctx))]
     pub async fn initialize_async(ctx: Arc<Self>) -> Result<(), MailContextError> {
-        let watcher = InitializationWatcher::new(ctx.user_stash())?;
-        let watcher_clone = watcher.clone();
-        let watcher_task_handle = ctx.spawn(async move { watcher_clone.task().await });
-
-        let t0 = Instant::now();
-        let labels = ctx.spawn_init(&watcher, |ctx, watcher| async move {
-            LabelWithCounters::initialize(watcher, ctx.api(), ctx.user_stash()).await
-        });
-        let counters = ctx.spawn_init(&watcher, |ctx, watcher| async move {
-            StoreLabelCounters::initialize(watcher, ctx.api(), ctx.user_stash()).await
-        });
-        let contacts = ctx.spawn_init(&watcher, |ctx, watcher| async move {
-            Contact::initialize(watcher, ctx.api(), ctx.user_stash()).await
-        });
-
-        let event_loop = ctx.spawn_init(&watcher, |ctx, watcher| async move {
-            initialize_event_loop(watcher, ctx.as_ref()).await
-        });
-        let user_settings = ctx.spawn_init(&watcher, |ctx, watcher| async move {
-            User::initialize_with_settings(watcher, ctx.api(), ctx.user_stash()).await
-        });
-        let mail_settings = ctx.spawn_init(&watcher, |ctx, watcher| async move {
-            MailSettings::initialize(watcher, ctx.api(), ctx.user_stash()).await
-        });
-        let addresses = ctx.spawn_init(&watcher, |ctx, watcher| async move {
-            Address::initialize(watcher, ctx.api(), ctx.user_stash()).await
-        });
-        let inc_defs = ctx.spawn_init(&watcher, |ctx, watcher| async move {
-            IncomingDefaultLocation::initialize(watcher, ctx.api(), ctx.user_stash()).await
-        });
-
-        let abort_handles = [
-            watcher_task_handle.abort_handle(),
-            labels.abort_handle(),
-            contacts.abort_handle(),
-            counters.abort_handle(),
-            event_loop.abort_handle(),
-            user_settings.abort_handle(),
-            mail_settings.abort_handle(),
-            addresses.abort_handle(),
-            inc_defs.abort_handle(),
-        ]
-        .into_iter()
-        .collect::<Vec<_>>();
-
-        let res = try_join!(
-            Self::initial_sync_for(MailUserContextLoadingStage::Labels, labels),
-            Self::initial_sync_for(MailUserContextLoadingStage::Contacts, contacts),
-            Self::initial_sync_for(MailUserContextLoadingStage::Counters, counters),
-            Self::initial_sync_for(MailUserContextLoadingStage::Events, event_loop),
-            Self::initial_sync_for(MailUserContextLoadingStage::UserSettings, user_settings),
-            Self::initial_sync_for(MailUserContextLoadingStage::MailSettings, mail_settings),
-            Self::initial_sync_for(MailUserContextLoadingStage::Addresses, addresses),
-            Self::initial_sync_for(MailUserContextLoadingStage::IncomingDefaults, inc_defs),
-        );
-
-        abort_handles.into_iter().for_each(|a| a.abort());
-
-        match res {
-            Ok(_) => {
-                InitializedComponent::set_state(
-                    Self::CONTEXT_INIT_KEY,
-                    InitializedComponentState::Succeeded,
-                    &mut ctx.user_stash().connection(),
-                )
-                .await?;
-
-                debug!("Syncing Complete in {:?}", t0.elapsed());
-                Ok(())
-            }
-            Err(e) => {
-                InitializedComponent::set_state(
-                    Self::CONTEXT_INIT_KEY,
-                    InitializedComponentState::Failed,
-                    &mut ctx.user_stash().connection(),
-                )
-                .await?;
-
-                error!("Syncing Failed in {:?}", t0.elapsed());
-                Err(e)
-            }
-        }
+        let ctx_cloned = Arc::clone(&ctx);
+        ctx.initialization_mediator.initialize(ctx_cloned).await
     }
 
     /// Checks whether initialization process finished suscesfully.
@@ -239,4 +159,149 @@ async fn initialize_event_loop(
         async |_tx, ()| Ok(()),
     )
     .await
+}
+
+type InitializerMessage = (
+    Arc<MailUserContext>,
+    tokio::sync::oneshot::Sender<MailContextResult<()>>,
+);
+/// This mediator makes sure that we only ever initialize the context in a serial fashion.
+///
+/// It is possible on mobile to trigger multiple context inits at the same time. Initialization
+/// is funneled through here to make sure it's not being done concurrently.
+pub(crate) struct InitializationMediator {
+    sender: flume::Sender<InitializerMessage>,
+}
+impl InitializationMediator {
+    const CHANNEL_CAPACITY: usize = 1;
+    pub(crate) fn new(task_service: &TaskService) -> Self {
+        let (sender, receiver) = flume::bounded::<InitializerMessage>(Self::CHANNEL_CAPACITY);
+        task_service.spawn(async move { Self::background_loop(receiver).await });
+
+        Self { sender }
+    }
+
+    async fn background_loop(receiver: flume::Receiver<InitializerMessage>) {
+        while let Ok((ctx, sender)) = receiver.recv_async().await {
+            let r = Self::initialize_context(ctx).await;
+            _ = sender.send(r);
+        }
+    }
+
+    /// Send an initialization request and wait for the result.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if we can't communicate with the background task.
+    pub(crate) async fn initialize(&self, ctx: Arc<MailUserContext>) -> MailContextResult<()> {
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        if self.sender.send_async((ctx, sender)).await.is_err() {
+            error!("Failed to communicate with initializer mediator");
+            return Err(MailContextError::InitMediatorError);
+        };
+
+        receiver.await.unwrap_or_else(|_| {
+            error!("Failed to communicate with initializer mediator");
+            Err(MailContextError::InitMediatorError)
+        })
+    }
+
+    async fn initialize_context(ctx: Arc<MailUserContext>) -> Result<(), MailContextError> {
+        tracing::info!("Initializing mail user context");
+        if ctx.is_initialized().await? {
+            warn!("Context already initialized");
+            return Ok(());
+        }
+        let watcher = InitializationWatcher::new(ctx.user_stash())?;
+        let watcher_clone = watcher.clone();
+        let watcher_task_handle = ctx.spawn(async move { watcher_clone.task().await });
+
+        let t0 = Instant::now();
+        let labels = ctx.spawn_init(&watcher, |ctx, watcher| async move {
+            LabelWithCounters::initialize(watcher, ctx.api(), ctx.user_stash()).await
+        });
+        let counters = ctx.spawn_init(&watcher, |ctx, watcher| async move {
+            StoreLabelCounters::initialize(watcher, ctx.api(), ctx.user_stash()).await
+        });
+        let contacts = ctx.spawn_init(&watcher, |ctx, watcher| async move {
+            Contact::initialize(watcher, ctx.api(), ctx.user_stash()).await
+        });
+
+        let event_loop = ctx.spawn_init(&watcher, |ctx, watcher| async move {
+            initialize_event_loop(watcher, ctx.as_ref()).await
+        });
+        let user_settings = ctx.spawn_init(&watcher, |ctx, watcher| async move {
+            User::initialize_with_settings(watcher, ctx.api(), ctx.user_stash()).await
+        });
+        let mail_settings = ctx.spawn_init(&watcher, |ctx, watcher| async move {
+            MailSettings::initialize(watcher, ctx.api(), ctx.user_stash()).await
+        });
+        let addresses = ctx.spawn_init(&watcher, |ctx, watcher| async move {
+            Address::initialize(watcher, ctx.api(), ctx.user_stash()).await
+        });
+        let inc_defs = ctx.spawn_init(&watcher, |ctx, watcher| async move {
+            IncomingDefaultLocation::initialize(watcher, ctx.api(), ctx.user_stash()).await
+        });
+
+        let abort_handles = [
+            watcher_task_handle.abort_handle(),
+            labels.abort_handle(),
+            contacts.abort_handle(),
+            counters.abort_handle(),
+            event_loop.abort_handle(),
+            user_settings.abort_handle(),
+            mail_settings.abort_handle(),
+            addresses.abort_handle(),
+            inc_defs.abort_handle(),
+        ]
+        .into_iter()
+        .collect::<Vec<_>>();
+
+        let res = try_join!(
+            MailUserContext::initial_sync_for(MailUserContextLoadingStage::Labels, labels),
+            MailUserContext::initial_sync_for(MailUserContextLoadingStage::Contacts, contacts),
+            MailUserContext::initial_sync_for(MailUserContextLoadingStage::Counters, counters),
+            MailUserContext::initial_sync_for(MailUserContextLoadingStage::Events, event_loop),
+            MailUserContext::initial_sync_for(
+                MailUserContextLoadingStage::UserSettings,
+                user_settings
+            ),
+            MailUserContext::initial_sync_for(
+                MailUserContextLoadingStage::MailSettings,
+                mail_settings
+            ),
+            MailUserContext::initial_sync_for(MailUserContextLoadingStage::Addresses, addresses),
+            MailUserContext::initial_sync_for(
+                MailUserContextLoadingStage::IncomingDefaults,
+                inc_defs
+            ),
+        );
+
+        abort_handles.into_iter().for_each(|a| a.abort());
+
+        match res {
+            Ok(_) => {
+                InitializedComponent::set_state(
+                    MailUserContext::CONTEXT_INIT_KEY,
+                    InitializedComponentState::Succeeded,
+                    &mut ctx.user_stash().connection(),
+                )
+                .await?;
+
+                debug!("Syncing Complete in {:?}", t0.elapsed());
+                Ok(())
+            }
+            Err(e) => {
+                InitializedComponent::set_state(
+                    MailUserContext::CONTEXT_INIT_KEY,
+                    InitializedComponentState::Failed,
+                    &mut ctx.user_stash().connection(),
+                )
+                .await?;
+
+                error!("Syncing Failed in {:?}", t0.elapsed());
+                Err(e)
+            }
+        }
+    }
 }
