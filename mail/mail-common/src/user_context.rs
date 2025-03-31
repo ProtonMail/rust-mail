@@ -63,15 +63,17 @@ impl MailUserContext {
         register_mail_actions(user_context.queue());
 
         let wait_for_online = WFO::create(user_context.session().status_watcher());
+        let task_service = mail_context.core_context().task_service();
         let default_queue_executor = user_context
             .queue()
             .new_executor()
-            .into_auto_executor(wait_for_online.subscribe());
+            .into_auto_executor(wait_for_online.subscribe(), task_service);
         let send_queue_executors = QueueAutoExecutorPool::new(
             user_context.queue(),
             &SEND_ACTION_GROUP,
             NonZeroUsize::new(4).unwrap(),
             &wait_for_online,
+            task_service,
         );
         let this = Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),

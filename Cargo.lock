@@ -4214,6 +4214,7 @@ dependencies = [
  "parking_lot",
  "pretty_assertions",
  "proton-sqlite3",
+ "proton-task-service",
  "rmp",
  "rmp-serde",
  "serde",

@@ -11,6 +11,7 @@ use crate::network::{WaitForOnline, WaitForOnlineSubscribtion};
 use chrono::DateTime;
 use parking_lot::RwLock;
 use proton_sqlite3::MigratorError;
+use proton_task_service::TaskService;
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, StashError, Tether};
 use std::any::{Any, TypeId};
@@ -770,8 +771,12 @@ impl QueueExecutor {
 
     /// Convert this executor into a [`QueueAutoExecutor`].
     #[must_use]
-    pub fn into_auto_executor(self, wait_for_online: impl WaitForOnline) -> QueueAutoExecutor {
-        QueueAutoExecutor::new(self, wait_for_online)
+    pub fn into_auto_executor(
+        self,
+        wait_for_online: impl WaitForOnline,
+        task_service: &TaskService,
+    ) -> QueueAutoExecutor {
+        QueueAutoExecutor::new(self, wait_for_online, task_service)
     }
 
     /// Execute one action from the queue.
@@ -898,12 +903,16 @@ impl Drop for QueueAutoExecutor {
 }
 
 impl QueueAutoExecutor {
-    fn new(executor: QueueExecutor, wait_for_online: impl WaitForOnline) -> Self {
+    fn new(
+        executor: QueueExecutor,
+        wait_for_online: impl WaitForOnline,
+        task_service: &TaskService,
+    ) -> Self {
         let id = executor.id.clone();
         let (pause, listener) = watch::channel(false);
-        let handle =
-            tokio::spawn(async move { Self::run(executor, listener, wait_for_online).await })
-                .abort_handle();
+        let handle = task_service
+            .spawn(async move { Self::run(executor, listener, wait_for_online).await })
+            .abort_handle();
 
         QueueAutoExecutor {
             abort_handle: handle,
@@ -1030,13 +1039,14 @@ impl QueueAutoExecutorPool {
         action_group: &ActionGroup,
         count: NonZeroUsize,
         wait_for_online: &impl WaitForOnlineSubscribtion,
+        task_service: &TaskService,
     ) -> Self {
         let executors = std::iter::repeat_n((), count.get())
             .map(|()| {
                 let wait_for_online = wait_for_online.subscribe();
                 queue
                     .new_executor_with_group(action_group.clone())
-                    .into_auto_executor(wait_for_online)
+                    .into_auto_executor(wait_for_online, task_service)
             })
             .collect::<Vec<_>>();
 
