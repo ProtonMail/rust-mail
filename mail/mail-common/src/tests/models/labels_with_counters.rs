@@ -1,21 +1,20 @@
 #![allow(clippy::module_inception)]
 #![allow(non_snake_case)]
 
+use crate::datatypes::ConversationLabelsCount;
+use crate::datatypes::MessageLabelsCount;
+use crate::models::LabelWithCounters;
 use pretty_assertions::assert_eq;
 use proton_api_core::services::proton::Label as ApiLabel;
 use proton_api_core::services::proton::LabelId;
 use proton_api_core::services::proton::LabelType as ApiLabelType;
 use proton_core_common::models::Label;
 use proton_mail_test_utils::db::new_test_connection;
-
-use crate::datatypes::ConversationLabelsCount;
-use crate::datatypes::MessageLabelsCount;
-use crate::models::LabelWithCounters;
+use stash::stash::StashError;
 
 #[tokio::test]
 async fn label_with_counts() {
     let mut tether = new_test_connection().await.connection();
-    let tx = tether.transaction().await.unwrap();
     let label = ApiLabel {
         id: LabelId::from("label"),
         parent_id: None,
@@ -36,31 +35,35 @@ async fn label_with_counts() {
     let unread_msg = 600_u64;
 
     let mut local_label = Label::from(label.clone());
-    local_label.save(&tx).await.unwrap();
-    let local_id = local_label.local_id.unwrap();
+    let local_id = tether
+        .tx::<_, _, StashError>(async |tx| {
+            local_label.save(tx).await.unwrap();
 
-    ConversationLabelsCount::create_or_update_conversation_counts(
-        vec![ConversationLabelsCount {
-            label_id: local_label.remote_id.clone().unwrap(),
-            total: total_conv,
-            unread: unread_conv,
-        }],
-        &tx,
-    )
-    .await
-    .unwrap();
+            ConversationLabelsCount::create_or_update_conversation_counts(
+                vec![ConversationLabelsCount {
+                    label_id: local_label.remote_id.clone().unwrap(),
+                    total: total_conv,
+                    unread: unread_conv,
+                }],
+                tx,
+            )
+            .await
+            .unwrap();
 
-    MessageLabelsCount::create_or_update_message_counts(
-        vec![MessageLabelsCount {
-            label_id: local_label.remote_id.clone().unwrap(),
-            total: total_msg,
-            unread: unread_msg,
-        }],
-        &tx,
-    )
-    .await
-    .unwrap();
-    tx.commit().await.unwrap();
+            MessageLabelsCount::create_or_update_message_counts(
+                vec![MessageLabelsCount {
+                    label_id: local_label.remote_id.clone().unwrap(),
+                    total: total_msg,
+                    unread: unread_msg,
+                }],
+                tx,
+            )
+            .await
+            .unwrap();
+            Ok(local_label.local_id.unwrap())
+        })
+        .await
+        .unwrap();
 
     let counters = LabelWithCounters::load(local_id, &tether)
         .await

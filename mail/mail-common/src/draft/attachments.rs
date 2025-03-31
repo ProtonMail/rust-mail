@@ -222,9 +222,10 @@ mod tests {
         let tmpdir = tempfile::tempdir().unwrap();
 
         let mut tether = stash.connection();
-        let tx = tether.transaction().await.unwrap();
-        let db_metadata = DraftMetadata::empty(&tx).await.unwrap();
-        tx.commit().await.unwrap();
+        let db_metadata = tether
+            .tx(async |tx| DraftMetadata::empty(tx).await)
+            .await
+            .unwrap();
 
         let staging_path = tmpdir.path();
         let staging_path_metadata_1 = staging_path.join(db_metadata.id.unwrap().0.to_string());

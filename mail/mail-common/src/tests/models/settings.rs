@@ -52,9 +52,10 @@ async fn test_mail_settings_store_read() {
         hide_sender_images: Default::default(),
         row_id: None,
     };
-    let tx = tether.transaction().await.unwrap();
-    settings.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |tx| settings.save(tx).await)
+        .await
+        .unwrap();
     let db_settings = MailSettings::get(&tether).await.unwrap().unwrap();
     assert_eq!(db_settings, settings);
     assert_eq!(db_settings.local_id, MailSettingsId);
@@ -71,9 +72,10 @@ async fn test_mail_settings_updated() {
         ..Default::default()
     };
     // Save once
-    let tx = tether.transaction().await.unwrap();
-    settings.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |tx| settings.save(tx).await)
+        .await
+        .unwrap();
 
     let mut settings = MailSettings {
         local_id: MailSettingsId,
@@ -83,9 +85,10 @@ async fn test_mail_settings_updated() {
         ..Default::default()
     };
     // Save second time
-    let tx = tether.transaction().await.unwrap();
-    settings.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |tx| settings.save(tx).await)
+        .await
+        .unwrap();
 
     let db_settings = MailSettings::get(&tether).await.unwrap().unwrap();
     assert_eq!(db_settings, settings);
