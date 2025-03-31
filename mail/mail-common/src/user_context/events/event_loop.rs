@@ -50,24 +50,23 @@ impl Store for MailUserContext {
     }
 
     async fn store(&self, id: EventId) -> anyhow::Result<()> {
-        {
-            let mut tether = self.user_context.stash().connection();
-            tether
-                .tx(async |tx| {
-                    tx.execute(
-                        "INSERT OR REPLACE INTO event_id_store (id, value) VALUES (?, ?)",
-                        params![MAIL_EVENT_TYPE_ID, id],
-                    )
-                    .await
-                })
+        self.user_context
+            .stash()
+            .connection()
+            .tx(async |tx| {
+                tx.execute(
+                    "INSERT OR REPLACE INTO event_id_store (id, value) VALUES (?, ?)",
+                    params![MAIL_EVENT_TYPE_ID, id],
+                )
                 .await?;
 
-            Ok(())
-        }
-        .map_err(|e: StashError| {
-            error!("Failed to store event id in db:{e:?}");
-            anyhow!("Failed to store event id {e}")
-        })
+                Ok(())
+            })
+            .await
+            .map_err(|e: StashError| {
+                error!("Failed to store event id in db:{e:?}");
+                anyhow!("Failed to store event id {e}")
+            })
     }
 }
 
