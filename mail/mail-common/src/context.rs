@@ -114,7 +114,8 @@ pub enum MailContextError {
     InvalidUtf8AttachmentPath(std::ffi::OsString),
     #[error("Could not start transaction: {0}")]
     IntoTransactionError(anyhow::Error),
-
+    #[error("Communication error with init mediator")]
+    InitMediatorError,
     #[error("{0}")]
     Other(anyhow::Error),
 }

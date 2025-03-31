@@ -225,6 +225,7 @@ impl From<MailContextError> for ProtonMailError {
             | MailContextError::InvalidUtf8AttachmentPath(_) => {
                 Self::Unexpected(Unexpected::Internal)
             }
+            MailContextError::InitMediatorError => Self::Unexpected(Unexpected::Internal),
         }
     }
 }

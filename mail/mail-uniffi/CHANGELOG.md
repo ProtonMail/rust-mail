@@ -9,7 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `block_address`, `unblock_address` functions are available.
+  - `block_address`, `unblock_address` functions are available.
+
+### Fixed
+
+  - Double initialization crash.
 
 ## [0.66.0] - 2025-03-28
 

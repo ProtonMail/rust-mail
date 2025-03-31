@@ -8,6 +8,7 @@ use crate::actions::register_mail_actions;
 use crate::draft::attachments::DraftStagingAreaCleaner;
 use crate::models::{Conversation, Message};
 use crate::prefetch::{Prefetch, PrefetchNotify};
+use crate::user_context::initialization::InitializationMediator;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 use proton_action_queue::action::ActionId;
@@ -51,6 +52,7 @@ pub struct MailUserContext {
     prefetch: PrefetchNotify,
     /// Last id of the event loop action.
     last_event_loop_action_id: Mutex<Option<ActionId>>,
+    initialization_mediator: InitializationMediator,
     pub is_cleanup_cache_running: Arc<AtomicBool>,
 }
 
@@ -75,6 +77,7 @@ impl MailUserContext {
             &wait_for_online,
             task_service,
         );
+        let initialization_mediator = InitializationMediator::new(task_service);
         let this = Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             mail_context,
@@ -84,6 +87,7 @@ impl MailUserContext {
             default_queue_executor,
             send_queue_executors,
             last_event_loop_action_id: Mutex::new(None),
+            initialization_mediator,
             is_cleanup_cache_running: Default::default(),
         });
 
