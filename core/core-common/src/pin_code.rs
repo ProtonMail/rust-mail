@@ -6,7 +6,7 @@ use chrono::Utc;
 use futures::future::try_join_all;
 use proton_crypto_pin_hash::argon2::{Argon2HashingError, ProtonArgon2Hash};
 use secrecy::{ExposeSecret, SecretString};
-use stash::stash::StashError;
+use stash::stash::{StashError, Tether};
 use thiserror::Error;
 use tokio::task::JoinError;
 
@@ -239,50 +239,49 @@ const QUERY_LIST_TABLES: &str = "SELECT name as value FROM sqlite_master WHERE t
 
 async fn nuke_application_data(ctx: Arc<Context>) -> Result<(), PinError> {
     tracing::error!("Fetching all logged in users.");
-
     let all_user_ctxs = ctx.get_all_logged_in_user_ctx().await?;
+    let users = ctx.get_accounts().await?;
+
+    tracing::error!("Logout and delete all accounts");
+    for user in users {
+        ctx.logout_account(user.remote_id.clone()).await?;
+        ctx.delete_account(user.remote_id).await?;
+    }
 
     tracing::error!("Removing all user data");
-
     let iter = all_user_ctxs.iter().map(|ctx| async {
-        let mut tether = ctx.stash().connection();
+        let tether = ctx.stash().connection();
 
-        tether.execute("PRAGMA foreign_keys = OFF;", vec![]).await?;
-
-        let table_names = tether
-            .query_values::<_, String>(QUERY_LIST_TABLES, vec![])
-            .await?;
-
-        tether
-            .tx(async |tx| -> Result<(), StashError> {
-                for table in table_names {
-                    let query = format!("DROP TABLE IF EXISTS {table};");
-                    if let Err(e) = tx.execute(query, vec![]).await {
-                        tracing::error!("Could not drop table: `{table}`, details: `{e}`");
-                    }
-                }
-
-                Ok(())
-            })
-            .await?;
-
-        tether.execute("PRAGMA foreign_keys = ON;", vec![]).await?;
+        drop_all_tables_in_database(tether).await?;
 
         Result::<(), PinError>::Ok(())
     });
 
     try_join_all(iter).await?;
 
-    tracing::error!("Removing all account data");
+    tracing::error!("Removing all remaining account data");
+    let tether = ctx.account_stash().connection();
 
-    let mut tether = ctx.account_stash().connection();
+    drop_all_tables_in_database(tether).await?;
+
+    tracing::error!("Removing all cached filesystem data");
+    if let Err(e) = tokio::fs::remove_dir_all(ctx.get_cache_path()).await {
+        tracing::error!("Could not remove cached data in filesystem, details: `{e}`");
+    }
+
+    tracing::error!("Application's data has been cleared successfuly");
+
+    Ok(())
+}
+
+async fn drop_all_tables_in_database(mut tether: Tether) -> Result<(), StashError> {
+    tether.execute("PRAGMA foreign_keys = OFF;", vec![]).await?;
+
     let table_names = tether
         .query_values::<_, String>(QUERY_LIST_TABLES, vec![])
         .await?;
 
-    tether.execute("PRAGMA foreign_keys = OFF;", vec![]).await?;
-
-    tether
+    let tx_res = tether
         .tx(async |tx| -> Result<(), StashError> {
             for table in table_names {
                 let query = format!("DROP TABLE IF EXISTS {table};");
@@ -293,15 +292,9 @@ async fn nuke_application_data(ctx: Arc<Context>) -> Result<(), PinError> {
 
             Ok(())
         })
-        .await?;
+        .await;
 
     tether.execute("PRAGMA foreign_keys = ON;", vec![]).await?;
 
-    tracing::error!("Removing all cached fs data");
-
-    tokio::fs::remove_dir_all(ctx.get_cache_path()).await?;
-
-    tracing::error!("Application's data has been cleared successfuly");
-
-    Ok(())
+    tx_res
 }

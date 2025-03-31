@@ -50,6 +50,18 @@ pub struct AppSettings {
 }
 
 impl AppSettings {
+    pub fn set_biometrics(&mut self) {
+        if let AppProtection::None = self.protection {
+            self.protection = AppProtection::Biometrics;
+        }
+    }
+
+    pub fn unset_biometrics(&mut self) {
+        if let AppProtection::Biometrics = self.protection {
+            self.protection = AppProtection::None;
+        }
+    }
+
     /// Get the app settings from database
     pub async fn get(tether: &Tether) -> Result<Option<Self>, StashError> {
         Self::load(SingleEntryId, tether).await
