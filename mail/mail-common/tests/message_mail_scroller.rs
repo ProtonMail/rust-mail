@@ -18,6 +18,7 @@ use proton_mail_test_utils::{api_message_meta, utils::create_address};
 use proton_mail_test_utils::{conv_id, conversation, label, lbl_id, message, msg_id};
 use proton_mail_test_utils::{init::Params as TestParams, test_context::MailTestContext};
 
+use stash::stash::StashError;
 use stash::{
     orm::Model,
     stash::{Bond, Tether, WatcherHandle},
@@ -45,25 +46,29 @@ async fn save_single_message(label: &Label, message: &mut Message, bond: &Bond<'
 
 async fn save_to_database(data: &mut BTreeMap<&str, Vec<Message>>, tether: &mut Tether) {
     let address = create_address(tether).await;
-    let bond = tether.transaction().await.unwrap();
-    let mut conv = conversation!(remote_id: conv_id!("convid_1"));
-    conv.save(&bond).await.unwrap();
-    for (label_rid, messages) in data.iter_mut() {
-        let mut label = label!(remote_id: lbl_id!(label_rid));
-        label.save(&bond).await.unwrap();
-        let mut counters = MessageCounters::new(label.local_id.unwrap());
-        counters.total = messages.len() as u64;
-        counters.save(&bond).await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |bond| {
+            let mut conv = conversation!(remote_id: conv_id!("convid_1"));
+            conv.save(bond).await.unwrap();
+            for (label_rid, messages) in data.iter_mut() {
+                let mut label = label!(remote_id: lbl_id!(label_rid));
+                label.save(bond).await.unwrap();
+                let mut counters = MessageCounters::new(label.local_id.unwrap());
+                counters.total = messages.len() as u64;
+                counters.save(bond).await.unwrap();
 
-        for message in messages.iter_mut() {
-            message.local_address_id = address.local_id.unwrap();
-            message.remote_address_id = address.remote_id.clone().unwrap();
-            message.local_conversation_id = conv.local_id;
-            message.remote_conversation_id = conv.remote_id.clone();
-            save_single_message(&label, message, &bond).await;
-        }
-    }
-    bond.commit().await.unwrap()
+                for message in messages.iter_mut() {
+                    message.local_address_id = address.local_id.unwrap();
+                    message.remote_address_id = address.remote_id.clone().unwrap();
+                    message.local_conversation_id = conv.local_id;
+                    message.remote_conversation_id = conv.remote_id.clone();
+                    save_single_message(&label, message, bond).await;
+                }
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
 }
 
 fn expected_messages(
@@ -108,9 +113,10 @@ async fn test_message_mail_scroller_reads_correct_items_within_visible_range_for
         .display_order(last_message.display_order)
         .build();
 
-    let bond = tether.transaction().await.unwrap();
-    scroller.save(&bond).await.unwrap();
-    bond.commit().await.unwrap();
+    tether
+        .tx(async |bond| scroller.save(bond).await)
+        .await
+        .unwrap();
 
     let page_size = 5;
     let mut scroller =
@@ -197,9 +203,10 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
         .unwrap()
         .unwrap();
     counters.total = page_size as u64 * 2;
-    let bond = tether.transaction().await.unwrap();
-    counters.save(&bond).await.unwrap();
-    bond.commit().await.unwrap();
+    tether
+        .tx(async |bond| counters.save(bond).await)
+        .await
+        .unwrap();
 
     // Online
     let mut scroller =
@@ -322,9 +329,10 @@ async fn test_message_mail_scroller_notificate_about_changes() {
         .unwrap()
         .unwrap();
     counters.total = page_size as u64 * 2;
-    let bond = tether.transaction().await.unwrap();
-    counters.save(&bond).await.unwrap();
-    bond.commit().await.unwrap();
+    tether
+        .tx(async |bond| counters.save(bond).await)
+        .await
+        .unwrap();
 
     let mut scroller =
         MailScroller::messages(user_ctx.as_weak(), local_label_id, unread, page_size)
@@ -411,10 +419,14 @@ async fn test_message_mail_scroller_notificate_about_changes() {
         time: 100
     );
 
-    let bond = tether.transaction().await.unwrap();
-    let label = Label::load(local_label_id, &bond).await.unwrap().unwrap();
-    save_single_message(&label, &mut test_message.clone(), &bond).await;
-    bond.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |bond| {
+            let label = Label::load(local_label_id, bond).await.unwrap().unwrap();
+            save_single_message(&label, &mut test_message.clone(), bond).await;
+            Ok(())
+        })
+        .await
+        .unwrap();
     // Getting an update will trigger a notification
     receiver.recv_async().await.unwrap();
 

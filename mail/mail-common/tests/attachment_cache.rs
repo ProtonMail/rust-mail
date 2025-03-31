@@ -14,10 +14,9 @@ use std::time::{Duration, SystemTime};
 
 use proton_mail_common::models::{AttachmentType, Message};
 
-use std::sync::atomic::AtomicU64;
-
+use proton_mail_common::MailContextError;
 use proton_mail_test_utils::test_context::MailTestContext;
-
+use std::sync::atomic::AtomicU64;
 // FIXME: There is duplicated logic from mail/mail-common/src/models/attachment_cache.rs
 // This will be removed when we delete the mail-test-utils crate.
 
@@ -280,46 +279,48 @@ async fn integration() -> anyhow::Result<()> {
         ..Default::default()
     };
     let addr = create_address(tether).await;
-    let tx = tether.transaction().await?;
-    conv.save(&tx).await?;
-    tx.commit().await?;
+    tether.tx(async |tx| conv.save(tx).await).await?;
 
     // Evil hack to stop cleanup
     user_ctx
         .is_cleanup_cache_running
         .store(true, Ordering::SeqCst);
 
-    let tx = tether.transaction().await?;
-    for (n, var) in comprehensive().enumerate() {
-        let (mut at_cache, mut at, mut msg) = var.unpack(now);
-        msg.local_conversation_id = conv.local_id;
-        msg.remote_conversation_id = conv.remote_id.clone();
-        msg.local_address_id = addr.local_id.unwrap();
-        msg.remote_address_id = addr.remote_id.clone().unwrap();
-        msg.save(&tx).await?;
+    tether
+        .tx::<_, _, MailContextError>(async |tx| {
+            for (n, var) in comprehensive().enumerate() {
+                let (mut at_cache, mut at, mut msg) = var.unpack(now);
+                msg.local_conversation_id = conv.local_id;
+                msg.remote_conversation_id = conv.remote_id.clone();
+                msg.local_address_id = addr.local_id.unwrap();
+                msg.remote_address_id = addr.remote_id.clone().unwrap();
+                msg.save(tx).await?;
 
-        at.local_message_id = msg.local_id;
-        at.local_address_id = addr.local_id;
-        at.remote_address_id = addr.remote_id.clone();
-        at.save(&tx).await?;
+                at.local_message_id = msg.local_id;
+                at.local_address_id = addr.local_id;
+                at.remote_address_id = addr.remote_id.clone();
+                at.save(tx).await?;
 
-        // First request the data
-        let path = Attachment::store_in_cache(
-            &user_ctx,
-            &at.filename,
-            at.local_id.unwrap(),
-            vec![0; at_cache.size.try_into().unwrap()],
-            &tx,
-        )
+                // First request the data
+                let path = Attachment::store_in_cache(
+                    &user_ctx,
+                    &at.filename,
+                    at.local_id.unwrap(),
+                    vec![0; at_cache.size.try_into().unwrap()],
+                    tx,
+                )
+                .await?;
+
+                // Then override locally ;)
+                at_cache.attachment_id = at.local_id.unwrap();
+                at_cache.path = path.into_os_string().into_string().unwrap();
+                at_cache.row_id = Some(n.try_into().unwrap()); // Evil rowid hack
+                at_cache.save(tx).await?;
+            }
+
+            Ok(())
+        })
         .await?;
-
-        // Then override locally ;)
-        at_cache.attachment_id = at.local_id.unwrap();
-        at_cache.path = path.into_os_string().into_string().unwrap();
-        at_cache.row_id = Some(n.try_into().unwrap()); // Evil rowid hack
-        at_cache.save(&tx).await?;
-    }
-    tx.commit().await?;
 
     let files_before = tether
         .query_values::<_, String>("SELECT path AS value FROM attachment_cache", vec![])

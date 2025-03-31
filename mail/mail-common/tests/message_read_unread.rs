@@ -156,9 +156,10 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
                 .unwrap()
                 .unwrap();
         conversation.num_unread = messages.len() as u64;
-        let bond = tether.transaction().await.unwrap();
-        conversation.save(&bond).await.unwrap();
-        bond.commit().await.unwrap();
+        tether
+            .tx(async |bond| conversation.save(bond).await)
+            .await
+            .unwrap();
     }
 
     // Action

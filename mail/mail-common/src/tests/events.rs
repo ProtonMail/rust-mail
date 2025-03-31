@@ -5,11 +5,7 @@ use proton_mail_test_utils::db::new_test_connection;
 
 #[tokio::test]
 async fn test_event_id_store_get_set() {
-    let mut tether = new_test_connection().await.connection();
-    let _tx = tether
-        .transaction()
-        .await
-        .expect("Failed to start transaction");
+    let _ = new_test_connection().await.connection();
     let _event_id1 = EventId::from("EVENT1");
     let _event_id2 = EventId::from("EVENT2");
     let _event_id3 = EventId::from("EVENT3");

@@ -148,9 +148,7 @@ async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize
         .unwrap()
         .unwrap();
     counters.unread = counters.total;
-    let tx = tether.transaction().await.unwrap();
-    counters.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    tether.tx(async |tx| counters.save(tx).await).await.unwrap();
 
     let conversation_ids = Conversation::remote_ids_counterpart(to_mark, &tether)
         .await
@@ -224,9 +222,7 @@ async fn mark_conversation_unread(conversations: &[TestItem], expected_read: usi
         .unwrap()
         .unwrap();
     counters.unread = counters.total;
-    let tx = tether.transaction().await.unwrap();
-    counters.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    tether.tx(async |tx| counters.save(tx).await).await.unwrap();
 
     let conversation_ids = Conversation::remote_ids_counterpart(to_mark, &tether)
         .await

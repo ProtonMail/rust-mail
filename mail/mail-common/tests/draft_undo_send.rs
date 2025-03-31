@@ -53,9 +53,10 @@ async fn draft_undo_send() {
         .await
         .unwrap();
 
-    let tx = tether.transaction().await.unwrap();
-    local_sent_message.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    tether
+        .tx(async |tx| local_sent_message.save(tx).await)
+        .await
+        .unwrap();
 
     // Queue undo send action - The exposed API uses apply for faster reaction, but we
     // want to check intermediate state here.
@@ -122,9 +123,10 @@ async fn draft_undo_send_failure() {
         .await
         .unwrap();
 
-    let tx = tether.transaction().await.unwrap();
-    local_sent_message.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    tether
+        .tx(async |tx| local_sent_message.save(tx).await)
+        .await
+        .unwrap();
 
     // Que undo send action
     Draft::action_undo_send(

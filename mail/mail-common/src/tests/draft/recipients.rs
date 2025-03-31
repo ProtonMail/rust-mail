@@ -3,6 +3,7 @@ use proton_api_core::services::proton::{ContactEmailId, ContactId, LabelId};
 use proton_core_common::datatypes::{LabelType, Labels};
 use proton_core_common::models::{Contact, ContactEmail, Label};
 use proton_mail_test_utils::db::new_test_connection_file;
+use stash::stash::StashError;
 
 #[test]
 fn duplicate_single_recipient_reports_error() {
@@ -374,8 +375,6 @@ async fn contact_group_resolution_from_message_recipients() {
     let contact_group_name = "contact_group".to_owned();
     let unknown_contact_group_name = "unknown".to_owned();
 
-    let tx = tether.transaction().await.unwrap();
-
     let contact_group_id = LabelId::from("l2");
     let mut contact_group = Label {
         remote_id: Some(contact_group_id.clone()),
@@ -406,12 +405,17 @@ async fn contact_group_resolution_from_message_recipients() {
         remote_contact_id: contact1.remote_id.clone(),
         ..Default::default()
     };
-    contact_group.save(&tx).await.unwrap();
-    contact1.save(&tx).await.unwrap();
-    contact2.save(&tx).await.unwrap();
-    contact1_email.save(&tx).await.unwrap();
-    contact2_email.save(&tx).await.unwrap();
-    tx.commit().await.unwrap();
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            contact_group.save(tx).await.unwrap();
+            contact1.save(tx).await.unwrap();
+            contact2.save(tx).await.unwrap();
+            contact1_email.save(tx).await.unwrap();
+            contact2_email.save(tx).await.unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
 
     // Note: it doesn't matter if the emails add up, what we are testing is that
     // the total numer of contact in that group is reported correctly.

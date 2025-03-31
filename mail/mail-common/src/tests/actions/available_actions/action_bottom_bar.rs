@@ -82,6 +82,7 @@ impl PartialEq<TestActions> for BottomBarActions {
 mod message {
     use super::*;
     use crate::datatypes::MovableSystemFolder;
+    use stash::stash::StashError;
     use test_case::test_case;
 
     static DEFAULT_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
@@ -383,19 +384,23 @@ mod message {
             },
             ..Default::default()
         });
-        let tx = tether.transaction().await.unwrap();
-        settings.save(&tx).await.unwrap();
+        let messages = tether
+            .tx::<_, _, StashError>(async |tx| {
+                settings.save(tx).await.unwrap();
 
-        let mut conversation = Conversation::default();
-        conversation.save(&tx).await.unwrap();
+                let mut conversation = Conversation::default();
+                conversation.save(tx).await.unwrap();
 
-        let mut messages = test_case.items.clone();
-        for message in &mut messages {
-            message.local_address_id = address.local_id.unwrap();
-            message.local_conversation_id = conversation.local_id;
-            message.save(&tx).await.unwrap();
-        }
-        tx.commit().await.unwrap();
+                let mut messages = test_case.items.clone();
+                for message in &mut messages {
+                    message.local_address_id = address.local_id.unwrap();
+                    message.local_conversation_id = conversation.local_id;
+                    message.save(tx).await.unwrap();
+                }
+                Ok(messages)
+            })
+            .await
+            .unwrap();
         let current_local = Label::remote_id_counterpart(test_case.current_local.clone(), &tether)
             .await
             .unwrap()
@@ -423,6 +428,7 @@ mod conversation {
     use super::*;
     use crate::datatypes::ContextualConversation;
     use crate::models::ConversationLabel;
+    use stash::stash::StashError;
     use test_case::test_case;
 
     static INBOX_LABEL_READ: LazyLock<ConversationLabel> = LazyLock::new(|| ConversationLabel {
@@ -801,14 +807,18 @@ mod conversation {
             },
             ..Default::default()
         });
-        let tx = tether.transaction().await.unwrap();
-        settings.save(&tx).await.unwrap();
+        let conversations = tether
+            .tx::<_, _, StashError>(async |tx| {
+                settings.save(tx).await.unwrap();
 
-        let mut conversations = test_case.items.clone();
-        for conversation in &mut conversations {
-            conversation.save(&tx).await.unwrap();
-        }
-        tx.commit().await.unwrap();
+                let mut conversations = test_case.items.clone();
+                for conversation in &mut conversations {
+                    conversation.save(tx).await.unwrap();
+                }
+                Ok(conversations)
+            })
+            .await
+            .unwrap();
         let current_local = Label::remote_id_counterpart(test_case.current_local.clone(), &tether)
             .await
             .unwrap()

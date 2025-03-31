@@ -10,6 +10,7 @@ use proton_mail_test_utils::init::Params;
 use proton_mail_common::models::Message;
 
 use proton_mail_test_utils::test_context::MailTestContext;
+use stash::stash::StashError;
 
 #[tokio::test]
 async fn banners() -> anyhow::Result<()> {
@@ -30,17 +31,20 @@ async fn banners() -> anyhow::Result<()> {
         ..addr.clone()
     };
 
-    let tx = tether.transaction().await?;
-    conv.save(&tx).await?;
-    addr.save(&tx).await?;
-    blocked_addr.save(&tx).await?;
-
-    let incoming_default = vec![IncomingDefault {
-        email: Some("blocked@email".into()),
-        location: Some(ApiIncomingDefaultLocation::Blocked),
-        action: None,
-    }];
-    IncomingDefaultLocation::store(incoming_default, &tx).await?;
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            conv.save(tx).await?;
+            addr.save(tx).await?;
+            blocked_addr.save(tx).await?;
+            let incoming_default = vec![IncomingDefault {
+                email: Some("blocked@email".into()),
+                location: Some(ApiIncomingDefaultLocation::Blocked),
+                action: None,
+            }];
+            IncomingDefaultLocation::store(incoming_default, tx).await?;
+            Ok(())
+        })
+        .await?;
 
     let mut msg_normal = Message {
         local_conversation_id: conv.local_id,
@@ -68,13 +72,16 @@ async fn banners() -> anyhow::Result<()> {
         remote_conversation_id: conv.remote_id.clone(),
         ..Default::default()
     };
-
-    msg_normal.save(&tx).await?;
-    msg_phising.save(&tx).await?;
-    msg_spam.save(&tx).await?;
-    msg_expiry.save(&tx).await?;
-    msg_blocked.save(&tx).await?;
-    tx.commit().await?;
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            msg_normal.save(tx).await?;
+            msg_phising.save(tx).await?;
+            msg_spam.save(tx).await?;
+            msg_expiry.save(tx).await?;
+            msg_blocked.save(tx).await?;
+            Ok(())
+        })
+        .await?;
 
     assert_eq!(
         Vec::<MessageBanner>::new(),
