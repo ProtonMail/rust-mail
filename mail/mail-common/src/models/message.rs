@@ -7,6 +7,7 @@ use crate::actions::messages::ham::Ham;
 use crate::actions::messages::label::Label as ActionLabel;
 use crate::actions::messages::label_as::LabelAs;
 use crate::actions::messages::r#move::Move;
+use crate::actions::messages::phishing::ReportPhishing;
 use crate::actions::messages::read::Read;
 use crate::actions::messages::unlabel::Unlabel;
 use crate::actions::messages::unread::Unread;
@@ -440,6 +441,27 @@ impl Message {
         message_ids: Vec<LocalMessageId>,
     ) -> Result<QueuedActionOutput<Ham>, QueueActionError<Ham>> {
         let action = Ham::new(message_ids);
+        queue.queue_action(action).await
+    }
+
+    /// Mark multiple messages as ham (not spam).
+    ///
+    /// # Parameters
+    ///
+    /// * `queue`       - The action queue.
+    /// * `label_id`    - The ID of the label to apply to the messages.
+    /// * `message_ids` - The IDs of the target messages.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API request failed.
+    ///
+    pub async fn action_report_phishing(
+        queue: &Queue,
+        label_id: LocalLabelId,
+        message_id: LocalMessageId,
+    ) -> Result<QueuedActionOutput<ReportPhishing>, QueueActionError<ReportPhishing>> {
+        let action = ReportPhishing::new(label_id, message_id);
         queue.queue_action(action).await
     }
 
@@ -2608,7 +2630,7 @@ impl Message {
             .await
     }
 
-    pub(crate) async fn store_decrypted_message_body(
+    pub async fn store_decrypted_message_body(
         local_id: LocalMessageId,
         message: String,
         bond: &Bond<'_>,
@@ -2660,7 +2682,7 @@ impl Message {
         let flags = self.flags;
         // The user might have marked it manually as not spam, skip that case
         if !flags.contains(MessageFlags::HAM_MANUAL) {
-            // Phising
+            // phishing
             if flags.intersects(
                 MessageFlags::FLAG_SUSPICIOUS
                     | MessageFlags::PHISHING_AUTO

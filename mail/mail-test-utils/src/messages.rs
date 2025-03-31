@@ -527,7 +527,7 @@ impl MailTestContext {
         .await;
     }
 
-    /// Generate a new mock expectation that accpets an incomingdefault PUT
+    /// Generate a new mock expectation that accepts an incomingdefault PUT
     /// but doesn't actually do anything
     #[allow(clippy::doc_markdown)]
     #[function_name::named]
@@ -541,13 +541,26 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate a new mock expectation that accpets an incomingdefault POST
+    /// Generate a new mock expectation that accepts an incomingdefault POST
     /// but doesn't actually do anything
     #[allow(clippy::doc_markdown)]
     #[function_name::named]
     pub async fn mock_post_incoming_default(&self) {
         Mock::given(method("POST"))
             .and(path("/api/mail/v4/incomingdefaults"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(()))
+            .expect(1)
+            .named(function_name!())
+            .mount(self.mock_server())
+            .await;
+    }
+
+    /// Generate a new mock expectation that accpets a mark as phising POST request.
+    #[allow(clippy::doc_markdown)]
+    #[function_name::named]
+    pub async fn mock_report_phishing(&self) {
+        Mock::given(method("POST"))
+            .and(path("/api/core/v4/reports/phishing"))
             .respond_with(ResponseTemplate::new(200).set_body_json(()))
             .expect(1)
             .named(function_name!())

@@ -464,4 +464,13 @@ pub trait ProtonMail {
         &self,
         message_id: MessageId,
     ) -> Result<PostCancelSendResponse, ApiServiceError>;
+
+    /// Reports a message as phishing.
+    /// It requires the decrypted message body.
+    async fn report_phishing(
+        &self,
+        message_id: MessageId,
+        mime_type: MimeType,
+        body: &str,
+    ) -> Result<(), ApiServiceError>;
 }

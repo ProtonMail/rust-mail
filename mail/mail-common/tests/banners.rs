@@ -1,9 +1,15 @@
+use proton_api_core::services::proton::LabelId;
+use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::response_data::IncomingDefault;
 use proton_api_mail::services::proton::response_data::IncomingDefaultLocation as ApiIncomingDefaultLocation;
 use proton_core_common::models::Address;
+use proton_core_common::models::Label;
+use proton_core_common::models::ModelIdExtension as _;
 use proton_mail_common::datatypes::MessageFlags;
+use proton_mail_common::datatypes::SystemLabelId as _;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
 use proton_mail_common::models::Conversation;
+use proton_mail_common::models::MessageBodyMetadata;
 use proton_mail_common::models::default_location::IncomingDefaultLocation;
 use proton_mail_test_utils::init::Params;
 
@@ -11,6 +17,7 @@ use proton_mail_common::models::Message;
 
 use proton_mail_test_utils::test_context::MailTestContext;
 use proton_mail_test_utils::test_context::MailUserContextTestExtension;
+use stash::orm::Model;
 use stash::stash::StashError;
 use wiremock::Mock;
 use wiremock::ResponseTemplate;
@@ -33,11 +40,18 @@ async fn banners() -> anyhow::Result<()> {
         .mount(test_ctx.mock_server())
         .await;
 
+    let message_id = MessageId::from("normal");
+
+    test_ctx.mock_report_phishing().await;
     test_ctx.mock_put_incoming_default().await;
     test_ctx.mock_post_incoming_default().await;
+    test_ctx.mock_put_message_ham(&"spam".into()).await;
+    test_ctx.mock_put_message_ham(&"phishing".into()).await;
+    test_ctx.mock_put_message_ham(&"normal".into()).await;
     test_ctx.catch_all().await;
 
     let ctx = test_ctx.mail_user_context().await;
+    test_ctx.initialize_uninitialized_ctx(&ctx).await;
 
     let tether = &mut ctx.user_stash().connection();
 
@@ -67,37 +81,33 @@ async fn banners() -> anyhow::Result<()> {
         remote_conversation_id: conv.remote_id.clone(),
         local_address_id: addr.local_id.unwrap(),
         remote_address_id: addr.remote_id.clone().unwrap(),
+        remote_id: Some(message_id),
         ..Default::default()
     };
-    let mut msg_phising = Message {
+
+    let mut msg_phishing = Message {
         flags: MessageFlags::FLAG_SUSPICIOUS,
+        remote_id: Some("phishing".into()),
         ..msg_normal.clone()
     };
     let mut msg_spam = Message {
         flags: MessageFlags::SPAM_AUTO,
+        remote_id: Some("spam".into()),
         ..msg_normal.clone()
     };
-    let mut msg_expiry = Message {
+    let msg_expiry = Message {
         expiration_time: 42,
+        remote_id: Some("expiry".into()),
         ..msg_normal.clone()
     };
-    let mut msg_blocked = Message {
+    let msg_blocked = Message {
         local_address_id: blocked_addr.local_id.unwrap(),
         remote_address_id: blocked_addr.remote_id.unwrap(),
         local_conversation_id: conv.local_id,
         remote_conversation_id: conv.remote_id.clone(),
+        remote_id: Some("blocked".into()),
         ..Default::default()
     };
-    tether
-        .tx::<_, _, StashError>(async |tx| {
-            msg_normal.save(tx).await?;
-            msg_phising.save(tx).await?;
-            msg_spam.save(tx).await?;
-            msg_expiry.save(tx).await?;
-            msg_blocked.save(tx).await?;
-            Ok(())
-        })
-        .await?;
 
     assert_eq!(
         Vec::<MessageBanner>::new(),
@@ -105,7 +115,7 @@ async fn banners() -> anyhow::Result<()> {
     );
     assert_eq!(
         vec![MessageBanner::PhishingAttempt],
-        msg_phising.get_banners(tether).await
+        msg_phishing.get_banners(tether).await
     );
     assert_eq!(
         vec![MessageBanner::Spam],
@@ -120,20 +130,80 @@ async fn banners() -> anyhow::Result<()> {
         msg_blocked.get_banners(tether).await
     );
 
+    let (msg_normal_id, msg_spam_id, msg_phishing_id) = tether
+        .tx::<_, _, StashError>(async |tx| {
+            msg_normal.save(tx).await?;
+            msg_spam.save(tx).await?;
+            msg_phishing.save(tx).await?;
+
+            MessageBodyMetadata {
+                local_message_id: msg_normal.local_id,
+                remote_message_id: msg_normal.remote_id.clone(),
+                ..Default::default()
+            }
+            .save(tx)
+            .await?;
+            Message::store_decrypted_message_body(
+                msg_normal.local_id.unwrap(),
+                "im a nigerian prince, click this link".into(),
+                tx,
+            )
+            .await?;
+
+            Ok((
+                msg_normal.local_id.unwrap(),
+                msg_spam.local_id.unwrap(),
+                msg_phishing.local_id.unwrap(),
+            ))
+        })
+        .await?;
+
+    // Let's block, unblock and report phishing to see how labels change
+
     IncomingDefaultLocation::action_block(ctx.action_queue(), addr.local_id.unwrap()).await?;
     IncomingDefaultLocation::action_unblock(ctx.action_queue(), blocked_addr.local_id.unwrap())
         .await?;
+    Message::action_ham(ctx.action_queue(), vec![msg_spam_id, msg_phishing_id]).await?;
 
-    assert_eq!(2, ctx.execute_all_actions().await?);
+    let inbox = Label::remote_id_counterpart(LabelId::inbox(), tether)
+        .await?
+        .unwrap();
+
+    Message::action_report_phishing(ctx.action_queue(), inbox, msg_normal_id).await?;
+
+    assert_eq!(4, ctx.execute_all_actions().await?);
+
+    let msg_normal = Message::load(msg_normal_id, tether).await?.unwrap();
+    let msg_spam = Message::load(msg_spam_id, tether).await?.unwrap();
+    let msg_phishing = Message::load(msg_phishing_id, tether).await?.unwrap();
 
     assert_eq!(
         vec![MessageBanner::BlockedSender],
+        msg_spam.get_banners(tether).await
+    );
+
+    assert_eq!(
+        vec![MessageBanner::BlockedSender, MessageBanner::PhishingAttempt],
         msg_normal.get_banners(tether).await
     );
 
     assert_eq!(
         Vec::<MessageBanner>::new(),
         msg_blocked.get_banners(tether).await
+    );
+
+    assert_eq!(
+        vec![MessageBanner::BlockedSender],
+        msg_phishing.get_banners(tether).await
+    );
+
+    // Let's make sure that action_report_phishing gets reverted
+    Message::action_ham(ctx.action_queue(), vec![msg_normal.local_id.unwrap()]).await?;
+    assert_eq!(1, ctx.execute_all_actions().await?);
+    let msg_normal = Message::load(msg_normal_id, tether).await?.unwrap();
+    assert_eq!(
+        vec![MessageBanner::BlockedSender],
+        msg_normal.get_banners(tether).await
     );
 
     Ok(())
