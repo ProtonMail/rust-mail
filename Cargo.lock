@@ -5995,12 +5995,11 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "derivative",
- "fastrand",
  "flume",
  "futures",
  "indoc",
  "itertools 0.13.0",
- "parking_lot",
+ "proton-task-service",
  "r2d2",
  "rusqlite",
  "serde",

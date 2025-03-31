@@ -30,6 +30,7 @@ use core::time::Duration;
 use derivative::Derivative;
 use flume::{Receiver as QueueReceiver, Sender as QueueSender, unbounded};
 use indoc::formatdoc;
+use proton_task_service::IntoNonPausableFuture;
 use r2d2::Pool;
 use rusqlite::hooks::Action;
 use rusqlite::types::FromSql;
@@ -921,11 +922,6 @@ impl Tether {
         Ok(values.swap_remove(0))
     }
 
-    /// Starts a new transaction.
-    ///
-    /// This function starts a new transaction. All queries executed within the transaction must be
-    /// executed against the same connection, which is why a new transaction consumes the [`Tether`].
-    ///
     /// Note that under the current design, transactions are not nestable, and
     /// each transaction must be carried out on its own, independent connection.
     /// It is possible to reuse a connection for multiple transactions, but only
@@ -947,21 +943,7 @@ impl Tether {
     ///   - [`TransactionError`](StashError::ExecutionError) - Problem starting
     ///     the transaction.
     ///
-    /// # See also
     ///
-    /// * [`Stash::connection()`]
-    ///
-    #[allow(dead_code)]
-    pub async fn transaction(&mut self) -> Result<Bond<'_>, StashError> {
-        self.transaction_impl(TransactionTrackingPolicy::Tracking)
-            .await
-    }
-
-    /// Same as [`transaction()`] but wraps the steps in a closure.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if a transaction step failed or the closure failed.
     pub async fn tx<F, T, E>(&mut self, closure: F) -> Result<T, E>
     where
         F: AsyncFnOnce(&Bond<'_>) -> Result<T, E>,
@@ -997,18 +979,22 @@ impl Tether {
         F: AsyncFnOnce(&Bond<'_>) -> Result<T, E>,
         E: From<StashError>,
     {
-        let tx = self.transaction_impl(policy).await?;
-        let r = closure(&tx).await;
-        if r.is_err() {
-            if let Err(e) = tx.rollback().await {
-                error!("Failed to rollback transaction: {e:?}");
+        async {
+            let tx = self.transaction_impl(policy).await?;
+            let r = closure(&tx).await;
+            if r.is_err() {
+                if let Err(e) = tx.rollback().await {
+                    error!("Failed to rollback transaction: {e:?}");
+                }
+                return r;
             }
-            return r;
+            tx.commit_(policy)
+                .await
+                .inspect_err(|e| error!("Failed to commit transaction: {e:?}"))?;
+            r
         }
-        tx.commit_(policy)
-            .await
-            .inspect_err(|e| error!("Failed to commit transaction: {e:?}"))?;
-        r
+        .into_non_pausable()
+        .await
     }
 
     async fn transaction_impl(
@@ -1176,28 +1162,6 @@ impl<'tether> Bond<'tether> {
         Self { tether }
     }
 
-    /// Commits a transaction.
-    ///
-    /// This function commits, i.e. finalises, an existing, active transaction.
-    ///
-    /// # Errors
-    ///
-    /// The following [`StashError`] variants can be returned:
-    ///
-    ///   - [`NoActiveTransaction`](StashError::NoActiveTransaction) - No
-    ///     transaction is currently active on this connection.
-    ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
-    ///     back to the caller via the oneshot channel.
-    ///   - [`QueueError`](StashError::QueueError) - Problem sending the
-    ///     operation to the queue.
-    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
-    ///     connection from the pool.
-    ///   - [`TransactionError`](StashError::ExecutionError) - Problem
-    ///     committing the transaction.
-    ///
-    pub async fn commit(self) -> Result<(), StashError> {
-        self.commit_(TransactionTrackingPolicy::Tracking).await
-    }
     #[allow(clippy::mem_forget)]
     /// Internal commit implementation.
     ///
@@ -1254,7 +1218,7 @@ impl<'tether> Bond<'tether> {
     ///     the transaction.
     ///
     #[allow(clippy::mem_forget)]
-    pub async fn rollback(self) -> Result<(), StashError> {
+    async fn rollback(self) -> Result<(), StashError> {
         let (sender, receiver) = oneshot::channel();
 
         let operation = Operation::Transaction(OperationTransaction::Rollback(sender));
