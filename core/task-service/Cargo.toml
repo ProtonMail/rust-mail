@@ -8,6 +8,7 @@ tokio = { workspace = true }
 pin-project = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
+tracing-test = { version = "0.2.5", features = ["no-env-filter"] }
 
 [lints]
 workspace = true

@@ -8,6 +8,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
 use std::task::{Context, Poll, Waker};
+use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info};
 
@@ -60,11 +61,17 @@ impl<F: Future> Future for PausableFuture<F> {
 pub struct NonPausableFuture<F: Future> {
     #[pin]
     future: F,
+    /// We need to remember the old value in the nested hierarchy so we can restore
+    /// it when the future is finished.
+    old_value: Cell<Option<bool>>,
 }
 
 impl<F: Future> NonPausableFuture<F> {
     fn new(future: F) -> Self {
-        Self { future }
+        Self {
+            future,
+            old_value: Cell::new(None),
+        }
     }
 }
 
@@ -73,22 +80,17 @@ impl<F: Future> Future for NonPausableFuture<F> {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         // Disable the pause check.
-        match OVERWRITE_PAUSE.try_with(|value| {
-            if value.get() {
-                false
-            } else {
-                value.set(true);
-                true
-            }
-        }) {
-            Ok(should_restore) => {
+        match OVERWRITE_PAUSE.try_with(|value| value.replace(true)) {
+            Ok(old_value) => {
+                if self.old_value.get().is_none() {
+                    self.old_value.set(Some(old_value));
+                }
+                let old_value = self.old_value.get().unwrap();
                 match self.project().future.poll(cx) {
                     Poll::Ready(output) => {
                         // Restore the pause check when the future is finished, but only
                         // if it wasn't previously paused.
-                        if should_restore {
-                            OVERWRITE_PAUSE.with(|value| value.set(false));
-                        }
+                        OVERWRITE_PAUSE.with(|value| value.set(old_value));
                         Poll::Ready(output)
                     }
                     Poll::Pending => Poll::Pending,
@@ -143,10 +145,28 @@ impl TaskService {
         debug!("Starting task service");
         let mut watchers: HashMap<u64, Waker> = HashMap::new();
         let mut paused = false;
+        let mut num_futures = 0_usize;
+        let mut pause_awaiters = Vec::<oneshot::Sender<()>>::new();
+
+        let notify_awaiters =
+            |paused_count: usize,
+             future_count: usize,
+             pause_awaiters: &mut Vec<oneshot::Sender<()>>| {
+                if paused_count == future_count {
+                    tracing::trace!("All futures paused");
+                    for sender in pause_awaiters.drain(..) {
+                        let _ = sender.send(());
+                    }
+                }
+            };
         while let Ok(command) = receiver.recv() {
             match command {
                 Command::Pause => {
                     paused = true;
+                }
+                Command::PauseAndWait(sender) => {
+                    paused = true;
+                    pause_awaiters.push(sender);
                 }
                 Command::Resume => {
                     paused = false;
@@ -167,10 +187,20 @@ impl TaskService {
 
                     // Register watcher and await the unpause command.
                     watchers.insert(id, waker);
+
+                    // Notify all paused waiters that all the futures are paused now.
+                    notify_awaiters(watchers.len(), num_futures, &mut pause_awaiters);
                 }
                 Command::Dropped { id } => {
                     tracing::trace!("Future dropped: {}", id);
                     watchers.remove(&id);
+                    num_futures = num_futures.saturating_sub(1);
+                    // Notify all paused waiters that all the futures are paused now.
+                    notify_awaiters(watchers.len(), num_futures, &mut pause_awaiters);
+                }
+                Command::Started { id } => {
+                    tracing::trace!("Future started: {}", id);
+                    num_futures = num_futures.saturating_add(1);
                 }
             }
         }
@@ -188,6 +218,30 @@ impl TaskService {
         if let Err(e) = self.sender.send(Command::Pause) {
             error!("Failed to send pause command: {}", e);
         }
+    }
+
+    /// Pause all running async task.
+    ///
+    /// # Remarks
+    ///
+    /// This will eventually cause the futures spawned via this to pause on their next poll cycle.
+    ///
+    /// As soon as all the spawned futures have entered the paused state, this future will resolve.
+    /// If after this method new tasks are spawned, it is possible that this method will return
+    /// early if all current futures have paused.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if we did not receive a reply.
+    pub async fn pause_and_wait(&self) -> Result<(), oneshot::error::RecvError> {
+        info!("Pausing tasks and await");
+        self.allowed_to_run.store(false, Ordering::Relaxed);
+        let (sender, receiver) = oneshot::channel();
+        if let Err(e) = self.sender.send(Command::PauseAndWait(sender)) {
+            error!("Failed to send pause command: {}", e);
+            drop(e);
+        }
+        receiver.await
     }
 
     /// Unpause all paused async tasks.
@@ -234,14 +288,23 @@ impl TaskService {
             channel: self.sender.clone(),
         };
 
+        // Communicate new future
+        let _ = self.sender.send(Command::Started {
+            id: future_state.id,
+        });
+
         OVERWRITE_PAUSE.scope(Cell::new(false), PausableFuture::new(future_state, future))
     }
 }
 
 /// Background worker command
 enum Command {
+    /// Signal that a future has started
+    Started { id: u64 },
     /// Signal that we entered the paused state.
     Pause,
+    /// Signal a request to pause all the futures and wait until they are all paused.
+    PauseAndWait(oneshot::Sender<()>),
     /// Signal that we exited the paused state.
     Resume,
     /// Register a waker for a future.
@@ -304,6 +367,7 @@ mod tests {
     use super::*;
     use std::time::Duration;
     use tokio::sync::RwLock;
+    use tracing::{Instrument, trace_span};
 
     #[tokio::test(flavor = "multi_thread")]
     async fn overwrite_pause_state() {
@@ -360,5 +424,107 @@ mod tests {
         service.resume();
         // Normal future now completes
         receiver1.recv().await.unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[tracing_test::traced_test]
+    async fn pause_and_await() {
+        let service = TaskService::new().unwrap();
+        let (sender1, mut receiver1) = tokio::sync::mpsc::channel(1);
+        let (sender2, mut receiver2) = tokio::sync::mpsc::channel(1);
+        let (main_sender, mut main_receiver) = tokio::sync::mpsc::channel(2);
+
+        let lock = Arc::new(RwLock::new(0));
+        let guard = lock.write().await;
+        let lock_clone = Arc::clone(&lock);
+        let main_sender_clone = main_sender.clone();
+        service.spawn(
+            async move {
+                // Notify main task that we are ready.
+                main_sender_clone.send(()).await.unwrap();
+                // Wait to acquire read lock, this means the service should be paused now.
+                let guard = lock_clone.read().await;
+                drop(guard);
+                tracing::info!("Sleeping");
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                // this future only completes after we resume execution
+                sender1.send(()).await.unwrap();
+                tracing::info!("DONE");
+            }
+            .instrument(trace_span!("FUTURE1")),
+        );
+        let lock_clone = Arc::clone(&lock);
+        let main_sender_clone = main_sender.clone();
+        service.spawn(
+            async move {
+                async move {
+                    // Notify main task that we are ready.
+                    main_sender_clone.send(()).await.unwrap();
+                    // Wait to acquire read lock, this means the service should be paused now.
+                    let guard = lock_clone.read().await;
+                    drop(guard);
+                    tracing::info!("Sleeping");
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                    tracing::info!("Done");
+                }
+                .instrument(trace_span!("NONPAUSE"))
+                .into_non_pausable()
+                .await;
+                tracing::info!("Sleeping");
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                sender2.send(()).await.unwrap();
+                tracing::info!("Done");
+            }
+            .instrument(trace_span!("FUTURE2")),
+        );
+
+        let lock_clone = Arc::clone(&lock);
+        let main_sender_clone = main_sender.clone();
+        // this future will be aborted
+        let join_handle = service.spawn(
+            async move {
+                // Notify main task that we are ready.
+                main_sender_clone.send(()).await.unwrap();
+                // Wait to acquire read lock, this means the service should be paused now.
+                let guard = lock_clone.read().await;
+                drop(guard);
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+            .instrument(trace_span!("FUTURE3")),
+        );
+
+        // wait on futures to be ready
+        main_receiver.recv().await.unwrap();
+        main_receiver.recv().await.unwrap();
+        main_receiver.recv().await.unwrap();
+        service.pause();
+        // unblock futures
+        drop(guard);
+        // Abort future.
+        join_handle.abort();
+
+        // re-pause and await
+        tokio::time::timeout(Duration::from_secs(2), service.pause_and_wait())
+            .await
+            .unwrap()
+            .unwrap();
+
+        // Ensure future remains paused.
+        tokio::time::timeout(Duration::from_millis(100), receiver2.recv())
+            .await
+            .unwrap_err();
+        // Ensure future remains paused.
+        tokio::time::timeout(Duration::from_millis(100), receiver1.recv())
+            .await
+            .unwrap_err();
+        // Resume service
+        service.resume();
+        // Wait on future completion
+        tokio::time::timeout(Duration::from_millis(600), receiver1.recv())
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_millis(600), receiver2.recv())
+            .await
+            .unwrap();
     }
 }
