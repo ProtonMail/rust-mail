@@ -12,6 +12,7 @@ use crate::user_context::initialization::InitializationMediator;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 use proton_action_queue::action::ActionId;
+use proton_action_queue::network::WaitForOnlineSubscribtion;
 use proton_action_queue::queue::{Queue, QueueAutoExecutor, QueueAutoExecutorPool};
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::connection_status::ConnectionStatus;
@@ -28,7 +29,7 @@ use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
 use proton_event_loop::foreground_loop::EventLoop;
-use proton_task_service::{AsyncTaskResult, TaskSpawner};
+use proton_task_service::{AsyncTaskResult, TaskService, TaskSpawner};
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, Tether};
 use std::future::Future;
@@ -42,6 +43,7 @@ use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tracing::error;
 
+const DEFAULT_SEND_QUEUE_POOL_SIZE: usize = 4;
 pub struct MailUserContext {
     this: Weak<Self>,
     mail_context: Arc<MailContext>,
@@ -66,15 +68,12 @@ impl MailUserContext {
 
         let wait_for_online = WFO::create(user_context.session().status_watcher());
         let task_service = mail_context.core_context().task_service();
-        let default_queue_executor = user_context
-            .queue()
-            .new_executor()
-            .into_auto_executor(wait_for_online.subscribe(), task_service);
-        let send_queue_executors = QueueAutoExecutorPool::new(
+        let default_queue_executor =
+            Self::new_default_queue_executor(user_context.queue(), &wait_for_online, task_service);
+        let send_queue_executors = Self::new_send_queue_executor(
             user_context.queue(),
-            &SEND_ACTION_GROUP,
-            NonZeroUsize::new(4).unwrap(),
             &wait_for_online,
+            NonZeroUsize::new(DEFAULT_SEND_QUEUE_POOL_SIZE).unwrap(),
             task_service,
         );
         let initialization_mediator = InitializationMediator::new(task_service);
@@ -101,6 +100,33 @@ impl MailUserContext {
         this.init_expiration_loop();
 
         Ok(this)
+    }
+
+    /// Create a new default action executor.
+    pub fn new_default_queue_executor(
+        queue: &Queue,
+        wait_for_online: &impl WaitForOnlineSubscribtion,
+        task_service: &TaskService,
+    ) -> QueueAutoExecutor {
+        queue
+            .new_executor()
+            .into_auto_executor(wait_for_online.subscribe(), task_service)
+    }
+
+    /// Create a new send group action executor.
+    pub fn new_send_queue_executor(
+        queue: &Queue,
+        wait_for_online: &impl WaitForOnlineSubscribtion,
+        pool_size: NonZeroUsize,
+        task_service: &TaskService,
+    ) -> QueueAutoExecutorPool {
+        QueueAutoExecutorPool::new(
+            queue,
+            &SEND_ACTION_GROUP,
+            pool_size,
+            wait_for_online,
+            task_service,
+        )
     }
 
     /// Get the current Arc instance for this context.

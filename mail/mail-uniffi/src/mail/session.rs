@@ -2,7 +2,10 @@ use crate::core::datatypes::{ApiConfig, AppProtection, AppSettings, AppSettingsD
 use crate::core::verification::{ChallengeNotifierWrap, DynChallengeNotifier};
 use crate::core::{FFIKeyChain, StoredAccountState, StoredSession, StoredSessionState};
 use crate::core::{OSKeyChain, StoredAccount};
-use crate::errors::{LoginError, PinAuthError, PinSetError, UserSessionError, VoidSessionResult};
+use crate::errors::unexpected::UnexpectedError;
+use crate::errors::{
+    LoginError, PinAuthError, PinSetError, ProtonError, UserSessionError, VoidSessionResult,
+};
 use crate::mail::logging::init_log;
 use crate::mail::state::MailUserContextMap;
 use crate::mail::{LoginFlow, MailUserSession};
@@ -13,6 +16,9 @@ use crate::{
 };
 use futures::TryFutureExt;
 use itertools::Itertools;
+use proton_core_common::action_queue::{
+    CheckNetworkStatusSubscriber, WaitForOnlineSubscribtionExt,
+};
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::models::AppSettings as RealAppSettings;
 use proton_core_common::os::KeyChainExt;
@@ -24,12 +30,14 @@ use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::models::DraftMetadata;
 use proton_mail_common::{MailContext, MailUserContext};
+use proton_task_service::TaskService;
 use stash::stash::{Stash, WatcherHandle};
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use tokio::sync::mpsc;
-use tokio::task::{AbortHandle, spawn_blocking};
-use tracing::debug;
+use tokio::task::spawn_blocking;
+use tracing::{debug, error};
 use tracing_appender::non_blocking::WorkerGuard;
 
 /// Mail context is the entry point for the application. It contains important state such as
@@ -659,14 +667,14 @@ impl MailSession {
 
     /// Functionality to execute pending actions for all logged in accounts in controlled manner.
     ///
-    /// This method is ment to be executed when putting application to sleep or running it in the background.
+    /// This method is meant to be executed when putting application to sleep or running it in the background.
     /// It stops automatic execution of the queues and sequentially execute actions in following priority:
     /// * Send actions for primary account,
     /// * Send actions for secondary accounts,
     /// * Other actions for primary account,
     /// * Other actions for secondary accounts,
     ///
-    /// It will stop when aborded or when finished whatever comes first.
+    /// It will stop when aborted or when finished whatever comes first.
     /// On exit the callback will be triggered to notify caller that it finished.
     ///
     #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
@@ -675,9 +683,15 @@ impl MailSession {
         callback: Box<dyn LiveQueryCallback>,
     ) -> Result<Arc<BackgroundExecutionHandle>, UserSessionError> {
         let ctx = self.mail_ctx.clone();
-        let (sender, abort) = mpsc::channel(1);
+        let task_service = TaskService::new().map_err(|_| {
+            error!("Failed to create task service");
+            UserSessionError::Other(ProtonError::Unexpected(UnexpectedError::Os))
+        })?;
+        let (sender, mut abort) = mpsc::channel(1);
 
-        let handle = spawn_async(ctx.clone(), async move {
+        // This task needs to run a free task that won't get paused or it may get stuck.
+        async_runtime().spawn(async move {
+            tracing::info!("Starting background execution");
             let all_user_ctxs = get_all_logged_in_mail_user_contexts(&ctx)
                 .await
                 .inspect_err(|e| {
@@ -695,21 +709,43 @@ impl MailSession {
                 return Ok(());
             }
 
-            let mut execution_ctx = BackgroundExecutionContext {
-                abort,
-                _musc: all_user_ctxs,
-            };
+            // Create new executors for all the contexts.
+            let queue_executors = all_user_ctxs
+                .iter()
+                .map(|ctx| {
+                    let wait_for_online =
+                        CheckNetworkStatusSubscriber::create(ctx.session().status_watcher());
+                    let send_executor = MailUserContext::new_send_queue_executor(
+                        ctx.action_queue(),
+                        &wait_for_online,
+                        NonZeroUsize::new(2).unwrap(),
+                        &task_service,
+                    );
+                    let default_executor = MailUserContext::new_default_queue_executor(
+                        ctx.action_queue(),
+                        &wait_for_online,
+                        &task_service,
+                    );
+                    (send_executor, default_executor)
+                })
+                .collect::<Vec<_>>();
 
             tracing::debug!("Background execution is in progress... awaiting for abort");
-            execution_ctx.abort.recv().await;
-            execution_ctx.stop();
-
+            abort.recv().await;
+            // Pause all executors and make sure all non-pausable futures finish on time.
+            tracing::info!("Pausing Background queue executors...");
+            if task_service.pause_and_wait().await.is_err() {
+                tracing::error!("Pausing Background queue executors... Failed");
+            } else {
+                tracing::info!("Pausing executors... Done");
+            }
+            drop(queue_executors);
+            tracing::info!("Background execution finished");
             Result::<_, RealProtonMailError>::Ok(())
         });
 
         Ok(Arc::new(BackgroundExecutionHandle {
             sender,
-            handle: handle.abort_handle(),
             ctx: Arc::downgrade(&self.mail_ctx),
         }))
     }
@@ -1013,6 +1049,24 @@ impl MailSession {
         self.mail_ctx.core_context().task_service().pause();
     }
 
+    /// Pause all background work and wait for all non-pausable futures to complete.
+    ///
+    /// This should be called once the application enters the background.
+    pub fn pause_work_and_wait(&self) {
+        async_runtime().block_on(async {
+            if self
+                .mail_ctx
+                .core_context()
+                .task_service()
+                .pause_and_wait()
+                .await
+                .is_err()
+            {
+                error!("Failed to await paused work");
+            }
+        });
+    }
+
     /// Resume all background work
     ///
     /// This should be called once the application enters the foreground.
@@ -1117,7 +1171,6 @@ impl WatchedSessions {
 #[derive(uniffi::Object)]
 pub struct BackgroundExecutionHandle {
     sender: mpsc::Sender<()>,
-    handle: AbortHandle,
     ctx: Weak<MailContext>,
 }
 
@@ -1128,13 +1181,10 @@ impl BackgroundExecutionHandle {
     /// Allows holder of the `BackgroundExecutionHandle` to finish execution prematurely.
     ///
     pub async fn abort(&self) {
-        if !self.sender.is_closed() && !self.handle.is_finished() {
-            if let Err(e) = self.sender.send(()).await {
-                tracing::error!(
-                    "Critical: Could not notify task to abort, force it to finish, details: `{e}`"
-                );
-                self.handle.abort();
-            }
+        if let Err(e) = self.sender.send(()).await {
+            tracing::error!(
+                "Critical: Could not notify task to abort, force it to finish, details: `{e}`"
+            );
         }
     }
 }
@@ -1142,16 +1192,12 @@ impl BackgroundExecutionHandle {
 impl Drop for BackgroundExecutionHandle {
     fn drop(&mut self) {
         let sender = self.sender.clone();
-        let handle = self.handle.clone();
         if let Some(ctx) = self.ctx.upgrade() {
             spawn_async(ctx, async move {
-                if !sender.is_closed() && !handle.is_finished() {
-                    if let Err(e) = sender.send(()).await {
-                        tracing::error!(
-                            "Critical: Could not notify task to abort on drop, force it to finish, details: `{e}`"
-                        );
-                        handle.abort();
-                    }
+                if let Err(e) = sender.send(()).await {
+                    tracing::error!(
+                        "Critical: Could not notify task to abort on drop, force it to finish, details: `{e}`"
+                    );
                 }
             });
         } else {
@@ -1159,23 +1205,6 @@ impl Drop for BackgroundExecutionHandle {
                 "MailContext already dropped, background execution handle should not live that long"
             );
         }
-    }
-}
-
-/// Internal representation of Execution.
-///
-/// It purpuose is to group all the operations which needs to happen,
-/// when execution is aborted.
-///
-struct BackgroundExecutionContext {
-    abort: mpsc::Receiver<()>,
-    _musc: Vec<Arc<MailUserContext>>,
-}
-
-impl BackgroundExecutionContext {
-    #[allow(clippy::unused_self)]
-    pub fn stop(self) {
-        tracing::debug!("Stoping execution of background activites");
     }
 }
 
@@ -1195,7 +1224,7 @@ async fn get_all_logged_in_mail_user_contexts(
         return Ok(vec![]);
     };
     let primary_user_ctx = ctx
-        .user_context_from_session(&session, None, ShouldInitializeMailUserContext::Yes)
+        .initialized_user_context_from_session(&session, None)
         .await?;
 
     let other_sessions_iter = ctx
@@ -1207,10 +1236,15 @@ async fn get_all_logged_in_mail_user_contexts(
 
     // There might be a case when a User logs out the primary account before putting app in the background
     let mut all_user_ctxs = if let Some(CoreAccountState::LoggedIn(_)) = ctx
-        .get_account_state(primary_user_ctx.user_id().clone())
+        .get_account_state(primary_account.remote_id.clone())
         .await?
     {
-        vec![primary_user_ctx.clone()]
+        if let Some(ctx) = primary_user_ctx {
+            vec![ctx]
+        } else {
+            debug!("Primary user is not initialized. Skipping...");
+            vec![]
+        }
     } else {
         tracing::warn!("Primary account is not LoggedIn");
         vec![]
@@ -1222,15 +1256,19 @@ async fn get_all_logged_in_mail_user_contexts(
             ctx.get_session_state(session.remote_id.clone()).await?
         else {
             tracing::warn!(
-                "Found unauthenticated session for secondary account, this may suggest problem with loggin flow not correctly resumed"
+                "Found unauthenticated session for secondary account, this may suggest problem with login flow not correctly resumed"
             );
             continue;
         };
 
-        let user_ctx = ctx
-            .user_context_from_session(&session, None, ShouldInitializeMailUserContext::Yes)
-            .await?;
-        all_user_ctxs.push(user_ctx);
+        if let Some(user_ctx) = ctx
+            .initialized_user_context_from_session(&session, None)
+            .await?
+        {
+            all_user_ctxs.push(user_ctx);
+        } else {
+            debug!("User {0}, is not initialized. Skipping", session.remote_id);
+        }
     }
 
     Ok(all_user_ctxs)
