@@ -1009,7 +1009,7 @@ impl Tether {
             .map_err(|_| anyhow!("The stash worker dropped"))?;
         receiver
             .await
-            .expect("Tether closed its channel with handles still open")?;
+            .map_err(|_| anyhow!("The stash worker dropped"))??;
 
         Ok(Bond::new(self))
     }
@@ -1185,7 +1185,7 @@ impl<'tether> Bond<'tether> {
 
         if let Err(e) = receiver
             .await
-            .expect("Tether closed its channel with handles still open")
+            .map_err(|_| anyhow!("The stash worker dropped"))?
         {
             error!("Commit error: {e:?}");
             self.rollback().await?;
@@ -1227,7 +1227,7 @@ impl<'tether> Bond<'tether> {
             .map_err(|_| anyhow!("The stash worker dropped"))?;
         receiver
             .await
-            .expect("Tether closed its channel with handles still open")?;
+            .map_err(|_| anyhow!("The stash worker dropped"))??;
 
         // Transaction rolled back, skip the drop logic
         mem::forget(self);
