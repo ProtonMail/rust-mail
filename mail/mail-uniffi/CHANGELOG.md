@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+## [0.68.1] - 2025-04-01
+
+### Fixed
+
+  - Fixedbitset insert crash.
+
 ## [0.68.0] - 2025-04-01
 
 ### Added
