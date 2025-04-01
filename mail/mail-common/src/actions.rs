@@ -13,7 +13,7 @@ use crate::models::RollbackItem;
 use addresses::block;
 use indoc::formatdoc;
 use itertools::Itertools;
-use proton_action_queue::action::WriterGuardError;
+use proton_action_queue::action::{Action, FactoryError, WriterGuardError};
 use proton_action_queue::queue::Queue;
 use proton_api_core::consts::General;
 use proton_api_core::service::ApiServiceError;
@@ -87,27 +87,42 @@ impl From<CoreActionError> for MailActionError {
 
 pub(crate) fn register_mail_actions(queue: &Queue) {
     const ERR_MSG: &str = "Double Factory registration";
-    queue.register::<conversations::Delete>().expect(ERR_MSG);
-    queue.register::<conversations::Unlabel>().expect(ERR_MSG);
-    queue.register::<conversations::Label>().expect(ERR_MSG);
-    queue.register::<conversations::MarkRead>().expect(ERR_MSG);
+
+    fn register_action<T: Action>(queue: &Queue) {
+        if let Err(e) = queue.register::<T>() {
+            match e {
+                FactoryError::AlreadyRegistered(_) => {
+                    // Do nothing it is possible we already registered this action
+                    // in the queue once before.
+                }
+                e => {
+                    panic!("Failed to register action: {e:?}");
+                }
+            }
+        }
+    }
+
+    register_action::<conversations::Delete>(queue);
+    register_action::<conversations::Unlabel>(queue);
+    register_action::<conversations::Label>(queue);
+    register_action::<conversations::MarkRead>(queue);
     queue
         .register::<conversations::MarkUnread>()
         .expect(ERR_MSG);
-    queue.register::<block::Block>().expect(ERR_MSG);
-    queue.register::<conversations::Move>().expect(ERR_MSG);
-    queue.register::<messages::label::Label>().expect(ERR_MSG);
+    register_action::<block::Block>(queue);
+    register_action::<conversations::Move>(queue);
+    register_action::<messages::label::Label>(queue);
     queue
         .register::<messages::unlabel::Unlabel>()
         .expect(ERR_MSG);
-    queue.register::<messages::r#move::Move>().expect(ERR_MSG);
-    queue.register::<messages::delete::Delete>().expect(ERR_MSG);
-    queue.register::<messages::read::Read>().expect(ERR_MSG);
-    queue.register::<messages::unread::Unread>().expect(ERR_MSG);
-    queue.register::<messages::ham::Ham>().expect(ERR_MSG);
-    queue.register::<draft::Save>().expect(ERR_MSG);
-    queue.register::<draft::Send>().expect(ERR_MSG);
-    queue.register::<labels::Expand>().expect(ERR_MSG);
+    register_action::<messages::r#move::Move>(queue);
+    register_action::<messages::delete::Delete>(queue);
+    register_action::<messages::read::Read>(queue);
+    register_action::<messages::unread::Unread>(queue);
+    register_action::<messages::ham::Ham>(queue);
+    register_action::<draft::Save>(queue);
+    register_action::<draft::Send>(queue);
+    register_action::<labels::Expand>(queue);
     queue
         .register::<messages::label_as::LabelAs>()
         .expect(ERR_MSG);
@@ -117,11 +132,11 @@ pub(crate) fn register_mail_actions(queue: &Queue) {
     queue
         .register::<proton_core_common::actions::contacts::Delete>()
         .expect(ERR_MSG);
-    queue.register::<draft::Discard>().expect(ERR_MSG);
-    queue.register::<draft::UndoSend>().expect(ERR_MSG);
-    queue.register::<draft::AttachmentUpload>().expect(ERR_MSG);
-    queue.register::<draft::AttachmentRemove>().expect(ERR_MSG);
-    queue.register::<event_poll::EventPoll>().expect(ERR_MSG);
+    register_action::<draft::Discard>(queue);
+    register_action::<draft::UndoSend>(queue);
+    register_action::<draft::AttachmentUpload>(queue);
+    register_action::<draft::AttachmentRemove>(queue);
+    register_action::<event_poll::EventPoll>(queue);
 }
 
 /// Convenience type which contains data common to many actions.
