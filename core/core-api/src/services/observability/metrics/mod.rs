@@ -26,7 +26,7 @@ macro_rules! metric {
 }
 
 metric!(
-    "core_signin_submit_totp_total_v1",
+    "core_signin_submit_totp_total",
     1,
     SignInSubmitTotpTotal {
         status: ApiServiceObservabilityResponse
@@ -34,7 +34,7 @@ metric!(
 );
 
 metric!(
-    "core_signin_submit_fido_total_v1",
+    "core_signin_submit_fido_total",
     1,
     SignInSubmitFidoTotal {
         status: ApiServiceObservabilityResponse
@@ -42,7 +42,7 @@ metric!(
 );
 
 metric!(
-    "core_signin_submit_mbp_total_v1",
+    "core_signin_submit_mbp_total",
     1,
     SignInSubmitMailBoxPwTotal {
         status: MailboxPasswordMetricStatus
@@ -65,7 +65,7 @@ pub enum MailboxPasswordMetricStatus {
 }
 
 metric!(
-    "core_signin_auth_total_v1",
+    "core_signin_auth_total",
     1,
     #[doc = "Tracks the success or failure of the POST request to `/auth/v4/info` and `/auth/v4`."]
     #[doc = "This metric indicates whether the authentication session initialization/login request completed successfully."]
@@ -98,11 +98,11 @@ mod tests {
         let serialized = serde_json::to_string(&metric).unwrap();
         assert_eq!(
             serialized,
-            r#"{"Name":"core_signin_submit_totp_total_v1","Version":1,"Timestamp":1741021308,"Data":{"Labels":{"status":"success"},"Value":1}}"#
+            r#"{"Name":"core_signin_submit_totp_total","Version":1,"Timestamp":1741021308,"Data":{"Labels":{"status":"success"},"Value":1}}"#
         );
         assert_eq!(
             PostMetricsRequestElement {
-                name: String::from("core_signin_submit_totp_total_v1"),
+                name: String::from("core_signin_submit_totp_total"),
                 version: 1,
                 timestamp: 1_741_021_308,
                 data: PostMetricsRequestData {
@@ -128,11 +128,11 @@ mod tests {
         let serialized = serde_json::to_string(&metric).unwrap();
         assert_eq!(
             serialized,
-            r#"{"Name":"core_signin_submit_fido_total_v1","Version":1,"Timestamp":1741021308,"Data":{"Labels":{"status":"success"},"Value":2}}"#
+            r#"{"Name":"core_signin_submit_fido_total","Version":1,"Timestamp":1741021308,"Data":{"Labels":{"status":"success"},"Value":2}}"#
         );
         assert_eq!(
             PostMetricsRequestElement {
-                name: String::from("core_signin_submit_fido_total_v1"),
+                name: String::from("core_signin_submit_fido_total"),
                 version: 1,
                 timestamp: 1_741_021_308,
                 data: PostMetricsRequestData {
@@ -160,11 +160,11 @@ mod tests {
         let serialized = serde_json::to_string(&metric).unwrap();
         assert_eq!(
             serialized,
-            r#"{"Name":"core_signin_submit_mbp_total_v1","Version":1,"Timestamp":1741021308,"Data":{"Labels":{"status":"success"},"Value":1}}"#
+            r#"{"Name":"core_signin_submit_mbp_total","Version":1,"Timestamp":1741021308,"Data":{"Labels":{"status":"success"},"Value":1}}"#
         );
         assert_eq!(
             PostMetricsRequestElement {
-                name: String::from("core_signin_submit_mbp_total_v1"),
+                name: String::from("core_signin_submit_mbp_total"),
                 version: 1,
                 timestamp: 1_741_021_308,
                 data: PostMetricsRequestData {
@@ -190,11 +190,11 @@ mod tests {
         let serialized = serde_json::to_string(&metric).unwrap();
         assert_eq!(
             serialized,
-            r#"{"Name":"core_signin_auth_total_v1","Version":1,"Timestamp":1741021308,"Data":{"Labels":{"status":"success"},"Value":1}}"#
+            r#"{"Name":"core_signin_auth_total","Version":1,"Timestamp":1741021308,"Data":{"Labels":{"status":"success"},"Value":1}}"#
         );
         assert_eq!(
             PostMetricsRequestElement {
-                name: String::from("core_signin_auth_total_v1"),
+                name: String::from("core_signin_auth_total"),
                 version: 1,
                 timestamp: 1_741_021_308,
                 data: PostMetricsRequestData {
