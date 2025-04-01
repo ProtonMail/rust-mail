@@ -370,13 +370,15 @@ impl Context {
             {
                 ctxs.push(self.user_context_from_session(&session, None).await?);
             } else {
-                tracing::warn!("Found unathenticated session");
+                tracing::warn!("Found unauthenticated session");
             }
         }
 
         Ok(ctxs)
     }
 
+    /// Get path of the filesystem cache.
+    ///
     #[must_use]
     pub(crate) fn get_cache_path(&self) -> &Path {
         self.cache_path.as_path()

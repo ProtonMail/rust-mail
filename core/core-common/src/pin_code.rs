@@ -238,7 +238,7 @@ impl StoreInKeyChain for PinHash {
 const QUERY_LIST_TABLES: &str = "SELECT name as value FROM sqlite_master WHERE type='table'";
 
 async fn nuke_application_data(ctx: Arc<Context>) -> Result<(), PinError> {
-    tracing::error!("Fetching all logged in users.");
+    tracing::error!("Fetch all logged in users.");
     let all_user_ctxs = ctx.get_all_logged_in_user_ctx().await?;
     let users = ctx.get_accounts().await?;
 
@@ -248,10 +248,11 @@ async fn nuke_application_data(ctx: Arc<Context>) -> Result<(), PinError> {
         ctx.delete_account(user.remote_id).await?;
     }
 
-    tracing::error!("Removing all user data");
+    tracing::error!("Remove all user data and kill all background tasks");
     let iter = all_user_ctxs.iter().map(|ctx| async {
         let tether = ctx.stash().connection();
 
+        ctx.cancel_all_tasks();
         drop_all_tables_in_database(tether).await?;
 
         Result::<(), PinError>::Ok(())
@@ -259,12 +260,12 @@ async fn nuke_application_data(ctx: Arc<Context>) -> Result<(), PinError> {
 
     try_join_all(iter).await?;
 
-    tracing::error!("Removing all remaining account data");
+    tracing::error!("Remove all remaining account data");
     let tether = ctx.account_stash().connection();
 
     drop_all_tables_in_database(tether).await?;
 
-    tracing::error!("Removing all cached filesystem data");
+    tracing::error!("Remove all cached filesystem data");
     if let Err(e) = tokio::fs::remove_dir_all(ctx.get_cache_path()).await {
         tracing::error!("Could not remove cached data in filesystem, details: `{e}`");
     }
