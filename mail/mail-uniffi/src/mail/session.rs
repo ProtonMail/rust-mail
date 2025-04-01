@@ -1049,6 +1049,24 @@ impl MailSession {
         self.mail_ctx.core_context().task_service().pause();
     }
 
+    /// Pause all background work and wait for all non-pausable futures to complete.
+    ///
+    /// This should be called once the application enters the background.
+    pub fn pause_work_and_wait(&self) {
+        async_runtime().block_on(async {
+            if self
+                .mail_ctx
+                .core_context()
+                .task_service()
+                .pause_and_wait()
+                .await
+                .is_err()
+            {
+                error!("Failed to await paused work");
+            }
+        });
+    }
+
     /// Resume all background work
     ///
     /// This should be called once the application enters the foreground.
