@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+### Fixed
+
+  - Double action registration assert.
+
 ## [0.67.0] - 2025-04-01
 
 ### Added
