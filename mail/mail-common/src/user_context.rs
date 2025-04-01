@@ -216,6 +216,20 @@ impl MailUserContext {
         &self.user_context
     }
 
+    /// Get `MailUserContext` for each logged in account.
+    ///
+    pub async fn all_mail_user_ctxs(&self) -> MailContextResult<Vec<Arc<Self>>> {
+        self.mail_context.get_all_logged_in_user_ctx().await
+    }
+
+    /// Get `MailUserContext` for any other than self, logged in account.
+    ///
+    pub async fn other_mail_user_ctxs(&self) -> MailContextResult<Vec<Arc<Self>>> {
+        self.mail_context
+            .get_other_logged_in_user_ctx(self.session_id())
+            .await
+    }
+
     /// Get the remote (API) ID of the user associated with this context.
     pub fn user_id(&self) -> &UserId {
         self.user_context.user_id()

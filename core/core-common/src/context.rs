@@ -211,7 +211,8 @@ pub enum CoreSessionState {
 }
 
 impl CoreSessionState {
-    fn of(session: &CoreSession) -> Self {
+    #[must_use]
+    pub fn of(session: &CoreSession) -> Self {
         if session.auth_scopes.contains("twofactor") {
             CoreSessionState::NeedTfa
         } else if session.key_secret.is_none() {

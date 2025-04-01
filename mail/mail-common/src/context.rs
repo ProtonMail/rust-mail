@@ -368,6 +368,75 @@ impl MailContext {
             .await
     }
 
+    /// Create all new contexts from all existing sessions.
+    ///
+    /// It returns `MailUserContext` for each logged in account.
+    ///
+    /// ### Errors
+    ///
+    /// When `user_context_from_session` fails or database fails.
+    ///
+    pub async fn get_all_logged_in_user_ctx(
+        self: &Arc<Self>,
+    ) -> MailContextResult<Vec<Arc<MailUserContext>>> {
+        let sessions = self.get_sessions().await?;
+        let mut ctxs = Vec::with_capacity(sessions.len());
+
+        for session in sessions {
+            if let CoreSessionState::Authenticated = CoreSessionState::of(&session) {
+                ctxs.push(
+                    self.user_context_from_session(
+                        &session,
+                        None,
+                        ShouldInitializeMailUserContext::No,
+                    )
+                    .await?,
+                );
+            } else {
+                tracing::warn!("Found unauthenticated session");
+            }
+        }
+
+        Ok(ctxs)
+    }
+
+    /// Create all new contexts from other existing session.
+    ///
+    /// It returns `MailUserContext` for each logged in account except one which is
+    /// tight to the passed `SessionId`.
+    ///
+    /// ### Errors
+    ///
+    /// When `user_context_from_session` fails or database fails.
+    ///
+    pub async fn get_other_logged_in_user_ctx(
+        self: &Arc<Self>,
+        current_session_id: &SessionId,
+    ) -> MailContextResult<Vec<Arc<MailUserContext>>> {
+        let sessions = self.get_sessions().await?;
+        let mut ctxs = Vec::with_capacity(sessions.len());
+
+        for session in sessions
+            .into_iter()
+            .filter(|s| &s.remote_id != current_session_id)
+        {
+            if let CoreSessionState::Authenticated = CoreSessionState::of(&session) {
+                ctxs.push(
+                    self.user_context_from_session(
+                        &session,
+                        None,
+                        ShouldInitializeMailUserContext::No,
+                    )
+                    .await?,
+                );
+            } else {
+                tracing::warn!("Found unauthenticated session");
+            }
+        }
+
+        Ok(ctxs)
+    }
+
     /// Get all available accounts.
     ///
     /// An account is an entity representing a Proton account known to the system.

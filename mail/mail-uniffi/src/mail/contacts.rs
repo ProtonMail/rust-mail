@@ -7,9 +7,10 @@ use crate::{
     core::datatypes::{DeviceContact, GroupedContacts, Id},
     uniffi_async,
 };
+use futures::future::try_join_all;
 use itertools::Itertools;
 use proton_core_common::datatypes::DeviceContact as RealDeviceContact;
-use proton_core_common::models::Contact as RealContact;
+use proton_core_common::models::{AppSettings, Contact as RealContact};
 use proton_core_common::utils::MapVec as _;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::{MailContextError, MailUserContext};
@@ -43,27 +44,55 @@ pub async fn contact_list(
     .map_err(ActionError::from)
 }
 
-/// Returns a list of contact suggestions (used for example in Composer). Sorted, deduplicated but not filtered by the query
+/// Returns a list of contact suggestions (used for example in Composer).
+///
+/// If the `AppSettings::use_combine_contacts` is set, the function will include
+/// all other available contacts from all logged in accounts.
+///
+/// Contacts are sorted, deduplicated but not filtered by the query.
+/// Contacts from other accounts have lower priority and will appear at the end of the list.
 ///
 #[uniffi_export]
 pub async fn contact_suggestions(
     device_contacts: Vec<DeviceContact>,
     session: Arc<MailUserSession>,
 ) -> Result<Arc<ContactSuggestions>, ActionError> {
-    let stash = session.user_stash()?;
+    let ctx = session.ctx()?.clone();
     uniffi_async(async move {
-        let tether = stash.connection();
-        Result::<_, RealProtonMailError>::Ok(Arc::new(
-            RealContact::contact_suggestions(
-                device_contacts
-                    .into_iter()
-                    .map_into::<RealDeviceContact>()
-                    .collect(),
-                &tether,
-            )
-            .await?
-            .into(),
-        ))
+        let tether = ctx.user_stash().connection();
+        let primary_contacts = RealContact::contact_suggestions(
+            device_contacts
+                .into_iter()
+                .map_into::<RealDeviceContact>()
+                .collect(),
+            &tether,
+        );
+        let acc_tether = ctx
+            .mail_context()
+            .core_context()
+            .account_stash()
+            .connection();
+        let app_settings = AppSettings::get_or_default(&acc_tether).await;
+        let other_acc_contacts = if app_settings.use_combine_contacts {
+            let other_user_ctxs = ctx.other_mail_user_ctxs().await?;
+            let iter = other_user_ctxs.iter().map(|ctx| async {
+                let tether = ctx.user_stash().connection();
+                let contacts = RealContact::contact_suggestions(vec![], &tether).await?;
+
+                Result::<_, MailContextError>::Ok(contacts)
+            });
+
+            try_join_all(iter).await?
+        } else {
+            vec![]
+        };
+        let mut primary_contacts = primary_contacts.await?;
+
+        for other in other_acc_contacts {
+            primary_contacts.concat(other);
+        }
+
+        Result::<_, RealProtonMailError>::Ok(Arc::new(primary_contacts.into()))
     })
     .await
     .map_err(ActionError::from)
