@@ -16,7 +16,7 @@ use stash::orm::Model;
 use stash::stash::{Bond, Stash, StashError, Tether};
 use std::any::{Any, TypeId};
 use std::collections::{HashMap, HashSet};
-use std::fmt::{Debug, Formatter};
+use std::fmt;
 use std::future::Future;
 use std::num::NonZeroUsize;
 use std::pin::Pin;
@@ -67,8 +67,8 @@ pub enum ActionError<T: Action> {
 }
 
 // Custom debug impl, otherwise T also needs to have Debug when it is not really necessary.
-impl<T: Action> Debug for ActionError<T> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl<T: Action> fmt::Debug for ActionError<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ActionError::Action(err) => {
                 write!(f, "ActionError::Action{{{err:?}}}")
@@ -86,7 +86,7 @@ impl<T: Action> From<StashError> for ActionError<T> {
     }
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// Errors that may arise from executing queued actions.
 #[derive(Debug, thiserror::Error)]
@@ -133,7 +133,7 @@ impl QueuedError {
         err.as_action_error::<T>()
     }
 }
-pub type QueuedResult<T> = std::result::Result<T, QueuedError>;
+pub type QueuedResult<T> = Result<T, QueuedError>;
 
 /// Metadata associated with a queued [`Action`].
 #[derive(Debug)]
@@ -276,9 +276,7 @@ impl Shared {
         self.factory.read().has_action::<T>()
     }
 
-    fn resolve_execution_context<T: Action>(
-        &self,
-    ) -> std::result::Result<Arc<T::Context>, ContextError> {
+    fn resolve_execution_context<T: Action>(&self) -> Result<Arc<T::Context>, ContextError> {
         let type_id = TypeId::of::<T::Context>();
         let exec_contexts = self.execution_contexts.read();
         let context = exec_contexts
@@ -383,7 +381,7 @@ impl Queue {
     pub async fn queue_action<T: Action>(
         &self,
         action: T,
-    ) -> std::result::Result<QueuedActionOutput<T>, ActionError<T>> {
+    ) -> Result<QueuedActionOutput<T>, ActionError<T>> {
         self.queue_action_with_metadata::<T>(action, Metadata::default())
             .await
     }
@@ -399,7 +397,7 @@ impl Queue {
         &self,
         mut action: T,
         metadata: Metadata,
-    ) -> std::result::Result<QueuedActionOutput<T>, ActionError<T>> {
+    ) -> Result<QueuedActionOutput<T>, ActionError<T>> {
         debug!("Queueing action: {} {:?}", T::TYPE, metadata);
         if !self.shared.has_action::<T>() {
             error!("Unknown action queued: {}", T::TYPE);
@@ -443,7 +441,7 @@ impl Queue {
         &self,
         existing_id: ActionId,
         action: T,
-    ) -> std::result::Result<QueuedActionOutput<T>, ActionError<T>> {
+    ) -> Result<QueuedActionOutput<T>, ActionError<T>> {
         self.replace_or_queue_action_with_metadata::<T>(existing_id, action, Metadata::default())
             .await
     }
@@ -461,7 +459,7 @@ impl Queue {
         existing_id: ActionId,
         mut action: T,
         metadata: Metadata,
-    ) -> std::result::Result<QueuedActionOutput<T>, ActionError<T>> {
+    ) -> Result<QueuedActionOutput<T>, ActionError<T>> {
         debug!(
             "Replacing {existing_id:?} or Queueing action: {} {metadata:?}",
             T::TYPE,
@@ -603,9 +601,7 @@ impl Queue {
 
     /// Retrieve the next action to execute.
     #[cfg(test)]
-    pub(crate) async fn next_action(
-        &self,
-    ) -> std::result::Result<Option<StoredAction>, StashError> {
+    pub(crate) async fn next_action(&self) -> Result<Option<StoredAction>, StashError> {
         let tether = self.shared.stash.connection();
         StoredAction::next(ActionGroup::default().as_ref(), &tether).await
     }
@@ -878,7 +874,7 @@ impl QueueExecutor {
     async fn next_action(
         &self,
         tether: &mut Tether,
-    ) -> std::result::Result<Option<(ExecutionGuard, StoredAction)>, StashError> {
+    ) -> Result<Option<(ExecutionGuard, StoredAction)>, StashError> {
         StoredAction::pop(self.id.clone(), self.action_group.as_ref(), tether).await
     }
 }
@@ -1083,7 +1079,7 @@ async fn execute_action_local<T: Action>(
     action: &mut T,
     metadata: Metadata,
     existing_id: Option<ActionId>,
-) -> std::result::Result<(T::LocalOutput, ActionId), ActionError<T>> {
+) -> Result<(T::LocalOutput, ActionId), ActionError<T>> {
     let mut tether = shared.stash.connection();
     tether
         .tx::<_, _, ActionError<T>>(async |tx| {
@@ -1159,7 +1155,7 @@ async fn execute_action_remote<T: Action>(
     action: &mut T,
     tether: &mut Tether,
     guard: ExecutionGuard,
-) -> std::result::Result<ActionRemoteOutput<T::RemoteOutput>, ActionError<T>> {
+) -> Result<ActionRemoteOutput<T::RemoteOutput>, ActionError<T>> {
     //1) Attempt to execute on remote
     debug!("Applying action on remote");
 
