@@ -137,6 +137,12 @@ impl UserContext {
         self.context.get_log_path()
     }
 
+    /// Get path to the log file.
+    #[must_use]
+    pub fn get_user_db_path(&self) -> &Path {
+        self.context.get_user_db_location()
+    }
+
     /// Retrieves the current user's account details.
     ///
     /// # Errors

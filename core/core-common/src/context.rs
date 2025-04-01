@@ -234,6 +234,7 @@ pub type CoreContextResult<T> = Result<T, CoreContextError>;
 pub struct Context {
     this: Weak<Self>,
     user_db_path: PathBuf,
+    account_db_path: PathBuf,
     log_path: Option<PathBuf>,
     account_stash: Stash,
     key_chain: Arc<dyn KeyChain>,
@@ -281,9 +282,9 @@ impl Context {
         let user_db_path = user_db_path.into();
         std::fs::create_dir_all(&account_db_path)?;
         std::fs::create_dir_all(&user_db_path)?;
-        let account_db_path = get_account_db_path(account_db_path);
+        let account_stash_path = get_account_db_path(&account_db_path);
         let stash_config = StashConfiguration {
-            path: Some(&account_db_path),
+            path: Some(&account_stash_path),
             pool_size: connection_pool_size,
             ..Default::default()
         };
@@ -295,6 +296,7 @@ impl Context {
         Ok(Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             user_db_path,
+            account_db_path,
             log_path,
             key_chain,
             account_stash,
@@ -365,9 +367,7 @@ impl Context {
         let mut ctxs = Vec::with_capacity(sessions.len());
 
         for session in sessions {
-            if let Some(CoreSessionState::Authenticated) =
-                self.get_session_state(session.remote_id.clone()).await?
-            {
+            if let CoreSessionState::Authenticated = CoreSessionState::of(&session) {
                 ctxs.push(self.user_context_from_session(&session, None).await?);
             } else {
                 tracing::warn!("Found unauthenticated session");
@@ -377,11 +377,25 @@ impl Context {
         Ok(ctxs)
     }
 
-    /// Get path of the filesystem cache.
+    /// Get path of the core cache in filesystem.
     ///
     #[must_use]
-    pub(crate) fn get_cache_path(&self) -> &Path {
+    pub(crate) fn get_cache_location(&self) -> &Path {
         self.cache_path.as_path()
+    }
+
+    /// Get path of the user database parent directory location
+    ///
+    #[must_use]
+    pub(crate) fn get_user_db_location(&self) -> &Path {
+        self.user_db_path.as_path()
+    }
+
+    /// Get path of account's database parent directory location
+    ///
+    #[must_use]
+    pub(crate) fn get_account_db_location(&self) -> &Path {
+        self.account_db_path.as_path()
     }
 
     /// Watch the API sessions for changes.
