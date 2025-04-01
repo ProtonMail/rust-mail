@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+## [0.67.0] - 2025-04-01
+
 ### Added
 
   - `block_address`, `unblock_address` functions are available.
@@ -14,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
   - Double initialization crash.
+  - Observability names.
 
 ## [0.66.0] - 2025-03-28
 
