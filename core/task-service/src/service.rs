@@ -12,6 +12,10 @@ use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tracing::{debug, error, info};
 
+thread_local! {
+    static DRAIN: Cell<bool> = const { Cell::new(false) };
+}
+
 /// Trait to convert any future into a pausable future.
 pub trait IntoPausableFuture: Future + Sized + Send + 'static {
     /// Convert the current future into a pausable future controled by the given `service`.
@@ -44,11 +48,27 @@ impl<F: Future> PausableFuture<F> {
 impl<F: Future> Future for PausableFuture<F> {
     type Output = F::Output;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if !self.state.allowed_to_progress(cx) {
             return Poll::Pending;
         }
-        self.project().future.poll(cx)
+
+        DRAIN.set(false);
+
+        let poll = self.as_mut().project().future.poll(cx);
+
+        // Intuitively, what we need to discover is:
+        //
+        // > Is there any `NonPausableFuture` that we've reached that has
+        // > yielded `Poll::Pending`? If so, we'll have to poll this future
+        // > again the next time, until it returns `Poll::Ready(_)`.
+        //
+        // In some languages this can be implemented using algebraic effects -
+        // we can imagine `NonPausableFuture` throwing a kind of "SuperPending"
+        // effect - but in our case a thread-local will do.
+        self.state.drain.set(DRAIN.get());
+
+        poll
     }
 }
 
@@ -61,17 +81,11 @@ impl<F: Future> Future for PausableFuture<F> {
 pub struct NonPausableFuture<F: Future> {
     #[pin]
     future: F,
-    /// We need to remember the old value in the nested hierarchy so we can restore
-    /// it when the future is finished.
-    old_value: Cell<Option<bool>>,
 }
 
 impl<F: Future> NonPausableFuture<F> {
     fn new(future: F) -> Self {
-        Self {
-            future,
-            old_value: Cell::new(None),
-        }
+        Self { future }
     }
 }
 
@@ -79,26 +93,19 @@ impl<F: Future> Future for NonPausableFuture<F> {
     type Output = F::Output;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        // Disable the pause check.
-        match OVERWRITE_PAUSE.try_with(|value| value.replace(true)) {
-            Ok(old_value) => {
-                if self.old_value.get().is_none() {
-                    self.old_value.set(Some(old_value));
-                }
-                let old_value = self.old_value.get().unwrap();
-                match self.project().future.poll(cx) {
-                    Poll::Ready(output) => {
-                        // Restore the pause check when the future is finished, but only
-                        // if it wasn't previously paused.
-                        OVERWRITE_PAUSE.with(|value| value.set(old_value));
-                        Poll::Ready(output)
-                    }
-                    Poll::Pending => Poll::Pending,
-                }
-            }
-            Err(_) => {
-                // running outside of a pausable scope.
-                self.project().future.poll(cx)
+        match self.project().future.poll(cx) {
+            Poll::Ready(value) => Poll::Ready(value),
+
+            Poll::Pending => {
+                // Notify our parent, `GuardedFuture`, that we're still pending.
+                //
+                // This could be also done via `cx.ext()`, but no need to go
+                // that crazy (plus it's still a nightly feature).
+                _ = DRAIN.try_with(|drain| {
+                    drain.set(true);
+                });
+
+                Poll::Pending
             }
         }
     }
@@ -284,6 +291,7 @@ impl TaskService {
         // if the future is re-scheduled to a different execution thread.
         let future_state = FutureState {
             id: self.id_allocator.fetch_add(1, Ordering::AcqRel),
+            drain: Cell::new(false),
             allowed_to_run: self.allowed_to_run.clone(),
             channel: self.sender.clone(),
         };
@@ -293,7 +301,7 @@ impl TaskService {
             id: future_state.id,
         });
 
-        OVERWRITE_PAUSE.scope(Cell::new(false), PausableFuture::new(future_state, future))
+        PausableFuture::new(future_state, future)
     }
 }
 
@@ -320,6 +328,7 @@ tokio::task_local! {
 /// Future state to check whether we are paused or not.
 struct FutureState {
     id: u64,
+    drain: Cell<bool>,
     allowed_to_run: Arc<AtomicBool>,
     channel: Sender<Command>,
 }
@@ -333,14 +342,7 @@ impl Drop for FutureState {
 impl FutureState {
     /// Check whether we are allowed to progress.
     fn allowed_to_progress(&self, cx: &mut Context<'_>) -> bool {
-        // Check whether this a pause overwrite.
-        if let Ok(value) = OVERWRITE_PAUSE.try_with(Cell::get) {
-            if value {
-                return true;
-            }
-        }
-        // Check whether we are not in a paused state.
-        if self.allowed_to_run.load(Ordering::Relaxed) {
+        if self.drain.get() || self.allowed_to_run.load(Ordering::Relaxed) {
             return true;
         }
         // Register waker
