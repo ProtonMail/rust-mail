@@ -231,9 +231,16 @@ pub struct DeviceContact {
 }
 
 /// Collection of sorted contact suggestions
+#[derive(Debug, PartialEq)]
 pub struct ContactSuggestions {
     /// Sorted and deduplicated suggestions
     suggestions: Vec<ContactSuggestion>,
+}
+
+impl From<Vec<ContactSuggestion>> for ContactSuggestions {
+    fn from(suggestions: Vec<ContactSuggestion>) -> Self {
+        Self { suggestions }
+    }
 }
 
 impl ContactSuggestions {
