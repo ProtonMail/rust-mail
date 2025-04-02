@@ -27,7 +27,7 @@ use proton_crypto_account::keys::PGPDeviceKey;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_sqlite3::MigratorError;
 use proton_task_service::TaskService;
-use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner, spawn_task};
+use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use proton_vcard::VcardValidationError;
 use secrecy::ExposeSecret;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
@@ -882,28 +882,27 @@ impl Context {
         self.log_path.as_deref()
     }
 
-    /// Spawn an async `task` associated to this context.
+    /// Spawns a new task.
     ///
-    /// See [`spawn_task()`] for more details.
+    /// Spawned task is bound to this context, i.e. it will get cancelled if
+    /// this context gets cancelled as well.
     pub fn spawn<F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
     where
-        <F as Future>::Output: Send + 'static,
-        F: Future + Send + 'static,
+        F: Future<Output: Send> + Send + 'static,
     {
-        self.spawn_with::<_, DefaultTaskSpawner>(task)
+        self.spawn_with::<DefaultTaskSpawner, _>(task)
     }
 
-    /// Spawn an async `task` associated to this context with a specific [`TaskSpawner`].
-    ///
-    /// See [`spawn_task()`] for more details.
-    pub fn spawn_with<F, S>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    /// Like [`Self::spawn()`], but using given [`TaskSpawner`].
+    pub fn spawn_with<S, F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
     where
-        F: Future + Send + 'static,
-        <F as Future>::Output: Send + 'static,
-        S: TaskSpawner + 'static,
+        S: TaskSpawner,
+        F: Future<Output: Send> + Send + 'static,
     {
         let token = self.cancellation_token.clone();
-        spawn_task::<_, S>(&self.task_service, token, task)
+
+        self.task_service
+            .spawn_cancellable_with::<S, _>(token, task)
     }
 
     /// Returns a cancellation token that is a child of the the one owned by the context.

@@ -351,7 +351,7 @@ impl AsyncSpawnable for MailUserContext {
         F: Future + Send + 'static,
         <F as Future>::Output: Send + 'static,
     {
-        self.spawn_with::<_, UniffiTaskSpawner>(future)
+        self.spawn_with::<UniffiTaskSpawner, _>(future)
     }
 }
 
@@ -361,7 +361,7 @@ impl AsyncSpawnable for MailContext {
         F: Future + Send + 'static,
         <F as Future>::Output: Send + 'static,
     {
-        self.spawn_with::<_, UniffiTaskSpawner>(future)
+        self.spawn_with::<UniffiTaskSpawner, _>(future)
     }
 }
 
