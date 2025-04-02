@@ -132,7 +132,8 @@ pub async fn report_an_issue(
     report: IssueReport,
     user_ctx: &UserContext,
 ) -> Result<(), CoreContextError> {
-    let email = user_ctx.account_details().await?.email;
+    let acc_details = user_ctx.account_details().await?;
+    let email = acc_details.email;
 
     if email.is_empty() {
         tracing::error!("Email address in account details is empty cannot send the bug report");
@@ -140,6 +141,12 @@ pub async fn report_an_issue(
             "Email address cannot be empty"
         )));
     }
+
+    let username = if acc_details.name.is_empty() {
+        email.clone()
+    } else {
+        acc_details.name
+    };
 
     let logs: Option<ZippedFile> = if report.logs {
         if let Some(log_path) = user_ctx.get_log_path() {
@@ -154,7 +161,7 @@ pub async fn report_an_issue(
         None
     };
 
-    let payload = create_bug_report_payload(report, email, logs);
+    let payload = create_bug_report_payload(report, username, email, logs);
 
     user_ctx.session().api().post_report_bug(payload).await?;
 
@@ -165,6 +172,7 @@ pub async fn report_an_issue(
 ///
 fn create_bug_report_payload(
     report: IssueReport,
+    username: String,
     email: String,
     logs: Option<ZippedFile>,
 ) -> PostReportBug {
@@ -190,7 +198,7 @@ fn create_bug_report_payload(
         client_type: report.client_type as u8,
         title: report.title,
         description,
-        username: String::new(),
+        username,
         email,
         logs,
     }
