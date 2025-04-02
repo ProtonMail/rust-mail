@@ -529,4 +529,28 @@ mod tests {
             .await
             .unwrap();
     }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[tracing_test::traced_test]
+    async fn non_pausable_with_multiple_yield_points() {
+        let service = Arc::new(TaskService::new().unwrap());
+
+        let value = service.spawn({
+            let service = service.clone();
+
+            async move {
+                service.pause();
+
+                tokio::task::yield_now().await;
+                tokio::task::yield_now().await;
+                tokio::task::yield_now().await;
+            }
+            .into_non_pausable()
+        });
+
+        tokio::time::timeout(Duration::from_millis(100), value)
+            .await
+            .unwrap()
+            .unwrap();
+    }
 }
