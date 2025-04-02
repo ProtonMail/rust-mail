@@ -86,8 +86,6 @@ impl From<CoreActionError> for MailActionError {
 }
 
 pub(crate) fn register_mail_actions(queue: &Queue) {
-    const ERR_MSG: &str = "Double Factory registration";
-
     fn register_action<T: Action>(queue: &Queue) {
         if let Err(e) = queue.register::<T>() {
             match e {
@@ -106,15 +104,11 @@ pub(crate) fn register_mail_actions(queue: &Queue) {
     register_action::<conversations::Unlabel>(queue);
     register_action::<conversations::Label>(queue);
     register_action::<conversations::MarkRead>(queue);
-    queue
-        .register::<conversations::MarkUnread>()
-        .expect(ERR_MSG);
+    register_action::<conversations::MarkUnread>(queue);
     register_action::<block::Block>(queue);
     register_action::<conversations::Move>(queue);
     register_action::<messages::label::Label>(queue);
-    queue
-        .register::<messages::unlabel::Unlabel>()
-        .expect(ERR_MSG);
+    register_action::<messages::unlabel::Unlabel>(queue);
     register_action::<messages::r#move::Move>(queue);
     register_action::<messages::delete::Delete>(queue);
     register_action::<messages::read::Read>(queue);
@@ -123,15 +117,9 @@ pub(crate) fn register_mail_actions(queue: &Queue) {
     register_action::<draft::Save>(queue);
     register_action::<draft::Send>(queue);
     register_action::<labels::Expand>(queue);
-    queue
-        .register::<messages::label_as::LabelAs>()
-        .expect(ERR_MSG);
-    queue
-        .register::<conversations::label_as::LabelAs>()
-        .expect(ERR_MSG);
-    queue
-        .register::<proton_core_common::actions::contacts::Delete>()
-        .expect(ERR_MSG);
+    register_action::<messages::label_as::LabelAs>(queue);
+    register_action::<conversations::label_as::LabelAs>(queue);
+    register_action::<proton_core_common::actions::contacts::Delete>(queue);
     register_action::<draft::Discard>(queue);
     register_action::<draft::UndoSend>(queue);
     register_action::<draft::AttachmentUpload>(queue);
