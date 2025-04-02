@@ -5,51 +5,227 @@ use std::cell::Cell;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::mpsc::{Receiver, Sender};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
 use std::task::{Context, Poll, Waker};
+use std::thread;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, trace};
 
 thread_local! {
     static DRAIN: Cell<bool> = const { Cell::new(false) };
 }
 
-/// Trait to convert any future into a pausable future.
-pub trait IntoPausableFuture: Future + Sized + Send + 'static {
-    /// Convert the current future into a pausable future controled by the given `service`.
-    fn into_pausable(
-        self,
-        service: &TaskService,
-    ) -> impl Future<Output = Self::Output> + Send + 'static {
-        service.wrap_future(self)
+/// Manages futures that can be paused on demand.
+pub struct TaskService {
+    active: Arc<AtomicBool>,
+    sender: mpsc::Sender<Command>,
+}
+
+impl TaskService {
+    /// Creates a new task service.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if we can't spawn the background thread.
+    pub fn new() -> std::io::Result<Self> {
+        let (sender, receiver) = mpsc::channel();
+
+        thread::Builder::new()
+            .name("task-service".into())
+            .spawn(move || {
+                Self::run(receiver);
+            })?;
+
+        Ok(Self {
+            active: Arc::new(AtomicBool::new(true)),
+            sender,
+        })
     }
-}
 
-impl<T: Future + Sized + Send + 'static> IntoPausableFuture for T {}
+    #[tracing::instrument(skip(receiver))]
+    fn run(receiver: mpsc::Receiver<Command>) {
+        debug!("Starting task service");
 
-/// Future Wrapper that will pause execution when instructed by a [`TaskService`].
-#[pin_project]
-struct PausableFuture<F: Future> {
-    state: FutureState,
-    #[pin]
-    future: F,
-}
+        let mut wakers: HashMap<usize, Waker> = HashMap::new();
+        let mut paused = false;
+        let mut num_futures = 0_usize;
+        let mut pause_awaiters = Vec::new();
 
-impl<F: Future> PausableFuture<F> {
-    fn new(future_state: FutureState, future: F) -> Self {
-        Self {
-            state: future_state,
-            future,
+        let notify_awaiters =
+            |paused_count: usize,
+             future_count: usize,
+             pause_awaiters: &mut Vec<oneshot::Sender<()>>| {
+                if paused_count == future_count {
+                    trace!("All futures paused");
+
+                    for sender in pause_awaiters.drain(..) {
+                        let _ = sender.send(());
+                    }
+                }
+            };
+
+        while let Ok(command) = receiver.recv() {
+            match command {
+                Command::Pause(sender) => {
+                    paused = true;
+
+                    if let Some(sender) = sender {
+                        pause_awaiters.push(sender);
+                    }
+                }
+
+                Command::Resume => {
+                    paused = false;
+
+                    for (id, waker) in wakers.drain() {
+                        trace!("Waking future {}", id);
+                        waker.wake();
+                    }
+                }
+
+                Command::FutureCreated { id } => {
+                    trace!("Future {} created", id);
+
+                    num_futures = num_futures.saturating_add(1);
+                }
+
+                Command::FuturePaused { id, waker } => {
+                    if !paused {
+                        trace!("Waking future {}", id);
+                        waker.wake();
+                        continue;
+                    }
+
+                    wakers.insert(id, waker);
+
+                    notify_awaiters(wakers.len(), num_futures, &mut pause_awaiters);
+                }
+
+                Command::FutureDropped { id } => {
+                    trace!("Future {} dropped", id);
+
+                    wakers.remove(&id);
+                    num_futures = num_futures.saturating_sub(1);
+
+                    notify_awaiters(wakers.len(), num_futures, &mut pause_awaiters);
+                }
+            }
+        }
+
+        debug!("Stopping task service");
+    }
+
+    /// Pauses running (and future) tasks until you call [`Self::resume()`].
+    ///
+    /// Futures are paused on their next `.poll()` cycle, i.e. they are not
+    /// interrupted immediately (which we couldn't do anyway even if we wanted
+    /// to).
+    pub fn pause(&self) {
+        info!("Pausing tasks");
+
+        self.active.store(false, Ordering::Relaxed);
+
+        if let Err(e) = self.sender.send(Command::Pause(None)) {
+            error!("Failed to send pause command: {}", e);
         }
     }
+
+    /// Like [`Self::pause()`], but instead of returning immediately, it waits
+    /// for all futures to actually pause.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the task service's thread has crashed and is unable to
+    /// service the request.
+    pub async fn pause_and_wait(&self) -> Result<(), oneshot::error::RecvError> {
+        info!("Pausing tasks and await");
+
+        self.active.store(false, Ordering::Relaxed);
+
+        let (sender, receiver) = oneshot::channel();
+
+        if let Err(e) = self.sender.send(Command::Pause(Some(sender))) {
+            error!("Failed to send pause command: {}", e);
+        }
+
+        receiver.await
+    }
+
+    /// Resumes all paused tasks.
+    pub fn resume(&self) {
+        info!("Resuming tasks");
+
+        self.active.store(true, Ordering::Relaxed);
+
+        if let Err(e) = self.sender.send(Command::Resume) {
+            error!("Failed to send resume command: {}", e);
+        }
+    }
+
+    /// Spawns a new task.
+    ///
+    /// The spawned task can have its execution paused with [`Self::pause()`].
+    pub fn spawn<F>(&self, future: F) -> JoinHandle<F::Output>
+    where
+        F: Future<Output: Send> + Send + 'static,
+    {
+        self.spawn_with::<DefaultTaskSpawner, _>(future)
+    }
+
+    /// Like [`Self::spawn()`], but using given [`TaskSpawner`].
+    pub fn spawn_with<S, F>(&self, future: F) -> JoinHandle<F::Output>
+    where
+        S: TaskSpawner,
+        F: Future<Output: Send> + Send + 'static,
+    {
+        S::spawn(self.guard(future))
+    }
+
+    pub(crate) fn guard<F>(&self, future: F) -> Pin<Box<GuardedFuture<F>>>
+    where
+        F: Future,
+    {
+        let guard = FutureGuard {
+            id: 0,
+            drain: Cell::new(false),
+            active: self.active.clone(),
+            parent: self.sender.clone(),
+        };
+
+        let mut future = Box::new(GuardedFuture::new(future, guard));
+
+        // Pointers to live objects are unique by definition, so it's a
+        // convenient way of uniquely identifying alive Futures:
+        future.guard.id = (&raw const *future) as usize;
+
+        let _ = self.sender.send(Command::FutureCreated {
+            id: future.guard.id,
+        });
+
+        Pin::from(future)
+    }
 }
-impl<F: Future> Future for PausableFuture<F> {
+
+#[pin_project]
+pub(crate) struct GuardedFuture<F: Future> {
+    #[pin]
+    future: F,
+    guard: FutureGuard,
+}
+
+impl<F: Future> GuardedFuture<F> {
+    fn new(future: F, guard: FutureGuard) -> Self {
+        Self { future, guard }
+    }
+}
+
+impl<F: Future> Future for GuardedFuture<F> {
     type Output = F::Output;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if !self.state.allowed_to_progress(cx) {
+        if !self.guard.can_continue(cx) {
             return Poll::Pending;
         }
 
@@ -66,17 +242,64 @@ impl<F: Future> Future for PausableFuture<F> {
         // In some languages this can be implemented using algebraic effects -
         // we can imagine `NonPausableFuture` throwing a kind of "SuperPending"
         // effect - but in our case a thread-local will do.
-        self.state.drain.set(DRAIN.get());
+        self.guard.drain.set(DRAIN.get());
 
         poll
     }
 }
 
-/// A future that can not be paused by the [`TaskService`].
+struct FutureGuard {
+    id: usize,
+    drain: Cell<bool>,
+    active: Arc<AtomicBool>,
+    parent: mpsc::Sender<Command>,
+}
+
+impl FutureGuard {
+    fn can_continue(&self, cx: &mut Context<'_>) -> bool {
+        if self.drain.get() || self.active.load(Ordering::Relaxed) {
+            return true;
+        }
+
+        if self
+            .parent
+            .send(Command::FuturePaused {
+                id: self.id,
+                waker: cx.waker().clone(),
+            })
+            .is_err()
+        {
+            // Task service must've died - if we don't continue, we'll turn into
+            // a zombie
+            return true;
+        }
+
+        trace!("Pausing future {}", self.id);
+
+        false
+    }
+}
+
+impl Drop for FutureGuard {
+    fn drop(&mut self) {
+        let _ = self.parent.send(Command::FutureDropped { id: self.id });
+    }
+}
+
+/// Future that, once polled, can't be paused.
 ///
-/// This should be used by futures which should not have their execution interrupted. Prime
-/// candidates includes operations that hold onto file locks such as sqlite database transactions.
+/// Wrapping a [`Future`] with this causes that future to get polled even if
+/// someone calls [`TaskService::pause()`].
 ///
+/// Note that this doesn't guarantee polling into completion, since your caller
+/// can always just `mem::forget()` you - this only affects the task service's
+/// pausing mechanism.
+///
+/// If task service is already paused when you're spawning this future, it will
+/// be spawned as paused as well, i.e. the future must've gotten polled at least
+/// once for the non-pausing mechanism to kick in.
+///
+/// See: [`IntoNonPausableFuture`].
 #[pin_project]
 pub struct NonPausableFuture<F: Future> {
     #[pin]
@@ -111,264 +334,34 @@ impl<F: Future> Future for NonPausableFuture<F> {
     }
 }
 
-/// Trait to convert any future into a future that can not be paused.
 pub trait IntoNonPausableFuture: Future + Sized {
+    /// Converts this future into a future that can't be paused.
+    ///
+    /// See: [`NonPausableFuture`].
     fn into_non_pausable(self) -> NonPausableFuture<Self> {
         NonPausableFuture::new(self)
     }
 }
 
-impl<T: Future> IntoNonPausableFuture for T {}
-
-/// Provides a service that spawns futures which may be paused and resumed.
-pub struct TaskService {
-    id_allocator: AtomicU64,
-    allowed_to_run: Arc<AtomicBool>,
-    sender: Sender<Command>,
+impl<T: Future> IntoNonPausableFuture for T {
+    //
 }
 
-impl TaskService {
-    /// Create a new task service.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if we can't name the background thread.
-    pub fn new() -> std::io::Result<Self> {
-        let (sender, receiver) = std::sync::mpsc::channel();
-        std::thread::Builder::new()
-            .name("task-service".into())
-            .spawn(move || {
-                Self::run(&receiver);
-            })?;
-
-        Ok(Self {
-            id_allocator: AtomicU64::new(0),
-            allowed_to_run: Arc::new(AtomicBool::new(true)),
-            sender,
-        })
-    }
-
-    fn run(receiver: &Receiver<Command>) {
-        debug!("Starting task service");
-        let mut watchers: HashMap<u64, Waker> = HashMap::new();
-        let mut paused = false;
-        let mut num_futures = 0_usize;
-        let mut pause_awaiters = Vec::<oneshot::Sender<()>>::new();
-
-        let notify_awaiters =
-            |paused_count: usize,
-             future_count: usize,
-             pause_awaiters: &mut Vec<oneshot::Sender<()>>| {
-                if paused_count == future_count {
-                    tracing::trace!("All futures paused");
-                    for sender in pause_awaiters.drain(..) {
-                        let _ = sender.send(());
-                    }
-                }
-            };
-        while let Ok(command) = receiver.recv() {
-            match command {
-                Command::Pause => {
-                    paused = true;
-                }
-                Command::PauseAndWait(sender) => {
-                    paused = true;
-                    pause_awaiters.push(sender);
-                }
-                Command::Resume => {
-                    paused = false;
-                    // Wake up all the paused futures.
-                    for (id, waker) in watchers.drain() {
-                        tracing::trace!("Waking future {}", id);
-                        waker.wake();
-                    }
-                }
-                Command::Queue { id, waker } => {
-                    // If we are not paused anymore, but still receive a waker registration
-                    // immediately waken the waker.
-                    if !paused {
-                        tracing::trace!("Waking future {}", id);
-                        waker.wake();
-                        continue;
-                    }
-
-                    // Register watcher and await the unpause command.
-                    watchers.insert(id, waker);
-
-                    // Notify all paused waiters that all the futures are paused now.
-                    notify_awaiters(watchers.len(), num_futures, &mut pause_awaiters);
-                }
-                Command::Dropped { id } => {
-                    tracing::trace!("Future dropped: {}", id);
-                    watchers.remove(&id);
-                    num_futures = num_futures.saturating_sub(1);
-                    // Notify all paused waiters that all the futures are paused now.
-                    notify_awaiters(watchers.len(), num_futures, &mut pause_awaiters);
-                }
-                Command::Started { id } => {
-                    tracing::trace!("Future started: {}", id);
-                    num_futures = num_futures.saturating_add(1);
-                }
-            }
-        }
-        debug!("Starting task service terminating");
-    }
-
-    /// Pause all running async task.
-    ///
-    /// # Remarks
-    ///
-    /// This will eventually cause the futures spawned via this to pause on their next poll cycle.
-    pub fn pause(&self) {
-        info!("Pausing tasks");
-        self.allowed_to_run.store(false, Ordering::Relaxed);
-        if let Err(e) = self.sender.send(Command::Pause) {
-            error!("Failed to send pause command: {}", e);
-        }
-    }
-
-    /// Pause all running async task.
-    ///
-    /// # Remarks
-    ///
-    /// This will eventually cause the futures spawned via this to pause on their next poll cycle.
-    ///
-    /// As soon as all the spawned futures have entered the paused state, this future will resolve.
-    /// If after this method new tasks are spawned, it is possible that this method will return
-    /// early if all current futures have paused.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if we did not receive a reply.
-    pub async fn pause_and_wait(&self) -> Result<(), oneshot::error::RecvError> {
-        info!("Pausing tasks and await");
-        self.allowed_to_run.store(false, Ordering::Relaxed);
-        let (sender, receiver) = oneshot::channel();
-        if let Err(e) = self.sender.send(Command::PauseAndWait(sender)) {
-            error!("Failed to send pause command: {}", e);
-            drop(e);
-        }
-        receiver.await
-    }
-
-    /// Unpause all paused async tasks.
-    pub fn resume(&self) {
-        info!("Resuming tasks");
-        self.allowed_to_run.store(true, Ordering::Relaxed);
-        if let Err(e) = self.sender.send(Command::Resume) {
-            error!("Failed to send resume command: {}", e);
-        }
-    }
-
-    /// Spawn a new task using the [`DefaultTaskSpawner`].
-    ///
-    /// The spawned task can have its execution paused with [`Self::pause()`].
-    pub fn spawn<F>(&self, future: F) -> JoinHandle<F::Output>
-    where
-        F: Future + Send + 'static,
-        <F as Future>::Output: Send,
-    {
-        self.spawn_with::<DefaultTaskSpawner, _>(future)
-    }
-
-    /// Spawn a new task using the given [`TaskSpawner`].
-    ///
-    /// The spawned task can have its execution paused with [`Self::pause()`].
-    pub fn spawn_with<S, F>(&self, future: F) -> JoinHandle<F::Output>
-    where
-        F: Future + Send + 'static,
-        <F as Future>::Output: Send,
-        S: TaskSpawner,
-    {
-        S::spawn(self.wrap_future(future))
-    }
-
-    fn wrap_future<F: Future + Send + 'static>(
-        &self,
-        future: F,
-    ) -> impl Future<Output = F::Output> + Send + 'static {
-        // Each future needs an unique id, as it is possible the waker can change
-        // if the future is re-scheduled to a different execution thread.
-        let future_state = FutureState {
-            id: self.id_allocator.fetch_add(1, Ordering::AcqRel),
-            drain: Cell::new(false),
-            allowed_to_run: self.allowed_to_run.clone(),
-            channel: self.sender.clone(),
-        };
-
-        // Communicate new future
-        let _ = self.sender.send(Command::Started {
-            id: future_state.id,
-        });
-
-        PausableFuture::new(future_state, future)
-    }
-}
-
-/// Background worker command
+#[derive(Debug)]
 enum Command {
-    /// Signal that a future has started
-    Started { id: u64 },
-    /// Signal that we entered the paused state.
-    Pause,
-    /// Signal a request to pause all the futures and wait until they are all paused.
-    PauseAndWait(oneshot::Sender<()>),
-    /// Signal that we exited the paused state.
+    Pause(Option<oneshot::Sender<()>>),
     Resume,
-    /// Register a waker for a future.
-    Queue { id: u64, waker: Waker },
-    /// Cleanup future waker on drop
-    Dropped { id: u64 },
-}
 
-tokio::task_local! {
-    static OVERWRITE_PAUSE: Cell<bool>;
-}
-
-/// Future state to check whether we are paused or not.
-struct FutureState {
-    id: u64,
-    drain: Cell<bool>,
-    allowed_to_run: Arc<AtomicBool>,
-    channel: Sender<Command>,
-}
-
-impl Drop for FutureState {
-    fn drop(&mut self) {
-        let _ = self.channel.send(Command::Dropped { id: self.id });
-    }
-}
-
-impl FutureState {
-    /// Check whether we are allowed to progress.
-    fn allowed_to_progress(&self, cx: &mut Context<'_>) -> bool {
-        if self.drain.get() || self.allowed_to_run.load(Ordering::Relaxed) {
-            return true;
-        }
-        // Register waker
-        if self
-            .channel
-            .send(Command::Queue {
-                id: self.id,
-                waker: cx.waker().clone(),
-            })
-            .is_err()
-        {
-            // Background thread must be dead so we can't pause or we will turn
-            // into zombie.
-            return true;
-        }
-
-        tracing::trace!("Pausing future {}", self.id);
-        false
-    }
+    FutureCreated { id: usize },
+    FuturePaused { id: usize, waker: Waker },
+    FutureDropped { id: usize },
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::time::Duration;
-    use tokio::sync::RwLock;
+    use tokio::{sync::RwLock, task, time};
     use tracing::{Instrument, trace_span};
 
     #[tokio::test(flavor = "multi_thread")]
@@ -382,17 +375,22 @@ mod tests {
         let guard = lock.write().await;
         let lock_clone = Arc::clone(&lock);
         let main_sender_clone = main_sender.clone();
+
         service.spawn(async move {
             // Notify main task that we are ready.
             main_sender_clone.send(()).await.unwrap();
+
             // Wait to acquire read lock, this means the service should be paused now.
             let guard = lock_clone.read().await;
             drop(guard);
+
             // this future only completes after we resume execution
             sender1.send(()).await.unwrap();
         });
+
         let lock_clone = Arc::clone(&lock);
         let main_sender_clone = main_sender.clone();
+
         service.spawn(
             async move {
                 // Notify main task that we are ready.
@@ -409,28 +407,33 @@ mod tests {
         // wait on futures to be ready
         main_receiver.recv().await.unwrap();
         main_receiver.recv().await.unwrap();
+
         // pause services
         service.pause();
+
         // unblock futures
         drop(guard);
 
         // Wait on answer from unpausable future
-        tokio::time::timeout(Duration::from_millis(100), receiver2.recv())
+        time::timeout(Duration::from_millis(100), receiver2.recv())
             .await
             .unwrap();
+
         // Normal future will not trigger anything
-        tokio::time::timeout(Duration::from_millis(100), receiver1.recv())
+        time::timeout(Duration::from_millis(100), receiver1.recv())
             .await
             .unwrap_err();
+
         // Resume service
         service.resume();
+
         // Normal future now completes
         receiver1.recv().await.unwrap();
     }
 
     #[tokio::test(flavor = "multi_thread")]
     #[tracing_test::traced_test]
-    async fn pause_and_await() {
+    async fn pause_and_wait() {
         let service = TaskService::new().unwrap();
         let (sender1, mut receiver1) = tokio::sync::mpsc::channel(1);
         let (sender2, mut receiver2) = tokio::sync::mpsc::channel(1);
@@ -440,6 +443,7 @@ mod tests {
         let guard = lock.write().await;
         let lock_clone = Arc::clone(&lock);
         let main_sender_clone = main_sender.clone();
+
         service.spawn(
             async move {
                 // Notify main task that we are ready.
@@ -447,16 +451,18 @@ mod tests {
                 // Wait to acquire read lock, this means the service should be paused now.
                 let guard = lock_clone.read().await;
                 drop(guard);
-                tracing::info!("Sleeping");
-                tokio::time::sleep(Duration::from_millis(500)).await;
+                info!("Sleeping");
+                time::sleep(Duration::from_millis(500)).await;
                 // this future only completes after we resume execution
                 sender1.send(()).await.unwrap();
-                tracing::info!("DONE");
+                info!("DONE");
             }
             .instrument(trace_span!("FUTURE1")),
         );
+
         let lock_clone = Arc::clone(&lock);
         let main_sender_clone = main_sender.clone();
+
         service.spawn(
             async move {
                 async move {
@@ -465,23 +471,24 @@ mod tests {
                     // Wait to acquire read lock, this means the service should be paused now.
                     let guard = lock_clone.read().await;
                     drop(guard);
-                    tracing::info!("Sleeping");
-                    tokio::time::sleep(Duration::from_millis(500)).await;
-                    tracing::info!("Done");
+                    info!("Sleeping");
+                    time::sleep(Duration::from_millis(500)).await;
+                    info!("Done");
                 }
                 .instrument(trace_span!("NONPAUSE"))
                 .into_non_pausable()
                 .await;
-                tracing::info!("Sleeping");
-                tokio::time::sleep(Duration::from_millis(500)).await;
+                info!("Sleeping");
+                time::sleep(Duration::from_millis(500)).await;
                 sender2.send(()).await.unwrap();
-                tracing::info!("Done");
+                info!("Done");
             }
             .instrument(trace_span!("FUTURE2")),
         );
 
         let lock_clone = Arc::clone(&lock);
         let main_sender_clone = main_sender.clone();
+
         // this future will be aborted
         let join_handle = service.spawn(
             async move {
@@ -490,7 +497,7 @@ mod tests {
                 // Wait to acquire read lock, this means the service should be paused now.
                 let guard = lock_clone.read().await;
                 drop(guard);
-                tokio::time::sleep(Duration::from_millis(5)).await;
+                time::sleep(Duration::from_millis(5)).await;
             }
             .instrument(trace_span!("FUTURE3")),
         );
@@ -500,32 +507,38 @@ mod tests {
         main_receiver.recv().await.unwrap();
         main_receiver.recv().await.unwrap();
         service.pause();
+
         // unblock futures
         drop(guard);
+
         // Abort future.
         join_handle.abort();
 
         // re-pause and await
-        tokio::time::timeout(Duration::from_secs(2), service.pause_and_wait())
+        time::timeout(Duration::from_secs(2), service.pause_and_wait())
             .await
             .unwrap()
             .unwrap();
 
         // Ensure future remains paused.
-        tokio::time::timeout(Duration::from_millis(100), receiver2.recv())
+        time::timeout(Duration::from_millis(100), receiver2.recv())
             .await
             .unwrap_err();
+
         // Ensure future remains paused.
-        tokio::time::timeout(Duration::from_millis(100), receiver1.recv())
+        time::timeout(Duration::from_millis(100), receiver1.recv())
             .await
             .unwrap_err();
+
         // Resume service
         service.resume();
+
         // Wait on future completion
-        tokio::time::timeout(Duration::from_millis(600), receiver1.recv())
+        time::timeout(Duration::from_millis(600), receiver1.recv())
             .await
             .unwrap();
-        tokio::time::timeout(Duration::from_millis(600), receiver2.recv())
+
+        time::timeout(Duration::from_millis(600), receiver2.recv())
             .await
             .unwrap();
     }
@@ -541,14 +554,14 @@ mod tests {
             async move {
                 service.pause();
 
-                tokio::task::yield_now().await;
-                tokio::task::yield_now().await;
-                tokio::task::yield_now().await;
+                task::yield_now().await;
+                task::yield_now().await;
+                task::yield_now().await;
             }
             .into_non_pausable()
         });
 
-        tokio::time::timeout(Duration::from_millis(100), value)
+        time::timeout(Duration::from_millis(100), value)
             .await
             .unwrap()
             .unwrap();
