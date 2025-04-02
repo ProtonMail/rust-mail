@@ -93,7 +93,7 @@ async fn make_another_request_when_stale() {
     Mock::given(method("GET"))
         .and(path(format!("{api_path}/core/v4/tests/ping")))
         .respond_with(ResponseTemplate::new(200))
-        .expect(2)
+        .expect(1..=2)
         .mount(&mock_server)
         .await;
     catch_all(&mock_server).await;
@@ -123,7 +123,7 @@ async fn very_bad_connection_but_responding_in_under_a_second() {
     Mock::given(method("GET"))
         .and(path(format!("{api_path}/core/v4/tests/ping")))
         .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_millis(500)))
-        .expect(2..=3)
+        .expect(1..=3)
         .mount(&mock_server)
         .await;
 

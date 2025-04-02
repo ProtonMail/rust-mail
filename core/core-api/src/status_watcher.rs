@@ -72,7 +72,7 @@ impl StatusWatcher {
         let observer = self.observer.clone();
 
         tokio::spawn(async move {
-            let mut interval = time::interval(Duration::from_secs(10));
+            let mut interval = time::interval(Duration::from_secs(15));
             let mut on_update = observer.on_updates();
             // Make first call lazy and wait for real data.
             on_update.mark_unchanged();
