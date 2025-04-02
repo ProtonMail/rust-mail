@@ -12,9 +12,13 @@ use tokio::sync::{RwLock, watch};
 use tokio::task::JoinHandle;
 use tracing::trace;
 
+mod fixed_queue;
+
+use fixed_queue::StatusChanges;
+
 type StatusJoinHandle = JoinHandle<()>;
 
-const UP_TO_DATE_SECONDS: u64 = 5;
+const UP_TO_DATE_SECONDS: u64 = 10;
 static STATUS: LazyLock<Arc<RwLock<Status>>> = LazyLock::new(|| {
     Arc::new(RwLock::new(Status {
         status: ConnectionStatus::Online,
@@ -81,8 +85,8 @@ impl StatusObserverConfig {
     fn new() -> Self {
         Self {
             up_to_date: Duration::from_secs(UP_TO_DATE_SECONDS),
-            fg_retry: RetryPolicy::default().max_count(0),
-            fg_timeout: Timeouts::ONE_SECOND,
+            fg_retry: RetryPolicy::default().never(),
+            fg_timeout: Timeouts::FIVE_SECONDS,
             bg_retry: RetryPolicy::default(),
             bg_timeout: Timeouts::HALF_MINUTE,
         }
@@ -120,6 +124,7 @@ pub struct StatusObserver {
     request: Arc<RwLock<Option<BackgroundPing>>>,
     config: StatusObserverConfig,
     on_update: watch::Sender<ConnectionStatus>,
+    past_statuses: StatusChanges,
 }
 
 impl StatusObserver {
@@ -141,6 +146,7 @@ impl StatusObserver {
             request: Arc::new(RwLock::new(None)),
             config: StatusObserverConfig::default(),
             on_update,
+            past_statuses: StatusChanges::new(5),
         }
     }
 
@@ -170,6 +176,7 @@ impl StatusObserver {
             request: Arc::new(RwLock::new(None)),
             config,
             on_update,
+            past_statuses: StatusChanges::new(3),
         }
     }
 
@@ -198,6 +205,7 @@ impl StatusObserver {
     /// If the status is `Offline`, it will start a background check.
     ///
     pub async fn status(&self, api: Proton) -> ConnectionStatus {
+        let status = self.get_status().await;
         if !self.is_up_to_date().await {
             let request_finished = self
                 .request
@@ -211,10 +219,15 @@ impl StatusObserver {
                 drop(self.request.write().await.take());
             }
 
-            Self::ping(api.clone(), self.config.fg_timeout, self.config.fg_retry).await;
-        }
+            let was_online_most_of_the_time =
+                self.past_statuses.was_online_most_of_the_time().await;
 
-        let status = self.get_status().await;
+            if status.is_offline() && was_online_most_of_the_time {
+                Self::ping(api.clone(), self.config.fg_timeout, self.config.fg_retry).await;
+            } else {
+                self.background_check(api.clone()).await;
+            }
+        }
 
         if status.is_offline() {
             self.background_check(api).await;
@@ -239,6 +252,7 @@ impl StatusObserver {
             self.on_update.send_replace(status);
         }
 
+        self.past_statuses.push(self_status.status).await;
         self_status.last_check = Instant::now();
         self_status.status = status;
 
