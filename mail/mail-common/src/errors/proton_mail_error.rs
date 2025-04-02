@@ -279,7 +279,6 @@ impl From<DraftSaveOrSendError> for ProtonMailError {
             DraftSaveOrSendError::AttachmentDoesNotHaveKeyPackets(_) => {
                 Self::Unexpected(Unexpected::InvalidArgument)
             }
-            DraftSaveOrSendError::MetadataNotFound(_) => Self::Unexpected(Unexpected::Internal),
             DraftSaveOrSendError::LocalDraftWithoutMessage => {
                 Self::Unexpected(Unexpected::Internal)
             }
@@ -290,7 +289,8 @@ impl From<DraftSaveOrSendError> for ProtonMailError {
             DraftSaveOrSendError::NoRecipients => Self::Reason(
                 MailErrorReason::DraftSaveSendReason(DraftSaveSendErrorReason::NoRecipients),
             ),
-            DraftSaveOrSendError::DraftDoesNotExistOnServer => Self::Reason(
+            DraftSaveOrSendError::MetadataNotFound(_)
+            | DraftSaveOrSendError::DraftDoesNotExistOnServer => Self::Reason(
                 MailErrorReason::DraftSaveSendReason(DraftSaveSendErrorReason::MessageDoesNotExist),
             ),
             SaveOrSendError::MissingAttachmentUploads => {
@@ -308,7 +308,9 @@ impl From<DraftUndoError> for ProtonMailError {
             DraftUndoError::MessageNotADraft(_) => Self::Reason(
                 MailErrorReason::DraftUndoSendReason(DraftUndoSendErrorReason::MessageIsNotADraft),
             ),
-            DraftUndoError::MetadataNotFound(_) => Self::Unexpected(Unexpected::Internal),
+            DraftUndoError::MetadataNotFound(_) => Self::Reason(
+                MailErrorReason::DraftUndoSendReason(DraftUndoSendErrorReason::MessageDoesNotExist),
+            ),
             DraftUndoError::MessageCanNotBeUndoSent(_) => {
                 Self::Reason(MailErrorReason::DraftUndoSendReason(
                     DraftUndoSendErrorReason::MessageCanNotBeUndoSent,
@@ -329,11 +331,11 @@ impl From<DraftUndoError> for ProtonMailError {
 impl From<DraftDiscardError> for ProtonMailError {
     fn from(value: DraftDiscardError) -> Self {
         match value {
-            DraftDiscardError::MetadataNotFound(_) => Self::Unexpected(Unexpected::Internal),
             DraftDiscardError::DeleteFailed => Self::Reason(MailErrorReason::DraftDiscardReason(
                 DraftDiscardErrorReason::MessageDoesNotExist,
             )),
-            DraftDiscardError::DraftDoesNotExistOnServer => Self::Reason(
+            DraftDiscardError::MetadataNotFound(_)
+            | DraftDiscardError::DraftDoesNotExistOnServer => Self::Reason(
                 MailErrorReason::DraftDiscardReason(DraftDiscardErrorReason::MessageDoesNotExist),
             ),
         }
@@ -343,8 +345,7 @@ impl From<DraftDiscardError> for ProtonMailError {
 impl From<AttachmentError> for ProtonMailError {
     fn from(value: AttachmentError) -> Self {
         match value {
-            AttachmentError::MetadataNotFound(_) => Self::Unexpected(Unexpected::Internal),
-            AttachmentError::MessageDoesNotExist => {
+            AttachmentError::MetadataNotFound(_) | AttachmentError::MessageDoesNotExist => {
                 Self::Reason(MailErrorReason::DraftAttachmentReason(
                     DraftAttachmentErrorReason::MessageDoesNotExist,
                 ))
