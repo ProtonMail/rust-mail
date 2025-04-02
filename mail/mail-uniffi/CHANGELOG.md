@@ -6,6 +6,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.69.0] - 2025-04-02
+
+### Features
+
+- [ET-2552] Clear application data on 10th incorrect PIN validation attempt
+- [ET-2552] Add functionality to set/unset biometrics
+- [ET-2552] Cancel all tasks spawned in UserCtx
+- [ET-2552] Archive database files
+
+### Fixes
+
+- Task-service: Improve pausable futures
+- Task-service: Add another test
+- Task-service: Refactoring, improve docs
+- Task-service: Address comments
+- [ET-2358] Correct reported error after draft deleted
+
 
 ## [0.68.2] - 2025-04-02
 
