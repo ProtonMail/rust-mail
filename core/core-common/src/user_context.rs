@@ -26,6 +26,7 @@ use tracing::{debug, warn};
 pub mod action_queue;
 pub mod images_logo;
 mod keys;
+pub mod nuke_utils;
 
 /// Extra initializer for the user database.
 pub trait UserDatabaseInitializer: Send + Sync {
