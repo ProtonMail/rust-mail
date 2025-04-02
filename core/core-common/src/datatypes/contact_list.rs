@@ -6,6 +6,7 @@ use itertools::Itertools;
 use proton_api_core::services::proton::LabelId;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::mem;
 use unicode_segmentation::UnicodeSegmentation;
 
 const DEFAULT_GROUP: &str = "#";
@@ -230,9 +231,16 @@ pub struct DeviceContact {
 }
 
 /// Collection of sorted contact suggestions
+#[derive(Debug, PartialEq)]
 pub struct ContactSuggestions {
     /// Sorted and deduplicated suggestions
     suggestions: Vec<ContactSuggestion>,
+}
+
+impl From<Vec<ContactSuggestion>> for ContactSuggestions {
+    fn from(suggestions: Vec<ContactSuggestion>) -> Self {
+        Self { suggestions }
+    }
 }
 
 impl ContactSuggestions {
@@ -337,10 +345,23 @@ impl ContactSuggestions {
                 FollowingSuggestion::DeviceContact { suggestions, .. } => suggestions,
             });
 
+        Self::concat_iters(proton_suggestions, rest)
+    }
+
+    pub fn concat(&mut self, other: Self) {
+        let mut suggestions = vec![];
+        mem::swap(&mut self.suggestions, &mut suggestions);
+        *self = Self::concat_iters(suggestions, other.suggestions);
+    }
+
+    fn concat_iters(
+        one: impl IntoIterator<Item = ContactSuggestion>,
+        other: impl IntoIterator<Item = ContactSuggestion>,
+    ) -> Self {
         Self {
-            suggestions: proton_suggestions
+            suggestions: one
                 .into_iter()
-                .chain(rest)
+                .chain(other)
                 .unique_by(|suggestion| {
                     suggestion
                         .email()
@@ -387,7 +408,7 @@ impl ContactSuggestions {
         contact: Contact,
         mut email: ContactEmail,
     ) -> (Contact, ContactEmailItem) {
-        let label_ids = std::mem::take(&mut email.label_ids);
+        let label_ids = mem::take(&mut email.label_ids);
         let email = ContactEmailItem::from(email);
         for label_id in label_ids.iter() {
             if let Some(group) = contact_groups.get_mut(label_id) {
