@@ -1,3 +1,4 @@
+use std::io::Error as IoError;
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -8,9 +9,10 @@ use stash::stash::StashError;
 use thiserror::Error;
 use tokio::task::JoinError;
 
-use crate::Context;
 use crate::models::{AppProtection, AppSettings, ModelExtension, PinProtection};
+use crate::nuke_utils::nuke_application_data;
 use crate::os::{KeyChainError, StoreInKeyChain};
+use crate::{Context, CoreContextError};
 
 #[derive(Debug, Error)]
 pub enum PinError {
@@ -38,6 +40,10 @@ pub enum PinError {
     StashError(#[from] StashError),
     #[error("Could not join future, details: `{0}`")]
     JoinError(#[from] JoinError),
+    #[error("Core context error, details: `{0}`")]
+    CoreContext(#[from] CoreContextError),
+    #[error("IO Error, details: `{0}`")]
+    IoError(#[from] IoError),
 }
 
 /// Struct to group PIN code functionality
@@ -45,7 +51,7 @@ pub enum PinError {
 pub struct PinCode;
 
 impl PinCode {
-    const MAX_ATTEMPTS: u8 = 10;
+    pub const MAX_ATTEMPTS: u8 = 10;
     const MIN_PASSWD_LEN: usize = 4;
     const MAX_PASSWD_LEN: usize = 21;
     const HIGHEST_SINGLE_DIGIT: u8 = 9;
@@ -115,8 +121,14 @@ impl PinCode {
                 return Err(PinError::MissingPinMetadata);
             };
 
-            if pin_protection.attempts >= Self::MAX_ATTEMPTS {
-                tracing::error!("Nuking databases");
+            if pin_protection.attempts + 1 >= Self::MAX_ATTEMPTS {
+                tracing::error!(
+                    "All attemps to validate PIN have been used, nuking application data"
+                );
+                if let Err(e) = nuke_application_data(ctx).await {
+                    tracing::error!("Could not clear application data, details `{e}`");
+                }
+
                 return Err(PinError::TooManyAttempts);
             }
 

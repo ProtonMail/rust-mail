@@ -26,6 +26,7 @@ use tracing::{debug, warn};
 pub mod action_queue;
 pub mod images_logo;
 mod keys;
+pub mod nuke_utils;
 
 /// Extra initializer for the user database.
 pub trait UserDatabaseInitializer: Send + Sync {
@@ -135,6 +136,12 @@ impl UserContext {
     #[must_use]
     pub fn get_log_path(&self) -> Option<&Path> {
         self.context.get_log_path()
+    }
+
+    /// Get path to the log file.
+    #[must_use]
+    pub fn get_user_db_path(&self) -> &Path {
+        self.context.get_user_db_location()
     }
 
     /// Retrieves the current user's account details.

@@ -88,6 +88,10 @@ impl From<PinError> for ProtonMailError {
             PinError::Keychain(_core_context_error) => Self::Unexpected(Unexpected::Crypto),
             PinError::StashError(_stash_error) => Self::Unexpected(Unexpected::Database),
             PinError::JoinError(_join_error) => Self::Unexpected(Unexpected::Internal),
+            PinError::CoreContext(core_context_error) => {
+                MailContextError::from(core_context_error).into()
+            }
+            PinError::IoError(_io_error) => Self::Unexpected(Unexpected::FileSystem),
         }
     }
 }

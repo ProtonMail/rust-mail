@@ -881,6 +881,48 @@ impl MailSession {
         .map_err(PinAuthError::from)
     }
 
+    /// Set App Protection to `Biometrics`
+    ///
+    /// This function will have no effect if the current `AppProtection` is something
+    /// different than None.
+    ///
+    pub async fn set_biometrics_app_protection(&self) -> Result<(), UserSessionError> {
+        let ctx = self.mail_ctx.core_context().clone();
+
+        uniffi_async(async move {
+            let mut tether = ctx.account_stash().connection();
+            let mut app_settings = RealAppSettings::get_or_default(&tether).await;
+            app_settings.set_biometrics();
+
+            tether.tx(async |tx| app_settings.save(tx).await).await?;
+
+            Result::<_, RealProtonMailError>::Ok(())
+        })
+        .await
+        .map_err(UserSessionError::from)
+    }
+
+    /// Set App Protection to `None`
+    ///
+    /// This function will have no effect if the current `AppProtection` is something
+    /// different than Biometrics.
+    ///
+    pub async fn unset_biometrics_app_protection(&self) -> Result<(), UserSessionError> {
+        let ctx = self.mail_ctx.core_context().clone();
+
+        uniffi_async(async move {
+            let mut tether = ctx.account_stash().connection();
+            let mut app_settings = RealAppSettings::get_or_default(&tether).await;
+            app_settings.unset_biometrics();
+
+            tether.tx(async |tx| app_settings.save(tx).await).await?;
+
+            Result::<_, RealProtonMailError>::Ok(())
+        })
+        .await
+        .map_err(UserSessionError::from)
+    }
+
     /// Get current app settings
     ///
     pub async fn get_app_settings(&self) -> Result<AppSettings, UserSessionError> {
@@ -894,7 +936,6 @@ impl MailSession {
         })
         .await
         .map_err(UserSessionError::from)
-        .into()
     }
 
     /// Change the settings of the application.
@@ -918,7 +959,6 @@ impl MailSession {
         })
         .await
         .map_err(UserSessionError::from)
-        .into()
     }
 }
 
