@@ -3,9 +3,9 @@ use crate::test_context::MailTestContext;
 use proton_api_core::services::proton::{
     Address as ApiAddress, AddressSignedKeyList, AddressStatus as ApiAddressStatus,
     AddressType as ApiAddressType, ContactBasic as ApiContactBasic,
-    ContactEmail as ApiContactEmail, DateFormat as ApiDateFormat, Density as ApiDensity,
-    Email as ApiEmail, Flags as ApiFlags, HighSecurity as ApiHighSecurity, Label as ApiLabel,
-    LogAuth as ApiLogAuth, Password as ApiPassword, Phone as ApiPhone,
+    ContactEmail as ApiContactEmail, DateFormat as ApiDateFormat, DelinquentState,
+    Density as ApiDensity, Email as ApiEmail, Flags as ApiFlags, HighSecurity as ApiHighSecurity,
+    Label as ApiLabel, LogAuth as ApiLogAuth, Password as ApiPassword, Phone as ApiPhone,
     ProductUsedSpace as ApiProductUsedSpace, SettingsFlags as ApiSettingsFlags,
     TfaStatus as ApiTfaStatus, TimeFormat as ApiTimeFormat, TwoFa as ApiTwoFa, User as ApiUser,
     UserMnemonicStatus as ApiUserMnemonicStatus, UserSettings as ApiUserSettings,
@@ -263,7 +263,7 @@ impl MailTestContext {
                     private: 0,
                     subscribed: 0,
                     services: 0,
-                    delinquent: 0,
+                    delinquent: DelinquentState::Paid,
                     flags: ApiFlags {
                         protected: false,
                         onboard_checklist_storage_granted: false,

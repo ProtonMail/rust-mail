@@ -322,4 +322,93 @@ pub trait ProtonCore {
     /// This method will return an error if the request fails.
     ///
     async fn post_report_bug(&self, body: PostReportBug) -> ApiServiceResult<()>;
+
+    /// Sets up a new address for a non-subscriber user.
+    ///
+    /// This method sends a request to create a new email address for a non-subscriber user,
+    /// returning the result of the operation.
+    ///
+    /// # Arguments
+    /// * `request` - The request containing details for the new address setup.
+    ///
+    /// # Returns
+    /// An `ApiServiceResult` containing the response with the created address details or an error.
+    ///
+    /// [API doc](https://protonmail.gitlab-pages.protontech.ch/Slim-API/core/#tag/Address/operation/post_core-%7B_version%7D-addresses-setup)
+    async fn setup_new_nonsubuser_address(&self,request: PostSetupNewNonSubuserAddressRequest) -> ApiServiceResult<PostSetupNewNonSubuserAddressResponse>;
+
+    /// Retrieves a list of available domains.
+    ///
+    /// This method queries the available domains for email address creation, optionally filtered
+    /// by domain type. See [API docs](https://protonmail.gitlab-pages.protontech.ch/Slim-API/account/#tag/Domains/operation/get_core-%7B_version%7D-domains-available)
+    /// for more details.
+    ///
+    /// # Arguments
+    /// * `domain_type` - An optional filter for the type of domains to retrieve (e.g., "custom").
+    ///
+    /// # Returns
+    /// An `ApiServiceResult` containing the list of available domains or an error.
+    ///
+    /// [API doc](https://protonmail.gitlab-pages.protontech.ch/Slim-API/account/#tag/Domains/operation/get_core-%7B_version%7D-domains-available)
+    async fn get_available_domains(&self, domain_type: Option<String>) -> ApiServiceResult<GetAvailableDomainsResponse>;
+
+
+    /// Checks the availability of a username.
+    ///
+    /// This method verifies if a given username is available for use, with an option to parse it
+    /// as a full email address and include payment information.
+    ///
+    /// # Arguments
+    /// * `name` - The username to check.
+    /// * `parse_domain` - Indicates whether to parse the username as a full email address.
+    /// * `payment_info_token` - An optional token for payment-related validation.
+    ///
+    /// # Returns
+    /// An `ApiServiceResult` containing a response code indicating availability or an error
+    /// 
+    /// [API doc](https://protonmail.gitlab-pages.protontech.ch/Slim-API/core/#tag/Users/operation/get_core-%7B_version%7D-users-available)
+    async fn check_username_availability(&self, name: String, parse_domain: ParseDomain, payment_info_token: Option<&str>) -> ApiServiceResult<ResponseCode>;
+
+    /// Checks the availability of an external username.
+    ///
+    /// This method verifies if an external username is available, with an optional payment token.
+    ///
+    /// # Arguments
+    /// * `name` - The external username to check.
+    /// * `payment_info_token` - An optional token for payment-related validation.
+    ///
+    /// # Returns
+    /// An `ApiServiceResult` containing a response code indicating availability or an error.
+    ///
+    /// [API doc](https://protonmail.gitlab-pages.protontech.ch/Slim-API/core/#tag/Users/operation/get_core-%7B_version%7D-users-availableExternal)
+    async fn check_external_username_availability(&self, name: String, payment_info_token: Option<&str>) -> ApiServiceResult<ResponseCode>;
+
+    /// Sends a verification code to a user.
+    ///
+    /// This method requests a verification code to be sent via email or SMS, based on the provided
+    /// request details.
+    ///
+    /// # Arguments
+    /// * `request` - The request specifying the verification method and destination.
+    ///
+    /// # Returns
+    /// An `ApiServiceResult` containing a response code indicating success or an error.
+    ///
+    /// [API doc](https://protonmail.gitlab-pages.protontech.ch/Slim-API/core/#tag/Users/operation/post_core-%7B_version%7D-users-code)
+    async fn send_verification_code(&self, request: SendVerificationCodeRequest) -> ApiServiceResult<ResponseCode>;
+
+    /// Performs the initial key setup for new private users.
+    ///
+    /// This method sets up encryption keys for a new private user account, including user initialization
+    /// flags and key details.
+    ///
+    /// # Arguments
+    /// * `user_init_flag` - Flag indicating that /core/v4/welcome-mail-send and /core/v4/checklist/get-started/init endpoints are called by the client.
+    /// * `request` - The request containing key setup details.
+    ///
+    /// # Returns
+    /// An `ApiServiceResult` containing the setup response with user and key details or an error.
+    /// 
+    /// [API doc](https://protonmail.gitlab-pages.protontech.ch/Slim-API/core/#tag/Keys/operation/post_core-%7B_version%7D-keys-setup)
+    async fn setup_keys_for_new_account(&self, user_init_flag: AsyncUserInitialization, request: SetupKeysRequest) -> ApiServiceResult<SetupKeysResponse>;
 }

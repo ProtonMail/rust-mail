@@ -398,7 +398,7 @@ MailEvent {
             create_time: 1654615966,
             credit: 0,
             currency: "USD",
-            delinquent: 0,
+            delinquent: Paid,
             display_name: Some(
                 "jason",
             ),

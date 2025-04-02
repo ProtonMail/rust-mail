@@ -122,7 +122,7 @@ impl From<ApiUser> for User {
             create_time: value.create_time,
             credit: value.credit,
             currency: value.currency,
-            delinquent: value.delinquent,
+            delinquent: value.delinquent as u32,
             display_name: value.display_name,
             email: value.email,
             keys: value.keys.into(),

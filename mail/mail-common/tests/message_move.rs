@@ -1,5 +1,5 @@
 use proton_api_core::services::proton::{
-    Address as ApiAddress, Flags as ApiFlags, Label as ApiLabel,
+    Address as ApiAddress, DelinquentState, Flags as ApiFlags, Label as ApiLabel,
     ProductUsedSpace as ApiProductUsedSpace, User as ApiUser,
     UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
 };
@@ -528,7 +528,7 @@ fn test_user_info() -> ApiUser {
         private: 0,
         subscribed: 0,
         services: 0,
-        delinquent: 0,
+        delinquent: DelinquentState::Paid,
         flags: ApiFlags {
             protected: false,
             onboard_checklist_storage_granted: false,

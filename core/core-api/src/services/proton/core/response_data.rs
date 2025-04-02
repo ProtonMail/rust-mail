@@ -815,8 +815,8 @@ pub struct User {
     /// TODO: Document this field.
     pub currency: String,
 
-    /// TODO: Document this field.
-    pub delinquent: u32,
+    /// Indicates the delinquency status of the user's account.
+    pub delinquent: DelinquentState,
 
     /// TODO: Document this field.
     pub display_name: Option<String>,
@@ -868,6 +868,26 @@ pub struct User {
     #[serde(rename = "Type")]
     #[serde_as(as = "FromInto<u8>")]
     pub user_type: UserType,
+}
+
+/// Represents the delinquent state of the user.
+///
+/// This enum indicates the payment status of the user's account.
+#[derive(Clone, Debug, PartialEq, Deserialize_repr, Eq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[serde(rename_all = "PascalCase")]
+#[repr(u32)]
+pub enum DelinquentState {
+    /// The user's account is fully paid.
+    Paid = 0,
+    /// The user's account is available but not yet paid.
+    Available = 1,
+    /// The user's account has an overdue payment.
+    Overdue = 2,
+    /// The user's account is delinquent due to unpaid dues.
+    Delinquent = 3,
+    /// The user's payment has not been received.
+    NotReceived = 4,
 }
 
 /// TODO: Document this struct.

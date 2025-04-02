@@ -6,10 +6,14 @@
 //! The structs in this module should NOT have any business logic or other
 //! functionality.
 //!
+#[cfg(any(test, debug_assertions))]
+use serde::Serialize;
+#[cfg(any(test, debug_assertions))]
+use serde_repr::Serialize_repr;
 
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::Value as JsonValue;
-use serde_repr::{Deserialize_repr, Serialize_repr};
+use serde_repr::Deserialize_repr;
 use serde_with::serde_as;
 use std::collections::HashMap;
 use std::fmt::Debug;

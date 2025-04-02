@@ -3,8 +3,8 @@ use crate::init::Params as TestParams;
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::services::proton::{
     Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
-    AddressStatus as ApiAddressStatus, AddressType as ApiAddressType, Flags as ApiFlags,
-    ProductUsedSpace as ApiProductUsedSpace, User as ApiUser,
+    AddressStatus as ApiAddressStatus, AddressType as ApiAddressType, DelinquentState,
+    Flags as ApiFlags, ProductUsedSpace as ApiProductUsedSpace, User as ApiUser,
     UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
 };
 use proton_api_core::services::proton::{AddressId, LabelId, UserId};
@@ -79,7 +79,7 @@ pub fn message_body_test_user_info() -> ApiUser {
         private: 0,
         subscribed: 0,
         services: 0,
-        delinquent: 0,
+        delinquent: DelinquentState::Paid,
         flags: ApiFlags {
             protected: false,
             onboard_checklist_storage_granted: false,
