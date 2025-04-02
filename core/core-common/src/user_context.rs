@@ -10,7 +10,7 @@ use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::services::proton::{SessionId, UserId};
 use proton_api_core::session::Session;
 use proton_sqlite3::MigratorError;
-use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner, spawn_task};
+use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use stash::orm::Model;
 use stash::stash::{Stash, StashConfiguration};
 use std::fmt::{Debug, Formatter};
@@ -209,28 +209,28 @@ impl UserContext {
         Ok(stash)
     }
 
-    /// Spawn an async `task` associated to this context.
+    /// Spawns a new task.
     ///
-    /// See [`spawn_task()`] for more details.
+    /// Spawned task is bound to this context, i.e. it will get cancelled if
+    /// this context gets cancelled as well.
     pub fn spawn<F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
     where
-        <F as Future>::Output: Send + 'static,
-        F: Future + Send + 'static,
+        F: Future<Output: Send> + Send + 'static,
     {
-        self.spawn_with::<_, DefaultTaskSpawner>(task)
+        self.spawn_with::<DefaultTaskSpawner, _>(task)
     }
 
-    /// Spawn an async `task` associated to this context with a specific [`TaskSpawner`].
-    ///
-    /// See [`spawn_task()`] for more details.
-    pub fn spawn_with<F, S>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    /// Like [`Self::spawn()`], but using given [`TaskSpawner`].
+    pub fn spawn_with<S, F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
     where
-        F: Future + Send + 'static,
-        <F as Future>::Output: Send + 'static,
-        S: TaskSpawner + 'static,
+        S: TaskSpawner,
+        F: Future<Output: Send> + Send + 'static,
     {
         let token = self.cancellation_token.clone();
-        spawn_task::<_, S>(self.context.task_service(), token, task)
+
+        self.context
+            .task_service()
+            .spawn_cancellable_with::<S, _>(token, task)
     }
 
     /// Cancel all tasks which are bound to this context.

@@ -1,5 +1,4 @@
-use crate::TaskSpawner;
-use crate::spawn::DefaultTaskSpawner;
+use crate::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use pin_project::pin_project;
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -11,6 +10,7 @@ use std::task::{Context, Poll, Waker};
 use std::thread;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, trace};
 
 thread_local! {
@@ -117,11 +117,10 @@ impl TaskService {
         debug!("Stopping task service");
     }
 
-    /// Pauses running (and future) tasks until you call [`Self::resume()`].
+    /// Pauses the currently running (and possible future) tasks until you call
+    /// [`Self::resume()`].
     ///
-    /// Futures are paused on their next `.poll()` cycle, i.e. they are not
-    /// interrupted immediately (which we couldn't do anyway even if we wanted
-    /// to).
+    /// Futures are paused as soon as they return from the call to `.poll()`.
     pub fn pause(&self) {
         info!("Pausing tasks");
 
@@ -133,14 +132,14 @@ impl TaskService {
     }
 
     /// Like [`Self::pause()`], but instead of returning immediately, it waits
-    /// for all futures to actually pause.
+    /// for all of the futures to be actually paused.
     ///
     /// # Errors
     ///
     /// Returns error if the task service's thread has crashed and is unable to
     /// service the request.
     pub async fn pause_and_wait(&self) -> Result<(), oneshot::error::RecvError> {
-        info!("Pausing tasks and await");
+        info!("Pausing tasks and waiting");
 
         self.active.store(false, Ordering::Relaxed);
 
@@ -166,7 +165,7 @@ impl TaskService {
 
     /// Spawns a new task.
     ///
-    /// The spawned task can have its execution paused with [`Self::pause()`].
+    /// Spawned task can have its execution paused with [`Self::pause()`].
     pub fn spawn<F>(&self, future: F) -> JoinHandle<F::Output>
     where
         F: Future<Output: Send> + Send + 'static,
@@ -183,15 +182,38 @@ impl TaskService {
         S::spawn(self.guard(future))
     }
 
-    pub(crate) fn guard<F>(&self, future: F) -> Pin<Box<GuardedFuture<F>>>
+    /// Spawns a new task that races with given cancellation token.
+    ///
+    /// If the task wins, this function returns [`AsyncTaskResult::Completed`],
+    /// otherwise this function returns [`AsyncTaskResult::Cancelled`].
+    ///
+    /// Spawned task can have its execution paused with [`Self::pause()`].
+    pub fn spawn_cancellable_with<S, F>(
+        &self,
+        token: CancellationToken,
+        future: F,
+    ) -> JoinHandle<AsyncTaskResult<F::Output>>
+    where
+        S: TaskSpawner,
+        F: Future<Output: Send> + Send + 'static,
+    {
+        self.spawn_with::<S, _>(async move {
+            tokio::select! {
+                () = token.cancelled() => AsyncTaskResult::Cancelled,
+                r = future => AsyncTaskResult::Completed(r),
+            }
+        })
+    }
+
+    fn guard<F>(&self, future: F) -> Pin<Box<GuardedFuture<F>>>
     where
         F: Future,
     {
         let guard = FutureGuard {
             id: 0,
-            drain: Cell::new(false),
+            drain: false,
             active: self.active.clone(),
-            parent: self.sender.clone(),
+            service: self.sender.clone(),
         };
 
         let mut future = Box::new(GuardedFuture::new(future, guard));
@@ -208,8 +230,9 @@ impl TaskService {
     }
 }
 
+/// Manages the inner-future, deciding whether it can be polled or not.
 #[pin_project]
-pub(crate) struct GuardedFuture<F: Future> {
+struct GuardedFuture<F: Future> {
     #[pin]
     future: F,
     guard: FutureGuard,
@@ -224,14 +247,16 @@ impl<F: Future> GuardedFuture<F> {
 impl<F: Future> Future for GuardedFuture<F> {
     type Output = F::Output;
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        if !self.guard.can_continue(cx) {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+
+        if !this.guard.can_continue(cx) {
             return Poll::Pending;
         }
 
         DRAIN.set(false);
 
-        let poll = self.as_mut().project().future.poll(cx);
+        let poll = this.future.poll(cx);
 
         // Intuitively, what we need to discover is:
         //
@@ -242,7 +267,7 @@ impl<F: Future> Future for GuardedFuture<F> {
         // In some languages this can be implemented using algebraic effects -
         // we can imagine `NonPausableFuture` throwing a kind of "SuperPending"
         // effect - but in our case a thread-local will do.
-        self.guard.drain.set(DRAIN.get());
+        this.guard.drain = DRAIN.get();
 
         poll
     }
@@ -250,19 +275,19 @@ impl<F: Future> Future for GuardedFuture<F> {
 
 struct FutureGuard {
     id: usize,
-    drain: Cell<bool>,
+    drain: bool,
     active: Arc<AtomicBool>,
-    parent: mpsc::Sender<Command>,
+    service: mpsc::Sender<Command>,
 }
 
 impl FutureGuard {
     fn can_continue(&self, cx: &mut Context<'_>) -> bool {
-        if self.drain.get() || self.active.load(Ordering::Relaxed) {
+        if self.drain || self.active.load(Ordering::Relaxed) {
             return true;
         }
 
         if self
-            .parent
+            .service
             .send(Command::FuturePaused {
                 id: self.id,
                 waker: cx.waker().clone(),
@@ -282,7 +307,7 @@ impl FutureGuard {
 
 impl Drop for FutureGuard {
     fn drop(&mut self) {
-        let _ = self.parent.send(Command::FutureDropped { id: self.id });
+        let _ = self.service.send(Command::FutureDropped { id: self.id });
     }
 }
 
@@ -296,8 +321,8 @@ impl Drop for FutureGuard {
 /// pausing mechanism.
 ///
 /// If task service is already paused when you're spawning this future, it will
-/// be spawned as paused as well, i.e. the future must've gotten polled at least
-/// once for the non-pausing mechanism to kick in.
+/// be spawned as paused as well, i.e. the future must be polled at least once
+/// for the non-pausing mechanism to kick in.
 ///
 /// See: [`IntoNonPausableFuture`].
 #[pin_project]

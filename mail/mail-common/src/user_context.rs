@@ -466,27 +466,21 @@ impl MailUserContext {
             .join("attachment-staging")
     }
 
-    /// Spawn an async `task` associated to this context.
-    ///
-    /// See [`spawn_task()`] for more details.
+    /// See [`UserContext::spawn()`].
     pub fn spawn<F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
     where
-        <F as Future>::Output: Send + 'static,
-        F: Future + Send + 'static,
+        F: Future<Output: Send> + Send + 'static,
     {
         self.user_context.spawn(task)
     }
 
-    /// Spawn an async `task` associated to this context with a specific [`TaskSpawner`].
-    ///
-    /// See [`spawn_task()`] for more details.
-    pub fn spawn_with<F, S>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
+    /// See [`UserContext::spawn_with()`].
+    pub fn spawn_with<S, F>(&self, task: F) -> JoinHandle<AsyncTaskResult<F::Output>>
     where
-        F: Future + Send + 'static,
-        <F as Future>::Output: Send + 'static,
-        S: TaskSpawner + 'static,
+        S: TaskSpawner,
+        F: Future<Output: Send> + Send + 'static,
     {
-        self.user_context.spawn_with::<_, S>(task)
+        self.user_context.spawn_with::<S, _>(task)
     }
 }
 
