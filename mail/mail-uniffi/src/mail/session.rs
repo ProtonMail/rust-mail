@@ -881,6 +881,12 @@ impl MailSession {
         .map_err(PinAuthError::from)
     }
 
+    /// Return remaining attempts at verifing PIN code.
+    ///
+    /// Method will return None when PIN protection is not set.
+    /// Method will return Some(value) when PIN protection is in use.
+    ///
+    #[allow(clippy::cast_lossless)]
     pub async fn remaining_pin_attempts(&self) -> Result<Option<u32>, UserSessionError> {
         let ctx = self.mail_ctx.core_context().clone();
 

@@ -158,19 +158,17 @@ impl PinCode {
 
             if success {
                 Ok(())
-            } else {
-                if pin_protection.attempts >= Self::MAX_ATTEMPTS {
-                    tracing::error!(
-                        "All attemps to validate PIN have been used, nuking application data"
-                    );
-                    if let Err(e) = nuke_application_data(ctx).await {
-                        tracing::error!("Could not clear application data, details `{e}`");
-                    }
-
-                    Err(PinError::TooManyAttempts)
-                } else {
-                    Err(PinError::IncorrectPin)
+            } else if pin_protection.attempts >= Self::MAX_ATTEMPTS {
+                tracing::error!(
+                    "All attemps to validate PIN have been used, nuking application data"
+                );
+                if let Err(e) = nuke_application_data(ctx).await {
+                    tracing::error!("Could not clear application data, details `{e}`");
                 }
+
+                Err(PinError::TooManyAttempts)
+            } else {
+                Err(PinError::IncorrectPin)
             }
         } else {
             Ok(())
