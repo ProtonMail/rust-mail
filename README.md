@@ -31,6 +31,28 @@ For instance for the `mail-uniffi` crate this would translate into:
   unrelated changes. This may not be avoidable in all cases and it may be better to create a new
   release if the merge conflicts are too great.
 
+### Generating the Changelog
+
+You should use [git-cliff] to generate the Changelog:
+
+```bash
+# Everything
+git-cliff > CHANGELOG.md
+
+# Specific range
+git-cliff mail-uniffi-v0.62.0..mail-uniffi-v0.65.0
+
+```
+
+To skip commits from the changelog you should add an `*` before the `:` in the commit message.
+
+Example:
+```
+feat*: this will not be in the changelog
+
+```
+
+
 
 ## Crate Publishing
 
