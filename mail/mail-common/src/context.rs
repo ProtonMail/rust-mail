@@ -721,6 +721,31 @@ impl MailContext {
     {
         self.core_context.spawn_with::<S, _>(task)
     }
+
+    /// Get all the logged in user context that are active and initialized.
+    pub async fn get_all_logged_in_and_initialized_user_contexts(
+        self: &Arc<Self>,
+    ) -> MailContextResult<Vec<Arc<MailUserContext>>> {
+        let sessions = self.get_sessions().await?;
+        let mut ctxs = Vec::with_capacity(sessions.len());
+
+        for session in sessions {
+            if let CoreSessionState::Authenticated = CoreSessionState::of(&session) {
+                if let Some(user_context) = self
+                    .initialized_user_context_from_session(&session, None)
+                    .await?
+                {
+                    ctxs.push(user_context);
+                } else {
+                    tracing::trace!("{} has non-initialized context", session.account_id);
+                }
+            } else {
+                tracing::warn!("Found unauthenticated session");
+            }
+        }
+
+        Ok(ctxs)
+    }
 }
 
 pub struct MailUserDatabaseInitializer {}

@@ -12,6 +12,7 @@ pub mod prefetch;
 pub mod sidebar;
 mod user_context;
 
+pub mod background_execution;
 pub mod draft;
 pub mod mail_scroller;
 #[cfg(test)]
