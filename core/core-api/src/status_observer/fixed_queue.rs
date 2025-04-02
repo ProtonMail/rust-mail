@@ -1,24 +1,24 @@
-use std::{collections::VecDeque, ops::Deref, sync::Arc};
+use std::{collections::VecDeque, num::NonZeroUsize, ops::Deref, sync::Arc};
 
-use tokio::sync::RwLock;
+use parking_lot::RwLock;
 
 use crate::connection_status::ConnectionStatus;
 
 #[derive(Clone, Debug)]
-pub struct FixedQueue<T> {
+struct FixedQueue<T> {
     queue: VecDeque<T>,
     capacity: usize,
 }
 
 impl<T> FixedQueue<T> {
-    pub fn new(capacity: usize) -> Self {
+    fn new(capacity: usize) -> Self {
         Self {
             queue: VecDeque::with_capacity(capacity),
             capacity,
         }
     }
 
-    pub fn push(&mut self, item: T) {
+    fn push(&mut self, item: T) {
         if self.queue.len() == self.capacity {
             self.queue.pop_front(); // Remove oldest element
         }
@@ -40,18 +40,18 @@ pub struct StatusChanges {
 }
 
 impl StatusChanges {
-    pub fn new(capacity: usize) -> Self {
+    pub fn new(capacity: NonZeroUsize) -> Self {
         Self {
-            queue: Arc::new(RwLock::new(FixedQueue::new(capacity))),
+            queue: Arc::new(RwLock::new(FixedQueue::new(capacity.get()))),
         }
     }
 
-    pub async fn push(&self, status: ConnectionStatus) {
-        self.queue.write().await.push(status);
+    pub fn push(&self, status: ConnectionStatus) {
+        self.queue.write().push(status);
     }
 
-    pub async fn was_online_most_of_the_time(&self) -> bool {
-        let queue = self.queue.read().await;
+    pub fn was_online_most_of_the_time(&self) -> bool {
+        let queue = self.queue.read();
 
         let online_count = queue.iter().filter(|st| st.is_online()).count();
         let offline_count = queue.iter().filter(|st| st.is_offline()).count();

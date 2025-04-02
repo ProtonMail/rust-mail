@@ -5,6 +5,7 @@ use derive_more::Deref;
 use muon::common::{BoxFut, RetryPolicy, Sender, SenderLayer};
 use muon::error::ErrorKind;
 use muon::{Error as MuonError, ProtonRequest, ProtonResponse, Result as MuonResult};
+use std::num::NonZeroUsize;
 use std::ops::Deref;
 use std::sync::{Arc, LazyLock};
 use std::time::{Duration, Instant};
@@ -146,7 +147,7 @@ impl StatusObserver {
             request: Arc::new(RwLock::new(None)),
             config: StatusObserverConfig::default(),
             on_update,
-            past_statuses: StatusChanges::new(5),
+            past_statuses: StatusChanges::new(NonZeroUsize::new(5).unwrap()),
         }
     }
 
@@ -176,7 +177,7 @@ impl StatusObserver {
             request: Arc::new(RwLock::new(None)),
             config,
             on_update,
-            past_statuses: StatusChanges::new(3),
+            past_statuses: StatusChanges::new(NonZeroUsize::new(3).unwrap()),
         }
     }
 
@@ -219,8 +220,7 @@ impl StatusObserver {
                 drop(self.request.write().await.take());
             }
 
-            let was_online_most_of_the_time =
-                self.past_statuses.was_online_most_of_the_time().await;
+            let was_online_most_of_the_time = self.past_statuses.was_online_most_of_the_time();
 
             if status.is_offline() && was_online_most_of_the_time {
                 Self::ping(api.clone(), self.config.fg_timeout, self.config.fg_retry).await;
@@ -252,7 +252,7 @@ impl StatusObserver {
             self.on_update.send_replace(status);
         }
 
-        self.past_statuses.push(self_status.status).await;
+        self.past_statuses.push(self_status.status);
         self_status.last_check = Instant::now();
         self_status.status = status;
 
