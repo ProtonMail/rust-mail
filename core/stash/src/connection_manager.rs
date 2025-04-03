@@ -1,11 +1,12 @@
+use parking_lot::Mutex;
 pub use rusqlite;
 use rusqlite::{Connection, Error, OpenFlags};
 use sqlite_watcher::connection::State;
 use sqlite_watcher::statement::Statement;
-use std::fmt;
-use std::path::{Path, PathBuf};
+use std::ops::{Deref, DerefMut};
+use std::path::PathBuf;
+use std::sync::{Arc, Weak};
 use tempdir::TempDir;
-use uuid::Uuid;
 
 #[derive(Debug)]
 enum Source {
@@ -13,95 +14,139 @@ enum Source {
     TmpFile(TempDir),
 }
 
-type InitFn = dyn Fn(&mut Connection) -> Result<(), rusqlite::Error> + Send + Sync + 'static;
+type InitFn = dyn Fn(&mut Connection) -> Result<(), Error> + Send + Sync + 'static;
 
-/// An `r2d2::ManageConnection` for `rusqlite::Connection`s.
-pub struct StashConnectionManager {
+/// Maintains a pool of sqlite connections.
+pub struct StashConnectionPool {
+    connections: Mutex<Vec<Connection>>,
     source: Source,
+    max_connections: usize,
+    init_fn: Box<InitFn>,
     flags: OpenFlags,
-    init: Option<Box<InitFn>>,
 }
 
-impl fmt::Debug for StashConnectionManager {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut builder = f.debug_struct("StashConnectionMananger");
-        let _ = builder.field("source", &self.source);
-        let _ = builder.field("flags", &self.source);
-        let _ = builder.field("init", &self.init.as_ref().map(|_| "InitFn"));
-        builder.finish()
-    }
-}
-
-impl StashConnectionManager {
-    /// Creates a new `StashConnectionMananger` from file.
+impl StashConnectionPool {
+    /// Creates a new `StashConnectionPool` from file.
     ///
     /// See `rusqlite::Connection::open`
-    pub fn file<P: AsRef<Path>>(path: P) -> Self {
-        Self {
-            source: Source::File(path.as_ref().to_path_buf()),
-            flags: OpenFlags::default(),
-            init: None,
-        }
+    pub fn file<P: Into<PathBuf>>(
+        path: P,
+        max_connections: usize,
+        init_fn: Box<InitFn>,
+    ) -> Arc<Self> {
+        Arc::new(Self {
+            connections: Default::default(),
+            source: Source::File(path.into()),
+            max_connections,
+            init_fn,
+            flags: Default::default(),
+        })
     }
 
-    /// Creates a new `StashConnectionMananger` pretending to be memory database.
+    /// Creates a new `StashConnectionPool` pretending to be memory database.
     /// Due to many issues with shared_cache option and many more without, decision was made
     /// to build temp file databases and keep them alive in Manager context.
     /// This allows for flexibility of memory database and stability of file database in nice wrapping.
     /// Since the production usage is exclusively file database it is nice bonus to run all tests in the
     /// file.
     ///
-    pub fn tmp_file() -> Self {
-        let tmp_dir =
-            TempDir::new(Uuid::new_v4().to_string().as_str()).expect("failed to create temp dir");
-
-        Self {
+    pub fn tmp_file(max_connections: usize, init_fn: Box<InitFn>) -> Arc<Self> {
+        let tmp_dir = TempDir::new("stash-tmp").expect("failed to create temp dir");
+        Arc::new(Self {
+            connections: Default::default(),
             source: Source::TmpFile(tmp_dir),
-            flags: OpenFlags::default(),
-            init: None,
-        }
+            max_connections,
+            init_fn,
+            flags: Default::default(),
+        })
     }
 
-    /// Converts `StashConnectionMananger` into one that calls an initialization
-    /// function upon connection creation. Could be used to set PRAGMAs, for
-    /// example.
+    /// Acquire a new connection from the pool.
     ///
-    pub fn with_init<F>(mut self, init: F) -> Self
-    where
-        F: Fn(&mut Connection) -> Result<(), rusqlite::Error> + Send + Sync + 'static,
-    {
-        self.init = Some(Box::new(init));
-        self
+    /// If connections are available in the pool we use one of those, otherwise we create a new one.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if we failed to initialize a connection.
+    pub fn acquire(self: &Arc<Self>) -> Result<StashPooledConnection, Error> {
+        self.create_or_acquire()
+            .map(|c| StashPooledConnection::new(c, Arc::downgrade(self)))
     }
-}
 
-impl r2d2::ManageConnection for StashConnectionManager {
-    type Connection = Connection;
-    type Error = rusqlite::Error;
+    fn create_or_acquire(&self) -> Result<Connection, Error> {
+        let mut connections = self.connections.lock();
+        while let Some(connection) = connections.pop() {
+            if Self::is_connection_valid(&connection) {
+                return Ok(connection);
+            }
+        }
+        drop(connections);
 
-    fn connect(&self) -> Result<Self::Connection, Error> {
-        let connection = match self.source {
-            Source::File(ref path) => Connection::open_with_flags(path, self.flags),
-            Source::TmpFile(ref tmp) => {
+        self.create_connection()
+    }
+
+    fn is_connection_valid(connection: &Connection) -> bool {
+        connection.execute_batch("SELECT 1").is_ok()
+    }
+
+    fn create_connection(&self) -> Result<Connection, Error> {
+        match &self.source {
+            Source::File(path) => Connection::open_with_flags(path, self.flags),
+            Source::TmpFile(tmp) => {
                 Connection::open_with_flags(tmp.path().join("test"), self.flags)
             }
         }
-        .and_then(|mut c| match self.init {
-            None => Ok(c),
-            Some(ref init) => init(&mut c).map(|_| c),
-        })?;
-
-        State::set_pragmas().execute(&connection)?;
-        State::start_tracking().execute(&connection)?;
-
-        Ok(connection)
+        .and_then(|mut c| {
+            (self.init_fn)(&mut c)?;
+            State::set_pragmas().execute(&c)?;
+            State::start_tracking().execute(&c)?;
+            Ok(c)
+        })
     }
 
-    fn is_valid(&self, conn: &mut Self::Connection) -> Result<(), Error> {
-        conn.execute_batch("SELECT 1")
+    /// Release a connection back to the pool.
+    fn release(&self, connection: Connection) {
+        let mut connections = self.connections.lock();
+        if connections.len() < self.max_connections {
+            connections.push(connection);
+        }
     }
+}
 
-    fn has_broken(&self, _: &mut Self::Connection) -> bool {
-        false
+/// A Sqlite Connection managed by the [`StashConnectionPool`].
+///
+/// On drop the connection is returned to the pool.
+pub struct StashPooledConnection {
+    conn: Option<Connection>,
+    pool: Weak<StashConnectionPool>,
+}
+
+impl StashPooledConnection {
+    fn new(connection: Connection, pool: Weak<StashConnectionPool>) -> Self {
+        Self {
+            conn: Some(connection),
+            pool,
+        }
+    }
+}
+
+impl Drop for StashPooledConnection {
+    fn drop(&mut self) {
+        if let Some(pool) = self.pool.upgrade() {
+            pool.release(self.conn.take().expect("Should be set"));
+        }
+    }
+}
+
+impl Deref for StashPooledConnection {
+    type Target = Connection;
+    fn deref(&self) -> &Self::Target {
+        self.conn.as_ref().expect("Should be set")
+    }
+}
+
+impl DerefMut for StashPooledConnection {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.conn.as_mut().expect("Should be set")
     }
 }
