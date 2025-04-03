@@ -1,10 +1,10 @@
 use bytes::Bytes;
 use muon::DELETE;
 use proton_api_core::service::{ApiServiceError, ApiServiceResult};
-use proton_api_core::services::proton::LabelId;
 use proton_api_core::services::proton::Proton;
 use proton_api_core::services::proton::muon::util::ProtonRequestExt;
 use proton_api_core::services::proton::muon::{GET, POST, PUT, serde_to_query};
+use proton_api_core::services::proton::{CORE_V4, LabelId};
 use serde_json::json;
 use std::io::Cursor;
 use std::time::Duration;
@@ -442,6 +442,28 @@ impl ProtonMail for Proton {
         message_id: MessageId,
     ) -> Result<PostCancelSendResponse, ApiServiceError> {
         Ok(POST!("{MAIL_V4}/messages/{message_id}/cancel_send")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    /// Reports a message as phishing.
+    /// It requires the decrypted message body.
+    async fn report_phishing(
+        &self,
+        message_id: MessageId,
+        mime_type: MimeType,
+        body: &str,
+    ) -> Result<(), ApiServiceError> {
+        let query = json!({
+            "MessageID": message_id,
+            "MIMEType": mime_type,
+            "Body": body
+        });
+
+        Ok(POST!("{CORE_V4}/reports/phishing")
+            .body_json(query)?
             .send_with(self)
             .await?
             .ok()?

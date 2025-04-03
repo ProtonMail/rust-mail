@@ -114,6 +114,7 @@ pub(crate) fn register_mail_actions(queue: &Queue) {
     register_action::<messages::read::Read>(queue);
     register_action::<messages::unread::Unread>(queue);
     register_action::<messages::ham::Ham>(queue);
+    register_action::<messages::phishing::ReportPhishing>(queue);
     register_action::<draft::Save>(queue);
     register_action::<draft::Send>(queue);
     register_action::<labels::Expand>(queue);

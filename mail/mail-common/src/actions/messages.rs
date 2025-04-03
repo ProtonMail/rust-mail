@@ -3,6 +3,7 @@ pub mod ham;
 pub mod label;
 pub mod label_as;
 pub mod r#move;
+pub mod phishing;
 pub mod read;
 pub mod unlabel;
 pub mod unread;

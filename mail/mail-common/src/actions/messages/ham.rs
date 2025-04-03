@@ -13,7 +13,7 @@ use stash::stash::Bond;
 
 /// Action which marks messages as Ham.
 /// Ham means that a message is not spam (get it?)
-/// This also applies to messages thought to be phising or suspicious.
+/// This also applies to messages thought to be phishing or suspicious.
 ///
 /// It will also whitelist the sender
 #[derive(Clone, Debug, Deserialize, Serialize)]

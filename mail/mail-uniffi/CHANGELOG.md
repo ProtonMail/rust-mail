@@ -30,6 +30,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   - Repeated action registration crash
 
+### Added
+  - `report_phishing` exists and has an implementation available (renamed from `phishing_attempt`)
+
 ## [0.68.1] - 2025-04-01
 
 ### Fixed

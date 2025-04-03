@@ -942,7 +942,7 @@ pub async fn unblock_address(mailbox: Arc<Mailbox>, address_id: Id) -> Result<()
     .into()
 }
 
-/// Mark multiple messages as ham (not spam) AKA as legitimate
+/// Mark message as phishing
 ///
 /// # Parameters
 ///
@@ -951,19 +951,25 @@ pub async fn unblock_address(mailbox: Arc<Mailbox>, address_id: Id) -> Result<()
 ///
 /// # Errors
 ///
-/// This will always error out as it's not yet implemented
+/// Returns an error if the action can not be executed.
 ///
 #[allow(unused)]
 #[allow(clippy::unused_async)]
 #[uniffi_export]
 #[returns(VoidActionResult)]
-pub async fn phising_attempt(
-    mailbox: Arc<MailUserSession>,
-    message_id: Id,
-) -> Result<(), ActionError> {
-    Err(ActionError::Other(ProtonError::OtherReason(
-        crate::errors::OtherErrorReason::Other("Unimplemented!".into()),
-    )))
+pub async fn report_phishing(mailbox: Arc<Mailbox>, message_id: Id) -> Result<(), ActionError> {
+    let ctx = mailbox.ctx()?;
+    let label = mailbox.mbox().label_id();
+
+    uniffi_async(async move {
+        RealMessage::action_report_phishing(ctx.action_queue(), label, message_id.into())
+            .await
+            .map(|_| ())
+            .map_err(RealProtonMailError::from)
+    })
+    .await
+    .map_err(ActionError::from)
+    .into()
 }
 
 /// Struct returned by [`get_embedded_attachment`] representing the data of an embedded attachment.
