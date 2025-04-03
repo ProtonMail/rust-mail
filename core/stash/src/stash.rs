@@ -18,7 +18,6 @@
 //! to interface with sqlite.
 //!
 
-use crate::connection_manager::StashConnectionManager;
 use crate::orm::{ConversionError, DbRecord, DbRecords, Model, from_rows, perform_load};
 use anyhow::{Context, anyhow};
 use core::fmt;
@@ -31,7 +30,6 @@ use derivative::Derivative;
 use flume::{Receiver as QueueReceiver, Sender as QueueSender, unbounded};
 use indoc::formatdoc;
 use proton_task_service::IntoNonPausableFuture;
-use r2d2::Pool;
 use rusqlite::hooks::Action;
 use rusqlite::types::FromSql;
 use rusqlite::{Connection, Error as SqliteError, Rows, ToSql, Transaction, TransactionBehavior};
@@ -49,6 +47,7 @@ use tokio::sync::oneshot::{self, Sender as OneshotSender};
 use tracing::{debug, error, trace, warn};
 // Used to resolve undeclared crate of module `stash` from DbRecord proc marco
 use crate as stash;
+use crate::connection_manager::StashConnectionPool;
 
 type StdSender<T> = flume::Sender<T>;
 /// Set a timeout for a specified amount of time when a table is locked. This
@@ -59,9 +58,6 @@ const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 /// defaults to 100.
 // TODO: Test perf of lower values.
 const MAX_CONNECTIONS: u32 = 100;
-
-/// The maximum number of opened idle connections.
-const IDLE_CONNECTIONS: u32 = 5;
 
 /// A type alias for a field convertor function.
 type Converter = Box<dyn Fn(Rows<'_>) -> Result<DbRecords, ConversionError> + Send>;
@@ -417,7 +413,7 @@ pub struct Stash {
     watcher: Arc<Watcher>,
 
     /// The pool used for database connections.
-    pool: Pool<StashConnectionManager>,
+    pool: Arc<StashConnectionPool>,
 }
 
 impl Debug for Stash {
@@ -460,25 +456,20 @@ impl Stash {
     /// This is infallible, if it cannot open the file it will fail later on when we try to
     /// connect.
     #[allow(clippy::missing_panics_doc)] // This can only happen if we misconfigure the pool.
-    fn make_pool(config: StashConfiguration<'_>) -> Pool<StashConnectionManager> {
+    fn make_pool(config: StashConfiguration<'_>) -> Arc<StashConnectionPool> {
         let StashConfiguration {
-            path,
-            pool_size,
-            idle_count,
+            path, pool_size, ..
         } = config;
 
         match path {
             Some(p) => debug!("New Stash with file: {:?}", p),
             None => debug!("New Stash with in-memory database"),
         }
-        let manager = path
-            .map_or_else(
-                StashConnectionManager::tmp_file,
-                StashConnectionManager::file,
-            )
-            .with_init(|connection| {
-                connection
-                    .execute_batch(&formatdoc!("
+
+        let max_connections = pool_size.unwrap_or(MAX_CONNECTIONS) as usize;
+
+        let init_fn = Box::new(|c: &mut Connection| {
+            c.execute_batch(&formatdoc!("
                         PRAGMA journal_mode = WAL;         -- Better write-concurrency
                         PRAGMA synchronous = NORMAL;       -- Perform fsync only at critical points
                         PRAGMA wal_checkpoint(TRUNCATE);   -- Free space by truncating WAL files from the last run
@@ -487,19 +478,13 @@ impl Stash {
                         PRAGMA temp_store = MEMORY;        -- Allows temporary storage for watcher
                         PRAGMA recursive_triggers='ON';    -- Allows recursive triggers for watcher
                     ", BUSY_TIMEOUT.as_millis()))?;
-                Ok(())
-            });
+            Ok(())
+        });
 
-        let pool_size = pool_size.unwrap_or(MAX_CONNECTIONS);
-        let idle_count = idle_count
-            .or(Some(IDLE_CONNECTIONS))
-            .map(|idle| std::cmp::min(idle, pool_size));
-
-        Pool::builder()
-            .max_size(pool_size)
-            .min_idle(idle_count)
-            .build(manager)
-            .expect("Could not open that many connections")
+        match path {
+            Some(p) => StashConnectionPool::file(p, max_connections, init_fn),
+            None => StashConnectionPool::tmp_file(max_connections, init_fn),
+        }
     }
 
     /// Gets a connection from the pool.
@@ -1049,7 +1034,7 @@ impl Tether {
             debug!("Creating worker thread");
 
             let connection = pool
-                .get()
+                .acquire()
                 .context("Could not connect to the database")
                 .map_err(StashError::from);
 

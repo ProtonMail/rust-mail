@@ -11,8 +11,8 @@ derivative = { workspace = true }
 flume = { workspace = true }
 indoc = { workspace = true }
 itertools = { workspace = true }
+parking_lot = { workspace = true }
 proton-task-service = { workspace = true }
-r2d2 = "0.8.10"
 rusqlite = { workspace = true, features = ["hooks"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -22,7 +22,6 @@ tempdir = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
-uuid = { workspace = true }
 
 [dev-dependencies]
 tempdir = { workspace = true }
