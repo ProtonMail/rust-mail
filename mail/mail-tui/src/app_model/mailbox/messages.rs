@@ -17,9 +17,11 @@ use crate::widgets::{
 use anyhow::{Context, anyhow};
 use futures::FutureExt;
 use futures::future::try_join_all;
+use itertools::Itertools as _;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label;
 use proton_core_common::os::safe_write;
+use proton_mail_common::datatypes::message_banner::MessageBanner;
 use proton_mail_common::datatypes::{
     ContextualConversation, LocalConversationId, LocalMessageId, ReadFilter, SearchOptions,
 };
@@ -34,8 +36,8 @@ use ratatui::Frame;
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
-use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
-use stash::stash::WatcherHandle;
+use ratatui::widgets::{Block, Borders, Cell, List, ListItem, Paragraph, Row, Table};
+use stash::stash::{Tether, WatcherHandle};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -262,7 +264,6 @@ impl MessagesState {
         ))
     }
 
-    #[allow(clippy::zombie_processes)]
     pub fn open_message_body(&mut self, ctx: Arc<MailUserContext>) -> Command<Messages> {
         let Some(metadata) = self.selected_message() else {
             tracing::warn!("No message selected");
@@ -275,58 +276,15 @@ impl MessagesState {
             #[allow(clippy::redundant_closure_call)] // Poor's man try blocks
             let c: anyhow::Result<_> = (|| async move {
                 let stash = ctx.user_stash();
-                let tether = stash.connection();
                 let local_id = metadata.local_id.unwrap();
 
                 let decrypted = MailMessage::message_body(&ctx, local_id)
                     .await
                     .context("Failed to get message body")?;
 
-                let html = decrypted
-                    .transformed(TransformOpts::default(), &tether)
-                    .await;
-
-                if let Some(cmd_name) = CLI_ARGS.browser.as_deref() {
-                    let cmd_name = if !cmd_name.is_empty() {
-                        cmd_name
-                    } else if cfg!(target_os = "linux") {
-                        "xdg-open"
-                    } else if cfg!(target_os = "macos") {
-                        "open"
-                    } else {
-                        panic!("Please specify a browser in --browser");
-                    };
-
-                    let mut temp_dir = CLI_ARGS
-                        .html_dir
-                        .clone()
-                        .unwrap_or_else(|| std::env::temp_dir().join("proton_htmls"));
-                    let escaped_subject = PathBuf::from(
-                        &metadata
-                            .subject
-                            .replace(|c: char| !c.is_ascii_alphanumeric(), "_"),
-                    );
-                    temp_dir.push(escaped_subject);
-
-                    fs::create_dir_all(&temp_dir).unwrap();
-                    let before = temp_dir.join("before.html");
-                    fs::write(&before, &decrypted.body).unwrap();
-
-                    let after = temp_dir.join("after.html");
-                    safe_write(&after, &html.body).unwrap();
-
-                    _ = std::process::Command::new(cmd_name)
-                        .args([&after])
-                        .spawn()
-                        .unwrap();
-                }
-
-                let html = html_to_text(&html.body)?;
-                Ok(Box::new(DecryptedMessage::new(
-                    metadata,
-                    decrypted,
-                    Some(html),
-                )))
+                Ok(Box::new(
+                    DecryptedMessage::new(metadata, decrypted, &stash.connection()).await?,
+                ))
             })()
             .await;
 
@@ -649,8 +607,7 @@ impl StateHandler for MessagesState {
 
 pub struct DecryptedMessage {
     metadata: MailMessage,
-    decrypted_body: DecryptedMessageBody,
-    content: Option<String>,
+    content: String,
     scroll_state: ScrollableParagraphState,
     num_lines: usize,
     date: String,
@@ -659,6 +616,7 @@ pub struct DecryptedMessage {
     cc_list: String,
     bcc_list: String,
     label_list: String,
+    banners: Vec<MessageBanner>,
 }
 
 enum DecryptedMessageStatus {
@@ -706,13 +664,58 @@ impl DecryptedMessageStatus {
 }
 
 impl DecryptedMessage {
-    pub fn new(
+    pub async fn new(
         metadata: MailMessage,
         decrypted_body: DecryptedMessageBody,
-        content: Option<String>,
-    ) -> Self {
-        let text = content.as_deref().unwrap_or(&decrypted_body.body);
-        let num_lines = text.chars().filter(|c| *c == '\n').count();
+        tether: &Tether,
+    ) -> anyhow::Result<Self> {
+        let body_output = decrypted_body
+            .transformed(TransformOpts::default(), tether)
+            .await;
+
+        if let Some(cmd_name) = CLI_ARGS.browser.as_deref() {
+            let cmd_name = if !cmd_name.is_empty() {
+                cmd_name
+            } else if cfg!(target_os = "linux") {
+                "xdg-open"
+            } else if cfg!(target_os = "macos") {
+                "open"
+            } else {
+                panic!("Please specify a browser in --browser");
+            };
+
+            let mut temp_dir = CLI_ARGS
+                .html_dir
+                .clone()
+                .unwrap_or_else(|| std::env::temp_dir().join("proton_htmls"));
+            let escaped_subject = PathBuf::from(
+                &metadata
+                    .subject
+                    .replace(|c: char| !c.is_ascii_alphanumeric(), "_"),
+            );
+            temp_dir.push(escaped_subject);
+
+            fs::create_dir_all(&temp_dir).unwrap();
+            let before = temp_dir.join("before.html");
+            fs::write(&before, &decrypted_body.body).unwrap();
+
+            let after = temp_dir.join("after.html");
+            safe_write(&after, &body_output.body).unwrap();
+
+            #[allow(
+                clippy::zombie_processes,
+                reason = "This is fine to run in the background"
+            )]
+            {
+                _ = std::process::Command::new(cmd_name)
+                    .args([&after])
+                    .spawn()
+                    .unwrap();
+            }
+        }
+
+        let content = html_to_text(&body_output.body)?;
+        let num_lines = content.chars().filter(|c| *c == '\n').count();
 
         let date = date_from_timestamp(metadata.time);
         let sender = format_sender(&metadata.sender);
@@ -723,11 +726,10 @@ impl DecryptedMessage {
             .custom_labels
             .iter()
             .map(|l| l.name.clone())
-            .collect::<Vec<_>>()
             .join(", ");
-        Self {
+
+        Ok(Self {
             metadata,
-            decrypted_body,
             content,
             scroll_state: ScrollableParagraphState::new(),
             num_lines,
@@ -737,7 +739,8 @@ impl DecryptedMessage {
             cc_list,
             bcc_list,
             label_list,
-        }
+            banners: body_output.body_banners,
+        })
     }
 
     pub fn draw(&mut self, frame: &mut Frame, area: Rect) {
@@ -761,8 +764,11 @@ impl DecryptedMessage {
             ]),
         ];
 
-        let [header_area, box_area, message_area] = Layout::vertical([
+        let [header_area, banners_area, box_area, message_area] = Layout::vertical([
             Constraint::Length(u16::try_from(rows.len()).unwrap_or(7)),
+            Constraint::Length(
+                u16::try_from(self.banners.len()).expect("More tan u16::MAX banners??"),
+            ),
             Constraint::Length(1),
             Constraint::Percentage(100),
         ])
@@ -772,11 +778,32 @@ impl DecryptedMessage {
         let table = Table::new(rows, widths).column_spacing(1);
 
         frame.render_widget(table, header_area);
+        self.draw_banners(frame, banners_area);
 
         frame.render_widget(Block::new().borders(Borders::TOP), box_area);
-        let text = self.content.as_deref().unwrap_or(&self.decrypted_body.body);
-        let paragraph = ScrollableParagraph::new(Paragraph::new(text), self.num_lines);
+        let paragraph = ScrollableParagraph::new(Paragraph::new(&*self.content), self.num_lines);
         frame.render_stateful_widget(paragraph, message_area, &mut self.scroll_state);
+    }
+
+    pub fn draw_banners(&self, frame: &mut Frame, rect: Rect) {
+        let rows = self.banners.iter().map(|banner| {
+             match banner {
+                    MessageBanner::BlockedSender => ListItem::from("You blocked this sender."),
+                    MessageBanner::PhishingAttempt => {
+                        ListItem::from("The system thinks that this is a phising attempt")
+                    }
+                    MessageBanner::Spam => ListItem::from("This message was automatically marked as spam"),
+                    MessageBanner::Expiry { timestamp } => ListItem::from(format!("This message will self-destruct at {timestamp:?}")),
+                    MessageBanner::AutoDelete {
+                        timestamp,
+                        delete_days,
+                    } => ListItem::from(format!("Messages in the trash get deleted after {delete_days}. This message will get deleted at {timestamp:?}")),
+                    MessageBanner::RemoteContent => ListItem::from("This message contains remote images. Use the --browser flag to see them."),
+                    MessageBanner::EmbeddedImages => ListItem::from("This message contains embedded images, which can't be shown in the TUI."),
+                    _ => ListItem::from("unimplemented"),
+                }
+        });
+        frame.render_widget(List::new(rows), rect);
     }
 }
 
