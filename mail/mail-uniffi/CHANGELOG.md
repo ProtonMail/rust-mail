@@ -6,7 +6,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.69.0] - 2025-04-02
+## [0.70.0] - 2025-04-03
+
+### Changed
+
+- [ET-2592] Update background execution API
+
+### Features
+
+- [ET-2552] Use combine contacts AppSetting for `contact_suggestions`
+- Mark as phising implementation
+
+### Fixes
+
+- [ET-2613] Fill `Username` field in bug report request
+- [ET-2614] Correctly format bug report description to include all provided fields
+- [ET-2592] Replace r2d2 with basic replacement
+- Missing pinned and blocked system label migration
+
+## [mail-uniffi-v0.69.0] - 2025-04-02
 
 ### Features
 
@@ -29,9 +47,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
   - Repeated action registration crash
-
-### Added
-  - `report_phishing` exists and has an implementation available (renamed from `phishing_attempt`)
 
 ## [0.68.1] - 2025-04-01
 
