@@ -2,41 +2,30 @@ use crate::core::datatypes::{ApiConfig, AppProtection, AppSettings, AppSettingsD
 use crate::core::verification::{ChallengeNotifierWrap, DynChallengeNotifier};
 use crate::core::{FFIKeyChain, StoredAccountState, StoredSession, StoredSessionState};
 use crate::core::{OSKeyChain, StoredAccount};
-use crate::errors::unexpected::UnexpectedError;
-use crate::errors::{
-    LoginError, PinAuthError, PinSetError, ProtonError, UserSessionError, VoidSessionResult,
-};
+use crate::errors::{LoginError, PinAuthError, PinSetError, UserSessionError, VoidSessionResult};
 use crate::mail::logging::init_log;
 use crate::mail::state::MailUserContextMap;
 use crate::mail::{LoginFlow, MailUserSession};
 use crate::{AsyncLiveQueryCallback, watch_channel_async};
 use crate::{
-    LiveQueryCallback, WatchHandle, async_runtime, async_runtime_slim, spawn_async, uniffi_async,
-    watch_channel,
+    LiveQueryCallback, WatchHandle, async_runtime, async_runtime_slim, uniffi_async, watch_channel,
 };
 use futures::TryFutureExt;
 use itertools::Itertools;
-use proton_core_common::action_queue::{
-    CheckNetworkStatusSubscriber, WaitForOnlineSubscribtionExt,
-};
+use proton_core_common::CoreSessionState;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::models::AppSettings as RealAppSettings;
 use proton_core_common::os::KeyChainExt;
 use proton_core_common::pin_code::PinCode;
-use proton_core_common::{CoreAccountState, CoreSessionState};
+use proton_mail_common::MailContext;
 use proton_mail_common::actions::draft::Send;
 use proton_mail_common::context::ShouldInitializeMailUserContext;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::models::DraftMetadata;
-use proton_mail_common::{MailContext, MailUserContext};
-use proton_task_service::TaskService;
 use stash::stash::{Stash, WatcherHandle};
-use std::num::NonZeroUsize;
 use std::path::PathBuf;
-use std::sync::{Arc, Weak};
-use tokio::sync::mpsc;
-use tokio::task::spawn_blocking;
+use std::sync::Arc;
 use tracing::{debug, error};
 use tracing_appender::non_blocking::WorkerGuard;
 
@@ -665,98 +654,15 @@ impl MailSession {
         .map_err(UserSessionError::from)
     }
 
-    /// Functionality to execute pending actions for all logged in accounts in controlled manner.
-    ///
-    /// This method is meant to be executed when putting application to sleep or running it in the background.
-    /// It stops automatic execution of the queues and sequentially execute actions in following priority:
-    /// * Send actions for primary account,
-    /// * Send actions for secondary accounts,
-    /// * Other actions for primary account,
-    /// * Other actions for secondary accounts,
-    ///
-    /// It will stop when aborted or when finished whatever comes first.
-    /// On exit the callback will be triggered to notify caller that it finished.
-    ///
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
-    pub fn start_background_execution(
-        &self,
-        callback: Box<dyn LiveQueryCallback>,
-    ) -> Result<Arc<BackgroundExecutionHandle>, UserSessionError> {
-        let ctx = self.mail_ctx.clone();
-        let task_service = TaskService::new().map_err(|_| {
-            error!("Failed to create task service");
-            UserSessionError::Other(ProtonError::Unexpected(UnexpectedError::Os))
-        })?;
-        let (sender, mut abort) = mpsc::channel(1);
-
-        // This task needs to run a free task that won't get paused or it may get stuck.
-        async_runtime().spawn(async move {
-            tracing::info!("Starting background execution");
-            let all_user_ctxs = get_all_logged_in_mail_user_contexts(&ctx)
-                .await
-                .inspect_err(|e| {
-                    tracing::error!("Failed to get logged in users, details: `{e:?}`");
-                })?;
-
-            if all_user_ctxs.is_empty() {
-                tracing::warn!("There are no logged in users, skipping background execution");
-                let callback = move || callback.on_update();
-                let _ = spawn_blocking(move || callback()).await.inspect_err(|e| {
-                    tracing::error!(
-                        "Could not call callback in background execution, details: `{e}`"
-                    );
-                });
-                return Ok(());
-            }
-
-            // Create new executors for all the contexts.
-            let queue_executors = all_user_ctxs
-                .iter()
-                .map(|ctx| {
-                    let wait_for_online =
-                        CheckNetworkStatusSubscriber::create(ctx.session().status_watcher());
-                    let send_executor = MailUserContext::new_send_queue_executor(
-                        ctx.action_queue(),
-                        &wait_for_online,
-                        NonZeroUsize::new(2).unwrap(),
-                        &task_service,
-                    );
-                    let default_executor = MailUserContext::new_default_queue_executor(
-                        ctx.action_queue(),
-                        &wait_for_online,
-                        &task_service,
-                    );
-                    (send_executor, default_executor)
-                })
-                .collect::<Vec<_>>();
-
-            tracing::debug!("Background execution is in progress... awaiting for abort");
-            abort.recv().await;
-            // Pause all executors and make sure all non-pausable futures finish on time.
-            tracing::info!("Pausing Background queue executors...");
-            if task_service.pause_and_wait().await.is_err() {
-                tracing::error!("Pausing Background queue executors... Failed");
-            } else {
-                tracing::info!("Pausing executors... Done");
-            }
-            drop(queue_executors);
-            tracing::info!("Background execution finished");
-            Result::<_, RealProtonMailError>::Ok(())
-        });
-
-        Ok(Arc::new(BackgroundExecutionHandle {
-            sender,
-            ctx: Arc::downgrade(&self.mail_ctx),
-        }))
-    }
-
     /// Check if any message for all logged in accounts is still pending to send
     ///
     pub async fn all_messages_were_sent(&self) -> Result<bool, UserSessionError> {
         let ctx = self.mail_ctx.clone();
 
         uniffi_async(async move {
-            let all_user_ctxs = get_all_logged_in_mail_user_contexts(&ctx).await?;
+            let all_user_ctxs = ctx
+                .get_all_logged_in_and_initialized_user_contexts()
+                .await?;
             let mut all_messages_were_sent = true;
 
             for user_ctx in &all_user_ctxs {
@@ -1201,115 +1107,4 @@ impl WatchedSessions {
     ) -> WatchedSessions {
         WatchedSessions::new(sessions, watch_channel_async(ctx, handle, callback))
     }
-}
-
-/// Handle for background activites execution.
-///
-/// It is meant to be hold by a caller of `start_background_execution` method.
-/// When dropped it will cease the execution.
-///
-#[derive(uniffi::Object)]
-pub struct BackgroundExecutionHandle {
-    sender: mpsc::Sender<()>,
-    ctx: Weak<MailContext>,
-}
-
-#[uniffi_export]
-impl BackgroundExecutionHandle {
-    /// Abort background execution.
-    ///
-    /// Allows holder of the `BackgroundExecutionHandle` to finish execution prematurely.
-    ///
-    pub async fn abort(&self) {
-        if let Err(e) = self.sender.send(()).await {
-            tracing::error!(
-                "Critical: Could not notify task to abort, force it to finish, details: `{e}`"
-            );
-        }
-    }
-}
-
-impl Drop for BackgroundExecutionHandle {
-    fn drop(&mut self) {
-        let sender = self.sender.clone();
-        if let Some(ctx) = self.ctx.upgrade() {
-            spawn_async(ctx, async move {
-                if let Err(e) = sender.send(()).await {
-                    tracing::error!(
-                        "Critical: Could not notify task to abort on drop, force it to finish, details: `{e}`"
-                    );
-                }
-            });
-        } else {
-            tracing::warn!(
-                "MailContext already dropped, background execution handle should not live that long"
-            );
-        }
-    }
-}
-
-async fn get_all_logged_in_mail_user_contexts(
-    ctx: &Arc<MailContext>,
-) -> Result<Vec<Arc<MailUserContext>>, RealProtonMailError> {
-    let Some(primary_account) = ctx.get_primary_account().await? else {
-        tracing::warn!("Missing primary account, skipping background execution");
-        return Ok(vec![]);
-    };
-    let Some(session) = ctx
-        .get_account_sessions(primary_account.remote_id.clone())
-        .await?
-        .pop()
-    else {
-        tracing::warn!("No active session for primary account, skipping background execution");
-        return Ok(vec![]);
-    };
-    let primary_user_ctx = ctx
-        .initialized_user_context_from_session(&session, None)
-        .await?;
-
-    let other_sessions_iter = ctx
-        .get_sessions()
-        .await?
-        .into_iter()
-        .filter(|session| session.account_id != primary_account.remote_id)
-        .unique_by(|session| session.account_id.clone());
-
-    // There might be a case when a User logs out the primary account before putting app in the background
-    let mut all_user_ctxs = if let Some(CoreAccountState::LoggedIn(_)) = ctx
-        .get_account_state(primary_account.remote_id.clone())
-        .await?
-    {
-        if let Some(ctx) = primary_user_ctx {
-            vec![ctx]
-        } else {
-            debug!("Primary user is not initialized. Skipping...");
-            vec![]
-        }
-    } else {
-        tracing::warn!("Primary account is not LoggedIn");
-        vec![]
-    };
-
-    for session in other_sessions_iter {
-        // Make sure we deal only with Authenticated Sessions
-        let Some(CoreSessionState::Authenticated) =
-            ctx.get_session_state(session.remote_id.clone()).await?
-        else {
-            tracing::warn!(
-                "Found unauthenticated session for secondary account, this may suggest problem with login flow not correctly resumed"
-            );
-            continue;
-        };
-
-        if let Some(user_ctx) = ctx
-            .initialized_user_context_from_session(&session, None)
-            .await?
-        {
-            all_user_ctxs.push(user_ctx);
-        } else {
-            debug!("User {0}, is not initialized. Skipping", session.remote_id);
-        }
-    }
-
-    Ok(all_user_ctxs)
 }

@@ -1,5 +1,6 @@
 mod assigned_actions;
 mod avatar_information;
+mod background_execution;
 mod contacts;
 pub mod conversations;
 pub mod datatypes;

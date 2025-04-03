@@ -103,7 +103,7 @@ impl MailUserContext {
     }
 
     /// Create a new default action executor.
-    pub fn new_default_queue_executor(
+    pub(crate) fn new_default_queue_executor(
         queue: &Queue,
         wait_for_online: &impl WaitForOnlineSubscribtion,
         task_service: &TaskService,
@@ -114,7 +114,7 @@ impl MailUserContext {
     }
 
     /// Create a new send group action executor.
-    pub fn new_send_queue_executor(
+    pub(crate) fn new_send_queue_executor(
         queue: &Queue,
         wait_for_online: &impl WaitForOnlineSubscribtion,
         pool_size: NonZeroUsize,

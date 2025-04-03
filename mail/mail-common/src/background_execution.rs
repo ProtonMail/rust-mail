@@ -1,0 +1,94 @@
+use crate::{MailContext, MailContextResult, MailUserContext};
+use proton_core_common::action_queue::{
+    CheckNetworkStatusSubscriber, WaitForOnlineSubscribtionExt,
+};
+use proton_task_service::TaskService;
+use std::num::NonZeroUsize;
+use std::sync::Arc;
+use std::time::Duration;
+
+pub enum BackgroundExecutionStatus {
+    /// Skipped due to the lack of logged in and initialized user contexts.
+    SkippedNoActiveContexts,
+    /// Actually executed something.
+    Executed,
+    /// Abort request triggered
+    Aborted,
+    /// We ran more than the allotted time.
+    TimedOut,
+}
+
+/// Contains all relevant state to successfully execute actions in the background.
+pub struct BackgroundExecutionContext {
+    task_service: TaskService,
+}
+
+impl BackgroundExecutionContext {
+    pub fn new() -> MailContextResult<Self> {
+        Ok(Self {
+            task_service: TaskService::new()?,
+        })
+    }
+
+    /// Create new queue executors to run tasks separate from the main queue executors until
+    /// `abort` returns.
+    #[tracing::instrument(level = "trace", skip_all)]
+    pub async fn run(
+        &self,
+        ctx: &Arc<MailContext>,
+        abort: impl Future<Output = ()>,
+        max_duration: Duration,
+    ) -> MailContextResult<BackgroundExecutionStatus> {
+        let all_user_ctxs = ctx
+            .get_all_logged_in_and_initialized_user_contexts()
+            .await
+            .inspect_err(|e| {
+                tracing::error!("Failed to get logged in users, details: `{e:?}`");
+            })?;
+
+        if all_user_ctxs.is_empty() {
+            tracing::warn!("There are no logged in users, skipping background execution");
+            return Ok(BackgroundExecutionStatus::SkippedNoActiveContexts);
+        }
+
+        // Create new executors for all the contexts.
+        let queue_executors = all_user_ctxs
+            .iter()
+            .map(|ctx| {
+                let wait_for_online =
+                    CheckNetworkStatusSubscriber::create(ctx.session().status_watcher());
+                let send_executor = MailUserContext::new_send_queue_executor(
+                    ctx.action_queue(),
+                    &wait_for_online,
+                    NonZeroUsize::new(2).unwrap(),
+                    &self.task_service,
+                );
+                let default_executor = MailUserContext::new_default_queue_executor(
+                    ctx.action_queue(),
+                    &wait_for_online,
+                    &self.task_service,
+                );
+                (send_executor, default_executor)
+            })
+            .collect::<Vec<_>>();
+
+        tracing::debug!("Background execution is in progress... awaiting for abort");
+        let status = match tokio::time::timeout(max_duration, abort).await {
+            Ok(()) => BackgroundExecutionStatus::Aborted,
+            Err(_) => {
+                tracing::debug!("Background execution timed out");
+                BackgroundExecutionStatus::TimedOut
+            }
+        };
+        // Pause all executors and make sure all non-pausable futures finish on time.
+        tracing::info!("Pausing Background queue executors...");
+        if self.task_service.pause_and_wait().await.is_err() {
+            tracing::error!("Pausing Background queue executors... Failed");
+        } else {
+            tracing::info!("Pausing executors... Done");
+        }
+        drop(queue_executors);
+        tracing::info!("Background execution finished");
+        Ok(status)
+    }
+}
