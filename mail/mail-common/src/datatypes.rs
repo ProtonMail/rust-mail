@@ -1005,7 +1005,13 @@ impl EncryptedMessageBody {
         let (decrypted_body, _) = self
             .decrypt(&pgp_provider, &address_keys)
             .context("Failed to decrypt message body")
-            .map_err(MailContextError::Other)?;
+            .map_err(|e| {
+                error!(
+                    "Failed to decrypt message body ({:?}): {e:?}",
+                    self.metadata.remote_message_id,
+                );
+                MailContextError::Crypto
+            })?;
 
         match decrypted_body {
             DecryptedBody::Plain(body) => Ok(if with_attachment_prefetch {
