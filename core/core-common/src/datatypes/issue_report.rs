@@ -179,15 +179,21 @@ fn create_bug_report_payload(
     let mut description = format!("SUMMARY\n{}", report.summary);
 
     if !report.steps_to_reproduce.is_empty() {
-        description = format!("\n\nSTEPS TO REPRODUCE\n{}", report.steps_to_reproduce);
+        description = format!(
+            "{}\n\nSTEPS TO REPRODUCE\n{}",
+            description, report.steps_to_reproduce
+        );
     }
 
     if !report.expected_result.is_empty() {
-        description = format!("\n\nEXPECTED RESULT\n{}", report.expected_result);
+        description = format!(
+            "{}\n\nEXPECTED RESULT\n{}",
+            description, report.expected_result
+        );
     }
 
     if !report.actual_result.is_empty() {
-        description = format!("\n\nACTUAL RESULT\n{}", report.actual_result);
+        description = format!("{}\n\nACTUAL RESULT\n{}", description, report.actual_result);
     }
 
     PostReportBug {
