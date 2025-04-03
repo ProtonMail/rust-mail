@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [unreleased] - 2025-03-xx
 
+## [0.68.3] - 2025-04-02
+
+### Fixed
+
+ - [ET-2592] - Replace r2d2 to avoid os termination.
+
 ## [0.68.2] - 2025-04-02
 
 ### Fixed
