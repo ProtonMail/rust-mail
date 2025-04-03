@@ -8,6 +8,7 @@ edition.workspace = true
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
+bitflags = { workspace = true }
 chrono = { workspace = true }
 derive_more = { workspace = true, features = ["try_from"] }
 include_dir = { workspace = true }

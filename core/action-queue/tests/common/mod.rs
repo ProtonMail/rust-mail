@@ -2,6 +2,7 @@
 
 use proton_action_queue::action::{Action, Factory};
 use proton_action_queue::queue::Queue;
+#[allow(unused_imports)]
 pub use proton_action_queue::tests::common::DefaultError;
 use stash::exports::SqliteError;
 use stash::params;
