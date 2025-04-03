@@ -886,7 +886,6 @@ impl MailSession {
     /// Method will return None when PIN protection is not set.
     /// Method will return Some(value) when PIN protection is in use.
     ///
-    #[allow(clippy::cast_lossless)]
     pub async fn remaining_pin_attempts(&self) -> Result<Option<u32>, UserSessionError> {
         let ctx = self.mail_ctx.core_context().clone();
 
@@ -894,7 +893,7 @@ impl MailSession {
             let tether = ctx.account_stash().connection();
             let pin_metadata = PinProtection::get(&tether).await?;
             let remaining_attempts = match pin_metadata {
-                Some(pin_metadata) => Some((PinCode::MAX_ATTEMPTS - pin_metadata.attempts) as u32),
+                Some(pin_metadata) => Some(pin_metadata.remaining_attempts()),
                 None => None,
             };
 

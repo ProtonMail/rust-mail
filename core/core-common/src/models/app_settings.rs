@@ -7,6 +7,8 @@ use stash::macros::Model;
 use stash::orm::Model;
 use stash::stash::{Bond, StashError, Tether};
 
+use crate::pin_code::PinCode;
+
 /// Struct Representing `AppSettings` - cross accounts settings of the application.
 ///
 /// This model is stored in account (shared) database.
@@ -236,6 +238,21 @@ impl PinProtection {
         Self::load(SingleEntryId, tether).await
     }
 
+    /// Return remaining attempts to verify PIN code.
+    ///
+    /// The reason behaind returning always 1 when attempts are greater than
+    /// the allowed number of attempts is that when you would have gone done to zero
+    /// your database is already cleared.
+    ///
+    /// So in theory there is no real life scenarion in which the number returned should be
+    /// lower than 1. There is also no real life reason to force the number one as the min
+    /// value BUT it has benefits when it would come to reducing number of allowed attempts.
+    ///
+    #[must_use]
+    pub fn remaining_attempts(&self) -> u32 {
+        u32::from(PinCode::MAX_ATTEMPTS.saturating_sub(self.attempts).max(1))
+    }
+
     /// Save or update a pin protection;
     ///
     /// It's imperative that you use this method over [`Model::save()`] to
@@ -316,5 +333,21 @@ mod tests {
     #[test_case(ProtectionAutoLock::Minutes(60), 60)]
     fn test_from_protection_auto_lock_for_u8(val: ProtectionAutoLock, expected: u8) {
         assert_eq!(u8::from(val), expected);
+    }
+
+    #[test_case(0 => 10; "TEST0: No attempts have been made")]
+    #[test_case(1 => 9; "TEST1: One attempt has been made")]
+    #[test_case(9 => 1; "TEST2: Nine attempts have been made")]
+    #[test_case(10 => 1; "TEST3: Ten attempts have been made - Equal to allowed")]
+    #[test_case(11 => 1; "TEST4: Eleven attempts have been made - More than allowed")]
+    fn remaining_attempts(attempts: u8) -> u32 {
+        let pinpro = PinProtection {
+            local_id: SingleEntryId,
+            attempts,
+            last_access_unixepoch: 0,
+            row_id: None,
+        };
+
+        pinpro.remaining_attempts()
     }
 }
