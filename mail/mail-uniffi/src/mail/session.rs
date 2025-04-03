@@ -14,7 +14,7 @@ use futures::TryFutureExt;
 use itertools::Itertools;
 use proton_core_common::CoreSessionState;
 use proton_core_common::db::account::SessionEncryptionKey;
-use proton_core_common::models::AppSettings as RealAppSettings;
+use proton_core_common::models::{AppSettings as RealAppSettings, PinProtection};
 use proton_core_common::os::KeyChainExt;
 use proton_core_common::pin_code::PinCode;
 use proton_mail_common::MailContext;
@@ -785,6 +785,28 @@ impl MailSession {
         })
         .await
         .map_err(PinAuthError::from)
+    }
+
+    /// Return remaining attempts at verifing PIN code.
+    ///
+    /// Method will return None when PIN protection is not set.
+    /// Method will return Some(value) when PIN protection is in use.
+    ///
+    pub async fn remaining_pin_attempts(&self) -> Result<Option<u32>, UserSessionError> {
+        let ctx = self.mail_ctx.core_context().clone();
+
+        uniffi_async(async move {
+            let tether = ctx.account_stash().connection();
+            let pin_metadata = PinProtection::get(&tether).await?;
+            let remaining_attempts = match pin_metadata {
+                Some(pin_metadata) => Some(pin_metadata.remaining_attempts()),
+                None => None,
+            };
+
+            Result::<_, RealProtonMailError>::Ok(remaining_attempts)
+        })
+        .await
+        .map_err(UserSessionError::from)
     }
 
     /// Set App Protection to `Biometrics`

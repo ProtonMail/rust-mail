@@ -121,17 +121,6 @@ impl PinCode {
                 return Err(PinError::MissingPinMetadata);
             };
 
-            if pin_protection.attempts + 1 >= Self::MAX_ATTEMPTS {
-                tracing::error!(
-                    "All attemps to validate PIN have been used, nuking application data"
-                );
-                if let Err(e) = nuke_application_data(ctx).await {
-                    tracing::error!("Could not clear application data, details `{e}`");
-                }
-
-                return Err(PinError::TooManyAttempts);
-            }
-
             let now = Utc::now().timestamp();
 
             if pin_protection.last_access_unixepoch == now {
@@ -141,8 +130,9 @@ impl PinCode {
             // We have no guarantees that hashing function will not block whole runtime
             // Better be safe than sorry.
             let pin = pin.as_ref().to_vec();
+            let ctx_clone = ctx.clone();
             let success = tokio::task::spawn_blocking(move || {
-                let Some(secret) = ctx.load_secret::<PinHash>()? else {
+                let Some(secret) = ctx_clone.load_secret::<PinHash>()? else {
                     return Err(PinError::MissingPinHash);
                 };
 
@@ -168,6 +158,15 @@ impl PinCode {
 
             if success {
                 Ok(())
+            } else if pin_protection.attempts >= Self::MAX_ATTEMPTS {
+                tracing::error!(
+                    "All attemps to validate PIN have been used, nuking application data"
+                );
+                if let Err(e) = nuke_application_data(ctx).await {
+                    tracing::error!("Could not clear application data, details `{e}`");
+                }
+
+                Err(PinError::TooManyAttempts)
             } else {
                 Err(PinError::IncorrectPin)
             }
