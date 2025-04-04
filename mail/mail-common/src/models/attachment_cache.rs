@@ -31,7 +31,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime};
 use tokio::fs;
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 use super::{AttachmentType, Message};
 
@@ -468,6 +468,7 @@ impl Attachment {
     /// being accessed.
     #[allow(clippy::cast_possible_truncation)]
     #[allow(clippy::cast_possible_wrap)]
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub async fn do_cleanup_cache(ctx: &MailUserContext) -> anyhow::Result<()> {
         // First let's check whether we should run. We run on two conditions:
         // 1. If the cache is too big
@@ -486,6 +487,7 @@ impl Attachment {
             debug!("Not deleting attachments from cache yet.");
             return Ok(());
         }
+        debug!("Cache is too large, trying to delete attachments...");
 
         let all_cache_items = AttachmentCacheMetadata::find("", vec![], &tether).await?;
 
@@ -495,18 +497,23 @@ impl Attachment {
 
         let mut atts = vec![];
         for at_cache in all_cache_items {
-            if let Some(attachment) =
-                Attachment::find_by_id(at_cache.attachment_id, &tether).await?
-            {
-                if let Some(id) = attachment.local_message_id {
-                    if let Some(message) = Message::find_by_id(id, &tether).await? {
-                        let utility = get_utility(&at_cache, &attachment, &message, now);
-                        atts.push((utility, at_cache));
-                        continue;
-                    }
+            let Some(attachment) = Attachment::find_by_id(at_cache.attachment_id, &tether).await?
+            else {
+                // Garbage collect deleted attachments.
+                atts.push((0.0, at_cache));
+                continue;
+            };
+            // Some attachments have no messages assigned yet when creating drafts so it's fine to skip over them.
+            if let Some(id) = attachment.local_message_id {
+                if let Some(message) = Message::find_by_id(id, &tether).await? {
+                    let utility = get_utility(&at_cache, &attachment, &message, now);
+                    atts.push((utility, at_cache));
+                } else {
+                    error!(
+                        "Bug: attachment.local_message_id doesn't have a message. This should be impossible because of the sql constraint."
+                    );
                 }
             }
-            atts.push((0.0, at_cache));
         }
 
         atts.sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
@@ -530,6 +537,7 @@ impl Attachment {
             debug!("No attachments to delete");
             return Ok(());
         }
+        info!("Deleting {} attachments", ids.len());
 
         match ctx.user_context().delete_files_safe(files) {
             Err(DeleteFilesSafeError::Failed(e)) => {
@@ -629,11 +637,6 @@ fn get_utility(
 
     // -------- CODE --------
 
-    if at_cache.size == 0 {
-        // 0 sized attachments are useless
-        return 0.0;
-    }
-
     // Prioritize deleting bigger attachments: bigger = less useful.
     let mut utility = 1.0 / at_cache.size as f64;
 
@@ -642,14 +645,20 @@ fn get_utility(
     utility *= atime_factor(elapsed);
     utility *= (at_cache.hit_count as f64 + 1.0) * hit_count_ratio;
 
-    if message.is_draft() || message.label_ids.contains(&LabelId::outbox()) {
-        return f64::INFINITY; // Unsent draft attachments must be retained
-    }
-
-    if AttachmentType::Pgp == attachment.attachment_type {
+    if message.is_draft()
+        || message.label_ids.contains(&LabelId::outbox())
+        || !matches!(attachment.attachment_type, AttachmentType::Remote(Some(_)))
+    {
+        // Either PGP attachment or draft.
+        // Unsent draft attachments must be retained
         // PGP attachments must be retained because we can't re-request them.
         return f64::INFINITY;
-    };
+    }
+
+    if at_cache.size == 0 {
+        // 0 sized attachments are useless
+        return 0.0;
+    }
 
     match attachment.disposition {
         Disposition::Attachment => {
@@ -693,9 +702,9 @@ fn attachments_to_delete(
             return false;
         }
 
-        // if *utility == f64::INFINITY {
-        //     return false; // From here on we can't delete anything else, even we're low on space.
-        // }
+        if *utility == f64::INFINITY {
+            return false; // From here on we can't delete anything else, even we're low on space.
+        }
 
         bytes_to_delete -= at.size as i64;
         true
