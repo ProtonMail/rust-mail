@@ -94,10 +94,12 @@ pub fn disable_content(document: &NodeRef, hide_remote: bool, hide_embedded: boo
             {
                 if hide_embedded {
                     *attr = String::new();
-                    disabled_embedded = true;
                 }
-            } else if hide_remote {
-                *attr = String::new();
+                disabled_embedded = true;
+            } else {
+                if hide_remote {
+                    *attr = String::new();
+                }
                 disabled_remote = true;
             }
         }
