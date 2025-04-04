@@ -435,6 +435,20 @@ impl MailUserContext {
         Ok(())
     }
 
+    /// Delete account.
+    ///
+    pub async fn delete_account(&self) -> MailContextResult<()> {
+        // `UserContext::delete_account` already performs all
+        // neccessary actions in order to sort out online logout
+        // and local data removal.
+        self.user_context.delete_account().await?;
+        // Last thing to do is to remove user cache as `UserContext`
+        // has no knowledge of the `MailContext::cache`
+        self.mail_context.delete_user_cache(self.user_id()).await?;
+
+        Ok(())
+    }
+
     /// Ping the proton servers to see if they are responsive/alive.
     pub async fn ping(&self) -> MailContextResult<()> {
         self.user_context

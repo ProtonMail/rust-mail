@@ -11,6 +11,7 @@ use crate::db::account::{
 };
 use crate::db::migrations::migrate_account_db;
 use crate::models::ModelExtension;
+use crate::nuke_utils::{drop_all_tables_in_database, rename_database_files};
 use crate::os::{KeyChain, KeyChainError, KeyChainExt, StoreInKeyChain};
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{Error as AnyhowError, anyhow};
@@ -759,6 +760,24 @@ impl Context {
                     .await
             })
             .await?;
+
+        Ok(())
+    }
+
+    /// Removes all data from account database by dropping all tables,
+    /// and renaming empty database file to include `.nuked` extension.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if data can not be removed or the db operation failed.
+    ///
+    pub async fn tear_down_account_database(&self) -> CoreContextResult<()> {
+        tracing::warn!("Remove all accounts data");
+        let tether = self.account_stash().connection();
+        drop_all_tables_in_database(tether).await?;
+        tracing::warn!("Archive account database");
+        let account_db_location = self.get_account_db_location();
+        rename_database_files(account_db_location).await?;
 
         Ok(())
     }

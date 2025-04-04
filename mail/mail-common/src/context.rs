@@ -29,6 +29,7 @@ use std::future::Future;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
+use tokio::fs;
 use tokio::sync::Mutex;
 use tokio::task::{JoinError, JoinHandle};
 
@@ -619,6 +620,10 @@ impl MailContext {
     /// Returns error if data can not be removed or the db operation failed.
     pub async fn delete_account(&self, user_id: UserId) -> MailContextResult<()> {
         Ok(self.core_context.delete_account(user_id).await?)
+    }
+
+    pub async fn delete_user_cache(&self, user_id: &UserId) -> MailContextResult<()> {
+        Ok(fs::remove_dir_all(self.mail_cache_path(user_id)).await?)
     }
 
     /// Path where mail content should be cached for user with `user_id`.

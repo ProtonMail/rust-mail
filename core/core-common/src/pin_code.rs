@@ -10,7 +10,7 @@ use thiserror::Error;
 use tokio::task::JoinError;
 
 use crate::models::{AppProtection, AppSettings, ModelExtension, PinProtection};
-use crate::nuke_utils::nuke_application_data;
+use crate::nuke_utils::nuke_core_application_data;
 use crate::os::{KeyChainError, StoreInKeyChain};
 use crate::{Context, CoreContextError};
 
@@ -159,7 +159,7 @@ impl PinCode {
                 tracing::error!(
                     "All attemps to validate PIN have been used, nuking application data"
                 );
-                if let Err(e) = nuke_application_data(ctx).await {
+                if let Err(e) = nuke_core_application_data(ctx).await {
                     tracing::error!("Could not clear application data, details `{e}`");
                 }
 

@@ -2,9 +2,10 @@ pub use self::keys::*;
 use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
-use crate::models::{InitializationWatcher, UserSettings};
+use crate::models::{InitializationWatcher, ModelExtension, UserSettings};
 use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse};
 use anyhow::Context as _;
+use nuke_utils::{drop_all_tables_in_database, rename_database_files};
 use proton_action_queue::queue::Queue;
 use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::services::proton::{SessionId, UserId};
@@ -242,6 +243,46 @@ impl UserContext {
         }
 
         Ok(stash)
+    }
+
+    /// Logs out and removes an account, dropping associated data from user
+    /// database and renaming empty database file to include `.nuked` extension.
+    ///
+    /// This `delete_account` is different than `core::Context::delete_account`
+    /// due to not removing file itself which on some operating systems
+    /// is not permited if file is in use.
+    ///
+    /// This function should be preffered way to delete account without
+    /// verifing number of open contexts and background tasks.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if data can not be removed or the db operation failed.
+    ///
+    pub async fn delete_account(&self) -> CoreContextResult<()> {
+        let user_id = self.user_id.clone();
+        tracing::warn!("Logout user");
+        self.context.logout_account(user_id.clone()).await?;
+        tracing::warn!("Kill all background tasks for this user");
+        self.cancel_all_tasks();
+        tracing::warn!("Remove all user data");
+        let tether = self.stash().connection();
+        drop_all_tables_in_database(tether).await?;
+        tracing::warn!("Archive user database");
+        let user_db_location = self.get_user_db_path();
+        rename_database_files(user_db_location).await?;
+
+        tracing::warn!("Remove account");
+        let mut tether = self.context.account_stash().connection();
+        tether
+            .tx(async |tx| {
+                CoreAccount::delete_by_id(user_id, tx)
+                    .await
+                    .inspect_err(|e| tracing::error!("Failed to delete account from db: {e:?}"))
+            })
+            .await?;
+
+        Ok(())
     }
 
     /// Spawns a new task.
