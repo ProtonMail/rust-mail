@@ -392,7 +392,7 @@ mime_type: {mime_type:?}"
     let tags_stripped = transformer.strip_whitelist();
     let utm_stripped = transformer.strip_utm();
 
-    let (remote_images_disabled, embedded_images_disabled) =
+    let (mut remote_images_count, mut embedded_images_count) =
         transformer.disable_content(hide_remote_images, hide_embedded_images);
 
     let had_blockquote = if !show_block_quote {
@@ -409,12 +409,16 @@ mime_type: {mime_type:?}"
         transformer.inject_style();
     }
 
-    if opts.hide_remote_images {
+    if opts.hide_remote_images && remote_images_count > 0 {
         prev_banners.push(MessageBanner::RemoteContent);
+        // So that they don't show up in the stats later on
+        remote_images_count = 0;
     }
 
-    if opts.hide_embedded_images {
+    if opts.hide_embedded_images && embedded_images_count > 0 {
         prev_banners.push(MessageBanner::EmbeddedImages);
+        // So that they don't show up in the stats later on
+        embedded_images_count = 0;
     }
 
     prev_banners.sort_unstable();
@@ -424,8 +428,8 @@ mime_type: {mime_type:?}"
         had_blockquote,
         tags_stripped,
         utm_stripped,
-        remote_images_disabled,
-        embedded_images_disabled,
+        remote_images_disabled: remote_images_count,
+        embedded_images_disabled: embedded_images_count,
         transform_opts: opts.into(),
         body_banners: prev_banners,
     };
