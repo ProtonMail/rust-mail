@@ -44,7 +44,7 @@ use html5ever::tendril::TendrilSink;
 use kuchikiki::NodeRef;
 use message_detector::SplitDoc;
 use std::fmt::{Display, Formatter};
-use transforms::keep_spaces;
+use transforms::keep_spaces_and_escape_gt_and_lt;
 
 // NOTE: each new transformation pass should be its own module.
 pub mod ios;
@@ -86,7 +86,7 @@ impl Transformer {
     /// Create a new [`Transformer`] with the given plain text string.
     #[must_use]
     pub fn new_text_plain(plain_text: &str) -> Self {
-        let document = keep_spaces(plain_text);
+        let document = keep_spaces_and_escape_gt_and_lt(plain_text);
         let document = kuchikiki::parse_html().one(document.as_str());
         Self { document }
     }
