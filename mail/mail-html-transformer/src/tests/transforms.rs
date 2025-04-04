@@ -75,3 +75,36 @@ fn insert_links_text() {
     html.insert_links(InsertLinkToken(()));
     insta::assert_snapshot!(html.to_string());
 }
+
+#[test]
+fn plain_text_forwarding_is_preserved() {
+    let input = r#"
+TEST
+
+Signature
+
+------- Forwarded Message -------
+From: Foo@bar.com
+Date: On Wednesday, April 2nd, 2025 at 18:27
+Subject: Lorem ipsum dolor sit amet
+To: lorem@ipsum.ch <lorem@ipsum.ch>
+
+
+> Lorem ipsum dolor sit amet, consectetur adipiscing elit. Etiam nec convallis lorem. Fusce
+> scelerisque turpis eu tincidunt luctus. Sed sem tellus, cursus non arcu id, vestibulum
+> tempus arcu. Vivamus non odio a diam sollicitudin vestibulum id vitae mauris. Sed consequat
+> felis est, sed auctor eros consectetur eget. Sed augue urna, faucibus euismod orci eget,
+> tincidunt porttitor nibh. Nulla ultricies hendrerit accumsan. Nulla suscipit vel dui eu iaculis.
+> Nam convallis, urna nec scelerisque venenatis, justo sem faucibus metus, et mattis nisl purus ac
+> nulla.
+>
+> ====================================================
+>
+> X >Y && Y < X
+>
+> ----------
+> <pre> <>& & <> </pre>
+"#;
+    let html = Transformer::new_text_plain(input);
+    insta::assert_snapshot!(html.to_string());
+}
