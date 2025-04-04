@@ -50,7 +50,18 @@ pub enum AddGroupRecipientError {
     /// Failed to queue save action for draft.
     SaveFailed,
     /// Empty group name
-    EmtpyGroupName,
+    EmptyGroupName,
+}
+
+/// Errors which occur when removing recipient from the draft
+#[derive(Clone, uniffi::Enum)]
+pub enum RemoveRecipientError {
+    /// No errors occurred
+    Ok,
+    /// Empty group name
+    EmptyGroupName,
+    /// Failed to queue save action for draft.
+    SaveFailed,
 }
 
 #[derive(Clone, uniffi::Enum)]
@@ -271,7 +282,7 @@ impl ComposerRecipientList {
         total_contacts_in_group: u64,
     ) -> AddGroupRecipientError {
         let Ok(group_name) = NonEmptyString::new(group_name) else {
-            return AddGroupRecipientError::EmtpyGroupName;
+            return AddGroupRecipientError::EmptyGroupName;
         };
 
         // internally the function spawns an async task.
@@ -302,25 +313,53 @@ impl ComposerRecipientList {
     }
 
     /// Remove a single recipient by `email`.
-    pub fn remove_single_recipient(&self, email: &str) {
+    pub fn remove_single_recipient(&self, email: &str) -> RemoveRecipientError {
         self.list.remove_single(email);
+        async_runtime().block_on(async move {
+            if let Err(e) = self.save_draft(&self.ctx).await {
+                error!("Failed to queue draft save after recipient remove: {e:?}");
+                RemoveRecipientError::SaveFailed
+            } else {
+                RemoveRecipientError::Ok
+            }
+        })
     }
 
     /// Remove a contact group by `group_name`
-    pub fn remove_group(&self, group_name: String) {
+    pub fn remove_group(&self, group_name: String) -> RemoveRecipientError {
         let Ok(group_name) = NonEmptyString::new(group_name) else {
             error!("remove_group with empty group name");
-            return;
+            return RemoveRecipientError::EmptyGroupName;
         };
         self.list.remove_group(&group_name);
+        async_runtime().block_on(async move {
+            if let Err(e) = self.save_draft(&self.ctx).await {
+                error!("Failed to queue draft save after removing group: {e:?}");
+                RemoveRecipientError::SaveFailed
+            } else {
+                RemoveRecipientError::Ok
+            }
+        })
     }
 
     /// Remove a recipient with `email` from a contact group with `group_name`.
-    pub fn remove_recipient_from_group(&self, group_name: String, email: &str) {
+    pub fn remove_recipient_from_group(
+        &self,
+        group_name: String,
+        email: &str,
+    ) -> RemoveRecipientError {
         let Ok(group_name) = NonEmptyString::new(group_name) else {
             error!("remove_recipient_from_group with empty group name");
-            return;
+            return RemoveRecipientError::EmptyGroupName;
         };
         self.list.remove_group_recipient(&group_name, email);
+        async_runtime().block_on(async move {
+            if let Err(e) = self.save_draft(&self.ctx).await {
+                error!("Failed to queue draft save after removing recipient from group: {e:?}");
+                RemoveRecipientError::SaveFailed
+            } else {
+                RemoveRecipientError::Ok
+            }
+        })
     }
 }
