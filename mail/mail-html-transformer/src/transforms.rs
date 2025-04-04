@@ -131,22 +131,37 @@ fn insert_link_str(text: &str) -> Option<NodeRef> {
 }
 
 #[must_use]
-/// Replaces consecutive ' ' for `&nbsp;` and '\n' for `<br>`
-pub fn keep_spaces(text: &str) -> String {
+/// Replaces consecutive ' ' for `&nbsp;` and '\n' for `<br>`. We also escape the `>` and `<` to
+/// make sure these are not confused for valid html tags when the HTML parser finds them
+/// in between other HTML tags we inject.
+pub fn keep_spaces_and_escape_gt_and_lt(text: &str) -> String {
     let mut out = String::with_capacity(text.len() * 2);
     out.push_str("<pre>");
 
     let mut prev_was_space = false;
 
     for ch in text.chars() {
-        if ch == ' ' {
-            if prev_was_space {
-                out.push_str("&nbsp;");
-            } else {
-                out.push(' ');
-                prev_was_space = true;
+        match ch {
+            ' ' => {
+                if prev_was_space {
+                    out.push_str("&nbsp;");
+                } else {
+                    out.push(' ');
+                    prev_was_space = true;
+                }
+                continue;
             }
-            continue;
+            '>' => {
+                out.push_str("&gt;");
+                prev_was_space = false;
+                continue;
+            }
+            '<' => {
+                out.push_str("&lt;");
+                prev_was_space = false;
+                continue;
+            }
+            _ => {}
         }
         prev_was_space = false;
         if ch == '\n' {

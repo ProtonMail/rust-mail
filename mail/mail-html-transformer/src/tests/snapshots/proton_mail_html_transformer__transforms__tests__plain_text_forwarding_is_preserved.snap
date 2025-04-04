@@ -1,0 +1,6 @@
+---
+source: mail/mail-html-transformer/src/tests/transforms.rs
+expression: html.to_string()
+snapshot_kind: text
+---
+<html><head></head><body><pre><br>TEST<br><br>Signature<br><br>------- Forwarded Message -------<br>From: Foo@bar.com<br>Date: On Wednesday, April 2nd, 2025 at 18:27<br>Subject: Lorem ipsum dolor sit amet<br>To: lorem@ipsum.ch &lt;lorem@ipsum.ch&gt;<br><br><br>&gt; Lorem ipsum dolor sit amet, consectetur adipiscing elit. Etiam nec convallis lorem. Fusce<br>&gt; scelerisque turpis eu tincidunt luctus. Sed sem tellus, cursus non arcu id, vestibulum<br>&gt; tempus arcu. Vivamus non odio a diam sollicitudin vestibulum id vitae mauris. Sed consequat<br>&gt; felis est, sed auctor eros consectetur eget. Sed augue urna, faucibus euismod orci eget,<br>&gt; tincidunt porttitor nibh. Nulla ultricies hendrerit accumsan. Nulla suscipit vel dui eu iaculis.<br>&gt; Nam convallis, urna nec scelerisque venenatis, justo sem faucibus metus, et mattis nisl purus ac<br>&gt; nulla.<br>&gt;<br>&gt; ====================================================<br>&gt;<br>&gt; X &gt;Y &amp;&amp; Y &lt; X<br>&gt;<br>&gt; ----------<br>&gt; &lt;pre&gt; &lt;&gt;&amp; &amp; &lt;&gt; &lt;/pre&gt;<br></pre></body></html>
