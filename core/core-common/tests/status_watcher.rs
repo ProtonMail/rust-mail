@@ -26,7 +26,7 @@ fn random_path() -> String {
 async fn shared_status() {
     let mock_server = MockServer::start().await;
     let mock_env = MockApiEnv::new(mock_server.uri()).with_path("/api");
-    let api_config = Config::custom(mock_env);
+    let api_config = Config::for_env(mock_env);
     let api_1 = Session::builder()
         .with_config(&api_config)
         .build()
@@ -81,7 +81,7 @@ async fn make_another_request_when_stale() {
     let mock_server = MockServer::start().await;
     let api_path = random_path();
     let mock_env = MockApiEnv::new(mock_server.uri()).with_path(&api_path);
-    let api_config = Config::custom(mock_env);
+    let api_config = Config::for_env(mock_env);
     let status = status_watcher(500).await;
     let api = Session::builder()
         .with_config(api_config)
@@ -111,7 +111,7 @@ async fn very_bad_connection_but_responding_in_under_a_second() {
     let mock_server = MockServer::start().await;
     let api_path = random_path();
     let mock_env = MockApiEnv::new(mock_server.uri()).with_path(&api_path);
-    let api_config = Config::custom(mock_env);
+    let api_config = Config::for_env(mock_env);
     let status = status_watcher(1000).await;
     let api = Session::builder()
         .with_config(api_config)
@@ -143,7 +143,7 @@ async fn wait_for_online() {
     let mock_server = MockServer::start().await;
     let api_path = random_path();
     let mock_env = MockApiEnv::new(mock_server.uri()).with_path(&api_path);
-    let api_config = Config::custom(mock_env);
+    let api_config = Config::for_env(mock_env);
     let status = status_watcher(500).await;
     let api = Session::builder()
         .with_config(api_config)
@@ -182,7 +182,7 @@ async fn multiple_subscribers() {
     let mock_server = MockServer::start().await;
     let api_path = random_path();
     let mock_env = MockApiEnv::new(mock_server.uri()).with_path(&api_path);
-    let api_config = Config::custom(mock_env);
+    let api_config = Config::for_env(mock_env);
     let status = status_watcher(500).await;
     let api = Session::builder()
         .with_config(api_config)
@@ -249,7 +249,7 @@ async fn status_reflected_in_response_http_code(http_code: u16, expected_status:
     let mock_server = MockServer::start().await;
     let api_path = random_path();
     let mock_env = MockApiEnv::new(mock_server.uri()).with_path(&api_path);
-    let api_config = Config::custom(mock_env);
+    let api_config = Config::for_env(mock_env);
 
     let api = Session::builder()
         .with_config(api_config)

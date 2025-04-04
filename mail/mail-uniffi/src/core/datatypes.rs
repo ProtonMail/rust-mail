@@ -57,8 +57,9 @@ pub use connection_status::*;
 pub use contact_list::*;
 pub use issue_report::*;
 use itertools::Itertools;
-use muon::client::flow::LoginFlowData;
 use proton_api_core::auth::UserKeySecret;
+use proton_api_core::services::proton::muon::client::flow::LoginFlowData;
+use proton_api_core::services::proton::muon::error::ParseEndpointErr;
 use proton_api_core::store::UserData;
 use proton_api_mail::services::proton::common::MessageId;
 use secrecy::SecretString;
@@ -67,7 +68,7 @@ use tracing::error;
 
 use core::fmt;
 use proton_api_core::auth::PasswordMode as RealPasswordMode;
-use proton_api_core::session::{Config as RealApiConfig, EnvId};
+use proton_api_core::session::Config as RealApiConfig;
 use proton_core_common::datatypes::{
     AddressSignedKeyList as RealAddressSignedKeyList, AddressStatus as RealAddressStatus,
     AddressType as RealAddressType, ContactSendingPreferences as RealContactSendingPreferences,
@@ -810,16 +811,17 @@ pub enum ApiEnvId {
     ///
     /// Clients configured with this environment will connect to `https://<name>.proton.black/api`.
     Scientist(String),
-}
 
-impl From<ApiEnvId> for EnvId {
-    fn from(env_id: ApiEnvId) -> Self {
-        match env_id {
-            ApiEnvId::Prod => Self::Prod,
-            ApiEnvId::Atlas => Self::Atlas(None),
-            ApiEnvId::Scientist(name) => Self::Atlas(Some(name)),
-        }
-    }
+    /// A specific environment specified by its URL.
+    ///
+    /// Clients configured with this environment will connect to the specified URL,
+    /// which must be a valid URL with a scheme, host, and if necessary, a port.
+    ///
+    /// This is useful for testing but MUST NOT be used in production.
+    /// Ideally, this would be protected by compile-time feature flags.
+    ///
+    /// TODO: Protect this with a compile-time feature flag.
+    Custom(String),
 }
 
 /// The configuration for the Proton API service.
@@ -849,14 +851,24 @@ impl Default for ApiConfig {
     }
 }
 
-impl From<ApiConfig> for RealApiConfig {
-    fn from(config: ApiConfig) -> Self {
-        Self {
+impl TryFrom<ApiConfig> for RealApiConfig {
+    type Error = ParseEndpointErr;
+
+    fn try_from(config: ApiConfig) -> Result<Self, Self::Error> {
+        let base = match config.env_id {
+            ApiEnvId::Prod => Self::default(),
+            ApiEnvId::Atlas => Self::atlas(),
+            ApiEnvId::Scientist(name) => Self::scientist(name),
+            ApiEnvId::Custom(server) => Self::custom(server)?,
+        };
+
+        Ok(Self {
             app_version: config.app_version,
             user_agent: Some(config.user_agent),
-            env_id: config.env_id.into(),
             proxy: config.proxy,
-        }
+
+            ..base
+        })
     }
 }
 
