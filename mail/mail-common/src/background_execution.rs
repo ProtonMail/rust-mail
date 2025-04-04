@@ -57,13 +57,13 @@ impl BackgroundExecutionContext {
             .map(|ctx| {
                 let wait_for_online =
                     CheckNetworkStatusSubscriber::create(ctx.session().status_watcher());
-                let send_executor = MailUserContext::new_send_queue_executor(
+                let send_executor = MailUserContext::new_background_send_queue_executor(
                     ctx.action_queue(),
                     &wait_for_online,
                     NonZeroUsize::new(2).unwrap(),
                     &self.task_service,
                 );
-                let default_executor = MailUserContext::new_default_queue_executor(
+                let default_executor = MailUserContext::new_background_default_queue_executor(
                     ctx.action_queue(),
                     &wait_for_online,
                     &self.task_service,
@@ -73,11 +73,26 @@ impl BackgroundExecutionContext {
             .collect::<Vec<_>>();
 
         tracing::debug!("Background execution is in progress... awaiting for abort");
-        let status = match tokio::time::timeout(max_duration, abort).await {
-            Ok(()) => BackgroundExecutionStatus::Aborted,
-            Err(_) => {
-                tracing::debug!("Background execution timed out");
-                BackgroundExecutionStatus::TimedOut
+        let status = {
+            // scoped here to force drop of the executors.
+            let await_queue_executors = async {
+                for (send_executor, default_executor) in queue_executors {
+                    send_executor.await_finished().await;
+                    default_executor.await_finished().await;
+                }
+            };
+            let timeout = tokio::time::sleep(max_duration);
+            tokio::select! {
+                _ = await_queue_executors=> {
+                    BackgroundExecutionStatus::Executed
+                },
+                _ = timeout => {
+                    tracing::debug!("Background execution timed out");
+                    BackgroundExecutionStatus::TimedOut
+                },
+                _ = abort => {
+                    BackgroundExecutionStatus::Aborted
+                }
             }
         };
         // Pause all executors and make sure all non-pausable futures finish on time.
@@ -87,7 +102,6 @@ impl BackgroundExecutionContext {
         } else {
             tracing::info!("Pausing executors... Done");
         }
-        drop(queue_executors);
         tracing::info!("Background execution finished");
         Ok(status)
     }
