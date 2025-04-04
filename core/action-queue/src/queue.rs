@@ -8,6 +8,7 @@ use crate::action::{
 };
 use crate::db::{self, DEFAULT_LOCK_TIMEOUT, ExecutionGuard, StoredAction};
 use crate::network::{WaitForOnline, WaitForOnlineSubscribtion};
+use bitflags::bitflags;
 use chrono::DateTime;
 use parking_lot::RwLock;
 use proton_sqlite3::MigratorError;
@@ -22,7 +23,7 @@ use std::num::NonZeroUsize;
 use std::pin::Pin;
 use std::sync::{Arc, Weak};
 use tokio::sync::watch;
-use tokio::task::AbortHandle;
+use tokio::task::JoinHandle;
 use topological_sort::TopologicalSort;
 use tracing::{Instrument, Level, debug, debug_span, error};
 use uuid::Uuid;
@@ -765,14 +766,29 @@ impl QueueExecutor {
         &self.id
     }
 
-    /// Convert this executor into a [`QueueAutoExecutor`].
+    /// Convert this executor into a [`QueueAutoExecutor`] with the default termination policy
     #[must_use]
     pub fn into_auto_executor(
         self,
         wait_for_online: impl WaitForOnline,
         task_service: &TaskService,
     ) -> QueueAutoExecutor {
-        QueueAutoExecutor::new(self, wait_for_online, task_service)
+        self.into_auto_executor_with_policy(
+            wait_for_online,
+            task_service,
+            QueueAutoTerminationPolicy::Never,
+        )
+    }
+
+    /// Convert this executor into a [`QueueAutoExecutor`] with a custom termination policy
+    #[must_use]
+    pub fn into_auto_executor_with_policy(
+        self,
+        wait_for_online: impl WaitForOnline,
+        task_service: &TaskService,
+        termination_policy: QueueAutoTerminationPolicy,
+    ) -> QueueAutoExecutor {
+        QueueAutoExecutor::new(self, wait_for_online, task_service, termination_policy)
     }
 
     /// Execute one action from the queue.
@@ -879,6 +895,34 @@ impl QueueExecutor {
     }
 }
 
+/// Control the behavior by why the executor will terminate
+#[derive(Debug, Copy, Clone)]
+pub struct QueueAutoTerminationPolicy(u8);
+
+bitflags! {
+    impl QueueAutoTerminationPolicy: u8 {
+        /// Run forever and ever and even...
+        const Never=0;
+        /// Stop executing as soon as the queue is empty. Note that is can cause
+        /// early exists with concurrent modifications of the queue.
+        const Empty=1<<0;
+        /// Stop executing when we detect there is not network.
+        const NetworkLoss=1<<1;
+        /// Combines both [`Empty`] and [`NetworkLoss`] behaviors.
+        const EmptyOrNetworkLoss = QueueAutoTerminationPolicy::Empty.bits() | QueueAutoTerminationPolicy::NetworkLoss.bits();
+    }
+}
+
+impl QueueAutoTerminationPolicy {
+    fn is_empty_policy(self) -> bool {
+        self.intersects(QueueAutoTerminationPolicy::Empty)
+    }
+
+    fn is_network_loss_policy(self) -> bool {
+        self.intersects(QueueAutoTerminationPolicy::NetworkLoss)
+    }
+}
+
 /// This executor will automatically execute action from the [`Queue`] as soon as they are inserted.
 ///
 /// When executing in the same process, the executor can react very quickly to actions that
@@ -887,14 +931,14 @@ impl QueueExecutor {
 /// In a cross-process setting we currently rely on a timeout to ensure that actions queued
 /// by another process are executed.
 pub struct QueueAutoExecutor {
-    abort_handle: AbortHandle,
+    join_handle: JoinHandle<()>,
     id: String,
     pause: watch::Sender<bool>,
 }
 
 impl Drop for QueueAutoExecutor {
     fn drop(&mut self) {
-        self.abort_handle.abort();
+        self.terminate();
     }
 }
 
@@ -903,15 +947,16 @@ impl QueueAutoExecutor {
         executor: QueueExecutor,
         wait_for_online: impl WaitForOnline,
         task_service: &TaskService,
+        termination_policy: QueueAutoTerminationPolicy,
     ) -> Self {
         let id = executor.id.clone();
         let (pause, listener) = watch::channel(false);
-        let handle = task_service
-            .spawn(async move { Self::run(executor, listener, wait_for_online).await })
-            .abort_handle();
+        let handle = task_service.spawn(async move {
+            Self::run(executor, listener, wait_for_online, termination_policy).await;
+        });
 
         QueueAutoExecutor {
-            abort_handle: handle,
+            join_handle: handle,
             id,
             pause,
         }
@@ -945,6 +990,7 @@ impl QueueAutoExecutor {
         executor: QueueExecutor,
         mut pause: watch::Receiver<bool>,
         mut wait_for_online: impl WaitForOnline,
+        termination_policy: QueueAutoTerminationPolicy,
     ) {
         debug!(
             "Starting auto queue executor {} with group={}",
@@ -974,6 +1020,9 @@ impl QueueAutoExecutor {
             {
                 Ok(None) => ActionExecutionFollowup::WaitForAction,
                 Ok(Some(QueuedActionState::Queued(_, QueuedActionReason::Network))) => {
+                    if termination_policy.is_network_loss_policy() {
+                        return;
+                    }
                     ActionExecutionFollowup::WaitForNetwork
                 }
                 Ok(Some(QueuedActionState::Executed(_))) => ActionExecutionFollowup::PickNextAction,
@@ -988,6 +1037,18 @@ impl QueueAutoExecutor {
 
             match followup {
                 ActionExecutionFollowup::WaitForAction => {
+                    if termination_policy.is_empty_policy() {
+                        let tether = executor.shared.stash.connection();
+                        if let Ok(count) =
+                            StoredAction::pending_count(&tether).await.inspect_err(|e| {
+                                error!("Failed to get pending action count: {e:?}");
+                            })
+                        {
+                            if count == 0 {
+                                return;
+                            }
+                        }
+                    }
                     // We currently wait for a signal from an action queue to start executing.
                     // The timeout is here to catch potential changes made in another process.
                     // This can be revisited once we have a cross process database observer.
@@ -1011,7 +1072,13 @@ impl QueueAutoExecutor {
 
     /// Terminate the execution of actions.
     pub fn terminate(&self) {
-        self.abort_handle.abort();
+        self.join_handle.abort();
+    }
+
+    /// Wait on the executor to finish.
+    #[allow(clippy::missing_panics_doc)]
+    pub async fn await_finished(mut self) {
+        let _ = (&mut self.join_handle).await;
     }
 }
 
@@ -1037,12 +1104,37 @@ impl QueueAutoExecutorPool {
         wait_for_online: &impl WaitForOnlineSubscribtion,
         task_service: &TaskService,
     ) -> Self {
+        Self::with_termination_policy(
+            queue,
+            action_group,
+            count,
+            wait_for_online,
+            task_service,
+            QueueAutoTerminationPolicy::Never,
+        )
+    }
+
+    /// Create a new auto executor pool with `count` executors for the `action_group` and with
+    /// a `termination_policy`
+    #[must_use]
+    pub fn with_termination_policy(
+        queue: &Queue,
+        action_group: &ActionGroup,
+        count: NonZeroUsize,
+        wait_for_online: &impl WaitForOnlineSubscribtion,
+        task_service: &TaskService,
+        termination_policy: QueueAutoTerminationPolicy,
+    ) -> Self {
         let executors = std::iter::repeat_n((), count.get())
             .map(|()| {
                 let wait_for_online = wait_for_online.subscribe();
                 queue
                     .new_executor_with_group(action_group.clone())
-                    .into_auto_executor(wait_for_online, task_service)
+                    .into_auto_executor_with_policy(
+                        wait_for_online,
+                        task_service,
+                        termination_policy,
+                    )
             })
             .collect::<Vec<_>>();
 
@@ -1067,6 +1159,13 @@ impl QueueAutoExecutorPool {
     pub fn unpause(&self) {
         for executor in &self.executors {
             executor.unpause();
+        }
+    }
+
+    /// Wait on all executors to finish
+    pub async fn await_finished(self) {
+        for executor in self.executors {
+            executor.await_finished().await;
         }
     }
 }

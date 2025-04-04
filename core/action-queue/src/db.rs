@@ -460,18 +460,18 @@ impl ExecutionGuard {
     pub async fn has_executor(action_id: ActionId, bond: &Bond<'_>) -> Result<bool, StashError> {
         // While this function could be written to accept a Tether instead, it would bypass
         // the exclusive writer access, which is required for this to work.
-        let permit_id = match bond
-            .query_value::<_, usize>(
-                "SELECT permit_id AS value FROM action_queue_lock WHERE action_id = ?",
+        let has_executor = match bond
+            .query_value::<_, bool>(
+                "SELECT executor_id IS NOT NULL AS value FROM action_queue_lock WHERE action_id = ?",
                 params![action_id],
             )
             .await
         {
-            Ok(permit_id) => permit_id,
-            Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => 0,
+            Ok(has_executor) => has_executor,
+            Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => false,
             Err(e) => return Err(e),
         };
-        Ok(permit_id != 0)
+        Ok(has_executor)
     }
 
     /// Acquire the execution rights for the action with `action_id`.
