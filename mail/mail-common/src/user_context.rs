@@ -13,7 +13,9 @@ use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 use proton_action_queue::action::ActionId;
 use proton_action_queue::network::WaitForOnlineSubscribtion;
-use proton_action_queue::queue::{Queue, QueueAutoExecutor, QueueAutoExecutorPool};
+use proton_action_queue::queue::{
+    Queue, QueueAutoExecutor, QueueAutoExecutorPool, QueueAutoTerminationPolicy,
+};
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::crypto_clock;
@@ -103,7 +105,7 @@ impl MailUserContext {
     }
 
     /// Create a new default action executor.
-    pub(crate) fn new_default_queue_executor(
+    fn new_default_queue_executor(
         queue: &Queue,
         wait_for_online: &impl WaitForOnlineSubscribtion,
         task_service: &TaskService,
@@ -113,8 +115,21 @@ impl MailUserContext {
             .into_auto_executor(wait_for_online.subscribe(), task_service)
     }
 
+    /// Create a new default action executor for background execution.
+    pub(crate) fn new_background_default_queue_executor(
+        queue: &Queue,
+        wait_for_online: &impl WaitForOnlineSubscribtion,
+        task_service: &TaskService,
+    ) -> QueueAutoExecutor {
+        queue.new_executor().into_auto_executor_with_policy(
+            wait_for_online.subscribe(),
+            task_service,
+            QueueAutoTerminationPolicy::EmptyOrNetworkLoss,
+        )
+    }
+
     /// Create a new send group action executor.
-    pub(crate) fn new_send_queue_executor(
+    fn new_send_queue_executor(
         queue: &Queue,
         wait_for_online: &impl WaitForOnlineSubscribtion,
         pool_size: NonZeroUsize,
@@ -126,6 +141,23 @@ impl MailUserContext {
             pool_size,
             wait_for_online,
             task_service,
+        )
+    }
+
+    /// Create a new send group action executor for background_execution.
+    pub(crate) fn new_background_send_queue_executor(
+        queue: &Queue,
+        wait_for_online: &impl WaitForOnlineSubscribtion,
+        pool_size: NonZeroUsize,
+        task_service: &TaskService,
+    ) -> QueueAutoExecutorPool {
+        QueueAutoExecutorPool::with_termination_policy(
+            queue,
+            &SEND_ACTION_GROUP,
+            pool_size,
+            wait_for_online,
+            task_service,
+            QueueAutoTerminationPolicy::EmptyOrNetworkLoss,
         )
     }
 
