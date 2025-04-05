@@ -93,7 +93,7 @@ impl StatusObserverConfig {
                 .max_count(2)
                 .max_delay(5.s())
                 .iter_mul(1.0),
-            bg_timeout: Timeouts::HALF_MINUTE,
+            bg_timeout: Timeouts::QUARTER_MINUTE,
         }
     }
 
@@ -230,9 +230,7 @@ impl StatusObserver {
             } else {
                 self.background_check(api.clone()).await;
             }
-        }
-
-        if self.get_status().await.is_offline() {
+        } else if self.get_status().await.is_offline() {
             self.background_check(api).await;
         }
 
