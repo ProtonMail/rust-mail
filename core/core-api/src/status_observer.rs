@@ -4,6 +4,7 @@ use crate::{connection_status::ConnectionStatus, services::proton::Proton};
 use derive_more::Deref;
 use muon::common::{BoxFut, RetryPolicy, Sender, SenderLayer};
 use muon::error::ErrorKind;
+use muon::util::DurationExt;
 use muon::{Error as MuonError, ProtonRequest, ProtonResponse, Result as MuonResult};
 use std::num::NonZeroUsize;
 use std::ops::Deref;
@@ -19,7 +20,7 @@ use fixed_queue::StatusChanges;
 
 type StatusJoinHandle = JoinHandle<()>;
 
-const UP_TO_DATE_SECONDS: u64 = 10;
+const UP_TO_DATE_SECONDS: u64 = 6;
 static STATUS: LazyLock<Arc<RwLock<Status>>> = LazyLock::new(|| {
     Arc::new(RwLock::new(Status {
         status: ConnectionStatus::Online,
@@ -87,8 +88,11 @@ impl StatusObserverConfig {
         Self {
             up_to_date: Duration::from_secs(UP_TO_DATE_SECONDS),
             fg_retry: RetryPolicy::default().never(),
-            fg_timeout: Timeouts::FIVE_SECONDS,
-            bg_retry: RetryPolicy::default(),
+            fg_timeout: Timeouts::TWO_SECONDS,
+            bg_retry: RetryPolicy::default()
+                .max_count(2)
+                .max_delay(5.s())
+                .iter_mul(1.0),
             bg_timeout: Timeouts::HALF_MINUTE,
         }
     }
@@ -206,7 +210,6 @@ impl StatusObserver {
     /// If the status is `Offline`, it will start a background check.
     ///
     pub async fn status(&self, api: Proton) -> ConnectionStatus {
-        let status = self.get_status().await;
         if !self.is_up_to_date().await {
             let request_finished = self
                 .request
@@ -222,18 +225,18 @@ impl StatusObserver {
 
             let was_online_most_of_the_time = self.past_statuses.was_online_most_of_the_time();
 
-            if status.is_offline() && was_online_most_of_the_time {
+            if self.get_status().await.is_offline() && was_online_most_of_the_time {
                 Self::ping(api.clone(), self.config.fg_timeout, self.config.fg_retry).await;
             } else {
                 self.background_check(api.clone()).await;
             }
         }
 
-        if status.is_offline() {
+        if self.get_status().await.is_offline() {
             self.background_check(api).await;
         }
 
-        status
+        self.get_status().await
     }
 
     /// Peek in `update` method

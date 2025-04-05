@@ -29,7 +29,7 @@ pub struct Timeouts;
 impl Timeouts {
     pub const QUARTER_SECOND: Duration = Duration::from_millis(250);
     pub const ONE_SECOND: Duration = Duration::from_secs(1);
-    pub const FIVE_SECONDS: Duration = Duration::from_secs(5);
+    pub const TWO_SECONDS: Duration = Duration::from_secs(2);
     pub const HALF_MINUTE: Duration = Duration::from_secs(30);
     pub const ONE_MINUTE: Duration = Duration::from_secs(60);
 }
