@@ -100,7 +100,7 @@ impl StatusObserverConfig {
     /// Create a new `StatusObserverConfig` with default test values.
     fn test() -> Self {
         // Make single requests
-        let test_retry_policy = RetryPolicy::default().max_count(0);
+        let test_retry_policy = RetryPolicy::default().never();
         let fg_timeout = Timeouts::ONE_SECOND;
         let bg_timeout = Timeouts::ONE_SECOND * 2;
         let up_to_date = Duration::from_secs(2);
@@ -151,7 +151,7 @@ impl StatusObserver {
             request: Arc::new(RwLock::new(None)),
             config: StatusObserverConfig::default(),
             on_update,
-            past_statuses: StatusChanges::new(NonZeroUsize::new(5).unwrap()),
+            past_statuses: StatusChanges::new(NonZeroUsize::new(3).unwrap()),
         }
     }
 
