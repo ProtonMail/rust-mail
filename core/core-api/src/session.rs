@@ -1,5 +1,6 @@
 use derive_more::{Debug, Deref};
 use muon::client::flow::ForkFlowResult;
+use muon::error::ParseEndpointErr;
 use std::borrow::Borrow;
 use std::sync::Arc;
 use tokio::sync::{RwLock, watch};
@@ -21,6 +22,7 @@ pub use muon::env::{Env, EnvId};
 pub use muon::tls::TlsPinSet;
 
 const OBSERVABILITY_BATCH_SIZE: usize = 500;
+
 /// Core session trait which provides access to the API.
 pub trait CoreSession {
     #[must_use]
@@ -50,6 +52,16 @@ pub struct Config {
 }
 
 impl Config {
+    /// Create a new session config for the given environment.
+    #[must_use]
+    pub fn for_env(env: impl Env) -> Self {
+        Self {
+            env_id: EnvId::new_custom(env),
+            ..Self::default()
+        }
+    }
+
+    /// Create a new session config for the atlas environment.
     #[must_use]
     pub fn atlas() -> Self {
         Self {
@@ -58,20 +70,47 @@ impl Config {
         }
     }
 
+    /// Create a new session config for a named atlas environment.
     #[must_use]
-    pub fn atlas_name(name: &str) -> Self {
+    pub fn scientist(name: impl AsRef<str>) -> Self {
         Self {
             env_id: EnvId::new_atlas_name(name),
             ..Self::default()
         }
     }
 
-    #[must_use]
-    pub fn custom(env: impl Env) -> Self {
-        Self {
-            env_id: EnvId::new_custom(env),
-            ..Self::default()
+    /// Create a new session config for a custom environment.
+    ///
+    /// This will create a new environment with the given server URL.
+    /// This must be a valid URL, including the scheme, host, and if applicable,
+    /// path and port. For example: `http://127.0.0.1:8888/api`.
+    ///
+    /// # Security
+    ///
+    /// This function is insecure because it allows the user to create a session
+    /// with a custom environment. This can lead to security issues if the
+    /// environment is not trusted. The user must ensure that the environment
+    /// is safe to use and that the server is trusted.
+    pub fn custom(url: impl AsRef<str>) -> Result<Self, ParseEndpointErr> {
+        struct CustomEnv(Server);
+
+        impl CustomEnv {
+            fn new(server: impl AsRef<str>) -> Result<Self, ParseEndpointErr> {
+                Ok(Self(server.as_ref().parse()?))
+            }
         }
+
+        impl Env for CustomEnv {
+            fn servers(&self, _: &AppVersion) -> Vec<Server> {
+                vec![self.0.clone()]
+            }
+
+            fn pins(&self, _: &Server) -> Option<TlsPinSet> {
+                None
+            }
+        }
+
+        Ok(Self::for_env(CustomEnv::new(url)?))
     }
 }
 

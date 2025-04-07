@@ -183,8 +183,13 @@ async fn create_mail_session_inner(
         })?;
     }
 
-    // Creating client.
-    let api_env_config = params.api_env_config.unwrap_or_default();
+    let api_env_config = params
+        .api_env_config
+        .unwrap_or_default()
+        .try_into()
+        .inspect_err(|e| error!("{e:?}"))
+        .map_err(|_| Unexpected::Config)?;
+
     let hv_notifier = hv_notifier.map(ChallengeNotifierWrap::wrap);
 
     debug!("Creating Context");
@@ -196,7 +201,7 @@ async fn create_mail_session_inner(
         params.mail_cache_size,
         connection_pool_size,
         Arc::new(key_chain),
-        api_env_config.into(),
+        api_env_config,
         hv_notifier,
         Some(log_path),
     )

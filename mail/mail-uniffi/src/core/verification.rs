@@ -1,4 +1,5 @@
 use crate::errors::ProtonError;
+use crate::errors::unexpected::UnexpectedError;
 use crate::{core::datatypes::ApiConfig, uniffi_async};
 use futures::{FutureExt, TryFutureExt};
 use itertools::Itertools;
@@ -177,8 +178,12 @@ pub struct ChallengeLoader {
 /// Create a new `ChallengeLoader`.
 #[uniffi_export]
 pub async fn new_challenge_loader(cfg: ApiConfig) -> Result<Arc<ChallengeLoader>, ProtonError> {
+    let cfg = CoreApiConfig::try_from(cfg)
+        .inspect_err(|e| error!("{e:?}"))
+        .map_err(|_| UnexpectedError::Config)?;
+
     let inner = uniffi_async(async move {
-        hv::ChallengeLoader::new(CoreApiConfig::from(cfg))
+        hv::ChallengeLoader::new(cfg)
             .inspect_err(|e| error!("{e:?}"))
             .map_err(|_| RealProtonMailError::Unexpected(Unexpected::Config))
             .await
