@@ -27,7 +27,6 @@ use proton_api_mail::services::proton::request_data::DraftSender;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::message::EncryptedDraft;
 use proton_mail_ids::{LocalAttachmentId, LocalConversationId};
-use proton_task_service::IntoNonPausableFuture;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::params;
@@ -138,6 +137,7 @@ impl Action for Save {
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::High;
     const GROUP: ActionGroup = SEND_ACTION_GROUP;
+    const PAUSABLE: bool = false;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = SaveHandler;
     type RemoteOutput = ();
@@ -374,9 +374,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let r = Save::apply_remote_impl(ctx, action, &mut guard)
-            .into_non_pausable()
-            .await;
+        let r = Save::apply_remote_impl(ctx, action, &mut guard).await;
         if let Err(e) = &r {
             if let Err(e) = save_send_error(action, &mut guard, e).await {
                 error!("Failed to save draft send result: {e:?}");
