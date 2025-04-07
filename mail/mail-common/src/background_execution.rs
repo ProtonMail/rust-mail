@@ -12,8 +12,10 @@ pub enum BackgroundExecutionStatus {
     SkippedNoActiveContexts,
     /// Actually executed something.
     Executed,
-    /// Abort request triggered
-    Aborted,
+    /// Abort request triggered in background
+    AbortedInBackground,
+    /// Abort request triggered in foreground
+    AbortedInForeground,
     /// We ran more than the allotted time.
     TimedOut,
 }
@@ -36,7 +38,7 @@ impl BackgroundExecutionContext {
     pub async fn run(
         &self,
         ctx: &Arc<MailContext>,
-        abort: impl Future<Output = ()>,
+        abort: impl Future<Output = bool>,
         max_duration: Duration,
     ) -> MailContextResult<BackgroundExecutionStatus> {
         tracing::debug!("Background execution is gathering user contexts");
@@ -78,7 +80,8 @@ impl BackgroundExecutionContext {
 
         tracing::debug!("Background execution is in progress... awaiting for abort");
         let status = match tokio::time::timeout(max_duration, abort).await {
-            Ok(()) => BackgroundExecutionStatus::Aborted,
+            Ok(true) => BackgroundExecutionStatus::AbortedInForeground,
+            Ok(false) => BackgroundExecutionStatus::AbortedInBackground,
             Err(_) => {
                 tracing::debug!("Background execution timed out");
                 BackgroundExecutionStatus::TimedOut
