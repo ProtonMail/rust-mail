@@ -20,8 +20,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [mail-uniffi-v0.70.1] - 2025-04-04
 
+### Features
+
+- [ET-2592] Terminating action queue auto executor
+- [ET-2592] Background execution terminates when queue is empty
+- Add banners to the tui client
+- Support local API server
+
 ### Fixes
 
+- Do not delete draft attachments
+- [ET-2671] Persist recipient removal
+- [ET-2581] Don't show embedded and remote banners when there is no remote/embedded content.
+- Escape rendering of forwarded plain text messages
 - Do not delete draft attachments
 - [ET-2671] Persist recipient removal
 
