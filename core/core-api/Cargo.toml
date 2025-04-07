@@ -29,6 +29,7 @@ smart-default = { workspace = true }
 stash = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
+tokio-util = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
 

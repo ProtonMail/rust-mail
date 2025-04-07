@@ -12,7 +12,7 @@ use crate::service::ApiServiceResult;
 use crate::services::observability::store::InMemoryMetricStore;
 use crate::services::observability::{ObservabilityManager, ObservabilityMetric};
 use crate::services::proton::{self, BuildError, Proton};
-use crate::status_watcher::{StatusWatcher, StatusWatcherSubscriber};
+use crate::status_watcher::StatusWatcher;
 use crate::store::{BoxStore, DynStore, Store, TempStore};
 use crate::verification::{DynChallengeNotifier, FailNotifier};
 
@@ -206,7 +206,7 @@ impl Builder {
         init_server_crypto_clock();
 
         let store = self.store.unwrap_or_else(TempStore::boxed);
-        let status = self.status.unwrap_or_default();
+        let mut status = self.status.unwrap_or_default();
         let notifier = self.notifier.unwrap_or_else(FailNotifier::arced);
 
         let config = Arc::new(self.config);
@@ -344,10 +344,25 @@ impl Session {
         self.status.subscribe()
     }
 
-    /// Hold task till connection status is back online
+    /// Waits until the connection is online; if that's the case at the moment,
+    /// returns immediately.
     ///
     pub async fn wait_for_online(&self) {
-        self.status_changes().wait_for_online().await;
+        // `wait_for()` returns `Err` if the channel's tx has died - this
+        // shouldn't be the case here, because the channel is allowed to die
+        // only after the *last* instance of status watcher is dropped, and we
+        // know at least one instance must be alive as it's held within `self`.
+        //
+        // If this logic becomes violated, the worst that can happen is that
+        // this function returns even if the network connection is actually
+        // offline. This is alright, because listening on network status is
+        // advisory anyway - the caller is supposed to handle potential network
+        // problems on their side one way or another.
+
+        _ = self
+            .status_changes()
+            .wait_for(ConnectionStatus::is_online)
+            .await;
     }
 
     pub fn record_metric(&self, metric: impl ObservabilityMetric + 'static) {

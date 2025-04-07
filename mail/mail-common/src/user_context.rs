@@ -12,7 +12,6 @@ use crate::user_context::initialization::InitializationMediator;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 use proton_action_queue::action::ActionId;
-use proton_action_queue::network::WaitForOnlineSubscribtion;
 use proton_action_queue::queue::{
     Queue, QueueAutoExecutor, QueueAutoExecutorPool, QueueAutoTerminationPolicy,
 };
@@ -22,7 +21,6 @@ use proton_api_core::crypto_clock;
 use proton_api_core::services::proton::{AddressId, SessionId, UserId};
 use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::session::{CoreSession, Session};
-use proton_core_common::action_queue::WaitForOnlineSubscribtionExt;
 use proton_core_common::datatypes::{AccountDetails, LocalAddressId};
 use proton_core_common::models::{Address, User, UserSettings};
 use proton_core_common::{ContactError, CoreContextError, LoadKeySecret, UserContext};
@@ -41,11 +39,12 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, OnceLock, Weak};
 use std::time::Duration;
 use tokio::join;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, watch};
 use tokio::task::JoinHandle;
 use tracing::error;
 
 const DEFAULT_SEND_QUEUE_POOL_SIZE: usize = 4;
+
 pub struct MailUserContext {
     this: Weak<Self>,
     mail_context: Arc<MailContext>,
@@ -62,23 +61,31 @@ pub struct MailUserContext {
 
 impl MailUserContext {
     /// Create a new user context.
-    pub(crate) async fn new<WFO: WaitForOnlineSubscribtionExt>(
+    pub(crate) async fn new(
         mail_context: Arc<MailContext>,
         user_context: Arc<UserContext>,
     ) -> MailContextResult<Arc<Self>> {
         register_mail_actions(user_context.queue());
 
-        let wait_for_online = WFO::create(user_context.session().status_watcher());
+        let online = user_context
+            .session()
+            .status_watcher()
+            .subscribe_to_online();
+
         let task_service = mail_context.core_context().task_service();
+
         let default_queue_executor =
-            Self::new_default_queue_executor(user_context.queue(), &wait_for_online, task_service);
+            Self::new_default_queue_executor(user_context.queue(), online.clone(), task_service);
+
         let send_queue_executors = Self::new_send_queue_executor(
             user_context.queue(),
-            &wait_for_online,
+            online,
             NonZeroUsize::new(DEFAULT_SEND_QUEUE_POOL_SIZE).unwrap(),
             task_service,
         );
+
         let initialization_mediator = InitializationMediator::new(task_service);
+
         let this = Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             mail_context,
@@ -107,22 +114,22 @@ impl MailUserContext {
     /// Create a new default action executor.
     fn new_default_queue_executor(
         queue: &Queue,
-        wait_for_online: &impl WaitForOnlineSubscribtion,
+        online: watch::Receiver<bool>,
         task_service: &TaskService,
     ) -> QueueAutoExecutor {
         queue
             .new_executor()
-            .into_auto_executor(wait_for_online.subscribe(), task_service)
+            .into_auto_executor(online, task_service)
     }
 
     /// Create a new default action executor for background execution.
     pub(crate) fn new_background_default_queue_executor(
         queue: &Queue,
-        wait_for_online: &impl WaitForOnlineSubscribtion,
+        online: watch::Receiver<bool>,
         task_service: &TaskService,
     ) -> QueueAutoExecutor {
         queue.new_executor().into_auto_executor_with_policy(
-            wait_for_online.subscribe(),
+            online,
             task_service,
             QueueAutoTerminationPolicy::EmptyOrNetworkLoss,
         )
@@ -131,23 +138,17 @@ impl MailUserContext {
     /// Create a new send group action executor.
     fn new_send_queue_executor(
         queue: &Queue,
-        wait_for_online: &impl WaitForOnlineSubscribtion,
+        online: watch::Receiver<bool>,
         pool_size: NonZeroUsize,
         task_service: &TaskService,
     ) -> QueueAutoExecutorPool {
-        QueueAutoExecutorPool::new(
-            queue,
-            &SEND_ACTION_GROUP,
-            pool_size,
-            wait_for_online,
-            task_service,
-        )
+        QueueAutoExecutorPool::new(queue, &SEND_ACTION_GROUP, pool_size, online, task_service)
     }
 
     /// Create a new send group action executor for background_execution.
     pub(crate) fn new_background_send_queue_executor(
         queue: &Queue,
-        wait_for_online: &impl WaitForOnlineSubscribtion,
+        online: watch::Receiver<bool>,
         pool_size: NonZeroUsize,
         task_service: &TaskService,
     ) -> QueueAutoExecutorPool {
@@ -155,7 +156,7 @@ impl MailUserContext {
             queue,
             &SEND_ACTION_GROUP,
             pool_size,
-            wait_for_online,
+            online,
             task_service,
             QueueAutoTerminationPolicy::EmptyOrNetworkLoss,
         )
