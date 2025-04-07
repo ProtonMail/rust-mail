@@ -39,6 +39,8 @@ impl BackgroundExecutionContext {
         abort: impl Future<Output = ()>,
         max_duration: Duration,
     ) -> MailContextResult<BackgroundExecutionStatus> {
+        tracing::debug!("Background execution is gathering user contexts");
+
         let all_user_ctxs = ctx
             .get_all_logged_in_and_initialized_user_contexts()
             .await
@@ -50,6 +52,8 @@ impl BackgroundExecutionContext {
             tracing::warn!("There are no logged in users, skipping background execution");
             return Ok(BackgroundExecutionStatus::SkippedNoActiveContexts);
         }
+
+        tracing::debug!("Background execution is creating executors");
 
         // Create new executors for all the contexts.
         let queue_executors = all_user_ctxs
