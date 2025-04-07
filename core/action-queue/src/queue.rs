@@ -11,7 +11,7 @@ use crate::network::{WaitForOnline, WaitForOnlineSubscribtion};
 use chrono::DateTime;
 use parking_lot::RwLock;
 use proton_sqlite3::MigratorError;
-use proton_task_service::TaskService;
+use proton_task_service::{IntoNonPausableFuture, TaskService};
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, StashError, Tether};
 use std::any::{Any, TypeId};
@@ -683,10 +683,11 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
         metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<QueuedActionState>> + 'a + Send>> {
         let result = shared.resolve_execution_context::<T>();
+        let pausable = T::PAUSABLE;
+
         Box::pin(async move {
             let context = result?;
-            // Can't return result here as there is no one to consume it.
-            let output = execute_action_remote(
+            let future = execute_action_remote(
                 shared,
                 self.action_id,
                 context.as_ref(),
@@ -694,9 +695,17 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
                 &mut self.action,
                 tether,
                 exec_guard,
-            )
-            .await
-            .map_err(|e| QueuedError::Action(Arc::new(anyhow::Error::new(e)), metadata))?;
+            );
+
+            let result = if pausable {
+                future.await
+            } else {
+                future.into_non_pausable().await
+            };
+
+            // Can't return result here as there is no one to consume it.
+            let output = result
+                .map_err(|e| QueuedError::Action(Arc::new(anyhow::Error::new(e)), metadata))?;
 
             Ok(match output {
                 ActionRemoteOutput::Executed(_) => QueuedActionState::Executed(self.action_id),
