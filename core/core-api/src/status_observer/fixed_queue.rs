@@ -40,9 +40,34 @@ pub struct StatusChanges {
 }
 
 impl StatusChanges {
+    /// Initialize `StatusChanges` queue.
+    ///
+    /// Its purpose is to keep track of the past statuses,
+    /// in order to be able to estimate probability
+    /// of the false negatives when device connectivity
+    /// environment is not ideal.
+    ///
+    /// Queue starts initialized with default values,
+    /// picked to be the most fair for both either scenarios:
+    /// * Starting application online with poor internet connection.
+    /// * Starting application when totaly offline.
+    ///
     pub fn new(capacity: NonZeroUsize) -> Self {
+        let capacity = capacity.get();
+        let mut queue = FixedQueue::new(capacity);
+        let half_cap = capacity / 2;
+
+        // Make probability "almost" half-half.
+        // With a little advantage for online state
+        // as the order in the queue also matters.
+        // First out will be `Offline`.
+        for _ in 0..=half_cap {
+            queue.push(ConnectionStatus::Offline);
+            queue.push(ConnectionStatus::Online);
+        }
+
         Self {
-            queue: Arc::new(RwLock::new(FixedQueue::new(capacity.get()))),
+            queue: Arc::new(RwLock::new(queue)),
         }
     }
 
