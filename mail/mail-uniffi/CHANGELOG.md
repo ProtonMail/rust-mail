@@ -6,7 +6,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.70.0] - 2025-04-03
+## [mail-uniffi-v0.70.3] - 2025-04-04
+
+### Fixes
+
+- Escape rendering of forwarded plain text messages
+
+## [mail-uniffi-v0.70.2] - 2025-04-04
+
+### Fixes
+
+- [ET-2581] Don't show embedded and remote banners when there is no remote/embedded content.
+
+## [mail-uniffi-v0.70.1] - 2025-04-04
+
+### Fixes
+
+- Do not delete draft attachments
+- [ET-2671] Persist recipient removal
+
+## [mail-uniffi-v0.70.0] - 2025-04-03
 
 ### Changed
 

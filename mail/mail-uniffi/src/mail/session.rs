@@ -258,43 +258,45 @@ impl MailSession {
     /// This method **does NOT** initialize context itself. It also **does NOT**
     /// create a new context.
     ///
-    pub fn initialized_user_context_from_session(
+    pub async fn initialized_user_context_from_session(
         &self,
         session: Arc<StoredSession>,
     ) -> Result<Option<Arc<MailUserSession>>, UserSessionError> {
         let ctx = self.mail_ctx.clone();
 
-        async_runtime()
-            .block_on(async move {
-                ctx.initialized_user_context_from_session(session.session(), None)
-                    .map_ok(|ctx| ctx.map(|ctx| self.user_ctx.insert(ctx)))
-                    .map_ok(|ctx| ctx.map(MailUserSession::new))
-                    .map_err(RealProtonMailError::from)
-                    .await
-            })
-            .map_err(UserSessionError::from)
+        let user_ctx = uniffi_async(async move {
+            ctx.initialized_user_context_from_session(session.session(), None)
+                .map_err(RealProtonMailError::from)
+                .await
+        })
+        .map_ok(|ctx| ctx.map(|ctx| self.user_ctx.insert(ctx)))
+        .map_ok(|ctx| ctx.map(MailUserSession::new))
+        .await?;
+
+        Ok(user_ctx)
     }
 
     /// Create an user context from a stored session.
-    pub fn user_context_from_session(
+    pub async fn user_context_from_session(
         &self,
         session: Arc<StoredSession>,
     ) -> Result<Arc<MailUserSession>, UserSessionError> {
         let ctx = self.mail_ctx.clone();
 
-        async_runtime()
-            .block_on(async move {
-                ctx.user_context_from_session(
-                    session.session(),
-                    None,
-                    ShouldInitializeMailUserContext::Yes,
-                )
-                .map_ok(|ctx| self.user_ctx.insert(ctx))
-                .map_ok(MailUserSession::new)
-                .map_err(RealProtonMailError::from)
-                .await
-            })
-            .map_err(UserSessionError::from)
+        let user_ctx = uniffi_async(async move {
+            ctx.user_context_from_session(
+                session.session(),
+                None,
+                ShouldInitializeMailUserContext::Yes,
+            )
+            .map_err(RealProtonMailError::from)
+            .await
+        })
+        .map_ok(|ctx| self.user_ctx.insert(ctx))
+        .map_ok(MailUserSession::new)
+        .await?;
+
+        Ok(user_ctx)
     }
 
     /// Get all available accounts.
