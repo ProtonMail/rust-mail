@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.70.7] - 2025-04-07
+
+### Fixes
+
+- Add Action's PAUSABLE associated const which force Executors to finish apply_remote b4 pausing
+
 ## [mail-uniffi-v0.70.6] - 2025-04-07
 
 ### Fixes
