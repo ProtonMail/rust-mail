@@ -6,6 +6,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.70.6] - 2025-04-07
+
+### Fixes
+
+- Make `Draft::save` & `Draft::send` action's `apply_remote` non pausable futures
+
 ## [mail-uniffi-v0.70.5] - 2025-04-07
 
 ### Fixes

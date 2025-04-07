@@ -20,6 +20,7 @@ use proton_api_mail::services::proton::ProtonMail;
 use proton_api_mail::services::proton::common::MessageId;
 use proton_core_common::models::ModelExtension;
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
+use proton_task_service::IntoNonPausableFuture;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::Bond;
@@ -196,7 +197,9 @@ impl proton_action_queue::action::Handler for SendHandler {
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let r = Send::apply_remote_impl(context, action, &mut guard).await;
+        let r = Send::apply_remote_impl(context, action, &mut guard)
+            .into_non_pausable()
+            .await;
         if let Err(e) = save_send_status(action, &mut guard, &r).await {
             error!("Failed to save draft send result: {e:?}");
         }
