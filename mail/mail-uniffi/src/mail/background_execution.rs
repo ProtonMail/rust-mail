@@ -62,9 +62,7 @@ impl MailSession {
             let status = match background_context
                 .run(
                     &ctx,
-                    async {
-                        let _ = abort.recv().await;
-                    },
+                    async { abort.recv().await.unwrap_or(false) },
                     duration,
                 )
                 .await
@@ -88,8 +86,10 @@ pub enum BackgroundExecutionStatus {
     SkippedNoActiveContexts,
     /// Actually executed something.
     Executed,
-    /// Abort request triggered
-    Aborted,
+    /// Abort request triggered in background
+    AbortedInBackground,
+    /// Abort request triggered in foreground
+    AbortedInForeground,
     /// We ran more than the allotted time.
     TimedOut,
     /// Failed to execute
@@ -101,7 +101,8 @@ impl From<RealBackgroundExecutionStatus> for BackgroundExecutionStatus {
         match value {
             RealBackgroundExecutionStatus::SkippedNoActiveContexts => Self::SkippedNoActiveContexts,
             RealBackgroundExecutionStatus::Executed => Self::Executed,
-            RealBackgroundExecutionStatus::Aborted => Self::Aborted,
+            RealBackgroundExecutionStatus::AbortedInBackground => Self::AbortedInBackground,
+            RealBackgroundExecutionStatus::AbortedInForeground => Self::AbortedInForeground,
             RealBackgroundExecutionStatus::TimedOut => Self::TimedOut,
         }
     }
@@ -124,7 +125,7 @@ pub trait BackgroundExecutionCallback: Send + Sync {
 ///
 #[derive(uniffi::Object)]
 pub struct BackgroundExecutionHandle {
-    sender: mpsc::Sender<()>,
+    sender: mpsc::Sender<bool>,
     ctx: Weak<MailContext>,
 }
 
@@ -134,8 +135,8 @@ impl BackgroundExecutionHandle {
     ///
     /// Allows holder of the `BackgroundExecutionHandle` to finish execution prematurely.
     ///
-    pub async fn abort(&self) {
-        let _ = self.sender.send(()).await;
+    pub async fn abort(&self, in_foreground: bool) {
+        let _ = self.sender.send(in_foreground).await;
     }
 }
 
@@ -144,7 +145,7 @@ impl Drop for BackgroundExecutionHandle {
         let sender = self.sender.clone();
         if let Some(ctx) = self.ctx.upgrade() {
             spawn_async(ctx, async move {
-                let _ = sender.send(()).await;
+                let _ = sender.send(false).await;
             });
         } else {
             tracing::warn!(
