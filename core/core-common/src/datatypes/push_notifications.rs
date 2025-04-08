@@ -50,7 +50,7 @@ impl StoredDevicePrivateKey {
         Self(Secret::new(value))
     }
 
-    /// Transforms it to PGPDeviceKey
+    /// Transforms it to `PGPDeviceKey`
     ///
     /// # Errors
     ///
@@ -64,7 +64,7 @@ impl StoredDevicePrivateKey {
         P: PGPProviderSync,
     {
         let key_data = self.0.expose_secret();
-        PGPDeviceKey::deserialize_from_secure_storage(pgp_provider, &key_data)
+        PGPDeviceKey::deserialize_from_secure_storage(pgp_provider, key_data)
     }
 
     #[must_use]

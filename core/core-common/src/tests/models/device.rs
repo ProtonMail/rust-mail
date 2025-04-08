@@ -1,213 +1,401 @@
-/*
+use std::sync::{Arc, Mutex};
 
+use proton_api_core::services::proton::{SessionId, UserId};
 use proton_core_test_utils::test_context::TestContext;
-use proton_sqlite3::rusqlite::ErrorCode;
-use stash::{orm::Model, stash::StashError};
+use serde::{Deserialize, Serialize};
+use tokio::sync::watch;
 
 // To break cyclic dependency
 use proton_core_test_utils::reexport::proton_core_common::{
-    datatypes::DeviceEnvironment, models::RegisteredDevice,
+    datatypes::DeviceEnvironment, models::RegisteredDevice, models::RegisteredDeviceTaskState,
+    models::registered_device_task_step,
+};
+use wiremock::{
+    Mock, Request, ResponseTemplate,
+    matchers::{body_partial_json, method, path},
 };
 
 #[tokio::test]
-async fn test_save_registered_device_and_retrieve_it() {
+async fn initial_registration() {
     let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
 
-    let mut device_to_register = RegisteredDevice {
+    let mut background_task_state = RegisteredDeviceTaskState::default();
+    let (_sessions_tx, sessions_rx) = flume::bounded::<()>(16);
+    let (device_tx, mut device_rx) = watch::channel::<Option<RegisteredDevice>>(None);
+    let mut sessions_stream = sessions_rx.into_stream();
+
+    let device_to_register = RegisteredDevice {
         device_token: "ABCD".to_string(),
-
         environment: DeviceEnvironment::Google,
-
-        public_key: None,
-
         ping_notification_status: None,
-
         push_notification_status: None,
-
         row_id: None,
     };
 
-    let mut tether = user_ctx.stash().connection();
-    tether
-        .tx(async |tx| device_to_register.save(tx, ctx.core_context()).await)
-        .await
-        .unwrap();
+    device_tx
+        .send(Some(device_to_register))
+        .expect("Could not send device to register");
 
-    let cached_device = RegisteredDevice::get(&tether)
-        .await
-        .expect("Cached device")
-        .expect("Cached device");
+    mock_ping_success(&ctx).await;
+    let used_device_key = Arc::new(Mutex::new(None));
+    mock_device_registration(
+        &ctx,
+        PartialTestRegisterDeviceRequest {
+            device_token: "ABCD".to_string(),
+            environment: proton_api_core::services::proton::DeviceEnvironment::Google,
+            ping_notification_status: None,
+            push_notification_status: None,
+        },
+        &used_device_key,
+        1,
+    )
+    .await;
+    ctx.catch_all().await;
+    let core_ctx = ctx.context();
 
-    assert_eq!(cached_device.device_token, device_to_register.device_token);
-    assert_eq!(cached_device.environment, device_to_register.environment);
-    assert_eq!(cached_device.public_key, device_to_register.public_key);
-    assert_eq!(
-        cached_device.ping_notification_status,
-        device_to_register.ping_notification_status
-    );
-    assert_eq!(
-        cached_device.push_notification_status,
-        device_to_register.push_notification_status
-    );
+    registered_device_task_step(
+        core_ctx,
+        &mut background_task_state,
+        &mut sessions_stream,
+        &mut device_rx,
+    )
+    .await
+    .expect("Step");
+
+    // It generated device key automatically
+    assert!(used_device_key.lock().unwrap().is_some());
 }
 
 #[tokio::test]
-async fn only_last_device_token_can_be_retrieved() {
-    // Scenario: App crashes without the proper sign-off.
-
+async fn initial_registration_when_device_key_already_exist_in_keychain() {
     let ctx = TestContext::new().await;
-    let user_ctx = ctx.user_context().await;
 
-    let mut tether = user_ctx.stash().connection();
-    tether
-        .tx::<_, _, StashError>(async |tx| {
-            let mut first = RegisteredDevice {
-                device_token: "ABCD".to_string(),
+    let mut background_task_state = RegisteredDeviceTaskState::default();
+    let (_sessions_tx, sessions_rx) = flume::bounded::<()>(16);
+    let (device_tx, mut device_rx) = watch::channel::<Option<RegisteredDevice>>(None);
+    let mut sessions_stream = sessions_rx.into_stream();
 
-                environment: DeviceEnvironment::Google,
+    let device_to_register = RegisteredDevice {
+        device_token: "ABCD".to_string(),
+        environment: DeviceEnvironment::Google,
+        ping_notification_status: None,
+        push_notification_status: None,
+        row_id: None,
+    };
 
-                public_key: None,
+    device_tx
+        .send(Some(device_to_register))
+        .expect("Could not send device to register");
 
-                ping_notification_status: None,
+    mock_ping_success(&ctx).await;
+    let used_device_key = Arc::new(Mutex::new(None));
+    mock_device_registration(
+        &ctx,
+        PartialTestRegisterDeviceRequest {
+            device_token: "ABCD".to_string(),
+            environment: proton_api_core::services::proton::DeviceEnvironment::Google,
+            ping_notification_status: None,
+            push_notification_status: None,
+        },
+        &used_device_key,
+        1,
+    )
+    .await;
+    ctx.catch_all().await;
+    let core_ctx = ctx.context();
+    // Imagine a scenario where keychain already has device key.
+    // We want to reuse such a key.
+    let pgp_provider = proton_crypto::new_pgp_provider();
+    let stored_public_key = core_ctx
+        // It stores private key in keychain.
+        // Later, we use private key to derive public key
+        .gen_device_key_pair(&pgp_provider)
+        .unwrap()
+        .to_string();
 
-                push_notification_status: None,
+    registered_device_task_step(
+        core_ctx,
+        &mut background_task_state,
+        &mut sessions_stream,
+        &mut device_rx,
+    )
+    .await
+    .expect("Step");
 
-                row_id: None,
-            };
-
-            first.save(tx, ctx.core_context()).await.unwrap();
-            Ok(first)
-        })
-        .await
-        .unwrap();
-
-    // Crash
-    //
-    // ...
-    //
-    // Recovery
-    let mut tether = user_ctx.stash().connection();
-    let second = tether
-        .tx::<_, _, StashError>(async |tx| {
-            let mut second = RegisteredDevice {
-                device_token: "ABCD".to_string(),
-
-                environment: DeviceEnvironment::Google,
-
-                public_key: None,
-
-                ping_notification_status: None,
-
-                push_notification_status: None,
-
-                row_id: None,
-            };
-
-            second.save(tx, ctx.core_context()).await.unwrap();
-            Ok(second)
-        })
-        .await
-        .unwrap();
-
-    let cached_device = RegisteredDevice::get(&tether)
-        .await
-        .expect("Cached device")
-        .expect("Cached device");
-
-    assert_eq!(cached_device.device_token, second.device_token);
-    assert_eq!(cached_device.environment, second.environment);
-    assert_eq!(cached_device.public_key, second.public_key);
-    assert_eq!(
-        cached_device.ping_notification_status,
-        second.ping_notification_status
-    );
-    assert_eq!(
-        cached_device.push_notification_status,
-        second.push_notification_status
-    );
+    // It used previously generated key
+    assert_eq!(*used_device_key.lock().unwrap(), Some(stored_public_key));
 }
 
-// # Context
-//
-// There is a constraint, that only one row in `registered_devices` might exist.
-// It is guarded by DB trigger.
-//
-// Additionally, [`RegisteredDevice::save`] prevents it by overwriting the last row.
-//
-// # What we test
-//
-// Since `::save` ensures there is only one row, we never test whether the database trigger is
-// correct or not. Therefore let's make a scenario where developer
-// by accident used `Model::save` instead.
 #[tokio::test]
-async fn should_trigger_db_guard_if_incorrectly_used_trait_method() {
-    {
-        let ctx = TestContext::new().await;
-        let user_ctx = ctx.user_context().await;
+async fn test_device_token_changed() {
+    let ctx = TestContext::new().await;
 
-        let mut tether = user_ctx.stash().connection();
-        tether
-            .tx::<_, _, StashError>(async |tx| {
-                let mut first = RegisteredDevice {
-                    device_token: "ABCD".to_string(),
+    let mut background_task_state = RegisteredDeviceTaskState::default();
+    let (_sessions_tx, sessions_rx) = flume::bounded::<()>(16);
+    let (device_tx, mut device_rx) = watch::channel::<Option<RegisteredDevice>>(None);
+    let mut sessions_stream = sessions_rx.into_stream();
 
-                    environment: DeviceEnvironment::Google,
+    let device_to_register = RegisteredDevice {
+        device_token: "ABCD".to_string(),
+        environment: DeviceEnvironment::Google,
+        ping_notification_status: None,
+        push_notification_status: None,
+        row_id: None,
+    };
 
-                    public_key: None,
+    device_tx
+        .send(Some(device_to_register))
+        .expect("Could not send device to register");
 
-                    ping_notification_status: None,
+    mock_ping_success(&ctx).await;
+    let used_device_key = Arc::new(Mutex::new(None));
+    mock_device_registration(
+        &ctx,
+        PartialTestRegisterDeviceRequest {
+            device_token: "ABCD".to_string(),
+            environment: proton_api_core::services::proton::DeviceEnvironment::Google,
+            ping_notification_status: None,
+            push_notification_status: None,
+        },
+        &used_device_key,
+        1,
+    )
+    .await;
+    ctx.catch_all().await;
+    let core_ctx = ctx.context();
 
-                    push_notification_status: None,
+    // Initial registration
+    registered_device_task_step(
+        core_ctx,
+        &mut background_task_state,
+        &mut sessions_stream,
+        &mut device_rx,
+    )
+    .await
+    .expect("Step");
 
-                    row_id: None,
-                };
+    let device_to_register = RegisteredDevice {
+        device_token: "EFGH".to_string(),
+        environment: DeviceEnvironment::Google,
+        ping_notification_status: None,
+        push_notification_status: None,
+        row_id: None,
+    };
 
-                Model::save(&mut first, tx).await?;
-                Ok(first)
-            })
-            .await
-            .unwrap();
+    device_tx
+        .send(Some(device_to_register))
+        .expect("Could not send device to register");
 
-        // Crash
-        //
-        // ...
-        //
-        // Recovery
-        let mut tether = user_ctx.stash().connection();
-        let stash_error = tether
-            .tx::<_, _, StashError>(async |tx| {
-                let mut second = RegisteredDevice {
-                    device_token: "ABCD".to_string(),
+    ctx.mock_server().reset().await;
 
-                    environment: DeviceEnvironment::Google,
+    mock_device_registration(
+        &ctx,
+        PartialTestRegisterDeviceRequest {
+            device_token: "EFGH".to_string(),
+            environment: proton_api_core::services::proton::DeviceEnvironment::Google,
+            ping_notification_status: None,
+            push_notification_status: None,
+        },
+        &used_device_key,
+        1,
+    )
+    .await;
+    ctx.catch_all().await;
 
-                    public_key: None,
-
-                    ping_notification_status: None,
-
-                    push_notification_status: None,
-
-                    row_id: None,
-                };
-
-                Model::save(&mut second, tx).await
-            })
-            .await
-            .unwrap_err();
-
-        let StashError::DeserializationError(stash::orm::ConversionError::SqliteError(
-            sqlite_error,
-        )) = stash_error
-        else {
-            panic!("Expected Sqlite Error, found {stash_error:?}")
-        };
-        assert_eq!(
-            "registered_devices may have only one row. This is a bug in a model layer",
-            sqlite_error.to_string()
-        );
-        let error = sqlite_error.sqlite_error().expect("Error");
-        assert_eq!(error.code, ErrorCode::ConstraintViolation);
-    }
+    // Registration token changed
+    registered_device_task_step(
+        core_ctx,
+        &mut background_task_state,
+        &mut sessions_stream,
+        &mut device_rx,
+    )
+    .await
+    .expect("Step");
 }
-*/
+
+#[tokio::test]
+async fn register_more_than_one_session() {
+    let ctx = TestContext::new().await;
+
+    ctx.new_account(UserId::from("1234"), SessionId::from("TEST_UID_2"), None)
+        .await;
+
+    let mut background_task_state = RegisteredDeviceTaskState::default();
+    let (_sessions_tx, sessions_rx) = flume::bounded::<()>(16);
+    let (device_tx, mut device_rx) = watch::channel::<Option<RegisteredDevice>>(None);
+    let mut sessions_stream = sessions_rx.into_stream();
+
+    let device_to_register = RegisteredDevice {
+        device_token: "ABCD".to_string(),
+        environment: DeviceEnvironment::Google,
+        ping_notification_status: None,
+        push_notification_status: None,
+        row_id: None,
+    };
+
+    device_tx
+        .send(Some(device_to_register))
+        .expect("Could not send device to register");
+
+    mock_ping_success(&ctx).await;
+    let used_device_key = Arc::new(Mutex::new(None));
+    mock_device_registration(
+        &ctx,
+        PartialTestRegisterDeviceRequest {
+            device_token: "ABCD".to_string(),
+            environment: proton_api_core::services::proton::DeviceEnvironment::Google,
+            ping_notification_status: None,
+            push_notification_status: None,
+        },
+        &used_device_key,
+        2,
+    )
+    .await;
+    ctx.catch_all().await;
+    let core_ctx = ctx.context();
+
+    registered_device_task_step(
+        core_ctx,
+        &mut background_task_state,
+        &mut sessions_stream,
+        &mut device_rx,
+    )
+    .await
+    .expect("Step");
+
+    // It generated device key automatically
+    assert!(used_device_key.lock().unwrap().is_some());
+}
+
+#[tokio::test]
+async fn register_new_session() {
+    let ctx = TestContext::new().await;
+
+    let mut background_task_state = RegisteredDeviceTaskState::default();
+    let (sessions_tx, sessions_rx) = flume::bounded::<()>(16);
+    let (device_tx, mut device_rx) = watch::channel::<Option<RegisteredDevice>>(None);
+    let mut sessions_stream = sessions_rx.into_stream();
+
+    let device_to_register = RegisteredDevice {
+        device_token: "ABCD".to_string(),
+        environment: DeviceEnvironment::Google,
+        ping_notification_status: None,
+        push_notification_status: None,
+        row_id: None,
+    };
+
+    device_tx
+        .send(Some(device_to_register))
+        .expect("Could not send device to register");
+
+    mock_ping_success(&ctx).await;
+    let used_device_key = Arc::new(Mutex::new(None));
+    mock_device_registration(
+        &ctx,
+        PartialTestRegisterDeviceRequest {
+            device_token: "ABCD".to_string(),
+            environment: proton_api_core::services::proton::DeviceEnvironment::Google,
+            ping_notification_status: None,
+            push_notification_status: None,
+        },
+        &used_device_key,
+        1,
+    )
+    .await;
+    ctx.catch_all().await;
+    let core_ctx = ctx.context();
+
+    registered_device_task_step(
+        core_ctx,
+        &mut background_task_state,
+        &mut sessions_stream,
+        &mut device_rx,
+    )
+    .await
+    .expect("Step");
+
+    // It generated device key automatically
+    assert!(used_device_key.lock().unwrap().is_some());
+
+    ctx.new_account(UserId::from("1234"), SessionId::from("TEST_UID_2"), None)
+        .await;
+    sessions_tx.send(()).expect("Notify that session was added");
+
+    ctx.mock_server().reset().await;
+    mock_device_registration(
+        &ctx,
+        PartialTestRegisterDeviceRequest {
+            device_token: "ABCD".to_string(),
+            environment: proton_api_core::services::proton::DeviceEnvironment::Google,
+            ping_notification_status: None,
+            push_notification_status: None,
+        },
+        &used_device_key,
+        1,
+    )
+    .await;
+    ctx.catch_all().await;
+
+    registered_device_task_step(
+        core_ctx,
+        &mut background_task_state,
+        &mut sessions_stream,
+        &mut device_rx,
+    )
+    .await
+    .expect("Step");
+}
+
+async fn mock_ping_success(ctx: &TestContext) {
+    Mock::given(method("GET"))
+        .and(path("/api/core/v4/tests/ping"))
+        .respond_with(ResponseTemplate::new(200))
+        .mount(ctx.mock_server())
+        .await;
+}
+
+async fn mock_device_registration(
+    ctx: &TestContext,
+    params: PartialTestRegisterDeviceRequest,
+    key: &Arc<Mutex<Option<String>>>,
+    times: u64,
+) {
+    let key = key.clone();
+
+    Mock::given(method("POST"))
+        .and(path("/api/core/v4/devices"))
+        .and(body_partial_json(params))
+        .respond_with(move |request: &Request| {
+            let json = request
+                .body_json::<RequestWithDeviceKey>()
+                .expect("Could not deserialize");
+            *key.lock().unwrap() = json.public_key;
+
+            ResponseTemplate::new(200)
+        })
+        .expect(times)
+        .mount(ctx.mock_server())
+        .await;
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct RequestWithDeviceKey {
+    /// PGP Public Key
+    pub public_key: Option<String>,
+}
+
+/// Represents `POST /devices` request body.
+///
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PartialTestRegisterDeviceRequest {
+    /// Device token
+    pub device_token: String,
+    /// Environment to which we register
+    pub environment: proton_api_core::services::proton::DeviceEnvironment,
+    /// TODO: Document this field
+    pub ping_notification_status: Option<i32>,
+    /// TODO: Document this field
+    pub push_notification_status: Option<i32>,
+}

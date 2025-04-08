@@ -41,7 +41,7 @@ impl RegisterDeviceTaskHandle {
     /// Call this method whenever device token was received.
     ///
     #[returns(VoidActionResult)]
-    async fn update_device(&self, device: RegisteredDevice) -> Result<(), ActionError> {
+    pub fn update_device(&self, device: RegisteredDevice) -> Result<(), ActionError> {
         self.sender
             .send(Some(RealRegisteredDevice::from(device)))
             .map_err(|_| Unexpected::Internal)

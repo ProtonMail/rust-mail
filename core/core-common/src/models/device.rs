@@ -28,6 +28,9 @@ use crate::{
 };
 
 // TODO (wpolak): Remove this table and this structure
+// We no longer need to store tokens in the database.
+// We might want to keep only minimal datastructure in memory.
+//
 /// This model is used to registed the device for Push notifications.
 ///
 /// Note, that in the database at the same time there should be only one row in `registered_devices`.
@@ -65,7 +68,7 @@ pub struct RegisteredDevice {
 /// # Parameters
 ///
 /// * `ctx` - core context.
-/// * `device_rx` - stream of device registration details. If changed it must contain Some().
+/// * `device_rx` - stream of device registration details. If changed it must contain `Some`
 ///
 pub async fn spawn_registered_device_task(
     ctx: Arc<Context>,
@@ -102,41 +105,63 @@ pub enum RegisteredDeviceTaskError {
     API(#[from] ApiServiceError),
 }
 
+#[derive(Default)]
+pub struct RegisteredDeviceTaskState {
+    device: Option<RegisteredDevice>,
+    registered_sessions: HashSet<SessionId>,
+}
+
 async fn registered_device_task(
     ctx: Arc<Context>,
     sessions_watcher: WatcherHandle,
     mut device_rx: watch::Receiver<Option<RegisteredDevice>>,
 ) -> Result<(), RegisteredDeviceTaskError> {
-    let mut registered_sessions: HashSet<SessionId> = Default::default();
     let mut sessions_stream = sessions_watcher.receiver.into_stream();
+    let mut state = RegisteredDeviceTaskState::default();
 
-    let mut device = None;
     loop {
-        let sessions = tokio::select! {
-            res = device_rx.changed() => {
-                res?;
-
-                device = device_rx.borrow_and_update().clone();
-                // New device token registered. We need to re-register all sessions.
-                registered_sessions.clear();
-                let tether = ctx.account_stash().connection();
-                let sessions = CoreSession::all(&tether).await?;
-                sessions
-            },
-            res = sessions_stream.next() => {
-                res.ok_or(RegisteredDeviceTaskError::SessionStreamEnded)?;
-
-                let tether = ctx.account_stash().connection();
-                // New session has been created. Instead of re-registering everything, we only
-                // process unregistered sessions.
-                let sessions = get_unregistered_sessions(&tether, &registered_sessions).await?;
-                sessions
-            }
-        };
-        if let Some(device) = device.as_ref() {
-            register_sessions(&ctx, sessions, &mut registered_sessions, device.clone()).await?;
-        }
+        registered_device_task_step(&ctx, &mut state, &mut sessions_stream, &mut device_rx).await?;
     }
+}
+
+// This function is public because we have to re-import it in tests via proton_core_test_utils
+// in order to break dependency cycle.
+/// One step of the background task that registers device.
+pub async fn registered_device_task_step(
+    ctx: &Context,
+    state: &mut RegisteredDeviceTaskState,
+    sessions_stream: &mut flume::r#async::RecvStream<'_, ()>,
+    device_rx: &mut watch::Receiver<Option<RegisteredDevice>>,
+) -> Result<(), RegisteredDeviceTaskError> {
+    let sessions = tokio::select! {
+        res = device_rx.changed() => {
+            res?;
+
+            state.device.clone_from(&device_rx.borrow_and_update());
+            // New device token registered. We need to re-register all sessions.
+            state.registered_sessions.clear();
+            let tether = ctx.account_stash().connection();
+            CoreSession::all(&tether).await?
+        },
+        res = sessions_stream.next() => {
+            res.ok_or(RegisteredDeviceTaskError::SessionStreamEnded)?;
+
+            let tether = ctx.account_stash().connection();
+            // New session has been created. Instead of re-registering everything, we only
+            // process unregistered sessions.
+            get_unregistered_sessions(&tether, &state.registered_sessions).await?
+        }
+    };
+    if let Some(device) = state.device.as_ref() {
+        register_sessions(
+            ctx,
+            sessions,
+            &mut state.registered_sessions,
+            device.clone(),
+        )
+        .await?;
+    }
+    Ok(())
 }
 
 /// Returns sessions that were not already registered.
@@ -169,34 +194,45 @@ async fn register_sessions(
     device: RegisteredDevice,
 ) -> Result<(), RegisteredDeviceTaskError> {
     for session in sessions {
-        let session_ctx = ctx.user_context_from_session(&session, None).await?;
-
-        let pgp_provider = proton_crypto::new_pgp_provider();
-        let private_key = ctx
-            .load_secret::<StoredDevicePrivateKey>()
-            .map_err(|_| RegisteredDeviceTaskError::Crypto)?;
-        let public_key = match private_key {
-            None => ctx
-                .gen_device_key_pair(&pgp_provider)
-                .map_err(|_| RegisteredDeviceTaskError::Crypto)?,
-            Some(key) => {
-                let device_key = key
-                    .to_device_key(&pgp_provider)
-                    .map_err(|_| RegisteredDeviceTaskError::Crypto)?;
-
-                let public_key = device_key
-                    .export_public_key(&pgp_provider)
-                    .map_err(|_| RegisteredDeviceTaskError::Crypto)?;
-                StoredDevicePublicKey::from(public_key)
-            }
-        };
-
-        device
-            .register(session_ctx.session().api(), public_key)
-            .await?;
-
-        registered_sessions.insert(session.remote_id.clone());
+        register_session(ctx, session, registered_sessions, &device).await?;
     }
+    Ok(())
+}
+
+#[tracing::instrument(skip_all, fields(session_id = ?session.remote_id))]
+async fn register_session(
+    ctx: &Context,
+    session: CoreSession,
+    registered_sessions: &mut HashSet<SessionId>,
+    device: &RegisteredDevice,
+) -> Result<(), RegisteredDeviceTaskError> {
+    let session_ctx = ctx.user_context_from_session(&session, None).await?;
+
+    let pgp_provider = proton_crypto::new_pgp_provider();
+    let private_key = ctx
+        .load_secret::<StoredDevicePrivateKey>()
+        .map_err(|_| RegisteredDeviceTaskError::Crypto)?;
+    let public_key = match private_key {
+        None => ctx
+            .gen_device_key_pair(&pgp_provider)
+            .map_err(|_| RegisteredDeviceTaskError::Crypto)?,
+        Some(key) => {
+            let device_key = key
+                .to_device_key(&pgp_provider)
+                .map_err(|_| RegisteredDeviceTaskError::Crypto)?;
+
+            let public_key = device_key
+                .export_public_key(&pgp_provider)
+                .map_err(|_| RegisteredDeviceTaskError::Crypto)?;
+            StoredDevicePublicKey::from(public_key)
+        }
+    };
+
+    device
+        .register(session_ctx.session().api(), public_key)
+        .await?;
+
+    registered_sessions.insert(session.remote_id.clone());
     Ok(())
 }
 
