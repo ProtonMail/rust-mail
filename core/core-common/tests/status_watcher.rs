@@ -1,3 +1,4 @@
+use futures::FutureExt;
 use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::session::{Config, Session};
 use proton_api_core::status_observer::StatusObserver;
@@ -10,9 +11,9 @@ use tokio::time::sleep;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-async fn status_watcher(millis: u64) -> StatusWatcher {
+fn status_watcher(millis: u64) -> StatusWatcher {
     let mut sw = StatusWatcher::with_observer(StatusObserver::test());
-    let () = sw.set_up_to_date(Duration::from_millis(millis)).await;
+    sw.set_up_to_date(Duration::from_millis(millis));
     sw
 }
 
@@ -45,16 +46,22 @@ async fn shared_status() {
         .expect(1)
         .mount(&mock_server)
         .await;
-    catch_all(&mock_server).await;
-    // Give some time for a server to start
-    sleep(Duration::from_millis(200)).await;
 
-    // 429
+    catch_all(&mock_server).await;
+
+    // Services start with the assumption that the connection is online, so
+    // let's wait until they notice the meme highway is actually turned off now:
+    api_1.wait_for_offline().await;
+    api_2.wait_for_offline().await;
+    api_3.wait_for_offline().await;
+
     assert_eq!(api_1.status().await, ConnectionStatus::ServerUnreachable);
     assert_eq!(api_2.status().await, ConnectionStatus::ServerUnreachable);
     assert_eq!(api_3.status().await, ConnectionStatus::ServerUnreachable);
 
+    // Now let's pretend the connection went back up:
     mock_server.reset().await;
+
     Mock::given(method("GET"))
         .and(path(r"/api/core/v4/tests/ping"))
         .respond_with(ResponseTemplate::new(200))
@@ -63,17 +70,23 @@ async fn shared_status() {
         .expect(1..=4)
         .mount(&mock_server)
         .await;
+
     catch_all(&mock_server).await;
 
+    // ... let's wait for any of the APIs to notice:
     api_1.wait_for_online().await;
 
-    // Check if all this calls trigger a single request - expect 2 as there is offline background request running
-    assert_eq!(api_1.status().await, ConnectionStatus::Online);
-    assert_eq!(api_2.status().await, ConnectionStatus::Online);
-    assert_eq!(api_3.status().await, ConnectionStatus::Online);
-    assert_eq!(api_1.status().await, ConnectionStatus::Online);
-    assert_eq!(api_2.status().await, ConnectionStatus::Online);
-    assert_eq!(api_3.status().await, ConnectionStatus::Online);
+    // ... and let's assert.
+    //
+    // Crucially, without waiting for `api_2` and `api_3` - since they are
+    // supposed to share the same connection status, waiting for either one of
+    // them should be sufficient to observe the same state across all three.
+    for api in [&api_1, &api_2, &api_3] {
+        // We use `.now_or_never()` to make sure that `api.status()` uses the
+        // cached value instead of, say, sending a new request and waiting for
+        // it to complete
+        assert_eq!(api.status().now_or_never(), Some(ConnectionStatus::Online));
+    }
 }
 
 #[tokio::test]
@@ -82,7 +95,7 @@ async fn make_another_request_when_stale() {
     let api_path = random_path();
     let mock_env = MockApiEnv::new(mock_server.uri()).with_path(&api_path);
     let api_config = Config::for_env(mock_env);
-    let status = status_watcher(500).await;
+    let status = status_watcher(500);
     let api = Session::builder()
         .with_config(api_config)
         .with_status(status)
@@ -112,7 +125,7 @@ async fn very_bad_connection_but_responding_in_under_a_second() {
     let api_path = random_path();
     let mock_env = MockApiEnv::new(mock_server.uri()).with_path(&api_path);
     let api_config = Config::for_env(mock_env);
-    let status = status_watcher(1000).await;
+    let status = status_watcher(1000);
     let api = Session::builder()
         .with_config(api_config)
         .with_status(status)
@@ -144,7 +157,7 @@ async fn wait_for_online() {
     let api_path = random_path();
     let mock_env = MockApiEnv::new(mock_server.uri()).with_path(&api_path);
     let api_config = Config::for_env(mock_env);
-    let status = status_watcher(500).await;
+    let status = status_watcher(500);
     let api = Session::builder()
         .with_config(api_config)
         .with_status(status)
@@ -183,7 +196,7 @@ async fn multiple_subscribers() {
     let api_path = random_path();
     let mock_env = MockApiEnv::new(mock_server.uri()).with_path(&api_path);
     let api_config = Config::for_env(mock_env);
-    let status = status_watcher(500).await;
+    let status = status_watcher(500);
     let api = Session::builder()
         .with_config(api_config)
         .with_status(status)
@@ -253,7 +266,7 @@ async fn status_reflected_in_response_http_code(http_code: u16, expected_status:
 
     let api = Session::builder()
         .with_config(api_config)
-        .with_status(status_watcher(500).await)
+        .with_status(status_watcher(500))
         .build()
         .await
         .unwrap();

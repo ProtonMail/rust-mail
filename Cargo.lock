@@ -4316,6 +4316,7 @@ dependencies = [
  "email_address",
  "flume",
  "futures",
+ "futures-util",
  "ical",
  "include_dir",
  "indoc",

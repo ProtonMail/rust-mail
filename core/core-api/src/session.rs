@@ -365,6 +365,16 @@ impl Session {
             .await;
     }
 
+    /// Waits until the connection is offline; if that's the case at the moment,
+    /// returns immediately.
+    ///
+    pub async fn wait_for_offline(&self) {
+        _ = self
+            .status_changes()
+            .wait_for(ConnectionStatus::is_offline)
+            .await;
+    }
+
     pub fn record_metric(&self, metric: impl ObservabilityMetric + 'static) {
         self.observability.record(metric);
     }
