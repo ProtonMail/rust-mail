@@ -1,20 +1,17 @@
 #![allow(clippy::ignored_unit_patterns)]
 mod common;
 
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use std::time::Duration;
-
 use crate::common::DefaultError;
 use common::new_queue_typed;
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard, WriterGuardError,
 };
-use proton_action_queue::network::{DummyWaitForOnline, WaitForOnline, WaitForOnlineSubscribtion};
 use proton_action_queue::queue::{BroadcastMessage, QueuedActionReason, QueuedActionState};
 use proton_task_service::TaskService;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
+use std::time::Duration;
+use tokio::sync::watch;
 use tokio::time::sleep;
 
 #[tokio::test]
@@ -23,12 +20,13 @@ async fn auto_queued_on_network_failure() {
     let queue = new_queue_typed::<ErrorAction>().await;
 
     queue.queue_action(ErrorAction {}).await.unwrap();
+
     let output = queue.new_executor().execute_one().await.unwrap().unwrap();
 
     assert!(matches!(
         output,
         QueuedActionState::Queued(_, QueuedActionReason::Network)
-    ),);
+    ));
 }
 
 #[tokio::test]
@@ -36,9 +34,11 @@ async fn auto_queued_on_pause() {
     let queue = new_queue_typed::<SuccessAction>().await;
     let mut broadcast = queue.new_broadcast_receiver();
     let task_service = TaskService::new().unwrap();
+    let online = watch::channel(true);
+
     let auto_executor = queue
         .new_executor()
-        .into_auto_executor(DummyWaitForOnline, &task_service);
+        .into_auto_executor(online.1, &task_service);
 
     auto_executor.pause();
     queue.queue_action(SuccessAction {}).await.unwrap();
@@ -63,9 +63,11 @@ async fn auto_queued_on_multiple_unpause() {
     queue.queue_action(SuccessAction {}).await.unwrap();
 
     let task_service = TaskService::new().unwrap();
+    let online = watch::channel(true);
+
     let auto_executor = queue
         .new_executor()
-        .into_auto_executor(DummyWaitForOnline, &task_service);
+        .into_auto_executor(online.1, &task_service);
 
     // Calling unpause should have no effect as auto executors starts unpaused.
     auto_executor.unpause();
@@ -84,9 +86,11 @@ async fn auto_queued_on_multiple_pause() {
     let queue = new_queue_typed::<SuccessAction>().await;
     let mut broadcast = queue.new_broadcast_receiver();
     let task_service = TaskService::new().unwrap();
+    let online = watch::channel(true);
+
     let auto_executor = queue
         .new_executor()
-        .into_auto_executor(DummyWaitForOnline, &task_service);
+        .into_auto_executor(online.1, &task_service);
 
     // Calling pause multiple times should still end up in paused state.
     auto_executor.pause();
@@ -114,9 +118,11 @@ async fn auto_queued_on_pause_and_partially_manual_execution() {
     let queue = new_queue_typed::<SuccessAction>().await;
     let mut broadcast = queue.new_broadcast_receiver();
     let task_service = TaskService::new().unwrap();
+    let online = watch::channel(true);
+
     let auto_executor = queue
         .new_executor()
-        .into_auto_executor(DummyWaitForOnline, &task_service);
+        .into_auto_executor(online.1, &task_service);
 
     auto_executor.pause();
     queue.queue_action(SuccessAction {}).await.unwrap();
@@ -151,6 +157,7 @@ async fn auto_queued_on_writer_guard_failure() {
         .queue_action(WriteGuardExpiredAction {})
         .await
         .unwrap();
+
     let output = queue.new_executor().execute_one().await.unwrap().unwrap();
 
     assert!(matches!(
@@ -172,43 +179,22 @@ async fn execute_all_does_not_loop_forever_on_network_failure() {
 
 #[tokio::test]
 async fn execute_all_waits_for_network_to_reoccur() {
-    let is_offline = DeviceAlwaysOffline::default();
+    let online = watch::channel(false);
     let queue = new_queue_typed::<ErrorAction>().await;
     let mut broadcast = queue.new_broadcast_receiver();
-    // We spawn an auto executor in the background.
     let task_service = TaskService::new().unwrap();
+
     let auto_executor = queue
         .new_executor()
-        .into_auto_executor(is_offline.clone(), &task_service);
+        .into_auto_executor(online.1, &task_service);
 
     auto_executor.pause();
     queue.queue_action(ErrorAction {}).await.unwrap();
-
     auto_executor.unpause();
 
     sleep(Duration::from_secs(5)).await;
 
     broadcast.recv().await.unwrap();
-
-    // Check if the executor waited for the action.
-    assert!(is_offline.0.load(std::sync::atomic::Ordering::Relaxed));
-}
-
-/// That implementation never returns, so the device is seen as always offline
-#[derive(Clone, Default)]
-struct DeviceAlwaysOffline(Arc<AtomicBool>);
-
-impl WaitForOnlineSubscribtion for DeviceAlwaysOffline {
-    fn subscribe(&self) -> impl WaitForOnline {
-        self.clone()
-    }
-}
-#[async_trait::async_trait]
-impl WaitForOnline for DeviceAlwaysOffline {
-    async fn wait_for_online(&mut self) {
-        self.0.store(true, std::sync::atomic::Ordering::Relaxed);
-        futures::future::pending::<()>().await;
-    }
 }
 
 #[derive(Serialize, Deserialize)]

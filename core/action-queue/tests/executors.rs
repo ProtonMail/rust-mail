@@ -2,13 +2,13 @@ use crate::common::{new_factory, new_queue};
 use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
-use proton_action_queue::network::{DummyWaitForOnline, DummyWaitForOnlineSubscribtion};
 use proton_action_queue::queue::{QueueAutoExecutorPool, QueueAutoTerminationPolicy};
 use proton_action_queue::tests::common::DefaultError;
 use proton_task_service::TaskService;
 use stash::stash::Bond;
 use std::num::NonZeroUsize;
 use std::time::Duration;
+use tokio::sync::watch;
 
 mod common;
 
@@ -16,7 +16,7 @@ mod common;
 async fn auto_execute_until_empty() {
     let queue = new_queue(new_factory::<TestAction>()).await;
     let task_service = TaskService::new().unwrap();
-    let waiter = DummyWaitForOnline;
+    let online = watch::channel(true);
 
     queue
         .queue_action(TestAction {
@@ -32,11 +32,13 @@ async fn auto_execute_until_empty() {
         .unwrap();
 
     assert_eq!(queue.queued_actions_count().await.unwrap(), 2);
+
     let executor = queue.new_executor().into_auto_executor_with_policy(
-        waiter,
+        online.1,
         &task_service,
         QueueAutoTerminationPolicy::Empty,
     );
+
     executor.await_finished().await;
     assert_eq!(queue.queued_actions_count().await.unwrap(), 0);
 }
@@ -45,7 +47,7 @@ async fn auto_execute_until_empty() {
 async fn auto_execute_until_network_failure() {
     let queue = new_queue(new_factory::<TestAction>()).await;
     let task_service = TaskService::new().unwrap();
-    let waiter = DummyWaitForOnline;
+    let online = watch::channel(true);
 
     queue
         .queue_action(TestAction {
@@ -53,10 +55,12 @@ async fn auto_execute_until_network_failure() {
         })
         .await
         .unwrap();
+
     queue
         .queue_action(TestAction { fail_network: true })
         .await
         .unwrap();
+
     queue
         .queue_action(TestAction {
             fail_network: false,
@@ -65,11 +69,13 @@ async fn auto_execute_until_network_failure() {
         .unwrap();
 
     assert_eq!(queue.queued_actions_count().await.unwrap(), 3);
+
     let executor = queue.new_executor().into_auto_executor_with_policy(
-        waiter,
+        online.1,
         &task_service,
         QueueAutoTerminationPolicy::NetworkLoss,
     );
+
     executor.await_finished().await;
     assert_eq!(queue.queued_actions_count().await.unwrap(), 2);
 }
@@ -78,19 +84,21 @@ async fn auto_execute_until_network_failure() {
 async fn auto_execute_until_empty_or_network_failure() {
     let queue = new_queue(new_factory::<TestAction>()).await;
     let task_service = TaskService::new().unwrap();
-    let waiter = DummyWaitForOnline;
+    let online = watch::channel(true);
 
     let action_id = queue
         .queue_action(TestAction { fail_network: true })
         .await
         .unwrap()
         .id;
+
     queue
         .queue_action(TestAction {
             fail_network: false,
         })
         .await
         .unwrap();
+
     queue
         .queue_action(TestAction {
             fail_network: false,
@@ -99,21 +107,26 @@ async fn auto_execute_until_empty_or_network_failure() {
         .unwrap();
 
     assert_eq!(queue.queued_actions_count().await.unwrap(), 3);
+
     let executor = queue.new_executor().into_auto_executor_with_policy(
-        waiter,
+        online.1.clone(),
         &task_service,
         QueueAutoTerminationPolicy::EmptyOrNetworkLoss,
     );
+
     executor.await_finished().await;
     assert_eq!(queue.queued_actions_count().await.unwrap(), 3);
+
     // Delete action that triggers network failures.
     queue.delete_action(action_id).await.unwrap();
     assert_eq!(queue.queued_actions_count().await.unwrap(), 2);
+
     let executor = queue.new_executor().into_auto_executor_with_policy(
-        waiter,
+        online.1,
         &task_service,
         QueueAutoTerminationPolicy::EmptyOrNetworkLoss,
     );
+
     executor.await_finished().await;
     assert_eq!(queue.queued_actions_count().await.unwrap(), 0);
 }
@@ -122,7 +135,7 @@ async fn auto_execute_until_empty_or_network_failure() {
 async fn auto_execute_pool() {
     let queue = new_queue(new_factory::<TestAction>()).await;
     let task_service = TaskService::new().unwrap();
-    let waiter = DummyWaitForOnlineSubscribtion;
+    let online = watch::channel(true);
 
     for _ in 0..20 {
         queue
@@ -132,20 +145,24 @@ async fn auto_execute_pool() {
             .await
             .unwrap();
     }
+
     assert_eq!(queue.queued_actions_count().await.unwrap(), 20);
+
     let executor_pool = QueueAutoExecutorPool::with_termination_policy(
         &queue,
         &ActionGroup::default(),
         NonZeroUsize::new(3).unwrap(),
-        &waiter,
+        online.1,
         &task_service,
         QueueAutoTerminationPolicy::Empty,
     );
+
     // This test can take up to 1 min to complete due to the timeout while waiting for external
     // changes. To be improved.
     tokio::time::timeout(Duration::from_secs(70), executor_pool.await_finished())
         .await
         .unwrap();
+
     assert_eq!(queue.queued_actions_count().await.unwrap(), 0);
 }
 
@@ -153,7 +170,7 @@ async fn auto_execute_pool() {
 async fn auto_execute_forever() {
     let queue = new_queue(new_factory::<TestAction>()).await;
     let task_service = TaskService::new().unwrap();
-    let waiter = DummyWaitForOnline;
+    let online = watch::channel(true);
 
     queue
         .queue_action(TestAction {
@@ -163,8 +180,9 @@ async fn auto_execute_forever() {
         .unwrap();
 
     assert_eq!(queue.queued_actions_count().await.unwrap(), 1);
+
     let executor = queue.new_executor().into_auto_executor_with_policy(
-        waiter,
+        online.1,
         &task_service,
         QueueAutoTerminationPolicy::Never,
     );
@@ -172,6 +190,7 @@ async fn auto_execute_forever() {
     tokio::time::timeout(Duration::from_millis(100), executor.await_finished())
         .await
         .unwrap_err();
+
     assert_eq!(queue.queued_actions_count().await.unwrap(), 0);
 }
 

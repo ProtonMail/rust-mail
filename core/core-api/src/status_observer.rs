@@ -242,7 +242,7 @@ impl StatusObserver {
     /// Expose internal information about status updates
     ///
     #[must_use]
-    pub fn on_updates(&self) -> watch::Receiver<ConnectionStatus> {
+    pub fn subscribe(&self) -> watch::Receiver<ConnectionStatus> {
         self.on_update.subscribe()
     }
 

@@ -1,7 +1,4 @@
 use crate::{MailContext, MailContextResult, MailUserContext};
-use proton_core_common::action_queue::{
-    CheckNetworkStatusSubscriber, WaitForOnlineSubscribtionExt,
-};
 use proton_task_service::TaskService;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
@@ -61,19 +58,21 @@ impl BackgroundExecutionContext {
         let queue_executors = all_user_ctxs
             .iter()
             .map(|ctx| {
-                let wait_for_online =
-                    CheckNetworkStatusSubscriber::create(ctx.session().status_watcher());
+                let online = ctx.session().status_watcher().subscribe_to_online();
+
                 let send_executor = MailUserContext::new_background_send_queue_executor(
                     ctx.action_queue(),
-                    &wait_for_online,
+                    online.clone(),
                     NonZeroUsize::new(2).unwrap(),
                     &self.task_service,
                 );
+
                 let default_executor = MailUserContext::new_background_default_queue_executor(
                     ctx.action_queue(),
-                    &wait_for_online,
+                    online,
                     &self.task_service,
                 );
+
                 (send_executor, default_executor)
             })
             .collect::<Vec<_>>();

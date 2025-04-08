@@ -1,10 +1,10 @@
-use std::future::Future;
-use std::ops::{Deref, DerefMut};
-use std::{sync::Arc, time::Duration};
-
 use crate::status_observer::StatusObserver;
 use crate::{connection_status::ConnectionStatus, services::proton::Proton};
+use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::{sync::watch, time};
+use tokio_util::task::AbortOnDropHandle;
 
 /// A `StatusWatcher` keeps track of the connection status and provides an interface to observe the changes.
 ///
@@ -12,8 +12,10 @@ use tokio::{sync::watch, time};
 ///
 #[derive(Debug, Clone)]
 pub struct StatusWatcher {
-    subscribers: Arc<watch::Sender<ConnectionStatus>>,
+    status_tx: watch::Sender<ConnectionStatus>,
+    online_tx: watch::Sender<bool>,
     observer: StatusObserver,
+    task: Option<Arc<AbortOnDropHandle<()>>>,
 }
 
 impl Deref for StatusWatcher {
@@ -38,20 +40,22 @@ impl Default for StatusWatcher {
 
 impl StatusWatcher {
     /// Construct new `StatusWatcher` with default shared state Observer.
-    ///
     #[must_use]
     pub fn new() -> Self {
         Self::with_observer(StatusObserver::new())
     }
 
     /// Construct new `StatusWatcher` with custom observer, useful when running tests.
-    ///
     #[must_use]
     pub fn with_observer(observer: StatusObserver) -> Self {
-        let (sender, _) = watch::channel(ConnectionStatus::Online);
+        let (status_tx, _) = watch::channel(ConnectionStatus::Online);
+        let (online_tx, _) = watch::channel(true);
+
         Self {
             observer,
-            subscribers: Arc::new(sender),
+            status_tx,
+            online_tx,
+            task: None,
         }
     }
 
@@ -60,68 +64,60 @@ impl StatusWatcher {
         self.observer.clone()
     }
 
-    /// Subscribe for notifications of updates to the status
+    /// Returns a channel that observes the network connection status.
     #[must_use]
     pub fn subscribe(&self) -> watch::Receiver<ConnectionStatus> {
-        self.subscribers.subscribe()
+        self.status_tx.subscribe()
+    }
+
+    /// Returns a channel that observes the network connection status, but
+    /// simplified only to the "are we online" state.
+    #[must_use]
+    pub fn subscribe_to_online(&self) -> watch::Receiver<bool> {
+        self.online_tx.subscribe()
     }
 
     /// Initialize background task for notifying subscribers
-    pub fn initialize(&self, api: Proton) {
-        let subscribers = Arc::downgrade(&self.subscribers);
+    pub fn initialize(&mut self, api: Proton) {
+        let status_tx = self.status_tx.clone();
+        let online_tx = self.online_tx.clone();
         let observer = self.observer.clone();
 
-        tokio::spawn(async move {
+        let task = tokio::spawn(async move {
             let mut interval = time::interval(Duration::from_secs(10));
-            let mut on_update = observer.on_updates();
+            let mut on_update = observer.subscribe();
+
             // Make first call lazy and wait for real data.
             on_update.mark_unchanged();
 
             loop {
                 tokio::select! {
-                    _ = interval.tick() => {
-                        let Some(subscribers) = subscribers.upgrade() else {
-                            return;
-                        };
-                        Self::update_status(&subscribers, &observer, &api).await;
-                    }
-                    Ok(()) = on_update.changed() => {
-                        let Some(subscribers) = subscribers.upgrade() else {
-                            return;
-                        };
-                        Self::update_status(&subscribers, &observer, &api).await;
-                    }
+                    _ = interval.tick() => {}
+                    Ok(()) = on_update.changed() => {}
                 }
+
+                Self::update_status(&status_tx, &online_tx, &observer, &api).await;
             }
         });
+
+        self.task = Some(Arc::new(AbortOnDropHandle::new(task)));
     }
 
-    /// Update subscribers on status change
     async fn update_status(
-        subscribers: &watch::Sender<ConnectionStatus>,
+        status_tx: &watch::Sender<ConnectionStatus>,
+        online_tx: &watch::Sender<bool>,
         observer: &StatusObserver,
         api: &Proton,
     ) {
-        let current: ConnectionStatus = *subscribers.borrow();
-        let new_status = observer.status(api.clone()).await;
+        let old = *status_tx.borrow();
+        let new = observer.status(api.clone()).await;
 
-        if current != new_status {
-            subscribers.send_replace(new_status);
-        }
-    }
-}
-
-pub trait StatusWatcherSubscriber {
-    fn wait_for_online(&mut self) -> impl Future<Output = ()> + Send;
-}
-
-impl StatusWatcherSubscriber for watch::Receiver<ConnectionStatus> {
-    async fn wait_for_online(&mut self) {
-        while self.changed().await.is_ok() {
-            // first call to `.changed()` returns immediately
-            if self.borrow().is_online() {
-                break;
-            }
+        if new == old {
+            // Avoid calling `.send_replace()`, so that we don't wake up the
+            // subscribers just to tell them "ha, nothing changed, just a prank"
+        } else {
+            status_tx.send_replace(new);
+            online_tx.send_replace(new.is_online());
         }
     }
 }

@@ -11,9 +11,6 @@ use proton_api_core::session::Config;
 use proton_api_core::status_watcher::StatusWatcher;
 use proton_api_core::verification::DynChallengeNotifier;
 use proton_core_common::UserDatabaseInitializer;
-use proton_core_common::action_queue::{
-    CheckNetworkStatusSubscriber, WaitForOnlineSubscribtionExt,
-};
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::models::LabelError;
 use proton_core_common::os::{KeyChain, KeyChainError};
@@ -318,11 +315,9 @@ impl MailContext {
             .core_context
             .user_context_from_login_flow(login_flow)
             .await?;
+
         Arc::clone(self)
-            .new_user_context::<CheckNetworkStatusSubscriber>(
-                ctx,
-                ShouldInitializeMailUserContext::Yes,
-            )
+            .new_user_context(ctx, ShouldInitializeMailUserContext::Yes)
             .await
     }
 
@@ -363,9 +358,8 @@ impl MailContext {
             .core_context
             .user_context_from_session(session, status)
             .await?;
-        Arc::clone(self)
-            .new_user_context::<CheckNetworkStatusSubscriber>(ctx, init)
-            .await
+
+        Arc::clone(self).new_user_context(ctx, init).await
     }
 
     /// Create all new contexts from all existing sessions.
@@ -666,7 +660,7 @@ impl MailContext {
     }
 
     /// Create a new user context or return an existing one.
-    async fn new_user_context<WFO: WaitForOnlineSubscribtionExt>(
+    async fn new_user_context(
         self: Arc<Self>,
         core_context: Arc<UserContext>,
         init: ShouldInitializeMailUserContext,
@@ -694,7 +688,7 @@ impl MailContext {
             }
         }
 
-        let ctx = MailUserContext::new::<WFO>(self.clone(), core_context).await?;
+        let ctx = MailUserContext::new(self.clone(), core_context).await?;
 
         active_contexts.insert(ctx.user_id().clone(), Arc::downgrade(&ctx));
 

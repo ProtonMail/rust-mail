@@ -23,7 +23,6 @@
 //! use serde::{Deserialize, Serialize};
 //! use proton_action_queue::action::{Action, DefaultVersionConverter, Factory, Handler, ActionId, Metadata, Priority, Type, WriterGuardError, WriterGuard};
 //! use proton_action_queue::queue::{ActionRemoteOutput, Queue};
-//! use proton_action_queue::network::WaitForOnline;
 //! use stash::stash::{Stash, Bond};
 //!
 //! #[derive(Serialize, Deserialize)]
@@ -125,9 +124,9 @@
 //! [`Handler`]: action::Handler
 //! [`Queue`]: queue::Queue
 //! [`Factory`]: action::Factory
+
 pub mod action;
 pub mod db;
-pub mod network;
 pub mod observers;
 pub mod queue;
 

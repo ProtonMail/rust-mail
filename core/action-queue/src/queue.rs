@@ -7,7 +7,6 @@ use crate::action::{
     Handler, Metadata, Priority, Resources, Type, WriterGuard, WriterGuardError,
 };
 use crate::db::{self, DEFAULT_LOCK_TIMEOUT, ExecutionGuard, StoredAction};
-use crate::network::{WaitForOnline, WaitForOnlineSubscribtion};
 use bitflags::bitflags;
 use chrono::DateTime;
 use parking_lot::RwLock;
@@ -779,25 +778,21 @@ impl QueueExecutor {
     #[must_use]
     pub fn into_auto_executor(
         self,
-        wait_for_online: impl WaitForOnline,
+        online: watch::Receiver<bool>,
         task_service: &TaskService,
     ) -> QueueAutoExecutor {
-        self.into_auto_executor_with_policy(
-            wait_for_online,
-            task_service,
-            QueueAutoTerminationPolicy::Never,
-        )
+        self.into_auto_executor_with_policy(online, task_service, QueueAutoTerminationPolicy::Never)
     }
 
     /// Convert this executor into a [`QueueAutoExecutor`] with a custom termination policy
     #[must_use]
     pub fn into_auto_executor_with_policy(
         self,
-        wait_for_online: impl WaitForOnline,
+        online: watch::Receiver<bool>,
         task_service: &TaskService,
         termination_policy: QueueAutoTerminationPolicy,
     ) -> QueueAutoExecutor {
-        QueueAutoExecutor::new(self, wait_for_online, task_service, termination_policy)
+        QueueAutoExecutor::new(self, online, task_service, termination_policy)
     }
 
     /// Execute one action from the queue.
@@ -954,14 +949,14 @@ impl Drop for QueueAutoExecutor {
 impl QueueAutoExecutor {
     fn new(
         executor: QueueExecutor,
-        wait_for_online: impl WaitForOnline,
+        online: watch::Receiver<bool>,
         task_service: &TaskService,
         termination_policy: QueueAutoTerminationPolicy,
     ) -> Self {
         let id = executor.id.clone();
         let (pause, listener) = watch::channel(false);
         let handle = task_service.spawn(async move {
-            Self::run(executor, listener, wait_for_online, termination_policy).await;
+            Self::run(executor, listener, online, termination_policy).await;
         });
 
         QueueAutoExecutor {
@@ -997,27 +992,22 @@ impl QueueAutoExecutor {
 
     async fn run(
         executor: QueueExecutor,
-        mut pause: watch::Receiver<bool>,
-        mut wait_for_online: impl WaitForOnline,
+        mut paused: watch::Receiver<bool>,
+        mut online: watch::Receiver<bool>,
         termination_policy: QueueAutoTerminationPolicy,
     ) {
         debug!(
             "Starting auto queue executor {} with group={}",
             executor.id, executor.action_group
         );
-        // let mut wait_for_online = executor.shared.wait_for_online.subscribe();
+
         loop {
-            // Inner pause loop, before picking any more work, make sure we should not pause.
-            if *pause.borrow() {
+            if *paused.borrow() {
                 let eid = executor.id();
-                tracing::debug!("Executor `{eid}` is PAUSED");
-                while pause.changed().await.is_ok() {
-                    // Break only when unpaused.
-                    if !*pause.borrow() {
-                        tracing::debug!("Executor `{eid}` is running again after pause");
-                        break;
-                    }
-                }
+
+                debug!(?eid, "Pausing executor");
+                _ = paused.wait_for(|paused| !paused).await;
+                debug!(?eid, "Resuming executor");
             }
 
             let followup = match executor
@@ -1067,13 +1057,13 @@ impl QueueAutoExecutor {
                     )
                     .await;
                 }
+
                 ActionExecutionFollowup::WaitForNetwork => {
-                    debug!("Waiting for the network");
-
-                    wait_for_online.wait_for_online().await;
-
-                    debug!("Connection has restored. Resuming the auto queue executor");
+                    debug!("Waiting for network connection");
+                    _ = online.wait_for(|online| *online).await;
+                    debug!("Network connection restored - resuming the auto queue executor");
                 }
+
                 ActionExecutionFollowup::PickNextAction => (),
             }
         }
@@ -1110,14 +1100,14 @@ impl QueueAutoExecutorPool {
         queue: &Queue,
         action_group: &ActionGroup,
         count: NonZeroUsize,
-        wait_for_online: &impl WaitForOnlineSubscribtion,
+        online: watch::Receiver<bool>,
         task_service: &TaskService,
     ) -> Self {
         Self::with_termination_policy(
             queue,
             action_group,
             count,
-            wait_for_online,
+            online,
             task_service,
             QueueAutoTerminationPolicy::Never,
         )
@@ -1130,17 +1120,16 @@ impl QueueAutoExecutorPool {
         queue: &Queue,
         action_group: &ActionGroup,
         count: NonZeroUsize,
-        wait_for_online: &impl WaitForOnlineSubscribtion,
+        online: watch::Receiver<bool>,
         task_service: &TaskService,
         termination_policy: QueueAutoTerminationPolicy,
     ) -> Self {
         let executors = std::iter::repeat_n((), count.get())
-            .map(|()| {
-                let wait_for_online = wait_for_online.subscribe();
+            .map(move |()| {
                 queue
                     .new_executor_with_group(action_group.clone())
                     .into_auto_executor_with_policy(
-                        wait_for_online,
+                        online.clone(),
                         task_service,
                         termination_policy,
                     )
