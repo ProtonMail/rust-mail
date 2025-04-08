@@ -2,31 +2,32 @@
 #[path = "../tests/models/device.rs"]
 mod tests;
 
+use std::{collections::HashSet, sync::Arc};
+
+use futures::StreamExt;
+use itertools::Itertools;
 use proton_api_core::{
     service::ApiServiceError,
-    services::proton::{ProtonCore, prelude::RegisterDeviceRequest},
+    services::proton::{ProtonCore, SessionId, prelude::RegisterDeviceRequest},
+    session::CoreSession as _,
 };
+use proton_task_service::AsyncTaskResult;
 use stash::{
+    exports::ToSql,
     macros::Model,
     orm::Model,
-    stash::{Bond, StashError, Tether},
+    stash::{StashError, Tether, WatcherHandle},
+};
+use tokio::{sync::watch, task::JoinHandle};
+
+use crate::{
+    Context, CoreContextError,
+    datatypes::{DeviceEnvironment, StoredDevicePrivateKey, StoredDevicePublicKey},
+    db::account::CoreSession,
+    models::ModelExtension,
 };
 
-use crate::{Context, datatypes::DeviceEnvironment};
-
-/// Error encountered during operatin on registered device model
-///
-#[derive(Debug, thiserror::Error)]
-pub enum RegisteredDeviceError {
-    #[error("API error: {0}")]
-    API(#[from] ApiServiceError),
-    #[error("Stash error: {0}")]
-    Stash(#[from] StashError),
-
-    #[error("Failed to generate device key pair")]
-    Crypto,
-}
-
+// TODO (wpolak): Remove this table and this structure
 /// This model is used to registed the device for Push notifications.
 ///
 /// Note, that in the database at the same time there should be only one row in `registered_devices`.
@@ -43,10 +44,6 @@ pub struct RegisteredDevice {
     #[DbField]
     pub environment: DeviceEnvironment,
 
-    //// PGP Public Key
-    #[DbField]
-    pub public_key: Option<String>,
-
     /// TODO: Document this field
     #[DbField]
     pub ping_notification_status: Option<i32>,
@@ -62,76 +59,167 @@ pub struct RegisteredDevice {
     pub row_id: Option<u64>,
 }
 
-impl RegisteredDevice {
-    /// Returns last registered device if it does exist.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the query fails
-    ///
-    pub async fn get(tether: &Tether) -> Result<Option<Self>, StashError> {
-        // There should be always max one registered device in the table
-        // The order by logic is an extra failsafe. If for any reason there are more than two rows in the table,
-        // we will always return the latest one, guaranteeing at least some kind of consistency.
-        Self::find_first("ORDER BY rowid DESC", vec![], tether).await
-    }
+/// Spawns a background task that is responsible for registering devices for push notifications.
+/// It automatically detects whenever a new session is created.
+///
+/// # Parameters
+///
+/// * `ctx` - core context.
+/// * `device_rx` - stream of device registration details. If changed it must contain Some().
+///
+pub async fn spawn_registered_device_task(
+    ctx: Arc<Context>,
+    device_rx: watch::Receiver<Option<RegisteredDevice>>,
+) -> Result<JoinHandle<AsyncTaskResult<()>>, RegisteredDeviceTaskError> {
+    let sessions_watcher = CoreSession::watch(ctx.account_stash())?;
+    let ctx_clone = ctx.clone();
+    let handle = ctx.spawn(async move {
+        if let Err(e) = registered_device_task(ctx_clone, sessions_watcher, device_rx).await {
+            tracing::error!("Registering device tokens task failed {e:?}");
+        }
+    });
+    Ok(handle)
+}
 
+#[derive(Debug, thiserror::Error)]
+pub enum RegisteredDeviceTaskError {
+    #[error("Could not create a user context from session")]
+    CreateContext(#[from] CoreContextError),
+
+    #[error(transparent)]
+    Stash(#[from] StashError),
+
+    #[error("Stream receiving device tokens from client has failed: {0}")]
+    DeviceStream(#[from] watch::error::RecvError),
+
+    #[error("Stream watching core sessions has ended prematurely")]
+    SessionStreamEnded,
+
+    #[error("Failed to generate device key pair")]
+    Crypto,
+
+    #[error("API error: {0}")]
+    API(#[from] ApiServiceError),
+}
+
+async fn registered_device_task(
+    ctx: Arc<Context>,
+    sessions_watcher: WatcherHandle,
+    mut device_rx: watch::Receiver<Option<RegisteredDevice>>,
+) -> Result<(), RegisteredDeviceTaskError> {
+    let mut registered_sessions: HashSet<SessionId> = Default::default();
+    let mut sessions_stream = sessions_watcher.receiver.into_stream();
+
+    let mut device = None;
+    loop {
+        let sessions = tokio::select! {
+            res = device_rx.changed() => {
+                res?;
+
+                device = device_rx.borrow_and_update().clone();
+                // New device token registered. We need to re-register all sessions.
+                registered_sessions.clear();
+                let tether = ctx.account_stash().connection();
+                let sessions = CoreSession::all(&tether).await?;
+                sessions
+            },
+            res = sessions_stream.next() => {
+                res.ok_or(RegisteredDeviceTaskError::SessionStreamEnded)?;
+
+                let tether = ctx.account_stash().connection();
+                // New session has been created. Instead of re-registering everything, we only
+                // process unregistered sessions.
+                let sessions = get_unregistered_sessions(&tether, &registered_sessions).await?;
+                sessions
+            }
+        };
+        if let Some(device) = device.as_ref() {
+            register_sessions(&ctx, sessions, &mut registered_sessions, device.clone()).await?;
+        }
+    }
+}
+
+/// Returns sessions that were not already registered.
+///
+#[allow(trivial_casts)]
+async fn get_unregistered_sessions(
+    tether: &Tether,
+    registered_sessions: &HashSet<SessionId>,
+) -> Result<Vec<CoreSession>, StashError> {
+    let params = registered_sessions
+        .iter()
+        .cloned()
+        .map(|v| Box::new(v) as Box<dyn ToSql + Send>)
+        .collect_vec();
+    CoreSession::find(
+        format!(
+            "WHERE remote_id NOT IN ({})",
+            stash::utils::placeholders(params.len())
+        ),
+        params,
+        tether,
+    )
+    .await
+}
+
+async fn register_sessions(
+    ctx: &Context,
+    sessions: Vec<CoreSession>,
+    registered_sessions: &mut HashSet<SessionId>,
+    device: RegisteredDevice,
+) -> Result<(), RegisteredDeviceTaskError> {
+    for session in sessions {
+        let session_ctx = ctx.user_context_from_session(&session, None).await?;
+
+        let pgp_provider = proton_crypto::new_pgp_provider();
+        let private_key = ctx
+            .load_secret::<StoredDevicePrivateKey>()
+            .map_err(|_| RegisteredDeviceTaskError::Crypto)?;
+        let public_key = match private_key {
+            None => ctx
+                .gen_device_key_pair(&pgp_provider)
+                .map_err(|_| RegisteredDeviceTaskError::Crypto)?,
+            Some(key) => {
+                let device_key = key
+                    .to_device_key(&pgp_provider)
+                    .map_err(|_| RegisteredDeviceTaskError::Crypto)?;
+
+                let public_key = device_key
+                    .export_public_key(&pgp_provider)
+                    .map_err(|_| RegisteredDeviceTaskError::Crypto)?;
+                StoredDevicePublicKey::from(public_key)
+            }
+        };
+
+        device
+            .register(session_ctx.session().api(), public_key)
+            .await?;
+
+        registered_sessions.insert(session.remote_id.clone());
+    }
+    Ok(())
+}
+
+impl RegisteredDevice {
     /// Registers the device for Push Notifications.
     ///
     /// # Errors
     ///
     /// Returns an error if the API call fails
     ///
-    pub async fn register<API: ProtonCore>(&self, api: &API) -> Result<(), ApiServiceError> {
+    pub async fn register<API: ProtonCore>(
+        &self,
+        api: &API,
+        public_key: StoredDevicePublicKey,
+    ) -> Result<(), ApiServiceError> {
         api.register_device(RegisterDeviceRequest {
             device_token: self.device_token.clone(),
             environment: self.environment.into(),
-            public_key: self.public_key.clone(),
+            public_key: Some(public_key.to_string()),
             ping_notification_status: self.ping_notification_status,
             push_notification_status: self.push_notification_status,
         })
         .await?;
-        Ok(())
-    }
-
-    /// Save or update a registered device.
-    ///
-    /// It's imperative that you use this method over [`Model::save()`] to
-    /// ensure that the information is updated correctly in the database.
-    ///
-    /// This method ensures that there is only one registered device in the table.
-    /// Otherwise, it overwrites old record.
-    ///
-    /// If public key does not exist in the record, it generates a new key pair, stores private part in keychain and then
-    /// saves such a model to DB.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the query fails
-    ///
-    pub async fn save(
-        &mut self,
-        bond: &Bond<'_>,
-        ctx: &Context,
-    ) -> Result<(), RegisteredDeviceError> {
-        // Make sure there will be only one row.
-        if let Some(existing) = Self::get(bond).await? {
-            self.row_id = existing.row_id;
-            self.public_key = existing.public_key;
-        }
-
-        if self.public_key.is_none() {
-            let pgp_provider = proton_crypto::new_pgp_provider();
-
-            let new_key = ctx
-                .gen_device_key_pair(&pgp_provider)
-                .map_err(|_| RegisteredDeviceError::Crypto)?;
-
-            self.public_key = Some(new_key.to_string());
-        }
-
-        <Self as Model>::save(self, bond).await?;
-
         Ok(())
     }
 }
