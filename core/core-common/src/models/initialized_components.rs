@@ -176,7 +176,7 @@ impl InitializedComponent {
         };
 
         tracing::debug!("Fetched");
-        if let Err(e) = Self::wait_for_dependencies(key, dependencies, &watcher, &tether).await {
+        if let Err(e) = Self::wait_for_dependencies(dependencies, &watcher, &tether).await {
             tracing::error!("Component dependencies error: {e:?}");
             Self::fail(key, &mut tether).await?;
             return Err(e.into());
@@ -250,7 +250,6 @@ impl InitializedComponent {
     /// That creates a cascade effect.
     ///
     async fn wait_for_dependencies(
-        key: InitializationKey,
         dependencies: &[InitializationKey],
         watcher: &InitializationWatcher,
         tether: &Tether,
@@ -265,7 +264,7 @@ impl InitializedComponent {
         let mut handle = watcher.subscribe();
 
         // We already have a handle, but let's also check dependencies at least once, in case something is already initialized.
-        if Self::check_dependencies(key, dependencies, tether).await? {
+        if Self::check_dependencies(dependencies, tether).await? {
             return Ok(());
         }
 
@@ -275,7 +274,7 @@ impl InitializedComponent {
                     StashError::WatcherError("Watcher closed prematurely".to_owned()).into(),
                 );
             }
-            if Self::check_dependencies(key, dependencies, tether).await? {
+            if Self::check_dependencies(dependencies, tether).await? {
                 return Ok(());
             }
         }
@@ -286,7 +285,6 @@ impl InitializedComponent {
     /// If all succeeed, it returns true.
     /// Otherwise, false
     async fn check_dependencies(
-        key: InitializationKey,
         dependencies: &[InitializationKey],
         tether: &Tether,
     ) -> Result<bool, DependencyInitializationError> {
@@ -296,11 +294,14 @@ impl InitializedComponent {
         tracing::debug!("Checking state of dependencies: {state:?}");
 
         match state {
-            InitializedComponentState::Failed => {
-                Err(DependencyInitializationError::DependencyFailed(key.into()))
-            }
             InitializedComponentState::Succeeded => Ok(true),
-            InitializedComponentState::NotInitialized => Ok(false),
+            // If dependency failed it means either:
+            // * It just failed, and this task will be aborted very soon anyway.
+            // * Or, it failed in the previous run, it is currently running and it will change from Failed -> Succeeded.
+            //   Then we need to wait patiently
+            InitializedComponentState::Failed | InitializedComponentState::NotInitialized => {
+                Ok(false)
+            }
         }
     }
 }
@@ -312,9 +313,6 @@ pub enum InitializationError<E> {
     #[error("Initialization failed: {0:?}")]
     InitializationFailed(E),
 
-    #[error("Initialization of the dependency {0} failed")]
-    DependencyFailed(String),
-
     #[error(transparent)]
     Stash(#[from] StashError),
 }
@@ -322,9 +320,6 @@ pub enum InitializationError<E> {
 impl<E> From<DependencyInitializationError> for InitializationError<E> {
     fn from(value: DependencyInitializationError) -> Self {
         match value {
-            DependencyInitializationError::DependencyFailed(initialized_component_key) => {
-                Self::DependencyFailed(initialized_component_key)
-            }
             DependencyInitializationError::Stash(stash_error) => Self::Stash(stash_error),
         }
     }
@@ -333,9 +328,6 @@ impl<E> From<DependencyInitializationError> for InitializationError<E> {
 /// Error that happened while waiting for the dependency
 #[derive(Debug, thiserror::Error)]
 pub enum DependencyInitializationError {
-    #[error("Initialization of the dependency for {0} failed")]
-    DependencyFailed(String),
-
     #[error(transparent)]
     Stash(#[from] StashError),
 }

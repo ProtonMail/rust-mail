@@ -86,10 +86,6 @@ impl MailUserContext {
         match result {
             Ok(AsyncTaskResult::Completed(Ok(()))) => Ok(()),
             Ok(AsyncTaskResult::Completed(Err(e))) => match e {
-                InitializationError::DependencyFailed(ref dep) => {
-                    error!("Failed to sync {e:?} - Dependency failed - {dep}");
-                    Ok(())
-                }
                 InitializationError::InitializationFailed(e) => {
                     let e = e.into();
                     error!("Failed to sync {e:?}");
