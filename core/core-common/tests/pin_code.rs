@@ -11,7 +11,9 @@ async fn create_and_delete_pin() {
     let core_ctx = test_ctx.core_context();
     let pin = vec![1, 2, 3, 4];
 
-    PinCode::create_pin(core_ctx.clone(), &pin).await.unwrap();
+    PinCode::create_pin(core_ctx.clone(), pin.clone())
+        .await
+        .unwrap();
 
     let mut tether = core_ctx.account_stash().connection();
     let app_settings = AppSettings::get_or_default(&tether).await;
@@ -21,7 +23,7 @@ async fn create_and_delete_pin() {
 
     assert_eq!(pin_metadata.attempts, 0);
 
-    let error = PinCode::delete_pin(core_ctx.clone(), &pin)
+    let error = PinCode::delete_pin(core_ctx.clone(), pin.clone())
         .await
         .unwrap_err();
 
@@ -42,7 +44,7 @@ async fn create_and_delete_pin() {
 
     pin_metadata.last_access_reset(&mut tether).await.unwrap();
 
-    PinCode::delete_pin(core_ctx.clone(), &pin).await.unwrap();
+    PinCode::delete_pin(core_ctx.clone(), pin).await.unwrap();
 
     assert!(PinProtection::get(&tether).await.unwrap().is_none());
     assert_eq!(
@@ -59,7 +61,7 @@ async fn validation_max_attempts() {
     let pin = vec![1, 2, 3, 4];
     let incorrect_pin = vec![0, 0, 0, 0];
 
-    PinCode::create_pin(core_ctx.clone(), &pin).await.unwrap();
+    PinCode::create_pin(core_ctx.clone(), pin).await.unwrap();
 
     let mut tether = core_ctx.account_stash().connection();
     let app_settings = AppSettings::get_or_default(&tether).await;
@@ -78,7 +80,7 @@ async fn validation_max_attempts() {
         .await
         .unwrap();
 
-    let error = PinCode::validate_pin(core_ctx.clone(), &incorrect_pin)
+    let error = PinCode::validate_pin(core_ctx.clone(), incorrect_pin)
         .await
         .unwrap_err();
 

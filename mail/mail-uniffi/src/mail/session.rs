@@ -750,7 +750,7 @@ impl MailSession {
     /// The same PIN will be required for authentication of the user
     /// or when user want to change the way of authentication in the App.
     ///
-    pub async fn set_pin_code(&self, pin: Vec<u8>) -> Result<(), PinSetError> {
+    pub async fn set_pin_code(&self, pin: Vec<u32>) -> Result<(), PinSetError> {
         let ctx = self.mail_ctx.core_context().clone();
 
         uniffi_async(async move {
@@ -764,7 +764,7 @@ impl MailSession {
 
     /// Authenticate stored PIN
     ///
-    pub async fn verify_pin_code(&self, pin: Vec<u8>) -> Result<(), PinAuthError> {
+    pub async fn verify_pin_code(&self, pin: Vec<u32>) -> Result<(), PinAuthError> {
         let ctx = self.mail_ctx.core_context().clone();
 
         uniffi_async(async move {
@@ -782,7 +782,7 @@ impl MailSession {
     /// it returns PinAuthError type. If verification is unsuccessful it won't
     /// remove the PIN and return proper Error Reason.
     ///
-    pub async fn delete_pin_code(&self, pin: Vec<u8>) -> Result<(), PinAuthError> {
+    pub async fn delete_pin_code(&self, pin: Vec<u32>) -> Result<(), PinAuthError> {
         let ctx = self.mail_ctx.core_context().clone();
 
         uniffi_async(async move {
