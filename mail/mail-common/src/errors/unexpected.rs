@@ -3,7 +3,6 @@ use proton_action_queue::queue::{Error as QueueError, QueuedError};
 use proton_api_core::login::SaltError;
 use proton_api_core::store::StoreError;
 use proton_core_common::KeyHandlingError;
-use proton_core_common::models::RegisteredDeviceError;
 use proton_core_common::os::KeyChainError;
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 use proton_crypto_inbox::message::MessageError;
@@ -180,15 +179,5 @@ impl From<SaltError> for Unexpected {
 impl From<StoreError> for Unexpected {
     fn from(_error: StoreError) -> Self {
         Self::Crypto
-    }
-}
-
-impl From<RegisteredDeviceError> for Unexpected {
-    fn from(error: RegisteredDeviceError) -> Self {
-        match error {
-            RegisteredDeviceError::API(_error) => Self::Internal,
-            RegisteredDeviceError::Stash(_error) => Self::Internal,
-            RegisteredDeviceError::Crypto => Self::Crypto,
-        }
     }
 }

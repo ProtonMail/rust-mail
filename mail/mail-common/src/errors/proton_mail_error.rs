@@ -14,7 +14,7 @@ use proton_action_queue::queue::ActionError as InternalActionError;
 use proton_api_core::login::LoginError;
 use proton_api_core::service::ApiServiceError;
 use proton_core_common::ContactError;
-use proton_core_common::models::LabelError;
+use proton_core_common::models::{LabelError, RegisteredDeviceTaskError};
 use proton_core_common::pin_code::PinError;
 use proton_event_loop::EventLoopError;
 use proton_event_loop::subscriber::SubscriberError;
@@ -543,6 +543,21 @@ impl From<LabelError> for ProtonMailError {
             LabelError::CouldNotResolveLocalLabel(_label_id) => {
                 Self::Unexpected(Unexpected::Internal)
             }
+        }
+    }
+}
+
+impl From<RegisteredDeviceTaskError> for ProtonMailError {
+    fn from(error: RegisteredDeviceTaskError) -> Self {
+        match error {
+            RegisteredDeviceTaskError::CreateContext(core_context_error) => {
+                MailContextError::from(core_context_error).into()
+            }
+            RegisteredDeviceTaskError::Stash(stash_error) => Self::from(stash_error),
+            RegisteredDeviceTaskError::DeviceStream(_) => Self::Unexpected(Unexpected::Internal),
+            RegisteredDeviceTaskError::SessionStreamEnded => Self::Unexpected(Unexpected::Internal),
+            RegisteredDeviceTaskError::Crypto => Self::Unexpected(Unexpected::Crypto),
+            RegisteredDeviceTaskError::API(_) => Self::Unexpected(Unexpected::Api),
         }
     }
 }

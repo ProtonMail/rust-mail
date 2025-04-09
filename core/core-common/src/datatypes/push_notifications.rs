@@ -1,6 +1,8 @@
 use base64::{Engine, prelude::BASE64_STANDARD};
 use proton_api_core::services::proton::SessionId;
-use proton_crypto_account::{keys::PGPDeviceKey, proton_crypto::crypto::PGPProviderSync};
+use proton_crypto_account::{
+    errors::KeySerializationError, keys::PGPDeviceKey, proton_crypto::crypto::PGPProviderSync,
+};
 use proton_crypto_notifications::{
     DecryptableNotification, NotificationError, PGPEncryptedNotification,
 };
@@ -46,6 +48,23 @@ impl StoredDevicePrivateKey {
     #[must_use]
     pub fn with_bytes(value: Vec<u8>) -> Self {
         Self(Secret::new(value))
+    }
+
+    /// Transforms it to `PGPDeviceKey`
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if could not deserialize key from raw bytes
+    ///
+    pub fn to_device_key<P>(
+        &self,
+        pgp_provider: &P,
+    ) -> Result<PGPDeviceKey<P::PrivateKey, P::PublicKey>, KeySerializationError>
+    where
+        P: PGPProviderSync,
+    {
+        let key_data = self.0.expose_secret();
+        PGPDeviceKey::deserialize_from_secure_storage(pgp_provider, key_data)
     }
 
     #[must_use]

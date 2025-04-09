@@ -120,6 +120,7 @@ pub struct TestContext {
     pub core_account: CoreAccount,
     pub core_session: CoreSession,
     pub mock_web_server: Arc<MockServer>,
+    key: SessionEncryptionKey,
 }
 
 impl BaseTestContext for TestContext {}
@@ -205,6 +206,48 @@ impl TestContext {
         .expect("failed to create core context");
 
         // Generate a fake session and write it to the database
+        let (core_account, core_session) = Self::new_account_impl(
+            &tmp_dir,
+            user_id.clone(),
+            Self::test_uid(),
+            user_key_secret,
+            key.clone(),
+        )
+        .await;
+
+        Arc::new_cyclic(|this| Self {
+            this: Weak::clone(this),
+            context,
+            tmp_dir,
+            core_account,
+            core_session,
+            mock_web_server,
+            key,
+        })
+    }
+
+    /// Creates a new account and a fake session.
+    ///
+    /// # Panics
+    ///
+    pub async fn new_account(
+        &self,
+        user_id: UserId,
+        session_id: SessionId,
+        user_key_secret: Option<UserKeySecret>,
+    ) -> (CoreAccount, CoreSession) {
+        let key = self.key.clone();
+        let user_key_secret = user_key_secret.unwrap_or_else(testdata_user_secret);
+        Self::new_account_impl(&self.tmp_dir, user_id, session_id, user_key_secret, key).await
+    }
+
+    async fn new_account_impl(
+        tmp_dir: &TempDir,
+        user_id: UserId,
+        session_id: SessionId,
+        user_key_secret: UserKeySecret,
+        key: SessionEncryptionKey,
+    ) -> (CoreAccount, CoreSession) {
         let (core_account, core_session) = {
             // Create a temporary stash just to insert the fake data.
             let path = tmp_dir.path().join("account.db");
@@ -227,28 +270,19 @@ impl TestContext {
                     );
 
                     // Create a fake session.
-                    let session =
-                        CoreSession::new(user_id.clone(), Self::test_uid(), &tokens, &key)
-                            .expect("session should be created")
-                            .with_key_secret(&user_key_secret, &key)
-                            .expect("key secret should be set")
-                            .with_save(tx)
-                            .await
-                            .expect("fake session should save");
+                    let session = CoreSession::new(user_id.clone(), session_id, &tokens, &key)
+                        .expect("session should be created")
+                        .with_key_secret(&user_key_secret, &key)
+                        .expect("key secret should be set")
+                        .with_save(tx)
+                        .await
+                        .expect("fake session should save");
                     Ok((account, session))
                 })
                 .await
                 .expect("failed to create transaction")
         };
-
-        Arc::new_cyclic(|this| Self {
-            this: Weak::clone(this),
-            context,
-            tmp_dir,
-            core_account,
-            core_session,
-            mock_web_server,
-        })
+        (core_account, core_session)
     }
 
     /// Get the test user context.

@@ -664,17 +664,22 @@ impl Context {
         let _ = session
             .access_token
             .decrypt_to_string(&key)
+            .inspect_err(|_| tracing::error!("Could not decrypt access token"))
             .or(Err(CoreContextError::Crypto))?;
 
         // Ensure the key can be used to decrypt the refresh token
         let _ = session
             .refresh_token
             .decrypt_to_string(&key)
+            .inspect_err(|_| tracing::error!("Could not decrypt refresh token"))
             .or(Err(CoreContextError::Crypto))?;
 
         let user_id = session.account_id.clone();
         let session_id = session.remote_id.clone();
-        let session = self.new_api_session(Some(session), status).await?;
+        let session = self
+            .new_api_session(Some(session), status)
+            .await
+            .inspect_err(|e| tracing::error!("Could not create api session: {e:?}"))?;
 
         self.new_user_context(user_id, session, session_id).await
     }
@@ -741,6 +746,7 @@ impl Context {
         Ok(())
     }
 
+    #[tracing::instrument(err, skip(self))]
     fn get_encryption_key(&self) -> CoreContextResult<SessionEncryptionKey> {
         let Some(key) = self.load_secret::<SessionEncryptionKey>()? else {
             return Err(CoreContextError::KeyChainHasNoKey);
