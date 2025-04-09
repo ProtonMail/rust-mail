@@ -71,7 +71,7 @@ pub struct RegisteredDevice {
 /// * `device_rx` - stream of device registration details. If changed it must contain `Some`
 ///
 #[tracing::instrument(err, skip_all)]
-pub async fn spawn_registered_device_task(
+pub fn spawn_registered_device_task(
     ctx: Arc<Context>,
     device_rx: watch::Receiver<Option<RegisteredDevice>>,
 ) -> Result<JoinHandle<AsyncTaskResult<()>>, RegisteredDeviceTaskError> {

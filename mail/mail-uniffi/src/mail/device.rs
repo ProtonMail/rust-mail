@@ -1,6 +1,7 @@
+use crate::async_runtime;
 use crate::errors::VoidActionResult;
 use crate::mail::MailSession;
-use crate::{core::datatypes::DeviceEnvironment, errors::ActionError, uniffi_async};
+use crate::{core::datatypes::DeviceEnvironment, errors::ActionError};
 use proton_core_common::models::{
     RegisteredDevice as RealRegisteredDevice, spawn_registered_device_task,
 };
@@ -70,17 +71,17 @@ impl MailSession {
     ///
     /// This method may fail if connection to the account database cannot be reached.
     ///
-    pub async fn register_device_task(&self) -> Result<Arc<RegisterDeviceTaskHandle>, ActionError> {
+    pub fn register_device_task(&self) -> Result<Arc<RegisterDeviceTaskHandle>, ActionError> {
         let ctx = self.ctx().core_context().clone();
-        uniffi_async(async move {
-            let (tx, rx) = watch::channel(None);
+        let (tx, rx) = watch::channel(None);
 
-            let handle = spawn_registered_device_task(ctx, rx).await?;
+        // Even though this function is synchronous, we need async runtime for spawning background task.
+        //
+        let rt = async_runtime();
+        let _guard = rt.enter();
+        let handle = spawn_registered_device_task(ctx, rx).map_err(RealProtonMailError::from)?;
 
-            Ok::<_, RealProtonMailError>(Arc::new(RegisterDeviceTaskHandle { sender: tx, handle }))
-        })
-        .await
-        .map_err(ActionError::from)
+        Ok(Arc::new(RegisterDeviceTaskHandle { sender: tx, handle }))
     }
 }
 
