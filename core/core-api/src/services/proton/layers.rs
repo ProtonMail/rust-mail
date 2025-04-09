@@ -35,11 +35,11 @@ impl SetCryptoClockLayer {
 }
 
 impl SenderLayer<ProtonRequest, ProtonResponse> for SetCryptoClockLayer {
-    fn on_send<'a: 'fut, 'fut>(
+    fn on_send<'a>(
         &'a self,
         inner: &'a dyn Sender<ProtonRequest, ProtonResponse>,
         req: ProtonRequest,
-    ) -> BoxFut<'fut, MuonResult<ProtonResponse>> {
+    ) -> BoxFut<'a, MuonResult<ProtonResponse>> {
         Box::pin(self.on_send(inner, req))
     }
 }
@@ -62,11 +62,11 @@ impl SetDefaultServiceTypeLayer {
 }
 
 impl SenderLayer<ProtonRequest, ProtonResponse> for SetDefaultServiceTypeLayer {
-    fn on_send<'a: 'fut, 'fut>(
+    fn on_send<'a>(
         &'a self,
         inner: &'a dyn Sender<ProtonRequest, ProtonResponse>,
         req: ProtonRequest,
-    ) -> BoxFut<'fut, MuonResult<ProtonResponse>> {
+    ) -> BoxFut<'a, MuonResult<ProtonResponse>> {
         Box::pin(self.on_send(inner, req))
     }
 }
@@ -94,11 +94,11 @@ impl SetDefaultTimeoutLayer {
 }
 
 impl SenderLayer<ProtonRequest, ProtonResponse> for SetDefaultTimeoutLayer {
-    fn on_send<'a: 'fut, 'fut>(
+    fn on_send<'a>(
         &'a self,
         inner: &'a dyn Sender<ProtonRequest, ProtonResponse>,
         req: ProtonRequest,
-    ) -> BoxFut<'fut, MuonResult<ProtonResponse>> {
+    ) -> BoxFut<'a, MuonResult<ProtonResponse>> {
         Box::pin(self.on_send(inner, req))
     }
 }
@@ -141,11 +141,11 @@ impl CookieJarLayer {
 }
 
 impl SenderLayer<ProtonRequest, ProtonResponse> for CookieJarLayer {
-    fn on_send<'a: 'fut, 'fut>(
+    fn on_send<'a>(
         &'a self,
         inner: &'a dyn Sender<ProtonRequest, ProtonResponse>,
         req: ProtonRequest,
-    ) -> BoxFut<'fut, MuonResult<ProtonResponse>> {
+    ) -> BoxFut<'a, MuonResult<ProtonResponse>> {
         Box::pin(self.on_send(inner, req))
     }
 }

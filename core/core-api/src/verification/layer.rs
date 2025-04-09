@@ -94,11 +94,11 @@ impl ChallengeNotifierLayer {
 }
 
 impl SenderLayer<ProtonRequest, ProtonResponse> for ChallengeNotifierLayer {
-    fn on_send<'a: 'fut, 'fut>(
+    fn on_send<'a>(
         &'a self,
         inner: &'a dyn Sender<ProtonRequest, ProtonResponse>,
         req: ProtonRequest,
-    ) -> BoxFut<'fut, MuonResult<ProtonResponse>> {
+    ) -> BoxFut<'a, MuonResult<ProtonResponse>> {
         Box::pin(self.on_send(inner, req))
     }
 }
