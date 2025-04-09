@@ -109,15 +109,28 @@ impl StatusWatcher {
         observer: &StatusObserver,
         api: &Proton,
     ) {
-        let old = *status_tx.borrow();
         let new = observer.status(api.clone()).await;
 
-        if new == old {
-            // Avoid calling `.send_replace()`, so that we don't wake up the
-            // subscribers just to tell them "ha, nothing changed, just a prank"
-        } else {
-            status_tx.send_replace(new);
-            online_tx.send_replace(new.is_online());
-        }
+        // Avoid calling `.send_replace()`, so that we don't wake up the
+        // subscribers just to tell them "ha, nothing changed, just a prank"
+        status_tx.send_if_modified(|old| {
+            if new == *old {
+                false
+            } else {
+                *old = new;
+                true
+            }
+        });
+
+        online_tx.send_if_modified(|old| {
+            let new = new.is_online();
+
+            if new == *old {
+                false
+            } else {
+                *old = new;
+                true
+            }
+        });
     }
 }

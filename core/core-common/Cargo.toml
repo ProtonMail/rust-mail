@@ -49,6 +49,7 @@ async_zip = { version = "0.0.15", features = ["deflate", "chrono"] }
 
 [dev-dependencies]
 futures = { workspace = true }
+futures-util = { workspace = true }
 tempdir = { workspace = true }
 wiremock = { workspace = true }
 proton-core-test-utils = { workspace = true }
