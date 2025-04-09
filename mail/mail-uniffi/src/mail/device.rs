@@ -1,12 +1,11 @@
 use crate::async_runtime;
-use crate::errors::VoidActionResult;
+use crate::errors::{OtherErrorReason, ProtonError, VoidActionResult};
 use crate::mail::MailSession;
 use crate::{core::datatypes::DeviceEnvironment, errors::ActionError};
 use proton_core_common::models::{
     RegisteredDevice as RealRegisteredDevice, spawn_registered_device_task,
 };
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use proton_mail_common::errors::unexpected::Unexpected;
 use proton_task_service::AsyncTaskResult;
 use std::sync::Arc;
 use tokio::sync::watch;
@@ -52,8 +51,12 @@ impl RegisterDeviceTaskHandle {
     pub fn update_device(&self, device: RegisteredDevice) -> Result<(), ActionError> {
         self.sender
             .send(Some(RealRegisteredDevice::from(device)))
-            .map_err(|_| Unexpected::Internal)
-            .map_err(|e| RealProtonMailError::Unexpected(e))?;
+            .map_err(|_| {
+                ActionError::Other(ProtonError::OtherReason(OtherErrorReason::Other(
+                    "register-device-task has crashed".into(),
+                )))
+            })?;
+
         Ok(())
     }
 }

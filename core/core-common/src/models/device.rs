@@ -10,6 +10,7 @@ use proton_api_core::{
     service::ApiServiceError,
     services::proton::{ProtonCore, SessionId, prelude::RegisterDeviceRequest},
     session::CoreSession as _,
+    status_watcher::StatusWatcher,
 };
 use proton_task_service::AsyncTaskResult;
 use stash::{
@@ -26,6 +27,9 @@ use crate::{
     db::account::CoreSession,
     models::ModelExtension,
 };
+
+/// How long we should sleep just in case there was a network error other than offline issue.
+const SLEEP_IN_CASE_OF_NETWORK_ERR: u64 = 500;
 
 // TODO (wpolak): Remove this table and this structure
 // We no longer need to store tokens in the database.
@@ -106,6 +110,19 @@ pub enum RegisteredDeviceTaskError {
     API(#[from] ApiServiceError),
 }
 
+impl RegisteredDeviceTaskError {
+    // Whether we should repeat the step if it failed
+    //
+    fn is_network_failure(&self) -> bool {
+        match self {
+            RegisteredDeviceTaskError::API(api_service_error) => {
+                api_service_error.is_network_failure()
+            }
+            _ => false,
+        }
+    }
+}
+
 /// Internal state of a background task responsible for registering devices
 /// for push notifications.
 /// It keeps track of which session was already registered and what was the last device
@@ -164,14 +181,40 @@ pub async fn registered_device_task_step(
             get_unregistered_sessions(&tether, &state.registered_sessions).await?
         }
     };
+    let status_watcher = StatusWatcher::default();
+    let mut is_online = status_watcher.subscribe_to_online();
     if let Some(device) = state.device.as_ref() {
-        register_sessions(
-            ctx,
-            sessions,
-            &mut state.registered_sessions,
-            device.clone(),
-        )
-        .await?;
+        // Trying in a loop. If registration fails because of network, let's retry.
+        loop {
+            if let Err(e) = register_sessions(
+                ctx,
+                sessions.clone(),
+                &mut state.registered_sessions,
+                device.clone(),
+                status_watcher.clone(),
+            )
+            .await
+            {
+                if e.is_network_failure() {
+                    // Recoverable failure. Repeat.
+                    // Most likely happened because of network issue, so let's
+                    // see if we are online.
+                    is_online.wait_for(|t| t == &true).await?;
+                    // Even though we just waited for online, we should still sleep for a while.
+                    // It is, because if the endpoint returns 500, the /ping endpoint may actually
+                    // work just fine, so the `is_online` would return true, and yet we would
+                    // spam the broken endpoint without any timeout.
+                    tokio::time::sleep(tokio::time::Duration::from_millis(
+                        SLEEP_IN_CASE_OF_NETWORK_ERR,
+                    ))
+                    .await;
+                    continue;
+                }
+
+                return Err(e);
+            }
+            break;
+        }
     }
     Ok(())
 }
@@ -204,10 +247,18 @@ async fn register_sessions(
     sessions: Vec<CoreSession>,
     registered_sessions: &mut HashSet<SessionId>,
     device: RegisteredDevice,
+    status_watcher: StatusWatcher,
 ) -> Result<(), RegisteredDeviceTaskError> {
     tracing::debug!("Registering sessions: {}", sessions.len());
     for session in sessions {
-        register_session(ctx, session, registered_sessions, &device).await?;
+        register_session(
+            ctx,
+            session,
+            registered_sessions,
+            &device,
+            status_watcher.clone(),
+        )
+        .await?;
     }
     tracing::debug!("Registered successfully");
     Ok(())
@@ -219,8 +270,11 @@ async fn register_session(
     session: CoreSession,
     registered_sessions: &mut HashSet<SessionId>,
     device: &RegisteredDevice,
+    status_watcher: StatusWatcher,
 ) -> Result<(), RegisteredDeviceTaskError> {
-    let session_ctx = ctx.user_context_from_session(&session, None).await?;
+    let session_ctx = ctx
+        .user_context_from_session(&session, Some(status_watcher))
+        .await?;
 
     let pgp_provider = proton_crypto::new_pgp_provider();
     let private_key = ctx
