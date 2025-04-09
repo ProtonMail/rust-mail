@@ -105,6 +105,12 @@ pub enum RegisteredDeviceTaskError {
     API(#[from] ApiServiceError),
 }
 
+/// Internal state of a background task responsible for registering devices
+/// for push notifications.
+/// It keeps track of which session was already registered and what was the last device
+/// token.
+///
+// Public: For the sake of re-exporting and breaking dependency cycle in our tests.
 #[derive(Default)]
 pub struct RegisteredDeviceTaskState {
     device: Option<RegisteredDevice>,

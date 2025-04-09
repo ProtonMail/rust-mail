@@ -23,6 +23,13 @@ pub struct RegisteredDevice {
     pub push_notification_status: Option<i32>,
 }
 
+/// A handle to a background task responsible for registering devices.
+/// Keep it in memory for as long as you wish to have registration.
+/// It will abort the background task on drop.
+///
+/// Additionally, in order to provide device registration details,
+/// this handle provides a method, [`Self::update_device`].
+///
 #[derive(uniffi::Object)]
 pub struct RegisterDeviceTaskHandle {
     // None is used ONLY in the initial task state.
@@ -51,19 +58,30 @@ impl RegisterDeviceTaskHandle {
 }
 
 #[uniffi_export]
-pub async fn register_device_task(
-    session: Arc<MailSession>,
-) -> Result<Arc<RegisterDeviceTaskHandle>, ActionError> {
-    uniffi_async(async move {
-        let (tx, rx) = watch::channel(None);
-        let ctx = session.ctx().core_context().clone();
+impl MailSession {
+    /// Spawns new background task responsible for registering device for the push notification.
+    /// That task will automatically watch for new sessions and register them with latest known device
+    /// token.
+    ///
+    /// In order to provide device registration details, this function returns an object [`RegisterDeviceTaskHandle`]
+    /// that has a method [`RegisterDeviceTaskHandle::update_device`].
+    ///
+    /// # Errors
+    ///
+    /// This method may fail if connection to the account database cannot be reached.
+    ///
+    pub async fn register_device_task(&self) -> Result<Arc<RegisterDeviceTaskHandle>, ActionError> {
+        let ctx = self.ctx().core_context().clone();
+        uniffi_async(async move {
+            let (tx, rx) = watch::channel(None);
 
-        let handle = spawn_registered_device_task(ctx, rx).await?;
+            let handle = spawn_registered_device_task(ctx, rx).await?;
 
-        Ok::<_, RealProtonMailError>(Arc::new(RegisterDeviceTaskHandle { sender: tx, handle }))
-    })
-    .await
-    .map_err(ActionError::from)
+            Ok::<_, RealProtonMailError>(Arc::new(RegisterDeviceTaskHandle { sender: tx, handle }))
+        })
+        .await
+        .map_err(ActionError::from)
+    }
 }
 
 impl From<RealRegisteredDevice> for RegisteredDevice {
