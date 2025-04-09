@@ -489,8 +489,7 @@ impl MailTestContext {
                     incoming_defaults: vec![],
                 }),
             )
-            .expect(number_of_calls)
-            .named("Setup user get conversations count")
+            .named("Setup user incoming defaults")
             .mount(self.mock_server())
             .await;
     }

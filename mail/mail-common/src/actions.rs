@@ -10,7 +10,7 @@ pub use self::available_action::*;
 use crate::AppError;
 use crate::datatypes::{ExclusiveLocation, RollbackItemType};
 use crate::models::RollbackItem;
-use addresses::block;
+use addresses::{block, unblock, update_incoming_defaults};
 use indoc::formatdoc;
 use itertools::Itertools;
 use proton_action_queue::action::{Action, FactoryError, WriterGuardError};
@@ -106,6 +106,8 @@ pub(crate) fn register_mail_actions(queue: &Queue) {
     register_action::<conversations::MarkRead>(queue);
     register_action::<conversations::MarkUnread>(queue);
     register_action::<block::Block>(queue);
+    register_action::<unblock::Unblock>(queue);
+    register_action::<update_incoming_defaults::SyncIncomingDefaults>(queue);
     register_action::<conversations::Move>(queue);
     register_action::<messages::label::Label>(queue);
     register_action::<messages::unlabel::Unlabel>(queue);

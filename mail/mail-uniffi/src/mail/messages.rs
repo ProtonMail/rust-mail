@@ -22,6 +22,7 @@ use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
 use proton_mail_common::MailUserContext;
+
 use proton_mail_common::datatypes::LocalConversationId;
 use proton_mail_common::decrypted_message::{
     self, BodyOutput, DecryptedMessageBody, TransformOpts,
@@ -901,11 +902,11 @@ pub async fn mark_messages_ham(mailbox: Arc<Mailbox>, message_id: Id) -> Result<
 #[returns(VoidActionResult)]
 pub async fn block_address(
     session: Arc<MailUserSession>,
-    address_id: Id,
+    email: String,
 ) -> Result<(), ActionError> {
     let ctx = session.ctx()?;
     uniffi_async(async move {
-        IncomingDefaultLocation::action_block(ctx.action_queue(), address_id.into())
+        IncomingDefaultLocation::action_block(ctx.action_queue(), email)
             .await
             .map(|_| ())
             .map_err(RealProtonMailError::from)
@@ -929,10 +930,10 @@ pub async fn block_address(
 ///
 #[uniffi_export]
 #[returns(VoidActionResult)]
-pub async fn unblock_address(mailbox: Arc<Mailbox>, address_id: Id) -> Result<(), ActionError> {
+pub async fn unblock_address(mailbox: Arc<Mailbox>, email: String) -> Result<(), ActionError> {
     let ctx = mailbox.ctx()?;
     uniffi_async(async move {
-        IncomingDefaultLocation::action_unblock(ctx.action_queue(), address_id.into())
+        IncomingDefaultLocation::action_unblock(ctx.action_queue(), email)
             .await
             .map(|_| ())
             .map_err(RealProtonMailError::from)

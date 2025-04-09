@@ -4,7 +4,8 @@ use proton_api_core::services::proton::LabelId;
 use proton_api_core::services::proton::common::ApiErrorInfo;
 use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::prelude::{
-    PostCancelSendResponse, PostSendRequest, PutMessageHamResponse,
+    IncomingDefault, PostCancelSendResponse, PostIncomingDefaultResponse, PostSendRequest,
+    PutMessageHamResponse,
 };
 use proton_api_mail::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
@@ -197,7 +198,6 @@ impl MailTestContext {
             .await;
     }
 
-    #[function_name::named]
     pub async fn mock_put_message_ham(&self, id: &MessageId) {
         Mock::given(method("PUT"))
             .and(path(format!("/api/mail/v4/messages/{id}/mark/ham")))
@@ -205,7 +205,7 @@ impl MailTestContext {
                 ResponseTemplate::new(200).set_body_json(PutMessageHamResponse::default()),
             )
             .expect(1)
-            .named(function_name!())
+            .named(format!("mock put_message_ham, id = {id}"))
             .mount(self.mock_server())
             .await;
     }
@@ -531,9 +531,9 @@ impl MailTestContext {
     /// but doesn't actually do anything
     #[allow(clippy::doc_markdown)]
     #[function_name::named]
-    pub async fn mock_put_incoming_default(&self) {
+    pub async fn mock_delete_incoming_default(&self) {
         Mock::given(method("PUT"))
-            .and(path("/api/mail/v4/incomingdefaults"))
+            .and(path("/api/mail/v4/incomingdefaults/delete"))
             .respond_with(ResponseTemplate::new(200).set_body_json(()))
             .expect(1)
             .named(function_name!())
@@ -545,10 +545,11 @@ impl MailTestContext {
     /// but doesn't actually do anything
     #[allow(clippy::doc_markdown)]
     #[function_name::named]
-    pub async fn mock_post_incoming_default(&self) {
+    pub async fn mock_post_incoming_default(&self, incoming_default: IncomingDefault) {
+        let resp = PostIncomingDefaultResponse { incoming_default };
         Mock::given(method("POST"))
             .and(path("/api/mail/v4/incomingdefaults"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(()))
+            .respond_with(ResponseTemplate::new(200).set_body_json(resp))
             .expect(1)
             .named(function_name!())
             .mount(self.mock_server())

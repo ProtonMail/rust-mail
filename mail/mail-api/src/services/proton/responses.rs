@@ -310,3 +310,10 @@ pub struct GetIncomingDefaultResponse {
     pub total: u64,
     pub global_total: u64,
 }
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PostIncomingDefaultResponse {
+    pub incoming_default: IncomingDefault,
+}
