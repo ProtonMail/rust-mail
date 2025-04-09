@@ -203,8 +203,6 @@ impl StatusObserver {
     ///
     pub async fn status(&self, api: Proton) -> ConnectionStatus {
         if !self.is_cache_fresh() {
-            self.drop_ping_if_finished();
-
             if self.get_cached_status().is_offline() && self.history.was_online_most_of_the_time() {
                 Self::ping(api.clone(), self.config.fg_timeout, self.config.fg_retry).await;
             } else {
@@ -249,31 +247,22 @@ impl StatusObserver {
     }
 
     fn spawn_ping(&self, api: Proton) {
-        // If a ping is already pending, don't spawn another one
-        if self.ping.read().is_some() {
-            return;
-        }
-
-        let timeout = self.config.bg_timeout;
-        let retry = self.config.bg_retry;
-
-        let ping = BackgroundPing {
-            request: tokio::spawn(async move {
-                Self::ping(api, timeout, retry).await;
-            }),
-        };
-
-        #[allow(clippy::let_underscore_future)]
-        let _ = self.ping.write().insert(ping);
-    }
-
-    fn drop_ping_if_finished(&self) {
         let mut ping = self.ping.write();
-        let has_ping_finished = ping.as_ref().filter(|ping| ping.is_finished()).is_some();
 
-        if has_ping_finished {
-            _ = ping.take();
+        // If a ping is already pending, don't spawn another one
+        if let Some(ping) = &mut *ping {
+            if !ping.is_finished() {
+                return;
+            }
         }
+
+        *ping = Some(BackgroundPing {
+            request: tokio::spawn(Self::ping(
+                api,
+                self.config.bg_timeout,
+                self.config.bg_retry,
+            )),
+        });
     }
 
     fn is_cache_fresh(&self) -> bool {
