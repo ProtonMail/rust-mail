@@ -1,7 +1,7 @@
 use crate::widgets::HelpCategory;
+use ratatui::Frame;
 use ratatui::crossterm::event::Event;
 use ratatui::layout::Rect;
-use ratatui::Frame;
 
 pub trait View<S, E> {
     fn on_enter(&mut self, _: &mut S) {}

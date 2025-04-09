@@ -7,7 +7,6 @@ use crate::user_context::events::messages::handle_message_events;
 use crate::{datatypes::ConversationLabelsCount, events::MailEvent};
 use anyhow::anyhow;
 use async_trait::async_trait;
-use proton_api_core::services::proton::Action;
 use proton_event_loop::subscriber::{Subscriber, SubscriberError};
 use std::sync::Weak;
 use tracing::{debug, error};
@@ -31,10 +30,15 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
             error!("{e:?}");
             SubscriberError::Other(e)
         })?;
+        debug!("Handling {} mail events", events.len());
+        debug!(?events);
 
+        // This needs to happen outside of the transaction because queuing an action creates a
+        // transaction and it would deadlock otherwise.
         let mut tether = ctx.user_context.stash().connection();
-        tether
+        let queue_incoming_default = tether
             .tx::<_, _, SubscriberError>(async |tx| {
+                let mut queue_incoming_default = false;
                 for event in events {
                     if let Some(labels) = &event.labels {
                         debug!("Handling label events");
@@ -82,27 +86,23 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
                         mail_settings.save(tx).await?;
                     }
 
-                    if let Some(incoming_defaults) = event.incoming_defaults.take() {
-                        debug!("Handling incoming defaults");
-                        let (delete, insert): (Vec<_>, Vec<_>) = incoming_defaults
-                            .into_iter()
-                            .partition(|def| def.action == Some(Action::Delete));
-
-                        IncomingDefaultLocation::store_by_email(insert, tx).await?;
-                        for default in delete {
-                            if let Some(email) = default.email {
-                                IncomingDefaultLocation::delete_by_email(email, tx).await?;
-                            }
-                        }
-                    }
+                    // It so happens that the API only returns the IDs of what changed, not the
+                    // actual data, so we better reload all.
+                    queue_incoming_default |= event.incoming_defaults.is_some();
                 }
-                Ok(())
+                Ok(queue_incoming_default)
             })
             .await
             .map_err(|e| {
                 let e = anyhow!("Failed to apply changes: {e}");
                 error!("{e:?}");
                 SubscriberError::Other(e)
-            })
+            })?;
+
+        if queue_incoming_default {
+            IncomingDefaultLocation::action_resync(ctx.action_queue()).await;
+        }
+
+        Ok(())
     }
 }

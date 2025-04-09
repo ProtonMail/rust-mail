@@ -26,6 +26,7 @@ use proton_mail_common::datatypes::{
 use proton_mail_common::decrypted_message::{DecryptedMessageBody, TransformOpts};
 use proton_mail_common::draft::ReplyMode;
 use proton_mail_common::mail_scroller::{DataScrollerSource, MailScroller, SearchScrollerSource};
+use proton_mail_common::models::default_location::IncomingDefaultLocation;
 use proton_mail_common::models::{
     Attachment, MailSettings, Message as MailMessage, MessageScrollData,
 };
@@ -358,6 +359,11 @@ impl MessagesState {
         let index = self.table_state.selected()?;
         self.messages.get(index).map(|c| c.local_id.unwrap())
     }
+
+    fn selected_email(&self) -> Option<String> {
+        let index = self.table_state.selected()?;
+        self.messages.get(index).map(|c| c.sender.address.clone())
+    }
 }
 
 impl StateHandler for MessagesState {
@@ -538,6 +544,22 @@ impl StateHandler for MessagesState {
                 .selected_message_id()
                 .map(|id| Command::message(MessageMessage::DeleteMessage(id).into()))
                 .unwrap_or_default(),
+            KeyCode::Char('b') => self
+                .selected_email()
+                .map(|email| {
+                    Command::message(
+                        MessageMessage::BlockSender(email, BlockOrUnblock::Block).into(),
+                    )
+                })
+                .unwrap_or_default(),
+            KeyCode::Char('B') => self
+                .selected_email()
+                .map(|email| {
+                    Command::message(
+                        MessageMessage::BlockSender(email, BlockOrUnblock::Unblock).into(),
+                    )
+                })
+                .unwrap_or_default(),
             KeyCode::Char('s') => Command::message(Message::OpenLabelSelectPopup.into()),
             KeyCode::Char('m') => self
                 .selected_message_id()
@@ -596,6 +618,9 @@ impl StateHandler for MessagesState {
             }
             MessageMessage::StarMessage(id) => {
                 return star_message(user_ctx.to_owned(), id);
+            }
+            MessageMessage::BlockSender(id, action) => {
+                return block_sender(user_ctx.to_owned(), id, action);
             }
             MessageMessage::UnstarMessage(id) => {
                 return unstar_message(user_ctx.to_owned(), id);
@@ -794,15 +819,10 @@ fn mark_message_read(
     id: LocalMessageId,
 ) -> Command<Messages> {
     let current_label_id = mailbox.label_id();
-    Command::task(async move {
-        match MailMessage::action_mark_read(ctx.action_queue(), current_label_id, vec![id]).await {
-            Ok(()) => Command::None,
-            Err(e) => {
-                let e = anyhow!("Failed to mark message as read: {e}");
-                tracing::error!("{e:?}");
-                Command::message(e.into())
-            }
-        }
+    Command::from_future(async move {
+        MailMessage::action_mark_read(ctx.action_queue(), current_label_id, vec![id])
+            .await
+            .context("Failed to mark message as read")
     })
 }
 
@@ -812,16 +832,10 @@ fn mark_message_unread(
     id: LocalMessageId,
 ) -> Command<Messages> {
     let current_label_id = mailbox.label_id();
-    Command::task(async move {
-        match MailMessage::action_mark_unread(ctx.action_queue(), current_label_id, vec![id]).await
-        {
-            Ok(()) => Command::None,
-            Err(e) => {
-                let e = anyhow!("Failed to mark message as unread: {e}");
-                tracing::error!("{e:?}");
-                Command::message(e.into())
-            }
-        }
+    Command::from_future(async move {
+        MailMessage::action_mark_unread(ctx.action_queue(), current_label_id, vec![id])
+            .await
+            .context("Failed to mark message as unread")
     })
 }
 
@@ -836,44 +850,33 @@ fn delete_message(
             "Confirm Message Delete",
             "Are you sure you wish to permanently delete the currently selected message?",
         )
-        .on_accept(Command::task(async move {
-            match MailMessage::action_delete(ctx.action_queue(), current_label_id, vec![id]).await {
-                Ok(_) => Command::None,
-                Err(e) => {
-                    let e = anyhow!("Failed to delete message: {e}");
-                    tracing::error!("{e:?}");
-                    Command::message(e.into())
-                }
-            }
+        .on_accept(Command::from_future(async move {
+            MailMessage::action_delete(ctx.action_queue(), current_label_id, vec![id])
+                .await
+                .context("Failed to delete message: {e}")
+                .map(|_| ())
         })),
     ))
 }
 
 fn star_message(ctx: Arc<MailUserContext>, id: LocalMessageId) -> Command<Messages> {
-    Command::task(async move {
-        match MailMessage::action_star(ctx.action_queue(), vec![id]).await {
-            Ok(_) => Command::None,
-            Err(e) => {
-                let e = anyhow!("Failed to apply label to message: {e}");
-                tracing::error!("{e:?}");
-                Command::message(e.into())
-            }
-        }
+    Command::from_future(async move {
+        MailMessage::action_star(ctx.action_queue(), vec![id])
+            .await
+            .context("Failed to star message")
+            .map(|_| ())
     })
 }
 
 fn unstar_message(ctx: Arc<MailUserContext>, id: LocalMessageId) -> Command<Messages> {
-    Command::task(async move {
-        match MailMessage::action_unstar(ctx.action_queue(), vec![id]).await {
-            Ok(_) => Command::None,
-            Err(e) => {
-                let e = anyhow!("Failed to apply label to message: {e}");
-                tracing::error!("{e:?}");
-                Command::message(e.into())
-            }
-        }
+    Command::from_future(async move {
+        MailMessage::action_unstar(ctx.action_queue(), vec![id])
+            .await
+            .context("Failed to star message")
+            .map(|_| ())
     })
 }
+
 fn label_message(
     ctx: Arc<MailUserContext>,
     LabelAs {
@@ -884,8 +887,8 @@ fn label_message(
         must_archive,
     }: LabelAs<LocalMessageId>,
 ) -> Command<Messages> {
-    Command::task(async move {
-        match MailMessage::action_label_as(
+    Command::from_future(async move {
+        MailMessage::action_label_as(
             ctx.action_queue(),
             source_label_id,
             conversation_ids,
@@ -894,14 +897,8 @@ fn label_message(
             must_archive,
         )
         .await
-        {
-            Ok(_) => Command::None,
-            Err(e) => {
-                let e = anyhow!("Failed to apply label to message: {e}");
-                tracing::error!("{e:?}");
-                Command::message(e.into())
-            }
-        }
+        .context("Failed to apply label to message")
+        .map(|_| ())
     })
 }
 
@@ -912,16 +909,38 @@ fn move_message(
     label_id: LocalLabelId,
 ) -> Command<Messages> {
     let current_label_id = mailbox.label_id();
-    Command::task(async move {
-        match MailMessage::action_move(ctx.action_queue(), current_label_id, label_id, vec![id])
+    Command::from_future(async move {
+        MailMessage::action_move(ctx.action_queue(), current_label_id, label_id, vec![id])
             .await
-        {
-            Ok(_) => Command::None,
-            Err(e) => {
-                let e = anyhow!("Failed to apply label to message: {e}");
-                tracing::error!("{e:?}");
-                Command::message(e.into())
+            .context("Failed to move message")
+            .map(|_| ())
+    })
+}
+
+fn block_sender(
+    ctx: Arc<MailUserContext>,
+    email: String,
+    block_or_unblock: BlockOrUnblock,
+) -> Command<Messages> {
+    Command::from_future(async move {
+        match block_or_unblock {
+            BlockOrUnblock::Block => {
+                IncomingDefaultLocation::action_block(ctx.action_queue(), email)
+                    .await
+                    .context("Failed to block or unblock sender")
+                    .map(|_| ())
+            }
+            BlockOrUnblock::Unblock => {
+                IncomingDefaultLocation::action_unblock(ctx.action_queue(), email)
+                    .await
+                    .context("Failed to block or unblock sender")
+                    .map(|_| ())
             }
         }
     })
+}
+
+pub enum BlockOrUnblock {
+    Block,
+    Unblock,
 }

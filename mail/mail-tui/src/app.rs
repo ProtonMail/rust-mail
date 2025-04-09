@@ -1,4 +1,5 @@
 use crate::TerminalType;
+use crate::messages::Messages;
 use flume::{Receiver, Sender};
 use futures::future::BoxFuture;
 use ratatui::crossterm::event;
@@ -135,6 +136,20 @@ pub enum Command<Message> {
     BackgroundTask(
         Box<dyn FnOnce(Sender<Command<Message>>) -> BoxFuture<'static, ()> + Send + 'static>,
     ),
+}
+
+impl Command<Messages> {
+    pub fn from_future(f: impl Future<Output = anyhow::Result<()>> + Send + 'static) -> Self {
+        Command::task(async move {
+            match f.await {
+                Ok(()) => Command::None,
+                Err(e) => {
+                    tracing::error!("{e:?}");
+                    Command::message(e.into())
+                }
+            }
+        })
+    }
 }
 
 impl<Message> Command<Message> {

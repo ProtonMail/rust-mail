@@ -24,7 +24,7 @@ use std::sync::{Arc, Weak};
 use tokio::sync::watch;
 use tokio::task::AbortHandle;
 use topological_sort::TopologicalSort;
-use tracing::{Instrument, Level, debug, debug_span, error};
+use tracing::{Instrument, Level, debug, debug_span, error, trace};
 use uuid::Uuid;
 
 /// Execution context errors
@@ -837,6 +837,8 @@ impl QueueExecutor {
         );
 
         async {
+            debug!("Event loop queue execution");
+            trace!(id=?action_id, type=?action_type);
             let (mut decoded, metadata) = match decode_action(&self.shared.factory, action) {
                 Ok(v) => v,
                 Err(e) => {
@@ -876,7 +878,7 @@ impl QueueExecutor {
 
             Ok(Some(exec_output))
         }
-        .instrument(debug_span!("QueuedExecute", id=?action_id, type=?action_type))
+        .instrument(debug_span!("Event Loop Execute"))
         .await
     }
 
@@ -974,13 +976,14 @@ impl QueueAutoExecutor {
                 }
             }
 
-            let followup = match executor
-                .execute_one()
-                .instrument(
-                    debug_span!("Auto Execute", id=?executor.id, group=?executor.action_group),
-                )
-                .await
-            {
+            let instrumented_fut = async {
+                debug!("Event loop automatic execution");
+                trace!(id=?executor.id, group=?executor.action_group);
+                executor.execute_one().await
+            }
+            .instrument(debug_span!("Event Loop Execute"));
+
+            let followup = match instrumented_fut.await {
                 Ok(None) => ActionExecutionFollowup::WaitForAction,
                 Ok(Some(QueuedActionState::Queued(_, QueuedActionReason::Network))) => {
                     ActionExecutionFollowup::WaitForNetwork
