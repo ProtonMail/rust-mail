@@ -54,7 +54,7 @@ impl PinCode {
     pub const MAX_ATTEMPTS: u8 = 10;
     const MIN_PASSWD_LEN: usize = 4;
     const MAX_PASSWD_LEN: usize = 21;
-    const HIGHEST_SINGLE_DIGIT: u8 = 9;
+    const HIGHEST_SINGLE_DIGIT: u32 = 9;
 
     /// Creates new PIN
     ///
@@ -63,8 +63,7 @@ impl PinCode {
     /// Method does not verify old PIN if existed it is up to client to make that
     /// verification.
     ///
-    pub async fn create_pin<P: AsRef<[u8]>>(ctx: Arc<Context>, pin: P) -> Result<(), PinError> {
-        let pin = pin.as_ref().to_vec();
+    pub async fn create_pin(ctx: Arc<Context>, pin: Vec<u32>) -> Result<(), PinError> {
         let pin_len = pin.len();
 
         if pin_len < Self::MIN_PASSWD_LEN {
@@ -75,9 +74,7 @@ impl PinCode {
             return Err(PinError::TooLong);
         }
 
-        if pin.iter().any(|num| *num > Self::HIGHEST_SINGLE_DIGIT) {
-            return Err(PinError::Malformed);
-        }
+        let pin = Self::standarize_pin(pin)?;
 
         // We have no guarantees that hashing function will not block whole runtime
         // Better be safe than sorry.
@@ -112,7 +109,8 @@ impl PinCode {
     ///
     /// This method will be utilized to verify user if he is eligible person to access the app.
     ///
-    pub async fn validate_pin<P: AsRef<[u8]>>(ctx: Arc<Context>, pin: P) -> Result<(), PinError> {
+    pub async fn validate_pin(ctx: Arc<Context>, pin: Vec<u32>) -> Result<(), PinError> {
+        let pin = Self::standarize_pin(pin)?;
         let mut tether = ctx.account_stash().connection();
         let app_settings = AppSettings::get_or_default(&tether).await;
 
@@ -129,7 +127,6 @@ impl PinCode {
 
             // We have no guarantees that hashing function will not block whole runtime
             // Better be safe than sorry.
-            let pin = pin.as_ref().to_vec();
             let ctx_clone = ctx.clone();
             let success = tokio::task::spawn_blocking(move || {
                 let Some(secret) = ctx_clone.load_secret::<PinHash>()? else {
@@ -182,7 +179,7 @@ impl PinCode {
     /// Chosen order of the removal is to minimalize possibility of ending up in incorrect state
     /// Firstly the database is updated and when successful the `PinHash` is removed from the `KeyChain`.
     ///
-    pub async fn delete_pin<P: AsRef<[u8]>>(ctx: Arc<Context>, pin: P) -> Result<(), PinError> {
+    pub async fn delete_pin(ctx: Arc<Context>, pin: Vec<u32>) -> Result<(), PinError> {
         Self::validate_pin(ctx.clone(), pin).await?;
 
         let mut tether = ctx.account_stash().connection();
@@ -206,6 +203,18 @@ impl PinCode {
         tokio::task::spawn_blocking(move || ctx.delete_secret::<PinHash>()).await??;
 
         Ok(())
+    }
+
+    fn standarize_pin(pin: Vec<u32>) -> Result<Vec<u8>, PinError> {
+        pin.into_iter()
+            .map(|num| {
+                if num <= Self::HIGHEST_SINGLE_DIGIT {
+                    Ok(u8::try_from(num).unwrap())
+                } else {
+                    Err(PinError::Malformed)
+                }
+            })
+            .collect()
     }
 }
 
@@ -233,5 +242,27 @@ impl StoreInKeyChain for PinHash {
     fn to_stored_string(&self) -> SecretString {
         // unwrap safety: SecretString::from_str returns `Infallible`
         self.as_ref().parse().unwrap()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{PinCode, PinError};
+    use test_case::test_case;
+
+    #[test_case(vec![0], Ok(vec![0]))]
+    #[test_case(vec![1], Ok(vec![1]))]
+    #[test_case(vec![9], Ok(vec![9]))]
+    #[test_case(vec![10], Err(PinError::Malformed))]
+    fn test_standarize_pin(pin: Vec<u32>, expected: Result<Vec<u8>, PinError>) {
+        let actual = PinCode::standarize_pin(pin);
+        if expected.is_err() {
+            assert_eq!(
+                actual.unwrap_err().to_string(),
+                expected.unwrap_err().to_string()
+            );
+        } else {
+            assert_eq!(actual.unwrap(), expected.unwrap());
+        }
     }
 }
