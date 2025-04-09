@@ -70,6 +70,7 @@ pub struct RegisteredDevice {
 /// * `ctx` - core context.
 /// * `device_rx` - stream of device registration details. If changed it must contain `Some`
 ///
+#[tracing::instrument(err, skip_all)]
 pub async fn spawn_registered_device_task(
     ctx: Arc<Context>,
     device_rx: watch::Receiver<Option<RegisteredDevice>>,
@@ -117,6 +118,7 @@ pub struct RegisteredDeviceTaskState {
     registered_sessions: HashSet<SessionId>,
 }
 
+#[tracing::instrument(err, skip_all)]
 async fn registered_device_task(
     ctx: Arc<Context>,
     sessions_watcher: WatcherHandle,
@@ -133,6 +135,8 @@ async fn registered_device_task(
 // This function is public because we have to re-import it in tests via proton_core_test_utils
 // in order to break dependency cycle.
 /// One step of the background task that registers device.
+///
+#[tracing::instrument(err, skip_all)]
 pub async fn registered_device_task_step(
     ctx: &Context,
     state: &mut RegisteredDeviceTaskState,
@@ -141,6 +145,7 @@ pub async fn registered_device_task_step(
 ) -> Result<(), RegisteredDeviceTaskError> {
     let sessions = tokio::select! {
         res = device_rx.changed() => {
+            tracing::debug!("Device details changed: {res:?}");
             res?;
 
             state.device.clone_from(&device_rx.borrow_and_update());
@@ -150,6 +155,7 @@ pub async fn registered_device_task_step(
             CoreSession::all(&tether).await?
         },
         res = sessions_stream.next() => {
+            tracing::debug!("Sessions changed: {res:?}");
             res.ok_or(RegisteredDeviceTaskError::SessionStreamEnded)?;
 
             let tether = ctx.account_stash().connection();
@@ -199,13 +205,15 @@ async fn register_sessions(
     registered_sessions: &mut HashSet<SessionId>,
     device: RegisteredDevice,
 ) -> Result<(), RegisteredDeviceTaskError> {
+    tracing::debug!("Registering sessions: {}", sessions.len());
     for session in sessions {
         register_session(ctx, session, registered_sessions, &device).await?;
     }
+    tracing::debug!("Registered successfully");
     Ok(())
 }
 
-#[tracing::instrument(skip_all, fields(session_id = ?session.remote_id))]
+#[tracing::instrument(err, skip_all, fields(session_id = ?session.remote_id))]
 async fn register_session(
     ctx: &Context,
     session: CoreSession,
