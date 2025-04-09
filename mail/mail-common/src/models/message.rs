@@ -2718,7 +2718,7 @@ impl Message {
             }
         }
         if let Ok(Some(IncomingDefaultLocation::Blocked)) =
-            IncomingDefaultLocation::find(self.local_address_id, tether).await
+            IncomingDefaultLocation::find(self.sender.address.clone(), tether).await
         {
             banners.push(MessageBanner::BlockedSender);
         }

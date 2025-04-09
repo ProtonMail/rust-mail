@@ -1,10 +1,10 @@
 use bytes::Bytes;
 use muon::DELETE;
 use proton_api_core::service::{ApiServiceError, ApiServiceResult};
-use proton_api_core::services::proton::Proton;
 use proton_api_core::services::proton::muon::util::ProtonRequestExt;
 use proton_api_core::services::proton::muon::{GET, POST, PUT, serde_to_query};
 use proton_api_core::services::proton::{CORE_V4, LabelId};
+use proton_api_core::services::proton::{IncomingDefaultId, Proton};
 use serde_json::json;
 use std::io::Cursor;
 use std::time::Duration;
@@ -39,12 +39,12 @@ impl ProtonMail for Proton {
         &self,
         page: u64,
     ) -> ApiServiceResult<GetIncomingDefaultResponse> {
-        let query = json!({
+        let body = json!({
             "Page": page,
             "PageSize": INCOMING_DEFAULTS_PAGE_SIZE,
         });
         Ok(GET!("{MAIL_V4}/incomingdefaults")
-            .body_json(query)?
+            .body_json(body)?
             .send_with(self)
             .await?
             .ok()?
@@ -55,34 +55,29 @@ impl ProtonMail for Proton {
         &self,
         location: IncomingDefaultLocation,
         email: &str,
-    ) -> ApiServiceResult<()> {
-        let query = json!({
+    ) -> ApiServiceResult<PostIncomingDefaultResponse> {
+        let body = json!({
             "Email": email,
             "Location": location,
         });
         Ok(POST!("{MAIL_V4}/incomingdefaults")
-            .body_json(query)?
+            .body_json(body)?
             .send_with(self)
             .await?
             .ok()?
             .into_body_json()?)
     }
 
-    async fn update_incoming_default(
-        &self,
-        location: IncomingDefaultLocation,
-        email: &str,
-    ) -> ApiServiceResult<()> {
-        let query = json!({
-            "Email": email,
-            "Location": location,
+    async fn delete_incoming_default(&self, id: &IncomingDefaultId) -> ApiServiceResult<()> {
+        let body = json!({
+            "IDs": vec![id],
         });
-        Ok(PUT!("{MAIL_V4}/incomingdefaults")
-            .body_json(query)?
+        PUT!("{MAIL_V4}/incomingdefaults/delete")
+            .body_json(body)?
             .send_with(self)
             .await?
-            .ok()?
-            .into_body_json()?)
+            .ok()?;
+        Ok(())
     }
 
     async fn post_attachment(

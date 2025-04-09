@@ -1307,7 +1307,7 @@ pub struct NewAttachmentResponse {
 /// The response from an incoming default, can come either in the event loop or by calling
 /// `incomingdefaults`
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize, Default))]
 #[serde(rename_all = "PascalCase")]
 pub struct IncomingDefault {
     /// Which label messages from this address go to
@@ -1319,10 +1319,10 @@ pub struct IncomingDefault {
     pub email: Option<String>,
     // These are unused
     //
-    // #[serde(rename = "ID")]
-    // pub id: String,
-    // domain: String,
-    // time: u64,
+    #[serde(rename = "ID")]
+    pub id: String,
+    pub domain: Option<String>,
+    // time: Option<u64>,
 }
 
 /// Where do messages from a sender go by default. This is handled by the backend, but we sometimes

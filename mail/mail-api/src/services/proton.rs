@@ -15,7 +15,7 @@
 
 use bytes::Bytes;
 use proton_api_core::service::{ApiServiceError, ApiServiceResult};
-use proton_api_core::services::proton::LabelId;
+use proton_api_core::services::proton::{IncomingDefaultId, LabelId};
 use std::time::Duration;
 
 use crate::services::proton::prelude::*;
@@ -91,18 +91,14 @@ pub trait ProtonMail {
         &self,
         location: IncomingDefaultLocation,
         email: &str,
-    ) -> ApiServiceResult<()>;
+    ) -> ApiServiceResult<PostIncomingDefaultResponse>;
 
     /// PUTs incoming defaults, updating it.
     ///
     /// Calls the API to get a page of the incoming defaults.
     ///
     /// For more details see [the API documentation](https://protonmail.gitlab-pages.protontech.ch/Slim-API/mail/#tag/IncomingDefaults/operation/put_mail-%7B_version%7D-incomingdefaults-%7Bid%7D)
-    async fn update_incoming_default(
-        &self,
-        location: IncomingDefaultLocation,
-        email: &str,
-    ) -> ApiServiceResult<()>;
+    async fn delete_incoming_default(&self, id: &IncomingDefaultId) -> ApiServiceResult<()>;
 
     /// Upload attachment data with the given `params`.
     ///

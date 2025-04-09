@@ -161,3 +161,8 @@ declare_proton_id! {
     /// Represents the Id of a crypto salt.
     pub SaltId
 }
+
+declare_proton_id! {
+    /// Represents the Id of an incoming default
+    pub IncomingDefaultId
+}

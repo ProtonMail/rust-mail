@@ -11,6 +11,7 @@ use crate::app_model::mailbox::conversations::ConversationsState;
 use crate::app_model::mailbox::messages::{DecryptedMessage, MessagesState};
 use crate::app_model::watcher::WatchHandle;
 use crate::messages::Messages;
+use messages::BlockOrUnblock;
 pub use model::Model;
 use proton_core_common::datatypes::{LocalIdMarker, LocalLabelId};
 use proton_core_common::models::Label;
@@ -95,6 +96,7 @@ pub enum MessageMessage {
     MarkMessageUnread(LocalMessageId),
     StarMessage(LocalMessageId),
     UnstarMessage(LocalMessageId),
+    BlockSender(String, BlockOrUnblock),
     HasMore,
 }
 

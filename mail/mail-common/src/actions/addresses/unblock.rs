@@ -3,20 +3,20 @@ use crate::actions::MailActionError;
 use crate::models::default_location::IncomingDefaultLocation;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
 use proton_action_queue::action::{ActionId, Handler as ActionHandler};
+use proton_api_core::services::proton::IncomingDefaultId;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_api_mail::services::proton::response_data::IncomingDefaultLocation as ApiIncomingDefaultLocation;
 use serde::{Deserialize, Serialize};
 use stash::params;
 use stash::stash::Bond;
 
 /// Action which blocks or unblocks an address
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Block {
+pub struct Unblock {
     pub email: String,
 }
 
-impl Action for Block {
-    const TYPE: Type = Type("block");
+impl Action for Unblock {
+    const TYPE: Type = Type("unblock");
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
@@ -32,7 +32,7 @@ impl Action for Block {
 pub struct Handler;
 
 impl ActionHandler for Handler {
-    type Action = Block;
+    type Action = Unblock;
 
     type Context = MailUserContext;
     async fn apply_local(
@@ -43,8 +43,8 @@ impl ActionHandler for Handler {
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         bond.execute(
-            "INSERT INTO incoming_default (email, location) VALUES (?,?)",
-            params![action.email.clone(), IncomingDefaultLocation::Blocked],
+            "UPDATE incoming_default SET location = NULL WHERE email = ?",
+            params![action.email.clone()],
         )
         .await?;
         Ok(())
@@ -57,7 +57,11 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        IncomingDefaultLocation::delete_by_email(action.email.clone(), bond).await?;
+        bond.execute(
+            "UPDATE incoming_default SET location = ? WHERE email = ?",
+            params![IncomingDefaultLocation::Blocked, action.email.clone()],
+        )
+        .await?;
         Ok(())
     }
 
@@ -66,19 +70,17 @@ impl ActionHandler for Handler {
         _: ActionId,
         ctx: &Self::Context,
         action: &mut Self::Action,
-        mut guard: WriterGuard<'_>,
+        guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let new_incoming = ctx
-            .api()
-            .post_incoming_default(ApiIncomingDefaultLocation::Blocked, &action.email)
-            .await?
-            .incoming_default;
-        guard
-            .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
-                IncomingDefaultLocation::store_by_email([new_incoming], tx).await?;
-                Ok(())
-            })
+        let id = guard
+            .tether()
+            .query_value::<_, IncomingDefaultId>(
+                "SELECT id AS value FROM incoming_default WHERE email = ?",
+                params![action.email.clone()],
+            )
             .await?;
+
+        ctx.api().delete_incoming_default(&id).await?;
 
         Ok(())
     }

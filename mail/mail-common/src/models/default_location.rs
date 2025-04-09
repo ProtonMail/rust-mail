@@ -3,13 +3,14 @@ use std::{iter, sync::Arc, time::Instant};
 use derive_more::TryFrom;
 use indoc::indoc;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
+use proton_api_core::service::ApiServiceResult;
 use proton_api_core::services::proton::Proton;
 
 use proton_api_mail::services::proton::response_data::IncomingDefault;
 use proton_api_mail::services::proton::response_data::IncomingDefaultLocation as ApiIncomingDefaultLocation;
 use proton_api_mail::{INCOMING_DEFAULTS_PAGE_SIZE, services::proton::ProtonMail};
 use proton_core_common::{
-    datatypes::{InitializationKey, LocalAddressId},
+    datatypes::InitializationKey,
     models::{Address, InitializationError, InitializationWatcher, InitializedComponent},
 };
 use stash::{
@@ -18,10 +19,13 @@ use stash::{
     stash::{Bond, Stash, StashError, Tether},
 };
 use tokio::task::JoinSet;
+use tracing::error;
 use tracing::{Level, debug};
 
 use crate::MailContextError;
 use crate::actions::addresses::block::Block;
+use crate::actions::addresses::unblock::Unblock;
+use crate::actions::addresses::update_incoming_defaults::SyncIncomingDefaults;
 
 /// Where do messages from a sender go by default. This is handled by the backend, but we sometimes
 /// want this informaton for things like banners.
@@ -41,11 +45,11 @@ pub enum IncomingDefaultLocation {
 
 impl IncomingDefaultLocation {
     /// Finds the incoming default for a given address id.
-    pub async fn find(id: LocalAddressId, tether: &Tether) -> Result<Option<Self>, StashError> {
+    pub async fn find(email: String, tether: &Tether) -> Result<Option<Self>, StashError> {
         match tether
             .query_value::<_, Self>(
-                "SELECT location AS value FROM incoming_default WHERE local_address_id = ?",
-                params![id],
+                "SELECT location AS value FROM incoming_default WHERE email = ?",
+                params![email],
             )
             .await
         {
@@ -53,21 +57,6 @@ impl IncomingDefaultLocation {
             Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => Ok(None),
             Err(e) => Err(e),
         }
-    }
-
-    /// Stores or modifies an IncomingDefaultLocation into the database.
-    pub async fn save(self, id: LocalAddressId, bond: &Bond<'_>) -> Result<(), StashError> {
-        bond.execute(
-            indoc! {
-                "INSERT INTO incoming_default (local_address_id, location)
-                VALUES (?, ?)
-                ON CONFLICT(local_address_id) DO UPDATE SET
-                  location = excluded.location"
-            },
-            params![id, self],
-        )
-        .await?;
-        Ok(())
     }
 
     pub const INIT_KEY: InitializationKey = InitializationKey::new("incoming_defaults");
@@ -83,7 +72,7 @@ impl IncomingDefaultLocation {
             Self::INIT_KEY,
             &[Address::INIT_KEY],
             stash.connection(),
-            async || Self::sync(api).await,
+            async || Ok(Self::sync(api).await?),
             async |tx, res| {
                 Self::store_by_email(res, tx).await?;
                 Ok(())
@@ -94,7 +83,7 @@ impl IncomingDefaultLocation {
 
     /// Downloads all `IncomingDefault`s
     #[tracing::instrument(level = Level::DEBUG, skip_all)]
-    async fn sync(api: &Proton) -> Result<Vec<IncomingDefault>, MailContextError> {
+    pub async fn sync(api: &Proton) -> ApiServiceResult<Vec<IncomingDefault>> {
         let t0 = Instant::now();
         let initial = api.get_incoming_defaults(0).await?;
         debug!("Requested initial batch in {:?}", t0.elapsed());
@@ -120,8 +109,8 @@ impl IncomingDefaultLocation {
 
         let mut out = vec![];
 
-        for i in iter::once(Ok(initial.incoming_defaults)).chain(ret) {
-            for def in i? {
+        for defs in iter::once(Ok(initial.incoming_defaults)).chain(ret) {
+            for def in defs? {
                 out.push(def);
             }
         }
@@ -131,76 +120,42 @@ impl IncomingDefaultLocation {
 
     /// Stores all `IncomingDefault`s into the database
     pub async fn store_by_email(
-        items: impl IntoIterator<Item = IncomingDefault>,
+        defs: impl IntoIterator<Item = IncomingDefault>,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
-        for def in items {
-            if let (Some(email), Some(location)) = (def.email, def.location) {
-                let location: IncomingDefaultLocation = location.into();
-                bond.execute(
-                    indoc! {"
-                        INSERT OR REPLACE INTO incoming_default 
-                            (local_address_id, location)
+        for def in defs {
+            let location = def.location.map(IncomingDefaultLocation::from);
+
+            bond.execute(
+                indoc! {"
+                        INSERT INTO incoming_default 
+                            (email, location, id, domain)
                         VALUES 
-                          ( (SELECT local_id FROM addresses WHERE email = ?), ? );"
-                    },
-                    params![email, location],
-                )
-                .await?;
-            }
+                          (?,?,?,?);"
+                },
+                params![def.email, location, def.id, def.domain],
+            )
+            .await?;
         }
-        Ok(())
-    }
-
-    /// Stores all `IncomingDefault`s into the database
-    pub async fn store_by_id(
-        id: LocalAddressId,
-        location: IncomingDefaultLocation,
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        bond.execute(
-            indoc! {"
-                INSERT OR REPLACE INTO incoming_default 
-                    (local_address_id, location)
-                VALUES (?, ?);"
-            },
-            params![id, location],
-        )
-        .await?;
-        Ok(())
-    }
-
-    /// Deletes an incoming default locally by id
-    pub async fn delete_by_id(id: LocalAddressId, bond: &Bond<'_>) -> Result<(), StashError> {
-        bond.execute(
-            "DELETE FROM incoming_default WHERE local_address_id = ?",
-            params![id],
-        )
-        .await?;
         Ok(())
     }
 
     /// Stores all `IncomingDefault`s into the database
     pub async fn delete_by_email(email: String, bond: &Bond<'_>) -> Result<(), StashError> {
         bond.execute(
-            indoc! {
-                "DELETE FROM incoming_default
-                  WHERE local_address_id =
-                   (SELECT local_id FROM addresses WHERE email = ?)"
-
-            },
+            "DELETE FROM incoming_default WHERE email = ?",
             params![email],
         )
         .await?;
         Ok(())
     }
 
-    /// Block an address
+    /// Blocks an address
     ///
     /// # Parameters
     ///
     /// * `queue`       - The action queue.
-    /// * `address_id`  - The ID of the address to block.
+    /// * `email`       - The email of the address to block
     ///
     /// # Errors
     ///
@@ -208,18 +163,18 @@ impl IncomingDefaultLocation {
     ///
     pub async fn action_block(
         queue: &Queue,
-        address_id: LocalAddressId,
+        email: String,
     ) -> Result<QueuedActionOutput<Block>, QueueActionError<Block>> {
-        let action = Block::block(address_id);
+        let action = Block { email };
         queue.queue_action(action).await
     }
 
-    /// Unblock an address
+    /// Unblocks an address
     ///
     /// # Parameters
     ///
     /// * `queue`       - The action queue.
-    /// * `address_id`  - The ID of the address to block.
+    /// * `email`       - The email of the address to block
     ///
     /// # Errors
     ///
@@ -227,10 +182,21 @@ impl IncomingDefaultLocation {
     ///
     pub async fn action_unblock(
         queue: &Queue,
-        address_id: LocalAddressId,
-    ) -> Result<QueuedActionOutput<Block>, QueueActionError<Block>> {
-        let action = Block::unblock(address_id);
+        email: String,
+    ) -> Result<QueuedActionOutput<Unblock>, QueueActionError<Unblock>> {
+        let action = Unblock { email };
         queue.queue_action(action).await
+    }
+
+    /// Reloads the data from the API.
+    pub async fn action_resync(queue: &Queue) {
+        if let Err(e) = queue.queue_action(SyncIncomingDefaults).await {
+            if cfg!(debug_assertions) {
+                panic!("apply_local can't fail {e}");
+            } else {
+                error!(?e);
+            }
+        }
     }
 }
 
