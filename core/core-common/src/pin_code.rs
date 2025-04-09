@@ -74,7 +74,7 @@ impl PinCode {
             return Err(PinError::TooLong);
         }
 
-        let pin = Self::standarize_pin(pin)?;
+        let pin = Self::sanitize_pin(pin)?;
 
         // We have no guarantees that hashing function will not block whole runtime
         // Better be safe than sorry.
@@ -110,7 +110,7 @@ impl PinCode {
     /// This method will be utilized to verify user if he is eligible person to access the app.
     ///
     pub async fn validate_pin(ctx: Arc<Context>, pin: Vec<u32>) -> Result<(), PinError> {
-        let pin = Self::standarize_pin(pin)?;
+        let pin = Self::sanitize_pin(pin)?;
         let mut tether = ctx.account_stash().connection();
         let app_settings = AppSettings::get_or_default(&tether).await;
 
@@ -205,7 +205,7 @@ impl PinCode {
         Ok(())
     }
 
-    fn standarize_pin(pin: Vec<u32>) -> Result<Vec<u8>, PinError> {
+    fn sanitize_pin(pin: Vec<u32>) -> Result<Vec<u8>, PinError> {
         pin.into_iter()
             .map(|num| {
                 if num <= Self::HIGHEST_SINGLE_DIGIT {
@@ -255,7 +255,7 @@ mod tests {
     #[test_case(vec![9], Ok(vec![9]))]
     #[test_case(vec![10], Err(PinError::Malformed))]
     fn test_standarize_pin(pin: Vec<u32>, expected: Result<Vec<u8>, PinError>) {
-        let actual = PinCode::standarize_pin(pin);
+        let actual = PinCode::sanitize_pin(pin);
         if expected.is_err() {
             assert_eq!(
                 actual.unwrap_err().to_string(),
