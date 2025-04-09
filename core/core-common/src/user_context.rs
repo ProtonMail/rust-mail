@@ -270,7 +270,7 @@ impl UserContext {
         drop_all_tables_in_database(tether).await?;
         tracing::warn!("Archive user database");
         let user_db_location = self.get_user_db_path();
-        rename_database_files(user_db_location).await?;
+        rename_database_files(user_db_location).await;
 
         tracing::warn!("Remove account");
         let mut tether = self.context.account_stash().connection();

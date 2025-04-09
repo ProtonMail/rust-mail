@@ -777,7 +777,7 @@ impl Context {
         drop_all_tables_in_database(tether).await?;
         tracing::warn!("Archive account database");
         let account_db_location = self.get_account_db_location();
-        rename_database_files(account_db_location).await?;
+        rename_database_files(account_db_location).await;
 
         Ok(())
     }

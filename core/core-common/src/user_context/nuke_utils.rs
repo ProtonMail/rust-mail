@@ -42,10 +42,10 @@ pub async fn nuke_core_application_data(ctx: Arc<Context>) -> Result<(), PinErro
     }
 
     tracing::warn!("Archive user databases");
-    rename_database_files(ctx.get_user_db_location()).await?;
+    rename_database_files(ctx.get_user_db_location()).await;
 
     tracing::warn!("Archive account database");
-    rename_database_files(ctx.get_account_db_location()).await?;
+    rename_database_files(ctx.get_account_db_location()).await;
 
     tracing::warn!("Application's data has been cleared successfuly");
 
@@ -77,11 +77,11 @@ pub(crate) async fn drop_all_tables_in_database(mut tether: Tether) -> Result<()
     tx_res
 }
 
-pub async fn rename_database_files(path: impl AsRef<Path>) -> Result<(), StashError> {
+pub async fn rename_database_files(path: impl AsRef<Path>) {
     let path = path.as_ref();
     let Ok(mut db_dir) = fs::read_dir(path).await else {
         tracing::error!("Could not read database directory, aborting archive");
-        return Ok(());
+        return;
     };
     let mut to_rename = vec![];
 
@@ -102,6 +102,4 @@ pub async fn rename_database_files(path: impl AsRef<Path>) -> Result<(), StashEr
             tracing::error!("Could not rename the file, details: `{e}`");
         }
     }
-
-    Ok(())
 }
