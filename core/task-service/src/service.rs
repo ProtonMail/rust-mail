@@ -1,4 +1,5 @@
 use crate::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
+use parking_lot::Mutex;
 use pin_project::pin_project;
 use std::cell::Cell;
 use std::collections::HashMap;
@@ -227,6 +228,197 @@ impl TaskService {
         });
 
         Pin::from(future)
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+enum ServiceState {
+    Active,
+    Suspended,
+}
+
+impl ServiceState {
+    fn is_active(self) -> bool {
+        self == ServiceState::Active
+    }
+
+    fn is_suspended(self) -> bool {
+        self == ServiceState::Suspended
+    }
+}
+
+struct BackgroundAwareTaskState {
+    main: ServiceState,
+    background: ServiceState,
+    background_tasks: usize,
+}
+
+impl BackgroundAwareTaskState {
+    fn new() -> Self {
+        Self {
+            main: ServiceState::Active,
+            background: ServiceState::Suspended,
+            background_tasks: 0,
+        }
+    }
+
+    fn pause_main(&mut self) -> bool {
+        // Only pause if main is running and background is suspended.
+        let should_pause = self.main.is_active() && self.background.is_suspended();
+        self.main = ServiceState::Suspended;
+        should_pause
+    }
+
+    fn pause_background(&mut self) -> bool {
+        // Only pause if background is running and main is suspended, and we are the last
+        // background request which initiated this request.
+        let do_pause =
+            self.main.is_suspended() && self.background.is_active() && self.background_tasks == 1;
+        self.background_tasks = self.background_tasks.saturating_sub(1);
+        if self.background_tasks == 0 {
+            self.background = ServiceState::Suspended;
+        }
+        do_pause
+    }
+
+    fn resume_background(&mut self) -> bool {
+        // Only resume main if both main and background are suspended, and we are the first
+        // background task to initiate this request.
+        let do_resume = self.main.is_suspended()
+            && self.background.is_suspended()
+            && self.background_tasks == 0;
+        self.background_tasks = self.background_tasks.saturating_add(1);
+        self.background = ServiceState::Active;
+        do_resume
+    }
+
+    fn resume_main(&mut self) -> bool {
+        // Only resume main if both main and background are suspended.
+        let do_resume = self.main.is_suspended() && self.background.is_suspended();
+        self.main = ServiceState::Active;
+        do_resume
+    }
+}
+
+/// Similar to [`TaskService`] but provides more control when the spawned tasked should be paused
+/// and resumed when used in a background job on the platform in the same OS process.
+///
+/// To achieve this we track 2 states: one for the main application and one for the background task
+/// When the main application goes into a suspended state, [`pause_main()`] should be called and
+/// [`resume_main()`] when it enters the foreground. When the background tasks(s) start, they should
+/// call [`resume_background()`] and [`pause_background()`].
+///
+/// Internally we will ensure the underlying [`TaskService`] is paused only when required, allowing
+/// it to be safely shared between various background tasks and the main application.
+pub struct BackgroundAwareTaskService {
+    service: TaskService,
+    state: Mutex<BackgroundAwareTaskState>,
+}
+
+impl BackgroundAwareTaskService {
+    /// Create a new instance where the main states is active and the background suspended.
+    #[must_use]
+    pub fn new(service: TaskService) -> Self {
+        Self {
+            state: Mutex::new(BackgroundAwareTaskState::new()),
+            service,
+        }
+    }
+
+    /// Pause tasks when the main application is about to go into a suspended state. If a background
+    /// task is running, the pause request will be ignored.
+    pub fn pause_main(&self) {
+        if self.state.lock().pause_main() {
+            self.service.pause();
+        }
+    }
+
+    /// Pause tasks and wait for all task to be paused when the main application is about to go
+    /// into a suspended state. If a background task is running, the pause request will be ignored
+    /// and we will return immediately.
+    pub async fn pause_main_and_wait(&self) -> Result<(), oneshot::error::RecvError> {
+        if self.state.lock().pause_main() {
+            self.service.pause_and_wait().await
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Pause tasks when the background task has finished running. If the main application is not
+    /// in a suspended state, teh request will be ignored an we will return immediately.
+    pub fn pause_background(&self) {
+        if self.state.lock().pause_background() {
+            self.service.pause();
+        }
+    }
+
+    /// Pause tasks and wait for all task to be paused when the background task has finished running.
+    /// If the main application is not in a suspended state, teh request will be ignored.
+    pub async fn pause_background_and_wait(&self) -> Result<(), oneshot::error::RecvError> {
+        if self.state.lock().pause_background() {
+            self.service.pause_and_wait().await
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Resume all tasks if the main application and the background task are not suspended. In all
+    /// other combinations, the request will be ignored.
+    pub fn resume_main(&self) {
+        let mut state = self.state.lock();
+        if state.resume_main() {
+            self.service.resume();
+        }
+    }
+
+    /// Resume all tasks if the main application and the background task are not suspended. In all
+    /// other combinations, the request will be ignored.
+    pub fn resume_background(&self) {
+        let mut state = self.state.lock();
+        if state.resume_background() {
+            self.service.resume();
+        }
+    }
+
+    /// Spawns a new task.
+    ///
+    /// Spawned task can have its execution paused with [`Self::pause()`].
+    pub fn spawn<F>(&self, future: F) -> JoinHandle<F::Output>
+    where
+        F: Future<Output: Send> + Send + 'static,
+    {
+        self.service.spawn(future)
+    }
+
+    /// Like [`Self::spawn()`], but using given [`TaskSpawner`].
+    pub fn spawn_with<S, F>(&self, future: F) -> JoinHandle<F::Output>
+    where
+        S: TaskSpawner,
+        F: Future<Output: Send> + Send + 'static,
+    {
+        self.service.spawn_with::<S, _>(future)
+    }
+
+    /// Spawns a new task that races with given cancellation token.
+    ///
+    /// If the task wins, this function returns [`AsyncTaskResult::Completed`],
+    /// otherwise this function returns [`AsyncTaskResult::Cancelled`].
+    ///
+    /// Spawned task can have its execution paused with [`Self::pause()`].
+    pub fn spawn_cancellable_with<S, F>(
+        &self,
+        token: CancellationToken,
+        future: F,
+    ) -> JoinHandle<AsyncTaskResult<F::Output>>
+    where
+        S: TaskSpawner,
+        F: Future<Output: Send> + Send + 'static,
+    {
+        self.service.spawn_cancellable_with::<S, _>(token, future)
+    }
+
+    pub fn task_service(&self) -> &TaskService {
+        &self.service
     }
 }
 
@@ -590,5 +782,64 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+    }
+
+    #[test]
+    fn background_state_transitions_main_active_background_paused() {
+        let mut state = BackgroundAwareTaskState::new();
+        // pause main
+        assert!(state.pause_main());
+        // pause resume main
+        assert!(state.resume_main());
+    }
+
+    #[test]
+    fn background_state_transitions_main_active_background_active() {
+        let mut state = BackgroundAwareTaskState::new();
+        // start background should be noop since main is active
+        assert!(!state.resume_background());
+        assert!(!state.pause_background());
+    }
+
+    #[test]
+    fn background_state_transitions_main_paused_background_active() {
+        let mut state = BackgroundAwareTaskState::new();
+        assert!(state.pause_main());
+        assert!(state.resume_background());
+        assert!(state.pause_background());
+    }
+
+    #[test]
+    fn background_state_transitions_main_paused_background_active_then_main_active_and_background_paused()
+     {
+        let mut state = BackgroundAwareTaskState::new();
+        assert!(state.pause_main());
+        assert!(state.resume_background());
+        assert!(!state.resume_main());
+        assert!(!state.pause_background());
+    }
+
+    #[test]
+    fn background_state_transitions_main_paused_background_active_then_background_pause_and_main_active()
+     {
+        let mut state = BackgroundAwareTaskState::new();
+        assert!(state.pause_main());
+        assert!(state.resume_background());
+        assert!(state.pause_background());
+        assert!(state.resume_main());
+    }
+
+    #[test]
+    fn background_state_transitions_main_paused_multiple_background_tasks() {
+        let mut state = BackgroundAwareTaskState::new();
+        assert!(state.pause_main());
+        // 1st task resumes background work.
+        assert!(state.resume_background());
+        // 2nd task resumes background work - noop
+        assert!(!state.resume_background());
+        // 2nd task finishes background work - noop
+        assert!(!state.pause_background());
+        // 1st task finished background work - we can pause
+        assert!(state.pause_background());
     }
 }
