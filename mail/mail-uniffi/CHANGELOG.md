@@ -11,11 +11,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Features
 
 - [ET-559] Signup network requests
-
-## [mail-uniffi-v0.70.10] - 2025-04-09
-
-### Features
-
 - [ET-2698] Registered device background task
 - [ET-2698] Registering devices tests
 - [ET-2698] Make the register_device_task a method of the MailSession
@@ -26,18 +21,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - [ET-2601] Improve initialization by waiting when failure of dependency happen
+- Core: Fix status watcher's shared state
+
+### Changed
+
+- Action-queue: Simplify the online-check
+
+## [mail-uniffi-v0.70.10] - 2025-04-09
+
+### Fixes
+
 - [ET-2699] Blocked banner now properly gets updated on the event loop and block_address now takes a String instead of an id
 
 ## [mail-uniffi-v0.70.9] - 2025-04-09
 
 ### Changed
 
-- Action-queue: Simplify the online-check
 - Change pin type from Vec<u8> to Vec<u32>
 
-### Fixes
-
-- Core: Fix status watcher's shared state
 
 ## [mail-uniffi-v0.70.8] - 2025-04-07
 
