@@ -6,27 +6,6 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [mail-uniffi-v0.72.0] - 2025-04-10
-
-### Features
-
-- [ET-559] Signup network requests
-- [ET-2698] Registered device background task
-- [ET-2698] Registering devices tests
-- [ET-2698] Make the register_device_task a method of the MailSession
-- [ET-2698] More logs
-- [ET-2698] Make register_device_task synchronous
-- [ET-2698] Make sure that registration task can handle network errors
-
-### Fixes
-
-- [ET-2601] Improve initialization by waiting when failure of dependency happen
-- Core: Fix status watcher's shared state
-
-### Changed
-
-- Action-queue: Simplify the online-check
-
 ## [mail-uniffi-v0.70.10] - 2025-04-09
 
 ### Fixes
