@@ -76,6 +76,6 @@ commit_parsers = [
 # filter out the commits that are not matched by commit parsers
 filter_commits = true
 # sort the tags topologically
-topo_order = false
+topo_order = true
 # sort the commits inside sections by oldest/newest order
 sort_commits = "oldest"
