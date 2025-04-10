@@ -12,9 +12,7 @@ use crate::user_context::initialization::InitializationMediator;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 use proton_action_queue::action::ActionId;
-use proton_action_queue::queue::{
-    Queue, QueueAutoExecutor, QueueAutoExecutorPool, QueueAutoTerminationPolicy,
-};
+use proton_action_queue::queue::{Queue, QueueAutoExecutor, QueueAutoExecutorPool};
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::crypto_clock;
@@ -72,7 +70,7 @@ impl MailUserContext {
             .status_watcher()
             .subscribe_to_online();
 
-        let task_service = mail_context.core_context().task_service();
+        let task_service = mail_context.core_context().task_service().task_service();
 
         let default_queue_executor =
             Self::new_default_queue_executor(user_context.queue(), online.clone(), task_service);
@@ -122,19 +120,6 @@ impl MailUserContext {
             .into_auto_executor(online, task_service)
     }
 
-    /// Create a new default action executor for background execution.
-    pub(crate) fn new_background_default_queue_executor(
-        queue: &Queue,
-        online: watch::Receiver<bool>,
-        task_service: &TaskService,
-    ) -> QueueAutoExecutor {
-        queue.new_executor().into_auto_executor_with_policy(
-            online,
-            task_service,
-            QueueAutoTerminationPolicy::EmptyOrNetworkLoss,
-        )
-    }
-
     /// Create a new send group action executor.
     fn new_send_queue_executor(
         queue: &Queue,
@@ -143,23 +128,6 @@ impl MailUserContext {
         task_service: &TaskService,
     ) -> QueueAutoExecutorPool {
         QueueAutoExecutorPool::new(queue, &SEND_ACTION_GROUP, pool_size, online, task_service)
-    }
-
-    /// Create a new send group action executor for background_execution.
-    pub(crate) fn new_background_send_queue_executor(
-        queue: &Queue,
-        online: watch::Receiver<bool>,
-        pool_size: NonZeroUsize,
-        task_service: &TaskService,
-    ) -> QueueAutoExecutorPool {
-        QueueAutoExecutorPool::with_termination_policy(
-            queue,
-            &SEND_ACTION_GROUP,
-            pool_size,
-            online,
-            task_service,
-            QueueAutoTerminationPolicy::EmptyOrNetworkLoss,
-        )
     }
 
     /// Get the current Arc instance for this context.

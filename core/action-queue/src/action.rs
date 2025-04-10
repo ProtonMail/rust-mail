@@ -192,18 +192,6 @@ pub trait Action: Serialize + DeserializeOwned + 'static + Send {
     /// Can be overridden with [`MetadataBuilder::with_priority_override`].
     const PRIORITY: Priority = Priority::Normal;
 
-    /// Wheter the action remote may be paused.
-    ///
-    /// There may be an action which sets the lock on the database
-    /// and action could potentially block whole execution.
-    /// If the action should be able to finish execution and clear the lock
-    /// this option need to be set to true.
-    ///
-    /// Note: Use with caution as some of the actions may take much longer,
-    /// than aticipated and in that scenario may cause problems in operating systems
-    /// such as iOS in which OS may kill the app for not pausing execution in background.
-    const PAUSABLE: bool = true;
-
     /// Associated version converter.
     ///
     /// For more details see the [`VersionConverter`] trait.
