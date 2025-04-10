@@ -16,7 +16,7 @@
 //! manual process i.e. the client should call a constructor such as
 //! [`MailSession::new()`](mail::MailSession::create()) and pass in the required
 //! information. After this, a [`MailUserSession`](mail::MailUserSession) needs
-//! to be created in other to access all the user settings and labels. This
+//! to be created in order to access all the user settings and labels. This
 //! second step is done automatically when establishing an authentication
 //! context.
 //!

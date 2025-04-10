@@ -1,80 +1,52 @@
+use std::collections::VecDeque;
+
 use crate::services::proton::prelude::PostMetricsRequestElement;
 
-/// A trait defining the interface for storing and retrieving metrics.
+const DEFAULT_STORE_CAPACITY: usize = 512;
+
+/// Stores metrics in a fixed-capacity FIFO queue.
 ///
-/// Implementors of this trait must provide methods to store individual metrics, retrieve
-/// a specified number of metrics, and remove a specified number of metrics from the store.
-/// The trait requires `Send` and `Sync` bounds to ensure thread-safety, as it may be used
-/// across threads in concurrent contexts.
-pub trait MetricStore: Send + Sync {
-    /// Stores a single metric in the store.
-    ///
-    /// # Arguments
-    /// * `metric` - The `PostMetricsRequestElement` to store.
-    ///
-    /// # Returns
-    /// Returns `Ok(())` if the metric was successfully stored, or an `anyhow::Error` if an
-    /// error occurred during storage.
-    fn store(&mut self, metric: PostMetricsRequestElement) -> Result<(), anyhow::Error>;
-
-    /// Retrieves the first `n` metrics from the store.
-    ///
-    /// # Arguments
-    /// * `count` - The maximum number of metrics to retrieve.
-    ///
-    /// # Returns
-    /// Returns a `Result` containing a `Vec` of up to `count` `PostMetricsRequestElement`s,
-    /// or an `anyhow::Error` if retrieval fails. If fewer than `count` metrics are available,
-    /// returns all available metrics.
-    fn get_first_n(&self, count: usize) -> Result<Vec<PostMetricsRequestElement>, anyhow::Error>;
-
-    /// Removes the first `n` metrics from the store.
-    ///
-    /// # Arguments
-    /// * `count` - The number of metrics to remove from the beginning of the store.
-    ///
-    /// # Returns
-    /// Returns `Ok(())` if the metrics were successfully removed, or an `anyhow::Error` if
-    /// an error occurred during removal. If fewer than `count` metrics are available, removes
-    /// all available metrics.
-    fn remove_first_n(&mut self, count: usize) -> Result<(), anyhow::Error>;
-}
-
-/// An in-memory implementation of the `MetricStore` trait.
-///
-/// This struct stores metrics in a `Vec`.
+/// Removes the oldest element (from the back) if the capacity is reached, then adds the new element to the front.
 pub struct InMemoryMetricStore {
-    metrics: Vec<PostMetricsRequestElement>,
+    metrics: VecDeque<PostMetricsRequestElement>,
+    capacity: usize,
 }
 
-impl MetricStore for InMemoryMetricStore {
-    fn store(&mut self, metric: PostMetricsRequestElement) -> Result<(), anyhow::Error> {
-        self.metrics.push(metric);
-        Ok(())
+impl InMemoryMetricStore {
+    /// Stores a metric.
+    /// Removes the oldest element (from the front) if the capacity is reached, then adds the new element to the back.
+    pub fn store(&mut self, metric: PostMetricsRequestElement) {
+        if self.metrics.len() >= self.capacity {
+            self.metrics.pop_front(); // Remove oldest element
+        }
+        self.metrics.push_back(metric);
     }
 
-    fn get_first_n(&self, count: usize) -> Result<Vec<PostMetricsRequestElement>, anyhow::Error> {
-        Ok(self.metrics.iter().take(count).cloned().collect())
+    /// Returns the first n elements (oldest first).
+    #[must_use]
+    pub fn get_first_n(&self, count: usize) -> Vec<PostMetricsRequestElement> {
+        self.metrics.iter().take(count).cloned().collect()
     }
 
-    fn remove_first_n(&mut self, count: usize) -> Result<(), anyhow::Error> {
+    /// Removes the first n elements (oldest first).
+    pub fn remove_first_n(&mut self, count: usize) {
         self.metrics.drain(0..count.min(self.metrics.len()));
-        Ok(())
     }
 }
 
 impl InMemoryMetricStore {
     #[must_use]
-    pub fn new() -> Self {
+    pub fn new(capacity: usize) -> Self {
         Self {
-            metrics: Vec::with_capacity(128),
+            metrics: VecDeque::with_capacity(capacity),
+            capacity,
         }
     }
 }
 
 impl Default for InMemoryMetricStore {
     fn default() -> Self {
-        Self::new()
+        Self::new(DEFAULT_STORE_CAPACITY)
     }
 }
 
@@ -88,7 +60,7 @@ mod tests {
 
     #[test]
     fn test_inmemory_store_with_single_value() {
-        let mut store = InMemoryMetricStore::new();
+        let mut store = InMemoryMetricStore::default();
         let element = PostMetricsRequestElement {
             name: String::from("test"),
             version: 2,
@@ -98,15 +70,15 @@ mod tests {
                 value: 1,
             },
         };
-        store.store(element.clone()).unwrap();
+        store.store(element.clone());
         assert_eq!(store.metrics.len(), 1);
-        assert_eq!(store.get_first_n(1).unwrap().len(), 1);
-        assert_eq!(store.get_first_n(1).unwrap()[0], element);
+        assert_eq!(store.get_first_n(1).len(), 1);
+        assert_eq!(store.get_first_n(1)[0], element);
     }
 
     #[test]
     fn test_inmemory_store_with_multiple_values() {
-        let mut store = InMemoryMetricStore::new();
+        let mut store = InMemoryMetricStore::default();
         for i in 0..10 {
             let element = PostMetricsRequestElement {
                 name: String::from("test"),
@@ -117,11 +89,11 @@ mod tests {
                     value: 1,
                 },
             };
-            store.store(element.clone()).unwrap();
+            store.store(element.clone());
         }
         assert_eq!(store.metrics.len(), 10);
 
-        let batch = store.get_first_n(3).unwrap();
+        let batch = store.get_first_n(3);
         assert_eq!(batch.len(), 3);
         assert_eq!(batch[0].version, 0);
         assert_eq!(batch[1].version, 1);
@@ -130,7 +102,7 @@ mod tests {
 
     #[test]
     fn test_inmemory_delete_with_multiple_values() {
-        let mut store = InMemoryMetricStore::new();
+        let mut store = InMemoryMetricStore::default();
         for i in 0..10 {
             let element = PostMetricsRequestElement {
                 name: String::from("test"),
@@ -141,12 +113,12 @@ mod tests {
                     value: 1,
                 },
             };
-            store.store(element.clone()).unwrap();
+            store.store(element.clone());
         }
 
-        store.remove_first_n(3).unwrap();
+        store.remove_first_n(3);
         assert_eq!(store.metrics.len(), 7);
-        let batch = store.get_first_n(3).unwrap();
+        let batch = store.get_first_n(3);
         assert_eq!(batch.len(), 3);
         assert_eq!(batch[0].version, 3);
         assert_eq!(batch[1].version, 4);
@@ -155,7 +127,7 @@ mod tests {
 
     #[test]
     fn test_inmemory_delete_more_values_than_max() {
-        let mut store = InMemoryMetricStore::new();
+        let mut store = InMemoryMetricStore::default();
         for i in 0..10 {
             let element = PostMetricsRequestElement {
                 name: String::from("test"),
@@ -166,11 +138,29 @@ mod tests {
                     value: 1,
                 },
             };
-            store.store(element.clone()).unwrap();
+            store.store(element.clone());
         }
         assert_eq!(store.metrics.len(), 10);
 
-        store.remove_first_n(500).unwrap();
+        store.remove_first_n(500);
         assert_eq!(store.metrics.len(), 0);
+    }
+
+    #[test]
+    fn test_inmemory_insert_more_than_capacity_elements() {
+        let mut store = InMemoryMetricStore::default();
+        for _ in 0..(DEFAULT_STORE_CAPACITY * 2) {
+            let element = PostMetricsRequestElement {
+                name: String::from("test"),
+                version: 1,
+                timestamp: 33333,
+                data: PostMetricsRequestData {
+                    labels: json!({"status": "http2xx"}),
+                    value: 1,
+                },
+            };
+            store.store(element.clone());
+        }
+        assert_eq!(store.metrics.len(), DEFAULT_STORE_CAPACITY);
     }
 }

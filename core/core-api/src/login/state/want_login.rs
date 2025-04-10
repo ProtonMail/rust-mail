@@ -1,8 +1,8 @@
 use crate::login::state::StateData;
 use crate::login::{LoginError, state::State};
 use crate::service::ApiServiceError;
-use crate::services::observability::ApiServiceObservabilityResponse;
 use crate::services::observability::metrics::AuthV4RequestMetric;
+use crate::services::observability::{ApiServiceObservabilityResponse, ObservabilityRecorder};
 use crate::services::proton::Proton;
 use crate::services::proton::{SessionId, UserId};
 use crate::session::SessionParts;
@@ -19,13 +19,18 @@ use tracing::info;
 pub struct WantLogin {
     flow: AuthFlow,
     parts: SessionParts,
+    observability: ObservabilityRecorder,
 }
 
 impl WantLogin {
     pub fn new(flow: AuthFlow, parts: SessionParts) -> Self {
         info!("Login flow wants login");
 
-        Self { flow, parts }
+        Self {
+            flow,
+            parts,
+            observability: ObservabilityRecorder::default(),
+        }
     }
 
     pub async fn login(
@@ -96,7 +101,7 @@ impl WantLogin {
         match self.flow.login_with_extra(&user, &pass, info).await {
             LoginFlow::Ok(client, flow_data) => {
                 info!("Login flow does not require 2FA");
-                self.parts.observability.record(AuthV4RequestMetric::new(
+                self.observability.record(AuthV4RequestMetric::new(
                     ApiServiceObservabilityResponse::Success,
                 ));
 
@@ -112,7 +117,7 @@ impl WantLogin {
 
             LoginFlow::TwoFactor(flow, flow_data) => {
                 info!("Login flow requires 2FA");
-                self.parts.observability.record(AuthV4RequestMetric::new(
+                self.observability.record(AuthV4RequestMetric::new(
                     ApiServiceObservabilityResponse::Success,
                 ));
 
@@ -135,8 +140,7 @@ impl WantLogin {
             LoginFlow::Failed { reason, .. } => {
                 let api_service_err: ApiServiceError = muon::Error::from(reason).into();
                 let metric_response: ApiServiceObservabilityResponse = (&api_service_err).into();
-                self.parts
-                    .observability
+                self.observability
                     .record(AuthV4RequestMetric::new(metric_response));
                 Err(LoginError::FlowLogin(api_service_err))
             }
@@ -158,5 +162,6 @@ fn get_state_data(data: &LoginFlowData, parts: SessionParts) -> StateData {
         parts,
         user_id: UserId::from(data.user_id.clone()),
         session_id: SessionId::from(data.session_id.clone()),
+        observability: ObservabilityRecorder::default(),
     }
 }

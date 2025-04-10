@@ -2,13 +2,21 @@ use serde::{Deserialize, Serialize};
 
 use super::{ApiServiceObservabilityResponse, ObservabilityMetric};
 
+#[macro_export]
 macro_rules! metric {
-    ($name:literal, $version:literal, $(#[$meta:meta])* $struct_name:ident { $($field:ident : $field_type:ty),* }) => {
+    (
+        #[name = $name:literal]
+        #[version = $version:literal]
+        $(#[$meta:meta])*
+        pub struct $struct_name:ident {
+            $($(#[$field_meta:meta])* pub $field:ident : $field_type:ty),* $(,)?
+        }
+    ) => {
         $(#[$meta])*
         #[derive(Debug, Serialize, Deserialize)]
         #[serde(rename_all = "snake_case")]
         pub struct $struct_name {
-            $(pub $field: $field_type),*
+            $($(#[$field_meta])* pub $field: $field_type),*
         }
 
         impl $struct_name {
@@ -25,29 +33,29 @@ macro_rules! metric {
     };
 }
 
-metric!(
-    "core_signin_submit_totp_total",
-    1,
-    SignInSubmitTotpTotal {
-        status: ApiServiceObservabilityResponse
+metric! {
+    #[name = "core_signin_submit_totp_total"]
+    #[version = 1]
+    pub struct SignInSubmitTotpTotal {
+        pub status: ApiServiceObservabilityResponse
     }
-);
+}
 
-metric!(
-    "core_signin_submit_fido_total",
-    1,
-    SignInSubmitFidoTotal {
-        status: ApiServiceObservabilityResponse
+metric! {
+    #[name = "core_signin_submit_fido_total"]
+    #[version = 1]
+    pub struct SignInSubmitFidoTotal {
+        pub status: ApiServiceObservabilityResponse
     }
-);
+}
 
-metric!(
-    "core_signin_submit_mbp_total",
-    1,
-    SignInSubmitMailBoxPwTotal {
-        status: MailboxPasswordMetricStatus
+metric! {
+    #[name = "core_signin_submit_mbp_total"]
+    #[version = 1]
+    pub struct SignInSubmitMailBoxPwTotal {
+        pub status: MailboxPasswordMetricStatus
     }
-);
+}
 
 #[derive(PartialEq, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -64,20 +72,20 @@ pub enum MailboxPasswordMetricStatus {
     KeyUnlockFailed,
 }
 
-metric!(
-    "core_signin_auth_total",
-    1,
+metric! {
+    #[name = "core_signin_auth_total"]
+    #[version = 1]
     #[doc = "Tracks the success or failure of the POST request to `/auth/v4/info` and `/auth/v4`."]
     #[doc = "This metric indicates whether the authentication session initialization/login request completed successfully."]
-    AuthV4RequestMetric {
-        status: ApiServiceObservabilityResponse
+    pub struct AuthV4RequestMetric {
+        pub status: ApiServiceObservabilityResponse
     }
-);
+}
 
 #[cfg(test)]
 mod tests {
     use crate::services::{
-        observability::ObservabilityManager,
+        observability::ObservabilityRecorder,
         proton::prelude::{PostMetricsRequestData, PostMetricsRequestElement},
     };
 
@@ -86,7 +94,7 @@ mod tests {
 
     #[test]
     fn test_signin_submit_totp_total_serialization() {
-        let metric = ObservabilityManager::metrics_element(
+        let metric = ObservabilityRecorder::into_metrics_element(
             SignInSubmitTotpTotal {
                 status: ApiServiceObservabilityResponse::Success,
             },
@@ -116,7 +124,7 @@ mod tests {
 
     #[test]
     fn test_signin_submit_fido_total_serialization() {
-        let metric = ObservabilityManager::metrics_element(
+        let metric = ObservabilityRecorder::into_metrics_element(
             SignInSubmitFidoTotal {
                 status: ApiServiceObservabilityResponse::Success,
             },
@@ -146,7 +154,7 @@ mod tests {
 
     #[test]
     fn test_signin_submit_mailbox_pw_total_serialization() {
-        let metric = ObservabilityManager::metrics_element(
+        let metric = ObservabilityRecorder::into_metrics_element(
             SignInSubmitMailBoxPwTotal {
                 status: MailboxPasswordMetricStatus::ApiService(
                     ApiServiceObservabilityResponse::Success,
@@ -178,7 +186,7 @@ mod tests {
 
     #[test]
     fn test_signin_auth_serialization() {
-        let metric = ObservabilityManager::metrics_element(
+        let metric = ObservabilityRecorder::into_metrics_element(
             AuthV4RequestMetric {
                 status: ApiServiceObservabilityResponse::Success,
             },

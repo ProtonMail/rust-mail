@@ -27,9 +27,7 @@ impl WantTfa {
         let Self { flow, data, pass } = self;
 
         let result = flow.totp(&code).await;
-
-        data.parts
-            .observability
+        data.observability
             .record(metrics::SignInSubmitTotpTotal::new(
                 result.as_ref().err().into(),
             ));
@@ -52,8 +50,7 @@ impl WantTfa {
         let Self { flow, data, pass } = self;
 
         let result = flow.fido(&code).await;
-        data.parts
-            .observability
+        data.observability
             .record(metrics::SignInSubmitFidoTotal::new(
                 result.as_ref().err().into(),
             ));

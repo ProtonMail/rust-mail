@@ -4767,6 +4767,7 @@ dependencies = [
  "proton-task-service",
  "proton-uniffi-macros",
  "secrecy",
+ "serde",
  "serde_json",
  "smart-default",
  "sqlite-watcher",
