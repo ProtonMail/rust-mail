@@ -8,11 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [mail-uniffi-v0.72.0] - 2025-04-10
 
-### Features
+### Changed
 
-- [ET-559] Signup network requests
-
-## [mail-uniffi-v0.70.10] - 2025-04-09
+- Action-queue: Simplify the online-check
 
 ### Features
 
@@ -22,22 +20,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-2698] More logs
 - [ET-2698] Make register_device_task synchronous
 - [ET-2698] Make sure that registration task can handle network errors
+- [ET-559] Signup network requests
 
 ### Fixes
 
+- Core: Fix status watcher's shared state
 - [ET-2601] Improve initialization by waiting when failure of dependency happen
+
+## [mail-uniffi-v0.71.0] - 2025-04-07
+
+### Features
+
+- [ET-2592] Terminating action queue auto executor
+- [ET-2592] Background execution terminates when queue is empty
+- Add banners to the tui client
+- Support local API server
+
+### Fixes
+
+- Do not delete draft attachments
+- [ET-2671] Persist recipient removal
+- [ET-2581] Don't show embedded and remote banners when there is no remote/embedded content.
+- Escape rendering of forwarded plain text messages
+
+## [mail-uniffi-v0.70.10] - 2025-04-09
+
+### Fixes
+
 - [ET-2699] Blocked banner now properly gets updated on the event loop and block_address now takes a String instead of an id
 
 ## [mail-uniffi-v0.70.9] - 2025-04-09
 
 ### Changed
 
-- Action-queue: Simplify the online-check
 - Change pin type from Vec<u8> to Vec<u32>
 
-### Fixes
-
-- Core: Fix status watcher's shared state
 
 ## [mail-uniffi-v0.70.8] - 2025-04-07
 

@@ -20,6 +20,7 @@ in
   packages = [
     pkgs.bashInteractive
     pkgs.sql-formatter
+    pkgs.git-cliff
   ] ++ lib.optionals pkgs.stdenv.isDarwin (
     with pkgs; [
       libiconv
