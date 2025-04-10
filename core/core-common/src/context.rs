@@ -26,8 +26,8 @@ use proton_api_core::verification::DynChallengeNotifier;
 use proton_crypto_account::keys::PGPDeviceKey;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_sqlite3::MigratorError;
-use proton_task_service::TaskService;
 use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
+use proton_task_service::{BackgroundAwareTaskService, TaskService};
 use proton_vcard::VcardValidationError;
 use secrecy::ExposeSecret;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
@@ -245,7 +245,7 @@ pub struct Context {
     api_config: ApiConfig,
     hv_notifier: Option<DynChallengeNotifier>,
     cancellation_token: CancellationToken,
-    task_service: TaskService,
+    task_service: BackgroundAwareTaskService,
 }
 
 impl Context {
@@ -307,7 +307,7 @@ impl Context {
             api_config,
             hv_notifier,
             cancellation_token: CancellationToken::new(),
-            task_service,
+            task_service: BackgroundAwareTaskService::new(task_service),
         }))
     }
 
@@ -962,7 +962,7 @@ impl Context {
         self.cancellation_token.cancel();
     }
 
-    pub fn task_service(&self) -> &TaskService {
+    pub fn task_service(&self) -> &BackgroundAwareTaskService {
         &self.task_service
     }
 }
