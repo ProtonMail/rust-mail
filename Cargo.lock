@@ -4807,6 +4807,7 @@ dependencies = [
 name = "proton-task-service"
 version = "0.1.0"
 dependencies = [
+ "parking_lot",
  "pin-project",
  "tokio",
  "tokio-util",

@@ -67,7 +67,7 @@ impl MailUserContext {
         register_mail_actions(user_context.queue());
 
         let wait_for_online = WFO::create(user_context.session().status_watcher());
-        let task_service = mail_context.core_context().task_service();
+        let task_service = mail_context.core_context().task_service().task_service();
         let default_queue_executor =
             Self::new_default_queue_executor(user_context.queue(), &wait_for_online, task_service);
         let send_queue_executors = Self::new_send_queue_executor(
