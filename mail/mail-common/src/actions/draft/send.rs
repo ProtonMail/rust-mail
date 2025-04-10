@@ -70,7 +70,6 @@ impl Action for Send {
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::High;
     const GROUP: ActionGroup = SEND_ACTION_GROUP;
-    const PAUSABLE: bool = false;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = SendHandler;
     type RemoteOutput = (MessageId, UndoTimestamp);

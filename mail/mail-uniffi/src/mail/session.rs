@@ -1021,7 +1021,7 @@ impl MailSession {
     ///
     /// This should be called once the application enters the background.
     pub fn pause_work(&self) {
-        self.mail_ctx.core_context().task_service().pause();
+        self.mail_ctx.core_context().task_service().pause_main();
     }
 
     /// Pause all background work and wait for all non-pausable futures to complete.
@@ -1033,7 +1033,7 @@ impl MailSession {
                 .mail_ctx
                 .core_context()
                 .task_service()
-                .pause_and_wait()
+                .pause_main_and_wait()
                 .await
                 .is_err()
             {
@@ -1046,7 +1046,7 @@ impl MailSession {
     ///
     /// This should be called once the application enters the foreground.
     pub fn resume_work(&self) {
-        self.mail_ctx.core_context().task_service().resume();
+        self.mail_ctx.core_context().task_service().resume_main();
     }
 }
 
