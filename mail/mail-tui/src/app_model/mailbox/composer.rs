@@ -350,6 +350,7 @@ impl Composer {
                     address_id,
                     Disposition::Attachment,
                     &path,
+                    None,
                     &mut tether,
                 )
                 .await
