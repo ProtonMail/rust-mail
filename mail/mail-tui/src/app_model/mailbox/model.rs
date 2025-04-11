@@ -150,17 +150,14 @@ impl Model {
                 let stash = ctx.user_stash();
                 let tether = stash.connection();
                 let label = match Label::find_by_id(mbox.label_id(), &tether).await {
-                    Ok(l) => {
-                        if let Some(l) = l {
-                            l
-                        } else {
-                            let e = anyhow!(
-                                "Failed to get label: {}",
-                                MailboxError::LabelNotFound(mbox.label_id())
-                            );
-                            error!("{e:?}");
-                            return Command::message(Messages::DisplayError(None, e));
-                        }
+                    Ok(Some(label)) => label,
+                    Ok(None) => {
+                        let e = anyhow!(
+                            "Failed to get label: {}",
+                            MailboxError::LabelNotFound(mbox.label_id())
+                        );
+                        error!("{e:?}");
+                        return Command::message(Messages::DisplayError(None, e));
                     }
                     Err(e) => {
                         let e = anyhow!("Failed to get label: {e}");

@@ -1,26 +1,33 @@
 use std::collections::BTreeSet;
 use std::time::Instant;
 
-use crate::AppError;
 use crate::actions::{AllBottomBarMessageActions, BottomBarActions, MovableSystemFolderAction};
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, ExclusiveLocation, LocalMessageId, MessageRecipients,
     MessageSenders, MobileActions,
 };
-use crate::models::{Attachment, Conversation, ConversationLabel, Message, MessageLabel};
+use crate::models::{
+    Attachment, Conversation, ConversationLabel, MailSettings, Message, MessageLabel,
+};
+use crate::{AppError, MailContextResult, MailUserContext};
 use futures::try_join;
 use itertools::Itertools;
 use proton_api_core::services::proton::LabelId;
 use proton_api_core::session::Session;
 use proton_api_mail::services::proton::common::ConversationId;
 use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::{Label, ModelExtension};
+use proton_core_common::models::{
+    Label, LabelError, ModelExtension, ModelIdExtension as _, PaidSubscription, User,
+};
 use proton_mail_ids::LocalConversationId;
 use sqlite_watcher::watcher::TableObserver;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Stash, StashError, Tether, WatcherHandle};
 use tracing::{debug, warn};
+
+use super::SystemLabelId as _;
+use super::folder_banner::{AutoDeleteBanner, AutoDeleteState, SpamOrTrash};
 
 /// Contextual representation of a [`Conversation`] when it is opened for display
 /// in a [`Label`].
@@ -362,6 +369,43 @@ impl ContextualConversation {
             trash,
             spam,
         )
+    }
+
+    /// Gets the banner for folder autodelete.
+    ///
+    /// This can be called on any folder, it will only return the banner when it's in the
+    /// correct folders.
+    pub async fn auto_delete_banner(
+        local_label_id: LocalLabelId,
+        ctx: &MailUserContext,
+    ) -> MailContextResult<Option<AutoDeleteBanner>> {
+        let tether = &ctx.user_stash().connection();
+        let user = ctx.user().await?;
+        let user: &User = &user;
+        let trash = Label::remote_id_counterpart(LabelId::trash(), tether)
+            .await?
+            .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::inbox()))?;
+        let spam = Label::remote_id_counterpart(LabelId::spam(), tether)
+            .await?
+            .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::spam()))?;
+        let folder = if trash == local_label_id {
+            SpamOrTrash::Spam
+        } else if spam == local_label_id {
+            SpamOrTrash::Trash
+        } else {
+            return Ok(None);
+        };
+        let settings = MailSettings::get_or_default(tether).await;
+        let is_paid = user.subscribed.contains(PaidSubscription::MAIL) && !user.is_deliquent();
+        let state = if is_paid {
+            match settings.auto_delete_spam_and_trash_days {
+                None | Some(0) => AutoDeleteState::AutoDeleteDisabled,
+                Some(_) => AutoDeleteState::AutoDeleteEnabled,
+            }
+        } else {
+            AutoDeleteState::AutoDeleteUpsell
+        };
+        Ok(Some(AutoDeleteBanner { state, folder }))
     }
 }
 

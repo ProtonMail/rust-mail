@@ -41,6 +41,7 @@ mod assigned_actions;
 pub mod attachment;
 pub(crate) mod contextual_conversation;
 pub mod exclusive_location;
+pub mod folder_banner;
 pub mod labels;
 pub mod mail_notifications;
 pub mod message_banner;

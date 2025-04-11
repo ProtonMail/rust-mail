@@ -1091,3 +1091,40 @@ pub async fn resolve_message_id(
     .map_err(ActionError::from)
     .into()
 }
+
+/// Delete all messages in a label
+///
+/// Limited to:
+///
+/// - drafts
+/// - spam
+/// - trash
+/// - custom labels
+/// - custom folders
+///
+/// # Parameters
+///
+/// * `session`     - The session to use for the request.
+/// * `label_id`    - The local ID of the label to empty.
+///
+/// # Errors
+///
+/// Returns an error if the action can not be executed.
+///
+#[uniffi_export]
+#[returns(VoidActionResult)]
+pub async fn delete_all_messages_in_label(
+    session: Arc<MailUserSession>,
+    label_id: Id,
+) -> Result<(), ActionError> {
+    let user_context = session.ctx()?;
+    uniffi_async(async move {
+        RealMessage::action_delete_all_in_label(user_context.action_queue(), label_id.into())
+            .await
+            .map(|_| ())
+            .map_err(RealProtonMailError::from)
+    })
+    .await
+    .map_err(ActionError::from)
+    .into()
+}

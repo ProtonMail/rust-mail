@@ -13,7 +13,7 @@ use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::LabelId;
 use proton_api_core::services::proton::Proton;
 use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
+use proton_core_common::models::{Label, ModelExtension as _, ModelIdExtension as _};
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 use stash::orm::Model;
 use stash::stash::{Stash, StashError, Tether, WatcherHandle};

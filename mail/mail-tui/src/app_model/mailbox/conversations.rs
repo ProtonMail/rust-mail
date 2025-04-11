@@ -12,9 +12,12 @@ use anyhow::anyhow;
 use futures::FutureExt;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label;
+use proton_mail_common::datatypes::folder_banner::{AutoDeleteBanner, AutoDeleteState};
 use proton_mail_common::datatypes::{ContextualConversation, LocalConversationId, ReadFilter};
 use proton_mail_common::mail_scroller::{DataScrollerSource, MailScroller};
-use proton_mail_common::models::{Conversation, ConversationScrollData, MailSettings};
+use proton_mail_common::models::{
+    Conversation, ConversationScrollData, MailSettings, Message as MailMessage,
+};
 use proton_mail_common::{MailContext, MailUserContext, Mailbox, MailboxResult};
 use ratatui::Frame;
 use ratatui::crossterm::event::{Event, KeyCode};
@@ -32,6 +35,8 @@ pub struct ConversationsState {
     conversations: Vec<ContextualConversation>,
     table_state: ScrollableTableState,
     messages: MessagesStatus,
+    opened_label: LocalLabelId,
+    autodelete_banner: Option<AutoDeleteBanner>,
 }
 
 impl ConversationsState {
@@ -78,6 +83,7 @@ impl ConversationsState {
         )
         .await?;
 
+        let autodelete_banner = ContextualConversation::auto_delete_banner(label_id, &ctx).await?;
         let conversations = paginator.fetch_more().await?;
         Ok((
             Self {
@@ -85,6 +91,8 @@ impl ConversationsState {
                 table_state: ScrollableTableState::new(Some(0)),
                 messages: MessagesStatus::None,
                 conversations,
+                opened_label: label_id,
+                autodelete_banner,
             },
             command,
         ))
@@ -195,6 +203,9 @@ impl StateHandler for ConversationsState {
                 .selected_conversation()
                 .map(|id| Command::message(ConversationMessage::UnstarConversation(id).into()))
                 .unwrap_or_default(),
+            KeyCode::Char('E') => {
+                Command::message(ConversationMessage::DeleteAll(self.opened_label).into())
+            }
             KeyCode::Enter => self
                 .selected_conversation()
                 .map(|id| Command::message(ConversationMessage::OpenConversation(id).into()))
@@ -263,6 +274,7 @@ impl StateHandler for ConversationsState {
                             ))
                         })
                     }
+                    ConversationMessage::DeleteAll(id) => delete_all(user_ctx.to_owned(), id),
                     _ => Command::None,
                 }
             }
@@ -289,7 +301,27 @@ impl StateHandler for ConversationsState {
         }
     }
 
-    fn view(&mut self, frame: &mut Frame, area: Rect) {
+    fn view(&mut self, frame: &mut Frame, mut area: Rect) {
+        if let Some(AutoDeleteBanner { state, folder }) = self.autodelete_banner {
+            let text = match state {
+                AutoDeleteState::AutoDeleteUpsell => format!(
+                    "Upgrade to automatically remove emails that have been in {folder} for over 30 days."
+                ),
+                AutoDeleteState::AutoDeleteDisabled => format!(
+                    "Auto-delete is off. Messages in {folder} will remain until you delete them manually."
+                ),
+                AutoDeleteState::AutoDeleteEnabled => {
+                    format!("Messages in {folder} will be automatically deleted after 30 days.")
+                }
+            };
+            let [para_area, rest] = Layout::default()
+                .constraints([Constraint::Length(1), Constraint::Percentage(100)])
+                .areas(area);
+
+            frame.render_widget(ratatui::widgets::Paragraph::new(text), para_area);
+            area = rest;
+        }
+
         match &mut self.messages {
             MessagesStatus::None => {
                 let table = self.conversations.as_table();
@@ -366,12 +398,8 @@ fn delete_conversation(
             "Are you sure you wish to permanently delete the currently selected conversation?",
         )
         .on_accept(Command::task(async move {
-            match Conversation::action_mark_deleted(
-                ctx.action_queue(),
-                current_label_id,
-                std::iter::once(id),
-            )
-            .await
+            match Conversation::action_mark_deleted(ctx.action_queue(), current_label_id, [id])
+                .await
             {
                 Ok(_) => Command::None,
                 Err(e) => {
@@ -471,4 +499,23 @@ fn label_conversation(
             }
         }
     })
+}
+
+fn delete_all(ctx: Arc<MailUserContext>, id: LocalLabelId) -> Command<Messages> {
+    Command::message(Messages::raise_popup(
+        YesNoPopup::new(
+            "Confirm Delete All",
+            "Are you sure you wish to permanently delete all messages of this folder?",
+        )
+        .on_accept(Command::task(async move {
+            match MailMessage::action_delete_all_in_label(ctx.action_queue(), id).await {
+                Ok(_) => Command::None,
+                Err(e) => {
+                    let e = anyhow!("Failed to delete all in label: {e}");
+                    tracing::error!("{e:?}");
+                    Command::message(e.into())
+                }
+            }
+        })),
+    ))
 }

@@ -924,7 +924,7 @@ pub struct MessageFlags(u64);
 bitflags::bitflags! {
     impl MessageFlags:u64 {
         /// Whether a message has been received.
-        const RECEIVED = 1;
+        const RECEIVED = 1 << 0;
 
         /// Whether a message has been sent.
         const SENT = 1 << 1;

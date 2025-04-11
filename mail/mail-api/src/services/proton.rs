@@ -14,7 +14,7 @@
 //!
 
 use bytes::Bytes;
-use proton_api_core::service::{ApiServiceError, ApiServiceResult};
+use proton_api_core::service::ApiServiceResult;
 use proton_api_core::services::proton::{IncomingDefaultId, LabelId};
 use std::time::Duration;
 
@@ -429,7 +429,7 @@ pub trait ProtonMail {
         message_id: MessageId,
         message: DraftParams,
         attachments: DraftAttachmentKeyPackets,
-    ) -> Result<PutUpdateDraftResponse, ApiServiceError>;
+    ) -> ApiServiceResult<PutUpdateDraftResponse>;
 
     /// Sends an e-mail send request to the server.
     ///
@@ -449,17 +449,7 @@ pub trait ProtonMail {
         packages: Vec<Package>,
         auto_save_contacts: Option<bool>,
         delay: Option<Duration>,
-    ) -> Result<PostSendMessageResponse, ApiServiceError>;
-
-    /// Cancel the sending of a message with `message_id`, which was previously sent.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the request fails
-    async fn cancel_send(
-        &self,
-        message_id: MessageId,
-    ) -> Result<PostCancelSendResponse, ApiServiceError>;
+    ) -> ApiServiceResult<PostSendMessageResponse>;
 
     /// Reports a message as phishing.
     /// It requires the decrypted message body.
@@ -468,5 +458,19 @@ pub trait ProtonMail {
         message_id: MessageId,
         mime_type: MimeType,
         body: &str,
-    ) -> Result<(), ApiServiceError>;
+    ) -> ApiServiceResult<()>;
+
+    /// Cancel the sending of a message with `message_id`, which was previously sent.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the request fails
+    async fn cancel_send(&self, message_id: MessageId) -> ApiServiceResult<PostCancelSendResponse>;
+
+    /// Delete all messages with a label/folder
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the request fails
+    async fn delete_all_messages_in_label(&self, label_id: LabelId) -> ApiServiceResult<()>;
 }

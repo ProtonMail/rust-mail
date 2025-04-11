@@ -3,6 +3,7 @@
 mod messages;
 
 use crate::actions::messages::delete::Delete;
+use crate::actions::messages::delete_all::DeleteAllMessagesInLabel;
 use crate::actions::messages::ham::Ham;
 use crate::actions::messages::label::Label as ActionLabel;
 use crate::actions::messages::label_as::LabelAs;
@@ -24,6 +25,7 @@ use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedA
 use proton_core_common::utils::MapVec as _;
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
+use stash::utils::placeholders;
 use std::collections::HashSet;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -2682,7 +2684,7 @@ impl Message {
         let flags = self.flags;
         // The user might have marked it manually as not spam, skip that case
         if !flags.contains(MessageFlags::HAM_MANUAL) {
-            // phishing
+            // Phishing
             if flags.intersects(
                 MessageFlags::FLAG_SUSPICIOUS
                     | MessageFlags::PHISHING_AUTO
@@ -2756,6 +2758,91 @@ impl Message {
             params![flags, local_id],
         )
         .await?;
+        Ok(())
+    }
+
+    /// Delete all messages from a label
+    ///
+    /// Limited to:
+    ///
+    /// - drafts
+    /// - spam
+    /// - trash
+    /// - custom labels
+    /// - custom folders
+    /// # Parameters
+    ///
+    /// * `queue`       - The action queue.
+    /// * `label_id`    - The ID of the label to empty
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the action failed.
+    ///
+    pub async fn action_delete_all_in_label(
+        queue: &Queue,
+        label_id: LocalLabelId,
+    ) -> Result<
+        QueuedActionOutput<DeleteAllMessagesInLabel>,
+        QueueActionError<DeleteAllMessagesInLabel>,
+    > {
+        let action = DeleteAllMessagesInLabel::new(label_id);
+        queue.queue_action(action).await
+    }
+
+    /// Marks all messages in a label as deleted
+    /// # Errors
+    ///
+    /// Returns an error if the action failed.
+    ///
+    pub async fn delete_all_in_label_returning_modified(
+        label_id: LocalLabelId,
+        tx: &Bond<'_>,
+    ) -> Result<Vec<LocalMessageId>, StashError> {
+        let ids = tx
+            .query_values(
+                indoc! { "
+                    UPDATE messages
+                    SET deleted = 1
+                    FROM message_labels
+                    WHERE messages.local_id = message_labels.local_message_id
+                      AND message_labels.local_label_id = ?
+                    RETURNING messages.local_id AS value;
+                    "
+                },
+                params![label_id],
+            )
+            .await?;
+        Ok(ids)
+    }
+
+    /// Marks all given messages in a label as not deleted without doing anything else
+    /// # Errors
+    ///
+    /// Returns an error if the action failed.
+    ///
+    pub async fn mark_messages_undeleted_plain(
+        ids: &[LocalMessageId],
+        tx: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        let ids: Vec<Box<dyn ToSql + Send + 'static>> = ids
+            .iter()
+            .copied()
+            .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
+            .collect();
+
+        tx.execute(
+            formatdoc! { "
+                UPDATE messages
+                SET deleted = 0
+                WHERE local_id in ({})
+                "
+                , placeholders(ids.len())
+            },
+            ids,
+        )
+        .await?;
+
         Ok(())
     }
 }
