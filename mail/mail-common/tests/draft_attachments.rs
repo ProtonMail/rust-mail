@@ -86,8 +86,14 @@ async fn attachment_not_removed_on_error() {
 
     // Create attachment
     let mut tether = user_ctx.user_stash().connection();
-    let local_attachment =
-        create_and_add_attachment(&user_ctx, attachment_file.path(), &mut draft, &mut tether).await;
+    let local_attachment = create_and_add_attachment(
+        &user_ctx,
+        attachment_file.path(),
+        &mut draft,
+        None,
+        &mut tether,
+    )
+    .await;
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap_err();
@@ -141,8 +147,14 @@ async fn remove_attachment_updates_attachment_list() {
     // Create attachment
     let attachment_file = tempfile::NamedTempFile::new().unwrap();
     let mut tether = user_ctx.user_stash().connection();
-    let attachment =
-        create_and_add_attachment(&user_ctx, attachment_file.path(), &mut draft, &mut tether).await;
+    let attachment = create_and_add_attachment(
+        &user_ctx,
+        attachment_file.path(),
+        &mut draft,
+        None,
+        &mut tether,
+    )
+    .await;
 
     let action_id = draft
         .remove_attachment(&user_ctx, attachment.local_id.unwrap())
@@ -211,8 +223,14 @@ async fn removing_non_uploaded_attachment() {
 
     // Create attachment
     let mut tether = user_ctx.user_stash().connection();
-    let local_attachment =
-        create_and_add_attachment(&user_ctx, attachment_file.path(), &mut draft, &mut tether).await;
+    let local_attachment = create_and_add_attachment(
+        &user_ctx,
+        attachment_file.path(),
+        &mut draft,
+        None,
+        &mut tether,
+    )
+    .await;
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap_err();
@@ -303,8 +321,14 @@ async fn removing_uploaded_attachment() {
 
     // Create attachment
     let mut tether = user_ctx.user_stash().connection();
-    let local_attachment =
-        create_and_add_attachment(&user_ctx, attachment_file.path(), &mut draft, &mut tether).await;
+    let local_attachment = create_and_add_attachment(
+        &user_ctx,
+        attachment_file.path(),
+        &mut draft,
+        None,
+        &mut tether,
+    )
+    .await;
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
@@ -585,10 +609,46 @@ async fn deleting_draft_metadata_cleans_not_uploaded_attachments() {
     }
 }
 
+#[tokio::test]
+async fn override_attachment_name() {
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.catch_all().await;
+
+    let user_ctx = ctx.mail_user_context().await;
+    let attachment_file = tempfile::NamedTempFile::new().unwrap();
+    tokio::fs::write(attachment_file.path(), "Hello World")
+        .await
+        .unwrap();
+
+    let filename_override = "OverriddenFileName.exe";
+    let draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let local_attachment = Attachment::create_local(
+        &user_ctx,
+        draft.address_id,
+        Disposition::Attachment,
+        attachment_file.path(),
+        Some(filename_override.to_owned()),
+        &mut user_ctx.user_stash().connection(),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(local_attachment.filename, filename_override);
+}
+
 async fn create_and_add_attachment(
     ctx: &MailUserContext,
     path: &Path,
     draft: &mut Draft,
+    file_name_override: Option<String>,
     tether: &mut Tether,
 ) -> Attachment {
     tokio::fs::write(path, "Hello World").await.unwrap();
@@ -598,6 +658,7 @@ async fn create_and_add_attachment(
         draft.address_id.clone(),
         Disposition::Attachment,
         path,
+        file_name_override,
         tether,
     )
     .await

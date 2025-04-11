@@ -109,8 +109,13 @@ impl AttachmentList {
 
 #[uniffi_export]
 impl AttachmentList {
-    /// Add a new attachment to this draft.
-    pub async fn add(&self, path: String) -> Result<(), DraftAttachmentError> {
+    /// Add a new attachment to this draft. If `filename_override` is present, that will become
+    /// the filename of the attachment. Otherwise, it is extracted from the path.
+    pub async fn add(
+        &self,
+        path: String,
+        filename_override: Option<String>,
+    ) -> Result<(), DraftAttachmentError> {
         let Some(draft) = self.draft.upgrade() else {
             return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
                 UnexpectedError::Draft,
@@ -131,6 +136,7 @@ impl AttachmentList {
                 address_id,
                 Disposition::Attachment,
                 &path,
+                filename_override,
                 &mut tether,
             )
             .await;

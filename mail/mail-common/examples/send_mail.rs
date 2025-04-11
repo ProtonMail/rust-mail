@@ -120,6 +120,7 @@ async fn main() {
         draft.address_id.clone(),
         Disposition::Attachment,
         &tmp_file,
+        None,
         &mut tether,
     )
     .await

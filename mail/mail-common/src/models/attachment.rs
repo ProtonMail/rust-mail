@@ -635,12 +635,16 @@ impl Attachment {
     ///
     /// It is expected that the attachment data temporarily exists in another location before it
     /// will moved or copied  to the internal cache.
+    ///
+    /// By default, the file name of the attachment will be the file name component of the specified
+    /// `path`.
     #[tracing::instrument(level = tracing::Level::DEBUG, skip(ctx, tether, path))]
     pub async fn create_local(
         ctx: &MailUserContext,
         address_id: AddressId,
         disposition: Disposition,
         path: &Path,
+        file_name_override: Option<String>,
         tether: &mut Tether,
     ) -> MailContextResult<Self> {
         debug!("Attachment path: {path:?}");
@@ -669,7 +673,7 @@ impl Attachment {
             )));
         }
         // File name
-        let file_name = file_name.to_string_lossy();
+        let file_name = file_name_override.unwrap_or(file_name.to_string_lossy().to_string());
         // Determine mime type
         let path_cloned = path.to_owned();
         let mime_type =
@@ -707,7 +711,7 @@ impl Attachment {
             is_auto_forwardee: false,
             key_packets: None,
             mime_type,
-            filename: file_name.to_string(),
+            filename: file_name,
             sender: None,
             signature: None,
             size: file_metadata.size(),
