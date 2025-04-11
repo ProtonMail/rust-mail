@@ -24,7 +24,7 @@ use std::sync::{Arc, Weak};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use topological_sort::TopologicalSort;
-use tracing::{Instrument, Level, debug, debug_span, error, trace};
+use tracing::{Level, debug, error, trace};
 use uuid::Uuid;
 
 /// Execution context errors
@@ -839,7 +839,6 @@ impl QueueExecutor {
         );
 
         async {
-            debug!("Event loop queue execution");
             trace!(id=?action_id, type=?action_type);
             let (mut decoded, metadata) = match decode_action(&self.shared.factory, action) {
                 Ok(v) => v,
@@ -880,7 +879,6 @@ impl QueueExecutor {
 
             Ok(Some(exec_output))
         }
-        .instrument(debug_span!("Event Loop Execute"))
         .await
     }
 
@@ -1003,14 +1001,7 @@ impl QueueAutoExecutor {
                 debug!(?eid, "Resuming executor");
             }
 
-            let instrumented_fut = async {
-                debug!("Event loop automatic execution");
-                trace!(id=?executor.id, group=?executor.action_group);
-                executor.execute_one().await
-            }
-            .instrument(debug_span!("Event Loop Execute"));
-
-            let followup = match instrumented_fut.await {
+            let followup = match executor.execute_one().await {
                 Ok(None) => ActionExecutionFollowup::WaitForAction,
                 Ok(Some(QueuedActionState::Queued(_, QueuedActionReason::Network))) => {
                     if termination_policy.is_network_loss_policy() {
