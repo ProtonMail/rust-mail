@@ -725,13 +725,18 @@ impl MailContext {
 
         for session in sessions {
             if let CoreSessionState::Authenticated = CoreSessionState::of(&session) {
-                if let Some(user_context) = self
+                match self
                     .initialized_user_context_from_session(&session, None)
-                    .await?
+                    .await
                 {
-                    ctxs.push(user_context);
-                } else {
-                    tracing::trace!("{} has non-initialized context", session.account_id);
+                    Ok(Some(user_context)) => ctxs.push(user_context),
+                    Ok(None) => {
+                        tracing::debug!("{} has non-initialized context", session.account_id);
+                    }
+                    Err(MailContextError::DuplicateContext(user_id)) => {
+                        tracing::warn!("Duplicate context detected for {user_id}, skipping");
+                    }
+                    Err(e) => return Err(e),
                 }
             } else {
                 tracing::warn!("Found unauthenticated session");
