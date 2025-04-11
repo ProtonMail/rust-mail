@@ -74,6 +74,7 @@ pub enum ConversationMessage {
     NextPage(Vec<ContextualConversation>),
     HasMore,
     CloseConversation,
+    DeleteAll(LocalLabelId),
 }
 
 impl From<ConversationMessage> for Messages {

@@ -113,6 +113,7 @@ pub(crate) fn register_mail_actions(queue: &Queue) {
     register_action::<messages::unlabel::Unlabel>(queue);
     register_action::<messages::r#move::Move>(queue);
     register_action::<messages::delete::Delete>(queue);
+    register_action::<messages::delete_all::DeleteAllMessagesInLabel>(queue);
     register_action::<messages::read::Read>(queue);
     register_action::<messages::unread::Unread>(queue);
     register_action::<messages::ham::Ham>(queue);

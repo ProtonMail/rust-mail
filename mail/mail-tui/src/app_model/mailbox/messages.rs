@@ -815,7 +815,7 @@ impl DecryptedMessage {
              match banner {
                     MessageBanner::BlockedSender => ListItem::from("You blocked this sender."),
                     MessageBanner::PhishingAttempt => {
-                        ListItem::from("The system thinks that this is a phising attempt")
+                        ListItem::from("The system thinks that this is a phishing attempt")
                     }
                     MessageBanner::Spam => ListItem::from("This message was automatically marked as spam"),
                     MessageBanner::Expiry { timestamp } => ListItem::from(format!("This message will self-destruct at {timestamp:?}")),

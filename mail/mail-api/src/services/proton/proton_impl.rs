@@ -1,10 +1,9 @@
 use bytes::Bytes;
 use muon::DELETE;
-use proton_api_core::service::{ApiServiceError, ApiServiceResult};
+use proton_api_core::service::ApiServiceResult;
 use proton_api_core::services::proton::muon::util::ProtonRequestExt;
 use proton_api_core::services::proton::muon::{GET, POST, PUT, serde_to_query};
-use proton_api_core::services::proton::{CORE_V4, LabelId};
-use proton_api_core::services::proton::{IncomingDefaultId, Proton};
+use proton_api_core::services::proton::{CORE_V4, IncomingDefaultId, LabelId, Proton};
 use serde_json::json;
 use std::io::Cursor;
 use std::time::Duration;
@@ -414,7 +413,7 @@ impl ProtonMail for Proton {
         packages: Vec<Package>,
         auto_save_contacts: Option<bool>,
         delay: Option<Duration>,
-    ) -> Result<PostSendMessageResponse, ApiServiceError> {
+    ) -> ApiServiceResult<PostSendMessageResponse> {
         let send_request = PostSendRequest {
             expiration_time: None,
             expires_in: None,
@@ -432,10 +431,7 @@ impl ProtonMail for Proton {
             .into_body_json()?)
     }
 
-    async fn cancel_send(
-        &self,
-        message_id: MessageId,
-    ) -> Result<PostCancelSendResponse, ApiServiceError> {
+    async fn cancel_send(&self, message_id: MessageId) -> ApiServiceResult<PostCancelSendResponse> {
         Ok(POST!("{MAIL_V4}/messages/{message_id}/cancel_send")
             .send_with(self)
             .await?
@@ -450,7 +446,7 @@ impl ProtonMail for Proton {
         message_id: MessageId,
         mime_type: MimeType,
         body: &str,
-    ) -> Result<(), ApiServiceError> {
+    ) -> ApiServiceResult<()> {
         let query = json!({
             "MessageID": message_id,
             "MIMEType": mime_type,
@@ -463,5 +459,17 @@ impl ProtonMail for Proton {
             .await?
             .ok()?
             .into_body_json()?)
+    }
+    async fn delete_all_messages_in_label(&self, label_id: LabelId) -> ApiServiceResult<()> {
+        let query = json! ({
+            "LabelID": label_id,
+        });
+
+        DELETE!("{MAIL_V4}/messages/empty")
+            .query(serde_to_query(query)?)
+            .send_with(self)
+            .await?
+            .ok()?;
+        Ok(())
     }
 }

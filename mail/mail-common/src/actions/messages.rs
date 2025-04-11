@@ -1,4 +1,5 @@
 pub mod delete;
+pub mod delete_all;
 pub mod ham;
 pub mod label;
 pub mod label_as;
