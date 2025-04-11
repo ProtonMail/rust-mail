@@ -4463,9 +4463,9 @@ dependencies = [
 
 [[package]]
 name = "proton-crypto-account"
-version = "0.9.1"
+version = "0.10.0"
 source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "b51286eb4e2702a22186c8e5d14cc497769b0caf0d599044b936b268565a3b59"
+checksum = "181b779c675cb02f63aac6197fee51879014cd5c180e2b82a0aa6aef85bffd70"
 dependencies = [
  "base64",
  "derive_more 2.0.1",
