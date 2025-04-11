@@ -556,7 +556,7 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate a new mock expectation that accpets a mark as phising POST request.
+    /// Generate a new mock expectation that accpets a mark as phishing POST request.
     #[allow(clippy::doc_markdown)]
     #[function_name::named]
     pub async fn mock_report_phishing(&self) {
