@@ -5,6 +5,8 @@ use crate::errors::{DraftAttachmentError, DraftAttachmentErrorReason, ProtonErro
 use crate::mail::datatypes::AttachmentMetadata;
 use crate::mail::draft::Draft;
 use crate::{AsyncLiveQueryCallback, uniffi_async};
+use anyhow::anyhow;
+use proton_mail_common::MailContextError;
 use proton_mail_common::datatypes::{Disposition, LocalAttachmentId};
 use proton_mail_common::draft::attachments::{
     DraftAttachment as RealDraftAttachment, DraftAttachmentState as RealDraftAttachmentState,
@@ -148,6 +150,58 @@ impl AttachmentList {
             let attachment = result?;
             instance.add_attachment(&draft.ctx, attachment).await?;
             Ok(())
+        })
+        .await
+        .map_err(DraftAttachmentError::from)
+    }
+
+    /// Add a new inline attachment to this draft. If `filename_override` is present, that will become
+    /// the filename of the attachment. Otherwise, it is extracted from the path.
+    ///
+    /// Returns the assigned content id.
+    pub async fn add_inline(
+        &self,
+        path: String,
+        filename_override: Option<String>,
+    ) -> Result<String, DraftAttachmentError> {
+        let Some(draft) = self.draft.upgrade() else {
+            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
+                UnexpectedError::Draft,
+            )));
+        };
+
+        uniffi_async::<String, RealProtonMailError, _>(async move {
+            let path = PathBuf::from(path);
+
+            let address_id = {
+                let instance = draft.instance.read().await;
+                instance.address_id.clone()
+            };
+            let mut tether = draft.ctx.user_stash().connection();
+
+            let result = RealAttachment::create_local(
+                &draft.ctx,
+                address_id,
+                Disposition::Inline,
+                &path,
+                filename_override,
+                &mut tether,
+            )
+            .await;
+
+            let instance = draft.instance.read().await;
+            instance
+                .delete_attachment_if_in_staging_area(&draft.ctx, &path)
+                .await;
+            let attachment = result?;
+            let content_id = attachment
+                .content_id
+                .clone()
+                .ok_or(MailContextError::Other(anyhow!(
+                    "Somehow missing attachment content id"
+                )))?;
+            instance.add_attachment(&draft.ctx, attachment).await?;
+            Ok(content_id)
         })
         .await
         .map_err(DraftAttachmentError::from)
