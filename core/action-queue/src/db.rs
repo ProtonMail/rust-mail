@@ -628,10 +628,9 @@ impl ExecutionGuard {
 /// # Errors
 ///
 /// Returns errors if the query or migration failed.
+#[tracing::instrument(name = "Action Table Setup", skip(conn))]
 pub async fn create_tables(conn: &mut Tether) -> Result<(), MigratorError> {
     static DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/db/migrations");
-    let span = tracing::debug_span!("Action Table Setup");
-    let _enter = span.enter();
     let migrator = proton_sqlite3::Migrator::new();
     let mut migrations = embedded_migrations(&DIR);
 
