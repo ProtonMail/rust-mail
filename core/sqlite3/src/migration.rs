@@ -13,7 +13,7 @@ use stash::exports::SqliteError;
 use stash::params;
 use stash::stash::{Bond, StashError, Tether};
 use thiserror::Error;
-use tracing::debug;
+use tracing::{Instrument, debug};
 
 /// Migration Unit.
 #[async_trait::async_trait]
@@ -212,15 +212,17 @@ async fn run_migrations(
 ) -> Result<(), StashError> {
     for (i, m) in migrations.iter().enumerate().skip(current_version) {
         let span = tracing::debug_span!("migration", version = i, name = m.name());
-        {
-            let _entered = span.enter();
+        async move {
             debug!("Starting migration");
             m.migrate(tx).await?;
             debug!("Migration complete");
             let next_version = i + 1;
             set_version_table_version(tx, table_name, next_version).await?;
             debug!("Version updated to {next_version}");
+            Ok::<_, StashError>(())
         }
+        .instrument(span)
+        .await?;
     }
 
     Ok(())
