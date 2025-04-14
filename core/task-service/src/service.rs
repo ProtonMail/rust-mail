@@ -80,6 +80,12 @@ impl TaskService {
                 Command::Resume => {
                     paused = false;
 
+                    // If we receive a resume after pause and await, we need to unblock
+                    // all the waiters or they will wait forever.
+                    for sender in pause_awaiters.drain(..) {
+                        let _ = sender.send(());
+                    }
+
                     for (id, waker) in wakers.drain() {
                         trace!("Waking future {}", id);
                         waker.wake();
