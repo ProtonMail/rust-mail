@@ -4352,6 +4352,7 @@ dependencies = [
  "async-trait",
  "async_zip",
  "base64",
+ "bitflags 2.9.0",
  "bytes",
  "chrono",
  "clap",

@@ -1,7 +1,6 @@
 /// Represents different types of banners that can be displayed for a given message.
 /// These banners indicate various security warnings, expiration notices,
 /// or content-related alerts.
-#[allow(dead_code)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum MessageBanner {

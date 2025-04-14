@@ -21,6 +21,7 @@ use itertools::Itertools;
 use proton_api_core::session::Session;
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
+use proton_mail_common::datatypes::folder_banner::AutoDeleteBanner;
 use proton_mail_common::datatypes::{
     ContextualConversation, ContextualConversationAndMessages, LocalConversationId,
 };
@@ -865,7 +866,7 @@ pub async fn label_conversations_as(
     .map_err(ActionError::from)
 }
 
-// watches available move_to actions for conversations or messages.
+/// watches available move_to actions for conversations or messages.
 /// Any action returned here should reflect the display needs.
 ///
 /// # Parameters
@@ -889,6 +890,32 @@ pub async fn watch_available_move_to_actions(
         let handle = RealLabel::watch(&stash)?;
         let handle = watch_channel(ctx, handle, callback);
         Result::<_, RealProtonMailError>::Ok(handle)
+    })
+    .await
+    .map_err(ActionError::from)
+}
+
+/// Gets whether or not to display the `AutoDelete` banner.
+/// Any action returned here should reflect the display needs.
+///
+/// # Parameters
+///
+/// * `session`     - The session to use for the request.
+/// * `label_id`    - The local ID of the label of the folder we're in.
+///
+/// # Errors
+///
+/// Returns an error if the database query fails.
+///
+#[uniffi_export]
+pub async fn get_auto_delete_banner(
+    session: Arc<MailUserSession>,
+    label_id: Id,
+) -> Result<Option<AutoDeleteBanner>, ActionError> {
+    let ctx = session.ctx()?;
+    uniffi_async(async move {
+        let banner = ContextualConversation::auto_delete_banner(label_id.into(), &ctx).await?;
+        Ok::<_, RealProtonMailError>(banner)
     })
     .await
     .map_err(ActionError::from)
