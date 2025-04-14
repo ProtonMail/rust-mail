@@ -1,8 +1,9 @@
 use crate::service::ApiServiceResult;
-use crate::services::proton::payments::{ProtonPayments, PAYMENTS_V5};
-use crate::services::proton::prelude::*;
 use crate::services::proton::Proton;
-use muon::{serde_to_query, util::ProtonRequestExt, GET, POST};
+use crate::services::proton::payments::{PAYMENTS_V5, ProtonPayments};
+use crate::services::proton::prelude::*;
+use bytes::Bytes;
+use muon::{GET, POST, serde_to_query, util::ProtonRequestExt};
 
 impl ProtonPayments for Proton {
     async fn get_payments_plans(
@@ -15,6 +16,15 @@ impl ProtonPayments for Proton {
             .await?
             .ok()?
             .into_body_json()?)
+    }
+
+    async fn get_payments_resources_icons(&self, name: String) -> ApiServiceResult<Bytes> {
+        Ok(GET!("{PAYMENTS_V5}/resources/icons/{name}")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body()
+            .into())
     }
 
     async fn post_payments_tokens(

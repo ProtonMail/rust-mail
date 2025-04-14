@@ -1,3 +1,5 @@
+use bytes::Bytes;
+
 use crate::service::ApiServiceResult;
 
 export! {
@@ -24,6 +26,13 @@ pub trait ProtonPayments {
         &self,
         options: GetPaymentsPlansOptions,
     ) -> ApiServiceResult<GetPaymentsPlansResponse>;
+
+    /// Get the icon resource with the given name.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the request fails.
+    async fn get_payments_resources_icons(&self, name: String) -> ApiServiceResult<Bytes>;
 
     /// Create a payment token.
     ///

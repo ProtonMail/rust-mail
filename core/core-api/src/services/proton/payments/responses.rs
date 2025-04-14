@@ -33,7 +33,6 @@ use serde::Deserialize;
 use serde::Serialize;
 
 /// The response containing plans available to the user.
-// The response containing plans available to the user.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]

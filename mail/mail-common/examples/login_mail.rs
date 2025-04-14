@@ -76,8 +76,6 @@ impl Cli {
 #[derive(Debug, Subcommand)]
 enum Cmd {
     Login(LoginCmd),
-
-    #[command(subcommand)]
     Payments(PaymentsCmd),
 }
 
@@ -125,61 +123,77 @@ impl LoginCmd {
 }
 
 /// Manage payments.
-#[derive(Debug, Subcommand)]
-enum PaymentsCmd {
-    Subscription(SubscriptionPaymentsCmd),
+#[derive(Debug, Args)]
+struct PaymentsCmd {
+    #[arg(long)]
+    username: String,
+
+    #[command(subcommand)]
+    cmd: PaymentsSubCmd,
 }
 
 impl PaymentsCmd {
     async fn run(self, ctx: Arc<MailContext>) -> Result<()> {
-        match self {
-            Self::Subscription(cmd) => cmd.run(ctx).await,
+        let ctx = get_user_ctx(&ctx, &self.username).await?;
+
+        match self.cmd {
+            PaymentsSubCmd::Resources(cmd) => cmd.run(ctx).await,
+            PaymentsSubCmd::Subscription(cmd) => cmd.run(ctx).await,
         }
+    }
+}
+
+#[derive(Debug, Subcommand)]
+enum PaymentsSubCmd {
+    #[command(subcommand)]
+    Resources(PaymentsResourcesCmd),
+    Subscription(PaymentsSubscriptionCmd),
+}
+
+/// Manage payments resources.
+#[derive(Debug, Subcommand)]
+enum PaymentsResourcesCmd {
+    /// Dump the icon for the given resource as a PNG file.
+    Icon(PaymentsResourcesIconCmd),
+}
+
+impl PaymentsResourcesCmd {
+    async fn run(self, ctx: Arc<MailUserContext>) -> Result<()> {
+        match self {
+            Self::Icon(cmd) => cmd.run(ctx).await,
+        }
+    }
+}
+
+#[derive(Debug, Args)]
+struct PaymentsResourcesIconCmd {
+    name: String,
+}
+
+impl PaymentsResourcesIconCmd {
+    async fn run(self, ctx: Arc<MailUserContext>) -> Result<()> {
+        let icon = ctx
+            .api()
+            .get_payments_resources_icons(self.name.clone())
+            .await?;
+
+        std::fs::write(format!("{}.png", self.name), icon)?;
+
+        Ok(())
     }
 }
 
 /// Display the active subscription for the given user.
 #[derive(Debug, Args)]
-struct SubscriptionPaymentsCmd {
-    username: String,
-}
+struct PaymentsSubscriptionCmd {}
 
-impl SubscriptionPaymentsCmd {
-    async fn run(self, ctx: Arc<MailContext>) -> Result<()> {
-        let plan = self
-            .get_user_ctx(&ctx)
-            .await?
-            .api()
-            .get_payments_subscription()
-            .await?;
+impl PaymentsSubscriptionCmd {
+    async fn run(self, ctx: Arc<MailUserContext>) -> Result<()> {
+        let plan = ctx.api().get_payments_subscription().await?;
 
         println!("{plan:#?}");
 
         Ok(())
-    }
-
-    async fn get_user_ctx(&self, ctx: &Arc<MailContext>) -> Result<Arc<MailUserContext>> {
-        for acc in ctx.get_accounts().await? {
-            if acc.name_or_addr != self.username {
-                continue;
-            }
-
-            let Some(CoreAccountState::LoggedIn(mut s)) =
-                ctx.get_account_state(acc.remote_id.clone()).await?
-            else {
-                continue;
-            };
-
-            let Some(session) = ctx.get_session(s.pop().unwrap()).await? else {
-                continue;
-            };
-
-            return Ok(ctx
-                .user_context_from_session(&session, None, ShouldInitializeMailUserContext::Yes)
-                .await?);
-        }
-
-        Err("account not found")?
     }
 }
 
@@ -237,6 +251,30 @@ async fn new_login_flow(ctx: &MailContext, username: &str) -> Result<Flow> {
     }
 
     Ok(ctx.new_login_flow().await?)
+}
+
+async fn get_user_ctx(ctx: &Arc<MailContext>, username: &str) -> Result<Arc<MailUserContext>> {
+    for acc in ctx.get_accounts().await? {
+        if acc.name_or_addr != username {
+            continue;
+        }
+
+        let Some(CoreAccountState::LoggedIn(mut s)) =
+            ctx.get_account_state(acc.remote_id.clone()).await?
+        else {
+            continue;
+        };
+
+        let Some(session) = ctx.get_session(s.pop().unwrap()).await? else {
+            continue;
+        };
+
+        return Ok(ctx
+            .user_context_from_session(&session, None, ShouldInitializeMailUserContext::Yes)
+            .await?);
+    }
+
+    Err("account not found")?
 }
 
 #[allow(clippy::print_stdout)]
