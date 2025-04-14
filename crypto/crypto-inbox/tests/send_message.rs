@@ -932,7 +932,7 @@ mod send_logic {
         };
         let mut builder = InboxMimeBuilder::new()
             .text_body("Test")
-            .html_body(plain_body.as_bytes());
+            .html_body(&plain_body);
         for attachment in &draft.attachments {
             match attachment.disposition {
                 proton_crypto_inbox_mime::Disposition::Attachment => {

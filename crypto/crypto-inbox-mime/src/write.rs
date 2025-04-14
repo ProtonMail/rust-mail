@@ -26,7 +26,7 @@ use std::{
 };
 
 use mail_builder::{
-    encoders::quoted_printable::quoted_printable_encode,
+    encoders::{base64::base64_encode_mime, quoted_printable::quoted_printable_encode},
     headers::content_type::ContentType,
     mime::{BodyPart, MimePart},
 };
@@ -42,7 +42,18 @@ const DEFAULT_MIME_TYPE_ATTACHMENT: &str = "application/octet-stream";
 const MIME_TYPE_PLAIN: &str = "text/plain";
 const MIME_TYPE_HTML: &str = "text/html";
 const QUOTED_PRINTABLE_ENCODING: &str = "quoted-printable";
+const BASE_64_ENCODING: &str = "base64";
 const CONTENT_DISPOSITION_HEADER: &str = "Content-Disposition";
+
+/// Mime processing errors.
+#[derive(Debug, thiserror::Error)]
+pub enum BuildMimeError {
+    #[error("Failed to encode: {0}")]
+    Encode(&'static str),
+
+    #[error("Failed to write: {0}")]
+    Write(#[from] io::Error),
+}
 
 /// A builder for constructing multipart MIME message bodies for PGP/MIME.
 ///
@@ -69,7 +80,7 @@ const CONTENT_DISPOSITION_HEADER: &str = "Content-Disposition";
 ///     .text_body("This is the plain text body of the email.")
 ///
 ///     // Begin the HTML part of the email
-///     .begin_html_body(br#"<html><body><h1>Hello</h1><img src="cid:image1"></body></html>"#)
+///     .begin_html_body(r#"<html><body><h1>Hello</h1><img src="cid:image1"></body></html>"#)
 ///     
 ///     // Add an inline attachment (an image in this case)
 ///     // The image only belongs to the html body part and will not be considered in
@@ -107,10 +118,10 @@ const CONTENT_DISPOSITION_HEADER: &str = "Content-Disposition";
 /// ```
 pub struct InboxMimeBuilder<'x> {
     /// The text plain body part if any.
-    text_body: Option<io::Result<MimePart<'x>>>,
+    text_body: Option<Result<MimePart<'x>, BuildMimeError>>,
 
     /// The html body part if any.
-    html_body: Option<MimePart<'x>>,
+    html_body: Option<Result<MimePart<'x>, BuildMimeError>>,
 
     /// The attachments.
     attachments: Vec<MimePart<'x>>,
@@ -146,7 +157,7 @@ impl<'x> InboxMimeBuilder<'x> {
     ///
     /// * `html_body` - The HTML content of the email message.
     #[must_use]
-    pub fn html_body(self, html_body: &'x [u8]) -> InboxMimeBuilder<'x> {
+    pub fn html_body(self, html_body: &'x str) -> InboxMimeBuilder<'x> {
         self.begin_html_body(html_body).end_html_body()
     }
 
@@ -159,10 +170,20 @@ impl<'x> InboxMimeBuilder<'x> {
     ///
     /// * `html_body` - The HTML content of the email message.
     #[must_use]
-    pub fn begin_html_body(self, html_body: &'x [u8]) -> HtmlBodyPartBuilder<'x> {
+    pub fn begin_html_body(self, html_body: &'x str) -> HtmlBodyPartBuilder<'x> {
+        let mut data = Vec::with_capacity(html_body.len());
+        let Ok(_) = base64_encode_mime(html_body.as_bytes(), &mut data, false) else {
+            return HtmlBodyPartBuilder::new(self, Err(BuildMimeError::Encode(BASE_64_ENCODING)));
+        };
+        let Ok(encoded) = String::from_utf8(data) else {
+            return HtmlBodyPartBuilder::new(self, Err(BuildMimeError::Encode(BASE_64_ENCODING)));
+        };
         HtmlBodyPartBuilder::new(
             self,
-            MimePart::new(MIME_TYPE_HTML, BodyPart::Binary(html_body.into())),
+            Ok(
+                MimePart::new(MIME_TYPE_HTML, BodyPart::Text(encoded.into()))
+                    .transfer_encoding(BASE_64_ENCODING),
+            ),
         )
     }
 
@@ -233,7 +254,7 @@ impl<'x> InboxMimeBuilder<'x> {
     ///
     /// # Errors
     /// Returns an error if writing to the output fails.
-    pub fn write_to(self, output: impl Write) -> io::Result<()> {
+    pub fn write_to(self, output: impl Write) -> Result<(), BuildMimeError> {
         let mut parts = Vec::with_capacity(self.attachments.len() + 1);
 
         let plain_body_part = self.text_body.transpose()?;
@@ -242,10 +263,10 @@ impl<'x> InboxMimeBuilder<'x> {
         let body_part = match (plain_body_part, self.html_body) {
             (None, None) => MimePart::new("text/plain", BodyPart::Text("".into()))
                 .transfer_encoding(QUOTED_PRINTABLE_ENCODING),
-            (None, Some(html_part)) => html_part,
+            (None, Some(html_part)) => html_part?,
             (Some(text_part), None) => text_part,
             (Some(text_part), Some(html_part)) => {
-                MimePart::new(MULTIPART_ALTERNATIVE, vec![text_part, html_part])
+                MimePart::new(MULTIPART_ALTERNATIVE, vec![text_part, html_part?])
             }
         };
 
@@ -260,16 +281,19 @@ impl<'x> InboxMimeBuilder<'x> {
 }
 
 /// Encodes the text body as quoted-printable.
-fn encode_text_plain_body(text_body: &str) -> io::Result<MimePart> {
+fn encode_text_plain_body(text_body: &str) -> Result<MimePart, BuildMimeError> {
     let mut encoded_data = Vec::with_capacity(text_body.len());
-    quoted_printable_encode(text_body.as_bytes(), &mut encoded_data, false, true)?;
+    quoted_printable_encode(text_body.as_bytes(), &mut encoded_data, false, true)
+        .map_err(|_| BuildMimeError::Encode(QUOTED_PRINTABLE_ENCODING))?;
     // The output is utf-8 encoded, thus, no error.
-    let encoded_plain_body = String::from_utf8(encoded_data).map_err(|_| {
-        io::Error::new(
-            io::ErrorKind::InvalidData,
-            "read non-utf8 compliant quoted-printable data",
-        )
-    })?;
+    let encoded_plain_body = String::from_utf8(encoded_data)
+        .map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "read non-utf8 compliant quoted-printable data",
+            )
+        })
+        .map_err(|_| BuildMimeError::Encode(QUOTED_PRINTABLE_ENCODING))?;
     Ok(
         MimePart::new(MIME_TYPE_PLAIN, BodyPart::Text(encoded_plain_body.into()))
             .transfer_encoding(QUOTED_PRINTABLE_ENCODING),
@@ -287,7 +311,7 @@ pub struct HtmlBodyPartBuilder<'x> {
     parent: InboxMimeBuilder<'x>,
 
     /// The HTML body.
-    html_body: MimePart<'x>,
+    html_body: Result<MimePart<'x>, BuildMimeError>,
 
     /// All inline attachments only relevant to the HTML body.
     inline_attachments: Vec<MimePart<'x>>,
@@ -295,7 +319,7 @@ pub struct HtmlBodyPartBuilder<'x> {
 
 impl<'x> HtmlBodyPartBuilder<'x> {
     /// Starts building an HTML part.
-    fn new(parent: InboxMimeBuilder<'x>, html_body: MimePart<'x>) -> Self {
+    fn new(parent: InboxMimeBuilder<'x>, html_body: Result<MimePart<'x>, BuildMimeError>) -> Self {
         Self {
             parent,
             html_body,
@@ -336,10 +360,12 @@ impl<'x> HtmlBodyPartBuilder<'x> {
     #[must_use]
     pub fn end_html_body(mut self) -> InboxMimeBuilder<'x> {
         let mut parts = Vec::with_capacity(self.inline_attachments.len() + 1);
-        parts.push(self.html_body);
-        parts.extend(self.inline_attachments);
 
-        self.parent.html_body = Some(MimePart::new(MULTIPART_RELATED, parts));
+        if let Ok(html_body) = self.html_body {
+            parts.push(html_body);
+            parts.extend(self.inline_attachments);
+            self.parent.html_body = Some(Ok(MimePart::new(MULTIPART_RELATED, parts)));
+        }
         self.parent
     }
 }
