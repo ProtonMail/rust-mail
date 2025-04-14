@@ -39,7 +39,8 @@ use tracing_appender::non_blocking::WorkerGuard;
 pub struct MailSession {
     mail_ctx: Arc<MailContext>,
     user_ctx: Arc<MailUserContextMap>,
-    _log_guard: WorkerGuard,
+    /// This is an Option because it compiles to `None` for iOS.
+    _log_guard: Option<WorkerGuard>,
 }
 
 /// Configuration parameters for the [`MailSession`]
@@ -152,7 +153,7 @@ async fn create_mail_session_inner(
     std::fs::create_dir_all(&log_path)?;
     log_path.push("proton-mail-uniffi.log");
 
-    let log_guard = init_log(&log_path, params.log_debug)?;
+    let maybe_log_guard = init_log(&log_path, params.log_debug)?;
 
     let session_path = PathBuf::from(params.session_dir);
     let user_path = PathBuf::from(params.user_dir);
@@ -210,7 +211,7 @@ async fn create_mail_session_inner(
     Ok(Arc::new(MailSession {
         mail_ctx,
         user_ctx: MailUserContextMap::new(),
-        _log_guard: log_guard,
+        _log_guard: maybe_log_guard,
     }))
 }
 
