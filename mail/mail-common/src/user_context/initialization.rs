@@ -7,7 +7,8 @@ use crate::{MailContextError, MailContextResult, MailUserContext};
 use futures::try_join;
 use proton_core_common::datatypes::{InitializationKey, InitializedComponentState};
 use proton_core_common::models::{
-    Address, Contact, InitializationError, InitializationWatcher, InitializedComponent, User,
+    Address, Contact, DependencyInitializationError, InitializationError, InitializationWatcher,
+    InitializedComponent, User,
 };
 use proton_event_loop::EventLoopError;
 use proton_task_service::{AsyncTaskResult, TaskService};
@@ -27,7 +28,7 @@ enum MailUserContextLoadingStage {
 }
 
 impl MailUserContext {
-    const CONTEXT_INIT_KEY: InitializationKey = InitializationKey::new("mail_user_context");
+    pub const CONTEXT_INIT_KEY: InitializationKey = InitializationKey::new("mail_user_context");
     /// Initialize the mail user context, running all the necessary syncs to ensure the context is ready to be used.
     /// Syncs are mostly run in the parallel, but updating message & conversation count are dependent on labels, so it is run in sequence.
     ///
@@ -60,6 +61,16 @@ impl MailUserContext {
         let tether = self.user_stash().connection();
         let state = InitializedComponent::state(Self::CONTEXT_INIT_KEY, &tether).await?;
         Ok(matches!(state, InitializedComponentState::Succeeded))
+    }
+
+    /// Wait for the `MailUserContext` to be initialized.
+    pub(crate) async fn wait_on_initialized(
+        &self,
+        watcher: &InitializationWatcher,
+    ) -> Result<(), DependencyInitializationError> {
+        let tether = self.user_stash().connection();
+        InitializedComponent::wait_for_dependencies(&[Self::CONTEXT_INIT_KEY], watcher, &tether)
+            .await
     }
 
     /// Initialize a component.
