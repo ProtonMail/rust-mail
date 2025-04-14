@@ -1,6 +1,7 @@
-use crate::MailUserContext;
+use crate::context::EventPollMode;
 use crate::events::MailEvent;
 use crate::user_context::events::subscriber::MailEventSubscriber;
+use crate::{MailContextError, MailUserContext};
 use anyhow::anyhow;
 use async_trait::async_trait;
 use proton_action_queue::queue::ActionError;
@@ -11,6 +12,7 @@ use proton_api_core::services::proton::ProtonCore;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::response_data::MailEvent as ApiMailEvent;
 use proton_core_common::CoreEventSubscriber;
+use proton_core_common::models::InitializationWatcher;
 use proton_event_loop::EventLoopError;
 use proton_event_loop::provider::Provider;
 use proton_event_loop::store::Store;
@@ -20,7 +22,7 @@ use stash::params;
 use stash::stash::StashError;
 use std::sync::Weak;
 use std::time::Duration;
-use tracing::error;
+use tracing::{Instrument, error, warn};
 
 const MAIL_EVENT_TYPE_ID: &str = "proton-mail-event";
 
@@ -89,7 +91,10 @@ impl Provider<MailEvent> for MailUserContext {
 
 impl MailUserContext {
     /// Setup a background task that queues the event loop action.
-    pub(crate) fn init_event_loop_poll(&self, duration: Duration) {
+    pub(crate) async fn init_event_loop_poll(
+        &self,
+        duration: Duration,
+    ) -> Result<(), MailContextError> {
         tracing::info!(
             "Initializing event loop poll with {} second interval",
             duration.as_secs()
@@ -97,40 +102,63 @@ impl MailUserContext {
         let ctx = self.this.clone();
         let mut interval = tokio::time::interval(duration);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let watcher = InitializationWatcher::new(self.user_stash())?;
+        let watcher_cloned = watcher.clone();
         self.spawn(async move {
-            // Loop until the `MailUserContext` is initialized.
-            loop {
-                let Some(ctx) = ctx.upgrade() else {
-                    return;
-                };
-
-                if let Ok(true) = ctx.is_initialized().await.inspect_err(|e| {
-                    error!("Failed to check initialization status in event loop: {e:?}")
-                }) {
-                    break;
-                }
-                drop(ctx);
-                interval.tick().await;
-            }
-            // `MailUserContext` is now initialized od event poll.
-            loop {
-                interval.tick().await;
-                let Some(ctx) = ctx.upgrade() else {
-                    return;
-                };
-
-                if let Err(e) = ctx.poll_event_loop().await {
-                    error!("Failed to queue poll event loop poll:{e:?}");
-                }
+            if let Err(e) = watcher_cloned.task().await {
+                error!("Failed to start event loop init watcher: {e:?}")
             }
         });
+        self.spawn(
+            async move {
+                // Wait until `MailUserContext` is initialized.
+                tracing::info!("Starting event poll init loop");
+                loop {
+                    let Some(ctx) = ctx.upgrade() else {
+                        return;
+                    };
+
+                    tracing::debug!("Waiting on context to be initialized.");
+                    if let Err(e) = ctx.wait_on_initialized(watcher.as_ref()).await {
+                        error!("Mail User Context failed to initialize: {e:?}, trying again...");
+                        continue;
+                    }
+
+                    break;
+                }
+                tracing::info!("Starting event poll loop");
+                // `MailUserContext` is now initialized, we can proceed with the event poll.
+                loop {
+                    interval.tick().await;
+                    let Some(ctx) = ctx.upgrade() else {
+                        return;
+                    };
+
+                    if let Err(e) = ctx.queue_poll_event_loop().await {
+                        error!("Failed to queue poll event loop poll:{e:?}");
+                    }
+                }
+            }
+            .instrument(tracing::debug_span!("event_loop")),
+        );
+        Ok(())
     }
     /// Queue an action to execute the event loop.
     ///
     /// # Errors
     ///
     /// Returns error if the action failed to be queued.
-    async fn poll_event_loop(
+    pub async fn poll_event_loop(
+        &self,
+    ) -> Result<(), ActionError<crate::actions::event_poll::EventPoll>> {
+        if self.mail_context.event_poll_mode != EventPollMode::Manual {
+            warn!("Event poll mode is not configured as manual");
+            return Ok(());
+        }
+        self.queue_poll_event_loop().await
+    }
+
+    async fn queue_poll_event_loop(
         &self,
     ) -> Result<(), ActionError<crate::actions::event_poll::EventPoll>> {
         let mut last_action_id = self.last_event_loop_action_id.lock().await;

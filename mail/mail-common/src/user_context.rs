@@ -108,7 +108,9 @@ impl MailUserContext {
         this.init_expiration_loop();
 
         if let EventPollMode::Automatic(interval) = this.mail_context.event_poll_mode {
-            this.init_event_loop_poll(interval);
+            this.init_event_loop_poll(interval)
+                .await
+                .inspect_err(|e| error!("Failed to init event loop task: {e:?}"))?;
         }
 
         Ok(this)

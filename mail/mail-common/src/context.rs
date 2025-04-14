@@ -196,6 +196,7 @@ impl From<JoinError> for MailContextError {
 }
 
 /// Defines how the event loop should be polled
+#[derive(Debug, Eq, PartialEq, Clone, Copy)]
 pub enum EventPollMode {
     /// On demand,
     Manual,
