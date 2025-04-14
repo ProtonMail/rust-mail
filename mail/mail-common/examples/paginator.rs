@@ -7,6 +7,7 @@ use proton_core_common::models::Label;
 use proton_core_common::models::ModelIdExtension;
 use proton_core_common::os::{InMemoryKeyChain, KeyChainExt};
 use proton_mail_common::MailContext;
+use proton_mail_common::context::EventPollMode;
 use proton_mail_common::datatypes::{ReadFilter, SystemLabelId};
 use proton_mail_common::mail_scroller::{MailScroller, MailScrollerSource};
 use std::fmt::Debug;
@@ -64,6 +65,7 @@ async fn main() {
         Config::default(),
         None,
         None,
+        EventPollMode::Manual,
     )
     .await
     .unwrap();

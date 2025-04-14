@@ -8,7 +8,9 @@ use proton_core_common::UserDatabaseInitializer;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_test_utils::test_context::{BaseTestContext, TestContext};
 use proton_mail_common::actions::draft::SEND_ACTION_GROUP;
-use proton_mail_common::context::{MailUserDatabaseInitializer, ShouldInitializeMailUserContext};
+use proton_mail_common::context::{
+    EventPollMode, MailUserDatabaseInitializer, ShouldInitializeMailUserContext,
+};
 use proton_mail_common::{MailContext, MailContextResult, MailUserContext};
 pub use secrecy::{ExposeSecret, SecretString as RealSecretString};
 use std::sync::Arc;
@@ -86,6 +88,7 @@ impl MailTestContext {
             core_test_context.context.clone(),
             mail_cache_path,
             mail_cache_size,
+            EventPollMode::Manual,
         )
         .await
         .expect("failed to create mail context");

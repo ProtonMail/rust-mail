@@ -14,6 +14,7 @@ use crate::keychain::AppKeyChain;
 use crate::messages::Messages;
 use anyhow::anyhow;
 use proton_mail_common::MailContext;
+use proton_mail_common::context::EventPollMode;
 use ratatui::crossterm::event::{Event, KeyCode, KeyEventKind};
 use ratatui::layout::Flex;
 use ratatui::prelude::*;
@@ -24,6 +25,7 @@ use std::fs::{File, read_to_string};
 use std::panic::{set_hook, take_hook};
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 use throbber_widgets_tui::ThrobberState;
 use tokio::runtime::Runtime;
 use tracing::error;
@@ -145,6 +147,9 @@ impl AppModel {
                 app_config.api_config(),
                 None, // TODO(jhoulahan): Support HV challenge (at least sms/email)
                 Some(log_file),
+                EventPollMode::Automatic(Duration::from_secs(
+                    CLI_ARGS.event_loop_time.unwrap_or(15),
+                )),
             )
             .await?;
 
