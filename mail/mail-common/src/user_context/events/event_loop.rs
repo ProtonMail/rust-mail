@@ -136,7 +136,10 @@ impl MailUserContext {
         );
         Ok(())
     }
+
     /// Queue an action to execute the event loop.
+    ///
+    /// If we are in automatic mode this is a noop.
     ///
     /// # Errors
     ///
@@ -149,6 +152,20 @@ impl MailUserContext {
             return Ok(());
         }
         self.queue_poll_event_loop().await
+    }
+
+    /// Queue an action to execute the event loop as soon as possible regardless of
+    /// the selected polling mode.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the action failed to be queued.
+    pub async fn force_event_loop_poll(
+        &self,
+    ) -> Result<(), ActionError<crate::actions::event_poll::EventPoll>> {
+        let event_poll_action = crate::actions::event_poll::EventPoll {};
+        self.action_queue().queue_action(event_poll_action).await?;
+        Ok(())
     }
 
     async fn queue_poll_event_loop(
