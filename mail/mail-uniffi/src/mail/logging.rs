@@ -10,7 +10,33 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
 
-pub(super) fn init_log(log_path: &Path, debug: bool) -> std::io::Result<WorkerGuard> {
+#[cfg(target_os = "ios")]
+pub(super) fn init_log(log_path: &Path, debug: bool) -> std::io::Result<Option<WorkerGuard>> {
+    let log_file = OpenOptions::new()
+        .read(true)
+        .create(true)
+        .append(true)
+        .open(log_path)?;
+
+    let file_subscriber = tracing_subscriber::fmt::layer()
+        .with_file(false)
+        .with_line_number(false)
+        .with_writer(log_file)
+        .with_target(false)
+        .with_ansi(false)
+        .with_filter(if debug {
+            app_tracing_env_filter_trace()
+        } else {
+            app_tracing_env_filter_default()
+        });
+
+    tracing_subscriber::registry().with(file_subscriber).init();
+    log_backtrace_on_panic();
+    Ok(None)
+}
+
+#[cfg(not(target_os = "ios"))]
+pub(super) fn init_log(log_path: &Path, debug: bool) -> std::io::Result<Option<WorkerGuard>> {
     let log_file = OpenOptions::new()
         .read(true)
         .create(true)
@@ -32,14 +58,13 @@ pub(super) fn init_log(log_path: &Path, debug: bool) -> std::io::Result<WorkerGu
         });
     tracing_subscriber::registry().with(file_subscriber).init();
     log_backtrace_on_panic();
-    Ok(guard)
+    Ok(Some(guard))
 }
 
 pub fn app_tracing_env_filter_default() -> EnvFilter {
-    // TODO: once stash statistics can be disabled, remove stash=error
     EnvFilter::builder()
         .with_default_directive(LevelFilter::DEBUG.into())
-        .parse(format!(
+        .parse(
             "info,\
             muon=debug,\
             muon_impl=debug,\
@@ -51,13 +76,8 @@ pub fn app_tracing_env_filter_default() -> EnvFilter {
             proton_api_core=debug,\
             proton_action_queue=trace,\
             proton_api_mail=debug,\
-            stash={}",
-            if std::env::var("STASH_SQL_DEBUG").is_ok() {
-                "debug"
-            } else {
-                "error"
-            }
-        ))
+            stash=debug",
+        )
         .expect("bad log directives")
 }
 
