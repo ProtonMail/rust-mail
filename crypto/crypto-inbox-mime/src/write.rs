@@ -212,9 +212,11 @@ impl<'x> InboxMimeBuilder<'x> {
         mime_type: Option<impl Into<Cow<'x, str>>>,
         content: Vec<u8>,
     ) -> Self {
+        // Ensure that the content-id is not in form <content-id>.
+        let cleaned_content_id = content_id.trim_start_matches('<').trim_end_matches('>');
         let part = create_attachment_mime_part(
             Disposition::Inline,
-            Some(content_id),
+            Some(cleaned_content_id),
             filename,
             mime_type,
             content,
