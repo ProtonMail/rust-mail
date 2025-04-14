@@ -249,7 +249,7 @@ impl InitializedComponent {
     /// If dependency fails to initialize, this component also fails.
     /// That creates a cascade effect.
     ///
-    async fn wait_for_dependencies(
+    pub async fn wait_for_dependencies(
         dependencies: &[InitializationKey],
         watcher: &InitializationWatcher,
         tether: &Tether,

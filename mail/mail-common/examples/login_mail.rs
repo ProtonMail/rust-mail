@@ -17,7 +17,7 @@ use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::{KeyChain, KeyChainEntryKind, KeyChainError};
 use proton_mail_common::MailContext;
 use proton_mail_common::MailUserContext;
-use proton_mail_common::context::ShouldInitializeMailUserContext;
+use proton_mail_common::context::{EventPollMode, ShouldInitializeMailUserContext};
 use secrecy::{ExposeSecret, SecretString};
 use std::error::Error as StdError;
 use std::fs;
@@ -216,6 +216,7 @@ async fn new_mail_ctx<T: KeyChain + 'static>(
         cfg,
         Some(notifier),
         None,
+        EventPollMode::Manual,
     )
     .await?)
 }

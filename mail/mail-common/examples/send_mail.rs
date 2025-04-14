@@ -8,6 +8,7 @@ use proton_api_core::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::{InMemoryKeyChain, KeyChainExt};
 use proton_mail_common::MailContext;
+use proton_mail_common::context::EventPollMode;
 use proton_mail_common::datatypes::Disposition;
 use proton_mail_common::draft::Draft;
 use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry};
@@ -73,6 +74,7 @@ async fn main() {
         Config::default(),
         None,
         None,
+        EventPollMode::Manual,
     )
     .await
     .unwrap();
