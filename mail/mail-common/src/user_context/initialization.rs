@@ -219,7 +219,7 @@ impl InitializationMediator {
             warn!("Context already initialized");
             return Ok(());
         }
-        let watcher = InitializationWatcher::new(ctx.user_stash())?;
+        let watcher = ctx.user_context.initialization_watcher.clone();
         let watcher_clone = watcher.clone();
         let watcher_task_handle = ctx.spawn(async move { watcher_clone.task().await });
 

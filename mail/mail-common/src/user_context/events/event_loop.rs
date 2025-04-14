@@ -12,7 +12,6 @@ use proton_api_core::services::proton::ProtonCore;
 use proton_api_core::session::CoreSession;
 use proton_api_mail::services::proton::response_data::MailEvent as ApiMailEvent;
 use proton_core_common::CoreEventSubscriber;
-use proton_core_common::models::InitializationWatcher;
 use proton_event_loop::EventLoopError;
 use proton_event_loop::provider::Provider;
 use proton_event_loop::store::Store;
@@ -102,13 +101,7 @@ impl MailUserContext {
         let ctx = self.this.clone();
         let mut interval = tokio::time::interval(duration);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        let watcher = InitializationWatcher::new(self.user_stash())?;
-        let watcher_cloned = watcher.clone();
-        self.spawn(async move {
-            if let Err(e) = watcher_cloned.task().await {
-                error!("Failed to start event loop init watcher: {e:?}")
-            }
-        });
+        let watcher = self.user_context.initialization_watcher.clone();
         self.spawn(
             async move {
                 // Wait until `MailUserContext` is initialized.
