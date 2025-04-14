@@ -5,6 +5,7 @@ mod initialization;
 
 use crate::actions::draft::SEND_ACTION_GROUP;
 use crate::actions::register_mail_actions;
+use crate::context::EventPollMode;
 use crate::draft::attachments::DraftStagingAreaCleaner;
 use crate::models::{Conversation, Message};
 use crate::prefetch::{Prefetch, PrefetchNotify};
@@ -105,6 +106,12 @@ impl MailUserContext {
             .register_execution_context(Weak::clone(&this.this));
 
         this.init_expiration_loop();
+
+        if let EventPollMode::Automatic(interval) = this.mail_context.event_poll_mode {
+            this.init_event_loop_poll(interval)
+                .await
+                .inspect_err(|e| error!("Failed to init event loop task: {e:?}"))?;
+        }
 
         Ok(this)
     }
