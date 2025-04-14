@@ -19,6 +19,7 @@ use stash::exports::SqliteError;
 use stash::params;
 use stash::stash::StashError;
 use std::sync::Weak;
+use std::time::Duration;
 use tracing::error;
 
 const MAIL_EVENT_TYPE_ID: &str = "proton-mail-event";
@@ -87,12 +88,49 @@ impl Provider<MailEvent> for MailUserContext {
 }
 
 impl MailUserContext {
+    /// Setup a background task that queues the event loop action.
+    pub(crate) fn init_event_loop_poll(&self, duration: Duration) {
+        tracing::info!(
+            "Initializing event loop poll with {} second interval",
+            duration.as_secs()
+        );
+        let ctx = self.this.clone();
+        let mut interval = tokio::time::interval(duration);
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        self.spawn(async move {
+            // Loop until the `MailUserContext` is initialized.
+            loop {
+                let Some(ctx) = ctx.upgrade() else {
+                    return;
+                };
+
+                if let Ok(true) = ctx.is_initialized().await.inspect_err(|e| {
+                    error!("Failed to check initialization status in event loop: {e:?}")
+                }) {
+                    break;
+                }
+                drop(ctx);
+                interval.tick().await;
+            }
+            // `MailUserContext` is now initialized od event poll.
+            loop {
+                interval.tick().await;
+                let Some(ctx) = ctx.upgrade() else {
+                    return;
+                };
+
+                if let Err(e) = ctx.poll_event_loop().await {
+                    error!("Failed to queue poll event loop poll:{e:?}");
+                }
+            }
+        });
+    }
     /// Queue an action to execute the event loop.
     ///
     /// # Errors
     ///
     /// Returns error if the action failed to be queued.
-    pub async fn poll_event_loop(
+    async fn poll_event_loop(
         &self,
     ) -> Result<(), ActionError<crate::actions::event_poll::EventPoll>> {
         let mut last_action_id = self.last_event_loop_action_id.lock().await;

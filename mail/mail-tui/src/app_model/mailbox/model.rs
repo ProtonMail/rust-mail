@@ -1,5 +1,4 @@
 use super::search::{Search, SearchStatusBar};
-use crate::CLI_ARGS;
 use crate::app::Command;
 use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::conversations::ConversationsState;
@@ -36,7 +35,6 @@ use ratatui::layout::{Flex, Rect};
 use ratatui::prelude::*;
 use stash::stash::WatcherHandle;
 use std::sync::Arc;
-use std::time::Duration;
 use throbber_widgets_tui::ThrobberState;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
@@ -655,17 +653,15 @@ fn background_worker(
 ) -> Command<Messages> {
     Command::background_task(|sender| {
         async move {
-            let event_loop_poll_time = CLI_ARGS.event_loop_time.unwrap_or(15);
-            let mut interval = tokio::time::interval(Duration::from_secs(event_loop_poll_time));
+            let mut observer = ActionFailureObserver::<EventPoll>::new(context.action_queue());
             loop {
                 tokio::select! {
                 () = cancel_token.cancelled() => {
                     return;
                 }
-                _ = interval.tick() => {
-                        if let Err(e) = context.poll_event_loop().await {
-                            let e = anyhow!("Failed to poll events: {e}");
-                            error!("{e:?}");
+                r = observer.next() => {
+                        if let Ok(ActionFailureReason::Error(err, _)) = r {
+                            let e = anyhow!("Failed to poll events: {err:?}");
                             if sender
                                 .send(Command::message(Messages::DisplayError(
                                     Some("Event Loop".to_owned()),

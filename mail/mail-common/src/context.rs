@@ -28,6 +28,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
+use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio::task::{JoinError, JoinHandle};
 
@@ -193,12 +194,23 @@ impl From<JoinError> for MailContextError {
         Self::Other(anyhow::Error::new(value))
     }
 }
+
+/// Defines how the event loop should be polled
+pub enum EventPollMode {
+    /// On demand,
+    Manual,
+    /// Background task that queues a request to polls the event loop in the
+    /// specified duration.
+    Automatic(Duration),
+}
+
 pub struct MailContext {
     core_context: Arc<Context>,
     mail_cache_path: PathBuf,
     /// This will get used in the near future.
     pub attachment_cache_size: u64,
     active_user_contexts: Mutex<HashMap<UserId, Weak<MailUserContext>>>,
+    pub event_poll_mode: EventPollMode,
 }
 
 impl MailContext {
@@ -221,6 +233,7 @@ impl MailContext {
         api_config: Config,
         hv_notifier: Option<DynChallengeNotifier>,
         log_path: Option<PathBuf>,
+        event_poll_mode: EventPollMode,
     ) -> Result<Arc<Self>, MailContextError> {
         let initializers: Vec<Box<dyn UserDatabaseInitializer>> =
             vec![Box::new(MailUserDatabaseInitializer {})];
@@ -243,6 +256,7 @@ impl MailContext {
             mail_cache_path: mail_cache_path.into(),
             attachment_cache_size: cache_size,
             active_user_contexts: Mutex::new(HashMap::new()),
+            event_poll_mode,
         }))
     }
 
@@ -251,12 +265,14 @@ impl MailContext {
         core_context: Arc<Context>,
         mail_cache_path: PathBuf,
         mail_cache_size: u64,
+        event_poll_mode: EventPollMode,
     ) -> Result<Arc<Self>, MailContextError> {
         Ok(Arc::new(Self {
             core_context,
             mail_cache_path,
             attachment_cache_size: mail_cache_size,
             active_user_contexts: Mutex::new(HashMap::new()),
+            event_poll_mode,
         }))
     }
 

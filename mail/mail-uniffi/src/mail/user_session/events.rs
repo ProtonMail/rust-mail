@@ -1,13 +1,11 @@
 use crate::errors::unexpected::UnexpectedError;
-use crate::errors::{EventError, EventErrorReason, ProtonError, VoidEventResult};
+use crate::errors::{EventError, EventErrorReason, ProtonError};
 use crate::mail::MailUserSession;
-use crate::{spawn_async, uniffi_async};
+use crate::spawn_async;
 use proton_action_queue::observers::{ActionFailureObserver, ActionFailureReason};
 use proton_action_queue::queue::{ActionError, AsActionError};
 use proton_event_loop::EventLoopError;
 use proton_mail_common::actions::event_poll::{ActionEventLoopError, EventPoll};
-use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use proton_mail_common::errors::unexpected::Unexpected;
 use std::sync::Arc;
 use tokio::task::AbortHandle;
 
@@ -41,26 +39,6 @@ impl EventLoopErrorObserverHandle {
 
 #[uniffi_export]
 impl MailUserSession {
-    /// Queue an event loop poll action.
-    ///
-    /// # Errors
-    ///
-    /// Errors returned here are only related to queuing of the action. To get information
-    /// about the event loop execution, please use [`MailUserSession::observe_event_loop_errors`].
-    #[returns(VoidEventResult)]
-    pub async fn poll_events(&self) -> Result<(), EventError> {
-        let ctx = self.ctx()?;
-        uniffi_async(async move {
-            ctx.poll_event_loop()
-                .await
-                .map_err(|_| RealProtonMailError::Unexpected(Unexpected::Internal))?;
-            Result::<_, RealProtonMailError>::Ok(())
-        })
-        .await
-        .map_err(EventError::from)
-        .into()
-    }
-
     /// Observe event loop errors.
     ///
     /// When an error occurs the `callback` is invoked.

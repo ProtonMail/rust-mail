@@ -19,13 +19,14 @@ use proton_core_common::os::KeyChainExt;
 use proton_core_common::pin_code::PinCode;
 use proton_mail_common::MailContext;
 use proton_mail_common::actions::draft::Send;
-use proton_mail_common::context::ShouldInitializeMailUserContext;
+use proton_mail_common::context::{EventPollMode, ShouldInitializeMailUserContext};
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::errors::unexpected::Unexpected;
 use proton_mail_common::models::DraftMetadata;
 use stash::stash::{Stash, WatcherHandle};
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::{debug, error};
 use tracing_appender::non_blocking::WorkerGuard;
 
@@ -205,6 +206,7 @@ async fn create_mail_session_inner(
         api_env_config,
         hv_notifier,
         Some(log_path),
+        EventPollMode::Automatic(Duration::from_secs(30)),
     )
     .await?;
 
