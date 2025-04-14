@@ -223,7 +223,7 @@ pub async fn generate_mime_top_package<Provider: PGPProviderSync>(
     let text_body: String;
     if mime_type == MimeType::TextHtml {
         text_body = html_to_text(body);
-        builder = builder.html_body(body.as_bytes()).text_body(&text_body);
+        builder = builder.html_body(body).text_body(&text_body);
     } else {
         builder = builder.text_body(body);
     }

@@ -166,7 +166,7 @@ Sent with Proton Mail secure email.";
     let mut data = Vec::new();
     InboxMimeBuilder::new()
         .text_body(text)
-        .begin_html_body(html.as_bytes())
+        .begin_html_body(html)
         .end_html_body()
         .inline_attachment(
             "36ff9cd9@proton.me",
@@ -210,7 +210,7 @@ Sent with Proton Mail secure email.";
 #[test]
 fn test_write_html() {
     let text = "Hello";
-    let html = br#"<html><body><h1>Hello</h1><img src="cid:image1"></body></html>"#;
+    let html = r#"<html><body><h1>Hello</h1><img src="cid:image1"></body></html>"#;
     let attachment_data = b"hello";
 
     let mut data = Vec::new();
@@ -239,7 +239,7 @@ fn test_write_html() {
         .unwrap();
 
     let (processed, _) = MimeProcessor::process_mime("message_id", &data).unwrap();
-    assert_eq!(processed.body.as_bytes(), html);
+    assert_eq!(processed.body, html);
     assert_eq!(processed.mime_body_type, ProcessedBodyType::Html);
 
     // inline html
