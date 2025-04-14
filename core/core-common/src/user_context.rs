@@ -2,7 +2,7 @@ pub use self::keys::*;
 use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
-use crate::models::UserSettings;
+use crate::models::{InitializationWatcher, UserSettings};
 use crate::{Context, CoreContextError, CoreContextResult};
 use anyhow::Context as _;
 use proton_action_queue::queue::Queue;
@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, warn};
+use tracing::{debug, error, warn};
 
 pub mod action_queue;
 pub mod images_logo;
@@ -56,6 +56,7 @@ pub struct UserContext {
     pub(self) key_manager: Arc<CryptoKeyManager>,
     cancellation_token: CancellationToken,
     pub cache_path: PathBuf,
+    pub initialization_watcher: Arc<InitializationWatcher>,
 }
 
 impl Debug for UserContext {
@@ -78,6 +79,7 @@ impl UserContext {
         let user_stash = Self::new_user_db(user_stash_path, db_initializers).await?;
         let cancellation_token = context.new_child_cancellation_token();
         let queue = Queue::new(user_stash.clone()).await?;
+        let initialization_watcher = InitializationWatcher::new(&user_stash)?;
         let this = Arc::new(Self {
             session,
             context,
@@ -88,6 +90,7 @@ impl UserContext {
             key_manager: Arc::new(CryptoKeyManager::new()),
             cache_path,
             cancellation_token,
+            initialization_watcher,
         });
         let this_weak = Arc::downgrade(&this);
 
@@ -98,6 +101,13 @@ impl UserContext {
 
         fs::create_dir_all(this.sender_images_cache_path())?;
         fs::create_dir_all(this.trash_path())?;
+
+        let init_watcher = this.initialization_watcher.clone();
+        this.spawn(async move {
+            if let Err(e) = init_watcher.task().await {
+                error!("Initialization watcher finished with error: {e:?}");
+            }
+        });
 
         Ok(this)
     }
