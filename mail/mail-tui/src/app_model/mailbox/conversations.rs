@@ -14,7 +14,9 @@ use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label;
 use proton_mail_common::datatypes::folder_banner::{AutoDeleteBanner, AutoDeleteState};
 use proton_mail_common::datatypes::{ContextualConversation, LocalConversationId, ReadFilter};
-use proton_mail_common::mail_scroller::{DataScrollerSource, MailScroller};
+use proton_mail_common::mail_scroller::{
+    DataScrollerSource, DataScrollerSourcePreviousPageStrategy, MailScroller,
+};
 use proton_mail_common::models::{
     Conversation, ConversationScrollData, MailSettings, Message as MailMessage,
 };
@@ -67,8 +69,14 @@ impl ConversationsState {
         let (paginator, command) = Paginator::new(
             || {
                 async move {
-                    MailScroller::conversations(context.as_weak(), label_id, filter, ITEM_LIMIT)
-                        .await
+                    MailScroller::conversations(
+                        context.as_weak(),
+                        label_id,
+                        filter,
+                        ITEM_LIMIT,
+                        DataScrollerSourcePreviousPageStrategy::Background,
+                    )
+                    .await
                 }
                 .boxed()
             },

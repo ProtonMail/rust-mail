@@ -30,7 +30,7 @@ use proton_mail_common::decrypted_message::{
 use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ProtonMailError as RealProtonMailError,
 };
-use proton_mail_common::mail_scroller::MailScroller;
+use proton_mail_common::mail_scroller::{DataScrollerSourcePreviousPageStrategy, MailScroller};
 use proton_mail_common::models::default_location::IncomingDefaultLocation;
 use proton_mail_common::models::{self, Message as RealMessage};
 use stash::orm::Model as _;
@@ -300,8 +300,14 @@ pub async fn scroll_messages_for_label(
 ) -> Result<Arc<MessageScroller>, ActionError> {
     let context = session.ctx()?;
     uniffi_async(async move {
-        let mut scroller =
-            MailScroller::messages(context.as_weak(), label_id.into(), filter.into(), 50).await?;
+        let mut scroller = MailScroller::messages(
+            context.as_weak(),
+            label_id.into(),
+            filter.into(),
+            50,
+            DataScrollerSourcePreviousPageStrategy::Background,
+        )
+        .await?;
         let handle = scroller.watch()?;
 
         Result::<_, RealProtonMailError>::Ok(Arc::new(MessageScroller {

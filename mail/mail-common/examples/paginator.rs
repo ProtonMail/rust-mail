@@ -9,6 +9,7 @@ use proton_core_common::os::{InMemoryKeyChain, KeyChainExt};
 use proton_mail_common::MailContext;
 use proton_mail_common::context::EventPollMode;
 use proton_mail_common::datatypes::{ReadFilter, SystemLabelId};
+use proton_mail_common::mail_scroller::DataScrollerSourcePreviousPageStrategy;
 use proton_mail_common::mail_scroller::{MailScroller, MailScrollerSource};
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -92,6 +93,7 @@ async fn main() {
         label.local_id.unwrap(),
         filter,
         page_count as usize,
+        DataScrollerSourcePreviousPageStrategy::Background,
     )
     .await
     .unwrap();
