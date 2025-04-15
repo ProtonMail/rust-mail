@@ -32,6 +32,10 @@ pub enum PaymentReceipt {
     AppleRecurring {
         details: AppleRecurringReceiptDetails,
     },
+    #[serde(rename_all = "PascalCase")]
+    GoogleRecurring {
+        details: GoogleRecurringReceiptDetails,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Eq, PartialEq)]
@@ -47,6 +51,24 @@ pub struct AppleRecurringReceiptDetails {
 
     #[serde(rename = "Receipt")]
     pub receipt: String,
+}
+
+#[derive(Clone, Debug, Serialize, Eq, PartialEq)]
+pub struct GoogleRecurringReceiptDetails {
+    #[serde(rename = "orderID")]
+    pub order_id: OrderId,
+
+    #[serde(rename = "customerID")]
+    pub customer_id: CustomerId,
+
+    #[serde(rename = "productID")]
+    pub product_id: ProductId,
+
+    #[serde(rename = "packageName")]
+    pub package_name: PackageNameId,
+
+    #[serde(rename = "purchaseToken")]
+    pub token: String,
 }
 
 /// Subscription details

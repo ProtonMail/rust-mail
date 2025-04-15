@@ -1679,6 +1679,7 @@ impl From<RealUserSettings> for UserSettings {
 
 use proton_api_core::services::proton::AppleRecurringReceiptDetails as RealAppleRecurringReceiptDetails;
 use proton_api_core::services::proton::GetPaymentsPlansOptions as RealGetPaymentsPlansOptions;
+use proton_api_core::services::proton::GoogleRecurringReceiptDetails as RealGoogleRecurringReceiptDetails;
 use proton_api_core::services::proton::NewSubscription as RealNewSubscription;
 use proton_api_core::services::proton::NewSubscriptionValues as RealNewSubscriptionValues;
 use proton_api_core::services::proton::PaymentReceipt as RealPaymentReceipt;
@@ -1946,12 +1947,18 @@ pub enum PaymentReceipt {
     AppleRecurring {
         details: AppleRecurringReceiptDetails,
     },
+    GoogleRecurring {
+        details: GoogleRecurringReceiptDetails,
+    },
 }
 
 impl From<PaymentReceipt> for RealPaymentReceipt {
     fn from(receipt: PaymentReceipt) -> Self {
         match receipt {
             PaymentReceipt::AppleRecurring { details } => Self::AppleRecurring {
+                details: details.into(),
+            },
+            PaymentReceipt::GoogleRecurring { details } => Self::GoogleRecurring {
                 details: details.into(),
             },
         }
@@ -1966,6 +1973,15 @@ pub struct AppleRecurringReceiptDetails {
     pub receipt: String,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
+pub struct GoogleRecurringReceiptDetails {
+    pub order_id: String,
+    pub customer_id: String,
+    pub product_id: String,
+    pub package_name: String,
+    pub token: String,
+}
+
 impl From<AppleRecurringReceiptDetails> for RealAppleRecurringReceiptDetails {
     fn from(details: AppleRecurringReceiptDetails) -> Self {
         Self {
@@ -1973,6 +1989,18 @@ impl From<AppleRecurringReceiptDetails> for RealAppleRecurringReceiptDetails {
             product_id: details.product_id.into(),
             bundle_id: details.bundle_id.into(),
             receipt: details.receipt,
+        }
+    }
+}
+
+impl From<GoogleRecurringReceiptDetails> for RealGoogleRecurringReceiptDetails {
+    fn from(details: GoogleRecurringReceiptDetails) -> Self {
+        Self {
+            order_id: details.order_id.into(),
+            customer_id: details.customer_id.into(),
+            product_id: details.product_id.into(),
+            package_name: details.package_name.into(),
+            token: details.token,
         }
     }
 }
