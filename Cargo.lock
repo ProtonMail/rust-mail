@@ -4744,7 +4744,7 @@ dependencies = [
 
 [[package]]
 name = "proton-mail-uniffi"
-version = "0.72.0"
+version = "0.72.7"
 dependencies = [
  "anyhow",
  "async-trait",

@@ -44,12 +44,21 @@ git-cliff mail-uniffi-v0.62.0..mail-uniffi-v0.65.0
 
 ```
 
+To make it simpler there is prepared script:
+
+```bash
+./mail/mail-uniffi/scripts/gen_changelog.sh
+```
+
 To skip commits from the changelog you should add an `*` before the `:` in the commit message.
 
 Example:
 ```
 feat*: this will not be in the changelog
+```
 
+```
+feat(ET-1234)*: This will also not be in the changelog
 ```
 
 
