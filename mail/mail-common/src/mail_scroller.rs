@@ -2,6 +2,7 @@ use crate::datatypes::{ReadFilter, SearchOptions};
 use crate::models::{ConversationScrollData, MessageScrollData};
 use crate::{MailContextError, MailUserContext};
 use anyhow::anyhow;
+use proton_action_queue::action::Error;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_task_service::AsyncTaskResult;
 use stash::stash::WatcherHandle;
@@ -41,8 +42,10 @@ impl MailScroller<DataScrollerSource<ConversationScrollData>> {
         local_label_id: LocalLabelId,
         unread: ReadFilter,
         page_size: usize,
+        previous_page_strategy: DataScrollerSourcePreviousPageStrategy,
     ) -> Result<Self, MailContextError> {
-        let source = DataScrollerSource::new(local_label_id, unread, page_size);
+        let source =
+            DataScrollerSource::new(local_label_id, unread, page_size, previous_page_strategy);
         MailScroller::new(ctx, source).await
     }
 }
@@ -53,8 +56,10 @@ impl MailScroller<DataScrollerSource<MessageScrollData>> {
         local_label_id: LocalLabelId,
         unread: ReadFilter,
         page_size: usize,
+        previous_page_strategy: DataScrollerSourcePreviousPageStrategy,
     ) -> Result<Self, MailContextError> {
-        let source = DataScrollerSource::new(local_label_id, unread, page_size);
+        let source =
+            DataScrollerSource::new(local_label_id, unread, page_size, previous_page_strategy);
         MailScroller::new(ctx, source).await
     }
 }
@@ -146,8 +151,8 @@ impl<T: MailScrollerSource> MailScroller<T> {
 
         // If initialization is fetching something in the background, we wait
         // on that task to finish first.
-        let is_online = ctx.session().status().await.is_online();
-        let result = if self.task.is_some() && is_online {
+        let previous_result = if self.task.is_some() {
+            tracing::debug!("Awaiting for previous task");
             // Unwrap is safe here since we checked for `Some` above.
             self.task
                 .take()
@@ -162,23 +167,24 @@ impl<T: MailScrollerSource> MailScroller<T> {
             Ok(())
         };
 
-        let (items, new_total, task) = self.source.sync_next(&ctx).await?;
+        let (items, new_total, task) = self
+            .source
+            .sync_next(&ctx)
+            .await
+            .inspect_err(|e| tracing::error!("Failed to fetch next page: {e:?}"))?;
+
         self.total = new_total;
         self.task = task;
 
-        if result.is_err() && is_online {
-            tracing::error!("Failed to fetch next page in the background: {:?}", result);
-
-            if items.is_empty() {
-                result?;
+        if items.is_empty() && self.seen().await? < self.total {
+            if let Err(e) = previous_result {
+                if e.is_network_failure() {
+                    return Err(MailContextError::no_connection());
+                }
             }
-
-            Ok(items)
-        } else if items.is_empty() && !is_online && self.seen().await? < self.total {
-            Err(MailContextError::no_connection())
-        } else {
-            Ok(items)
         }
+
+        Ok(items)
     }
 
     /// Returns all the elements that are "visible" in the data source.

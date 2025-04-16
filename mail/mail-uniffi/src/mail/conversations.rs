@@ -28,7 +28,7 @@ use proton_mail_common::datatypes::{
 use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ProtonMailError as RealProtonMailError,
 };
-use proton_mail_common::mail_scroller::MailScroller;
+use proton_mail_common::mail_scroller::{DataScrollerSourcePreviousPageStrategy, MailScroller};
 use proton_mail_common::models::Conversation as RealConversation;
 use stash::orm::Model;
 use stash::stash::Stash;
@@ -553,9 +553,14 @@ pub async fn scroll_conversations_for_label(
 ) -> Result<Arc<ConversationScroller>, ActionError> {
     let context = session.ctx()?;
     uniffi_async(async move {
-        let mut scroller =
-            MailScroller::conversations(context.as_weak(), label_id.into(), filter.into(), 50)
-                .await?;
+        let mut scroller = MailScroller::conversations(
+            context.as_weak(),
+            label_id.into(),
+            filter.into(),
+            50,
+            DataScrollerSourcePreviousPageStrategy::Background,
+        )
+        .await?;
         let handle = scroller.watch()?;
 
         Result::<_, RealProtonMailError>::Ok(Arc::new(ConversationScroller {

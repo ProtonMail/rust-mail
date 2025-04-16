@@ -14,6 +14,19 @@ use super::{
     remote_source::RemoteSource,
 };
 
+/// Controls behaviour of data scroller source while fetching previous page.
+///
+#[derive(Debug)]
+pub enum DataScrollerSourcePreviousPageStrategy {
+    /// In most cases, we want to fetch it in the background and return offline cache
+    /// immediately
+    Background,
+
+    /// In some scenarios (for example in Prefetcher) we want to wait until
+    /// API calls to our Remote finish.
+    Foreground,
+}
+
 #[derive(Debug)]
 pub struct DataScrollerSource<T: RemoteSource> {
     local_label_id: LocalLabelId,
@@ -21,16 +34,23 @@ pub struct DataScrollerSource<T: RemoteSource> {
     page_size: usize,
     invalidate: Option<flume::Sender<()>>,
     state: MailScrollerState<T>,
+    previous_page_strategy: DataScrollerSourcePreviousPageStrategy,
 }
 
 impl<T: RemoteSource> DataScrollerSource<T> {
-    pub fn new(local_label_id: LocalLabelId, unread: ReadFilter, page_size: usize) -> Self {
+    pub fn new(
+        local_label_id: LocalLabelId,
+        unread: ReadFilter,
+        page_size: usize,
+        previous_page_strategy: DataScrollerSourcePreviousPageStrategy,
+    ) -> Self {
         Self {
             local_label_id,
             unread,
             page_size,
             invalidate: None,
             state: MailScrollerState::None,
+            previous_page_strategy,
         }
     }
 
@@ -139,8 +159,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         let local_label_id = self.local_label_id;
         let unread = self.unread;
         let page_size = self.page_size;
-
-        T::sync_previous_page(
+        let task = T::sync_previous_page(
             ctx,
             local_label_id,
             scroller,
@@ -148,7 +167,12 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             unread,
             page_size,
         )
-        .await
+        .await?;
+
+        Ok(match self.previous_page_strategy {
+            DataScrollerSourcePreviousPageStrategy::Background => None,
+            DataScrollerSourcePreviousPageStrategy::Foreground => task,
+        })
     }
 }
 
