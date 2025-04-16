@@ -1032,15 +1032,14 @@ impl MailSession {
     /// This should be called once the application enters the background.
     pub fn pause_work_and_wait(&self) {
         async_runtime().block_on(async {
-            if self
+            if let Err(e) = self
                 .mail_ctx
                 .core_context()
                 .task_service()
                 .pause_main_and_wait()
                 .await
-                .is_err()
             {
-                error!("Failed to await paused work");
+                error!("Failed to await paused work: {e:?}");
             }
         });
     }

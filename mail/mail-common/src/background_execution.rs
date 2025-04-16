@@ -59,14 +59,13 @@ impl BackgroundExecutionContext {
         };
         // Pause all executors and make sure all non-pausable futures finish on time.
         tracing::info!("Pausing Background queue executors...");
-        if ctx
+        if let Err(e) = ctx
             .core_context()
             .task_service()
             .pause_background_and_wait()
             .await
-            .is_err()
         {
-            tracing::error!("Pausing Background queue executors... Failed");
+            tracing::error!("Pausing Background queue executors... Failed: {e:?}");
         } else {
             tracing::info!("Pausing executors... Done");
         }

@@ -1,4 +1,5 @@
 use crate::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
+use anyhow::anyhow;
 use parking_lot::Mutex;
 use pin_project::pin_project;
 use std::cell::Cell;
@@ -9,6 +10,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::task::{Context, Poll, Waker};
 use std::thread;
+use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -134,7 +136,7 @@ impl TaskService {
         self.active.store(false, Ordering::Relaxed);
 
         if let Err(e) = self.sender.send(Command::Pause(None)) {
-            error!("Failed to send pause command: {}", e);
+            error!("Failed to send pause command: {e:?}");
         }
     }
 
@@ -145,7 +147,7 @@ impl TaskService {
     ///
     /// Returns error if the task service's thread has crashed and is unable to
     /// service the request.
-    pub async fn pause_and_wait(&self) -> Result<(), oneshot::error::RecvError> {
+    pub async fn pause_and_wait(&self) -> anyhow::Result<()> {
         info!("Pausing tasks and waiting");
 
         self.active.store(false, Ordering::Relaxed);
@@ -156,7 +158,16 @@ impl TaskService {
             error!("Failed to send pause command: {}", e);
         }
 
-        receiver.await
+        // This is a failsafe mechanism.
+        // This should never timeout, that means that we have a bug here.
+        // However, we've had bugs here which tend to crash the whole application,
+        match tokio::time::timeout(Duration::from_millis(2_500), receiver).await {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(_)) => Err(anyhow!("The sender dropped!")),
+            Err(_) => Err(anyhow!(
+                "Pausing for non-pausable futures failed. This is a serious bug that could leave the app state in a bad state."
+            )),
+        }
     }
 
     /// Resumes all paused tasks.
@@ -342,7 +353,7 @@ impl BackgroundAwareTaskService {
     /// Pause tasks and wait for all task to be paused when the main application is about to go
     /// into a suspended state. If a background task is running, the pause request will be ignored
     /// and we will return immediately.
-    pub async fn pause_main_and_wait(&self) -> Result<(), oneshot::error::RecvError> {
+    pub async fn pause_main_and_wait(&self) -> anyhow::Result<()> {
         if self.state.lock().pause_main() {
             self.service.pause_and_wait().await
         } else {
@@ -360,7 +371,7 @@ impl BackgroundAwareTaskService {
 
     /// Pause tasks and wait for all task to be paused when the background task has finished running.
     /// If the main application is not in a suspended state, teh request will be ignored.
-    pub async fn pause_background_and_wait(&self) -> Result<(), oneshot::error::RecvError> {
+    pub async fn pause_background_and_wait(&self) -> anyhow::Result<()> {
         if self.state.lock().pause_background() {
             self.service.pause_and_wait().await
         } else {
