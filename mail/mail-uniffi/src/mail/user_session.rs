@@ -282,6 +282,22 @@ impl MailUserSession {
         .map_err(UserSessionError::from)
     }
 
+    /// Get the icon resource with the given name.
+    pub async fn get_payments_resources_icons(
+        &self,
+        name: String,
+    ) -> Result<Vec<u8>, UserSessionError> {
+        let ctx = self.ctx()?;
+
+        uniffi_async(async move {
+            let res = ctx.api().get_payments_resources_icons(name).await?;
+
+            Result::<_, RealProtonMailError>::Ok(res.into())
+        })
+        .await
+        .map_err(UserSessionError::from)
+    }
+
     /// Post a payment token to the server.
     pub async fn post_payments_tokens(
         &self,
