@@ -2,7 +2,6 @@
 
 set -eu
 
-git cliff --unreleased --tag "$1" --prepend ./mail/mail-uniffi/CHANGELOG.md
+uv run --project ./scripts/changelog changelog --after mail-uniffi-v0.68.2 > mail/mail-uniffi/CHANGELOG.md
 
-
-
+cat mail/mail-uniffi/CHANGELOG.old.md >> mail/mail-uniffi/CHANGELOG.md

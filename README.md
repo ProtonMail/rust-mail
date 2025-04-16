@@ -33,34 +33,17 @@ For instance for the `mail-uniffi` crate this would translate into:
 
 ### Generating the Changelog
 
-You should use [git-cliff] to generate the Changelog:
+You should use the `./scripts/changelog` tool to generate the Changelog.
+
+This can be invoked with the prepared script:
 
 ```bash
-# Everything
-git-cliff > CHANGELOG.md
-
-# Specific range
-git-cliff mail-uniffi-v0.62.0..mail-uniffi-v0.65.0
-
+$ pipx install uv # if needed
+$ sh ./mail/mail-uniffi/scripts/gen_changelog.sh
 ```
 
-To make it simpler there is prepared script:
+To skip commits from the changelog you should add an `*` before the `:` in the commit message:
 
-```bash
-./mail/mail-uniffi/scripts/gen_changelog.sh mail-uniffi-v0.minor.patch
-```
-
-It generates latest unreleased changes and tags them with the argument.
-
-> ![WARNING]
-> Running this script multiple of times will result in having duplicates in the changelog.
-> Also, in the past `git-cliff` was less reliable.
->
-> ALWAYS review `git diff` in the changelog before creating a tag.
-
-To skip commits from the changelog you should add an `*` before the `:` in the commit message.
-
-Example:
 ```
 feat*: this will not be in the changelog
 ```

@@ -1,0 +1,105 @@
+import re
+from dataclasses import asdict, dataclass
+from datetime import date
+
+from git import Commit, Tag
+from jinja2 import Environment
+
+from changelog.types import Commits
+
+TEMPLATE = """\
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+{% for release in releases -%}
+## [{{ release.name }}]{% if release.date %} - {{ release.date }}{% endif %}
+
+{% for section in release.sections -%}
+### {{ section.name }}
+
+{% for entry in section.entries -%}
+- {{ entry }}
+{% endfor %}
+{% endfor %}
+{% endfor %}
+"""
+
+
+def render(commits: Commits) -> str:
+    env = Environment()
+    tmp = env.from_string(TEMPLATE)
+    ctx = build_context(commits)
+
+    return tmp.render(asdict(ctx)).strip()
+
+
+@dataclass
+class Section:
+    name: str
+    entries: list[str]
+
+
+@dataclass
+class Release:
+    name: str
+    date: date | None
+    sections: list[Section]
+
+
+@dataclass
+class Context:
+    releases: list[Release]
+
+
+def build_context(cmts: Commits) -> Context:
+    releases = list()
+
+    for tag, commits in cmts.items():
+        if (release := build_release(tag, commits)) and release.sections:
+            releases.append(release)
+
+    return Context(releases)
+
+
+def build_release(tag: Tag | None, commits: list[Commit]) -> Release:
+    name = tag.name if tag else "Unreleased"
+    date = tag.commit.committed_datetime.date() if tag else None
+    sections = build_sections(commits)
+
+    return Release(name, date, sections)
+
+
+def build_sections(commits: list[Commit]) -> list[Section]:
+    sections = dict()
+
+    def decode(s: str | bytes) -> str:
+        return s.decode() if isinstance(s, bytes) else s
+
+    for c in commits:
+        try:
+            lhs, msg = decode(c.summary).split(":", 1)
+        except Exception:
+            continue
+        else:
+            lhs, msg = lhs.strip(), msg.strip().capitalize()
+
+        if lhs.endswith("*"):
+            continue
+
+        if m := re.search(r"(?:\(|\])([A-Z]+-[0-9]+)(?:\)|\])", lhs):
+            msg = f"[{m.group(1)}] {msg}"
+
+        if lhs.startswith("feat"):
+            sections.setdefault("Features", []).append(msg)
+
+        if lhs.startswith("fix"):
+            sections.setdefault("Fixes", []).append(msg)
+
+        if lhs.startswith("refactor"):
+            sections.setdefault("Changed", []).append(msg)
+
+    return [Section(name, entries) for name, entries in sorted(sections.items())]
