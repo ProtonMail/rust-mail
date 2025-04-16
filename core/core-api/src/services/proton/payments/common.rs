@@ -208,13 +208,23 @@ declare_proton_id! {
 }
 
 declare_proton_id! {
-    /// Represents the Id of a bundle.
+    /// Represents the Id of a bundle (Apple).
     pub BundleId
+}
+
+declare_proton_id! {
+    /// Represents the Id of a packageName (Google).
+    pub PackageNameId
 }
 
 declare_proton_id! {
     /// Represents the Id of a payment transaction.
     pub TransactionId
+}
+
+declare_proton_id! {
+    /// Represents the Id of a payment order.
+    pub OrderId
 }
 
 declare_proton_id! {
