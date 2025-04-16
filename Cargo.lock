@@ -4832,6 +4832,7 @@ dependencies = [
 name = "proton-task-service"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "parking_lot",
  "pin-project",
  "tokio",
