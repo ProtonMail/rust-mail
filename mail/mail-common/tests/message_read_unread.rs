@@ -4,7 +4,7 @@ use proton_api_mail::services::proton::common::MessageId;
 use proton_api_mail::services::proton::response_data::MailSettings as ApiMailSettings;
 use proton_api_mail::services::proton::response_data::MessageMetadata as ApiMessageMetadata;
 use proton_api_mail::services::proton::response_data::ViewMode as ApiViewMode;
-use proton_core_common::models::{Label, ModelIdExtension};
+use proton_core_common::models::ModelIdExtension;
 use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{Conversation, Message};
@@ -107,11 +107,6 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
     let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
 
-    let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
-        .await
-        .unwrap()
-        .unwrap();
-
     let mut params = Params::default_basic();
     params.mail_settings = Some(ApiMailSettings {
         view_mode: ApiViewMode::Messages,
@@ -166,13 +161,9 @@ async fn mark_message_read(messages: &[TestItem], expected_unread: usize) {
     let message_ids = Message::remote_ids_counterpart(to_mark, &tether)
         .await
         .unwrap();
-    Message::action_mark_read(
-        user_ctx.action_queue(),
-        inbox.local_id.unwrap(),
-        message_ids,
-    )
-    .await
-    .unwrap();
+    Message::action_mark_read(user_ctx.action_queue(), message_ids)
+        .await
+        .unwrap();
     user_ctx.execute_single_action().await.unwrap();
 
     // Validation
@@ -193,11 +184,6 @@ async fn mark_message_unread(messages: &[TestItem], expected_unread: usize) {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
     let tether = user_ctx.user_stash().connection();
-
-    let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
-        .await
-        .unwrap()
-        .unwrap();
 
     let mut params = Params::default_basic();
     params.mail_settings = Some(ApiMailSettings {
@@ -239,13 +225,9 @@ async fn mark_message_unread(messages: &[TestItem], expected_unread: usize) {
     let message_ids = Message::remote_ids_counterpart(to_mark, &tether)
         .await
         .unwrap();
-    Message::action_mark_unread(
-        user_ctx.action_queue(),
-        inbox.local_id.unwrap(),
-        message_ids,
-    )
-    .await
-    .unwrap();
+    Message::action_mark_unread(user_ctx.action_queue(), message_ids)
+        .await
+        .unwrap();
 
     user_ctx.execute_single_action().await.unwrap();
 

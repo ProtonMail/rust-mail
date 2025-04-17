@@ -1,5 +1,5 @@
 use crate::MailUserContext;
-use crate::actions::{GenericActionData, MailActionError, filter_responses_by_codes};
+use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_responses_by_codes};
 use crate::datatypes::{ContextualConversation, RollbackItemType};
 use crate::models::Conversation;
 use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
@@ -14,13 +14,13 @@ use tracing::error;
 
 /// Action to mark conversations read.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct MarkRead(GenericActionData<Conversation>);
+pub struct MarkRead(GenericLabelRelatedActionData<Conversation>);
 
 impl MarkRead {
     /// Create a new action which marks the conversations with `ids` as read.
     pub fn new(label_id: LocalLabelId, ids: impl IntoIterator<Item = LocalConversationId>) -> Self {
         // TODO(db-tests): label_id was present in the original action, why was it used.
-        Self(GenericActionData::new(label_id, ids))
+        Self(GenericLabelRelatedActionData::new(label_id, ids))
     }
 }
 
@@ -51,8 +51,8 @@ impl proton_action_queue::action::Handler for Handler {
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         // API call return an error 2501(Conversation was not updated) for conversation already read
-        let conversations = Conversation::find_by_ids(action.0.target_ids.clone(), tx).await?;
-        action.0.target_ids = conversations
+        let conversations = Conversation::find_by_ids(action.0.data.target_ids.clone(), tx).await?;
+        action.0.data.target_ids = conversations
             .into_iter()
             .filter_map(|c| ContextualConversation::new(c, action.0.label_id))
             .filter(|c| c.num_unread > 0)
@@ -61,7 +61,7 @@ impl proton_action_queue::action::Handler for Handler {
 
         action.0.resolve_ids(tx).await?;
 
-        Conversation::mark_read(action.0.target_ids.clone(), tx).await?;
+        Conversation::mark_read(action.0.data.target_ids.clone(), tx).await?;
         Ok(())
     }
 
@@ -72,7 +72,7 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Conversation::mark_unread(action.0.label_id, action.0.target_ids.clone(), tx).await?;
+        Conversation::mark_unread(action.0.label_id, action.0.data.target_ids.clone(), tx).await?;
         action
             .0
             .mark_rollback(RollbackItemType::Conversation, tx)
@@ -89,7 +89,7 @@ impl proton_action_queue::action::Handler for Handler {
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let responses = Conversation::mark_multiple_as_read_remote::<Proton>(
-            action.0.remote_target_ids.clone(),
+            action.0.data.remote_target_ids.clone(),
             ctx.api(),
         )
         .await?;

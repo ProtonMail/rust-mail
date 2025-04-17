@@ -1,5 +1,5 @@
 use crate::MailUserContext;
-use crate::actions::{GenericActionData, MailActionError, filter_responses};
+use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_responses};
 use crate::datatypes::RollbackItemType;
 use crate::models::Conversation;
 use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
@@ -13,12 +13,12 @@ use tracing::error;
 
 /// Action which applies a label to conversations.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Label(GenericActionData<Conversation>);
+pub struct Label(GenericLabelRelatedActionData<Conversation>);
 
 impl Label {
     /// Create a new instance which applies `label_id` to the conversations with `ids`.
     pub fn new(label_id: LocalLabelId, ids: impl IntoIterator<Item = LocalConversationId>) -> Self {
-        Self(GenericActionData::new(label_id, ids))
+        Self(GenericLabelRelatedActionData::new(label_id, ids))
     }
 }
 
@@ -51,7 +51,7 @@ impl proton_action_queue::action::Handler for Handler {
     ) -> Result<(), <Self::Action as Action>::Error> {
         action.0.resolve_ids(tx).await?;
 
-        Conversation::apply_label(action.0.label_id, action.0.target_ids.clone(), tx).await?;
+        Conversation::apply_label(action.0.label_id, action.0.data.target_ids.clone(), tx).await?;
         Ok(())
     }
 
@@ -62,7 +62,7 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Conversation::remove_label(action.0.label_id, action.0.target_ids.clone(), tx).await?;
+        Conversation::remove_label(action.0.label_id, action.0.data.target_ids.clone(), tx).await?;
         action
             .0
             .mark_rollback(RollbackItemType::Conversation, tx)
@@ -85,7 +85,7 @@ impl proton_action_queue::action::Handler for Handler {
                 .clone()
                 .expect("Should be set")
                 .clone(),
-            action.0.remote_target_ids.clone(),
+            action.0.data.remote_target_ids.clone(),
             None,
             ctx.api(),
         )

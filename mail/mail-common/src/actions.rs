@@ -5,6 +5,7 @@ pub mod draft;
 pub mod event_poll;
 pub mod labels;
 pub mod messages;
+pub mod notifications_quick_actions;
 
 pub use self::available_action::*;
 use crate::AppError;
@@ -133,16 +134,11 @@ pub(crate) fn register_mail_actions(queue: &Queue) {
 
 /// Convenience type which contains data common to many actions.
 #[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(bound = "")]
 struct GenericActionData<T>
 where
     T: ModelIdExtension<IdType: Serialize + DeserializeOwned>,
 {
-    /// Local label id which this action applies to.
-    label_id: LocalLabelId,
-    /// Resolved remote label id.
-    ///
-    /// Note: this is only for user with remote execution, it should be set by then.
-    remote_label_id: Option<LabelId>,
     /// Local ids for the action to act on.
     target_ids: Vec<T::IdType>,
     /// Resolved remote ids.
@@ -154,11 +150,9 @@ impl<T> GenericActionData<T>
 where
     T: ModelIdExtension<IdType: Serialize + DeserializeOwned>,
 {
-    /// Create a new instance with the given `label_id` and target `ids`.
-    pub fn new(label_id: LocalLabelId, target_ids: impl IntoIterator<Item = T::IdType>) -> Self {
+    /// Create a new instance with the given target `ids`.
+    pub fn new(target_ids: impl IntoIterator<Item = T::IdType>) -> Self {
         Self {
-            label_id,
-            remote_label_id: None,
             target_ids: Vec::from_iter(target_ids),
             remote_target_ids: vec![],
             phantom: PhantomData,
@@ -177,16 +171,14 @@ where
             return Err(MailActionError::NoInput);
         }
 
-        self.remote_label_id = Some(Label::resolve_remote_label_id(self.label_id, tether).await?);
-
-        let conv_ids = T::local_ids_counterpart(self.target_ids.clone(), tether)
+        let remote_target_ids = T::local_ids_counterpart(self.target_ids.clone(), tether)
             .await
             .map_err(|e| {
                 error!("Failed to resolve ids: {e:?}");
                 e
             })?;
 
-        self.remote_target_ids = conv_ids;
+        self.remote_target_ids = remote_target_ids;
 
         Ok(())
     }
@@ -239,6 +231,73 @@ where
                 .save(tx)
                 .await?;
         }
+
+        Ok(())
+    }
+}
+
+/// Convenience type which contains data common to many actions.
+/// It
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(bound = "")]
+struct GenericLabelRelatedActionData<T>
+where
+    T: ModelIdExtension<IdType: Serialize + DeserializeOwned>,
+{
+    /// Local label id which this action applies to.
+    label_id: LocalLabelId,
+    /// Resolved remote label id.
+    ///
+    /// Note: this is only for user with remote execution, it should be set by then.
+    remote_label_id: Option<LabelId>,
+    /// Generic data
+    data: GenericActionData<T>,
+}
+
+impl<T> GenericLabelRelatedActionData<T>
+where
+    T: ModelIdExtension<IdType: Serialize + DeserializeOwned>,
+{
+    /// Create a new instance with the given `label_id` and target `ids`.
+    pub fn new(label_id: LocalLabelId, target_ids: impl IntoIterator<Item = T::IdType>) -> Self {
+        Self {
+            label_id,
+            remote_label_id: None,
+            data: GenericActionData::new(target_ids),
+        }
+    }
+
+    /// Resolve all remote ids.
+    ///
+    /// Resolved remote ids are stored on self.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if ids could not be resolved.
+    async fn resolve_ids(&mut self, tether: &Tether) -> Result<(), MailActionError> {
+        self.data.resolve_ids(tether).await?;
+
+        self.remote_label_id = Some(Label::resolve_remote_label_id(self.label_id, tether).await?);
+
+        Ok(())
+    }
+
+    /// Return the ids of all the items which do not have a remote id.
+    ///
+    /// # Error
+    ///
+    /// Returns error if the query failed.
+    async fn unsynced_item_ids(&self, tether: &Tether) -> Result<Vec<T::IdType>, MailActionError> {
+        self.data.unsynced_item_ids(tether).await
+    }
+
+    /// Mark the action items to be rollback
+    async fn mark_rollback(
+        &self,
+        item_type: RollbackItemType,
+        tx: &Bond<'_>,
+    ) -> Result<(), MailActionError> {
+        self.data.mark_rollback(item_type, tx).await?;
 
         Ok(())
     }

@@ -578,10 +578,10 @@ impl StateHandler for MessagesState {
                 return label_message(user_ctx.to_owned(), *label_as);
             }
             MessageMessage::MarkMessageRead(id) => {
-                return mark_message_read(user_ctx.to_owned(), mbox, id);
+                return mark_message_read(user_ctx.to_owned(), id);
             }
             MessageMessage::MarkMessageUnread(id) => {
-                return mark_message_unread(user_ctx.to_owned(), mbox, id);
+                return mark_message_unread(user_ctx.to_owned(), id);
             }
             MessageMessage::StarMessage(id) => {
                 return star_message(user_ctx.to_owned(), id);
@@ -849,27 +849,17 @@ fn html_to_text(message: &str) -> anyhow::Result<String> {
         .string_from_read(cursor, 80)
         .map_err(|e| anyhow!("Failed to parse HTML: {e}"))
 }
-fn mark_message_read(
-    ctx: Arc<MailUserContext>,
-    mailbox: &Mailbox,
-    id: LocalMessageId,
-) -> Command<Messages> {
-    let current_label_id = mailbox.label_id();
+fn mark_message_read(ctx: Arc<MailUserContext>, id: LocalMessageId) -> Command<Messages> {
     Command::from_future(async move {
-        MailMessage::action_mark_read(ctx.action_queue(), current_label_id, vec![id])
+        MailMessage::action_mark_read(ctx.action_queue(), vec![id])
             .await
             .context("Failed to mark message as read")
     })
 }
 
-fn mark_message_unread(
-    ctx: Arc<MailUserContext>,
-    mailbox: &Mailbox,
-    id: LocalMessageId,
-) -> Command<Messages> {
-    let current_label_id = mailbox.label_id();
+fn mark_message_unread(ctx: Arc<MailUserContext>, id: LocalMessageId) -> Command<Messages> {
     Command::from_future(async move {
-        MailMessage::action_mark_unread(ctx.action_queue(), current_label_id, vec![id])
+        MailMessage::action_mark_unread(ctx.action_queue(), vec![id])
             .await
             .context("Failed to mark message as unread")
     })
