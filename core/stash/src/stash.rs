@@ -39,6 +39,7 @@ use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use sqlite_watcher::watcher::TableObserver;
 use sqlite_watcher::watcher::Watcher;
 use stash_macros::DbRecord;
+use std::mem::ManuallyDrop;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread::{self, yield_now};
@@ -1212,18 +1213,16 @@ impl<'tether> Bond<'tether> {
     ///
     #[allow(clippy::mem_forget)]
     async fn rollback(self) -> Result<(), StashError> {
+        let this = ManuallyDrop::new(self); // The drop glue does an implicit rollback
         let (sender, receiver) = oneshot::channel();
 
         let operation = Operation::Transaction(OperationTransaction::Rollback(sender));
-        self.sender
+        this.sender
             .send(operation)
             .map_err(|_| anyhow!("The stash worker dropped"))?;
         receiver
             .await
             .map_err(|_| anyhow!("The stash worker dropped"))??;
-
-        // Transaction rolled back, skip the drop logic
-        mem::forget(self);
 
         Ok(())
     }
