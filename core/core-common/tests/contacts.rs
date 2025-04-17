@@ -19,7 +19,6 @@ use proton_crypto_account::proton_crypto::new_pgp_provider;
 use proton_event_loop::subscriber::Subscriber;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::StashError;
 use std::sync::Arc;
 
 macro_rules! prune_email {
@@ -336,17 +335,13 @@ async fn test_contact_load_public_address_keys() {
     let pgp_provider = new_pgp_provider();
     let unlocked_user_keys = unlocked_user_key(&pgp_provider);
     let mut tether = user_ctx.stash().connection();
-    let keys = tether
-        .tx(async |tx| {
-            user_ctx
-                .public_address_keys_from_contacts(
-                    &pgp_provider,
-                    tx,
-                    &unlocked_user_keys,
-                    &contact_email,
-                )
-                .await
-        })
+    let keys = user_ctx
+        .public_address_keys_from_contacts(
+            &pgp_provider,
+            &mut tether,
+            &unlocked_user_keys,
+            &contact_email,
+        )
         .await
         .expect("there should be no error or key extraction")
         .expect("key must be found");
@@ -382,25 +377,20 @@ async fn test_contact_load_public_address_keys() {
     // Check public address keys from contacts
     let pgp_provider = new_pgp_provider();
     let unlocked_user_keys = unlocked_user_key(&pgp_provider);
-    let preferred_fingerprint_2 = tether
-        .tx::<_, _, StashError>(async |tx| {
-            Ok(user_ctx
-                .public_address_keys_from_contacts(
-                    &pgp_provider,
-                    tx,
-                    &unlocked_user_keys,
-                    &contact_email,
-                )
-                .await
-                .expect("there should be no error or key extraction")
-                .expect("key must be found")
-                .pinned_keys
-                .first()
-                .unwrap()
-                .key_fingerprint())
-        })
+    let preferred_fingerprint_2 = user_ctx
+        .public_address_keys_from_contacts(
+            &pgp_provider,
+            &mut tether,
+            &unlocked_user_keys,
+            &contact_email,
+        )
         .await
-        .expect("Failed to commit transaction");
+        .expect("there should be no error or key extraction")
+        .expect("key must be found")
+        .pinned_keys
+        .first()
+        .unwrap()
+        .key_fingerprint();
 
     assert!(preferred_fingerprint_1 != preferred_fingerprint_2);
 }
@@ -438,8 +428,7 @@ async fn prepare_sync_test_data_contacts(
         .await
         .unwrap()
         .unwrap();
-    tether
-        .tx(async |tx| Contact::sync_with_card(local_id, user_ctx.session().api(), tx).await)
+    Contact::sync_with_card(local_id, user_ctx.session().api(), &mut tether)
         .await
         .expect("failed to sync contacts");
 }

@@ -53,8 +53,14 @@ use crate::connection_manager::StashConnectionPool;
 
 type StdSender<T> = flume::Sender<T>;
 /// Set a timeout for a specified amount of time when a table is locked. This
-/// defaults to 5,000 milliseconds in the underlying libraries.
-const BUSY_TIMEOUT: Duration = Duration::from_secs(2);
+/// defaults to 5,000 milliseconds in the underlying libraries. This is currently only
+/// expected to be triggered when the db is shared between different processes. We mediate the
+/// access inside the same db process.
+const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Maximum time a transaction should be active. Long running transactions are a sign
+/// of problems and need to be revisited.
+const TRANSACTION_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// The maximum number of simultaneous connections allowed to the database. This
 /// defaults to 100.
@@ -982,9 +988,12 @@ impl Tether {
         //   transactions to be in flight at the same time.
         let tx_lock = self.tx_lock.clone();
         let _guard = tx_lock.lock().await;
-        let f = async {
+        async {
             let tx = self.transaction_impl(policy).await?;
-            let r = closure(&tx).await;
+            let r = match tokio::time::timeout(TRANSACTION_TIMEOUT, closure(&tx)).await {
+                Ok(val) => val,
+                Err(_) => Err(StashError::TransactionTimeout.into()),
+            };
             if r.is_err() {
                 if let Err(e) = tx.rollback().await {
                     error!("Failed to rollback transaction: {e:?}");
@@ -996,12 +1005,8 @@ impl Tether {
                 .inspect_err(|e| error!("Failed to commit transaction: {e:?}"))?;
             r
         }
-        .into_non_pausable();
-
-        match tokio::time::timeout(BUSY_TIMEOUT, f).await {
-            Ok(val) => val,
-            Err(_) => Err(StashError::TransactionTimeout.into()),
-        }
+        .into_non_pausable()
+        .await
     }
 
     async fn transaction_impl(
@@ -1259,6 +1264,10 @@ impl Drop for Bond<'_> {
 }
 
 impl RunTransaction for Tether {
+    fn tether(&self) -> &Tether {
+        self
+    }
+
     #[allow(clippy::manual_async_fn)]
     fn run_tx<T, F>(&mut self, closure: F) -> impl Future<Output = anyhow::Result<T>>
     where
@@ -1276,6 +1285,9 @@ impl RunTransaction for Tether {
 /// transactions.
 /// It exists so that you can pass either a `&mut Tether` or a `&mut WriterGuard`.
 pub trait RunTransaction {
+    /// Get the tether instance that powers the transaction for read only queries.
+    fn tether(&self) -> &Tether;
+
     /// Creates a transaction and run the given `closure`.
     fn run_tx<T, F>(&mut self, closure: F) -> impl Future<Output = anyhow::Result<T>>
     where

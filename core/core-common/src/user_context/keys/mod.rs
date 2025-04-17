@@ -22,10 +22,11 @@ use proton_crypto_account::{
     proton_crypto::{CryptoError, crypto::PGPProviderSync},
 };
 use proton_vcard::{VCardError, vcard::VCard};
+use stash::stash::RunTransaction;
 use stash::{
     orm::Model,
     params,
-    stash::{Bond, StashError, Tether},
+    stash::{StashError, Tether},
 };
 use thiserror::Error;
 use tracing::{Level, debug};
@@ -166,18 +167,18 @@ impl UserContext {
     /// Returns an error on a database or sync failure.
     /// - A DB/IO error if syncing the contact or accessing the contacts fails.
     /// - A wrapped [`KeyHandlingError`] if `VCard` parsing or signature verification fails.
-    #[tracing::instrument(level = Level::DEBUG, skip(self, pgp_provider, bond, unlocked_user_keys))]
+    #[tracing::instrument(level = Level::DEBUG, skip(self, pgp_provider, rt, unlocked_user_keys))]
     pub async fn public_address_keys_from_contacts<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
-        bond: &Bond<'_>,
+        rt: &mut impl RunTransaction,
         unlocked_user_keys: &UnlockedUserKeys<Provider>,
         email: &str,
     ) -> CoreContextResult<Option<PinnedPublicKeys<<Provider>::PublicKey>>> {
         // First, we try to load an contact emails that matches the email.
         debug!("Try to load the contact email for {email} from the db");
         let contact_email =
-            ContactEmail::find_first("WHERE email = ?", params![email.to_owned()], bond)
+            ContactEmail::find_first("WHERE email = ?", params![email.to_owned()], rt.tether())
                 .await?
                 .ok_or(ContactError::CardNotFound(email.to_owned()))?;
 
@@ -189,17 +190,21 @@ impl UserContext {
                 ))?;
 
         // On success try to sync the most recent full contact including its v-cards from the BE.
-        Contact::sync_with_card(local_contact_id, self.session().api(), bond).await?;
+        Contact::sync_with_card(local_contact_id, self.session().api(), rt).await?;
 
-        let mut contact = Contact::load(local_contact_id, bond)
+        let mut contact = Contact::load(local_contact_id, rt.tether())
             .await?
             .ok_or(ContactError::FullContactNotFound(email.to_owned()))?;
 
         debug!("Full contact with cards found");
-        Ok(
-            extract_pinned_keys(pgp_provider, bond, unlocked_user_keys, &mut contact, email)
-                .await?,
+        Ok(extract_pinned_keys(
+            pgp_provider,
+            rt.tether(),
+            unlocked_user_keys,
+            &mut contact,
+            email,
         )
+        .await?)
     }
 }
 

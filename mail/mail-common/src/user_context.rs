@@ -30,7 +30,7 @@ use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, Unlo
 use proton_event_loop::foreground_loop::EventLoop;
 use proton_task_service::{AsyncTaskResult, TaskService, TaskSpawner};
 use stash::orm::Model;
-use stash::stash::{Bond, Stash, Tether};
+use stash::stash::{RunTransaction, Stash, Tether};
 use std::future::Future;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
@@ -353,7 +353,7 @@ impl MailUserContext {
     pub async fn recipient_send_preferences<Provider>(
         &self,
         pgp_provider: &Provider,
-        tx: &Bond<'_>,
+        rt: &mut impl RunTransaction,
         email: &str,
         settings: CryptoMailSettings,
         composer_preference: ComposerPreference,
@@ -364,9 +364,12 @@ impl MailUserContext {
         let encryption_time = crypto_clock::server_crypto_clock().unix_time();
 
         // If the email is from an owned address by the user, use the corresponding keys.
-        if let Some(address) = Address::by_email(email, tx).await.inspect_err(|err| {
-            error!("send preferences: failed to search address by email: {err:?}")
-        })? {
+        if let Some(address) = Address::by_email(email, rt.tether())
+            .await
+            .inspect_err(|err| {
+                error!("send preferences: failed to search address by email: {err:?}")
+            })?
+        {
             let address_rid = address.remote_id.as_ref().ok_or_else(|| {
                 MailContextError::App(AppError::AddressHasNoRemoteId(
                     address.local_id.unwrap_or(LocalAddressId::from(0)),
@@ -374,7 +377,7 @@ impl MailUserContext {
             })?;
 
             let address_keys = self
-                .unlocked_address_keys(pgp_provider, tx, address_rid)
+                .unlocked_address_keys(pgp_provider, rt.tether(), address_rid)
                 .await
                 .inspect_err(|err| error!("send preferences for self: {err:?}"))?;
             let send_preferences =
@@ -383,14 +386,14 @@ impl MailUserContext {
             return Ok(send_preferences);
         }
 
-        let user_keys = self.unlocked_user_keys(pgp_provider, tx).await?;
+        let user_keys = self.unlocked_user_keys(pgp_provider, rt.tether()).await?;
         // Fetch API keys, and contact-pinned keys concurrently.
         let (api_keys_result, vcard_keys_result) = join!(
             self.user_context
                 .public_address_keys(pgp_provider, email, false),
             self.user_context.public_address_keys_from_contacts(
                 pgp_provider,
-                tx,
+                rt,
                 &user_keys,
                 email
             )
