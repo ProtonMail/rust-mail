@@ -19,7 +19,7 @@ use proton_crypto_inbox::message::packages::{
     EncryptedPackageBody, PackageMimeType, package_body_encrypt,
 };
 use proton_crypto_inbox::proton_crypto_inbox_mime::write::InboxMimeBuilder;
-use stash::stash::Bond;
+use stash::stash::RunTransaction;
 use std::collections::{HashMap, HashSet};
 use tracing::{Instrument, debug, debug_span, error};
 
@@ -27,7 +27,7 @@ use tracing::{Instrument, debug, debug_span, error};
 pub async fn load_send_preferences_for_recipients<Provider: PGPProviderSync>(
     context: &MailUserContext,
     pgp_provider: &Provider,
-    bond: &Bond<'_>,
+    rt: &mut impl RunTransaction,
     recipient_emails: &[String],
     crypto_mail_settings: CryptoMailSettings,
 ) -> MailContextResult<HashMap<String, SendPreferences<Provider::PublicKey>>> {
@@ -36,7 +36,7 @@ pub async fn load_send_preferences_for_recipients<Provider: PGPProviderSync>(
         let send_preference = context
             .recipient_send_preferences(
                 pgp_provider,
-                bond,
+                rt,
                 recipient,
                 crypto_mail_settings,
                 ComposerPreference::default(),

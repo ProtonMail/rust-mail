@@ -260,29 +260,26 @@ impl Send {
 
         let pgp_provider = new_pgp_provider();
 
-        let (send_preferences, address_keys) = guard
-            .tx::<_, _, <Self as Action>::Error>(async |tx| {
-                // Load send preferences for each recipient of the message.
-                let send_preferences = load_send_preferences_for_recipients(
-                    context,
-                    &pgp_provider,
-                    tx,
-                    &action.recipients,
-                    mail_settings.crypto_mail_settings(),
-                )
-                .await
-                .inspect_err(|err| {
-                    error!("Failed to load send preferences for recipients: {err:?}")
-                })?;
+        // Load send preferences for each recipient of the message.
+        let send_preferences = load_send_preferences_for_recipients(
+            context,
+            &pgp_provider,
+            guard,
+            &action.recipients,
+            mail_settings.crypto_mail_settings(),
+        )
+        .await
+        .inspect_err(|err| error!("Failed to load send preferences for recipients: {err:?}"))?;
 
-                // Unlock sender address keys
-                let address_keys = context
-                    .unlocked_address_keys(&pgp_provider, tx, &message_metadata.remote_address_id)
-                    .await
-                    .inspect_err(|err| error!("Failed to load address key for sending: {err:?}"))?;
-                Ok((send_preferences, address_keys))
-            })
-            .await?;
+        // Unlock sender address keys
+        let address_keys = context
+            .unlocked_address_keys(
+                &pgp_provider,
+                guard.tether(),
+                &message_metadata.remote_address_id,
+            )
+            .await
+            .inspect_err(|err| error!("Failed to load address key for sending: {err:?}"))?;
 
         let attachments =
             DraftAttachmentMetadata::attachment_for_draft(action.metadata_id, guard.tether())
