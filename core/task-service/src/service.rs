@@ -77,6 +77,8 @@ impl TaskService {
                     if let Some(sender) = sender {
                         pause_awaiters.push(sender);
                     }
+
+                    notify_awaiters(wakers.len(), num_futures, &mut pause_awaiters);
                 }
 
                 Command::Resume => {
@@ -796,6 +798,17 @@ mod tests {
         });
 
         time::timeout(Duration::from_millis(100), value)
+            .await
+            .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[tracing_test::traced_test]
+    async fn pause_and_wait_does_not_bock() {
+        let service = Arc::new(TaskService::new().unwrap());
+
+        time::timeout(Duration::from_millis(100), service.pause_and_wait())
             .await
             .unwrap()
             .unwrap();
