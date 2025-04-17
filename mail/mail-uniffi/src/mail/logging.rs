@@ -64,7 +64,7 @@ pub(super) fn init_log(log_path: &Path, debug: bool) -> std::io::Result<Option<W
 pub fn app_tracing_env_filter_default() -> EnvFilter {
     EnvFilter::builder()
         .with_default_directive(LevelFilter::DEBUG.into())
-        .parse(
+        .parse(format!(
             "info,\
             muon=debug,\
             muon_impl=debug,\
@@ -76,8 +76,13 @@ pub fn app_tracing_env_filter_default() -> EnvFilter {
             proton_api_core=debug,\
             proton_action_queue=trace,\
             proton_api_mail=debug,\
-            stash=debug",
-        )
+            stash={}",
+            if std::env::var("STASH_SQL_DEBUG").is_ok() {
+                "trace"
+            } else {
+                "error"
+            }
+        ))
         .expect("bad log directives")
 }
 
