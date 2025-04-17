@@ -12,6 +12,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Return cached data from mail scroller immediately
 
+## [mail-uniffi-v0.72.6] - 2025-04-14
+
+### Fixes
+
+- Restore manual event loop polling with `force_event_loop_poll`
+
+## [mail-uniffi-v0.72.5] - 2025-04-14
+
+### Changed
+
+- MailUserContext polls events in the background
+
+### Features
+
+- Ensure that html content is encoded as base64 in mime
+
+### Fixes
+
+- Disable async logger for iOS
+- Wake TaskService awaiters on resume
+- [ET-2326] Sanatize the conent-id in the mime-buidler
+
+## [mail-uniffi-v0.72.4] - 2025-04-14
+
+### Fixes
+
+- Leaking tracing spans in async code
+
+## [mail-uniffi-v0.72.3] - 2025-04-11
+
+### Fixes
+
+- Ignore duplicate context errors in background tasks
+
+## [mail-uniffi-v0.72.2] - 2025-04-11
+
 ## [mail-uniffi-v0.72.1] - 2025-04-10
 
 ### Fixed
