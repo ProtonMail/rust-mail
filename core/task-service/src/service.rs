@@ -77,6 +77,8 @@ impl TaskService {
                     if let Some(sender) = sender {
                         pause_awaiters.push(sender);
                     }
+
+                    notify_awaiters(wakers.len(), num_futures, &mut pause_awaiters);
                 }
 
                 Command::Resume => {
@@ -143,11 +145,17 @@ impl TaskService {
     /// Like [`Self::pause()`], but instead of returning immediately, it waits
     /// for all of the futures to be actually paused.
     ///
+    /// # Remarks
+    ///
+    /// If the spawned futures are awaiting on different await points they may not report
+    /// the fact that they are paused. It is possible that this function never recovers. A
+    /// `timeout` is required to avoid "surprise" blocked forever.
+    ///
     /// # Errors
     ///
     /// Returns error if the task service's thread has crashed and is unable to
     /// service the request.
-    pub async fn pause_and_wait(&self) -> anyhow::Result<()> {
+    pub async fn pause_and_wait(&self, timeout: Duration) -> anyhow::Result<()> {
         info!("Pausing tasks and waiting");
 
         self.active.store(false, Ordering::Relaxed);
@@ -161,11 +169,11 @@ impl TaskService {
         // This is a failsafe mechanism.
         // This should never timeout, that means that we have a bug here.
         // However, we've had bugs here which tend to crash the whole application,
-        match tokio::time::timeout(Duration::from_millis(2_500), receiver).await {
+        match tokio::time::timeout(timeout, receiver).await {
             Ok(Ok(())) => Ok(()),
             Ok(Err(_)) => Err(anyhow!("The sender dropped!")),
             Err(_) => Err(anyhow!(
-                "Pausing for non-pausable futures failed. This is a serious bug that could leave the app state in a bad state."
+                "Pausing for non-pausable futures failed. Some futures are paused in other locations."
             )),
         }
     }
@@ -353,9 +361,9 @@ impl BackgroundAwareTaskService {
     /// Pause tasks and wait for all task to be paused when the main application is about to go
     /// into a suspended state. If a background task is running, the pause request will be ignored
     /// and we will return immediately.
-    pub async fn pause_main_and_wait(&self) -> anyhow::Result<()> {
+    pub async fn pause_main_and_wait(&self, timeout: Duration) -> anyhow::Result<()> {
         if self.state.lock().pause_main() {
-            self.service.pause_and_wait().await
+            self.service.pause_and_wait(timeout).await
         } else {
             Ok(())
         }
@@ -371,9 +379,9 @@ impl BackgroundAwareTaskService {
 
     /// Pause tasks and wait for all task to be paused when the background task has finished running.
     /// If the main application is not in a suspended state, teh request will be ignored.
-    pub async fn pause_background_and_wait(&self) -> anyhow::Result<()> {
+    pub async fn pause_background_and_wait(&self, timeout: Duration) -> anyhow::Result<()> {
         if self.state.lock().pause_background() {
-            self.service.pause_and_wait().await
+            self.service.pause_and_wait(timeout).await
         } else {
             Ok(())
         }
@@ -749,9 +757,9 @@ mod tests {
         join_handle.abort();
 
         // re-pause and await
-        time::timeout(Duration::from_secs(2), service.pause_and_wait())
+        service
+            .pause_and_wait(Duration::from_secs(2))
             .await
-            .unwrap()
             .unwrap();
 
         // Ensure future remains paused.
@@ -798,6 +806,17 @@ mod tests {
         time::timeout(Duration::from_millis(100), value)
             .await
             .unwrap()
+            .unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[tracing_test::traced_test]
+    async fn pause_and_wait_does_not_bock() {
+        let service = Arc::new(TaskService::new().unwrap());
+
+        service
+            .pause_and_wait(Duration::from_millis(100))
+            .await
             .unwrap();
     }
 

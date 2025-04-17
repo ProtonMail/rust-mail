@@ -1036,7 +1036,7 @@ impl MailSession {
                 .mail_ctx
                 .core_context()
                 .task_service()
-                .pause_main_and_wait()
+                .pause_main_and_wait(Duration::from_millis(100))
                 .await
             {
                 error!("Failed to await paused work: {e:?}");
