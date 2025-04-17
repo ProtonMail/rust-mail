@@ -27,18 +27,14 @@ async fn load_sending_preferences() {
         .expect("Failed to get mail settings")
         .unwrap();
 
-    let recipient_preferences = tether
-        .tx(async |tx| {
-            user_ctx
-                .recipient_send_preferences(
-                    &pgp_provider,
-                    tx,
-                    recipient_email,
-                    mail_settings.crypto_mail_settings(),
-                    Default::default(),
-                )
-                .await
-        })
+    let recipient_preferences = user_ctx
+        .recipient_send_preferences(
+            &pgp_provider,
+            &mut tether,
+            recipient_email,
+            mail_settings.crypto_mail_settings(),
+            Default::default(),
+        )
         .await
         .unwrap();
 
@@ -70,18 +66,14 @@ async fn load_sending_preferences_for_self() {
         .expect("Failed to get mail settings")
         .unwrap();
 
-    let recipient_preferences = tether
-        .tx(async |tx| {
-            user_ctx
-                .recipient_send_preferences(
-                    &pgp_provider,
-                    tx,
-                    self_address,
-                    mail_settings.crypto_mail_settings(),
-                    Default::default(),
-                )
-                .await
-        })
+    let recipient_preferences = user_ctx
+        .recipient_send_preferences(
+            &pgp_provider,
+            &mut tether,
+            self_address,
+            mail_settings.crypto_mail_settings(),
+            Default::default(),
+        )
         .await
         .unwrap();
 
