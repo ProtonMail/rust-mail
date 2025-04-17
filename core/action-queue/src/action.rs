@@ -280,6 +280,10 @@ impl<'t> WriterGuard<'t> {
 }
 
 impl RunTransaction for WriterGuard<'_> {
+    fn tether(&self) -> &Tether {
+        self.tether
+    }
+
     #[allow(clippy::manual_async_fn)]
     fn run_tx<T, F>(&mut self, closure: F) -> impl Future<Output = anyhow::Result<T>>
     where

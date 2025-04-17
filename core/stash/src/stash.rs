@@ -44,6 +44,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread::{self, yield_now};
 use thiserror::Error;
+use tokio::sync::Mutex;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
 use tracing::{debug, error, trace, warn};
 // Used to resolve undeclared crate of module `stash` from DbRecord proc marco
@@ -52,8 +53,14 @@ use crate::connection_manager::StashConnectionPool;
 
 type StdSender<T> = flume::Sender<T>;
 /// Set a timeout for a specified amount of time when a table is locked. This
-/// defaults to 5,000 milliseconds in the underlying libraries.
-const BUSY_TIMEOUT: Duration = Duration::from_secs(2);
+/// defaults to 5,000 milliseconds in the underlying libraries. This is currently only
+/// expected to be triggered when the db is shared between different processes. We mediate the
+/// access inside the same db process.
+const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Maximum time a transaction should be active. Long running transactions are a sign
+/// of problems and need to be revisited.
+const TRANSACTION_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// The maximum number of simultaneous connections allowed to the database. This
 /// defaults to 100.
@@ -419,6 +426,8 @@ pub struct Stash {
 
     /// The pool used for database connections.
     pool: Arc<StashConnectionPool>,
+
+    tx_lock: Arc<Mutex<()>>,
 }
 
 impl Debug for Stash {
@@ -454,6 +463,7 @@ impl Stash {
         Ok(Self {
             pool: Self::make_pool(config.into()),
             watcher: Watcher::new().map_err(|e| StashError::WatcherError(e.to_string()))?,
+            tx_lock: Default::default(),
         })
     }
 
@@ -585,6 +595,8 @@ pub struct Tether {
     sender: StdSender<Operation>,
 
     watcher: Arc<Watcher>,
+
+    tx_lock: Arc<Mutex<()>>,
 }
 
 impl Tether {
@@ -969,9 +981,19 @@ impl Tether {
         F: AsyncFnOnce(&Bond<'_>) -> Result<T, E>,
         E: From<StashError>,
     {
-        let f = async {
+        // We acquire a lock rather than relying on the SQLite internal lock as it allows us to:
+        // * Avoid busy timeouts in the same process
+        // * Ensure that when this is running on a pausable future, that we _really_ only create
+        //   a new transaction if we are not paused. Previously it would be possible for many
+        //   transactions to be in flight at the same time.
+        let tx_lock = self.tx_lock.clone();
+        let _guard = tx_lock.lock().await;
+        async {
             let tx = self.transaction_impl(policy).await?;
-            let r = closure(&tx).await;
+            let r = match tokio::time::timeout(TRANSACTION_TIMEOUT, closure(&tx)).await {
+                Ok(val) => val,
+                Err(_) => Err(StashError::TransactionTimeout.into()),
+            };
             if r.is_err() {
                 if let Err(e) = tx.rollback().await {
                     error!("Failed to rollback transaction: {e:?}");
@@ -983,12 +1005,8 @@ impl Tether {
                 .inspect_err(|e| error!("Failed to commit transaction: {e:?}"))?;
             r
         }
-        .into_non_pausable();
-
-        match tokio::time::timeout(BUSY_TIMEOUT, f).await {
-            Ok(val) => val,
-            Err(_) => Err(StashError::TransactionTimeout.into()),
-        }
+        .into_non_pausable()
+        .await
     }
 
     async fn transaction_impl(
@@ -1111,6 +1129,7 @@ impl Tether {
         Self {
             sender: tether_sender,
             watcher: stash.watcher.clone(),
+            tx_lock: Arc::clone(&stash.tx_lock),
         }
     }
 }
@@ -1245,6 +1264,10 @@ impl Drop for Bond<'_> {
 }
 
 impl RunTransaction for Tether {
+    fn tether(&self) -> &Tether {
+        self
+    }
+
     #[allow(clippy::manual_async_fn)]
     fn run_tx<T, F>(&mut self, closure: F) -> impl Future<Output = anyhow::Result<T>>
     where
@@ -1262,6 +1285,9 @@ impl RunTransaction for Tether {
 /// transactions.
 /// It exists so that you can pass either a `&mut Tether` or a `&mut WriterGuard`.
 pub trait RunTransaction {
+    /// Get the tether instance that powers the transaction for read only queries.
+    fn tether(&self) -> &Tether;
+
     /// Creates a transaction and run the given `closure`.
     fn run_tx<T, F>(&mut self, closure: F) -> impl Future<Output = anyhow::Result<T>>
     where

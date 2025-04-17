@@ -28,7 +28,7 @@ use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
+use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
 use tokio::task::JoinSet;
 use tracing::{debug, error};
 
@@ -361,10 +361,10 @@ impl Contact {
     pub async fn sync_with_card(
         local_id: LocalContactId,
         api: &Proton,
-        bond: &Bond<'_>,
+        rt: &mut impl RunTransaction,
     ) -> CoreContextResult<()> {
         debug!("Syncing full contact for contact id {local_id}");
-        let remote_id = Contact::local_id_counterpart(local_id, bond)
+        let remote_id = Contact::local_id_counterpart(local_id, rt.tether())
             .await?
             .ok_or_else(|| {
                 CoreContextError::ContactError(ContactError::ContactDoesNotHaveRemoteId(local_id))
@@ -380,17 +380,22 @@ impl Contact {
                 .contact,
         );
 
-        contact_with_card.save(bond).await.map_err(|err| {
-            error!("Failed to sync full contact to db: {err:?}");
-            err
-        })?;
-
-        for email in &mut contact_with_card.contact_emails {
-            email.save(bond).await.map_err(|e| {
-                error!("Failed to update contact emails: {e:?}");
-                e
+        rt.run_tx(async |tx| {
+            contact_with_card.save(tx).await.map_err(|err| {
+                error!("Failed to sync full contact to db: {err:?}");
+                err
             })?;
-        }
+
+            for email in &mut contact_with_card.contact_emails {
+                email.save(tx).await.map_err(|e| {
+                    error!("Failed to update contact emails: {e:?}");
+                    e
+                })?;
+            }
+
+            Ok(())
+        })
+        .await?;
         Ok(())
     }
 
