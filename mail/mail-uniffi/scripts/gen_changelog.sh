@@ -2,5 +2,7 @@
 
 set -eu
 
-git cliff --latest --prepend ./mail/mail-uniffi/CHANGELOG.md
+git cliff --unreleased --tag "$1" --prepend ./mail/mail-uniffi/CHANGELOG.md
+
+
 

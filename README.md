@@ -47,8 +47,16 @@ git-cliff mail-uniffi-v0.62.0..mail-uniffi-v0.65.0
 To make it simpler there is prepared script:
 
 ```bash
-./mail/mail-uniffi/scripts/gen_changelog.sh
+./mail/mail-uniffi/scripts/gen_changelog.sh mail-uniffi-v0.minor.patch
 ```
+
+It generates latest unreleased changes and tags them with the argument.
+
+> ![WARNING]
+> Running this script multiple of times will result in having duplicates in the changelog.
+> Also, in the past `git-cliff` was less reliable.
+>
+> ALWAYS review `git diff` in the changelog before creating a tag.
 
 To skip commits from the changelog you should add an `*` before the `:` in the commit message.
 
@@ -60,6 +68,16 @@ feat*: this will not be in the changelog
 ```
 feat(ET-1234)*: This will also not be in the changelog
 ```
+
+## Procedure of the release
+
+* Create a new release branch / Merge hotfix directly into existing release branch
+* Bump Cargo.toml version in the uniffi crate.
+* Run the script for generating changelog using `<future tag>` as an argument.
+* Tag the commit with `git tag <future tag>`
+* Push it
+* Merge branch back to `master` (but do not delete source branch!)
+* Notify Slack channel about the pipeline with gist from the changelog.
 
 
 
