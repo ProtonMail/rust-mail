@@ -62,7 +62,7 @@ impl BackgroundExecutionContext {
         if let Err(e) = ctx
             .core_context()
             .task_service()
-            .pause_background_and_wait()
+            .pause_background_and_wait(Duration::from_millis(100))
             .await
         {
             tracing::error!("Pausing Background queue executors... Failed: {e:?}");
