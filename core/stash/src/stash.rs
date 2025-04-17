@@ -44,6 +44,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread::{self, yield_now};
 use thiserror::Error;
+use tokio::sync::Mutex;
 use tokio::sync::oneshot::{self, Sender as OneshotSender};
 use tracing::{debug, error, trace, warn};
 // Used to resolve undeclared crate of module `stash` from DbRecord proc marco
@@ -419,6 +420,8 @@ pub struct Stash {
 
     /// The pool used for database connections.
     pool: Arc<StashConnectionPool>,
+
+    tx_lock: Arc<Mutex<()>>,
 }
 
 impl Debug for Stash {
@@ -454,6 +457,7 @@ impl Stash {
         Ok(Self {
             pool: Self::make_pool(config.into()),
             watcher: Watcher::new().map_err(|e| StashError::WatcherError(e.to_string()))?,
+            tx_lock: Default::default(),
         })
     }
 
@@ -585,6 +589,8 @@ pub struct Tether {
     sender: StdSender<Operation>,
 
     watcher: Arc<Watcher>,
+
+    tx_lock: Arc<Mutex<()>>,
 }
 
 impl Tether {
@@ -969,6 +975,13 @@ impl Tether {
         F: AsyncFnOnce(&Bond<'_>) -> Result<T, E>,
         E: From<StashError>,
     {
+        // We acquire a lock rather than relying on the SQLite internal lock as it allows us to:
+        // * Avoid busy timeouts in the same process
+        // * Ensure that when this is running on a pausable future, that we _really_ only create
+        //   a new transaction if we are not paused. Previously it would be possible for many
+        //   transactions to be in flight at the same time.
+        let tx_lock = self.tx_lock.clone();
+        let _guard = tx_lock.lock().await;
         let f = async {
             let tx = self.transaction_impl(policy).await?;
             let r = closure(&tx).await;
@@ -1111,6 +1124,7 @@ impl Tether {
         Self {
             sender: tether_sender,
             watcher: stash.watcher.clone(),
+            tx_lock: Arc::clone(&stash.tx_lock),
         }
     }
 }
