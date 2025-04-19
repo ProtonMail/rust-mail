@@ -1,10 +1,11 @@
 pub use self::keys::*;
 use crate::datatypes::AccountDetails;
-use crate::db::account::CoreAccount;
+use crate::db::account::{CoreAccount, CoreSession};
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
-use crate::models::{InitializationWatcher, UserSettings};
+use crate::models::{InitializationWatcher, ModelExtension, UserSettings};
 use crate::{Context, CoreContextError, CoreContextResult};
 use anyhow::Context as _;
+use futures::StreamExt;
 use proton_action_queue::queue::Queue;
 use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::services::proton::{SessionId, UserId};
@@ -12,7 +13,7 @@ use proton_api_core::session::Session;
 use proton_sqlite3::MigratorError;
 use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use stash::orm::Model;
-use stash::stash::{Stash, StashConfiguration};
+use stash::stash::{Stash, StashConfiguration, WatcherHandle};
 use std::fmt::{Debug, Formatter};
 use std::fs::{self};
 use std::future::Future;
@@ -108,6 +109,10 @@ impl UserContext {
                 error!("Initialization watcher finished with error: {e:?}");
             }
         });
+        let clone_of_this = this.clone();
+        let handle = CoreSession::watch(this.context.account_stash())?;
+        tracing::info!("New user context");
+        this.spawn(async move { cleanup_task(handle, clone_of_this).await });
 
         Ok(this)
     }
@@ -322,4 +327,25 @@ pub enum DeleteFilesSafeError {
 
     /// Not all files could be deleted. Next time they probably will.
     Moved(io::Error),
+}
+
+#[tracing::instrument(skip_all)]
+async fn cleanup_task(handle: WatcherHandle, this: Arc<UserContext>) -> CoreContextResult<()> {
+    let mut receiver = handle.receiver.into_stream();
+    tracing::debug!("Starting cleanup task");
+    while receiver.next().await.is_some() {
+        tracing::debug!("Detected change in core_session table");
+        let tether = this.context.account_stash().connection();
+        let maybe_session = CoreSession::find_by_id(this.session_id.clone(), &tether).await?;
+        if maybe_session.is_none() {
+            tracing::warn!("Core session for {:?} not found.", this.session_id);
+            tracing::warn!("Clearing tasks...");
+            // Core session has been deleted.
+            // Clearup
+            this.cancel_all_tasks();
+            break;
+        }
+    }
+    tracing::warn!("User context cleanup task has ended");
+    Ok::<_, CoreContextError>(())
 }
