@@ -25,7 +25,6 @@ use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedA
 use proton_core_common::utils::MapVec as _;
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
-use stash::utils::placeholders;
 use std::collections::HashSet;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -2371,6 +2370,40 @@ impl Message {
         .await
     }
 
+    /// Retrieve all the message ids which are in a given label.
+    ///
+    /// # Params
+    ///
+    /// * `local_label_id` - Label where to search in
+    /// * `interface`      - Connection to the database
+    /// * `queue`          - Optional subscriber for changes.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query fails.
+    pub async fn ids_in_label(
+        local_label_id: LocalLabelId,
+        tether: &Tether,
+    ) -> Result<Vec<LocalMessageId>, StashError> {
+        tether
+            .query_values::<_, LocalMessageId>(
+                indoc!(
+                    "
+                SELECT local_id as value 
+                FROM messages
+                JOIN message_labels
+                    ON messages.local_id = message_labels.local_message_id
+                WHERE
+                    message_labels.local_label_id = ?
+                    AND messages.deleted = 0
+                ORDER BY messages.time DESC, display_order DESC
+                "
+                ),
+                params![local_label_id],
+            )
+            .await
+    }
+
     /// Get all messages which belong to the conversation with
     /// `local_conversation_id`.
     ///
@@ -2788,62 +2821,6 @@ impl Message {
     > {
         let action = DeleteAllMessagesInLabel::new(label_id);
         queue.queue_action(action).await
-    }
-
-    /// Marks all messages in a label as deleted
-    /// # Errors
-    ///
-    /// Returns an error if the action failed.
-    ///
-    pub async fn delete_all_in_label_returning_modified(
-        label_id: LocalLabelId,
-        tx: &Bond<'_>,
-    ) -> Result<Vec<LocalMessageId>, StashError> {
-        let ids = tx
-            .query_values(
-                indoc! { "
-                    UPDATE messages
-                    SET deleted = 1
-                    FROM message_labels
-                    WHERE messages.local_id = message_labels.local_message_id
-                      AND message_labels.local_label_id = ?
-                    RETURNING messages.local_id AS value;
-                    "
-                },
-                params![label_id],
-            )
-            .await?;
-        Ok(ids)
-    }
-
-    /// Marks all given messages in a label as not deleted without doing anything else
-    /// # Errors
-    ///
-    /// Returns an error if the action failed.
-    ///
-    pub async fn mark_messages_undeleted_plain(
-        ids: &[LocalMessageId],
-        tx: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        let ids: Vec<Box<dyn ToSql + Send + 'static>> = ids
-            .iter()
-            .copied()
-            .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
-            .collect();
-
-        tx.execute(
-            formatdoc! { "
-                UPDATE messages
-                SET deleted = 0
-                WHERE local_id in ({})
-                "
-                , placeholders(ids.len())
-            },
-            ids,
-        )
-        .await?;
-
-        Ok(())
     }
 }
 

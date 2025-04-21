@@ -1,3 +1,5 @@
+use std::mem;
+
 use crate::models::Message;
 use crate::{MailUserContext, actions::MailActionError};
 use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
@@ -52,8 +54,9 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        action.ids_for_rollback =
-            Message::delete_all_in_label_returning_modified(action.local_id, tx).await?;
+        let ids = Message::ids_in_label(action.local_id, tx).await?;
+        Message::mark_deleted(ids.clone(), tx).await?;
+        action.ids_for_rollback = ids;
 
         Ok(())
     }
@@ -65,7 +68,7 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Message::mark_messages_undeleted_plain(&action.ids_for_rollback, tx).await?;
+        Message::mark_undeleted(mem::take(&mut action.ids_for_rollback), tx).await?;
         Ok(())
     }
 
