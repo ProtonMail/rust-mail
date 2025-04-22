@@ -1,6 +1,7 @@
 mod crypto;
 pub mod datatypes;
 mod keychain;
+pub mod observability;
 mod report_an_issue;
 mod session;
 pub mod validation;

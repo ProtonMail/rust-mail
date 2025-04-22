@@ -4,7 +4,9 @@ use crate::login::state::complete::Complete;
 use crate::login::state::want_login::WantLogin;
 use crate::login::state::want_mbp::WantMbp;
 use crate::login::state::want_tfa::{TfaFlow, WantTfa};
-use crate::services::observability::{ApiServiceObservabilityResponse, metrics};
+use crate::services::observability::{
+    ApiServiceObservabilityResponse, ObservabilityRecorder, metrics,
+};
 use crate::services::proton::Proton;
 use crate::services::proton::ProtonCore;
 use crate::services::proton::{SessionId, UserId};
@@ -179,6 +181,7 @@ impl State {
             parts,
             user_id,
             session_id,
+            observability: ObservabilityRecorder::default(),
         };
 
         Self::want_tfa(client.auth().into(), data, pass)
@@ -195,6 +198,7 @@ impl State {
             parts,
             user_id,
             session_id,
+            observability: ObservabilityRecorder::default(),
         };
 
         Self::want_mbp(client, data)
@@ -245,8 +249,7 @@ impl State {
             .get_users()
             .map_ok(|res| res.user)
             .inspect_err(|err| {
-                data.parts
-                    .observability
+                data.observability
                     .record(metrics::SignInSubmitMailBoxPwTotal::new(
                         metrics::MailboxPasswordMetricStatus::ApiService(err.into()),
                     ));
@@ -259,8 +262,7 @@ impl State {
             .get_keys_salts()
             .map_ok(|res| res.key_salts)
             .inspect_err(|err| {
-                data.parts
-                    .observability
+                data.observability
                     .record(metrics::SignInSubmitMailBoxPwTotal::new(
                         metrics::MailboxPasswordMetricStatus::ApiService(err.into()),
                     ));
@@ -278,8 +280,7 @@ impl State {
         let secret = if let Some(key) = user.keys.primary() {
             (salts.salt_for_key(&srp, &key.id, pass.as_bytes()))
                 .inspect_err(|_| {
-                    data.parts
-                        .observability
+                    data.observability
                         .record(metrics::SignInSubmitMailBoxPwTotal::new(
                             metrics::MailboxPasswordMetricStatus::KeyDerivationFailed,
                         ));
@@ -291,8 +292,7 @@ impl State {
 
         // Check if the key secret can unlock the user keys.
         let secret = if user.keys.unlock(&pgp, &secret).unlocked_keys.is_empty() {
-            data.parts
-                .observability
+            data.observability
                 .record(metrics::SignInSubmitMailBoxPwTotal::new(
                     metrics::MailboxPasswordMetricStatus::KeyUnlockFailed,
                 ));
@@ -311,8 +311,7 @@ impl State {
             })
             .await?;
 
-        data.parts
-            .observability
+        data.observability
             .record(metrics::SignInSubmitMailBoxPwTotal::new(
                 metrics::MailboxPasswordMetricStatus::ApiService(
                     ApiServiceObservabilityResponse::Success,
@@ -326,6 +325,7 @@ pub(crate) struct StateData {
     parts: SessionParts,
     user_id: UserId,
     session_id: SessionId,
+    observability: ObservabilityRecorder,
 }
 
 /// A trait for states in which the user ID is known.

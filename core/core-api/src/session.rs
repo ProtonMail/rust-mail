@@ -9,8 +9,7 @@ use crate::auth::UserKeySecret;
 use crate::connection_status::ConnectionStatus;
 use crate::crypto_clock::init_server_crypto_clock;
 use crate::service::ApiServiceResult;
-use crate::services::observability::store::InMemoryMetricStore;
-use crate::services::observability::{ObservabilityManager, ObservabilityMetric};
+use crate::services::observability::ObservabilityManager;
 use crate::services::proton::{self, BuildError, Proton};
 use crate::status_watcher::StatusWatcher;
 use crate::store::{BoxStore, DynStore, Store, TempStore};
@@ -215,10 +214,8 @@ impl Builder {
 
         status.initialize(client.clone());
 
-        let observability = ObservabilityManager::create_and_start(
+        ObservabilityManager::start(
             client.clone(),
-            InMemoryMetricStore::new(),
-            status.observer(),
             tokio::time::Duration::from_secs(60),
             OBSERVABILITY_BATCH_SIZE,
         );
@@ -228,7 +225,6 @@ impl Builder {
             config,
             store,
             status,
-            observability,
         })
     }
 }
@@ -242,7 +238,6 @@ pub struct Session {
     config: Arc<Config>,
     store: DynStore,
     status: StatusWatcher,
-    observability: ObservabilityManager,
 }
 
 impl Session {
@@ -374,10 +369,6 @@ impl Session {
             .wait_for(ConnectionStatus::is_offline)
             .await;
     }
-
-    pub fn record_metric(&self, metric: impl ObservabilityMetric + 'static) {
-        self.observability.record(metric);
-    }
 }
 
 /// The parts of a session.
@@ -385,7 +376,6 @@ pub(crate) struct SessionParts {
     pub(crate) config: Arc<Config>,
     pub(crate) store: DynStore,
     pub(crate) status: StatusWatcher,
-    pub(crate) observability: ObservabilityManager,
 }
 
 impl Session {
@@ -398,7 +388,6 @@ impl Session {
             config: self.config,
             store: self.store,
             status: self.status,
-            observability: self.observability,
         };
 
         (self.client, parts)
@@ -410,7 +399,6 @@ impl Session {
             config: parts.config,
             store: parts.store,
             status: parts.status,
-            observability: parts.observability,
         }
     }
 }
