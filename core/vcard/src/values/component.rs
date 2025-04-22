@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Formatter};
 
-use regex_static::static_regex;
+use regex::Regex;
 
 use crate::errors::{VCardValueError, VCardValueResult};
 use crate::parameters::value::ValueType;
@@ -47,12 +47,15 @@ impl TryFrom<&str> for Component {
 }
 
 /// Validate that given `value` respect format for `component` values
+#[allow(clippy::missing_panics_doc, reason = "Valid regex")]
+#[must_use]
 pub fn is_component_value(value: &str) -> bool {
     // component = "\\" / "\," / "\;" / "\n" / WSP / NON-ASCII / %x21-2B / %x2D-3A / %x3C-5B / %x5D-7E
     // /!\ that line don't make sense in itself, components can have more than one char /!\
-    let re = static_regex!(
-        r"^(\\\\|\\,|\\;|\\n|[ \t]|[^\x00-\x7F]|[\x21-\x2B]|[\x2D-\x3A]|[\x3C-\x5B]|[\x5D-\x7E])*$"
-    );
+    let re = Regex::new(
+        r"^(\\\\|\\,|\\;|\\n|[ \t]|[^\x00-\x7F]|[\x21-\x2B]|[\x2D-\x3A]|[\x3C-\x5B]|[\x5D-\x7E])*$",
+    )
+    .unwrap();
     re.is_match(value)
 }
 

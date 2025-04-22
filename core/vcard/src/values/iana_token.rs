@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Formatter};
 
-use regex_static::static_regex;
+use regex::Regex;
 
 use crate::errors::{VCardValueError, VCardValueResult};
 use crate::parameters::value::ValueType;
@@ -47,9 +47,11 @@ impl TryFrom<&str> for IanaToken {
 }
 
 /// Validate that given `value` respect format for `iana-token` values
+#[allow(clippy::missing_panics_doc, reason = "Valid regex")]
+#[must_use]
 pub fn is_iana_token_value(value: &str) -> bool {
     // iana-token = 1*(ALPHA / DIGIT / "-")
     //  ; identifier registered with IANA
-    let re = static_regex!("^[a-zA-Z0-9-]+$");
+    let re = Regex::new("^[a-zA-Z0-9-]+$").unwrap();
     re.is_match(value)
 }

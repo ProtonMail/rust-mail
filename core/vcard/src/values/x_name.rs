@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Formatter};
 
-use regex_static::static_regex;
+use regex::Regex;
 
 use crate::errors::{VCardValueError, VCardValueResult};
 use crate::parameters::value::ValueType;
@@ -44,11 +44,13 @@ impl TryFrom<&str> for XName {
 }
 
 /// Validate that given `value` respect format for `x-name` values
+#[allow(clippy::missing_panics_doc, reason = "Valid regex")]
+#[must_use]
 pub fn is_x_name_value(value: &str) -> bool {
     // x-name = "x-" 1*(ALPHA / DIGIT / "-")
     //  ; Names that begin with "x-" or "X-" are
     //  ; reserved for experimental use, not intended for released
     //  ; products, or for use in bilateral agreements.
-    let re = static_regex!("^[xX]-[a-zA-Z0-9-]+$");
+    let re = Regex::new("^[xX]-[a-zA-Z0-9-]+$").unwrap();
     re.is_match(value)
 }

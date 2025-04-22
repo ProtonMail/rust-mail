@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Formatter};
 
 use crate::errors::{VCardParameterError, VCardParameterResult};
-use regex_static::static_regex;
+use regex::Regex;
 
 use crate::ParameterType;
 
@@ -81,10 +81,12 @@ impl Debug for PidElement {
 }
 
 /// Validate that the given `values` respect the format for a `PID` parameter
+#[allow(clippy::missing_panics_doc, reason = "Valid regex")]
+#[must_use]
 pub fn is_pid_param(values: &[String]) -> bool {
     // pid-param = "PID=" pid-value *("," pid-value)
     // pid-value = 1*DIGIT ["." 1*DIGIT]
-    let re = static_regex!("^[0-9]+([.][0-9]+)?$");
+    let re = Regex::new("^[0-9]+([.][0-9]+)?$").unwrap();
     !values.is_empty()
         && values.iter().all(|v| {
             re.captures(v).is_some_and(|v| {

@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Formatter};
 
-use regex_static::static_regex;
+use regex::Regex;
 
 use crate::errors::{VCardValueError, VCardValueResult};
 use crate::parameters::value::ValueType;
@@ -52,12 +52,15 @@ impl TryFrom<&str> for Text {
 }
 
 /// Validate that given `value` respect format for `text` values
+#[allow(clippy::missing_panics_doc, reason = "Valid regex")]
+#[must_use]
 pub fn is_text_value(value: &str) -> bool {
     // text = *TEXT-CHAR
     // TEXT-CHAR = "\\" / "\," / "\n" / WSP / NON-ASCII / %x21-2B / %x2D-5B / %x5D-7E
     //    ; Backslashes, commas, and newlines must be encoded.
     let re =
-        static_regex!(r"^(\\\\|\\,|\\n|[ \t]|[^\x00-\x7F]|[\x21-\x2B]|[\x2D-\x5B]|[\x5D-\x7E])*$");
+        Regex::new(r"^(\\\\|\\,|\\n|[ \t]|[^\x00-\x7F]|[\x21-\x2B]|[\x2D-\x5B]|[\x5D-\x7E])*$")
+            .unwrap();
     re.is_match(value)
 }
 
