@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
 
-use regex_static::static_regex;
+use regex::Regex;
 
 use crate::ParameterType;
 use crate::errors::{VCardParameterError, VCardParameterResult};
@@ -121,7 +121,7 @@ impl TryFrom<&str> for MediaType {
 }
 
 fn is_reg_name(value: &str) -> bool {
-    let re = static_regex!(r"^[a-zA-Z0-9!#$&.+-^_]{1,127}$");
+    let re = Regex::new(r"^[a-zA-Z0-9!#$&.+-^_]{1,127}$").unwrap();
     re.is_match(value)
 }
 
@@ -159,12 +159,12 @@ pub fn is_mediatype_param(values: &[String]) -> bool {
     //   CHAR        =  <any ASCII character>
 
     fn is_token(value: &str) -> bool {
-        let re = static_regex!(r"[!#-'*+\x2D\x2E0-9?A-Z^-~]+");
+        let re = Regex::new(r"[!#-'*+\x2D\x2E0-9?A-Z^-~]+").unwrap();
         re.is_match(value)
     }
 
     fn is_attribute_value(value: &str) -> bool {
-        let re = static_regex!(r#""(\\.|[^\x22\\\r])*""#);
+        let re = Regex::new(r#""(\\.|[^\x22\\\r])*""#).unwrap();
         is_token(value) || re.is_match(value)
     }
 

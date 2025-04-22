@@ -42,7 +42,7 @@ use crate::properties::version::validate_version;
 use crate::properties::xml::validate_xml;
 use ical::VcardParser;
 use ical::generator::{Property, VcardContact};
-use regex_static::static_regex;
+use regex::Regex;
 use std::collections::HashMap;
 use std::io::BufRead;
 use velcro::hash_map;
@@ -234,7 +234,7 @@ pub fn validate_property(property: &Property) -> VcardValidationResult<()> {
 pub(super) fn get_property_kind(name: &str) -> VcardValidationResult<PropertyKind> {
     // group = 1*(ALPHA / DIGIT / "-")
     if let Some(position) = name.rfind('.') {
-        let re = static_regex!(r"^[a-zA-Z0-9-]+$");
+        let re = Regex::new(r"^[a-zA-Z0-9-]+$").unwrap();
         if re.is_match(&name[..position]) {
             let name = &name[(position + 1)..];
             PropertyKind::try_from(name)

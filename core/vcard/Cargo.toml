@@ -10,7 +10,7 @@ ical = { workspace = true }
 oxilangtag = { workspace = true }
 paste = { workspace = true }
 proton-crypto-account = { workspace = true }
-regex_static = { workspace = true }
+regex = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 url = { workspace = true }
