@@ -31,7 +31,6 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
             SubscriberError::Other(e)
         })?;
         debug!("Handling {} mail events", events.len());
-        debug!(?events);
 
         // This needs to happen outside of the transaction because queuing an action creates a
         // transaction and it would deadlock otherwise.

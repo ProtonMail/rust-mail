@@ -62,7 +62,7 @@ impl EventLoop {
 
         debug!("Last Event Id = {last_event_id}");
 
-        let mut events = self
+        let events = self
             .collect_events(provider, &last_event_id)
             .await
             .map_err(|e| {
@@ -90,20 +90,23 @@ impl EventLoop {
             return Err(EventLoopError::Refresh);
         }
 
-        self.publish_events_to_subscribers(&mut events, subscribers)
-            .await?;
+        // Run 1 tx per event to avoid having long running transactions. Under normal circumstances
+        // this is not really an issue, but with the current iOS setup, if we enter a background
+        // state and we allow transactions to finish we can get killed by the OS. On Average
+        // the grace period seems to be around 200ms. It has been observed that on large events,
+        // the whole process can take > 200ms together.
+        for event in events {
+            let new_event_id = event.event_id().clone();
+            self.publish_events_to_subscribers(&mut [event], subscribers)
+                .await?;
 
-        let new_event_id = events
-            .last()
-            .expect("should be at least one event object present")
-            .event_id();
+            if let Err(e) = store.store(new_event_id.clone()).await {
+                error!("Failed to store new event id: {e:?}");
+                return Err(EventLoopError::StoreWrite(e));
+            }
 
-        if let Err(e) = store.store(new_event_id.clone()).await {
-            error!("Failed to store new event id: {e:?}");
-            return Err(EventLoopError::StoreWrite(e));
+            debug!("New Event ID = {}", new_event_id);
         }
-
-        debug!("New Event ID = {}", new_event_id);
 
         Ok(())
     }

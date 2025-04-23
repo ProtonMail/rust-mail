@@ -48,18 +48,16 @@ async fn test_loop_event_collection() {
     let second_event_id = EventId::from("1");
     let third_event_id = EventId::from("2");
 
-    let expected_events = [
-        LoopEvent {
-            event_id: second_event_id.clone(),
-            f: false,
-            has_more: true,
-        },
-        LoopEvent {
-            event_id: third_event_id.clone(),
-            f: false,
-            has_more: false,
-        },
-    ];
+    let expected_events = [LoopEvent {
+        event_id: second_event_id.clone(),
+        f: false,
+        has_more: true,
+    }];
+    let expected_events2 = [LoopEvent {
+        event_id: third_event_id.clone(),
+        f: false,
+        has_more: false,
+    }];
 
     let mut sequence = Sequence::new();
     let mut store = MockStore::new();
@@ -116,7 +114,7 @@ async fn test_loop_event_collection() {
 
     {
         let second_event_id = second_event_id.clone();
-        let event = expected_events[1].clone();
+        let event = expected_events2[0].clone();
         provider
             .expect_get_event()
             .times(1)
@@ -131,6 +129,20 @@ async fn test_loop_event_collection() {
         .times(1)
         .in_sequence(&mut sequence)
         .withf(move |events| events == expected_events.as_slice())
+        .return_once(|_| Ok(()));
+
+    store
+        .expect_store()
+        .times(1)
+        .in_sequence(&mut sequence)
+        .withf(move |id| *id == second_event_id)
+        .return_once(move |_| Ok(()));
+
+    subscriber
+        .expect_on_events()
+        .times(1)
+        .in_sequence(&mut sequence)
+        .withf(move |events| events == expected_events2.as_slice())
         .return_once(|_| Ok(()));
 
     subscriber.expect_name().return_const("foo".into());
