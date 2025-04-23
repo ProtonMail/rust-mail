@@ -12,7 +12,6 @@ use proton_mail_test_utils::init::Params;
 use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
 use stash::params;
-use std::sync::LazyLock;
 use test_case::test_case;
 
 struct TestItem {
@@ -21,79 +20,73 @@ struct TestItem {
     unread: bool,
 }
 
-static EMPTY: LazyLock<Vec<TestItem>> = LazyLock::new(Vec::new);
-static ALL_UNREAD: LazyLock<Vec<TestItem>> = LazyLock::new(|| {
-    vec![
-        TestItem {
-            id: "one",
-            to_mark: true,
-            unread: true,
-        },
-        TestItem {
-            id: "two",
-            to_mark: true,
-            unread: true,
-        },
-        TestItem {
-            id: "three",
-            to_mark: false,
-            unread: false,
-        },
-        TestItem {
-            id: "four",
-            to_mark: false,
-            unread: true,
-        },
-    ]
-});
-static MIXED_UNREAD: LazyLock<Vec<TestItem>> = LazyLock::new(|| {
-    vec![
-        TestItem {
-            id: "one",
-            to_mark: true,
-            unread: true,
-        },
-        TestItem {
-            id: "two",
-            to_mark: true,
-            unread: false,
-        },
-        TestItem {
-            id: "three",
-            to_mark: false,
-            unread: false,
-        },
-        TestItem {
-            id: "four",
-            to_mark: false,
-            unread: true,
-        },
-    ]
-});
-static ALL_READ: LazyLock<Vec<TestItem>> = LazyLock::new(|| {
-    vec![
-        TestItem {
-            id: "one",
-            to_mark: true,
-            unread: false,
-        },
-        TestItem {
-            id: "two",
-            to_mark: true,
-            unread: false,
-        },
-        TestItem {
-            id: "three",
-            to_mark: false,
-            unread: false,
-        },
-        TestItem {
-            id: "four",
-            to_mark: false,
-            unread: true,
-        },
-    ]
-});
+static EMPTY: &[TestItem] = &[];
+static ALL_UNREAD: &[TestItem] = &[
+    TestItem {
+        id: "one",
+        to_mark: true,
+        unread: true,
+    },
+    TestItem {
+        id: "two",
+        to_mark: true,
+        unread: true,
+    },
+    TestItem {
+        id: "three",
+        to_mark: false,
+        unread: false,
+    },
+    TestItem {
+        id: "four",
+        to_mark: false,
+        unread: true,
+    },
+];
+static MIXED_UNREAD: &[TestItem] = &[
+    TestItem {
+        id: "one",
+        to_mark: true,
+        unread: true,
+    },
+    TestItem {
+        id: "two",
+        to_mark: true,
+        unread: false,
+    },
+    TestItem {
+        id: "three",
+        to_mark: false,
+        unread: false,
+    },
+    TestItem {
+        id: "four",
+        to_mark: false,
+        unread: true,
+    },
+];
+static ALL_READ: &[TestItem] = &[
+    TestItem {
+        id: "one",
+        to_mark: true,
+        unread: false,
+    },
+    TestItem {
+        id: "two",
+        to_mark: true,
+        unread: false,
+    },
+    TestItem {
+        id: "three",
+        to_mark: false,
+        unread: false,
+    },
+    TestItem {
+        id: "four",
+        to_mark: false,
+        unread: true,
+    },
+];
 
 #[test_case(&EMPTY, 0; "empty")]
 #[test_case(&ALL_UNREAD, 1; "all unread")]
