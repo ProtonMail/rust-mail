@@ -1947,7 +1947,7 @@ pub enum PaymentReceipt {
     AppleRecurring {
         details: AppleRecurringReceiptDetails,
     },
-    GoogleRecurring {
+    Google {
         details: GoogleRecurringReceiptDetails,
     },
 }
@@ -1958,7 +1958,7 @@ impl From<PaymentReceipt> for RealPaymentReceipt {
             PaymentReceipt::AppleRecurring { details } => Self::AppleRecurring {
                 details: details.into(),
             },
-            PaymentReceipt::GoogleRecurring { details } => Self::GoogleRecurring {
+            PaymentReceipt::Google { details } => Self::Google {
                 details: details.into(),
             },
         }

@@ -33,7 +33,7 @@ pub enum PaymentReceipt {
         details: AppleRecurringReceiptDetails,
     },
     #[serde(rename_all = "PascalCase")]
-    GoogleRecurring {
+    Google {
         details: GoogleRecurringReceiptDetails,
     },
 }
