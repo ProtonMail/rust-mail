@@ -492,6 +492,11 @@ impl MailTestContext {
             .named("Setup user incoming defaults")
             .mount(self.mock_server())
             .await;
+        Mock::given(method("GET"))
+            .and(path("/api/core/v4/tests/ping"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(self.mock_server())
+            .await;
     }
 
     /// Generate new mock expectations for retrieving conversations.

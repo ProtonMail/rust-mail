@@ -309,8 +309,8 @@ async fn message_action_delete() {
 async fn message_action_ham() {
     let ctx = MailTestContext::new().await;
 
-    let label_id = LabelId::spam();
-    let label = test_label(&label_id);
+    let spam = LabelId::spam();
+    let label = test_label(&spam);
     let mut message = test_message();
     message.metadata.label_ids = vec![LabelId::spam()];
 
@@ -319,14 +319,13 @@ async fn message_action_ham() {
 
     // Initialize Mocking
     ctx.mock_get_messages(vec![message.metadata.clone()]).await;
-    // ctx.mock_messages_ok().await;
     ctx.mock_put_message_ham(&message.metadata.id).await;
+    ctx.mock_empty_label().await;
+
     ctx.catch_all().await;
 
     let user_context = ctx.mail_user_context().await;
     let tether = user_context.user_stash().connection();
-
-    let spam = LabelId::spam();
     // Create a mailbox and sync.
     let mailbox = Mailbox::with_remote_id(&user_context.user_stash().connection(), spam.clone())
         .await
@@ -369,16 +368,25 @@ async fn message_action_ham() {
 
     user_context.execute_all_actions().await.unwrap();
 
+    let local_inbox = Label::remote_id_counterpart(LabelId::inbox(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
     {
-        let local_inbox = Label::remote_id_counterpart(LabelId::inbox(), &tether)
-            .await
-            .unwrap()
-            .unwrap();
-
         let messages = Message::in_label(local_inbox, &tether).await.unwrap();
         assert_eq!(messages.len(), 1);
         assert!(messages[0].flags.contains(MessageFlags::HAM_MANUAL));
     }
+
+    Message::action_delete_all_in_label(user_context.action_queue(), local_inbox)
+        .await
+        .unwrap();
+
+    user_context.execute_single_action().await.unwrap();
+    let messages = Message::find("WHERE deleted = 1", vec![], &tether)
+        .await
+        .unwrap();
+    assert_eq!(messages.len(), 1);
 }
 
 fn test_init_params_label(label: ApiLabel) -> TestParams {
