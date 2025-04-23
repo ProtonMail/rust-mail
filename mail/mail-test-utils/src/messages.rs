@@ -165,6 +165,25 @@ impl MailTestContext {
             .await;
     }
 
+    /// Mock delete all messages in label
+    ///
+    /// # Params
+    /// * `message_ids`      - List of message ids to delete.
+    /// * `current_label_id` - Current label where the message is deleted from.
+    /// * `response`         - Response to the request.
+    #[function_name::named]
+    pub async fn mock_empty_label(&self) {
+        Mock::given(method("DELETE"))
+            .and(path("/api/mail/v4/messages/empty"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(PutMessagesDeleteResponse { responses: vec![] }),
+            )
+            .named(function_name!())
+            .mount(self.mock_server())
+            .await;
+    }
+
     #[function_name::named]
     pub async fn mock_messages_ok(&self) {
         Mock::given(method("PUT"))
