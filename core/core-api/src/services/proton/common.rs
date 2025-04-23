@@ -87,7 +87,7 @@ impl From<muon::Error> for ApiServiceError {
             Tls | Resolve | Dial | Connect => Self::ConnectionError(e.to_string()),
 
             // Network errors.
-            Send | Closed => Self::NetworkError(format!("{e:#?}")),
+            Send | SendRetry => Self::NetworkError(format!("{e:#?}")),
 
             // Request errors.
             Req => Self::RequestError(e.to_string()),
