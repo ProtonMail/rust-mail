@@ -389,9 +389,9 @@ impl ContextualConversation {
             .await?
             .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::spam()))?;
         let folder = if trash == local_label_id {
-            SpamOrTrash::Spam
-        } else if spam == local_label_id {
             SpamOrTrash::Trash
+        } else if spam == local_label_id {
+            SpamOrTrash::Spam
         } else {
             return Ok(None);
         };
