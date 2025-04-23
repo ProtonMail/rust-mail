@@ -59,7 +59,35 @@ pub struct UserContext {
     cancellation_token: CancellationToken,
     pub cache_path: PathBuf,
     pub initialization_watcher: Arc<InitializationWatcher>,
-    pub hook_sender: watch::Sender<(SessionId, UserId)>,
+    on_session_close_hook_sender: watch::Sender<(SessionId, UserId)>,
+}
+
+pub trait OnSessionCloseHook: Send + 'static {
+    fn on_session_close(
+        self,
+        session_id: SessionId,
+        user_id: UserId,
+    ) -> impl Future<Output = ()> + Send;
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct OnSessionCloseNOP;
+impl OnSessionCloseHook for OnSessionCloseNOP {
+    async fn on_session_close(self, _session_id: SessionId, _user_id: UserId) {}
+}
+
+impl<H, Fut> OnSessionCloseHook for H
+where
+    H: FnOnce(SessionId, UserId) -> Fut + Send + 'static,
+    Fut: Future<Output = ()> + Send,
+{
+    fn on_session_close(
+        self,
+        session_id: SessionId,
+        user_id: UserId,
+    ) -> impl Future<Output = ()> + Send {
+        self(session_id, user_id)
+    }
 }
 
 impl Debug for UserContext {
@@ -84,8 +112,9 @@ impl UserContext {
         let cancellation_token = context.new_child_cancellation_token();
         let queue = Queue::new(user_stash.clone()).await?;
         let initialization_watcher = InitializationWatcher::new(&user_stash)?;
-        let (hook_sender, _) = watch::channel((session_id.clone(), user_id.clone()));
-        let hook_sender_clone = hook_sender.clone();
+        let (on_session_close_hook_sender, _) =
+            watch::channel((session_id.clone(), user_id.clone()));
+        let on_session_close_hook_sender_clone = on_session_close_hook_sender.clone();
         let this = Arc::new(Self {
             session,
             context,
@@ -97,7 +126,7 @@ impl UserContext {
             cache_path,
             cancellation_token,
             initialization_watcher,
-            hook_sender,
+            on_session_close_hook_sender,
         });
         let this_weak = Arc::downgrade(&this);
 
@@ -118,9 +147,9 @@ impl UserContext {
         let clone_of_this = this.clone();
         let handle = CoreSession::watch(this.context.account_stash())?;
 
-        this.spawn(
-            async move { session_cleanup_task(handle, clone_of_this, hook_sender_clone).await },
-        );
+        this.spawn(async move {
+            session_cleanup_task(handle, clone_of_this, on_session_close_hook_sender_clone).await
+        });
 
         Ok(this)
     }
@@ -128,21 +157,17 @@ impl UserContext {
     /// Subscribes for the event of closing the session. Use it to cleanup any remaining tasks
     /// or memory footprints.
     ///
-    pub fn on_session_close_hook<H, Fut>(&self, hook: H)
-    where
-        H: FnOnce(SessionId, UserId) -> Fut + Send + 'static,
-        Fut: Future<Output = ()> + Send,
-    {
-        let mut receiver = self.hook_sender.subscribe();
+    pub fn on_session_close_hook(&self, hook: impl OnSessionCloseHook) {
+        let mut receiver = self.on_session_close_hook_sender.subscribe();
         // We are not using cancellable futures here because it wont hurt if for any reason it outlives the context.
         // Worst case we will return error because sender was already dropped.
-        tokio::task::spawn(async move {
+        self.context.task_service().spawn(async move {
             if receiver.changed().await.is_err() {
                 tracing::error!("Sender was dropped before handling this hook");
                 return;
             }
             let (session_id, user_id) = receiver.borrow_and_update().clone();
-            hook(session_id, user_id).await;
+            hook.on_session_close(session_id, user_id).await;
         });
     }
 

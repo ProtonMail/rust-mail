@@ -22,7 +22,9 @@ use proton_api_core::services::proton::{Proton, ProtonCore};
 use proton_api_core::session::{CoreSession, Session};
 use proton_core_common::datatypes::{AccountDetails, LocalAddressId};
 use proton_core_common::models::{Address, User, UserSettings};
-use proton_core_common::{ContactError, CoreContextError, LoadKeySecret, UserContext};
+use proton_core_common::{
+    ContactError, CoreContextError, LoadKeySecret, OnSessionCloseHook, UserContext,
+};
 use proton_crypto_inbox::keys::{ComposerPreference, CryptoMailSettings, SendPreferences};
 use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
@@ -63,7 +65,9 @@ impl MailUserContext {
     pub(crate) async fn new(
         mail_context: Arc<MailContext>,
         user_context: Arc<UserContext>,
+        on_session_close_hook: impl OnSessionCloseHook,
     ) -> MailContextResult<Arc<Self>> {
+        user_context.on_session_close_hook(on_session_close_hook);
         register_mail_actions(user_context.queue());
 
         let online = user_context

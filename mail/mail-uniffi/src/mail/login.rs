@@ -200,16 +200,11 @@ impl LoginFlow {
                 let mut guard = self.flow.lock().await;
 
                 self.mail_ctx
-                    .user_context_from_login_flow(&mut guard)
-                    .map_ok(|ctx| {
-                        ctx.user_context().on_session_close_hook(
-                            move |_session_id, user_id| async move {
-                                tracing::warn!("Session ended. Removing from the map");
-                                user_ctx.remove(&user_id);
-                            },
-                        );
-                        self.user_ctx.insert(ctx)
+                    .user_context_from_login_flow(&mut guard, |_, user_id| async move {
+                        tracing::warn!("Session ended. Removing from the map");
+                        user_ctx.remove(&user_id);
                     })
+                    .map_ok(|ctx| self.user_ctx.insert(ctx))
                     .map_ok(MailUserSession::new)
                     .map_err(RealProtonMailError::from)
                     .await
