@@ -444,7 +444,25 @@ impl MailUserContext {
         self.user_context.delete_account().await?;
         // Last thing to do is to remove user cache as `UserContext`
         // has no knowledge of the `MailContext::cache`
-        self.mail_context.delete_user_cache(self.user_id()).await?;
+        self.mail_context.delete_user_cache(self.user_id()).await;
+
+        Ok(())
+    }
+
+    pub async fn sign_out_all(&self) -> MailContextResult<()> {
+        let all_ctxs = self.all_mail_user_ctxs().await?;
+
+        for ctx in all_ctxs {
+            ctx.delete_account().await?;
+        }
+
+        self.mail_context()
+            .core_context()
+            .tear_down_account_database()
+            .await
+            .map_err(MailContextError::from)?;
+
+        self.mail_context().core_context().delete_core_cache().await;
 
         Ok(())
     }

@@ -5,7 +5,7 @@ use crate::db::migrations::{migrate_account_db, migrate_core_db};
 use crate::models::{InitializationWatcher, ModelExtension, UserSettings};
 use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse};
 use anyhow::Context as _;
-use nuke_utils::{drop_all_tables_in_database, rename_database_files};
+use nuke_utils::{drop_all_tables_in_database, remove_or_clear_dir_safe, rename_database_files};
 use proton_action_queue::queue::Queue;
 use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::services::proton::{SessionId, UserId};
@@ -255,6 +255,8 @@ impl UserContext {
     /// This function should be preffered way to delete account without
     /// verifing number of open contexts and background tasks.
     ///
+    /// Note: Function assumes seperatnes between database files
+    ///
     /// # Errors
     ///
     /// Returns an error if data can not be removed or the db operation failed.
@@ -262,15 +264,24 @@ impl UserContext {
     pub async fn delete_account(&self) -> CoreContextResult<()> {
         let user_id = self.user_id.clone();
         tracing::warn!("Logout user");
-        self.context.logout_account(user_id.clone()).await?;
+        if let Err(e) = self.context.logout_account(user_id.clone()).await {
+            tracing::error!("Could not logout account, details: `{e}`");
+        }
+
         tracing::warn!("Kill all background tasks for this user");
         self.cancel_all_tasks();
+
         tracing::warn!("Remove all user data");
         let tether = self.stash().connection();
-        drop_all_tables_in_database(tether).await?;
+
+        if let Err(e) = drop_all_tables_in_database(tether).await {
+            tracing::error!("Could not clean user database, details: `{e}`");
+        }
+
         tracing::warn!("Archive user database");
         let user_db_location = self.get_user_db_path();
-        rename_database_files(user_db_location).await;
+        rename_database_files(&user_db_location).await;
+        remove_or_clear_dir_safe(&user_db_location).await;
 
         tracing::warn!("Remove account");
         let mut tether = self.context.account_stash().connection();

@@ -13,6 +13,7 @@ use proton_api_core::verification::DynChallengeNotifier;
 use proton_core_common::UserDatabaseInitializer;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::models::LabelError;
+use proton_core_common::nuke_utils::remove_or_clear_dir_safe;
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::{
     ContactError, Context, CoreAccountState, CoreContextError, CoreSessionState, KeyHandlingError,
@@ -29,7 +30,6 @@ use std::future::Future;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
-use tokio::fs;
 use tokio::sync::Mutex;
 use tokio::task::{JoinError, JoinHandle};
 
@@ -622,8 +622,10 @@ impl MailContext {
         Ok(self.core_context.delete_account(user_id).await?)
     }
 
-    pub async fn delete_user_cache(&self, user_id: &UserId) -> MailContextResult<()> {
-        Ok(fs::remove_dir_all(self.mail_cache_path(user_id)).await?)
+    /// Removes a user's cached data
+    ///
+    pub async fn delete_user_cache(&self, user_id: &UserId) {
+        remove_or_clear_dir_safe(self.mail_cache_path(user_id)).await;
     }
 
     /// Path where mail content should be cached for user with `user_id`.

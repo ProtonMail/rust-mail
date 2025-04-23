@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use proton_mail_common::{MailContextError, errors::ProtonMailError};
+use proton_mail_common::errors::ProtonMailError;
 
 use crate::{
     errors::{UserSessionError, VoidSessionResult},
@@ -22,18 +22,7 @@ use super::MailUserSession;
 pub async fn sign_out_all(session: Arc<MailUserSession>) -> Result<(), UserSessionError> {
     let user_context = session.ctx()?;
     uniffi_async(async move {
-        let all_ctxs = user_context.all_mail_user_ctxs().await?;
-
-        for ctx in all_ctxs {
-            ctx.delete_account().await?;
-        }
-
-        user_context
-            .mail_context()
-            .core_context()
-            .tear_down_account_database()
-            .await
-            .map_err(MailContextError::from)?;
+        user_context.sign_out_all().await?;
 
         Result::<(), ProtonMailError>::Ok(())
     })

@@ -11,7 +11,9 @@ use crate::db::account::{
 };
 use crate::db::migrations::migrate_account_db;
 use crate::models::ModelExtension;
-use crate::nuke_utils::{drop_all_tables_in_database, rename_database_files};
+use crate::nuke_utils::{
+    drop_all_tables_in_database, remove_or_clear_dir_safe, rename_database_files,
+};
 use crate::os::{KeyChain, KeyChainError, KeyChainExt, StoreInKeyChain};
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{Error as AnyhowError, anyhow};
@@ -762,6 +764,10 @@ impl Context {
             .await?;
 
         Ok(())
+    }
+
+    pub async fn delete_core_cache(&self) {
+        remove_or_clear_dir_safe(self.get_cache_location()).await;
     }
 
     /// Removes all data from account database by dropping all tables,

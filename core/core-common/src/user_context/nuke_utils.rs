@@ -1,56 +1,16 @@
-use std::{ffi::OsStr, path::Path, sync::Arc};
+use std::{
+    ffi::OsStr,
+    path::{Path, PathBuf},
+    time::{Duration, Instant},
+};
 
-use futures::future::try_join_all;
+use itertools::Itertools;
 use stash::stash::{StashError, Tether};
-use tokio::fs;
-
-use crate::{Context, pin_code::PinError};
+use tokio::{fs, task};
+use walkdir::WalkDir;
 
 pub const DB_EXTENSIONS: &[&str] = &["db", "db-wal", "db-shm"];
 const QUERY_LIST_TABLES: &str = "SELECT name as value FROM sqlite_master WHERE type='table'";
-
-pub async fn nuke_core_application_data(ctx: Arc<Context>) -> Result<(), PinError> {
-    tracing::warn!("Fetch all logged in users.");
-    let all_user_ctxs = ctx.get_all_logged_in_user_ctx().await?;
-    let users = ctx.get_accounts().await?;
-
-    tracing::warn!("Logout and delete all accounts");
-    for user in users {
-        ctx.logout_account(user.remote_id.clone()).await?;
-    }
-
-    tracing::warn!("Remove all user data and kill all background tasks");
-    let iter = all_user_ctxs.iter().map(|ctx| async {
-        let tether = ctx.stash().connection();
-
-        ctx.cancel_all_tasks();
-        drop_all_tables_in_database(tether).await?;
-
-        Result::<(), PinError>::Ok(())
-    });
-
-    try_join_all(iter).await?;
-
-    tracing::warn!("Remove all remaining account data");
-    let tether = ctx.account_stash().connection();
-
-    drop_all_tables_in_database(tether).await?;
-
-    tracing::warn!("Remove all cached filesystem data");
-    if let Err(e) = fs::remove_dir_all(ctx.get_cache_location()).await {
-        tracing::error!("Could not remove cached data in filesystem, details: `{e}`");
-    }
-
-    tracing::warn!("Archive user databases");
-    rename_database_files(ctx.get_user_db_location()).await;
-
-    tracing::warn!("Archive account database");
-    rename_database_files(ctx.get_account_db_location()).await;
-
-    tracing::warn!("Application's data has been cleared successfuly");
-
-    Ok(())
-}
 
 pub(crate) async fn drop_all_tables_in_database(mut tether: Tether) -> Result<(), StashError> {
     tether.execute("PRAGMA foreign_keys = OFF;", vec![]).await?;
@@ -102,4 +62,74 @@ pub async fn rename_database_files(path: impl AsRef<Path>) {
             tracing::error!("Could not rename the file, details: `{e}`");
         }
     }
+}
+
+pub async fn remove_or_clear_dir_safe(path: impl AsRef<Path>) {
+    let path = path.as_ref().to_path_buf();
+    // Try remove whole directory
+    let result = fs::remove_dir_all(&path).await;
+
+    // When it fails, fallback to deleting one-by-one
+    if result.is_err() {
+        // Get all files paths in max_depth eq 2
+        let Ok(all_files) = task::spawn_blocking(move || {
+            WalkDir::new(format!("{}/**", path.display()))
+                .max_depth(2)
+                .into_iter()
+                .filter_map(|entry| {
+                    let entry = entry.ok()?;
+                    let meta = entry.metadata().ok()?;
+                    if meta.is_file() {
+                        Some(entry.into_path())
+                    } else {
+                        None
+                    }
+                })
+                .collect_vec()
+        })
+        .await
+        else {
+            // unlikely to happen as the closure is non failing
+            tracing::error!("Could not join task when gathering all files to remove");
+            return;
+        };
+
+        let failed = remove_files(&all_files).await;
+
+        // We have still some files not removed
+        // lets derefer this to the background
+        if !failed.is_empty() {
+            task::spawn(async move {
+                let max_wait: Duration = Duration::from_secs(5);
+                let retry_interval: Duration = Duration::from_millis(100);
+                let start = Instant::now();
+                let mut failed = failed;
+                loop {
+                    tokio::time::sleep(retry_interval).await;
+                    failed = remove_files(&failed).await;
+                    if failed.is_empty() {
+                        tracing::info!("Whole path was cleared in the background");
+                        break;
+                    }
+                    if start.elapsed() >= max_wait {
+                        tracing::error!("Unfortunatelly we were unable to clear the path.");
+                        break;
+                    }
+                }
+            });
+        }
+    }
+}
+
+async fn remove_files(paths: &[PathBuf]) -> Vec<PathBuf> {
+    let mut failed = vec![];
+
+    for file in paths {
+        if let Err(e) = fs::remove_file(file).await {
+            tracing::error!("Could not remove `{}`, details: `{e}`", file.display());
+            failed.push(file.clone());
+        }
+    }
+
+    failed
 }
