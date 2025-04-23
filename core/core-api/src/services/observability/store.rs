@@ -9,14 +9,14 @@ const DEFAULT_STORE_CAPACITY: usize = 512;
 /// Removes the oldest element (from the back) if the capacity is reached, then adds the new element to the front.
 pub struct InMemoryMetricStore {
     metrics: VecDeque<PostMetricsRequestElement>,
-    capacity: usize,
+    max_metrics: usize,
 }
 
 impl InMemoryMetricStore {
     /// Stores a metric.
     /// Removes the oldest element (from the front) if the capacity is reached, then adds the new element to the back.
     pub fn store(&mut self, metric: PostMetricsRequestElement) {
-        if self.metrics.len() >= self.capacity {
+        if self.metrics.len() >= self.max_metrics {
             self.metrics.pop_front(); // Remove oldest element
         }
         self.metrics.push_back(metric);
@@ -36,10 +36,10 @@ impl InMemoryMetricStore {
 
 impl InMemoryMetricStore {
     #[must_use]
-    pub fn new(capacity: usize) -> Self {
+    pub fn new(max_metrics: usize) -> Self {
         Self {
-            metrics: VecDeque::with_capacity(capacity),
-            capacity,
+            metrics: VecDeque::with_capacity(max_metrics),
+            max_metrics,
         }
     }
 }
