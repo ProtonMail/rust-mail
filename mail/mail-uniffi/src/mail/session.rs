@@ -267,12 +267,24 @@ impl MailSession {
     ) -> Result<Option<Arc<MailUserSession>>, UserSessionError> {
         let ctx = self.mail_ctx.clone();
 
+        let user_ctx = self.user_ctx.clone();
         let user_ctx = uniffi_async(async move {
             ctx.initialized_user_context_from_session(session.session(), None)
                 .map_err(RealProtonMailError::from)
                 .await
+                .map(|ctx| {
+                    ctx.map(|ctx| {
+                        let user_ctx_clone = user_ctx.clone();
+                        ctx.user_context().on_session_close_hook(
+                            move |_session_id, user_id| async move {
+                                tracing::warn!("Session ended. Removing from the map");
+                                user_ctx_clone.remove(&user_id);
+                            },
+                        );
+                        user_ctx.insert(ctx)
+                    })
+                })
         })
-        .map_ok(|ctx| ctx.map(|ctx| self.user_ctx.insert(ctx)))
         .map_ok(|ctx| ctx.map(MailUserSession::new))
         .await?;
 
@@ -286,6 +298,7 @@ impl MailSession {
     ) -> Result<Arc<MailUserSession>, UserSessionError> {
         let ctx = self.mail_ctx.clone();
 
+        let user_ctx = self.user_ctx.clone();
         let user_ctx = uniffi_async(async move {
             ctx.user_context_from_session(
                 session.session(),
@@ -294,8 +307,16 @@ impl MailSession {
             )
             .map_err(RealProtonMailError::from)
             .await
+            .map(|ctx| {
+                let user_ctx_clone = user_ctx.clone();
+                ctx.user_context()
+                    .on_session_close_hook(move |_session_id, user_id| async move {
+                        tracing::warn!("Session ended. Removing from the map");
+                        user_ctx_clone.remove(&user_id);
+                    });
+                user_ctx.insert(ctx)
+            })
         })
-        .map_ok(|ctx| self.user_ctx.insert(ctx))
         .map_ok(MailUserSession::new)
         .await?;
 

@@ -194,13 +194,22 @@ impl LoginFlow {
     /// When the flow is considered logged in, transform it into a `MailUserContext`.
     #[must_use]
     pub fn to_user_context(&self) -> Result<Arc<MailUserSession>, LoginError> {
+        let user_ctx = self.user_ctx.clone();
         async_runtime()
             .block_on(async {
                 let mut guard = self.flow.lock().await;
 
                 self.mail_ctx
                     .user_context_from_login_flow(&mut guard)
-                    .map_ok(|ctx| self.user_ctx.insert(ctx))
+                    .map_ok(|ctx| {
+                        ctx.user_context().on_session_close_hook(
+                            move |_session_id, user_id| async move {
+                                tracing::warn!("Session ended. Removing from the map");
+                                user_ctx.remove(&user_id);
+                            },
+                        );
+                        self.user_ctx.insert(ctx)
+                    })
                     .map_ok(MailUserSession::new)
                     .map_err(RealProtonMailError::from)
                     .await

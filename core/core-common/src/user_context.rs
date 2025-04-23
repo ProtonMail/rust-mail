@@ -20,6 +20,7 @@ use std::future::Future;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, warn};
@@ -58,6 +59,7 @@ pub struct UserContext {
     cancellation_token: CancellationToken,
     pub cache_path: PathBuf,
     pub initialization_watcher: Arc<InitializationWatcher>,
+    pub hook_sender: watch::Sender<(SessionId, UserId)>,
 }
 
 impl Debug for UserContext {
@@ -68,6 +70,7 @@ impl Debug for UserContext {
 
 impl UserContext {
     #[allow(clippy::too_many_arguments)]
+    #[tracing::instrument(name = "NewUserContext", skip_all)]
     pub(crate) async fn new(
         session: Session,
         context: Arc<Context>,
@@ -81,6 +84,8 @@ impl UserContext {
         let cancellation_token = context.new_child_cancellation_token();
         let queue = Queue::new(user_stash.clone()).await?;
         let initialization_watcher = InitializationWatcher::new(&user_stash)?;
+        let (hook_sender, _) = watch::channel((session_id.clone(), user_id.clone()));
+        let hook_sender_clone = hook_sender.clone();
         let this = Arc::new(Self {
             session,
             context,
@@ -92,6 +97,7 @@ impl UserContext {
             cache_path,
             cancellation_token,
             initialization_watcher,
+            hook_sender,
         });
         let this_weak = Arc::downgrade(&this);
 
@@ -111,10 +117,33 @@ impl UserContext {
         });
         let clone_of_this = this.clone();
         let handle = CoreSession::watch(this.context.account_stash())?;
-        tracing::info!("New user context");
-        this.spawn(async move { cleanup_task(handle, clone_of_this).await });
+
+        this.spawn(
+            async move { session_cleanup_task(handle, clone_of_this, hook_sender_clone).await },
+        );
 
         Ok(this)
+    }
+
+    /// Subscribes for the event of closing the session. Use it to cleanup any remaining tasks
+    /// or memory footprints.
+    ///
+    pub fn on_session_close_hook<H, Fut>(&self, hook: H)
+    where
+        H: FnOnce(SessionId, UserId) -> Fut + Send + 'static,
+        Fut: Future<Output = ()> + Send,
+    {
+        let mut receiver = self.hook_sender.subscribe();
+        // We are not using cancellable futures here because it wont hurt if for any reason it outlives the context.
+        // Worst case we will return error because sender was already dropped.
+        tokio::task::spawn(async move {
+            if receiver.changed().await.is_err() {
+                tracing::error!("Sender was dropped before handling this hook");
+                return;
+            }
+            let (session_id, user_id) = receiver.borrow_and_update().clone();
+            hook(session_id, user_id).await;
+        });
     }
 
     /// Get the network session.
@@ -330,7 +359,11 @@ pub enum DeleteFilesSafeError {
 }
 
 #[tracing::instrument(skip_all)]
-async fn cleanup_task(handle: WatcherHandle, this: Arc<UserContext>) -> CoreContextResult<()> {
+async fn session_cleanup_task(
+    handle: WatcherHandle,
+    this: Arc<UserContext>,
+    hook_sender: watch::Sender<(SessionId, UserId)>,
+) -> CoreContextResult<()> {
     let mut receiver = handle.receiver.into_stream();
     tracing::debug!("Starting cleanup task");
     while receiver.next().await.is_some() {
@@ -342,6 +375,7 @@ async fn cleanup_task(handle: WatcherHandle, this: Arc<UserContext>) -> CoreCont
             tracing::warn!("Clearing tasks...");
             // Core session has been deleted.
             // Clearup
+            _ = hook_sender.send((this.session_id.clone(), this.user_id.clone()));
             this.cancel_all_tasks();
             break;
         }
