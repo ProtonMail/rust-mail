@@ -11,7 +11,7 @@ use proton_core_common::{
 };
 use proton_mail_common::{
     datatypes::ReadFilter,
-    mail_scroller::{DataScrollerSourcePreviousPageStrategy, MailScroller},
+    mail_scroller::MailScroller,
     models::{Conversation, Message, MessageCounters, MessageScrollData},
 };
 use proton_mail_test_utils::{api_message_meta, utils::create_address};
@@ -119,15 +119,10 @@ async fn test_message_mail_scroller_reads_correct_items_within_visible_range_for
         .unwrap();
 
     let page_size = 5;
-    let mut scroller = MailScroller::messages(
-        user_ctx.as_weak(),
-        local_label_id,
-        unread,
-        page_size,
-        DataScrollerSourcePreviousPageStrategy::Background,
-    )
-    .await
-    .unwrap();
+    let mut scroller =
+        MailScroller::messages(user_ctx.as_weak(), local_label_id, unread, page_size)
+            .await
+            .unwrap();
     scroller.fetch_more().await.unwrap();
     let actual = scroller.all_items().await.unwrap();
     let expected = expected_messages(page_size, REMOTE_LABEL_ID, &data).unwrap();
@@ -158,6 +153,7 @@ async fn test_message_mail_scroller_reads_one_item_from_online_scroll_data() {
     );
 
     ctx.mock_get_messages(vec![message]).await;
+    ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
@@ -167,15 +163,10 @@ async fn test_message_mail_scroller_reads_one_item_from_online_scroll_data() {
     let unread = ReadFilter::All;
 
     let page_size = 5;
-    let mut scroller = MailScroller::messages(
-        user_ctx.as_weak(),
-        local_label_id,
-        unread,
-        page_size,
-        DataScrollerSourcePreviousPageStrategy::Background,
-    )
-    .await
-    .unwrap();
+    let mut scroller =
+        MailScroller::messages(user_ctx.as_weak(), local_label_id, unread, page_size)
+            .await
+            .unwrap();
     let actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 0);
 
@@ -219,15 +210,10 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
         .unwrap();
 
     // Online
-    let mut scroller = MailScroller::messages(
-        user_ctx.as_weak(),
-        local_label_id,
-        unread,
-        page_size,
-        DataScrollerSourcePreviousPageStrategy::Background,
-    )
-    .await
-    .unwrap();
+    let mut scroller =
+        MailScroller::messages(user_ctx.as_weak(), local_label_id, unread, page_size)
+            .await
+            .unwrap();
     scroller.fetch_more().await.unwrap();
     let actual = scroller.all_items().await.unwrap();
     assert_eq!(actual.len(), 5);
@@ -275,15 +261,10 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
     // Cached - it will trigger two more background requests for pages as we fetch more
     // This is because cursor have only two pages in cache, which means we will try to get new page everytime we progress
 
-    let mut scroller = MailScroller::messages(
-        user_ctx.as_weak(),
-        local_label_id,
-        unread,
-        page_size,
-        DataScrollerSourcePreviousPageStrategy::Background,
-    )
-    .await
-    .unwrap();
+    let mut scroller =
+        MailScroller::messages(user_ctx.as_weak(), local_label_id, unread, page_size)
+            .await
+            .unwrap();
     scroller.fetch_more().await.unwrap();
 
     let actual = scroller.all_items().await.unwrap();
@@ -354,15 +335,10 @@ async fn test_message_mail_scroller_notificate_about_changes() {
         .await
         .unwrap();
 
-    let mut scroller = MailScroller::messages(
-        user_ctx.as_weak(),
-        local_label_id,
-        unread,
-        page_size,
-        DataScrollerSourcePreviousPageStrategy::Background,
-    )
-    .await
-    .unwrap();
+    let mut scroller =
+        MailScroller::messages(user_ctx.as_weak(), local_label_id, unread, page_size)
+            .await
+            .unwrap();
     let WatcherHandle {
         handle: _handle,
         receiver,
@@ -484,6 +460,7 @@ async fn setup_api_message_pages(
     page_size: usize,
     empty_pages_requests: u64,
 ) -> TestParams {
+    ctx.mock_ping_success().await;
     let params = TestParams::default_basic();
     let conversation = params.conversations.first().cloned().unwrap();
     let address = params.addresses.first().cloned().unwrap();

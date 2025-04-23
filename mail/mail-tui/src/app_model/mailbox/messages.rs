@@ -27,9 +27,7 @@ use proton_mail_common::datatypes::{
 };
 use proton_mail_common::decrypted_message::{DecryptedMessageBody, TransformOpts};
 use proton_mail_common::draft::ReplyMode;
-use proton_mail_common::mail_scroller::{
-    DataScrollerSource, DataScrollerSourcePreviousPageStrategy, MailScroller, SearchScrollerSource,
-};
+use proton_mail_common::mail_scroller::{DataScrollerSource, MailScroller, SearchScrollerSource};
 use proton_mail_common::models::default_location::IncomingDefaultLocation;
 use proton_mail_common::models::{
     Attachment, MailSettings, Message as MailMessage, MessageScrollData,
@@ -95,14 +93,7 @@ impl MessagesState {
         let (paginator, command) = Paginator::new(
             || {
                 async move {
-                    MailScroller::messages(
-                        context.as_weak(),
-                        label_id,
-                        filter,
-                        ITEM_LIMIT,
-                        DataScrollerSourcePreviousPageStrategy::Background,
-                    )
-                    .await
+                    MailScroller::messages(context.as_weak(), label_id, filter, ITEM_LIMIT).await
                 }
                 .boxed()
             },

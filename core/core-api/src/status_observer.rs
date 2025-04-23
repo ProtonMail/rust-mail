@@ -19,6 +19,7 @@ use tokio::task::JoinHandle;
 use tracing::trace;
 
 const UP_TO_DATE_SECONDS: u64 = 6;
+const LOW_LATENCY_UP_TO_DATE_SECONDS: u64 = 1;
 
 static CACHE: LazyLock<Arc<RwLock<CachedStatus>>> = LazyLock::new(|| {
     Arc::new(RwLock::new(CachedStatus {
@@ -202,13 +203,58 @@ impl StatusObserver {
     /// If the status is `Offline`, it will start a background check.
     ///
     pub async fn status(&self, api: Proton) -> ConnectionStatus {
-        if !self.is_cache_fresh() {
-            if self.get_cached_status().is_offline() && self.history.was_online_most_of_the_time() {
+        self.status_fresher_than(api, self.config.up_to_date, false)
+            .await
+    }
+
+    /// Get the current status of the connection with low latency.
+    ///
+    /// Method is equivalent to [`status`] but with a distinction of
+    /// making sure the fresh time is very short and it forces
+    /// running low timeout ping requst in foreground to establish
+    /// almost real time of the current status.
+    ///
+    /// This method should be used only in very specific environments
+    /// which would rather fallback to serve cached data over online
+    /// when the online status is uncertain due to the fact it may
+    /// impair usage of the application.
+    ///
+    /// Due to the fact that this method is fast reacting it may produce a lot
+    /// of network trafic, so If you are uncertain which method to use, default
+    /// to [`status`] method instead.
+    ///
+    pub async fn low_latency_status(&self, api: Proton) -> ConnectionStatus {
+        self.status_fresher_than(
+            api,
+            Duration::from_secs(LOW_LATENCY_UP_TO_DATE_SECONDS),
+            true,
+        )
+        .await
+    }
+
+    /// Underlying logic behind [`status`] methods.
+    ///
+    async fn status_fresher_than(
+        &self,
+        api: Proton,
+        than: Duration,
+        force_update: bool,
+    ) -> ConnectionStatus {
+        if !self.is_cache_fresher_than(than) {
+            if force_update
+                || (self.get_cached_status().is_offline()
+                    && self.history.was_online_most_of_the_time())
+            {
                 Self::ping(api.clone(), self.config.fg_timeout, self.config.fg_retry).await;
             } else {
                 self.spawn_ping(api.clone());
             }
-        } else if self.get_cached_status().is_offline() {
+        }
+
+        // We want to spawn background ping
+        // anytime we are offline to get
+        // online notification as soon as possible
+        if self.get_cached_status().is_offline() {
             self.spawn_ping(api);
         }
 
@@ -265,11 +311,11 @@ impl StatusObserver {
         });
     }
 
-    fn is_cache_fresh(&self) -> bool {
+    fn is_cache_fresher_than(&self, than: Duration) -> bool {
         self.cache
             .read()
             .checked_at
-            .is_some_and(|at| at.elapsed() < self.config.up_to_date)
+            .is_some_and(|at| at.elapsed() < than)
     }
 
     fn get_cached_status(&self) -> ConnectionStatus {

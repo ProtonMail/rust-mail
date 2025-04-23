@@ -14,19 +14,6 @@ use super::{
     remote_source::RemoteSource,
 };
 
-/// Controls behaviour of data scroller source while fetching previous page.
-///
-#[derive(Debug)]
-pub enum DataScrollerSourcePreviousPageStrategy {
-    /// In most cases, we want to fetch it in the background and return offline cache
-    /// immediately
-    Background,
-
-    /// In some scenarios (for example in Prefetcher) we want to wait until
-    /// API calls to our Remote finish.
-    Foreground,
-}
-
 #[derive(Debug)]
 pub struct DataScrollerSource<T: RemoteSource> {
     local_label_id: LocalLabelId,
@@ -34,23 +21,16 @@ pub struct DataScrollerSource<T: RemoteSource> {
     page_size: usize,
     invalidate: Option<flume::Sender<()>>,
     state: MailScrollerState<T>,
-    previous_page_strategy: DataScrollerSourcePreviousPageStrategy,
 }
 
 impl<T: RemoteSource> DataScrollerSource<T> {
-    pub fn new(
-        local_label_id: LocalLabelId,
-        unread: ReadFilter,
-        page_size: usize,
-        previous_page_strategy: DataScrollerSourcePreviousPageStrategy,
-    ) -> Self {
+    pub fn new(local_label_id: LocalLabelId, unread: ReadFilter, page_size: usize) -> Self {
         Self {
             local_label_id,
             unread,
             page_size,
             invalidate: None,
             state: MailScrollerState::None,
-            previous_page_strategy,
         }
     }
 
@@ -98,24 +78,18 @@ impl<T: RemoteSource> DataScrollerSource<T> {
     async fn offline_fallback(
         &mut self,
         ctx: &MailUserContext,
-        is_offline: bool,
         tether: &Tether,
     ) -> Result<(Vec<T::Item>, MailPaginatorJoinHandle), MailContextError> {
+        self.state =
+            MailScrollerState::new_not_synced(self.local_label_id, self.unread, self.page_size)
+                .await?;
+
+        debug!("We are offline, load whatever is in the cache");
+        let items = self.state.offline_mut().unwrap().fetch_more(tether).await?;
+        // Low chance to get a task back, but lets try anyway
         let (_, task) = self.initialize(ctx).await?;
 
-        if is_offline {
-            self.state =
-                MailScrollerState::new_not_synced(self.local_label_id, self.unread, self.page_size)
-                    .await?;
-
-            debug!("We are offline, load whatever is in the cache");
-            let items = self.state.offline_mut().unwrap().fetch_more(tether).await?;
-
-            Ok((items, task))
-        } else {
-            // Retry to sync the data
-            Ok((vec![], task))
-        }
+        Ok((items, task))
     }
 
     #[tracing::instrument(level = tracing::Level::DEBUG, skip(ctx, local_label_id, remote_label_id))]
@@ -169,10 +143,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         )
         .await?;
 
-        Ok(match self.previous_page_strategy {
-            DataScrollerSourcePreviousPageStrategy::Background => None,
-            DataScrollerSourcePreviousPageStrategy::Foreground => task,
-        })
+        Ok(task)
     }
 }
 
@@ -189,8 +160,29 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         let remote_label_id = label.remote_id.clone().unwrap();
         let total = T::total(self.local_label_id, self.unread, &tether).await?;
         let unread = self.unread;
+        // On the initialization of the scroller its vital to be able to
+        // recognize the connection state with high precision due to the fact
+        // it may impare how the whole application is behaving.
+        //
+        // double call is done in order to utilize low_latency check
+        // only when we may be online but we have to confirm it, never for offline
+        // as we will have a 2 sec downtime everytime we load location in offline.
+        let is_offline = ctx.session().status().await.is_offline();
+        let is_offline = is_offline
+            || ctx
+                .session()
+                .status_watcher()
+                .low_latency_status(ctx.api().clone())
+                .await
+                .is_offline();
 
         self.sync_scroller(&tether).await?;
+
+        if is_offline {
+            debug!("We are offline, return scroller without a task");
+
+            return Ok((total, None));
+        }
 
         // Check if we have a data suggesting we have synced this label before
         if let Some(scroller) = self.state.online() {
@@ -286,18 +278,31 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         let label = self.get_label(&tether).await?;
         let total = T::total(self.local_label_id, self.unread, &tether).await?;
         let is_offline = ctx.session().status().await.is_offline();
+        let is_online = !is_offline;
 
         // If we go back online, we need to replace
-        let replace = self.state.is_offline() && !is_offline;
+        let replace = self.state.is_offline() && is_online;
 
         // Set state accordingly to the current connection status
         if is_offline && !self.state.has_more_in_order(&tether).await? {
             self.state.to_offline();
+        } else if self.state.is_not_synced() && is_online {
+            debug!("Mail Scroller was never initialized, finishing initialization");
+            let (_, task) = self.initialize(ctx).await?;
+
+            if let Some(task) = task {
+                // This has to be awaiten here, we have no way to establish
+                // switch from NonSynced -> Online if initialize do not spawn
+                // task when offline
+                task.await?;
+            }
         } else {
             self.state.to_online();
         };
 
-        // Always sync the cache as there might be new data
+        // Always sync the cache as there might be new data.
+        // The sync has to be done after determining the previous
+        // state. This is the soonest place it can be safely called.
         self.sync_scroller(&tether).await?;
 
         let (items, task) = match &mut self.state {
@@ -311,6 +316,9 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                 // To check if there is more data to download before asking for more.
                 let items = scroller.fetch_more(&tether).await?;
                 let items = if replace {
+                    debug!(
+                        "Items displayed on the screen are unordered, notifing client to reload"
+                    );
                     Self::notify_scroller_order_invalid(&self.invalidate).await?;
 
                     vec![]
@@ -336,17 +344,11 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
             MailScrollerState::Offline {
                 ordered: _,
                 unordered,
-            } => (unordered.fetch_more(&tether).await?, None),
-            MailScrollerState::NotSynced(unordered) => {
-                let items = unordered.fetch_more(&tether).await?;
-                let task = if is_offline {
-                    None
-                } else {
-                    let (_, task) = self.initialize(ctx).await?;
-                    task
-                };
-                (items, task)
             }
+            | MailScrollerState::NotSynced(unordered) => {
+                (unordered.fetch_more(&tether).await?, None)
+            }
+
             MailScrollerState::None => (vec![], None),
         };
 
@@ -356,7 +358,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         // This is extreme case but will force user to wait for the data to be downloaded
         let (items, task) = if self.state.is_none() && total > 0 {
             trace!("We have never seen this label before, try to recover");
-            self.offline_fallback(ctx, is_offline, &tether).await?
+            self.offline_fallback(ctx, &tether).await?
         } else {
             (items, task)
         };

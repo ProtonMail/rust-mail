@@ -12,7 +12,7 @@ use tracing::instrument;
 use crate::{
     AppError, MailContextError, MailUserContext,
     datatypes::{ReadFilter, ViewMode},
-    mail_scroller::{DataScrollerSourcePreviousPageStrategy, MailScroller},
+    mail_scroller::MailScroller,
     models::{Conversation, DraftMetadata, MailSettings, Message},
 };
 
@@ -127,14 +127,8 @@ impl Prefetch {
         local_label_id: LocalLabelId,
         ctx: &Arc<MailUserContext>,
     ) -> Result<(), MailContextError> {
-        let Ok(mut scroller) = MailScroller::conversations(
-            ctx.as_weak(),
-            local_label_id,
-            ReadFilter::All,
-            50,
-            DataScrollerSourcePreviousPageStrategy::Foreground,
-        )
-        .await
+        let Ok(mut scroller) =
+            MailScroller::conversations(ctx.as_weak(), local_label_id, ReadFilter::All, 50).await
         else {
             return Ok(());
         };
@@ -185,14 +179,8 @@ impl Prefetch {
         local_label_id: LocalLabelId,
         ctx: &Arc<MailUserContext>,
     ) -> Result<(), MailContextError> {
-        let Ok(mut scroller) = MailScroller::messages(
-            ctx.as_weak(),
-            local_label_id,
-            ReadFilter::All,
-            50,
-            DataScrollerSourcePreviousPageStrategy::Foreground,
-        )
-        .await
+        let Ok(mut scroller) =
+            MailScroller::messages(ctx.as_weak(), local_label_id, ReadFilter::All, 50).await
         else {
             return Ok(());
         };
