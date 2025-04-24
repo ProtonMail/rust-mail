@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [mail-uniffi-v0.74.0] - 2025-04-24
 
 ### Features
 
@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Spam and trash folders correctly get assigned in the banner
 - Decrease memory footprint of the app by compiling the vcard regexes on demand.
 - Ensure changelog generation doesn't filter out certain commits
+- Cleanly close git repo when done
+- Google paymentreceipt type.
+- Remove timeout on transactions
 
 
 ## [mail-uniffi-v0.72.12] - 2025-04-24
@@ -27,13 +30,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-2765] Cleanup background tasks when session is revoked
 - [ET-2765] Make sure we remove contexts from session map
 - [ET-2765] Make minor adjustments
-
-
-## [mail-uniffi-v0.72.11] - 2025-04-23
-
-### Fixes
-
-- [ET-2698] Handle a case where authentication scope is not enough
 
 
 ## [mail-uniffi-v0.73.0] - 2025-04-17
@@ -66,6 +62,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Leaking tracing spans in async code
 - Return cached data from mail scroller immediately
 - Don't send rollback again
+
+
+## [mail-uniffi-v0.72.11] - 2025-04-23
+
+### Fixes
+
+- [ET-2698] Handle a case where authentication scope is not enough
 
 
 ## [mail-uniffi-v0.72.10] - 2025-04-23
