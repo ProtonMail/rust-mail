@@ -1,6 +1,8 @@
 from collections import OrderedDict
+from contextlib import contextmanager
 from functools import cache
 from subprocess import run
+from typing import Iterator
 
 import click
 from git import Commit, Repo, Tag
@@ -14,16 +16,16 @@ from changelog.types import Commits
 @click.option("--head", type=str)
 @click.option("--after", type=str)
 def main(path: str | None, head: str | None, after: str | None) -> None:
-    repo = Repo(path)
-    tags = collect_tags(repo)
+    with open_repo(path) as repo:
+        tags = collect_tags(repo)
 
-    head_ref = repo.commit(head)
-    over_ref = set(repo.iter_commits(f"{after}..{head_ref}")) if after else None
+        head_ref = repo.commit(head)
+        over_ref = set(repo.iter_commits(f"{after}..{head_ref}")) if after else None
 
-    commits = collect_commits(tags, head_ref, over_ref)
-    deduped = dedupe_commits(commits)
+        commits = collect_commits(tags, head_ref, over_ref)
+        deduped = dedupe_commits(commits)
 
-    print(render(deduped))
+        print(render(deduped))
 
 
 def collect_tags(repo: Repo) -> dict[Commit, Tag]:
@@ -87,3 +89,13 @@ def patch_id(c: Commit) -> str:
             return pid
         case _:
             return c.hexsha
+
+
+@contextmanager
+def open_repo(path: str | None) -> Iterator[Repo]:
+    repo = Repo(path)
+
+    try:
+        yield repo
+    finally:
+        repo.close()
