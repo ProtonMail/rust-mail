@@ -4,6 +4,225 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Features
+
+- Et-2713: expose observability features via uniffi
+- Et-2713: guarantee a single observability background job even when multiple sessions are created
+
+### Fixes
+
+- Improved delete all messages in label
+- Spam and trash folders correctly get assigned in the banner
+- Remove event debug print
+- Decrease memory footprint of the app by compiling the vcard regexes on demand.
+- One transaction per event
+- Ensure changelog generation doesn't filter out certain commits
+
+
+## [mail-uniffi-v0.73.0] - 2025-04-17
+
+### Changed
+
+- Action-queue: simplify the online-check
+- [ET-2678] Optional filename overwrite for new attachments
+- Synchronize db writes
+
+### Features
+
+- [ET-2698] Registered device background task
+- [ET-2698] Registering devices tests
+- [ET-2698] Make the register_device_task a method of the mailsession
+- [ET-2698] More logs
+- [ET-2698] Make register_device_task synchronous
+- [ET-2698] Make sure that registration task can handle network errors
+- [ET-559] Signup network requests
+- Attchmenlist::add_inline
+- [ET-2719] Delete all folder banner, uniffi + tui
+- Support /payments/resources/icons
+- Googlerecurring paymentreceipt (post_payments_tokens).
+
+### Fixes
+
+- Core: fix status watcher's shared state
+- [ET-2601] Improve initialization by waiting when failure of dependency happen
+- Correct background task execution
+- Only allow one session per user
+- Leaking tracing spans in async code
+- Return cached data from mail scroller immediately
+- Restore stash debug filter for ios logs
+- Network requests in send preferences tx
+- Don't send rollback again
+
+
+## [mail-uniffi-v0.72.8] - 2025-04-16
+
+### Fixes
+
+- Don't hang if transaction never ends
+
+
+## [mail-uniffi-v0.72.7] - 2025-04-16
+
+### Fixes
+
+- Disable async logger for ios
+- Wake taskservice awaiters on resume
+- Return cached data from mail scroller immediately
+
+
+## [mail-uniffi-v0.72.6] - 2025-04-14
+
+### Fixes
+
+- Restore manual event loop polling with `force_event_loop_poll`
+
+
+## [mail-uniffi-v0.72.5] - 2025-04-14
+
+### Changed
+
+- Mailusercontext polls events in the background
+
+### Features
+
+- Ensure that html content is encoded as base64 in mime
+
+### Fixes
+
+- [ET-2326] Sanatize the conent-id in the mime-buidler
+
+
+## [mail-uniffi-v0.72.4] - 2025-04-14
+
+### Fixes
+
+- Leaking tracing spans in async code
+
+
+## [mail-uniffi-v0.72.3] - 2025-04-11
+
+### Fixes
+
+- Ignore duplicate context errors in background tasks
+
+
+## [mail-uniffi-v0.70.10] - 2025-04-09
+
+### Fixes
+
+- [ET-2699] Blocked banner now properly gets updated on the event loop and block_address now takes a string instead of an id
+
+
+## [mail-uniffi-v0.70.9] - 2025-04-09
+
+### Changed
+
+- Change pin type from vec<u8> to vec<u32>
+
+
+## [mail-uniffi-v0.70.8] - 2025-04-07
+
+### Fixes
+
+- Allow to specify if abort for bg execution was called from foreground
+
+
+## [mail-uniffi-v0.70.7] - 2025-04-07
+
+### Fixes
+
+- Add action's pausable associated const which force executors to finish apply_remote b4 pausing
+
+
+## [mail-uniffi-v0.70.6] - 2025-04-07
+
+### Fixes
+
+- Make `draft::save` & `draft::send` action's `apply_remote` non pausable futures
+
+
+## [mail-uniffi-v0.71.0] - 2025-04-07
+
+### Features
+
+- [ET-2552] Use combine contacts appsetting for `contact_suggestions`
+- Mark as phising implementation
+- [ET-2592] Terminating action queue auto executor
+- Add banners to the tui client
+- [ET-2592] Background execution terminates when queue is empty
+- Support local api server
+
+### Fixes
+
+- [ET-2613] Fill `username` field in bug report request
+
+
+## [mail-uniffi-v0.70.5] - 2025-04-07
+
+### Fixes
+
+- [ET-2551] Tweak request values of status observer
+
+
+## [mail-uniffi-v0.70.3] - 2025-04-04
+
+### Fixes
+
+- Escape rendering of forwarded plain text messages
+
+
+## [mail-uniffi-v0.70.2] - 2025-04-04
+
+### Fixes
+
+- [ET-2581] Don't show embedded and remote banners when there is no remote/embedded content.
+
+
+## [mail-uniffi-v0.70.0] - 2025-04-03
+
+### Changed
+
+- [ET-2592] Update background execution api
+
+### Features
+
+- [ET-2640] Add `mailsession::remaining_pin_attempts` method
+
+### Fixes
+
+- [ET-2614] Correctly format bug report description to include all provided fields
+- [ET-2592] Replace r2d2 with basic replacement
+- Missing pinned and blocked system label migration
+
+
+## [mail-uniffi-v0.70.1] - 2025-04-04
+
+### Fixes
+
+- Do not delete draft attachments
+- [ET-2671] Persist recipient removal
+
+
+## [mail-uniffi-v0.69.0] - 2025-04-02
+
+### Features
+
+- [ET-2552] Clear application data on 10th incorrect pin validation attempt
+- [ET-2552] Add functionality to set/unset biometrics
+- [ET-2552] Cancel all tasks spawned in userctx
+- [ET-2552] Archive database files
+
+### Fixes
+
+- Task-service: improve pausable futures
+- Task-service: add another test
+- [ET-2551] Make status observer more resilient in poor connection environment
+- Task-service: refactoring, improve docs
+- Task-service: address comments
+- [ET-2358] Correct reported error after draft deleted
 ## [0.68.2] - 2025-04-02
 
 ### Fixed

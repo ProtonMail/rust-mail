@@ -40,7 +40,7 @@ def collect_commits(tags: dict[Commit, Tag], head: Commit, over: set[Commit] | N
         if c in seen:
             continue
 
-        if over is not None and c in over:
+        if over is not None and c not in over:
             continue
 
         cmts.setdefault(t, []).append(c)
