@@ -58,10 +58,6 @@ type StdSender<T> = flume::Sender<T>;
 /// access inside the same db process.
 const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// Maximum time a transaction should be active. Long running transactions are a sign
-/// of problems and need to be revisited.
-const TRANSACTION_TIMEOUT: Duration = Duration::from_secs(2);
-
 /// The maximum number of simultaneous connections allowed to the database. This
 /// defaults to 100.
 // TODO: Test perf of lower values.
@@ -209,10 +205,6 @@ pub enum StashError {
     /// There was a problem with a transaction.
     #[error("Transaction error: {0}")]
     TransactionError(SqliteError),
-
-    /// Critical error that cannot be recovered from.
-    #[error("Transaction timed out before completing.")]
-    TransactionTimeout,
 
     /// Critical error that cannot be recovered from.
     #[error("Critical error: {0}")]
@@ -990,10 +982,7 @@ impl Tether {
         let _guard = tx_lock.lock().await;
         async {
             let tx = self.transaction_impl(policy).await?;
-            let r = match tokio::time::timeout(TRANSACTION_TIMEOUT, closure(&tx)).await {
-                Ok(val) => val,
-                Err(_) => Err(StashError::TransactionTimeout.into()),
-            };
+            let r = closure(&tx).await;
             if r.is_err() {
                 if let Err(e) = tx.rollback().await {
                     error!("Failed to rollback transaction: {e:?}");
