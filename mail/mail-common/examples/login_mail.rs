@@ -13,6 +13,7 @@ use proton_api_core::verification::ChallengeNotifier;
 use proton_api_core::verification::ChallengePayload;
 use proton_api_core::verification::ChallengeResponse;
 use proton_core_common::CoreAccountState;
+use proton_core_common::OnSessionCloseNOP;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::{KeyChain, KeyChainEntryKind, KeyChainError};
 use proton_mail_common::MailContext;
@@ -114,7 +115,7 @@ impl LoginCmd {
         }
 
         _ = ctx
-            .user_context_from_login_flow(&mut flow)
+            .user_context_from_login_flow(&mut flow, OnSessionCloseNOP)
             .inspect_err(|err| error!("failed to create user context: {err:?}"))
             .await?;
 
@@ -271,7 +272,12 @@ async fn get_user_ctx(ctx: &Arc<MailContext>, username: &str) -> Result<Arc<Mail
         };
 
         return Ok(ctx
-            .user_context_from_session(&session, None, ShouldInitializeMailUserContext::Yes)
+            .user_context_from_session(
+                &session,
+                None,
+                ShouldInitializeMailUserContext::Yes,
+                OnSessionCloseNOP,
+            )
             .await?);
     }
 

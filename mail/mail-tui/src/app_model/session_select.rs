@@ -4,6 +4,7 @@ use crate::app_model::{AppState, AppStateHandler, YesNoPopup, login, mailbox};
 use crate::messages::Messages;
 use crate::widgets::{ScrollableList, ScrollableListState};
 use anyhow::{Context as _, anyhow};
+use proton_core_common::OnSessionCloseNOP;
 use proton_core_common::db::account::CoreAccount;
 use proton_mail_common::context::ShouldInitializeMailUserContext;
 use proton_mail_common::{MailContext, MailContextError};
@@ -145,6 +146,7 @@ impl AppStateHandler for Model {
                                         sess,
                                         None,
                                         ShouldInitializeMailUserContext::Yes,
+                                        OnSessionCloseNOP,
                                     )
                                     .await
                                     .context("Error creating MailUserContext")?;

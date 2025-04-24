@@ -16,10 +16,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Improved delete all messages in label
 - Spam and trash folders correctly get assigned in the banner
-- Remove event debug print
 - Decrease memory footprint of the app by compiling the vcard regexes on demand.
-- One transaction per event
 - Ensure changelog generation doesn't filter out certain commits
+
+
+## [mail-uniffi-v0.72.12] - 2025-04-24
+
+### Fixes
+
+- [ET-2765] Cleanup background tasks when session is revoked
+- [ET-2765] Make sure we remove contexts from session map
+- [ET-2765] Make minor adjustments
+
+
+## [mail-uniffi-v0.72.11] - 2025-04-23
+
+### Fixes
+
+- [ET-2698] Handle a case where authentication scope is not enough
 
 
 ## [mail-uniffi-v0.73.0] - 2025-04-17
@@ -28,7 +42,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Action-queue: simplify the online-check
 - [ET-2678] Optional filename overwrite for new attachments
-- Synchronize db writes
 
 ### Features
 
@@ -52,9 +65,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Only allow one session per user
 - Leaking tracing spans in async code
 - Return cached data from mail scroller immediately
+- Don't send rollback again
+
+
+## [mail-uniffi-v0.72.10] - 2025-04-23
+
+### Fixes
+
+- Remove event debug print
+- One transaction per event
+
+
+## [mail-uniffi-v0.72.9] - 2025-04-17
+
+### Changed
+
+- Synchronize db writes
+
+### Fixes
+
 - Restore stash debug filter for ios logs
 - Network requests in send preferences tx
-- Don't send rollback again
 
 
 ## [mail-uniffi-v0.72.8] - 2025-04-16

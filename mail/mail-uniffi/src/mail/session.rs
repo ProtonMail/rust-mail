@@ -12,11 +12,11 @@ use crate::{
 };
 use futures::TryFutureExt;
 use itertools::Itertools;
-use proton_core_common::CoreSessionState;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::models::{AppSettings as RealAppSettings, PinProtection};
 use proton_core_common::os::KeyChainExt;
 use proton_core_common::pin_code::PinCode;
+use proton_core_common::{CoreSessionState, OnSessionCloseNOP};
 use proton_mail_common::MailContext;
 use proton_mail_common::actions::draft::Send;
 use proton_mail_common::context::{EventPollMode, ShouldInitializeMailUserContext};
@@ -267,12 +267,13 @@ impl MailSession {
     ) -> Result<Option<Arc<MailUserSession>>, UserSessionError> {
         let ctx = self.mail_ctx.clone();
 
+        let user_ctx = self.user_ctx.clone();
         let user_ctx = uniffi_async(async move {
             ctx.initialized_user_context_from_session(session.session(), None)
                 .map_err(RealProtonMailError::from)
                 .await
+                .map(|ctx| ctx.map(|ctx| user_ctx.insert(ctx)))
         })
-        .map_ok(|ctx| ctx.map(|ctx| self.user_ctx.insert(ctx)))
         .map_ok(|ctx| ctx.map(MailUserSession::new))
         .await?;
 
@@ -286,16 +287,24 @@ impl MailSession {
     ) -> Result<Arc<MailUserSession>, UserSessionError> {
         let ctx = self.mail_ctx.clone();
 
+        let user_ctx = self.user_ctx.clone();
         let user_ctx = uniffi_async(async move {
+            let weak_user_ctx = Arc::downgrade(&user_ctx);
             ctx.user_context_from_session(
                 session.session(),
                 None,
                 ShouldInitializeMailUserContext::Yes,
+                move |_session_id, user_id| async move {
+                    tracing::warn!("Session ended. Removing from the map");
+                    if let Some(ctx) = weak_user_ctx.upgrade() {
+                        ctx.remove(&user_id);
+                    }
+                },
             )
             .map_err(RealProtonMailError::from)
             .await
+            .map(|ctx| user_ctx.insert(ctx))
         })
-        .map_ok(|ctx| self.user_ctx.insert(ctx))
         .map_ok(MailUserSession::new)
         .await?;
 
@@ -714,6 +723,7 @@ impl MailSession {
                             &session,
                             None,
                             ShouldInitializeMailUserContext::Yes,
+                            OnSessionCloseNOP,
                         )
                         .await?;
                     let tether = user_ctx.user_stash().connection();
