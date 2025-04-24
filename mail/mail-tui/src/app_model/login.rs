@@ -4,6 +4,7 @@ use crate::app_model::{AppState, AppStateHandler, context_init, twofa};
 use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
 use anyhow::anyhow;
+use proton_core_common::OnSessionCloseNOP;
 use proton_mail_common::MailContext;
 use proton_mail_common::proton_api_mail::proton_api_core::login::{Flow, LoginError};
 use proton_mail_common::proton_api_mail::proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
@@ -143,7 +144,10 @@ impl AppStateHandler for Model {
                 } else {
                     let ctx = Arc::clone(ctx);
                     Command::task(async move {
-                        match ctx.user_context_from_login_flow(&mut flow).await {
+                        match ctx
+                            .user_context_from_login_flow(&mut flow, OnSessionCloseNOP)
+                            .await
+                        {
                             Ok(context) => Command::message(Messages::SwitchAppState(
                                 context_init::Model::new(context).into(),
                             )),

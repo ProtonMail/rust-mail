@@ -690,8 +690,6 @@ impl Context {
     ///
     /// Returns an error if the database operation fails.
     pub async fn logout_account(&self, user_id: UserId) -> CoreContextResult<()> {
-        self.cancel_user_tasks(&user_id).await;
-
         for session in self.get_account_sessions(user_id.clone()).await? {
             let Ok(api) = self
                 .new_api_session(Some(&session), None)
