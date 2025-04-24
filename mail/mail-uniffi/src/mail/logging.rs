@@ -3,7 +3,6 @@ use std::fs::OpenOptions;
 use std::panic::{set_hook, take_hook};
 use std::path::Path;
 use tracing::error;
-use tracing_appender::non_blocking;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
@@ -30,13 +29,30 @@ pub(super) fn init_log(log_path: &Path, debug: bool) -> std::io::Result<Option<W
             app_tracing_env_filter_default()
         });
 
-    tracing_subscriber::registry().with(file_subscriber).init();
+    let os_log_subscriber =
+        tracing_oslog::OsLogger::new("ch.protonmail.protonmail", "[Proton] Rust").with_filter(
+            if debug {
+                app_tracing_env_filter_trace()
+            } else {
+                app_tracing_env_filter_default()
+            },
+        );
+
+    tracing_subscriber::registry()
+        .with(file_subscriber)
+        .with(os_log_subscriber)
+        .init();
+
+    tracing::info!(path=?log_path, "Path to log");
+
     log_backtrace_on_panic();
     Ok(None)
 }
 
 #[cfg(not(target_os = "ios"))]
 pub(super) fn init_log(log_path: &Path, debug: bool) -> std::io::Result<Option<WorkerGuard>> {
+    use tracing_appender::non_blocking;
+
     let log_file = OpenOptions::new()
         .read(true)
         .create(true)
@@ -58,6 +74,9 @@ pub(super) fn init_log(log_path: &Path, debug: bool) -> std::io::Result<Option<W
         });
     tracing_subscriber::registry().with(file_subscriber).init();
     log_backtrace_on_panic();
+
+    tracing::info!(path=?log_path, "Path to log");
+
     Ok(Some(guard))
 }
 
