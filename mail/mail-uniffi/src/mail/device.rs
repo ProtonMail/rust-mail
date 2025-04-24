@@ -2,9 +2,8 @@ use crate::async_runtime;
 use crate::errors::{OtherErrorReason, ProtonError, VoidActionResult};
 use crate::mail::MailSession;
 use crate::{core::datatypes::DeviceEnvironment, errors::ActionError};
-use proton_core_common::models::{
-    RegisteredDevice as RealRegisteredDevice, spawn_registered_device_task,
-};
+use proton_core_common::datatypes::RegisteredDevice as RealRegisteredDevice;
+use proton_core_common::device_registration::spawn_registered_device_task;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_task_service::AsyncTaskResult;
 use std::sync::Arc;
@@ -106,7 +105,6 @@ impl From<RegisteredDevice> for RealRegisteredDevice {
             environment: value.environment.into(),
             ping_notification_status: value.ping_notification_status,
             push_notification_status: value.push_notification_status,
-            row_id: None,
         }
     }
 }

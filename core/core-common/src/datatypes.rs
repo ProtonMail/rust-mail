@@ -1551,3 +1551,20 @@ impl ToSql for LabelColor {
         Ok(ToSqlOutput::from(self.0.clone()))
     }
 }
+
+/// This struct is used to registed the device for Push notifications.
+///
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RegisteredDevice {
+    /// Device token, used as primary key
+    pub device_token: String,
+
+    /// Environment to which we register
+    pub environment: DeviceEnvironment,
+
+    /// TODO: Document this field
+    pub ping_notification_status: Option<i32>,
+
+    /// TODO: Document this field
+    pub push_notification_status: Option<i32>,
+}

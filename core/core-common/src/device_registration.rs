@@ -1,5 +1,5 @@
 #[cfg(test)]
-#[path = "../tests/models/device.rs"]
+#[path = "./tests/device_registration.rs"]
 mod tests;
 
 use std::{collections::HashSet, sync::Arc};
@@ -15,7 +15,6 @@ use proton_api_core::{
 use proton_task_service::AsyncTaskResult;
 use stash::{
     exports::ToSql,
-    macros::Model,
     orm::Model,
     stash::{StashError, Tether, WatcherHandle},
 };
@@ -23,7 +22,7 @@ use tokio::{sync::watch, task::JoinHandle};
 
 use crate::{
     Context, CoreContextError,
-    datatypes::{DeviceEnvironment, StoredDevicePrivateKey, StoredDevicePublicKey},
+    datatypes::{RegisteredDevice, StoredDevicePrivateKey, StoredDevicePublicKey},
     db::account::CoreSession,
     models::ModelExtension,
 };
@@ -34,41 +33,6 @@ const SLEEP_IN_CASE_OF_NETWORK_ERR: u64 = 500;
 /// Error code encountered when session has missing scopes.
 /// In the context of device registation this usually means "You are logged in, but still waiting for 2FA".
 const MISSING_SCOPES_ERROR_CODE: u32 = 9100;
-
-// TODO (wpolak): Remove this table and this structure
-// We no longer need to store tokens in the database.
-// We might want to keep only minimal datastructure in memory.
-//
-/// This model is used to registed the device for Push notifications.
-///
-/// Note, that in the database at the same time there should be only one row in `registered_devices`.
-/// It is because there should be only one session for one app.
-///
-#[derive(Clone, Debug, Eq, PartialEq, Model)]
-#[TableName("registered_devices")]
-pub struct RegisteredDevice {
-    /// Device token, used as primary key
-    #[IdField]
-    pub device_token: String,
-
-    /// Environment to which we register
-    #[DbField]
-    pub environment: DeviceEnvironment,
-
-    /// TODO: Document this field
-    #[DbField]
-    pub ping_notification_status: Option<i32>,
-
-    /// TODO: Document this field
-    #[DbField]
-    pub push_notification_status: Option<i32>,
-
-    /// The internal row ID of the record in the database. This is assigned by
-    /// `SQLite`, and is used as a consistent identifier for records when
-    /// listening for change notifications.
-    #[RowIdField]
-    pub row_id: Option<u64>,
-}
 
 /// Spawns a background task that is responsible for registering devices for push notifications.
 /// It automatically detects whenever a new session is created.
@@ -323,34 +287,18 @@ async fn register_session(
         }
     };
 
-    device
-        .register(session_ctx.session().api(), public_key)
+    session_ctx
+        .session()
+        .api()
+        .register_device(RegisterDeviceRequest {
+            device_token: device.device_token.clone(),
+            environment: device.environment.into(),
+            public_key: Some(public_key.to_string()),
+            ping_notification_status: device.ping_notification_status,
+            push_notification_status: device.push_notification_status,
+        })
         .await?;
 
     registered_sessions.insert(session.remote_id.clone());
     Ok(())
-}
-
-impl RegisteredDevice {
-    /// Registers the device for Push Notifications.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API call fails
-    ///
-    pub async fn register<API: ProtonCore>(
-        &self,
-        api: &API,
-        public_key: StoredDevicePublicKey,
-    ) -> Result<(), ApiServiceError> {
-        api.register_device(RegisterDeviceRequest {
-            device_token: self.device_token.clone(),
-            environment: self.environment.into(),
-            public_key: Some(public_key.to_string()),
-            ping_notification_status: self.ping_notification_status,
-            push_notification_status: self.push_notification_status,
-        })
-        .await?;
-        Ok(())
-    }
 }

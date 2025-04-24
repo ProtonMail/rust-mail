@@ -7,8 +7,8 @@ use tokio::sync::watch;
 
 // To break cyclic dependency
 use proton_core_test_utils::reexport::proton_core_common::{
-    datatypes::DeviceEnvironment, models::RegisteredDevice, models::RegisteredDeviceTaskState,
-    models::registered_device_task_step,
+    datatypes::{DeviceEnvironment, RegisteredDevice},
+    device_registration::{RegisteredDeviceTaskState, registered_device_task_step},
 };
 use wiremock::{
     Mock, Request, ResponseTemplate,
@@ -29,7 +29,6 @@ async fn initial_registration() {
         environment: DeviceEnvironment::Google,
         ping_notification_status: None,
         push_notification_status: None,
-        row_id: None,
     };
 
     device_tx
@@ -80,7 +79,6 @@ async fn initial_registration_when_device_key_already_exist_in_keychain() {
         environment: DeviceEnvironment::Google,
         ping_notification_status: None,
         push_notification_status: None,
-        row_id: None,
     };
 
     device_tx
@@ -140,7 +138,6 @@ async fn test_device_token_changed() {
         environment: DeviceEnvironment::Google,
         ping_notification_status: None,
         push_notification_status: None,
-        row_id: None,
     };
 
     device_tx
@@ -179,7 +176,6 @@ async fn test_device_token_changed() {
         environment: DeviceEnvironment::Google,
         ping_notification_status: None,
         push_notification_status: None,
-        row_id: None,
     };
 
     device_tx
@@ -230,7 +226,6 @@ async fn register_more_than_one_session() {
         environment: DeviceEnvironment::Google,
         ping_notification_status: None,
         push_notification_status: None,
-        row_id: None,
     };
 
     device_tx
@@ -281,7 +276,6 @@ async fn register_new_session() {
         environment: DeviceEnvironment::Google,
         ping_notification_status: None,
         push_notification_status: None,
-        row_id: None,
     };
 
     device_tx
