@@ -1,7 +1,7 @@
 use super::proton::prelude::{PostMetricsRequestData, PostMetricsRequestElement};
 use crate::{service::ApiServiceError, services::proton::ProtonData};
 use std::{
-    sync::{Arc, LazyLock},
+    sync::{Arc, LazyLock, Once},
     time::Duration,
 };
 
@@ -16,6 +16,8 @@ pub mod metrics;
 pub mod store;
 
 use crate::status_observer::StatusObserver;
+
+static START: Once = Once::new();
 
 /// Global singleton for the observability manager, lazily initialized.
 static MANAGER: LazyLock<Arc<RwLock<ObservabilityManager>>> = LazyLock::new(|| {
@@ -75,15 +77,17 @@ impl ObservabilityManager {
     /// is available. If called outside a Tokio runtime, it will panic.
     /// ```
     pub fn start(client: Client, send_period: Duration, batch_size: usize) {
-        tokio::spawn(async move {
-            info!("Start ObservabilityManager task");
-            let mut interval = tokio::time::interval(send_period);
-            loop {
-                interval.tick().await;
-                trace!("ObservabilityManager tick");
-                let mut manager = MANAGER.write().await;
-                manager.post_metrics(batch_size, &client).await;
-            }
+        START.call_once(|| {
+            tokio::spawn(async move {
+                info!("Start ObservabilityManager task");
+                let mut interval = tokio::time::interval(send_period);
+                loop {
+                    interval.tick().await;
+                    trace!("ObservabilityManager tick");
+                    let mut manager = MANAGER.write().await;
+                    manager.post_metrics(batch_size, &client).await;
+                }
+            });
         });
     }
 
