@@ -8,7 +8,7 @@ use futures::StreamExt;
 use itertools::Itertools;
 use proton_api_core::{
     service::ApiServiceError,
-    services::proton::{ProtonCore, SessionId, prelude::RegisterDeviceRequest},
+    services::proton::{ProtonCore, SessionId, muon::Status, prelude::RegisterDeviceRequest},
     session::CoreSession as _,
     status_watcher::StatusWatcher,
 };
@@ -30,6 +30,10 @@ use crate::{
 
 /// How long we should sleep just in case there was a network error other than offline issue.
 const SLEEP_IN_CASE_OF_NETWORK_ERR: u64 = 500;
+
+/// Error code encountered when session has missing scopes.
+/// In the context of device registation this usually means "You are logged in, but still waiting for 2FA".
+const MISSING_SCOPES_ERROR_CODE: u32 = 9100;
 
 // TODO (wpolak): Remove this table and this structure
 // We no longer need to store tokens in the database.
@@ -117,6 +121,23 @@ impl RegisteredDeviceTaskError {
         match self {
             RegisteredDeviceTaskError::API(api_service_error) => {
                 api_service_error.is_network_failure()
+            }
+            _ => false,
+        }
+    }
+
+    // Checks whether error comes from the fact, that the session is not yet fully
+    // authenticated (for example waiting for 2FA)
+    //
+    fn is_not_fully_authenticated(&self) -> bool {
+        match self {
+            RegisteredDeviceTaskError::API(ApiServiceError::OtherHttpError(
+                Status::FORBIDDEN,
+                _,
+                api_error_info,
+            )) => {
+                api_error_info.as_ref().map(|a| a.code).unwrap_or_default()
+                    == MISSING_SCOPES_ERROR_CODE
             }
             _ => false,
         }
@@ -209,6 +230,12 @@ pub async fn registered_device_task_step(
                     ))
                     .await;
                     continue;
+                }
+                if e.is_not_fully_authenticated() {
+                    // Session is not fully authenticated. We are waiting for 2FA to finish.
+                    // When it finishes, it will trigger session update with new scopes,
+                    // therefore instead of repeating that registration, let's skip it for now.
+                    break;
                 }
 
                 return Err(e);

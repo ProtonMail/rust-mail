@@ -4,6 +4,7 @@ use crate::messages::Messages;
 use crate::messages::Messages::DismissBackgroundProgress;
 use crate::widgets::{TextInput, TextInputState};
 use anyhow::anyhow;
+use proton_core_common::OnSessionCloseNOP;
 use proton_mail_common::MailContext;
 use proton_mail_common::proton_api_mail::proton_api_core::login::{Flow, LoginError};
 use ratatui::crossterm::event::{Event, KeyCode};
@@ -97,7 +98,10 @@ impl AppStateHandler for Model {
                 if flow.is_logged_in() {
                     let ctx = Arc::clone(ctx);
                     Command::task(async move {
-                        match ctx.user_context_from_login_flow(&mut flow).await {
+                        match ctx
+                            .user_context_from_login_flow(&mut flow, OnSessionCloseNOP)
+                            .await
+                        {
                             Ok(context) => Command::message(Messages::SwitchAppState(
                                 context_init::Model::new(context).into(),
                             )),

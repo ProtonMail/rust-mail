@@ -311,12 +311,14 @@ impl StatusObserverLayer {
     }
 
     fn on_recv_err(&self, error: &MuonError) {
+        use ErrorKind::*;
+
         match error.kind() {
-            ErrorKind::Tls | ErrorKind::Resolve | ErrorKind::Dial | ErrorKind::Send => {
+            Tls | Resolve | Dial | Send | SendRetry => {
                 self.update(ConnectionStatus::Offline);
             }
 
-            ErrorKind::Connect | ErrorKind::Closed => {
+            Connect => {
                 self.update(ConnectionStatus::ServerUnreachable);
             }
 

@@ -43,6 +43,8 @@ in
     ];
   };
   languages.go.enable = true; # For PGP 
+  languages.python.enable = true; # For changelog
+  languages.python.uv.enable = true;
   
   scripts.xcode = if pkgs.stdenv.isDarwin then {
     description = "Opens XCode";

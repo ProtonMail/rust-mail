@@ -5,6 +5,7 @@ use proton_action_queue::observers::ActionAwaiter;
 use proton_action_queue::queue::BroadcastMessage;
 use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_api_core::session::Config;
+use proton_core_common::OnSessionCloseNOP;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::{InMemoryKeyChain, KeyChainExt};
 use proton_mail_common::MailContext;
@@ -85,7 +86,10 @@ async fn main() {
         .await
         .unwrap();
 
-    let user_ctx = ctx.user_context_from_login_flow(&mut flow).await.unwrap();
+    let user_ctx = ctx
+        .user_context_from_login_flow(&mut flow, OnSessionCloseNOP)
+        .await
+        .unwrap();
 
     let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
 

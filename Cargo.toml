@@ -214,7 +214,7 @@ registry = "proton"
 
 [workspace.dependencies.muon]
 git = "https://gitlab.protontech.ch/jhoulahan/muon.git"
-branch = "master"
+rev = "e8ce5fd6400bd47de27c03a32cc6689377bc2096"
 features = ["unsealed"]
 
 [workspace.dependencies.proton-core-test-utils]

@@ -4,8 +4,8 @@ use proton_api_core::auth::UserKeySecret;
 use proton_api_core::services::proton::UserId;
 use proton_api_core::status_observer::StatusObserver;
 use proton_api_core::status_watcher::StatusWatcher;
-use proton_core_common::UserDatabaseInitializer;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
+use proton_core_common::{OnSessionCloseNOP, UserDatabaseInitializer};
 use proton_core_test_utils::test_context::{BaseTestContext, TestContext};
 use proton_mail_common::actions::draft::SEND_ACTION_GROUP;
 use proton_mail_common::context::{
@@ -124,6 +124,7 @@ impl MailTestContext {
                 &self.core_session,
                 Some(StatusWatcher::with_observer(StatusObserver::test())),
                 ShouldInitializeMailUserContext::No,
+                OnSessionCloseNOP,
             )
             .await
             .expect("failed to create user context");
@@ -160,6 +161,7 @@ impl MailTestContext {
                 &self.core_session,
                 Some(StatusWatcher::with_observer(StatusObserver::test())),
                 ShouldInitializeMailUserContext::Yes,
+                OnSessionCloseNOP,
             )
             .await
             .expect("failed to create user context");
@@ -183,6 +185,7 @@ impl MailTestContext {
                 &self.core_session,
                 Some(StatusWatcher::with_observer(StatusObserver::test())),
                 ShouldInitializeMailUserContext::Yes,
+                OnSessionCloseNOP,
             )
             .await?;
 
