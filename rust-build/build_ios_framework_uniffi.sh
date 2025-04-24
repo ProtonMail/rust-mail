@@ -165,10 +165,6 @@ check_exit
 TMP_DIR=$(readlink -f "$TMP_DIR")
 check_exit
 
-echo "Building x86_64 Sim"
-IPHONEOS_DEPLOYMENT_TARGET=$MIN_IOS_VERSION cargo build --release -p $TARGET --target x86_64-apple-ios
-check_exit
-
 echo "Building aarch64 Sim"
 IPHONEOS_DEPLOYMENT_TARGET=$MIN_IOS_VERSION cargo build --release -p $TARGET --target aarch64-apple-ios-sim
 check_exit
@@ -190,12 +186,9 @@ echo "Determining crate version"
 CRATE_VERSION=$(cargo metadata --format-version 1 --no-deps | jq --arg target "$TARGET" '.packages[] | select(.name == $target) | .version' | jq -r)
 
 echo "Generating swift bindings"
-cargo run -p uniffi-bindgen generate --library "target/x86_64-apple-ios/release/lib${TARGET_UNDERSCORE}.a" \
+cargo run -p uniffi-bindgen generate --library "target/aarch64-apple-ios/release/lib${TARGET_UNDERSCORE}.a" \
     --config "$CONFIG_PATH" --language swift --out-dir "$TMP_DIR/include"
 check_exit
-
-echo "Generating framework for ios sim x86_64"
-gen_framework "target/x86_64-apple-ios/release" $TARGET_UNDERSCORE "$TMP_DIR/include" $CRATE_VERSION iphonesimulator
 
 echo "Generating framework for ios sim aarch64"
 gen_framework "target/aarch64-apple-ios-sim/release" $TARGET_UNDERSCORE "$TMP_DIR/include" $CRATE_VERSION iphonesimulator
@@ -203,12 +196,6 @@ gen_framework "target/aarch64-apple-ios-sim/release" $TARGET_UNDERSCORE "$TMP_DI
 echo "Generating framework for ios aarch64"
 gen_framework "target/aarch64-apple-ios/release" $TARGET_UNDERSCORE "$TMP_DIR/include" $CRATE_VERSION iphoneos
 
-
-echo "Generating universal sim universal sim framework"
-lipo -create -output "target/aarch64-apple-ios-sim/release/${TARGET_UNDERSCORE}_ffi.framework/${TARGET_UNDERSCORE}_ffi" \
-"target/x86_64-apple-ios/release/${TARGET_UNDERSCORE}_ffi.framework/${TARGET_UNDERSCORE}_ffi" \
-"target/aarch64-apple-ios-sim/release/${TARGET_UNDERSCORE}_ffi.framework/${TARGET_UNDERSCORE}_ffi"
-check_exit
 
 cp target/aarch64-apple-ios/release/lib${TARGET_UNDERSCORE}.a "$TMP_DIR/ios-dev/lib${TARGET_UNDERSCORE}_dev.a"
 check_exit
