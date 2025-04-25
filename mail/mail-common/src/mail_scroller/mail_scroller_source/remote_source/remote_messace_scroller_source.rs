@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use proton_api_core::{
     services::proton::LabelId,
     session::{CoreSession, Session},
@@ -78,6 +79,7 @@ impl RemoteSource for MessageScrollData {
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
+        sender: flume::Sender<()>,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let stash = ctx.user_stash().clone();
         let remote_id = scroller.remote_message_id.clone();
@@ -85,7 +87,7 @@ impl RemoteSource for MessageScrollData {
         let session = ctx.session().clone();
 
         let task = Some(ctx.spawn(async move {
-            RemoteMessageScrollerSource::sync_previous_page(
+            let items = RemoteMessageScrollerSource::sync_previous_page(
                 &session,
                 stash,
                 local_label_id,
@@ -96,6 +98,14 @@ impl RemoteSource for MessageScrollData {
                 page_size,
             )
             .await?;
+
+            if !items.is_empty() {
+                sender.send_async(()).await.map_err(|e| {
+                    MailContextError::Other(anyhow!(
+                        "Could not notify about fetching previous page: {e}"
+                    ))
+                })?;
+            }
 
             Ok(())
         }));

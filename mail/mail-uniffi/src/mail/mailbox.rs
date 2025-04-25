@@ -16,7 +16,6 @@ use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use stash::stash::Stash;
 use std::sync::Arc;
-use tracing::error;
 
 /// A [`Mailbox`] provides a gateway to manipulating messages and conversations for a given label.
 #[derive(uniffi::Object)]
@@ -52,8 +51,6 @@ pub trait MailboxBackgroundResult: Send + Sync {
     fn on_background_result(&self, error: Option<UserSessionError>);
 }
 
-const DEFAULT_CONVERSATION_COUNT: usize = 50;
-
 /// Create a new mailbox for a given label id.
 #[uniffi_export]
 pub async fn new_mailbox(
@@ -65,15 +62,9 @@ pub async fn new_mailbox(
 
     uniffi_async(async move {
         let stash = ctx.user_stash();
-        let mut tether = stash.connection();
+        let tether = stash.connection();
         let mbox = RealMailbox::new(&tether, label_id.into()).await?;
 
-        if let Err(e) = mbox
-            .sync(&mut tether, ctx.api(), DEFAULT_CONVERSATION_COUNT)
-            .await
-        {
-            error!("Could not sync mailbox: {e:?}");
-        }
         Result::<_, RealProtonMailError>::Ok(Arc::new(Mailbox { ctx: ptr, mbox }))
     })
     .await

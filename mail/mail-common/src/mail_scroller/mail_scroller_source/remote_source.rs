@@ -38,5 +38,6 @@ pub trait RemoteSource: ScrollData + Send {
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
+        callback: flume::Sender<()>,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 }

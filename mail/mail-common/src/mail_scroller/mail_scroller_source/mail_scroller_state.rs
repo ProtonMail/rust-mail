@@ -111,6 +111,10 @@ impl<T: ScrollData> MailScrollerState<T> {
             || matches!(self, MailScrollerState::NotSynced { .. })
     }
 
+    pub fn is_not_synced(&self) -> bool {
+        matches!(self, MailScrollerState::NotSynced { .. })
+    }
+
     /// Check if the state is none
     pub fn is_none(&self) -> bool {
         matches!(self, MailScrollerState::None)

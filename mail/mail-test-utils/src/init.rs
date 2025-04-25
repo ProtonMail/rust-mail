@@ -520,6 +520,18 @@ impl MailTestContext {
             .await;
     }
 
+    /// Generate new mock for `ping` request
+    ///
+    /// This function will mock the response any ping request, returning 200.
+    ///
+    pub async fn mock_ping_success(&self) {
+        Mock::given(method("GET"))
+            .and(path("/api/core/v4/tests/ping"))
+            .respond_with(ResponseTemplate::new(200))
+            .mount(self.mock_server())
+            .await;
+    }
+
     /// Generate new mock expectations for retrieving conversations pages.
     ///
     /// This function will mock the response for the given conversations.
