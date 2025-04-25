@@ -34,6 +34,12 @@ impl Mailbox {
         Ok(self.ctx.upgrade().ok_or(UnexpectedError::Internal)?)
     }
 
+    /// Gets a weak mail user context pointer. Quickly clonable but does not
+    /// guarantee that the context will be still alive.
+    pub(crate) fn ctx_ptr(&self) -> MailUserContextPtr {
+        self.ctx.clone()
+    }
+
     /// Get the connection to the user database
     pub(crate) fn user_stash(&self) -> Result<Stash, ProtonError> {
         Ok(self.ctx()?.user_stash().to_owned())

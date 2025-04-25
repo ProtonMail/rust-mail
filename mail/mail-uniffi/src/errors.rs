@@ -9,6 +9,8 @@ mod proton_error;
 mod session_error;
 pub(crate) mod unexpected;
 
+use proton_mail_common::decrypted_message::BodyOutput;
+
 use crate::mail::messages::EmbeddedAttachmentInfo;
 
 pub use self::action_error::*;
@@ -102,4 +104,5 @@ export_typed_result! {
     /// - `Draft::get_embedded_attachment`,
     /// - `DecryptedMessage::get_embedded_attachment`.
     EmbeddedAttachmentInfoResult(EmbeddedAttachmentInfo, ProtonError),
+    BodyOutputResult(BodyOutput, ProtonError)
 }
