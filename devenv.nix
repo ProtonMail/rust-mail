@@ -60,11 +60,6 @@ in
     exec = ''
       pushd "$DEVENV_ROOT"
   
-      # We want to prebuild x86_64_Sim with libiconv from nixpkgs
-      cargo build --release -p "proton-mail-uniffi" --target x86_64-apple-ios
-
-      # But the rest has to use libiconv that is provided by XCode.
-
       ${filterPkg "libiconv"} ./mail/mail-uniffi/ios/build-local.sh
 
       popd

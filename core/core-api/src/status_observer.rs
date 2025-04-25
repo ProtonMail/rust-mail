@@ -94,6 +94,7 @@ impl StatusObserverConfig {
     }
 
     /// Create a new `StatusObserverConfig` with default test values.
+    #[cfg(any(test, debug_assertions))]
     fn test() -> Self {
         let never = RetryPolicy::default().never();
         let fg_timeout = Timeouts::ONE_SECOND;
