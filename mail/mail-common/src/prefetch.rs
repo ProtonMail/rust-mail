@@ -144,10 +144,7 @@ impl Prefetch {
         } = scroller.watch()?;
         yield_now().await;
         // Wait for previous page just in case it arrives
-        let _ = tokio::task::spawn_blocking(move || {
-            receiver.recv_timeout(PREVIOUS_PAGE_AWAIT_DURATION)
-        })
-        .await;
+        let _ = tokio::time::timeout(PREVIOUS_PAGE_AWAIT_DURATION, receiver.recv_async()).await;
 
         let items = scroller.fetch_more().await?;
 
@@ -206,10 +203,7 @@ impl Prefetch {
         } = scroller.watch()?;
         yield_now().await;
         // Wait for previous page just in case it arrives
-        let _ = tokio::task::spawn_blocking(move || {
-            receiver.recv_timeout(PREVIOUS_PAGE_AWAIT_DURATION)
-        })
-        .await;
+        let _ = tokio::time::timeout(PREVIOUS_PAGE_AWAIT_DURATION, receiver.recv_async()).await;
 
         let items = scroller.fetch_more().await?;
         yield_now().await;
