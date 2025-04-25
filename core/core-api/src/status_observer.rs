@@ -211,7 +211,7 @@ impl StatusObserver {
     ///
     /// Method is equivalent to [`status`] but with a distinction of
     /// making sure the fresh time is very short and it forces
-    /// running low timeout ping requst in foreground to establish
+    /// running low timeout ping request in foreground to establish
     /// almost real time of the current status.
     ///
     /// This method should be used only in very specific environments
@@ -220,7 +220,7 @@ impl StatusObserver {
     /// impair usage of the application.
     ///
     /// Due to the fact that this method is fast reacting it may produce a lot
-    /// of network trafic, so If you are uncertain which method to use, default
+    /// of network trafic, so if you are uncertain which method to use, default
     /// to [`status`] method instead.
     ///
     pub async fn low_latency_status(&self, api: Proton) -> ConnectionStatus {
