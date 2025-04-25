@@ -6,6 +6,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.72.13] - 2025-04-25
+
+### Fixes
+
+- [ET-2754] Draft now holds weak handle to `MailUserContext`.
+- [ET-2754] Decrypted message now hold s weak handle to the `MailUserContext`
+- [ET-2763] MailScroller will not send data requests when offline
+- Do not sync mailbox, fix of b8a6329bb0fe62a7cc3acc8676ea6553d3f2eeca
+
 ## [mail-uniffi-v0.72.12] - 2025-04-24
 
 ### Fixes
