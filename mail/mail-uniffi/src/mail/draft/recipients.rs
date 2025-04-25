@@ -1,5 +1,6 @@
 use crate::async_runtime;
 use crate::mail::draft::Draft;
+use crate::mail::state::MailUserContextPtr;
 use itertools::Itertools;
 use non_empty_string::NonEmptyString;
 use proton_mail_common::draft::recipients::{
@@ -169,12 +170,12 @@ pub struct ComposerRecipientList {
     list_type: ComposerListType,
     list: ValidatingRecipientList<ComposerRecipientValidationCallbackWrapper>,
     draft: Weak<Draft>,
-    ctx: Arc<MailUserContext>,
+    ctx: MailUserContextPtr,
 }
 
 impl ComposerRecipientList {
     pub(super) fn new_to_list(
-        ctx: Arc<MailUserContext>,
+        ctx: MailUserContextPtr,
         draft: Weak<Draft>,
         list: RecipientList,
     ) -> Arc<Self> {
@@ -186,7 +187,7 @@ impl ComposerRecipientList {
         })
     }
     pub(super) fn new_bcc_list(
-        ctx: Arc<MailUserContext>,
+        ctx: MailUserContextPtr,
         draft: Weak<Draft>,
         list: RecipientList,
     ) -> Arc<Self> {
@@ -199,7 +200,7 @@ impl ComposerRecipientList {
     }
 
     pub(super) fn new_cc_list(
-        ctx: Arc<MailUserContext>,
+        ctx: MailUserContextPtr,
         draft: Weak<Draft>,
         list: RecipientList,
     ) -> Arc<Self> {
@@ -251,12 +252,15 @@ impl ComposerRecipientList {
 
     /// Add a new single recipient to the list.
     pub fn add_single_recipient(&self, recipient: SingleRecipientEntry) -> AddSingleRecipientError {
+        let Some(ctx) = self.ctx.upgrade() else {
+            return AddSingleRecipientError::SaveFailed;
+        };
         // internally the function spawns an async task.
         async_runtime().block_on(async move {
             let email = recipient.email.clone();
-            match self.list.add_single(&self.ctx, recipient.into()) {
+            match self.list.add_single(&ctx, recipient.into()) {
                 Ok(()) => {
-                    if let Err(e) = self.save_draft(&self.ctx).await {
+                    if let Err(e) = self.save_draft(&ctx).await {
                         error!("Failed to queue draft save after recipient add: {e:?}");
                         self.list.remove_single(&email);
                         AddSingleRecipientError::SaveFailed
@@ -285,17 +289,20 @@ impl ComposerRecipientList {
             return AddGroupRecipientError::EmptyGroupName;
         };
 
+        let Some(ctx) = self.ctx.upgrade() else {
+            return AddGroupRecipientError::SaveFailed;
+        };
         // internally the function spawns an async task.
         async_runtime().block_on(async move {
             let recipients_cloned = recipients.clone();
             let duplicates = self.list.add_group(
-                &self.ctx,
+                &ctx,
                 group_name.clone(),
                 recipients.into_iter().map_into(),
                 total_contacts_in_group,
             );
 
-            if let Err(e) = self.save_draft(&self.ctx).await {
+            if let Err(e) = self.save_draft(&ctx).await {
                 error!("Failed to queue draft save after recipient add: {e:?}");
                 self.list.remove_group_recipients(
                     &group_name,
@@ -314,9 +321,12 @@ impl ComposerRecipientList {
 
     /// Remove a single recipient by `email`.
     pub fn remove_single_recipient(&self, email: &str) -> RemoveRecipientError {
+        let Some(ctx) = self.ctx.upgrade() else {
+            return RemoveRecipientError::SaveFailed;
+        };
         self.list.remove_single(email);
         async_runtime().block_on(async move {
-            if let Err(e) = self.save_draft(&self.ctx).await {
+            if let Err(e) = self.save_draft(&ctx).await {
                 error!("Failed to queue draft save after recipient remove: {e:?}");
                 RemoveRecipientError::SaveFailed
             } else {
@@ -331,9 +341,12 @@ impl ComposerRecipientList {
             error!("remove_group with empty group name");
             return RemoveRecipientError::EmptyGroupName;
         };
+        let Some(ctx) = self.ctx.upgrade() else {
+            return RemoveRecipientError::SaveFailed;
+        };
         self.list.remove_group(&group_name);
         async_runtime().block_on(async move {
-            if let Err(e) = self.save_draft(&self.ctx).await {
+            if let Err(e) = self.save_draft(&ctx).await {
                 error!("Failed to queue draft save after removing group: {e:?}");
                 RemoveRecipientError::SaveFailed
             } else {
@@ -352,9 +365,12 @@ impl ComposerRecipientList {
             error!("remove_recipient_from_group with empty group name");
             return RemoveRecipientError::EmptyGroupName;
         };
+        let Some(ctx) = self.ctx.upgrade() else {
+            return RemoveRecipientError::SaveFailed;
+        };
         self.list.remove_group_recipient(&group_name, email);
         async_runtime().block_on(async move {
-            if let Err(e) = self.save_draft(&self.ctx).await {
+            if let Err(e) = self.save_draft(&ctx).await {
                 error!("Failed to queue draft save after removing recipient from group: {e:?}");
                 RemoveRecipientError::SaveFailed
             } else {
