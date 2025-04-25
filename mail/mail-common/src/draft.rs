@@ -5,6 +5,7 @@ use crate::actions::draft;
 use crate::actions::draft::{
     AttachmentRemove, AttachmentUpload, AttachmentUploadMode, Discard, Save, UndoSend,
 };
+use crate::datatypes::attachment::ContentId;
 use crate::datatypes::{Disposition, LocalAttachmentId, LocalMessageId, MimeType};
 use crate::decrypted_message::DecryptedMessageBody;
 use crate::draft::attachments::DraftAttachment;
@@ -1048,14 +1049,14 @@ impl Draft {
     pub async fn get_embedded_attachment(
         &self,
         ctx: &MailUserContext,
-        cid: &str,
+        cid: &ContentId,
     ) -> MailContextResult<EmbeddedAttachmentInfo> {
         let mut tether = ctx.user_stash().connection();
         let attachments =
             DraftAttachmentMetadata::attachment_for_draft(self.metadata_id, &tether).await?;
         if let Some(attachment) = attachments
             .iter()
-            .find(|a| a.content_id.as_deref() == Some(cid))
+            .find(|a| a.content_id.as_ref() == Some(cid))
         {
             let data = attachment.content_data(ctx, &mut tether).await?;
             Ok(EmbeddedAttachmentInfo {
@@ -1065,7 +1066,7 @@ impl Draft {
                 width: attachment.image_width.clone(),
             })
         } else {
-            Err(AppError::UnknownCid(cid.to_owned(), vec![]).into())
+            Err(AppError::UnknownCid(cid.clone(), vec![]).into())
         }
     }
 

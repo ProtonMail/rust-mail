@@ -67,6 +67,7 @@ use crate::decrypted_message::DecryptedMessageBody;
 use crate::draft::recipients::MaybeEmptyString;
 use crate::models::{Attachment, AttachmentType, MailSettings, MessageBodyMetadata};
 use crate::{AppError, MailContextError, MailUserContext};
+use attachment::ContentId;
 use core::fmt;
 use proton_api_core::services::proton::LabelId;
 use proton_api_mail::services::proton::common::AttachmentId;
@@ -1032,7 +1033,7 @@ impl EncryptedMessageBody {
                 for att in pgp_attachments {
                     let model_att = Attachment {
                         attachment_type: AttachmentType::Pgp,
-                        content_id: Some(att.content_id),
+                        content_id: Some(ContentId::from(att.content_id)),
                         disposition: att.disposition.into(),
                         filename: att.name,
                         size: att.size as u64,

@@ -4,6 +4,7 @@ use std::str::FromStr;
 use indoc::formatdoc;
 use itertools::Itertools;
 use proton_mail_common::datatypes::SystemLabelId;
+use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::attachment::MimeType;
 use proton_mail_common::models::Message;
 use proton_mail_common::{AppError, MailContextError, Mailbox};
@@ -130,7 +131,7 @@ async fn mailbox_message_body_mime() {
         .unwrap();
 
     let Err(MailContextError::App(AppError::UnknownCid(_, cids))) = decrypted_message
-        .get_embedded_attachment(&user_ctx, "fail")
+        .get_embedded_attachment(&user_ctx, &ContentId::from("fail"))
         .await
     else {
         panic!("Expected error when passing bad cid");
@@ -236,7 +237,7 @@ async fn mailbox_message_retains_pgp_attachments() {
     assert_eq!(decrypted_message.metadata.attachments.len(), 3);
 
     let Err(MailContextError::App(AppError::UnknownCid(_, cids))) = decrypted_message
-        .get_embedded_attachment(&user_ctx, "fail")
+        .get_embedded_attachment(&user_ctx, &ContentId::from("fail"))
         .await
     else {
         panic!("Expected error when passing bad cid");

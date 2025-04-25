@@ -33,6 +33,7 @@ pub use proton_core_common;
 use proton_core_common::datatypes::{LocalAddressId, LocalLabelId};
 use stash::stash::StashError;
 
+use datatypes::attachment::ContentId;
 use proton_action_queue::action::ActionId;
 use proton_api_mail::services::proton::common::{AttachmentId, MessageId};
 use proton_mail_ids::LocalConversationId;
@@ -95,7 +96,7 @@ pub enum AppError {
     #[error("MessageBodyMetadata missing in database for message {0}")]
     MessageBodyMetadataMissing(LocalMessageId),
     #[error("The cid {0} does not exist. The available ones are: {1:#?}")]
-    UnknownCid(String, Vec<String>),
+    UnknownCid(ContentId, Vec<ContentId>),
     #[error("Message with ID {0} has no remote ID")]
     MessageHasNoRemoteId(LocalMessageId),
     #[error("Message missing in database for local_id {0}")]
