@@ -291,7 +291,7 @@ async fn encrypt_and_upload_attachment(
             let Some(content_id) = &attachment.content_id else {
                 return Err(AttachmentError::MissingContentId(attachment.local_id.unwrap()).into());
             };
-            NewAttachmentDisposition::Inline(content_id.clone())
+            NewAttachmentDisposition::Inline(content_id.clone().into_inner())
         }
     };
 

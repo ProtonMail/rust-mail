@@ -212,7 +212,7 @@ impl AttachmentList {
                     "Somehow missing attachment content id"
                 )))?;
             instance.add_attachment(&ctx, attachment).await?;
-            Ok(content_id)
+            Ok(content_id.into_inner())
         })
         .await
         .map_err(DraftAttachmentError::from)

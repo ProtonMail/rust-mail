@@ -431,7 +431,7 @@ async fn draft_reply_or_forward_creates_new_attachments() {
                 disposition: match attachment.disposition {
                     Disposition::Attachment => NewAttachmentDisposition::Attachment,
                     Disposition::Inline => {
-                        NewAttachmentDisposition::Inline(attachment.content_id.clone().unwrap())
+                        NewAttachmentDisposition::Inline(attachment.content_id.clone().unwrap().into_inner())
                     }
                 },
                 key_packets: vec![],

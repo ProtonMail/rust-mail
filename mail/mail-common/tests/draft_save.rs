@@ -12,6 +12,7 @@ use proton_api_mail::services::proton::response_data::MessageFlags;
 use proton_api_mail::services::proton::response_data::{Disposition, MessageAttachment};
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_mail_common::MailContextError;
+use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::draft::{Draft, DraftSyncStatus, Error, OpenError, ReplyMode};
@@ -523,7 +524,10 @@ fn compare_inline_attachment(attachment: &Attachment, inline_attachment: Message
     assert_eq!(attachment.disposition, inline_attachment.disposition.into());
     assert_eq!(attachment.filename, inline_attachment.name);
     assert_eq!(attachment.size, inline_attachment.size);
-    assert_eq!(attachment.content_id, inline_attachment.headers.content_id);
+    assert_eq!(
+        attachment.content_id,
+        inline_attachment.headers.content_id.map(ContentId::from)
+    );
 }
 
 async fn create_draft_reply_impl(

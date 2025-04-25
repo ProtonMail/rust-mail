@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 //! Everything related to processing a decrypted message.
+use crate::datatypes::attachment::ContentId;
 use crate::datatypes::message_banner::MessageBanner;
 use crate::datatypes::{AttachmentMetadata, Disposition, LocalAttachmentId, MimeType};
 use crate::models::{
@@ -190,20 +191,15 @@ impl DecryptedMessageBody {
     pub async fn get_embedded_attachment(
         &self,
         ctx: &MailUserContext,
-        cid: &str,
+        cid: &ContentId,
     ) -> MailContextResult<EmbeddedAttachmentInfo> {
         // We use this for logging if no embedded image was found.
         let mut available_cids = vec![];
-        let mut cid_match = |mut x: &str| {
-            // If the cid is provided in the `<foo@bar>` format
-            if x.starts_with('<') && x.ends_with('>') {
-                x = &x[1..x.len() - 1]
-            }
-
+        let mut cid_match = |x: &ContentId| {
             if x == cid {
                 true
             } else {
-                available_cids.push(x.to_string());
+                available_cids.push(x.clone());
                 false
             }
         };
@@ -213,9 +209,9 @@ impl DecryptedMessageBody {
             .attachments
             .iter()
             // Notice that we don't check for the disposition, this is intentional.
-            .find(|at| at.content_id.as_deref().is_some_and(&mut cid_match))
+            .find(|at| at.content_id.as_ref().is_some_and(&mut cid_match))
         else {
-            return Err(AppError::UnknownCid(cid.to_string(), available_cids).into());
+            return Err(AppError::UnknownCid(cid.clone(), available_cids).into());
         };
 
         let data = {

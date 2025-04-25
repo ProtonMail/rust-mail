@@ -28,6 +28,7 @@ use proton_mail_common::MailUserContext;
 use proton_mail_common::errors::unexpected::Unexpected;
 
 use proton_mail_common::datatypes::LocalConversationId;
+use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::decrypted_message::{
     self, BodyOutput, DecryptedMessageBody, TransformOpts,
 };
@@ -141,7 +142,7 @@ impl DecryptedMessage {
             let ctx = self.ctx()?;
             let att = self
                 .body
-                .get_embedded_attachment(&ctx, &cid)
+                .get_embedded_attachment(&ctx, &ContentId::from(cid))
                 .await
                 .map_err(RealProtonMailError::from)?;
             Ok::<_, RealProtonMailError>(EmbeddedAttachmentInfo {

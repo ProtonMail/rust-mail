@@ -261,7 +261,7 @@ pub async fn generate_mime_top_package<Provider: PGPProviderSync>(
             Disposition::Inline => {
                 if let Some(content_id) = &attachment.content_id {
                     builder = builder.inline_attachment(
-                        content_id,
+                        content_id.as_str(),
                         &attachment.filename,
                         Some(mime_type),
                         loaded_data,

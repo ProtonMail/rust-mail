@@ -1,3 +1,4 @@
+use crate::datatypes::attachment::ContentId;
 use crate::datatypes::attachment::MimeType;
 use crate::datatypes::{
     AttachmentEncryptedSignature, AttachmentMetadata, AttachmentSignature, Disposition, KeyPackets,
@@ -37,7 +38,6 @@ use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 use std::str::FromStr;
 use tracing::{debug, error, info};
-use uuid::Uuid;
 
 /// Represents a mail attachment.
 ///
@@ -169,7 +169,7 @@ pub struct Attachment {
 
     #[DbField]
     /// Content id of the attachment if inlined in the message.
-    pub content_id: Option<String>,
+    pub content_id: Option<ContentId>,
 
     #[DbField]
     /// Encoding of the attachment in the message.
@@ -703,7 +703,7 @@ impl Attachment {
             disposition,
             content_id: if disposition == Disposition::Inline {
                 // Generate a new content id.
-                Some(Uuid::new_v4().to_string())
+                Some(ContentId::new())
             } else {
                 None
             },
@@ -969,7 +969,7 @@ impl From<ApiMessageAttachment> for Attachment {
             sender: None,
             signature: value.signature.map(|v| v.into()),
             size: value.size,
-            content_id: value.headers.content_id,
+            content_id: value.headers.content_id.map(ContentId::from),
             transfer_encoding: value.headers.content_transfer_encoding,
             image_width: value.headers.image_width,
             image_height: value.headers.image_height,

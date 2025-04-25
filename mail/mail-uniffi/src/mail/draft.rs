@@ -16,6 +16,7 @@ use crate::mail::draft::observer::DraftSendResult;
 use crate::mail::messages::EmbeddedAttachmentInfo;
 use crate::mail::state::MailUserContextPtr;
 use crate::{async_runtime, uniffi_async};
+use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::draft::{
     Draft as RealDraft, DraftSyncStatus as RealDraftSyncStatus, ReplyMode,
 };
@@ -297,7 +298,7 @@ impl Draft {
         uniffi_async(async move {
             let draft = self.instance.read().await;
             let att = draft
-                .get_embedded_attachment(&ctx, &cid)
+                .get_embedded_attachment(&ctx, &ContentId::from(cid))
                 .await
                 .map_err(RealProtonMailError::from)?;
             Ok::<_, RealProtonMailError>(EmbeddedAttachmentInfo {
