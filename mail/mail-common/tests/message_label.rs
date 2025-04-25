@@ -198,10 +198,6 @@ async fn message_action_read_unread() {
         .await
         .unwrap();
 
-    let label = Label::find_first("WHERE remote_id = ?", params!["mylabel"], &tether)
-        .await
-        .unwrap()
-        .unwrap();
     let message = Message::load(1.into(), &tether).await.unwrap().unwrap();
 
     // This message starts as read
@@ -209,13 +205,9 @@ async fn message_action_read_unread() {
 
     // Actions:
     //   * Mark message unread
-    Message::action_mark_unread(
-        user_context.action_queue(),
-        label.local_id.unwrap(),
-        vec![message.local_id.unwrap()],
-    )
-    .await
-    .unwrap();
+    Message::action_mark_unread(user_context.action_queue(), vec![message.local_id.unwrap()])
+        .await
+        .unwrap();
 
     // Verification:
     //   * The message is unread
@@ -227,13 +219,9 @@ async fn message_action_read_unread() {
 
     // Actions:
     //   * Mark message read
-    Message::action_mark_read(
-        user_context.action_queue(),
-        label.local_id.unwrap(),
-        vec![message.local_id.unwrap()],
-    )
-    .await
-    .unwrap();
+    Message::action_mark_read(user_context.action_queue(), vec![message.local_id.unwrap()])
+        .await
+        .unwrap();
 
     // Verification:
     //   * The message is read

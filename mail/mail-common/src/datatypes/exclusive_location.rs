@@ -40,6 +40,13 @@ impl ExclusiveLocation {
         }
     }
 
+    pub fn local_id(&self) -> LocalLabelId {
+        match self {
+            ExclusiveLocation::System { local_id, .. }
+            | ExclusiveLocation::Custom { local_id, .. } => *local_id,
+        }
+    }
+
     pub fn from_labels(labels: &[Label]) -> Option<Self> {
         let label = SystemLabel::exclusive_locations()
             .into_iter()

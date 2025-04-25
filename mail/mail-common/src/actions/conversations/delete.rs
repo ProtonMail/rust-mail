@@ -1,4 +1,4 @@
-use crate::actions::{GenericActionData, MailActionError, filter_responses};
+use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_responses};
 use crate::datatypes::RollbackItemType;
 use crate::models::Conversation;
 use crate::{AppError, MailUserContext};
@@ -14,12 +14,12 @@ use tracing::error;
 ///
 /// This action permanently deletes the given conversations.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Delete(GenericActionData<Conversation>);
+pub struct Delete(GenericLabelRelatedActionData<Conversation>);
 
 impl Delete {
     /// Create new instance.
     pub fn new(label_id: LocalLabelId, ids: impl IntoIterator<Item = LocalConversationId>) -> Self {
-        Self(GenericActionData::new(label_id, ids))
+        Self(GenericLabelRelatedActionData::new(label_id, ids))
     }
 }
 
@@ -50,11 +50,11 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
-        if action.0.target_ids.is_empty() {
+        if action.0.data.target_ids.is_empty() {
             return Err(MailActionError::NoInput);
         }
 
-        Conversation::mark_deleted(action.0.label_id, action.0.target_ids.clone(), tx).await?;
+        Conversation::mark_deleted(action.0.label_id, action.0.data.target_ids.clone(), tx).await?;
 
         Ok(())
     }
@@ -66,7 +66,8 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Conversation::mark_undeleted(action.0.label_id, action.0.target_ids.clone(), tx).await?;
+        Conversation::mark_undeleted(action.0.label_id, action.0.data.target_ids.clone(), tx)
+            .await?;
         action
             .0
             .mark_rollback(RollbackItemType::Conversation, tx)
@@ -96,11 +97,11 @@ impl proton_action_queue::action::Handler for Handler {
             .await
             .inspect_err(|e| error!("Failed to load local only ids: {e:?})"))?;
 
-        let failed_ids = if action.0.remote_target_ids.is_empty() {
+        let failed_ids = if action.0.data.remote_target_ids.is_empty() {
             vec![]
         } else {
             let responses = Conversation::delete_multiple_remote(
-                action.0.remote_target_ids.clone(),
+                action.0.data.remote_target_ids.clone(),
                 remote_label_id,
                 ctx.api(),
             )

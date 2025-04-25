@@ -1,5 +1,5 @@
 use crate::MailUserContext;
-use crate::actions::{GenericActionData, MailActionError, filter_responses};
+use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_responses};
 use crate::datatypes::{LocalMessageId, RollbackItemType};
 use crate::models::{Conversation, Message};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
@@ -17,7 +17,7 @@ use tracing::error;
 
 /// Action which marks messages as deleted.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Delete(GenericActionData<Message>);
+pub struct Delete(GenericLabelRelatedActionData<Message>);
 
 impl Delete {
     /// Create a new instance which marks the messages as deleted.
@@ -25,7 +25,7 @@ impl Delete {
         label_id: LocalLabelId,
         message_ids: impl IntoIterator<Item = LocalMessageId>,
     ) -> Self {
-        Self(GenericActionData::new(label_id, message_ids))
+        Self(GenericLabelRelatedActionData::new(label_id, message_ids))
     }
 }
 
@@ -56,11 +56,11 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        if action.0.target_ids.is_empty() {
+        if action.0.data.target_ids.is_empty() {
             return Err(MailActionError::NoInput);
         }
 
-        Message::mark_deleted(action.0.target_ids.clone(), tx).await?;
+        Message::mark_deleted(action.0.data.target_ids.clone(), tx).await?;
         Ok(())
     }
 
@@ -71,7 +71,7 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Message::mark_undeleted(action.0.target_ids.clone(), tx).await?;
+        Message::mark_undeleted(action.0.data.target_ids.clone(), tx).await?;
         action
             .0
             .mark_rollback(RollbackItemType::Message, tx)
@@ -94,11 +94,11 @@ impl ActionHandler for Handler {
             .await
             .inspect_err(|e| error!("Failed to load local only ids: {e:?}"))?;
 
-        let failed_ids = if action.0.remote_target_ids.is_empty() {
+        let failed_ids = if action.0.data.remote_target_ids.is_empty() {
             vec![]
         } else {
             let api = ctx.api();
-            let message_ids = action.0.remote_target_ids.clone();
+            let message_ids = action.0.data.remote_target_ids.clone();
             let label_id = action.0.remote_label_id.clone();
             let response = api
                 .put_messages_delete(message_ids, label_id)

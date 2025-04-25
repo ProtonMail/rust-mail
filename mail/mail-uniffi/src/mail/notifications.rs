@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use proton_core_common::datatypes::EncryptedPushNotification as RealEncryptedPushNotification;
+use proton_mail_common::actions::notifications_quick_actions::execute_notification_quick_action;
 use proton_mail_common::datatypes::mail_notifications::{
     DecryptableInboxPushNotification,
     DecryptedEmailPushNotification as RealDecryptedEmailPushNotification,
@@ -8,12 +9,16 @@ use proton_mail_common::datatypes::mail_notifications::{
     DecryptedInboxPushNotification as RealDecryptedInboxPushNotification,
     DecryptedOpenUrlPushNotification as RealDecryptedOpenUrlPushNotification,
     NotificationSender as RealNotificationSender,
+    PushNotificationQuickAction as RealPushNotificationQuickAction,
 };
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 
 use crate::core::datatypes::RemoteId;
 use crate::core::{FFIKeyChain, OSKeyChain};
+use crate::errors::VoidActionResult;
 use crate::{errors::ActionError, uniffi_async};
+
+use super::MailUserSession;
 
 /// Encrypted push notification
 ///
@@ -209,4 +214,67 @@ pub async fn decrypt_push_notification(
     })
     .await
     .map_err(ActionError::from)
+}
+
+/// Quick actions available for mail related push notifications.
+/// It operates on remote ids since local ids are unknown at this point.
+///
+#[derive(Debug, uniffi::Enum)]
+pub enum PushNotificationQuickAction {
+    /// Marks email (being a subject of this notification) as "Read".
+    /// It might be no-op if user managed to mark it on another device
+    /// (It does not act as "toggle").
+    MarkAsRead {
+        /// Remote id of the message.
+        remote_id: RemoteId,
+    },
+
+    /// Moves email (being a subject of this notification) to "Archive" folder.
+    MoveToArchive {
+        /// Remote id of the message.
+        remote_id: RemoteId,
+    },
+
+    /// Moves email (being a subject of this notification) to "Trash" folder.
+    MoveToTrash {
+        /// Remote id of the message.
+        remote_id: RemoteId,
+    },
+}
+
+impl From<PushNotificationQuickAction> for RealPushNotificationQuickAction {
+    fn from(value: PushNotificationQuickAction) -> Self {
+        match value {
+            PushNotificationQuickAction::MarkAsRead { remote_id } => Self::MarkAsRead {
+                remote_id: remote_id.into(),
+            },
+            PushNotificationQuickAction::MoveToArchive { remote_id } => Self::MoveToArchive {
+                remote_id: remote_id.into(),
+            },
+            PushNotificationQuickAction::MoveToTrash { remote_id } => Self::MoveToTrash {
+                remote_id: remote_id.into(),
+            },
+        }
+    }
+}
+
+#[uniffi_export]
+impl MailUserSession {
+    /// Insert the quick action into the queue and execute local part immediately.
+    ///
+    #[returns(VoidActionResult)]
+    pub async fn execute_notification_quick_action(
+        &self,
+        action: PushNotificationQuickAction,
+    ) -> Result<(), ActionError> {
+        let ctx = self.ctx()?;
+        uniffi_async(async move {
+            execute_notification_quick_action(ctx.as_ref(), action.into())
+                .await
+                .map_err(RealProtonMailError::from)
+        })
+        .await
+        .map_err(ActionError::from)
+        .into()
+    }
 }

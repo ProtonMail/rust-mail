@@ -1,5 +1,5 @@
 use crate::MailUserContext;
-use crate::actions::{GenericActionData, MailActionError, filter_responses};
+use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_responses};
 use crate::datatypes::{LocalMessageId, RollbackItemType};
 use crate::models::Message;
 use proton_action_queue::action::{
@@ -14,7 +14,7 @@ use tracing::error;
 
 /// Action which remove a label from messages.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Unlabel(GenericActionData<Message>);
+pub struct Unlabel(GenericLabelRelatedActionData<Message>);
 
 impl Unlabel {
     /// Create a new instance which remove `label_id` from the messages with `message_ids`
@@ -22,7 +22,7 @@ impl Unlabel {
         label_id: LocalLabelId,
         message_ids: impl IntoIterator<Item = LocalMessageId>,
     ) -> Self {
-        Self(GenericActionData::new(label_id, message_ids))
+        Self(GenericLabelRelatedActionData::new(label_id, message_ids))
     }
 }
 
@@ -53,7 +53,7 @@ impl ActionHandler for Handler {
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         action.0.resolve_ids(tx).await?;
-        Message::remove_label(action.0.label_id, action.0.target_ids.clone(), tx).await?;
+        Message::remove_label(action.0.label_id, action.0.data.target_ids.clone(), tx).await?;
         Ok(())
     }
 
@@ -64,7 +64,7 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Message::apply_label(action.0.label_id, action.0.target_ids.clone(), tx).await?;
+        Message::apply_label(action.0.label_id, action.0.data.target_ids.clone(), tx).await?;
         action
             .0
             .mark_rollback(RollbackItemType::Message, tx)
@@ -80,7 +80,7 @@ impl ActionHandler for Handler {
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let api = ctx.api();
-        let message_ids = action.0.remote_target_ids.clone();
+        let message_ids = action.0.data.remote_target_ids.clone();
         let label_id = action.0.remote_label_id.clone().expect("Should be set");
         let response = api
             .put_messages_unlabel(message_ids, label_id)

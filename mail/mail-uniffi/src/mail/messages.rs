@@ -785,15 +785,10 @@ pub async fn mark_messages_read(
     message_ids: Vec<Id>,
 ) -> Result<(), ActionError> {
     let user_context = mailbox.ctx()?;
-    let label_id = mailbox.label_id();
     uniffi_async(async move {
-        RealMessage::action_mark_read(
-            user_context.action_queue(),
-            label_id.into(),
-            message_ids.map_vec(),
-        )
-        .await
-        .map_err(RealProtonMailError::from)
+        RealMessage::action_mark_read(user_context.action_queue(), message_ids.map_vec())
+            .await
+            .map_err(RealProtonMailError::from)
     })
     .await
     .map_err(ActionError::from)
@@ -818,15 +813,10 @@ pub async fn mark_messages_unread(
     message_ids: Vec<Id>,
 ) -> Result<(), ActionError> {
     let user_context = mailbox.ctx()?;
-    let label_id = mailbox.label_id();
     uniffi_async(async move {
-        RealMessage::action_mark_unread(
-            user_context.action_queue(),
-            label_id.into(),
-            message_ids.map_vec(),
-        )
-        .await
-        .map_err(RealProtonMailError::from)
+        RealMessage::action_mark_unread(user_context.action_queue(), message_ids.map_vec())
+            .await
+            .map_err(RealProtonMailError::from)
     })
     .await
     .map_err(ActionError::from)

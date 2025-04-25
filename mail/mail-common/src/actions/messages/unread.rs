@@ -8,7 +8,6 @@ use proton_action_queue::action::{
 };
 use proton_api_core::consts::General;
 use proton_api_mail::services::proton::ProtonMail;
-use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
@@ -20,11 +19,8 @@ pub struct Unread(GenericActionData<Message>);
 
 impl Unread {
     /// Create a new instance which marks the messages as unread.
-    pub fn new(
-        label_id: LocalLabelId,
-        message_ids: impl IntoIterator<Item = LocalMessageId>,
-    ) -> Self {
-        Self(GenericActionData::new(label_id, message_ids))
+    pub fn new(message_ids: impl IntoIterator<Item = LocalMessageId>) -> Self {
+        Self(GenericActionData::new(message_ids))
     }
 }
 

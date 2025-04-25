@@ -1,5 +1,5 @@
 use crate::MailUserContext;
-use crate::actions::{GenericActionData, MailActionError, filter_responses};
+use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_responses};
 use crate::datatypes::RollbackItemType;
 use crate::models::Conversation;
 use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
@@ -13,12 +13,12 @@ use tracing::error;
 
 /// Action which removes a label from conversations.
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Unlabel(GenericActionData<Conversation>);
+pub struct Unlabel(GenericLabelRelatedActionData<Conversation>);
 
 impl Unlabel {
     /// Create a new instance which removes `label_id` from the conversations with `ids`.
     pub fn new(label_id: LocalLabelId, ids: impl IntoIterator<Item = LocalConversationId>) -> Self {
-        Self(GenericActionData::new(label_id, ids))
+        Self(GenericLabelRelatedActionData::new(label_id, ids))
     }
 }
 
@@ -49,7 +49,7 @@ impl proton_action_queue::action::Handler for Handler {
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         action.0.resolve_ids(tx).await?;
-        Conversation::remove_label(action.0.label_id, action.0.target_ids.clone(), tx).await?;
+        Conversation::remove_label(action.0.label_id, action.0.data.target_ids.clone(), tx).await?;
         Ok(())
     }
 
@@ -60,7 +60,7 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Conversation::apply_label(action.0.label_id, action.0.target_ids.clone(), tx).await?;
+        Conversation::apply_label(action.0.label_id, action.0.data.target_ids.clone(), tx).await?;
         action
             .0
             .mark_rollback(RollbackItemType::Conversation, tx)
@@ -77,7 +77,7 @@ impl proton_action_queue::action::Handler for Handler {
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let response = Conversation::remove_label_from_multiple_remote::<Proton>(
             action.0.remote_label_id.clone().expect("Should be set"),
-            action.0.remote_target_ids.clone(),
+            action.0.data.remote_target_ids.clone(),
             ctx.api(),
         )
         .await?;

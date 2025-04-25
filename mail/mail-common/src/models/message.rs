@@ -313,7 +313,6 @@ impl Message {
     /// # Parameters
     ///
     /// * `queue`       - The action queue.
-    /// * `label_id`    - The ID of the label to apply to the messages.
     /// * `message_ids` - The IDs of the target messages.
     ///
     /// # Errors
@@ -322,10 +321,9 @@ impl Message {
     ///
     pub async fn action_mark_read(
         queue: &Queue,
-        label_id: LocalLabelId,
         message_ids: Vec<LocalMessageId>,
     ) -> Result<(), QueueActionError<Read>> {
-        let action = Read::new(label_id, message_ids);
+        let action = Read::new(message_ids);
         match queue.queue_action(action).await {
             Ok(_) | Err(QueueActionError::Action(MailActionError::NoInput)) => Ok(()),
             Err(other) => Err(other),
@@ -338,7 +336,6 @@ impl Message {
     ///
     /// * `session`     - The session.
     /// * `queue`       - The action queue.
-    /// * `label_id`    - The ID of the label to apply to the messages.
     /// * `message_ids` - The IDs of the target messages.
     ///
     /// # Errors
@@ -347,10 +344,9 @@ impl Message {
     ///
     pub async fn action_mark_unread(
         queue: &Queue,
-        label_id: LocalLabelId,
         message_ids: Vec<LocalMessageId>,
     ) -> Result<(), QueueActionError<Unread>> {
-        let action = Unread::new(label_id, message_ids);
+        let action = Unread::new(message_ids);
         match queue.queue_action(action).await {
             Ok(_) | Err(QueueActionError::Action(MailActionError::NoInput)) => Ok(()),
             Err(other) => Err(other),
