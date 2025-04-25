@@ -45,6 +45,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Google paymentreceipt type.
 - Decrease memory footprint of the app by compiling the vcard regexes on demand.
 - Remove timeout on transactions
+- [ET-2754] Fix add_inline in draft (after merging release 0.72.x to master)
+
+
+## [mail-uniffi-v0.72.13] - 2025-04-25
+
+### Fixes
+
+- [ET-2763] Mailscroller will not send data requests when offline
+- [ET-2754] Draft now holds weak handle to `mailusercontext`.
+- [ET-2754] Decrypted message now hold s weak handle to the `mailusercontext`
+- Do not sync mailbox, fix of b8a6329bb0fe62a7cc3acc8676ea6553d3f2eeca
 
 
 ## [mail-uniffi-v0.72.8] - 2025-04-16
@@ -54,6 +65,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Don't hang if transaction never ends
 
 
+## [mail-uniffi-v0.72.12] - 2025-04-24
+
+### Fixes
+
+- [ET-2765] Cleanup background tasks when session is revoked
+- [ET-2765] Make sure we remove contexts from session map
+- [ET-2765] Make minor adjustments
+
+
 ## [mail-uniffi-v0.72.7] - 2025-04-16
 
 ### Fixes
@@ -61,6 +81,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Disable async logger for ios
 - Wake taskservice awaiters on resume
 - Return cached data from mail scroller immediately
+
+
+## [mail-uniffi-v0.72.11] - 2025-04-23
+
+### Fixes
+
+- [ET-2698] Handle a case where authentication scope is not enough
 
 
 ## [mail-uniffi-v0.73.0] - 2025-04-17
@@ -77,13 +104,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Restore manual event loop polling with `force_event_loop_poll`
 
 
-## [mail-uniffi-v0.72.12] - 2025-04-24
+## [mail-uniffi-v0.72.10] - 2025-04-23
 
 ### Fixes
 
-- [ET-2765] Cleanup background tasks when session is revoked
-- [ET-2765] Make sure we remove contexts from session map
-- [ET-2765] Make minor adjustments
+- Remove event debug print
+- One transaction per event
 
 
 ## [mail-uniffi-v0.72.5] - 2025-04-14
@@ -108,28 +134,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Leaking tracing spans in async code
 
 
-## [mail-uniffi-v0.72.11] - 2025-04-23
-
-### Fixes
-
-- [ET-2698] Handle a case where authentication scope is not enough
-
-
-## [mail-uniffi-v0.72.3] - 2025-04-11
-
-### Fixes
-
-- Ignore duplicate context errors in background tasks
-
-
-## [mail-uniffi-v0.72.10] - 2025-04-23
-
-### Fixes
-
-- Remove event debug print
-- One transaction per event
-
-
 ## [mail-uniffi-v0.72.9] - 2025-04-17
 
 ### Changed
@@ -140,6 +144,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Restore stash debug filter for ios logs
 - Network requests in send preferences tx
+
+
+## [mail-uniffi-v0.72.3] - 2025-04-11
+
+### Fixes
+
+- Ignore duplicate context errors in background tasks
 
 
 ## [mail-uniffi-v0.70.10] - 2025-04-09
