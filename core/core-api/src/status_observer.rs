@@ -18,8 +18,8 @@ use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tracing::trace;
 
-const UP_TO_DATE_SECONDS: u64 = 6;
-const LOW_LATENCY_UP_TO_DATE_SECONDS: u64 = 1;
+const UP_TO_DATE_DURATION: Duration = Duration::from_secs(6);
+const LOW_LATENCY_UP_TO_DATE_DURATION: Duration = Duration::from_secs(1);
 
 static CACHE: LazyLock<Arc<RwLock<CachedStatus>>> = LazyLock::new(|| {
     Arc::new(RwLock::new(CachedStatus {
@@ -83,7 +83,7 @@ impl StatusObserverConfig {
     /// Create a new `StatusObserverConfig` with default production values.
     fn new() -> Self {
         Self {
-            up_to_date: Duration::from_secs(UP_TO_DATE_SECONDS),
+            up_to_date: UP_TO_DATE_DURATION,
             fg_retry: RetryPolicy::default().never(),
             fg_timeout: Timeouts::TWO_SECONDS,
             bg_retry: RetryPolicy::default()
@@ -224,12 +224,8 @@ impl StatusObserver {
     /// to [`status`] method instead.
     ///
     pub async fn low_latency_status(&self, api: Proton) -> ConnectionStatus {
-        self.status_fresher_than(
-            api,
-            Duration::from_secs(LOW_LATENCY_UP_TO_DATE_SECONDS),
-            true,
-        )
-        .await
+        self.status_fresher_than(api, LOW_LATENCY_UP_TO_DATE_DURATION, true)
+            .await
     }
 
     /// Underlying logic behind [`status`] methods.

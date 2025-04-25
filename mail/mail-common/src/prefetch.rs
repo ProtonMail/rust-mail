@@ -1,11 +1,14 @@
-use std::sync::{Arc, OnceLock};
+use std::{
+    sync::{Arc, OnceLock},
+    time::Duration,
+};
 
 use flume::Receiver;
 use proton_core_common::{
     datatypes::{LocalLabelId, SystemLabel},
     models::Label,
 };
-use stash::orm::Model;
+use stash::{orm::Model, stash::WatcherHandle};
 use tokio::task::yield_now;
 use tracing::instrument;
 
@@ -15,6 +18,8 @@ use crate::{
     mail_scroller::MailScroller,
     models::{Conversation, DraftMetadata, MailSettings, Message},
 };
+
+const PREVIOUS_PAGE_AWAIT_DURATION: Duration = Duration::from_secs(10);
 
 pub type PrefetchNotify = OnceLock<flume::Sender<()>>;
 
@@ -132,7 +137,17 @@ impl Prefetch {
         else {
             return Ok(());
         };
+        let WatcherHandle {
+            receiver,
+            handle: _,
+            ..
+        } = scroller.watch()?;
         yield_now().await;
+        // Wait for previous page just in case it arrives
+        let _ = tokio::task::spawn_blocking(move || {
+            receiver.recv_timeout(PREVIOUS_PAGE_AWAIT_DURATION)
+        })
+        .await;
 
         let items = scroller.fetch_more().await?;
 
@@ -184,7 +199,18 @@ impl Prefetch {
         else {
             return Ok(());
         };
+        let WatcherHandle {
+            receiver,
+            handle: _,
+            ..
+        } = scroller.watch()?;
         yield_now().await;
+        // Wait for previous page just in case it arrives
+        let _ = tokio::task::spawn_blocking(move || {
+            receiver.recv_timeout(PREVIOUS_PAGE_AWAIT_DURATION)
+        })
+        .await;
+
         let items = scroller.fetch_more().await?;
         yield_now().await;
         for item in items.into_iter().take(self.prefetch_count) {
