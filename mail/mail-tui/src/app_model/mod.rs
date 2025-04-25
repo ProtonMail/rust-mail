@@ -45,19 +45,19 @@ pub const APP_ID: &str = "com.proton.proton-mail-tui";
 /// Internal application state.
 pub enum AppState {
     /// There are existing sessions available, allow user to select one.
-    SessionSelect(session_select::Model),
+    SessionSelect(session_select::SessionSelectModel),
     /// Log into a new account.
-    Login(login::Model),
+    Login(login::LoginModel),
     /// Submit 2FA code.
     TwoFA(twofa::Model),
     /// Initialize the user context.
-    ContextInit(context_init::Model),
+    ContextInit(context_init::ContextInitModel),
     /// Display conversation/messages.
-    Mailbox(mailbox::Model),
+    Mailbox(mailbox::MailboxModel),
     /// Display contacts and groups
-    Contacts(contacts::Model),
+    Contacts(contacts::ContactsModel),
     /// Background Execution Simulator
-    Background(background::Model),
+    Background(background::BackgroundModel),
 }
 
 /// Trait to enforce behavior on each of the app states.
@@ -158,7 +158,7 @@ impl AppModel {
             )
             .await?;
 
-            let sessions_model = session_select::Model::new(&context).await?;
+            let sessions_model = session_select::SessionSelectModel::new(&context).await?;
             Ok(Self {
                 context,
                 state: AppState::SessionSelect(sessions_model),

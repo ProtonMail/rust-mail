@@ -52,7 +52,26 @@ impl State {
     }
 }
 
-pub struct Model {
+pub(super) trait StateHandler {
+    fn handle_event(
+        &mut self,
+        user_ctx: &Arc<MailUserContext>,
+        mbox: &Mailbox,
+        event: Event,
+    ) -> Command<Messages>;
+
+    fn update(
+        &mut self,
+        ctx: &MailContext,
+        user_ctx: &Arc<MailUserContext>,
+        message: Message,
+        mbox: &Mailbox,
+        mail_settings: &Arc<MailSettings>,
+    ) -> Command<Messages>;
+
+    fn view(&mut self, frame: &mut Frame, area: Rect);
+}
+pub struct MailboxModel {
     ctx: Arc<MailUserContext>,
     mailbox: Mailbox,
     label: LabelWithCounters,
@@ -66,7 +85,7 @@ pub struct Model {
     background_worker_initialized: bool,
 }
 
-impl Model {
+impl MailboxModel {
     pub async fn new(ctx: Arc<MailUserContext>) -> MailContextResult<Self> {
         let stash = ctx.user_stash();
         let tether = stash.connection();
@@ -282,7 +301,7 @@ impl Model {
 
     fn open_contacts(&mut self) -> Command<Messages> {
         Command::message(Messages::SwitchAppState(AppState::Contacts(
-            crate::app_model::contacts::Model::new(self.ctx.clone()),
+            crate::app_model::contacts::ContactsModel::new(self.ctx.clone()),
         )))
     }
 
@@ -303,7 +322,7 @@ impl Model {
     }
 }
 
-impl AppStateHandler for Model {
+impl AppStateHandler for MailboxModel {
     fn on_state_enter(&mut self) -> Command<Messages> {
         Command::batch([
             self.create_background_worker(),
@@ -345,7 +364,7 @@ impl AppStateHandler for Model {
                 }
                 KeyCode::F(8) => {
                     return Command::Message(Messages::SwitchAppState(AppState::Background(
-                        crate::app_model::background::Model::new(
+                        crate::app_model::background::BackgroundModel::new(
                             self.ctx.clone(),
                             Box::new(|ctx| {
                                 Command::batch([
@@ -619,8 +638,8 @@ impl State {
     }
 }
 
-impl From<Model> for AppState {
-    fn from(value: Model) -> Self {
+impl From<MailboxModel> for AppState {
+    fn from(value: MailboxModel) -> Self {
         Self::Mailbox(value)
     }
 }

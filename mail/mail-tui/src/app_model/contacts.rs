@@ -318,7 +318,7 @@ impl OpenedContactState {
     }
 }
 
-pub struct Model {
+pub struct ContactsModel {
     ctx: Arc<MailUserContext>,
     contacts: Vec<FlatContact>,
     open_contact: OpenedContactState,
@@ -326,7 +326,7 @@ pub struct Model {
     watcher: Option<WatchHandle>,
 }
 
-impl Model {
+impl ContactsModel {
     pub fn new(ctx: Arc<MailUserContext>) -> Self {
         Self {
             ctx,
@@ -459,7 +459,7 @@ impl Model {
     }
 }
 
-impl AppStateHandler for Model {
+impl AppStateHandler for ContactsModel {
     fn on_state_enter(&mut self) -> Command<Messages> {
         Command::message(Message::Init.into())
     }
@@ -489,7 +489,7 @@ impl AppStateHandler for Model {
                             "Loading mailbox ...".to_owned(),
                         )),
                         Command::task(async move {
-                            let model = crate::app_model::mailbox::Model::new(ctx).await;
+                            let model = crate::app_model::mailbox::MailboxModel::new(ctx).await;
                             let message = match model {
                                 Ok(model) => Messages::SwitchAppState(model.into()),
                                 Err(e) => e.into(),
@@ -610,8 +610,8 @@ impl AppStateHandler for Model {
     fn view_status_bar(&mut self, _frame: &mut Frame, _area: Rect) {}
 }
 
-impl From<Model> for AppState {
-    fn from(value: Model) -> Self {
+impl From<ContactsModel> for AppState {
+    fn from(value: ContactsModel) -> Self {
         Self::Contacts(value)
     }
 }

@@ -20,13 +20,13 @@ pub enum Message {
     LoginFailed(LoginError),
 }
 
-pub struct Model {
+pub struct LoginModel {
     email_input_state: TextInputState,
     password_input_state: TextInputState,
     active_input: ActiveInput,
 }
 
-impl Model {
+impl LoginModel {
     pub fn new() -> Self {
         let email = CLI_ARGS.username.as_deref().unwrap_or_default();
         let password = CLI_ARGS.password.as_deref().unwrap_or_default();
@@ -60,7 +60,7 @@ impl Model {
     }
 }
 
-impl AppStateHandler for Model {
+impl AppStateHandler for LoginModel {
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
         let Event::Key(k) = event else {
             return Command::None;
@@ -145,7 +145,7 @@ impl AppStateHandler for Model {
                     Command::task(async move {
                         match ctx.user_context_from_login_flow(&mut flow).await {
                             Ok(context) => Command::message(Messages::SwitchAppState(
-                                context_init::Model::new(context).into(),
+                                context_init::ContextInitModel::new(context).into(),
                             )),
                             Err(e) => {
                                 let e = anyhow!("Failed to login: {e}");
@@ -218,8 +218,8 @@ enum ActiveInput {
     Password,
 }
 
-impl From<Model> for AppState {
-    fn from(value: Model) -> Self {
+impl From<LoginModel> for AppState {
+    fn from(value: LoginModel) -> Self {
         Self::Login(value)
     }
 }

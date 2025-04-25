@@ -13,7 +13,7 @@ use crate::app_model::watcher::WatchHandle;
 use crate::messages::Messages;
 use chrono::{DateTime, Local};
 use messages::BlockOrUnblock;
-pub use model::Model;
+pub use model::MailboxModel;
 use proton_core_common::datatypes::{LocalIdMarker, LocalLabelId};
 use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::{
