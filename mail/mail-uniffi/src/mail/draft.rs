@@ -3,6 +3,7 @@ mod observer;
 mod recipients;
 
 use crate::core::datatypes::Id;
+use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{
     DraftDiscardError, DraftOpenError, DraftSaveSendError, DraftUndoSendError,
     EmbeddedAttachmentInfoResult, ProtonError, VoidDraftDiscardResult, VoidDraftSaveSendResult,
@@ -13,6 +14,7 @@ use crate::mail::datatypes::MimeType;
 use crate::mail::draft::attachments::AttachmentList;
 use crate::mail::draft::observer::DraftSendResult;
 use crate::mail::messages::EmbeddedAttachmentInfo;
+use crate::mail::state::MailUserContextPtr;
 use crate::{async_runtime, uniffi_async};
 use proton_mail_common::draft::{
     Draft as RealDraft, DraftSyncStatus as RealDraftSyncStatus, ReplyMode,
@@ -42,28 +44,32 @@ pub enum DraftCreateMode {
 #[derive(uniffi::Object)]
 pub struct Draft {
     instance: RwLock<RealDraft>,
-    ctx: Arc<MailUserContext>,
+    ctx: MailUserContextPtr,
     to_recipient_list: Arc<ComposerRecipientList>,
     bcc_recipient_list: Arc<ComposerRecipientList>,
     cc_recipient_list: Arc<ComposerRecipientList>,
     attachment_list: Arc<AttachmentList>,
 }
 impl Draft {
-    fn new_impl(ctx: Arc<MailUserContext>, draft: proton_mail_common::draft::Draft) -> Arc<Self> {
+    fn new_impl(
+        ctx: MailUserContextPtr,
+        real_ctx: &MailUserContext,
+        draft: proton_mail_common::draft::Draft,
+    ) -> Arc<Self> {
         let to_list = draft.to_list.clone();
         let cc_list = draft.cc_list.clone();
         let bcc_list = draft.bcc_list.clone();
-        let staging_path = draft.attachment_staging_path(&ctx);
+        let staging_path = draft.attachment_staging_path(real_ctx);
         Arc::new_cyclic(|weak| Self {
             instance: RwLock::new(draft),
-            ctx: Arc::clone(&ctx),
+            ctx: ctx.clone(),
             to_recipient_list: ComposerRecipientList::new_to_list(
-                Arc::clone(&ctx),
+                ctx.clone(),
                 Weak::clone(weak),
                 to_list,
             ),
             bcc_recipient_list: ComposerRecipientList::new_bcc_list(
-                Arc::clone(&ctx),
+                ctx.clone(),
                 Weak::clone(weak),
                 bcc_list,
             ),
@@ -112,6 +118,7 @@ pub async fn new_draft(
     create_mode: DraftCreateMode,
 ) -> Result<Arc<Draft>, DraftOpenError> {
     let ctx = session.ctx()?;
+    let ptr = session.ptr();
     uniffi_async(async move {
         let draft = match create_mode {
             DraftCreateMode::Empty => RealDraft::empty(ctx.user_stash()).await,
@@ -127,7 +134,7 @@ pub async fn new_draft(
         }
         .map_err(RealProtonMailError::from)?;
 
-        Result::<_, RealProtonMailError>::Ok(Draft::new_impl(ctx, draft))
+        Result::<_, RealProtonMailError>::Ok(Draft::new_impl(ptr, &ctx, draft))
     })
     .await
     .map_err(DraftOpenError::from)
@@ -146,10 +153,11 @@ pub async fn open_draft(
     message_id: Id,
 ) -> Result<OpenDraft, DraftOpenError> {
     let ctx = session.ctx()?;
+    let ptr = session.ptr();
     uniffi_async(async move {
         let (draft, status) = RealDraft::open(&ctx, message_id.into()).await?;
         Ok::<_, RealProtonMailError>(OpenDraft {
-            draft: Draft::new_impl(ctx, draft),
+            draft: Draft::new_impl(ptr, &ctx, draft),
             sync_status: status.into(),
         })
     })
@@ -193,11 +201,16 @@ impl Draft {
     /// Set the draft's `subject`.
     #[returns(VoidDraftSaveSendResult)]
     pub fn set_subject(&self, subject: String) -> Result<(), DraftSaveSendError> {
+        let Some(ctx) = self.ctx.upgrade() else {
+            return Err(DraftSaveSendError::Other(ProtonError::Unexpected(
+                UnexpectedError::Internal,
+            )));
+        };
         async_runtime()
             .block_on(async {
                 let mut instance = self.instance.write().await;
                 instance.subject = subject;
-                save_draft(&self.ctx, &mut instance)
+                save_draft(&ctx, &mut instance)
                     .await
                     .map_err(RealProtonMailError::from)
             })
@@ -208,11 +221,16 @@ impl Draft {
     /// Set the draft's `body`.
     #[returns(VoidDraftSaveSendResult)]
     pub fn set_body(&self, body: String) -> Result<(), DraftSaveSendError> {
+        let Some(ctx) = self.ctx.upgrade() else {
+            return Err(DraftSaveSendError::Other(ProtonError::Unexpected(
+                UnexpectedError::Internal,
+            )));
+        };
         async_runtime()
             .block_on(async {
                 let mut instance = self.instance.write().await;
                 instance.set_body(body);
-                save_draft(&self.ctx, &mut instance)
+                save_draft(&ctx, &mut instance)
                     .await
                     .map_err(RealProtonMailError::from)
             })
@@ -229,9 +247,12 @@ impl Draft {
     ///
     /// Returns `None` if no message was created.
     pub async fn message_id(self: Arc<Self>) -> Result<Option<Id>, ProtonError> {
+        let Some(ctx) = self.ctx.upgrade() else {
+            return Err(ProtonError::Unexpected(UnexpectedError::Internal));
+        };
         uniffi_async::<Option<Id>, RealProtonMailError, _>(async move {
             let metadata_id = { self.instance.read().await.metadata_id };
-            let tether = self.ctx.user_stash().connection();
+            let tether = ctx.user_stash().connection();
             DraftMetadata::message_id(metadata_id, &tether)
                 .await
                 .map(|v| v.map(Into::into))
@@ -270,10 +291,13 @@ impl Draft {
         self: Arc<Self>,
         cid: String,
     ) -> Result<EmbeddedAttachmentInfo, ProtonError> {
+        let Some(ctx) = self.ctx.upgrade() else {
+            return Err(ProtonError::Unexpected(UnexpectedError::Internal));
+        };
         uniffi_async(async move {
             let draft = self.instance.read().await;
             let att = draft
-                .get_embedded_attachment(&self.ctx, &cid)
+                .get_embedded_attachment(&ctx, &cid)
                 .await
                 .map_err(RealProtonMailError::from)?;
             Ok::<_, RealProtonMailError>(EmbeddedAttachmentInfo {
@@ -305,10 +329,15 @@ impl Draft {
     /// Returns error if the query failed.
     #[returns(VoidDraftSaveSendResult)]
     pub async fn save(self: Arc<Self>) -> Result<(), DraftSaveSendError> {
+        let Some(ctx) = self.ctx.upgrade() else {
+            return Err(DraftSaveSendError::Other(ProtonError::Unexpected(
+                UnexpectedError::Internal,
+            )));
+        };
         uniffi_async(async move {
             let mut instance = self.instance.write().await;
             instance
-                .save(self.ctx.action_queue(), &self.ctx.user_stash().connection())
+                .save(ctx.action_queue(), &ctx.user_stash().connection())
                 .await
                 .map_err(RealProtonMailError::from)?;
             Result::<_, RealProtonMailError>::Ok(())
@@ -327,10 +356,15 @@ impl Draft {
     /// Returns error if the query failed.
     #[returns(VoidDraftSaveSendResult)]
     pub async fn send(self: Arc<Self>) -> Result<(), DraftSaveSendError> {
+        let Some(ctx) = self.ctx.upgrade() else {
+            return Err(DraftSaveSendError::Other(ProtonError::Unexpected(
+                UnexpectedError::Internal,
+            )));
+        };
         uniffi_async(async move {
             let mut instance = self.instance.write().await;
             instance
-                .send(self.ctx.action_queue(), &self.ctx.user_stash().connection())
+                .send(ctx.action_queue(), &ctx.user_stash().connection())
                 .await
                 .map_err(RealProtonMailError::from)?;
 
@@ -350,10 +384,15 @@ impl Draft {
     /// Returns error if the query failed.
     #[returns(VoidDraftDiscardResult)]
     pub async fn discard(self: Arc<Self>) -> Result<(), DraftDiscardError> {
+        let Some(ctx) = self.ctx.upgrade() else {
+            return Err(DraftDiscardError::Other(ProtonError::Unexpected(
+                UnexpectedError::Internal,
+            )));
+        };
         uniffi_async(async move {
             let instance = self.instance.read().await;
             instance
-                .discard(self.ctx.action_queue())
+                .discard(ctx.action_queue())
                 .await
                 .map_err(RealProtonMailError::from)?;
 

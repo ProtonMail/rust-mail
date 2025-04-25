@@ -1,20 +1,25 @@
-use std::sync::{Arc, OnceLock};
+use std::{
+    sync::{Arc, OnceLock},
+    time::Duration,
+};
 
 use flume::Receiver;
 use proton_core_common::{
     datatypes::{LocalLabelId, SystemLabel},
     models::Label,
 };
-use stash::orm::Model;
+use stash::{orm::Model, stash::WatcherHandle};
 use tokio::task::yield_now;
 use tracing::instrument;
 
 use crate::{
     AppError, MailContextError, MailUserContext,
     datatypes::{ReadFilter, ViewMode},
-    mail_scroller::{DataScrollerSourcePreviousPageStrategy, MailScroller},
+    mail_scroller::MailScroller,
     models::{Conversation, DraftMetadata, MailSettings, Message},
 };
+
+const PREVIOUS_PAGE_AWAIT_DURATION: Duration = Duration::from_secs(10);
 
 pub type PrefetchNotify = OnceLock<flume::Sender<()>>;
 
@@ -127,18 +132,19 @@ impl Prefetch {
         local_label_id: LocalLabelId,
         ctx: &Arc<MailUserContext>,
     ) -> Result<(), MailContextError> {
-        let Ok(mut scroller) = MailScroller::conversations(
-            ctx.as_weak(),
-            local_label_id,
-            ReadFilter::All,
-            50,
-            DataScrollerSourcePreviousPageStrategy::Foreground,
-        )
-        .await
+        let Ok(mut scroller) =
+            MailScroller::conversations(ctx.as_weak(), local_label_id, ReadFilter::All, 50).await
         else {
             return Ok(());
         };
+        let WatcherHandle {
+            receiver,
+            handle: _,
+            ..
+        } = scroller.watch()?;
         yield_now().await;
+        // Wait for previous page just in case it arrives
+        let _ = tokio::time::timeout(PREVIOUS_PAGE_AWAIT_DURATION, receiver.recv_async()).await;
 
         let items = scroller.fetch_more().await?;
 
@@ -185,18 +191,20 @@ impl Prefetch {
         local_label_id: LocalLabelId,
         ctx: &Arc<MailUserContext>,
     ) -> Result<(), MailContextError> {
-        let Ok(mut scroller) = MailScroller::messages(
-            ctx.as_weak(),
-            local_label_id,
-            ReadFilter::All,
-            50,
-            DataScrollerSourcePreviousPageStrategy::Foreground,
-        )
-        .await
+        let Ok(mut scroller) =
+            MailScroller::messages(ctx.as_weak(), local_label_id, ReadFilter::All, 50).await
         else {
             return Ok(());
         };
+        let WatcherHandle {
+            receiver,
+            handle: _,
+            ..
+        } = scroller.watch()?;
         yield_now().await;
+        // Wait for previous page just in case it arrives
+        let _ = tokio::time::timeout(PREVIOUS_PAGE_AWAIT_DURATION, receiver.recv_async()).await;
+
         let items = scroller.fetch_more().await?;
         yield_now().await;
         for item in items.into_iter().take(self.prefetch_count) {

@@ -47,6 +47,7 @@ async fn test_search_mail_scroller_reads_one_item_from_online_scroll_data() {
     );
     ctx.mock_get_messages_total_expect(vec![message], 1, 2)
         .await;
+    ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
@@ -342,6 +343,7 @@ async fn setup_api_message_pages(
     search_phrase: &str,
     expect: u64,
 ) -> TestParams {
+    ctx.mock_ping_success().await;
     let params = TestParams::default_basic();
     let conversation = params.conversations.first().cloned().unwrap();
     let address = params.addresses.first().cloned().unwrap();
