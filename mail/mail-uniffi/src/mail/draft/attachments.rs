@@ -124,6 +124,12 @@ impl AttachmentList {
             )));
         };
 
+        let Some(ctx) = draft.ctx.upgrade() else {
+            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
+                UnexpectedError::Internal,
+            )));
+        };
+
         uniffi_async::<(), RealProtonMailError, _>(async move {
             let path = PathBuf::from(path);
 
@@ -131,10 +137,10 @@ impl AttachmentList {
                 let instance = draft.instance.read().await;
                 instance.address_id.clone()
             };
-            let mut tether = draft.ctx.user_stash().connection();
+            let mut tether = ctx.user_stash().connection();
 
             let result = RealAttachment::create_local(
-                &draft.ctx,
+                &ctx,
                 address_id,
                 Disposition::Attachment,
                 &path,
@@ -145,10 +151,10 @@ impl AttachmentList {
 
             let instance = draft.instance.read().await;
             instance
-                .delete_attachment_if_in_staging_area(&draft.ctx, &path)
+                .delete_attachment_if_in_staging_area(&ctx, &path)
                 .await;
             let attachment = result?;
-            instance.add_attachment(&draft.ctx, attachment).await?;
+            instance.add_attachment(&ctx, attachment).await?;
             Ok(())
         })
         .await
@@ -216,9 +222,15 @@ impl AttachmentList {
             )));
         };
 
+        let Some(ctx) = draft.ctx.upgrade() else {
+            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
+                UnexpectedError::Internal,
+            )));
+        };
+
         uniffi_async::<(), RealProtonMailError, _>(async move {
             let instance = draft.instance.read().await;
-            instance.remove_attachment(&draft.ctx, id).await?;
+            instance.remove_attachment(&ctx, id).await?;
             Ok(())
         })
         .await
@@ -238,10 +250,16 @@ impl AttachmentList {
             )));
         };
 
+        let Some(ctx) = draft.ctx.upgrade() else {
+            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
+                UnexpectedError::Internal,
+            )));
+        };
+
         uniffi_async::<(), RealProtonMailError, _>(async move {
             let instance = draft.instance.read().await;
             instance
-                .retry_attachment_upload(&draft.ctx, attachment_id.into())
+                .retry_attachment_upload(&ctx, attachment_id.into())
                 .await?;
             Ok(())
         })
@@ -264,8 +282,14 @@ impl AttachmentList {
             )));
         };
 
+        let Some(ctx) = draft.ctx.upgrade() else {
+            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
+                UnexpectedError::Internal,
+            )));
+        };
+
         uniffi_async::<_, RealProtonMailError, _>(async move {
-            let tether = draft.ctx.user_stash().connection();
+            let tether = ctx.user_stash().connection();
             let instance = draft.instance.read().await;
             let attachments = instance.attachments(&tether).await?;
             Ok(attachments.into_iter().map(DraftAttachment::from).collect())
@@ -284,15 +308,20 @@ impl AttachmentList {
                 UnexpectedError::Draft,
             )));
         };
+        let Some(ctx) = draft.ctx.upgrade() else {
+            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
+                UnexpectedError::Internal,
+            )));
+        };
         uniffi_async::<_, RealProtonMailError, _>(async move {
             let instance = draft.instance.read().await;
             let metadata_id = instance.metadata_id.clone();
             drop(instance);
-            let stash = draft.ctx.user_stash().clone();
+            let stash = ctx.user_stash().clone();
             let mut observer = DraftAttachmentObserver::new(metadata_id, stash)
                 .await
                 .map_err(RealProtonMailError::from)?;
-            let handle = draft.ctx.spawn(async move {
+            let handle = ctx.spawn(async move {
                 loop {
                     match observer.next().await {
                         Ok(()) => {
