@@ -10,18 +10,22 @@
 
 use super::datatypes::{AllBottomBarMessageActions, Message, ReadFilter, SearchScroller};
 use super::datatypes::{LabelAsAction, MessageAvailableActions, MimeType, MoveAction};
+use super::state::MailUserContextPtr;
 use super::{MailUserSession, Mailbox};
 use crate::PaginatorSearchOptions;
 use crate::core::datatypes::{Id, RemoteId};
-use crate::errors::{ActionError, EmbeddedAttachmentInfoResult, ProtonError, VoidActionResult};
+use crate::errors::{
+    ActionError, BodyOutputResult, EmbeddedAttachmentInfoResult, ProtonError, VoidActionResult,
+};
 use crate::mail::datatypes::MessageScroller;
 use crate::mail::datatypes::MessageSearchOptions;
-use crate::{LiveQueryCallback, WatchHandle, async_runtime, uniffi_async, watch_channel};
+use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
 use itertools::Itertools as _;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
 use proton_mail_common::MailUserContext;
+use proton_mail_common::errors::unexpected::Unexpected;
 
 use proton_mail_common::datatypes::LocalConversationId;
 use proton_mail_common::decrypted_message::{
@@ -39,14 +43,34 @@ use tokio::sync::Mutex;
 
 #[derive(uniffi::Object)]
 pub struct DecryptedMessage {
-    pub(crate) ctx: Arc<MailUserContext>,
+    pub(crate) ctx: MailUserContextPtr,
     pub(crate) body: DecryptedMessageBody,
+}
+
+impl DecryptedMessage {
+    /// Get a strong reference to the inner user context.
+    pub(crate) fn ctx(&self) -> Result<Arc<MailUserContext>, RealProtonMailError> {
+        self.ctx
+            .upgrade()
+            .ok_or(RealProtonMailError::Unexpected(Unexpected::Internal))
+    }
 }
 
 #[uniffi_export]
 impl DecryptedMessage {
-    pub async fn body_with_defaults(self: Arc<Self>) -> BodyOutput {
-        self.body(TransformOpts::default()).await
+    #[returns(BodyOutputResult)]
+    pub async fn body_with_defaults(self: Arc<Self>) -> Result<BodyOutput, ProtonError> {
+        uniffi_async(async move {
+            let tether = self.ctx()?.user_stash().connection();
+            Ok::<_, RealProtonMailError>(
+                self.body
+                    .transformed(TransformOpts::default(), &tether)
+                    .await,
+            )
+        })
+        .await
+        .map_err(ProtonError::from)
+        .into()
     }
 
     /// Gets the message body as an HTML. This does all of the transformations that are
@@ -61,15 +85,15 @@ impl DecryptedMessage {
     /// Returns an error if the network request, the database query, reading/writing
     /// the body to the cache, or decrypting the body fails,
     /// or if the message doesn't exist.
-    #[allow(clippy::missing_panics_doc)]
-    pub async fn body(self: Arc<Self>, opts: TransformOpts) -> BodyOutput {
-        async_runtime()
-            .spawn(async move {
-                let tether = self.ctx.user_stash().connection();
-                self.body.transformed(opts, &tether).await
-            })
-            .await
-            .expect("Transformed is infailable.")
+    #[returns(BodyOutputResult)]
+    pub async fn body(self: Arc<Self>, opts: TransformOpts) -> Result<BodyOutput, ProtonError> {
+        uniffi_async(async move {
+            let tether = self.ctx()?.user_stash().connection();
+            Ok::<_, RealProtonMailError>(self.body.transformed(opts, &tether).await)
+        })
+        .await
+        .map_err(ProtonError::from)
+        .into()
     }
 
     #[must_use]
@@ -114,9 +138,10 @@ impl DecryptedMessage {
         cid: String,
     ) -> Result<EmbeddedAttachmentInfo, ProtonError> {
         uniffi_async(async move {
+            let ctx = self.ctx()?;
             let att = self
                 .body
-                .get_embedded_attachment(&self.ctx, &cid)
+                .get_embedded_attachment(&ctx, &cid)
                 .await
                 .map_err(RealProtonMailError::from)?;
             Ok::<_, RealProtonMailError>(EmbeddedAttachmentInfo {
@@ -581,9 +606,12 @@ pub async fn get_message_body(
     mbox: &Mailbox,
     id: Id,
 ) -> Result<Arc<DecryptedMessage>, ActionError> {
-    let ctx = mbox.ctx()?;
+    let ctx = mbox.ctx_ptr();
+    // We upgrade context to strong reference **temporairly**. The return type of this function is a weak pointer
+    // to avoid memory leak
+    let strong_ctx = mbox.ctx()?;
     uniffi_async(async move {
-        let body = models::Message::message_body(&ctx, id.into()).await?;
+        let body = models::Message::message_body(&strong_ctx, id.into()).await?;
         Ok::<_, RealProtonMailError>(Arc::new(DecryptedMessage { ctx, body }))
     })
     .await
