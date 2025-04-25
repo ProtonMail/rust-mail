@@ -175,6 +175,11 @@ impl AttachmentList {
                 UnexpectedError::Draft,
             )));
         };
+        let Some(ctx) = draft.ctx.upgrade() else {
+            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
+                UnexpectedError::Internal,
+            )));
+        };
 
         uniffi_async::<String, RealProtonMailError, _>(async move {
             let path = PathBuf::from(path);
@@ -183,10 +188,10 @@ impl AttachmentList {
                 let instance = draft.instance.read().await;
                 instance.address_id.clone()
             };
-            let mut tether = draft.ctx.user_stash().connection();
+            let mut tether = ctx.user_stash().connection();
 
             let result = RealAttachment::create_local(
-                &draft.ctx,
+                &ctx,
                 address_id,
                 Disposition::Inline,
                 &path,
@@ -197,7 +202,7 @@ impl AttachmentList {
 
             let instance = draft.instance.read().await;
             instance
-                .delete_attachment_if_in_staging_area(&draft.ctx, &path)
+                .delete_attachment_if_in_staging_area(&ctx, &path)
                 .await;
             let attachment = result?;
             let content_id = attachment
@@ -206,7 +211,7 @@ impl AttachmentList {
                 .ok_or(MailContextError::Other(anyhow!(
                     "Somehow missing attachment content id"
                 )))?;
-            instance.add_attachment(&draft.ctx, attachment).await?;
+            instance.add_attachment(&ctx, attachment).await?;
             Ok(content_id)
         })
         .await
