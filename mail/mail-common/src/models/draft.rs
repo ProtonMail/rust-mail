@@ -4,6 +4,7 @@ mod draft_metadata;
 
 use crate::MailContextError;
 use crate::datatypes::LocalMessageId;
+use crate::datatypes::attachment::ContentId;
 use crate::draft::{AttachmentError, Error, PackageError, ReplyMode, SaveOrSendError};
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
@@ -954,7 +955,26 @@ impl DraftAttachmentMetadata {
             params![metadata_id],
             tether,
         )
-        .await
+            .await
+    }
+
+    /// Find the metadata for an attachment with a given `content_id`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query fails.
+    pub async fn find_with_content_id(
+        metadata_id: MetadataId,
+        content_id: ContentId,
+        tether: &Tether,
+    ) -> Result<Option<Self>, StashError> {
+        Self::find_first(formatdoc! {"
+            JOIN attachments ON attachments.local_id = {}.local_attachment_id AND attachments.content_id =?
+            WHERE {}.metadata_id = ?
+        ", Self::table_name(), Self::table_name()},
+                         params![content_id,metadata_id],
+                         tether,
+        ).await
     }
 
     /// Reset the tracked attachment state after a draft has been synced from the server.
@@ -991,8 +1011,8 @@ impl DraftAttachmentMetadata {
             formatdoc! {"DELETE FROM {} WHERE metadata_id = ? AND state NOT IN (?,?)", Self::table_name()},
             params![metadata_id, DraftAttachmentUploadState::Error, DraftAttachmentUploadState::Offline],
         )
-        .await
-        .inspect_err(|e| error!("Failed to delete existing draft metadata records: {e:?}"))?;
+            .await
+            .inspect_err(|e| error!("Failed to delete existing draft metadata records: {e:?}"))?;
         for mut state in new_state {
             state
                 .save(bond)
@@ -1008,7 +1028,7 @@ impl DraftAttachmentMetadata {
         metadata_id: MetadataId,
         tether: &Tether,
     ) -> Result<usize, StashError> {
-        tether.query_value::<_,usize>(formatdoc! {"SELECT IFNULL(MAX(display_order),0) AS value FROM {} WHERE metadata_id = ?", Self::table_name()}, params![metadata_id]).await
+        tether.query_value::<_, usize>(formatdoc! {"SELECT IFNULL(MAX(display_order),0) AS value FROM {} WHERE metadata_id = ?", Self::table_name()}, params![metadata_id]).await
     }
 
     /// Get the attachments id of attachments for a draft with `metadata_id` which

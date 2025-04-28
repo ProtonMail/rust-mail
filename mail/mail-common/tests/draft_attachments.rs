@@ -15,13 +15,14 @@ use proton_core_common::models::ModelExtension;
 use proton_crypto_inbox::attachment::{
     BinaryAttachmentEncryptedSignature, BinaryAttachmentSignature, KeyPackets,
 };
-use proton_mail_common::MailUserContext;
+use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::{Disposition, MimeType};
 use proton_mail_common::draft::attachments::DraftAttachmentState;
 use proton_mail_common::draft::{Draft, DraftSyncStatus, ReplyMode};
 use proton_mail_common::models::{
     Attachment, DraftAttachmentMetadata, DraftAttachmentUploadState, Message,
 };
+use proton_mail_common::{MailContextError, MailUserContext, draft};
 use proton_mail_test_utils::message_body::{
     TEST_USER_ID, message_body_test_message_mime, message_body_test_user_secret,
 };
@@ -89,6 +90,7 @@ async fn attachment_not_removed_on_error() {
     let local_attachment = create_and_add_attachment(
         &user_ctx,
         attachment_file.path(),
+        Disposition::Attachment,
         &mut draft,
         None,
         &mut tether,
@@ -150,6 +152,7 @@ async fn remove_attachment_updates_attachment_list() {
     let attachment = create_and_add_attachment(
         &user_ctx,
         attachment_file.path(),
+        Disposition::Attachment,
         &mut draft,
         None,
         &mut tether,
@@ -158,6 +161,84 @@ async fn remove_attachment_updates_attachment_list() {
 
     let action_id = draft
         .remove_attachment(&user_ctx, attachment.local_id.unwrap())
+        .await
+        .unwrap();
+
+    let draft_attachments = draft.attachments(&tether).await.unwrap();
+    assert_eq!(draft_attachments.len(), 0);
+
+    // cancelling the action  should undo the change.
+    user_ctx.action_queue().cancel(action_id).await.unwrap();
+
+    let draft_attachments = draft.attachments(&tether).await.unwrap();
+    assert_eq!(draft_attachments.len(), 1);
+}
+
+#[tokio::test]
+async fn remove_attachment_by_cid() {
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+
+    // Create draft.
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    draft
+        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
+
+    // Create attachment
+    let attachment_file = tempfile::NamedTempFile::new().unwrap();
+    let mut tether = user_ctx.user_stash().connection();
+    let attachment = create_and_add_attachment(
+        &user_ctx,
+        attachment_file.path(),
+        Disposition::Inline,
+        &mut draft,
+        None,
+        &mut tether,
+    )
+    .await;
+
+    let mut attachment2 = create_attachment(
+        &user_ctx,
+        attachment_file.path(),
+        Disposition::Inline,
+        &mut draft,
+        None,
+        &mut tether,
+    )
+    .await;
+
+    // Make the content id the same to check if our query is working correctly.
+    attachment2.content_id = attachment.content_id.clone();
+    tether
+        .tx(async |tx| attachment2.save(tx).await)
+        .await
+        .unwrap();
+
+    // Removing with unknown cid is an error
+    let err = draft
+        .remove_attachment_with_cid(&user_ctx, ContentId::new())
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        MailContextError::Draft(draft::Error::Attachment(
+            draft::AttachmentError::AttachmentMetadataNotFoundCid(_)
+        ))
+    ));
+
+    let action_id = draft
+        .remove_attachment_with_cid(&user_ctx, attachment.content_id.unwrap())
         .await
         .unwrap();
 
@@ -226,6 +307,7 @@ async fn removing_non_uploaded_attachment() {
     let local_attachment = create_and_add_attachment(
         &user_ctx,
         attachment_file.path(),
+        Disposition::Attachment,
         &mut draft,
         None,
         &mut tether,
@@ -324,6 +406,7 @@ async fn removing_uploaded_attachment() {
     let local_attachment = create_and_add_attachment(
         &user_ctx,
         attachment_file.path(),
+        Disposition::Attachment,
         &mut draft,
         None,
         &mut tether,
@@ -647,22 +730,13 @@ async fn override_attachment_name() {
 async fn create_and_add_attachment(
     ctx: &MailUserContext,
     path: &Path,
+    disposition: Disposition,
     draft: &mut Draft,
     file_name_override: Option<String>,
     tether: &mut Tether,
 ) -> Attachment {
-    tokio::fs::write(path, "Hello World").await.unwrap();
-
-    let local_attachment = Attachment::create_local(
-        ctx,
-        draft.address_id.clone(),
-        Disposition::Attachment,
-        path,
-        file_name_override,
-        tether,
-    )
-    .await
-    .unwrap();
+    let local_attachment =
+        create_attachment(ctx, path, disposition, draft, file_name_override, tether).await;
 
     draft
         .add_attachment(ctx, local_attachment.clone())
@@ -670,6 +744,28 @@ async fn create_and_add_attachment(
         .unwrap();
 
     local_attachment
+}
+
+async fn create_attachment(
+    ctx: &MailUserContext,
+    path: &Path,
+    disposition: Disposition,
+    draft: &mut Draft,
+    file_name_override: Option<String>,
+    tether: &mut Tether,
+) -> Attachment {
+    tokio::fs::write(path, "Hello World").await.unwrap();
+
+    Attachment::create_local(
+        ctx,
+        draft.address_id.clone(),
+        disposition,
+        path,
+        file_name_override,
+        tether,
+    )
+    .await
+    .unwrap()
 }
 
 fn new_attachment_params(file_path: &Path, message_id: MessageId) -> NewAttachmentParams {

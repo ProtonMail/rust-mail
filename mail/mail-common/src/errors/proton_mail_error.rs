@@ -377,7 +377,8 @@ impl From<AttachmentError> for ProtonMailError {
                     DraftAttachmentErrorReason::MessageAlreadySent,
                 ))
             }
-            AttachmentError::AttachmentMetadataNotFound(_) => {
+            AttachmentError::AttachmentMetadataNotFound(_)
+            | AttachmentError::AttachmentMetadataNotFoundCid(_) => {
                 Self::Unexpected(Unexpected::Internal)
             }
             AttachmentError::AttachmentTooLarge => {
