@@ -137,6 +137,8 @@ pub enum AttachmentError {
     MetadataNotFound(MetadataId),
     #[error("Attachment Metadata for Attachment {0} does not exist")]
     AttachmentMetadataNotFound(LocalAttachmentId),
+    #[error("Attachment Metadata for Attachment with content_id {0} does not exist")]
+    AttachmentMetadataNotFoundCid(ContentId),
     #[error("Draft has no message")]
     MessageDoesNotExist,
     #[error("Attachment's can't be uploaded because message {0} does not exist on server")]
@@ -1159,7 +1161,42 @@ impl Draft {
         &self,
         attachment_id: LocalAttachmentId,
     ) -> DraftAttachmentRemovalQueuer {
-        DraftAttachmentRemovalQueuer::new(self.metadata_id, attachment_id)
+        DraftAttachmentRemovalQueuer::new(
+            self.metadata_id,
+            AttachmentRemovalId::Local(attachment_id),
+        )
+    }
+
+    /// Remove the attachment with `content_id` from  this draft.
+    ///
+    /// Use [`Attachment::create_local`] to create a new attachment first.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query or queuing the action failed.
+    pub async fn remove_attachment_with_cid(
+        &self,
+        ctx: &MailUserContext,
+        content_id: ContentId,
+    ) -> Result<ActionId, MailContextError> {
+        let remove_action = self.to_remove_attachment_action_with_cid(content_id);
+
+        let queue = ctx.action_queue();
+        let tether = ctx.user_stash().connection();
+        let result = remove_action.queue(queue, &tether).await?;
+
+        Ok(result.id)
+    }
+
+    /// Remove the attachment with `content_id` from  this draft.
+    ///
+    /// Similar to [`remove_attachment_with_cid`] but return an action queuer instead.
+    ///
+    pub fn to_remove_attachment_action_with_cid(
+        &self,
+        content_id: ContentId,
+    ) -> DraftAttachmentRemovalQueuer {
+        DraftAttachmentRemovalQueuer::new(self.metadata_id, AttachmentRemovalId::Cid(content_id))
     }
 
     /// Retry the upload of a failed attachment.
@@ -1475,14 +1512,19 @@ impl DraftAttachmentUploadQueuer {
     }
 }
 
+enum AttachmentRemovalId {
+    Local(LocalAttachmentId),
+    Cid(ContentId),
+}
+
 /// Utility type to wrap the queueing of attachment removal.
 pub struct DraftAttachmentRemovalQueuer {
     id: MetadataId,
-    attachment_id: LocalAttachmentId,
+    attachment_id: AttachmentRemovalId,
 }
 
 impl DraftAttachmentRemovalQueuer {
-    fn new(id: MetadataId, attachment_id: LocalAttachmentId) -> Self {
+    fn new(id: MetadataId, attachment_id: AttachmentRemovalId) -> Self {
         Self { id, attachment_id }
     }
 
@@ -1494,10 +1536,26 @@ impl DraftAttachmentRemovalQueuer {
         tether: &Tether,
     ) -> Result<QueuedActionOutput<AttachmentRemove>, MailContextError> {
         // Find existing attachment metadata.
-        let Some(attachment_metadata) =
-            DraftAttachmentMetadata::find_by_id(self.attachment_id, tether).await?
-        else {
-            return Err(AttachmentError::AttachmentMetadataNotFound(self.attachment_id).into());
+        let attachment_metadata = match self.attachment_id {
+            AttachmentRemovalId::Local(id) => {
+                if let Some(attachment_metadata) =
+                    DraftAttachmentMetadata::find_by_id(id, tether).await?
+                {
+                    attachment_metadata
+                } else {
+                    return Err(AttachmentError::AttachmentMetadataNotFound(id).into());
+                }
+            }
+            AttachmentRemovalId::Cid(id) => {
+                if let Some(attachment_metadata) =
+                    DraftAttachmentMetadata::find_with_content_id(self.id, id.clone(), tether)
+                        .await?
+                {
+                    attachment_metadata
+                } else {
+                    return Err(AttachmentError::AttachmentMetadataNotFoundCid(id).into());
+                }
+            }
         };
 
         let mut metadata = MetadataBuilder::new()
@@ -1518,7 +1576,7 @@ impl DraftAttachmentRemovalQueuer {
 
         Ok(queue
             .queue_action_with_metadata(
-                AttachmentRemove::new(self.id, self.attachment_id),
+                AttachmentRemove::new(self.id, attachment_metadata.local_attachment_id),
                 metadata.build(),
             )
             .await?)

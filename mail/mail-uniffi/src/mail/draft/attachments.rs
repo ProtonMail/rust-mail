@@ -7,6 +7,7 @@ use crate::mail::draft::Draft;
 use crate::{AsyncLiveQueryCallback, uniffi_async};
 use anyhow::anyhow;
 use proton_mail_common::MailContextError;
+use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::{Disposition, LocalAttachmentId};
 use proton_mail_common::draft::attachments::{
     DraftAttachment as RealDraftAttachment, DraftAttachmentState as RealDraftAttachmentState,
@@ -236,6 +237,30 @@ impl AttachmentList {
         uniffi_async::<(), RealProtonMailError, _>(async move {
             let instance = draft.instance.read().await;
             instance.remove_attachment(&ctx, id).await?;
+            Ok(())
+        })
+        .await
+        .map_err(DraftAttachmentError::from)
+    }
+
+    /// Remove an attachment from this draft by `content-id`.
+    pub async fn remove_with_cid(&self, content_id: String) -> Result<(), DraftAttachmentError> {
+        let id = ContentId::from(content_id);
+        let Some(draft) = self.draft.upgrade() else {
+            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
+                UnexpectedError::Draft,
+            )));
+        };
+
+        let Some(ctx) = draft.ctx.upgrade() else {
+            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
+                UnexpectedError::Internal,
+            )));
+        };
+
+        uniffi_async::<(), RealProtonMailError, _>(async move {
+            let instance = draft.instance.read().await;
+            instance.remove_attachment_with_cid(&ctx, id).await?;
             Ok(())
         })
         .await
