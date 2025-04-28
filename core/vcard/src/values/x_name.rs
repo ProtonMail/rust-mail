@@ -7,7 +7,7 @@ use crate::parameters::value::ValueType;
 
 /// Representation for the x-name values from vCard RFC6350
 #[derive(Clone, Eq, Hash, PartialEq)]
-pub struct XName(pub(crate) String);
+pub struct XName(pub String);
 
 impl Debug for XName {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

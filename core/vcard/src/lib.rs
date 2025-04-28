@@ -91,7 +91,6 @@ use crate::parameters::label::is_label_param;
 use crate::parameters::language::is_language_param;
 use crate::parameters::mediatype::is_mediatype_param;
 
-pub mod address_keys;
 mod errors;
 pub mod parameters;
 pub mod properties;

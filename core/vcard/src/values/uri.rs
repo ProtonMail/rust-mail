@@ -7,7 +7,7 @@ use crate::parameters::value::ValueType;
 
 /// A Uri as defined in (RFC3986)
 #[derive(Clone, PartialEq)]
-pub struct Uri(pub(crate) Url);
+pub struct Uri(pub Url);
 
 impl Uri {
     /// Create a new Uri from a URL
