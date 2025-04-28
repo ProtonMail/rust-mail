@@ -7,45 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Changed
-
-- Action-queue: simplify the online-check
-- [ET-2678] Optional filename overwrite for new attachments
-
 ### Features
 
-- [ET-2698] Registered device background task
-- [ET-2698] Registering devices tests
-- [ET-2698] Make the register_device_task a method of the mailsession
-- [ET-2698] More logs
-- [ET-2698] Make register_device_task synchronous
-- [ET-2698] Make sure that registration task can handle network errors
-- [ET-559] Signup network requests
-- Attchmenlist::add_inline
-- [ET-2719] Delete all folder banner, uniffi + tui
 - Et-2713: expose observability features via uniffi
-- Support /payments/resources/icons
-- Googlerecurring paymentreceipt (post_payments_tokens).
 - Et-2713: guarantee a single observability background job even when multiple sessions are created
 - Send tracing logs both to file and to ios os-logger
 - [ET-2375] Quick actions for push notifications
+- [ET-2731] Remove attachments from draft with content-id
 
 ### Fixes
 
-- Core: fix status watcher's shared state
-- [ET-2601] Improve initialization by waiting when failure of dependency happen
-- Correct background task execution
-- Only allow one session per user
-- Leaking tracing spans in async code
 - Ensure changelog generation doesn't filter out certain commits
 - Improved delete all messages in label
 - Cleanly close git repo when done
-- Return cached data from mail scroller immediately
 - Spam and trash folders correctly get assigned in the banner
 - Google paymentreceipt type.
 - Decrease memory footprint of the app by compiling the vcard regexes on demand.
 - Remove timeout on transactions
 - [ET-2754] Fix add_inline in draft (after merging release 0.72.x to master)
+- [ET-2778] Correctly store content-id for inline attachments
+- 'seen' should consider both commit and tag
 
 
 ## [mail-uniffi-v0.72.13] - 2025-04-25
@@ -58,11 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Do not sync mailbox, fix of b8a6329bb0fe62a7cc3acc8676ea6553d3f2eeca
 
 
-## [mail-uniffi-v0.72.8] - 2025-04-16
+## [mail-uniffi-v0.72.7] - 2025-04-16
 
 ### Fixes
 
-- Don't hang if transaction never ends
+- Return cached data from mail scroller immediately
 
 
 ## [mail-uniffi-v0.72.12] - 2025-04-24
@@ -74,26 +55,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-2765] Make minor adjustments
 
 
-## [mail-uniffi-v0.72.7] - 2025-04-16
-
-### Fixes
-
-- Disable async logger for ios
-- Wake taskservice awaiters on resume
-- Return cached data from mail scroller immediately
-
-
-## [mail-uniffi-v0.72.11] - 2025-04-23
-
-### Fixes
-
-- [ET-2698] Handle a case where authentication scope is not enough
-
-
 ## [mail-uniffi-v0.73.0] - 2025-04-17
 
+### Changed
+
+- [ET-2678] Optional filename overwrite for new attachments
+
+### Features
+
+- Attchmenlist::add_inline
+- [ET-2719] Delete all folder banner, uniffi + tui
+- Support /payments/resources/icons
+- Googlerecurring paymentreceipt (post_payments_tokens).
+
 ### Fixes
 
+- Only allow one session per user
+- Leaking tracing spans in async code
+- Return cached data from mail scroller immediately
+- Don't hang if transaction never ends
 - Don't send rollback again
 
 
@@ -102,14 +82,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - Restore manual event loop polling with `force_event_loop_poll`
-
-
-## [mail-uniffi-v0.72.10] - 2025-04-23
-
-### Fixes
-
-- Remove event debug print
-- One transaction per event
 
 
 ## [mail-uniffi-v0.72.5] - 2025-04-14
@@ -125,6 +97,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - [ET-2326] Sanatize the conent-id in the mime-buidler
+- Disable async logger for ios
+- Wake taskservice awaiters on resume
+
+
+## [mail-uniffi-v0.72.11] - 2025-04-23
+
+### Fixes
+
+- [ET-2698] Handle a case where authentication scope is not enough
 
 
 ## [mail-uniffi-v0.72.4] - 2025-04-14
@@ -132,6 +113,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - Leaking tracing spans in async code
+
+
+## [mail-uniffi-v0.72.10] - 2025-04-23
+
+### Fixes
+
+- Remove event debug print
+- One transaction per event
+
+
+## [mail-uniffi-v0.72.3] - 2025-04-11
+
+### Fixes
+
+- Ignore duplicate context errors in background tasks
 
 
 ## [mail-uniffi-v0.72.9] - 2025-04-17
@@ -146,11 +142,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Network requests in send preferences tx
 
 
-## [mail-uniffi-v0.72.3] - 2025-04-11
+## [mail-uniffi-v0.72.1] - 2025-04-10
 
 ### Fixes
 
-- Ignore duplicate context errors in background tasks
+- Correct background task execution
 
 
 ## [mail-uniffi-v0.70.10] - 2025-04-09
@@ -158,6 +154,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - [ET-2699] Blocked banner now properly gets updated on the event loop and block_address now takes a string instead of an id
+
+
+## [mail-uniffi-v0.72.0] - 2025-04-10
+
+### Changed
+
+- Action-queue: simplify the online-check
+
+### Features
+
+- [ET-2698] Registered device background task
+- [ET-2698] Registering devices tests
+- [ET-2698] Make the register_device_task a method of the mailsession
+- [ET-2698] More logs
+- [ET-2698] Make register_device_task synchronous
+- [ET-2698] Make sure that registration task can handle network errors
+- [ET-559] Signup network requests
+
+### Fixes
+
+- Core: fix status watcher's shared state
+- [ET-2601] Improve initialization by waiting when failure of dependency happen
 
 
 ## [mail-uniffi-v0.70.9] - 2025-04-09
@@ -192,16 +210,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-- [ET-2552] Use combine contacts appsetting for `contact_suggestions`
-- Mark as phising implementation
 - [ET-2592] Terminating action queue auto executor
 - Add banners to the tui client
 - [ET-2592] Background execution terminates when queue is empty
 - Support local api server
-
-### Fixes
-
-- [ET-2613] Fill `username` field in bug report request
 
 
 ## [mail-uniffi-v0.70.5] - 2025-04-07
@@ -233,10 +245,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
+- [ET-2552] Use combine contacts appsetting for `contact_suggestions`
+- Mark as phising implementation
 - [ET-2640] Add `mailsession::remaining_pin_attempts` method
 
 ### Fixes
 
+- [ET-2613] Fill `username` field in bug report request
 - [ET-2614] Correctly format bug report description to include all provided fields
 - [ET-2592] Replace r2d2 with basic replacement
 - Missing pinned and blocked system label migration
