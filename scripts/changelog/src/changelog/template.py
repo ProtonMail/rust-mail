@@ -62,7 +62,7 @@ def build_context(cmts: Commits) -> Context:
         if (release := build_release(tag, commits)) and release.sections:
             releases.append(release)
 
-    return Context(releases)
+    return Context(sorted(releases, key=lambda r: r.date or date.max, reverse=True))
 
 
 def build_release(tag: Tag | None, commits: list[Commit]) -> Release:
