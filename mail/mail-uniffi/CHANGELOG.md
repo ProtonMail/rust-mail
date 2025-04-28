@@ -7,26 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- [ET-2328] Do not report errors on already sent
+
 ### Features
 
-- Et-2713: expose observability features via uniffi
-- Et-2713: guarantee a single observability background job even when multiple sessions are created
 - Send tracing logs both to file and to ios os-logger
 - [ET-2375] Quick actions for push notifications
 - [ET-2731] Remove attachments from draft with content-id
 
 ### Fixes
 
-- Ensure changelog generation doesn't filter out certain commits
-- Improved delete all messages in label
-- Cleanly close git repo when done
-- Spam and trash folders correctly get assigned in the banner
-- Google paymentreceipt type.
-- Decrease memory footprint of the app by compiling the vcard regexes on demand.
-- Remove timeout on transactions
 - [ET-2754] Fix add_inline in draft (after merging release 0.72.x to master)
 - [ET-2778] Correctly store content-id for inline attachments
 - 'seen' should consider both commit and tag
+
+
+## [mail-uniffi-v0.74.0] - 2025-04-24
+
+### Features
+
+- Et-2713: expose observability features via uniffi
+- Et-2713: guarantee a single observability background job even when multiple sessions are created
+
+### Fixes
+
+- Improved delete all messages in label
+- Spam and trash folders correctly get assigned in the banner
+- Decrease memory footprint of the app by compiling the vcard regexes on demand.
+- Ensure changelog generation doesn't filter out certain commits
+- Cleanly close git repo when done
+- Google paymentreceipt type.
+- Remove timeout on transactions
 
 
 ## [mail-uniffi-v0.72.13] - 2025-04-25
@@ -39,13 +52,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Do not sync mailbox, fix of b8a6329bb0fe62a7cc3acc8676ea6553d3f2eeca
 
 
-## [mail-uniffi-v0.72.7] - 2025-04-16
-
-### Fixes
-
-- Return cached data from mail scroller immediately
-
-
 ## [mail-uniffi-v0.72.12] - 2025-04-24
 
 ### Fixes
@@ -53,6 +59,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-2765] Cleanup background tasks when session is revoked
 - [ET-2765] Make sure we remove contexts from session map
 - [ET-2765] Make minor adjustments
+
+
+## [mail-uniffi-v0.72.7] - 2025-04-16
+
+### Fixes
+
+- Return cached data from mail scroller immediately
 
 
 ## [mail-uniffi-v0.73.0] - 2025-04-17
@@ -77,11 +90,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Don't send rollback again
 
 
+## [mail-uniffi-v0.72.11] - 2025-04-23
+
+### Fixes
+
+- [ET-2698] Handle a case where authentication scope is not enough
+
+
 ## [mail-uniffi-v0.72.6] - 2025-04-14
 
 ### Fixes
 
 - Restore manual event loop polling with `force_event_loop_poll`
+
+
+## [mail-uniffi-v0.72.10] - 2025-04-23
+
+### Fixes
+
+- Remove event debug print
+- One transaction per event
 
 
 ## [mail-uniffi-v0.72.5] - 2025-04-14
@@ -101,33 +129,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Wake taskservice awaiters on resume
 
 
-## [mail-uniffi-v0.72.11] - 2025-04-23
-
-### Fixes
-
-- [ET-2698] Handle a case where authentication scope is not enough
-
-
 ## [mail-uniffi-v0.72.4] - 2025-04-14
 
 ### Fixes
 
 - Leaking tracing spans in async code
-
-
-## [mail-uniffi-v0.72.10] - 2025-04-23
-
-### Fixes
-
-- Remove event debug print
-- One transaction per event
-
-
-## [mail-uniffi-v0.72.3] - 2025-04-11
-
-### Fixes
-
-- Ignore duplicate context errors in background tasks
 
 
 ## [mail-uniffi-v0.72.9] - 2025-04-17
@@ -140,6 +146,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Restore stash debug filter for ios logs
 - Network requests in send preferences tx
+
+
+## [mail-uniffi-v0.72.3] - 2025-04-11
+
+### Fixes
+
+- Ignore duplicate context errors in background tasks
 
 
 ## [mail-uniffi-v0.72.1] - 2025-04-10
