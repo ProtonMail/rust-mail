@@ -2,12 +2,12 @@ use crate::actions::draft::{
     SEND_ACTION_GROUP, local_all_draft_label_id, local_draft_label_id, local_outbox_label_id,
     local_sent_label_id,
 };
-use crate::datatypes::{LocalMessageId, MessageFlags, MimeType};
+use crate::datatypes::{LocalMessageId, MessageFlags, MimeType, RollbackItemType};
 use crate::draft::send::{build_packages, load_send_preferences_for_recipients};
 use crate::draft::{Draft, ReplyMode, SaveOrSendError, draft_attachment_staging_path};
 use crate::models::{
     Conversation, DraftAttachmentMetadata, DraftMetadata, DraftSendFailure, DraftSendResult,
-    DraftSendResultOrigin, MailSettings, Message, MetadataId,
+    DraftSendResultOrigin, MailSettings, Message, MetadataId, RollbackItem,
 };
 use crate::{AppError, MailContextError, MailUserContext};
 use proton_action_queue::action::{
@@ -25,7 +25,7 @@ use stash::orm::Model;
 use stash::stash::Bond;
 use std::collections::HashSet;
 use std::time::Duration;
-use tracing::error;
+use tracing::{debug, error};
 
 #[derive(Serialize, Deserialize)]
 pub struct Send {
@@ -305,96 +305,123 @@ impl Send {
 
         let auto_save_contacts = Some(mail_settings.auto_save_contacts);
 
-        let response = match context
+        let delivery_time = match context
             .api()
             .send_mail(
-                remote_message_id,
+                remote_message_id.clone(),
                 packages,
                 auto_save_contacts,
                 Some(Duration::from_secs(mail_settings.delay_send_seconds as u64)),
             )
             .await
         {
-            Ok(response) => response,
-            Err(err) => {
-                error!("Failed to send send email request: {err:?}");
-
-                if let Some(proton_error) = err.to_proton_error() {
-                    if proton_error.code == Mail::MessageAlreadySent as u32 {
-                        return Err(SaveOrSendError::AlreadySent.into());
-                    }
-                }
-
-                return Err(err.into());
-            }
-        };
-
-        // Update conversation
-        let metadata = guard
-            .tx::<_, _, <Self as Action>::Error>(async |tx| {
-                let mut conversation: Conversation = response.conversation.into();
-                conversation.save(tx).await.inspect_err(|err| {
-                    error!("Failed to update conversation after send: {err:?}")
-                })?;
-
-                // Update message and body metadata
-                let (mut metadata, mut body_metadata, _) =
-                    Message::from_api_data(response.sent, tx)
-                        .await
-                        .inspect_err(|e| {
-                            error!("Failed to convert message from API response: {e:?}");
+            Ok(response) => {
+                // Update conversation
+                guard
+                    .tx::<_, _, <Self as Action>::Error>(async |tx| {
+                        let mut conversation: Conversation = response.conversation.into();
+                        conversation.save(tx).await.inspect_err(|err| {
+                            error!("Failed to update conversation after send: {err:?}")
                         })?;
 
-                metadata.save(tx).await.inspect_err(|e| {
-                    error!("Failed to update message metadata after send: {e:?}");
-                })?;
+                        // Update message and body metadata
+                        let (mut metadata, mut body_metadata, _) =
+                            Message::from_api_data(response.sent, tx)
+                                .await
+                                .inspect_err(|e| {
+                                    error!("Failed to convert message from API response: {e:?}");
+                                })?;
 
-                body_metadata.save(tx).await.inspect_err(|e| {
-                    error!("Failed to update message body metadata after send: {e:?}");
-                })?;
+                        metadata.save(tx).await.inspect_err(|e| {
+                            error!("Failed to update message metadata after send: {e:?}");
+                        })?;
 
-                // Update parent message's send flag. Only do this here since
-                // one message can be replied to/forwarded many times and undoing this
-                // can produce incorrect results.
-                if let (Some(parent_id), Some(reply_mode)) =
-                    (draft_metadata.local_parent_id, draft_metadata.reply_mode)
-                {
-                    if let Some(mut parent_message) =
-                        Message::find_by_id(parent_id, tx).await.inspect_err(|e| {
-                            error!("Failed to load parent message {parent_id:?}: {e:?}")
-                        })?
-                    {
-                        match reply_mode {
-                            ReplyMode::Sender => parent_message.is_replied = true,
-                            ReplyMode::All => {
-                                parent_message.is_replied_all = true;
-                            }
-                            ReplyMode::Forward => {
-                                parent_message.is_forwarded = true;
-                            }
-                        }
-                    } else {
-                        error!(
+                        body_metadata.save(tx).await.inspect_err(|e| {
+                            error!("Failed to update message body metadata after send: {e:?}");
+                        })?;
+
+                        // Update parent message's send flag. Only do this here since
+                        // one message can be replied to/forwarded many times and undoing this
+                        // can produce incorrect results.
+                        if let (Some(parent_id), Some(reply_mode)) =
+                            (draft_metadata.local_parent_id, draft_metadata.reply_mode)
+                        {
+                            if let Some(mut parent_message) =
+                                Message::find_by_id(parent_id, tx).await.inspect_err(|e| {
+                                    error!("Failed to load parent message {parent_id:?}: {e:?}")
+                                })?
+                            {
+                                match reply_mode {
+                                    ReplyMode::Sender => parent_message.is_replied = true,
+                                    ReplyMode::All => {
+                                        parent_message.is_replied_all = true;
+                                    }
+                                    ReplyMode::Forward => {
+                                        parent_message.is_forwarded = true;
+                                    }
+                                }
+                            } else {
+                                error!(
                             "Could not find parent message {parent_id:?}, perhaps it was deleted?"
                         );
-                    };
+                            };
+                        }
+
+                        // Move message to sent folder
+                        Message::remove_label(local_outbox_label_id, [local_message_id], tx)
+                            .await
+                            .inspect_err(|e| error!("Failed to remove outbox label: {e:?}"))?;
+                        Message::apply_label(local_sent_label_id, [local_message_id], tx)
+                            .await
+                            .inspect_err(|e| error!("Failed to apply sent label: {e:?}"))?;
+
+                        // Delete draft metadata
+                        DraftMetadata::delete(action.metadata_id, tx)
+                            .await
+                            .inspect_err(|e| error!("Failed to delete draft metadata after send: {e:?}"))?;
+                        Ok(())
+                    })
+                    .await?;
+                response.delivery_time
+            }
+            Err(err) => {
+                let Some(proton_error) = err.to_proton_error() else {
+                    error!("Failed to send send email request: {err:?}");
+                    return Err(err.into());
+                };
+                if proton_error.code == Mail::MessageAlreadySent as u32 {
+                    debug!("Message already sent.");
+                    // When the message is already sent, we just need to delete the
+                    // metadata. The event loop will take care of the rest.
+                    guard
+                        .tx::<_, _, <Self as Action>::Error>(async |tx| {
+                            DraftMetadata::delete(action.metadata_id, tx)
+                                .await
+                                .inspect_err(|e| {
+                                    error!("Failed to delete draft metadata after send: {e:?}")
+                                })?;
+
+                            // Register rollback item just in case the event loop already ran
+                            // and the event was missed.
+                            RollbackItem::new(
+                                remote_message_id.clone().into_inner(),
+                                RollbackItemType::Message,
+                            )
+                            .save(tx)
+                            .await
+                            .inspect_err(|e| error!("Failed to register rollback item: {e:?}"))?;
+                            Ok(())
+                        })
+                        .await?;
+                    // We have no delivery time here, so we just return 0 to "cancel"
+                    // all the checks that depend on this time in the future.
+                    0
+                } else {
+                    error!("Failed to send send email request: {err:?}");
+                    return Err(err.into());
                 }
-
-                // Move message to sent folder
-                Message::remove_label(local_outbox_label_id, [local_message_id], tx)
-                    .await
-                    .inspect_err(|e| error!("Failed to remove outbox label: {e:?}"))?;
-                Message::apply_label(local_sent_label_id, [local_message_id], tx)
-                    .await
-                    .inspect_err(|e| error!("Failed to apply sent label: {e:?}"))?;
-
-                // Delete draft metadata
-                DraftMetadata::delete(action.metadata_id, tx)
-                    .await
-                    .inspect_err(|e| error!("Failed to delete draft metadata after send: {e:?}"))?;
-                Ok(metadata)
-            })
-            .await?;
+            }
+        };
 
         // try to delete staging path.
         let staging_path = draft_attachment_staging_path(context, action.metadata_id);
@@ -405,10 +432,7 @@ impl Send {
             }
         }
 
-        Ok((
-            metadata.remote_id.expect("This is valid"),
-            response.delivery_time,
-        ))
+        Ok((remote_message_id, delivery_time))
     }
 }
 
