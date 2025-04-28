@@ -1,6 +1,6 @@
 use chrono::Utc;
 use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
-use proton_api_core::consts::CoreBundle;
+use proton_api_core::consts::{CoreBundle, Mail};
 use proton_api_core::services::proton::GetKeysAllResponse;
 use proton_api_core::services::proton::common::ApiErrorInfo;
 use proton_api_core::services::proton::{
@@ -23,6 +23,7 @@ use proton_crypto_inbox::proton_crypto_account::keys::{
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::draft::Draft;
 use proton_mail_common::draft::compose::DEFAULT_SUBJECT;
+use proton_mail_common::draft::observers::DraftSendResultWatcher;
 use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry};
 use proton_mail_common::models::{
     DraftSendFailure, DraftSendResult, DraftSendResultOrigin, MailSettings, Message,
@@ -36,6 +37,7 @@ use proton_mail_test_utils::messages::TestDraftSendRequest;
 use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
 use std::sync::Arc;
+use std::time::Duration;
 
 #[tokio::test]
 async fn basic_send_check() {
@@ -386,6 +388,95 @@ async fn save_after_send_is_an_error() {
             draft::SaveOrSendError::AlreadySent
         ))
     ));
+}
+
+#[tokio::test]
+async fn already_sent_error_does_not_produce_error() {
+    // Check :
+    // * Draft is saved before sent
+    // * Send API endpoint is updated
+    // * Draft is moved to sent folder
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.to_list.push(MessageRecipient {
+        address: "foo@bar.com".to_string(),
+        is_proton: false,
+        name: "".to_string(),
+        group: None,
+    });
+
+    let expected_draft_params = expected_create_draft_params();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_create_draft(
+        expected_draft_params.clone(),
+        None,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+    ctx.mock_send_draft_failure(
+        message.metadata.id.clone(),
+        ApiErrorInfo {
+            code: Mail::MessageAlreadySent as u32,
+            error: None,
+            details: None,
+        },
+    )
+    .await;
+    ctx.core_test_context()
+        .mock_get_keys_all(
+            "foo@bar.com",
+            GetKeysAllResponse {
+                address_keys: Default::default(),
+                catch_all_keys: None,
+                is_proton: false,
+                proton_mx: false,
+                unverified_keys: None,
+                warnings: vec![],
+            },
+        )
+        .await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+
+    // Create draft.
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    draft
+        .to_list
+        .add_single(RecipientEntry {
+            email: "foo@bar.com".into(),
+            display_name: MaybeEmptyString(None),
+        })
+        .unwrap();
+    draft
+        .send(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
+
+    let mut observer = DraftSendResultWatcher::new(user_ctx.user_stash().clone())
+        .await
+        .unwrap();
+
+    // Execute action.
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    let result = tokio::time::timeout(Duration::from_secs(1), observer.next())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(result.len(), 1);
+    assert!(result[0].is_success());
+    // We have no send delivery time so we can't undo this.
+    assert!(!result[0].is_send_undoable());
 }
 
 async fn send_fails_if_recipient_is_not_valid_impl(

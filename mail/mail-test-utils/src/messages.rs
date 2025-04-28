@@ -480,6 +480,25 @@ impl MailTestContext {
             .await;
     }
 
+    /// Generate a new mock for draft send failures.
+    ///
+    /// # Parameters
+    ///
+    /// * `message_id` - Message to send
+    /// * `error`      - Api Error
+    ///
+    #[allow(clippy::doc_markdown)]
+    #[function_name::named]
+    pub async fn mock_send_draft_failure(&self, message_id: MessageId, error: ApiErrorInfo) {
+        Mock::given(method("POST"))
+            .and(path(format!("/api/mail/v4/messages/{message_id}")))
+            .respond_with(ResponseTemplate::new(422).set_body_json(error))
+            .expect(1)
+            .named(function_name!())
+            .mount(self.mock_server())
+            .await;
+    }
+
     /// Generate a new mock expectation for updating a draft.
     ///
     /// Note that this mock does not valid the draft body.
