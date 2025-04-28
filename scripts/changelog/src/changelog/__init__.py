@@ -8,46 +8,42 @@ import click
 from git import Commit, Repo, Tag
 
 from changelog.template import render
-from changelog.types import Commits
+from changelog.types import Commits, Tags
 
 
 @click.command()
 @click.option("--path", type=str)
 @click.option("--head", type=str)
-@click.option("--after", type=str)
-def main(path: str | None, head: str | None, after: str | None) -> None:
+@click.option("--init", type=str)
+def main(path: str | None, head: str | None, init: str | None) -> None:
     with open_repo(path) as repo:
         tags = collect_tags(repo)
+        head_rev = repo.commit(head)
+        over_rev = repo.iter_commits(f"{init or ''}..{head_rev}")
 
-        head_ref = repo.commit(head)
-        over_ref = set(repo.iter_commits(f"{after}..{head_ref}")) if after else None
-
-        commits = collect_commits(tags, head_ref, over_ref)
+        commits = collect_commits(tags, head_rev, set(over_rev))
         deduped = dedupe_commits(commits)
-
         print(render(deduped))
 
 
-def collect_tags(repo: Repo) -> dict[Commit, Tag]:
+def collect_tags(repo: Repo) -> Tags:
     return {t.commit: t for t in repo.tags}
 
 
-def collect_commits(tags: dict[Commit, Tag], head: Commit, over: set[Commit] | None) -> Commits:
+def collect_commits(tags: Tags, head: Commit, over: set[Commit]) -> Commits:
     cmts, jobs, seen = OrderedDict(), OrderedDict({head: tags.get(head)}), set()
 
     def pop_job() -> tuple[Commit, Tag | None] | None:
         return jobs.popitem(False) if jobs else None
 
     for c, t in iter(pop_job, None):
-        if c in seen:
+        if (c, t) in seen:
             continue
 
-        if over is not None and c not in over:
-            continue
-
-        cmts.setdefault(t, []).append(c)
-        jobs.update({p: tags.get(p) or t for p in c.parents})
-        seen.add(c)
+        if not over or c in over:
+            cmts.setdefault(t, []).append(c)
+            jobs.update({p: tags.get(p) or t for p in c.parents})
+            seen.add((c, t))
 
     return cmts
 
