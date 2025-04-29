@@ -222,7 +222,7 @@ async fn test_search_mail_scroller_notificate_about_changes() {
         handle: _handle,
         receiver,
         ..
-    } = scroller.watch().unwrap();
+    } = scroller.watch().await.unwrap();
     // Setting scroller up will never push notification
     assert!(receiver.is_empty());
 

@@ -556,7 +556,7 @@ pub async fn scroll_conversations_for_label(
         let mut scroller =
             MailScroller::conversations(context.as_weak(), label_id.into(), filter.into(), 50)
                 .await?;
-        let handle = scroller.watch()?;
+        let handle = scroller.watch().await?;
 
         Result::<_, RealProtonMailError>::Ok(Arc::new(ConversationScroller {
             scroller: Mutex::new(scroller),
