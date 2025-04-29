@@ -12,7 +12,6 @@ use crate::prefetch::{Prefetch, PrefetchNotify};
 use crate::user_context::initialization::InitializationMediator;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
-use proton_action_queue::action::ActionId;
 use proton_action_queue::queue::{Queue, QueueAutoExecutor, QueueAutoExecutorPool};
 use proton_api_core::auth::UserKeySecret;
 use proton_api_core::connection_status::ConnectionStatus;
@@ -55,7 +54,7 @@ pub struct MailUserContext {
     send_queue_executors: QueueAutoExecutorPool,
     prefetch: PrefetchNotify,
     /// Last id of the event loop action.
-    last_event_loop_action_id: Mutex<Option<ActionId>>,
+    last_event_loop_action_ids: Mutex<events::EventLoopActionIds>,
     initialization_mediator: InitializationMediator,
     pub is_cleanup_cache_running: Arc<AtomicBool>,
 }
@@ -97,7 +96,7 @@ impl MailUserContext {
             prefetch: OnceLock::new(),
             default_queue_executor,
             send_queue_executors,
-            last_event_loop_action_id: Mutex::new(None),
+            last_event_loop_action_ids: Mutex::new(Default::default()),
             initialization_mediator,
             is_cleanup_cache_running: Default::default(),
         });

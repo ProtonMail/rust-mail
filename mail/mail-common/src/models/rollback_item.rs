@@ -1,139 +1,25 @@
+use crate::MailContextError;
+use crate::datatypes::RollbackItemType;
+use crate::models::{Conversation, Message};
+use futures::stream::{FuturesUnordered, StreamExt};
+use proton_api_core::service::ApiServiceError;
+use proton_api_core::services::proton::ProtonCore;
+use proton_api_core::services::proton::{LabelId, ProtonIdMarker};
+use proton_api_core::session::{CoreSession, Session};
+use proton_api_mail::services::proton::ProtonMail;
+use proton_api_mail::services::proton::common::{ConversationId, MessageId};
+use proton_api_mail::services::proton::prelude::MessageMetadata;
+use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
+use proton_core_common::models::Label;
+use stash::macros::Model;
+use stash::orm::Model;
+use stash::params;
+use stash::stash::{Bond, RunTransaction, StashError, Tether};
+use tracing::{debug, error};
+
 #[cfg(test)]
 #[path = "../tests/models/rollback_item.rs"]
 mod tests;
-
-use crate::AppError;
-use crate::datatypes::RollbackItemType;
-use crate::models::{Conversation, Message, MessageBodyMetadata};
-use futures::stream::{self, StreamExt, TryStreamExt};
-use itertools::Itertools;
-use proton_api_core::services::proton::LabelId;
-use proton_api_core::services::proton::ProtonCore;
-use proton_api_mail::services::proton::ProtonMail;
-use proton_api_mail::services::proton::common::{ConversationId, MessageId};
-use proton_api_mail::services::proton::requests::GetConversationsOptions;
-use proton_api_mail::services::proton::responses::{GetConversationsResponse, GetMessageResponse};
-use proton_core_common::models::Label;
-use stash::orm::Model;
-use stash::params;
-use stash::stash::{Bond, StashError, Tether};
-use stash::{macros::Model, stash::Stash};
-use tokio::sync::Mutex;
-use tracing::{debug, error};
-
-/// The number of concurrent requests to make when syncing rollback items.
-///
-/// Value was chosen arbitrarily. Could be put up to discussion.
-const CONCURRENT_REQUEST_LIMIT: usize = 5;
-
-/// Macro for generating synchronization code for any kind of rollback item.
-/// Macro was chosen over a generic function because the type system would require
-/// boundings that would make implementation of those boundings more time consuming than
-/// its worth.
-///
-/// ## Parameters
-///
-/// * `$item` - The type of the item to sync. This is a token which allows the macro to put proper typing.
-/// * `$class` - Implementation of the type which contains `save`.
-/// * `$stash` - The local database instance to use for syncing.
-/// * `$batch` - The number of items to sync in a single batch.
-/// * `$api_request` - The API request to make to get the items. It is expected to be a clousure
-///   that takes a `RemoteId` and returns a Future of API response.
-/// * `$from_api_to_local` - The function to convert the API response to local items. It is expected to be a closure
-///   that takes the API response and returns a Future of IntoIterator over models.
-///
-/// ## Errors
-///
-/// As sync_all method. This is only a helper macro to reduce code duplication.
-///
-macro_rules! sync_any {
-    ($item:tt, $class:tt, $tether:expr, $stash: expr, $batch:expr => $api_request:expr => $from_api_to_local: expr) => {{
-        let tether = $tether;
-        let items = Self::find_by_kind(RollbackItemType::$item, tether).await?;
-        let batch = $batch.into().unwrap_or(items.len() + 1);
-        let chunked_remote_ids = items.into_iter().map(|item| item.remote_id).chunks(batch);
-
-        stream::iter(&chunked_remote_ids)
-            .then(|remote_ids| async {
-                let items: Mutex<Vec<$class>> = Mutex::new(Vec::new());
-
-                stream::iter(remote_ids)
-                    .map(|remote_id| {
-                        debug!(
-                            "Syncing {} with remote ID {:?}",
-                            stringify!($item),
-                            remote_id
-                        );
-                        remote_id
-                    })
-                    .then($api_request)
-                    .map_err(AppError::from)
-                    .try_for_each_concurrent(CONCURRENT_REQUEST_LIMIT, |api_items| async {
-                        let api_items = $from_api_to_local(api_items).await?;
-                        items.lock().await.extend(api_items);
-
-                        Ok(())
-                    })
-                    .await?;
-
-                Ok(items.into_inner())
-            })
-            .try_for_each(move |mut items| {
-                let mut tether = $stash.connection();
-                {
-                    async move {
-                        tether
-                            .tx(async |tx| {
-                                for item in items.iter_mut() {
-                                    let result = $class::save(item, &tx).await;
-
-                                    if let Err(err) = result {
-                                        error!(
-                                            "Failed to save {} with remote ID {:?}: {:?}",
-                                            stringify!($item),
-                                            item.remote_id,
-                                            err
-                                        );
-
-                                        return Err(err.into());
-                                    }
-
-                                    let result = Self::delete_by_rid_and_kind(
-                                        item.remote_id.clone().map(|v| v.into_inner()),
-                                        RollbackItemType::$item,
-                                        &tx,
-                                    )
-                                    .await;
-
-                                    if let Err(err) = result {
-                                        error!(
-                                            "Failed to delete {} with remote ID {:?}: {:?}",
-                                            stringify!($item),
-                                            item.remote_id,
-                                            err
-                                        );
-
-                                        return Err(err.into());
-                                    }
-
-                                    debug!(
-                                        "Synced {} with remote ID {:?}",
-                                        stringify!($item),
-                                        item.remote_id
-                                    );
-                                }
-
-                                Result::<_, AppError>::Ok(())
-                            })
-                            .await
-                    }
-                }
-            })
-            .await?;
-
-        Ok(())
-    }};
-}
 
 /// A record of an action that was rolled back.
 ///
@@ -197,9 +83,9 @@ impl RollbackItem {
     /// to have a way to recover from malfunctions.
     ///
     /// ## Parameters
-    /// * `api` - The API client to use for syncing.
-    /// * `stash` - The local database instance to use for syncing.
-    /// * `batch` - The number of items to sync in a single batch.
+    /// * `session`   - The API client to use for syncing.
+    /// * `tx_runner` - Transaction runner implementor.
+    /// * `batch`     - The number of items to sync in a single batch.
     ///
     /// ## Errors
     ///
@@ -209,15 +95,17 @@ impl RollbackItem {
     /// been synced, so double syncing should never happen.
     ///
     ///
-    pub async fn sync_all<I, API>(api: &API, stash: &Stash, batch: I) -> Result<(), AppError>
+    pub async fn sync_all<I>(
+        session: &Session,
+        tx_runner: &mut impl RunTransaction,
+        batch: I,
+    ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>> + Copy,
-        API: ProtonMail + ProtonCore,
     {
-        let tether = stash.connection();
-        Self::sync_labels(api, &tether, stash.clone(), batch).await?;
-        Self::sync_messages(api, &tether, stash.clone(), batch).await?;
-        Self::sync_conversations(api, &tether, stash.clone(), batch).await?;
+        Self::sync_labels(session, tx_runner, batch).await?;
+        Self::sync_messages(session, tx_runner, batch).await?;
+        Self::sync_conversations(session, tx_runner, batch).await?;
 
         Ok(())
     }
@@ -228,23 +116,16 @@ impl RollbackItem {
     ///
     /// Look at the documentation of the `sync_all` method.
     ///
-    pub async fn sync_labels<I, API>(
-        api: &API,
-        tether: &Tether,
-        stash: Stash,
+    #[tracing::instrument(level = "debug", skip_all)]
+    pub async fn sync_labels<I>(
+        session: &Session,
+        tx_runner: &mut impl RunTransaction,
         batch: I,
-    ) -> Result<(), AppError>
+    ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>>,
-        API: ProtonCore,
     {
-        use proton_api_core::services::proton::GetLabelsResponse;
-
-        sync_any!(Label, Label, tether, stash, batch => |remote_id| async {
-            api.get_labels_by_ids(vec![LabelId::from(remote_id)]).await
-        } => |api_labels: GetLabelsResponse| async {
-            Result::<_, AppError>::Ok(api_labels.labels.into_iter().map_into())
-        })
+        Self::sync_items_impl::<LabelRollbackHandler, _>(session, tx_runner, batch.into()).await
     }
 
     /// Synchronize all messages with remote counterparts.
@@ -253,23 +134,16 @@ impl RollbackItem {
     ///
     /// Look at the documentation of the `sync_all` method.
     ///
-    pub async fn sync_messages<I, PM>(
-        api: &PM,
-        tether: &Tether,
-        stash: Stash,
+    #[tracing::instrument(level = "debug", skip_all)]
+    pub async fn sync_messages<I>(
+        session: &Session,
+        tx_runner: &mut impl RunTransaction,
         batch: I,
-    ) -> Result<(), AppError>
+    ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>>,
-        PM: ProtonMail,
     {
-        sync_any!(Message, MessageAndBodyMetadata, tether, stash, batch => |remote_id| async {
-            api.get_message(MessageId::from(remote_id)).await
-        } => |api_message: GetMessageResponse| async {
-            let remote_id = api_message.message.metadata.id.clone();
-            let (metadata, body_metadata, _) = Message::from_api_data(api_message.message, tether).await?;
-            Result::<_, AppError>::Ok(Some(MessageAndBodyMetadata{message_metadata: metadata,body_metadata,remote_id:Some(remote_id)}))
-        })
+        Self::sync_items_impl::<MessageRollbackHandler, _>(session, tx_runner, batch.into()).await
     }
 
     /// Synchronize all conversations with remote counterparts.
@@ -278,24 +152,17 @@ impl RollbackItem {
     ///
     /// Look at the documentation of the `sync_all` method.
     ///
-    pub async fn sync_conversations<I, PM>(
-        api: &PM,
-        tether: &Tether,
-        stash: Stash,
+    #[tracing::instrument(level = "debug", skip_all)]
+    pub async fn sync_conversations<I>(
+        session: &Session,
+        tx_runner: &mut impl RunTransaction,
         batch: I,
-    ) -> Result<(), AppError>
+    ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>>,
-        PM: ProtonMail,
     {
-        sync_any!(Conversation, Conversation, tether, stash, batch => |remote_id| async {
-            api.get_conversations(GetConversationsOptions {
-                ids: Some(vec![ConversationId::from(remote_id)]),
-                ..Default::default()
-            }).await
-        } => |api_conversations: GetConversationsResponse| async {
-            Result::<_, AppError>::Ok(api_conversations.conversations.into_iter().map_into())
-        })
+        Self::sync_items_impl::<ConversationRollbackHandler, _>(session, tx_runner, batch.into())
+            .await
     }
 
     /// This helper method is used to find all rollback items of a specific kind.
@@ -309,11 +176,38 @@ impl RollbackItem {
     ///
     /// This method will return an error if the database operation fails.
     ///
+    #[cfg(test)]
     async fn find_by_kind(
         kind: RollbackItemType,
         tether: &Tether,
     ) -> Result<Vec<RollbackItem>, StashError> {
         RollbackItem::find("WHERE item_type = ?", params![kind], tether).await
+    }
+
+    /// This helper method is used to find all rollback items of a specific kind.
+    ///
+    /// ## Parameters
+    ///
+    /// * `kind` - The kind of the rollback item to find.
+    /// * `interface` - The interface to use for the database operations.
+    ///
+    /// ## Errors
+    ///
+    /// This method will return an error if the database operation fails.
+    ///
+    async fn find_remote_ids_by_kind(
+        kind: RollbackItemType,
+        tether: &Tether,
+    ) -> Result<Vec<String>, StashError> {
+        tether
+            .query_values::<_, String>(
+                format!(
+                    "SELECT remote_id AS value FROM {} WHERE item_type = ?",
+                    Self::table_name()
+                ),
+                params![kind],
+            )
+            .await
     }
 
     /// This helper method is used to delete rollback item of a specific kind & remote_id.
@@ -344,19 +238,182 @@ impl RollbackItem {
 
         Ok(())
     }
+
+    async fn sync_items_impl<H: RollbackHandler, T: RunTransaction>(
+        session: &Session,
+        tx_runner: &mut T,
+        batch: Option<usize>,
+    ) -> Result<(), MailContextError> {
+        let items: Vec<H::RemoteId> =
+            Self::find_remote_ids_by_kind(H::item_type(), tx_runner.tether())
+                .await?
+                .into_iter()
+                .map(H::RemoteId::from)
+                .collect();
+        if items.is_empty() {
+            // Nothing to sync.
+            return Ok(());
+        }
+        debug!("Found {} items to sync", items.len());
+        let batch = batch.unwrap_or(items.len() + 1);
+
+        // Can't use itertools chunks as it is not send compatible.
+        let batches = items
+            .chunks(batch)
+            .map(async |ids| Ok((ids, H::fetch_items(session, ids).await?)));
+
+        let mut tasks = FuturesUnordered::from_iter(batches);
+
+        while let Some(result) = tasks.next().await {
+            let (ids, items) = result.inspect_err(|e: &ApiServiceError| {
+                error!("Failed to fetch batch ({:?}): {e:?}", H::item_type());
+            })?;
+            tx_runner
+                .run_tx(async |tx| {
+                    H::store_items(items, tx).await.inspect_err(|e| {
+                        error!("Failed to store items ({:?}): {e:?}", H::item_type());
+                    })?;
+
+                    for id in ids {
+                        Self::delete_by_rid_and_kind(Some((*id).to_string()), H::item_type(), tx)
+                            .await
+                            .inspect_err(|e| {
+                                error!(
+                                    "Failed to delete rollback item {id}({:?}): {e:?}",
+                                    H::item_type()
+                                );
+                            })?;
+                    }
+                    Ok(())
+                })
+                .await
+                .map_err(MailContextError::Other)?;
+        }
+        debug!("Sync finished");
+        Ok(())
+    }
 }
 
-// Wrapper type so both the body and metadata are synced.
-struct MessageAndBodyMetadata {
-    message_metadata: Message,
-    body_metadata: MessageBodyMetadata,
-    remote_id: Option<MessageId>,
+/// Defines behaviors for use with `RollbackItem::sync_items_impl`.
+trait RollbackHandler: 'static + Send + Sync {
+    type Item: 'static;
+    type RemoteId: ProtonIdMarker + From<String> + std::fmt::Display;
+
+    /// Return the respective [`RollbackItemType`] for this handler.
+    fn item_type() -> RollbackItemType;
+
+    /// Fetch the items with `remote_ids` from the server.
+    ///
+    /// # Errors
+    ///
+    /// Return error if the fetching failed.
+    fn fetch_items(
+        session: &Session,
+        remote_ids: &[Self::RemoteId],
+    ) -> impl Future<Output = Result<Vec<Self::Item>, ApiServiceError>> + Send;
+
+    /// Convert and store the `items` in the local database.
+    ///
+    /// # Errors
+    ///
+    /// Return error if the conversion or the storing of the items failed.
+    fn store_items(
+        items: Vec<Self::Item>,
+        tx: &Bond<'_>,
+    ) -> impl Future<Output = Result<(), MailContextError>>;
 }
 
-impl MessageAndBodyMetadata {
-    async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        self.message_metadata.save(bond).await?;
-        self.body_metadata.save(bond).await?;
+struct MessageRollbackHandler {}
+
+impl RollbackHandler for MessageRollbackHandler {
+    type Item = MessageMetadata;
+    type RemoteId = MessageId;
+    fn item_type() -> RollbackItemType {
+        RollbackItemType::Message
+    }
+
+    async fn fetch_items(
+        session: &Session,
+        remote_ids: &[Self::RemoteId],
+    ) -> Result<Vec<Self::Item>, ApiServiceError> {
+        let options = GetMessagesOptions {
+            page: 0,
+            page_size: remote_ids.len() as u64,
+            ids: Some(remote_ids.to_vec()),
+            ..Default::default()
+        };
+        Ok(session.api().get_messages(options).await?.messages)
+    }
+
+    async fn store_items(items: Vec<Self::Item>, tx: &Bond<'_>) -> Result<(), MailContextError> {
+        for item in items {
+            let mut message = Message::from_api_metadata(item, tx).await?;
+            message.save(tx).await?;
+        }
+        Ok(())
+    }
+}
+
+struct ConversationRollbackHandler {}
+
+impl RollbackHandler for ConversationRollbackHandler {
+    type Item = proton_api_mail::services::proton::response_data::Conversation;
+    type RemoteId = ConversationId;
+    fn item_type() -> RollbackItemType {
+        RollbackItemType::Conversation
+    }
+
+    async fn fetch_items(
+        session: &Session,
+        remote_ids: &[Self::RemoteId],
+    ) -> Result<Vec<Self::Item>, ApiServiceError> {
+        let options = GetConversationsOptions {
+            page: 0,
+            page_size: remote_ids.len() as u64,
+            ids: Some(remote_ids.to_vec()),
+            ..Default::default()
+        };
+        Ok(session
+            .api()
+            .get_conversations(options)
+            .await?
+            .conversations)
+    }
+
+    async fn store_items(items: Vec<Self::Item>, tx: &Bond<'_>) -> Result<(), MailContextError> {
+        for item in items {
+            let mut message = Conversation::from(item);
+            message.save(tx).await?;
+        }
+        Ok(())
+    }
+}
+
+struct LabelRollbackHandler {}
+
+impl RollbackHandler for LabelRollbackHandler {
+    type Item = proton_api_core::services::proton::Label;
+    type RemoteId = LabelId;
+    fn item_type() -> RollbackItemType {
+        RollbackItemType::Label
+    }
+
+    async fn fetch_items(
+        session: &Session,
+        remote_ids: &[Self::RemoteId],
+    ) -> Result<Vec<Self::Item>, ApiServiceError> {
+        Ok(session
+            .api()
+            .get_labels_by_ids(remote_ids.to_vec())
+            .await?
+            .labels)
+    }
+
+    async fn store_items(items: Vec<Self::Item>, tx: &Bond<'_>) -> Result<(), MailContextError> {
+        for item in items {
+            let mut label = Label::from(item);
+            label.save(tx).await?;
+        }
         Ok(())
     }
 }

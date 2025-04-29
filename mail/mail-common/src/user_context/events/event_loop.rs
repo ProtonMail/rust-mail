@@ -1,9 +1,11 @@
+use crate::actions::rollback::RollbackAction;
 use crate::context::EventPollMode;
 use crate::events::MailEvent;
 use crate::user_context::events::subscriber::MailEventSubscriber;
 use crate::{MailContextError, MailUserContext};
 use anyhow::anyhow;
 use async_trait::async_trait;
+use proton_action_queue::action::ActionId;
 use proton_action_queue::queue::ActionError;
 use proton_api_core::service::ApiServiceError;
 use proton_api_core::services::proton::EventId;
@@ -88,6 +90,12 @@ impl Provider<MailEvent> for MailUserContext {
     }
 }
 
+#[derive(Debug, Default)]
+pub(crate) struct EventLoopActionIds {
+    last_event_loop_action_id: Option<ActionId>,
+    last_rollback_action_id: Option<ActionId>,
+}
+
 impl MailUserContext {
     /// Setup a background task that queues the event loop action.
     pub(crate) async fn init_event_loop_poll(
@@ -128,7 +136,11 @@ impl MailUserContext {
                     };
 
                     if let Err(e) = ctx.queue_poll_event_loop().await {
-                        error!("Failed to queue poll event loop poll:{e:?}");
+                        error!("Failed to queue poll event loop poll: {e:?}");
+                    }
+
+                    if let Err(e) = ctx.queue_item_rollback().await {
+                        error!("Failed to queue item rollback action: {e:?}")
                     }
                 }
             }
@@ -171,19 +183,38 @@ impl MailUserContext {
     async fn queue_poll_event_loop(
         &self,
     ) -> Result<(), ActionError<crate::actions::event_poll::EventPoll>> {
-        let mut last_action_id = self.last_event_loop_action_id.lock().await;
+        let mut last_action_ids = self.last_event_loop_action_ids.lock().await;
         let event_poll_action = crate::actions::event_poll::EventPoll {};
-        let output = if let Some(last_action_id) = *last_action_id {
-            self.action_queue()
-                .replace_or_queue_action(last_action_id, event_poll_action)
-                .await?
-        } else {
-            self.action_queue().queue_action(event_poll_action).await?
-        };
-        *last_action_id = Some(output.id);
+        {
+            let output = if let Some(last_action_id) = last_action_ids.last_event_loop_action_id {
+                self.action_queue()
+                    .replace_or_queue_action(last_action_id, event_poll_action)
+                    .await?
+            } else {
+                self.action_queue().queue_action(event_poll_action).await?
+            };
+            last_action_ids.last_event_loop_action_id = Some(output.id);
+        }
         Ok(())
     }
 
+    async fn queue_item_rollback(&self) -> Result<(), ActionError<RollbackAction>> {
+        let mut last_action_ids = self.last_event_loop_action_ids.lock().await;
+        {
+            let item_rollback_action = RollbackAction {};
+            let output = if let Some(last_action_id) = last_action_ids.last_rollback_action_id {
+                self.action_queue()
+                    .replace_or_queue_action(last_action_id, item_rollback_action)
+                    .await?
+            } else {
+                self.action_queue()
+                    .queue_action(item_rollback_action)
+                    .await?
+            };
+            last_action_ids.last_event_loop_action_id = Some(output.id);
+        }
+        Ok(())
+    }
     /// Perform one iteration of the event loop, which consists of retrieving the latest events,
     /// publishing it on all the registered subscribers and storing the event id for the next
     /// iteration.

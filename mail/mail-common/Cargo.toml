@@ -23,7 +23,7 @@ lazy_static = { workspace = true }
 mime = { workspace = true }
 parking_lot = { workspace = true }
 proton-action-queue = { workspace = true }
-proton-api-core = { workspace = true }
+proton-api-core = { workspace = true, features = ["sql"] }
 proton-api-mail = { workspace = true, features = ["sql"] }
 proton-core-common = { workspace = true }
 proton-crypto-account = { workspace = true }
