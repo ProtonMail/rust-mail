@@ -7,14 +7,10 @@
 //! functionality.
 //!
 
-use cfg_if::cfg_if;
 use derive_more::Display;
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use std::fmt::Debug;
-use std::hash::Hash;
-use std::ops::Deref;
 use std::time::Duration;
 
 use crate::service::ApiServiceError;
@@ -136,30 +132,4 @@ impl From<&StatusErr> for ApiServiceError {
             (code, e) => Self::OtherHttpError(code, e, err!(body)),
         }
     }
-}
-
-cfg_if! {
-    if #[cfg(feature = "sql")] {
-        /// If the `sql` feature is enabled this marker will contain extra trait boundaries.
-        pub trait ProtonIdSqlMarker: ::stash::exports::ToSql + ::stash::exports::FromSql {}
-    } else {
-        /// If the `sql` feature is enabled this marker will contain extra trait boundaries.
-        pub trait ProtonIdSqlMarker {}
-    }
-}
-
-/// Marker trait assigned to each id that was declared with [`declare_proton_id`].
-pub trait ProtonIdMarker:
-    Deref<Target = str>
-    + Clone
-    + Debug
-    + DeserializeOwned
-    + Eq
-    + Hash
-    + PartialEq
-    + ProtonIdSqlMarker
-    + Serialize
-    + Sync
-    + Send
-{
 }
