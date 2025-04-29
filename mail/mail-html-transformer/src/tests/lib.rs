@@ -10,7 +10,7 @@ fn pathologic_nested() {
     t.disable_content(true, true);
     t.inject_ios_content_size();
     _ = t.strip_whitelist();
-    t.inject_style();
+    t.inject_style(Stylesheet::LightMode);
     _ = t.strip_blockquote();
     let tok = t.add_noreferrer();
     t.insert_links(tok);

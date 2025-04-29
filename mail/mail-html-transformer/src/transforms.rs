@@ -17,7 +17,15 @@ fn node_ref_from_str(html: &str, tag: &str) -> NodeRef {
     kuchikiki::parse_fragment(qual_name, vec![]).one(html)
 }
 
-/// This function adds dark mode support. This fails if the html doesn't have a head tag.
+/// Determines which stylesheet hardcoded into the binary should be injected into HTML body of the message
+///
+pub enum Stylesheet {
+    LightMode,
+    DarkMode,
+}
+
+/// This function adds support for custom stylesheets. This fails if the html doesn't have a head tag.
+/// Or if the stylesheet is not in utf-8 format.
 ///
 /// This function will inject the following HTML snippet into the `head` tag
 /// of the document:
@@ -27,10 +35,13 @@ fn node_ref_from_str(html: &str, tag: &str) -> NodeRef {
 /// </style>
 /// ```
 #[allow(clippy::missing_panics_doc)]
-pub fn inject_style(document: NodeRef) {
+pub fn inject_style(document: NodeRef, style: Stylesheet) {
     let element = document.select_first("head").unwrap(); // kuckikiki always adds it
 
-    let style_text = include_str!("default.css");
+    let style_text = match style {
+        Stylesheet::LightMode => include_str!("light.css"),
+        Stylesheet::DarkMode => include_str!("dark.css"),
+    };
     let qual_name = QualName::new(None, html5ever::ns!(html), LocalName::from("style"));
 
     #[allow(clippy::default_trait_access)]
@@ -48,7 +59,6 @@ pub fn inject_style(document: NodeRef) {
         .insert("style", "text/css".to_owned());
 
     let style_node = NodeRef::new(NodeData::Element(element_data));
-
     let text_node = NodeRef::new(NodeData::Text(RefCell::new(style_text.to_owned())));
 
     style_node.append(text_node);

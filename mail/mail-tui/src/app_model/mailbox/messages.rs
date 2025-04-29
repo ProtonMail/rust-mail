@@ -18,6 +18,7 @@ use itertools::Itertools as _;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::os::safe_write;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
+use proton_mail_common::datatypes::theme::MailTheme;
 use proton_mail_common::datatypes::{
     ContextualConversation, LocalConversationId, LocalMessageId, MessageRecipientDisplayMode,
     ReadFilter, SearchOptions,
@@ -701,7 +702,10 @@ impl DecryptedMessage {
         tether: &Tether,
     ) -> anyhow::Result<Self> {
         let body_output = decrypted_body
-            .transformed(TransformOpts::default(), tether)
+            .transformed(
+                TransformOpts::default_with_theme(MailTheme::LightMode),
+                tether,
+            )
             .await;
 
         if let Some(cmd_name) = CLI_ARGS.browser.as_deref() {

@@ -69,7 +69,7 @@ pub fn parse(c: &mut Criterion) {
         c.bench_function("inject style", |b| {
             b.iter(|| {
                 let tr = tr.clone();
-                transforms::inject_style(tr.document());
+                transforms::inject_style(tr.document(), transforms::Stylesheet::LightMode);
             })
         });
 
@@ -117,7 +117,7 @@ pub fn all_transforms(c: &mut Criterion) {
                 t.disable_content(true, true);
                 t.inject_ios_content_size();
                 _ = t.strip_whitelist();
-                t.inject_style();
+                t.inject_style(transforms::Stylesheet::LightMode);
                 _ = t.strip_blockquote();
                 let tok = t.add_noreferrer();
                 t.insert_links(tok);

@@ -3,6 +3,7 @@
 //! Everything related to processing a decrypted message.
 use crate::datatypes::attachment::ContentId;
 use crate::datatypes::message_banner::MessageBanner;
+use crate::datatypes::theme::MailTheme;
 use crate::datatypes::{AttachmentMetadata, Disposition, LocalAttachmentId, MimeType};
 use crate::models::{
     AttachmentType, EmbeddedAttachmentInfo, MailSettings, Message, MessageBodyMetadata,
@@ -10,9 +11,9 @@ use crate::models::{
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use parking_lot::Mutex;
 use proton_mail_html_transformer::Transformer;
+use proton_mail_html_transformer::transforms::Stylesheet;
 use proton_task_service::AsyncTaskResult;
 use serde_json::Value;
-use smart_default::SmartDefault;
 use stash::orm::Model;
 use stash::stash::Tether;
 use std::collections::HashMap;
@@ -22,13 +23,50 @@ use tracing::{debug, trace, warn};
 
 /// What to do with the body. If in any of the fields `None` is specified it will read the relevant
 /// value from the user setttings. If all are set, the db query will be elided.
-#[derive(Debug, Clone, Copy, SmartDefault)]
+#[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct TransformOpts {
-    #[default = true]
     pub show_block_quote: bool,
     pub hide_remote_images: Option<bool>,
     pub hide_embedded_images: Option<bool>,
+    pub theme: ThemeOpts,
+}
+
+/// Current settings related to the color scheme.
+/// It affects on which CSS style is used in the HTML body of the message
+#[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
+pub struct ThemeOpts {
+    /// What is the current UI color scheme, provided by the application.
+    ///
+    pub current_theme: MailTheme,
+    /// While using the dark mode, some bodies of messages might be hard to read.
+    /// User has an option to override the theme inside of the message (without changing the overall theme).
+    ///
+    pub theme_override: Option<MailTheme>,
+}
+
+impl ThemeOpts {
+    /// Theme, either provided by the system or overriden by the user
+    pub fn theme(&self) -> MailTheme {
+        self.theme_override.unwrap_or(self.current_theme)
+    }
+}
+
+impl TransformOpts {
+    /// Like `Default` implementation, but requiring current theme to be provided
+    ///
+    pub fn default_with_theme(current_theme: MailTheme) -> Self {
+        Self {
+            show_block_quote: true,
+            hide_remote_images: None,
+            hide_embedded_images: None,
+            theme: ThemeOpts {
+                current_theme,
+                theme_override: None,
+            },
+        }
+    }
 }
 
 /// This is created after calling [`TransformOpts::fill_defaults`]
@@ -38,6 +76,7 @@ pub struct TransformOptsResolved {
     pub show_block_quote: bool,
     pub hide_remote_images: bool,
     pub hide_embedded_images: bool,
+    pub theme: ThemeOpts,
 }
 
 impl TransformOpts {
@@ -53,6 +92,7 @@ impl TransformOpts {
                 show_block_quote,
                 hide_remote_images,
                 hide_embedded_images,
+                theme: self.theme,
             };
         }
 
@@ -67,6 +107,7 @@ impl TransformOpts {
             show_block_quote,
             hide_remote_images: self.hide_remote_images.unwrap_or(hide_remote_images),
             hide_embedded_images: self.hide_embedded_images.unwrap_or(hide_embedded_images),
+            theme: self.theme,
         }
     }
 }
@@ -77,6 +118,7 @@ impl From<TransformOptsResolved> for TransformOpts {
             show_block_quote: val.show_block_quote,
             hide_remote_images: Some(val.hide_remote_images),
             hide_embedded_images: Some(val.hide_embedded_images),
+            theme: val.theme,
         }
     }
 }
@@ -293,7 +335,7 @@ impl DecryptedMessageBody {
             vec![]
         };
 
-        transform_html_with_banners(&self.body, resolved, self.metadata.mime_type, true, banners)
+        transform_html_with_banners(&self.body, resolved, self.metadata.mime_type, banners)
     }
 
     /// Get Disposition::Attachment attachments.
@@ -342,13 +384,15 @@ pub struct BodyOutput {
     pub body_banners: Vec<MessageBanner>,
 }
 
-pub fn transform_html(
-    html: &str,
-    opts: TransformOptsResolved,
-    mime_type: MimeType,
-    inject_style: bool,
-) -> BodyOutput {
-    transform_html_with_banners(html, opts, mime_type, inject_style, vec![])
+pub fn transform_html(html: &str, opts: TransformOptsResolved, mime_type: MimeType) -> BodyOutput {
+    transform_html_with_banners(html, opts, mime_type, vec![])
+}
+
+fn resolve_style(theme: ThemeOpts) -> Stylesheet {
+    match theme.theme() {
+        MailTheme::LightMode => Stylesheet::LightMode,
+        MailTheme::DarkMode => Stylesheet::DarkMode,
+    }
 }
 
 #[tracing::instrument(skip_all)]
@@ -356,7 +400,6 @@ pub fn transform_html_with_banners(
     html: &str,
     opts: TransformOptsResolved,
     mime_type: MimeType,
-    inject_style: bool,
     mut prev_banners: Vec<MessageBanner>,
 ) -> BodyOutput {
     trace!(
@@ -372,6 +415,7 @@ mime_type: {mime_type:?}"
         show_block_quote,
         hide_remote_images,
         hide_embedded_images,
+        theme,
     } = opts;
     // If the message is text/plain we need to apply some extra transforms to it like
     // preserving whitespaces and adding links.
@@ -401,9 +445,7 @@ mime_type: {mime_type:?}"
         transformer.inject_ios_content_size();
     }
 
-    if inject_style {
-        transformer.inject_style();
-    }
+    transformer.inject_style(resolve_style(theme));
 
     if opts.hide_remote_images && remote_images_count > 0 {
         prev_banners.push(MessageBanner::RemoteContent);
