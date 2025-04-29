@@ -4412,48 +4412,20 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "base64",
- "bytes",
- "flume",
  "function_name",
- "futures",
- "ical",
- "indoc",
- "itertools 0.13.0",
  "lazy_static",
- "muon",
- "num_enum",
- "once_cell",
- "parking_lot",
- "pretty_assertions",
- "proton-action-queue",
  "proton-api-core",
- "proton-api-mail",
  "proton-core-common",
  "proton-crypto-account",
- "proton-crypto-inbox",
  "proton-event-loop",
- "proton-mail-common",
  "proton-sqlite3",
- "proton-vcard",
- "quick_cache",
  "rand 0.8.5",
- "secrecy",
  "serde",
- "serde_with",
  "stash",
  "tempdir",
- "tempfile",
- "test-case",
- "thiserror 1.0.69",
- "tokio",
  "tracing",
  "tracing-subscriber",
- "url",
- "uuid",
- "velcro",
  "wiremock",
- "zeroize",
 ]
 
 [[package]]
@@ -4654,21 +4626,10 @@ dependencies = [
 name = "proton-mail-test-utils"
 version = "0.1.0"
 dependencies = [
- "anyhow",
- "async-trait",
- "base64",
- "bytes",
- "flume",
  "function_name",
  "futures",
- "ical",
- "indoc",
  "itertools 0.13.0",
  "lazy_static",
- "num_enum",
- "once_cell",
- "parking_lot",
- "pretty_assertions",
  "proton-action-queue",
  "proton-api-core",
  "proton-api-mail",
@@ -4676,29 +4637,18 @@ dependencies = [
  "proton-core-test-utils",
  "proton-crypto-account",
  "proton-crypto-inbox",
- "proton-event-loop",
  "proton-mail-common",
- "proton-sqlite3",
- "proton-vcard",
- "quick_cache",
- "rand 0.8.5",
  "secrecy",
  "serde",
  "serde_with",
  "stash",
  "tempdir",
  "tempfile",
- "test-case",
- "thiserror 1.0.69",
- "tokio",
  "tracing",
  "tracing-subscriber",
- "url",
- "uuid",
  "velcro",
  "wiremock",
  "wiremock-multipart",
- "zeroize",
 ]
 
 [[package]]
@@ -4877,18 +4827,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f50b1c63b38611e7d4d7f68b82d3ad0cc71a2ad2e7f61fc10f1328d917c93cd"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "quick_cache"
-version = "0.6.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "287e56aac5a2b4fb25a6fb050961d157635924c8696305a5c937a76f29841a0f"
-dependencies = [
- "ahash",
- "equivalent",
- "hashbrown 0.15.2",
- "parking_lot",
 ]
 
 [[package]]
