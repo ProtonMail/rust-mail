@@ -1,5 +1,6 @@
 //! Contains the logic to access PGP keys from the `UserContext`.
 mod cache;
+mod vcard_crypto;
 
 use std::future::Future;
 
@@ -244,5 +245,9 @@ async fn extract_pinned_keys<Provider: PGPProviderSync>(
         .next()
         .ok_or(KeyHandlingError::NoVCard)??;
     let vcard = VCard::try_from(vcard_contact)?;
-    Ok(vcard.pinned_keys_for_mail(pgp_provider, email))
+    Ok(vcard_crypto::pinned_keys_for_mail(
+        &vcard,
+        pgp_provider,
+        email,
+    ))
 }

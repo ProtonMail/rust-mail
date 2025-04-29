@@ -4812,7 +4812,6 @@ dependencies = [
  "ical",
  "oxilangtag",
  "paste",
- "proton-crypto-account",
  "regex",
  "thiserror 1.0.69",
  "tracing",

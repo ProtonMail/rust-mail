@@ -8,7 +8,7 @@ use crate::parameters::value::ValueType;
 /// Representation of a text value from vCard RFC6350
 #[derive(Clone, Eq, Hash, PartialEq)]
 pub struct Text {
-    pub(crate) value: String,
+    pub value: String,
 }
 
 impl Text {
