@@ -1,18 +1,18 @@
 use crate as proton_mail_common;
 use proton_api_core::services::proton::GetLabelsByIdsOptions;
 use proton_api_core::services::proton::GetLabelsResponse;
-use proton_api_core::session::{Config, CoreSession, EnvId, Session};
+use proton_api_core::session::{Config, EnvId, Session};
 use proton_api_core::status_observer::StatusObserver;
 use proton_api_core::status_watcher::StatusWatcher;
 use proton_api_mail::services::proton::common::ConversationId;
-use proton_api_mail::services::proton::responses::{GetConversationsResponse, GetMessageResponse};
+use proton_api_mail::services::proton::responses::{GetConversationsResponse, GetMessagesResponse};
 use proton_core_common::models::ModelExtension;
 use proton_core_common::models::ModelIdExtension;
 use proton_core_test_utils::test_context::MockApiEnv;
 use proton_mail_ids::LocalConversationId;
 use proton_mail_test_utils::db::new_test_connection_file;
 use proton_mail_test_utils::{
-    api_conversation, api_label, api_message, api_message_meta, conversation, label, message,
+    api_conversation, api_label, api_message_meta, conversation, label, message,
     utils::create_address,
 };
 use test_case::test_case;
@@ -130,9 +130,14 @@ async fn test_store_and_delete_remote_items(
     // * RollbackItem is correctly synced *
     setup_database(&mut tether).await;
 
-    let (_mock, api) = start_server(&tether).await;
+    const BATCH_SIZE: usize = 2;
 
-    RollbackItem::sync_all(api.api(), &stash, 2).await.unwrap();
+    let (_mock, api) = start_server(&tether, BATCH_SIZE).await;
+
+    let mut tether = stash.connection();
+    RollbackItem::sync_all(&api, &mut tether, BATCH_SIZE)
+        .await
+        .unwrap();
 
     // * RollbackItems are correctly deleted during sync *
     let actual = RollbackItem::all(&tether).await.unwrap();
@@ -140,7 +145,7 @@ async fn test_store_and_delete_remote_items(
     assert_eq!(actual.len(), 0);
 
     // * RollbackItems with no limit for empty stash *
-    RollbackItem::sync_all(api.api(), &stash, None)
+    RollbackItem::sync_all(&api, &mut tether, None)
         .await
         .unwrap();
 }
@@ -237,7 +242,7 @@ async fn labels(tether: &Tether) -> Vec<Label> {
         .collect()
 }
 
-async fn start_server(tether: &Tether) -> (MockServer, Session) {
+async fn start_server(tether: &Tether, batch_size: usize) -> (MockServer, Session) {
     let mock_server = MockServer::start().await;
     let api_config = Config {
         env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path("/api")),
@@ -258,11 +263,15 @@ async fn start_server(tether: &Tether) -> (MockServer, Session) {
     for kind in kinds {
         let items = RollbackItem::find_by_kind(kind, tether).await.unwrap();
 
-        for item in items {
-            match item.item_type {
-                RollbackItemType::Conversation => mock_get_conversation(&mock_server, &item).await,
-                RollbackItemType::Message => mock_get_message(&mock_server, &item, tether).await,
-                RollbackItemType::Label => mock_label(&mock_server, &item).await,
+        if items.is_empty() {
+            continue;
+        }
+        for chunks in items.chunks(batch_size) {
+            let items = chunks.to_vec();
+            match kind {
+                RollbackItemType::Conversation => mock_get_conversation(&mock_server, items).await,
+                RollbackItemType::Message => mock_get_message(&mock_server, items, tether).await,
+                RollbackItemType::Label => mock_label(&mock_server, items).await,
             }
         }
     }
@@ -271,68 +280,85 @@ async fn start_server(tether: &Tether) -> (MockServer, Session) {
 }
 
 #[function_name::named]
-async fn mock_get_conversation(mock_server: &MockServer, item: &RollbackItem) {
-    let remote_id = &item.remote_id;
-    let api_conversation = api_conversation!(id: remote_id.clone().into());
+async fn mock_get_conversation(mock_server: &MockServer, items: Vec<RollbackItem>) {
+    let mut api_conversations = Vec::with_capacity(items.len());
 
-    Mock::given(method("GET"))
-        .and(path("/api/mail/v4/conversations".to_string()))
-        .and(query_param_contains("ID[0]", remote_id.to_string()))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
-                conversations: vec![api_conversation],
-                stale: false,
-                total: 1,
-            }),
-        )
-        .expect(1)
-        .named(function_name!())
-        .mount(mock_server)
-        .await;
+    let mut mock = Mock::given(method("GET")).and(path("/api/mail/v4/conversations".to_string()));
+
+    for (index, item) in items.iter().enumerate() {
+        mock = mock.and(query_param_contains(
+            format!("ID[{index}]"),
+            item.remote_id.clone(),
+        ));
+        api_conversations.push(api_conversation!(id: item.remote_id.clone().into()));
+    }
+
+    mock.respond_with(
+        ResponseTemplate::new(200).set_body_json(GetConversationsResponse {
+            conversations: api_conversations,
+            stale: false,
+            total: 1,
+        }),
+    )
+    .expect(1)
+    .named(function_name!())
+    .mount(mock_server)
+    .await;
 }
 
 #[function_name::named]
-async fn mock_get_message(mock_server: &MockServer, item: &RollbackItem, tether: &Tether) {
-    let remote_id = &item.remote_id;
-    let db_message = Message::find_by_remote_id(remote_id.clone().into(), tether)
-        .await
-        .unwrap()
-        .unwrap();
-    let api_meta = api_message_meta!(
-        id: remote_id.clone().into(),
-        address_id: db_message.remote_address_id.clone(),
-        conversation_id: db_message.remote_conversation_id.clone().unwrap()
-    );
-    let api_message = api_message!(
-        metadata: api_meta
-    );
-
-    Mock::given(method("GET"))
-        .and(path(format!("/api/mail/v4/messages/{remote_id}")))
-        .respond_with(
-            ResponseTemplate::new(200).set_body_json(GetMessageResponse {
-                message: api_message,
-            }),
-        )
-        .expect(1)
-        .named(function_name!())
-        .mount(mock_server)
-        .await;
+async fn mock_get_message(mock_server: &MockServer, items: Vec<RollbackItem>, tether: &Tether) {
+    let mut api_metadatas = Vec::with_capacity(items.len());
+    let mut mock = Mock::given(method("GET")).and(path("/api/mail/v4/messages"));
+    for (index, item) in items.iter().enumerate() {
+        let db_message = Message::find_by_remote_id(item.remote_id.clone().into(), tether)
+            .await
+            .unwrap()
+            .unwrap();
+        let api_meta = api_message_meta!(
+            id: item.remote_id.clone().into(),
+            address_id: db_message.remote_address_id.clone(),
+            conversation_id: db_message.remote_conversation_id.clone().unwrap()
+        );
+        api_metadatas.push(api_meta);
+        mock = mock.and(query_param_contains(
+            format!("ID[{index}]"),
+            db_message.remote_id.clone().unwrap().into_inner(),
+        ));
+    }
+    mock.respond_with(
+        ResponseTemplate::new(200).set_body_json(GetMessagesResponse {
+            messages: api_metadatas,
+            stale: false,
+            total: 0,
+        }),
+    )
+    .expect(1)
+    .named(function_name!())
+    .mount(mock_server)
+    .await;
 }
 
 #[function_name::named]
-async fn mock_label(mock_server: &MockServer, item: &RollbackItem) {
-    let remote_id = &item.remote_id;
-    let api_label = api_label!(id: remote_id.clone().into());
+async fn mock_label(mock_server: &MockServer, items: Vec<RollbackItem>) {
+    let remote_ids = items
+        .iter()
+        .map(|item| LabelId::from(item.remote_id.clone()))
+        .collect();
+    let api_labels = items
+        .into_iter()
+        .map(|item| api_label!(id: item.remote_id.clone().into()))
+        .collect();
+    dbg!(&remote_ids);
 
     Mock::given(method("POST"))
-        .and(path("/api/core/v4/labels/by-ids".to_string()))
+        .and(path("/api/core/v4/labels/by-ids"))
         .and(body_json(GetLabelsByIdsOptions {
-            label_ids: vec![remote_id.clone().into()],
+            label_ids: remote_ids,
         }))
-        .respond_with(ResponseTemplate::new(200).set_body_json(GetLabelsResponse {
-            labels: vec![api_label],
-        }))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(GetLabelsResponse { labels: api_labels }),
+        )
         .expect(1)
         .named(function_name!())
         .mount(mock_server)
