@@ -231,6 +231,9 @@ impl From<MailContextError> for ProtonMailError {
                 Self::Unexpected(Unexpected::Internal)
             }
             MailContextError::InitMediatorError => Self::Unexpected(Unexpected::Internal),
+            MailContextError::UserContextNotInitialized(user_id) => Self::reason(
+                ContextErrorReason::UserContextNotInitialized(user_id.into_inner()),
+            ),
         }
     }
 }

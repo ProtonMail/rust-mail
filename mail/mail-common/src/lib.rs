@@ -15,6 +15,7 @@ mod user_context;
 pub mod background_execution;
 pub mod draft;
 pub mod mail_scroller;
+mod send_queries;
 #[cfg(test)]
 mod tests;
 

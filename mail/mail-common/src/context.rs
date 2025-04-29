@@ -98,6 +98,8 @@ pub enum MailContextError {
     DuplicateContext(UserId),
     #[error("The context instance is missing")]
     MissingContext,
+    #[error("The user context for {0} is not initialized")]
+    UserContextNotInitialized(UserId),
     #[error("A task was cancelled")]
     TaskCancelled,
     #[error("Queue Write Guard Expired")]
