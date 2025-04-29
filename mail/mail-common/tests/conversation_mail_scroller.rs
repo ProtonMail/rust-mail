@@ -313,7 +313,7 @@ async fn test_conversation_mail_scroller_notificate_about_changes() {
         handle: _handle,
         receiver,
         ..
-    } = scroller.watch().unwrap();
+    } = scroller.watch().await.unwrap();
     // Setting scroller up will never push notification
     assert!(receiver.is_empty());
 
@@ -595,7 +595,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
         receiver,
         handle: _handle,
         ..
-    } = scroller.watch().unwrap();
+    } = scroller.watch().await.unwrap();
 
     // Its faster for test purpose than `wait_for_online`
     while user_ctx.session().status().await.is_offline() {

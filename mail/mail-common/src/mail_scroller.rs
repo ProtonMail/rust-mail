@@ -6,6 +6,7 @@ use proton_core_common::datatypes::LocalLabelId;
 use proton_task_service::AsyncTaskResult;
 use stash::stash::WatcherHandle;
 use std::sync::Weak;
+use tokio::sync::Mutex;
 
 mod mail_scroller_source;
 mod mail_scroller_watcher;
@@ -30,7 +31,7 @@ mod conversation_scroller;
 /// of [`MailScrollerSource`].
 pub struct MailScroller<T: MailScrollerSource + 'static> {
     ctx: Weak<MailUserContext>,
-    source: T,
+    source: Mutex<T>,
     total: u64,
     task: MailPaginatorJoinHandle,
 }
@@ -87,26 +88,26 @@ impl<T: MailScrollerSource> MailScroller<T> {
         Ok(Self {
             ctx,
             total,
-            source,
+            source: Mutex::new(source),
             task,
         })
     }
 
-    pub fn watch(&mut self) -> Result<WatcherHandle, MailContextError> {
+    pub async fn watch(&mut self) -> Result<WatcherHandle, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
 
         let (sender, new_receiver) = flume::unbounded();
         let sender_clone = sender.clone();
-        self.source.set_notify(sender);
+        let mut src = self.source.lock().await;
+        let tables = src.watched_tables();
+        src.set_notify(sender);
+        drop(src);
 
         let WatcherHandle {
             receiver, handle, ..
-        } = ctx.user_stash().subscribe_to(|sender| {
-            Box::new(MailScrollerWatcher {
-                sender,
-                tables: self.source.watched_tables(),
-            })
-        })?;
+        } = ctx
+            .user_stash()
+            .subscribe_to(move |sender| Box::new(MailScrollerWatcher { sender, tables }))?;
 
         tokio::spawn(async move {
             while receiver.recv_async().await.is_ok() {
@@ -143,18 +144,18 @@ impl<T: MailScrollerSource> MailScroller<T> {
     /// Returns error if the data could not be fetched or saved.
     pub async fn fetch_more(&mut self) -> Result<Vec<T::Item>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
+        let mut src = self.source.lock().await;
         let is_online = ctx.session().status().await.is_online();
 
         // If initialization is fetching something in the background,
         // we want to wait for it if we have network to do so.
         let previous_result = if self.task.is_some() && is_online {
-            self.await_task().await
+            Self::await_task(&mut self.task).await
         } else {
             Ok(())
         };
 
-        let (items, new_total, task) = self
-            .source
+        let (items, new_total, task) = src
             .sync_next(&ctx)
             .await
             .inspect_err(|e| tracing::error!("Failed to fetch next page: {e:?}"))?;
@@ -162,7 +163,9 @@ impl<T: MailScrollerSource> MailScroller<T> {
         self.total = new_total;
         self.task = task;
 
-        if items.is_empty() && self.seen().await? < self.total {
+        let seen = src.visible_items_total(&ctx).await?;
+
+        if items.is_empty() && seen < self.total {
             previous_result?;
 
             if self.task.is_none() {
@@ -172,6 +175,8 @@ impl<T: MailScrollerSource> MailScroller<T> {
                 return Err(MailContextError::no_connection());
             }
         }
+
+        drop(src);
 
         Ok(items)
     }
@@ -183,10 +188,14 @@ impl<T: MailScrollerSource> MailScroller<T> {
     /// Return error if the query failed.
     pub async fn all_items(&mut self) -> Result<Vec<T::Item>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
+        let src = self.source.lock().await;
 
-        self.total = self.source.all_items_total(&ctx).await?;
+        self.total = src.all_items_total(&ctx).await?;
+        let items = src.visible_items(&ctx).await;
 
-        self.source.visible_items(&ctx).await
+        drop(src);
+
+        items
     }
 
     /// Return the total number of elements available.
@@ -200,16 +209,19 @@ impl<T: MailScrollerSource> MailScroller<T> {
     /// Return the number of already seen elements.
     pub async fn seen(&self) -> Result<u64, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
+        let src = self.source.lock().await;
+        let total = src.visible_items_total(&ctx).await;
 
-        self.source.visible_items_total(&ctx).await
+        drop(src);
+
+        total
     }
 
-    async fn await_task(&mut self) -> Result<(), MailContextError> {
+    async fn await_task(task: &mut MailPaginatorJoinHandle) -> Result<(), MailContextError> {
         tracing::debug!("Awaiting for previous task");
 
-        if self.task.is_some() {
-            self.task
-                .take()
+        if task.is_some() {
+            task.take()
                 .unwrap()
                 .await
                 .map_err(|_| MailContextError::Other(anyhow!("Failed to receive source data")))

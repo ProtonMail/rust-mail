@@ -650,3 +650,74 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
     assert_eq!(scroller_unread.conversation_time, 1);
     assert_eq!(scroller_unread.display_order, 2);
 }
+
+#[tokio::test]
+async fn test_cashed_scroller_correctly_reads_empty_conversations_from_the_trash() {
+    let stash = new_test_connection().await;
+    let mut tether = stash.connection();
+    let trash_remote_id = SystemLabel::Trash.remote_id();
+    let trash = Label::find_by_remote_id(trash_remote_id, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let mut conversations = vec![
+        conversation!(remote_id: conv_id!("conv_1"), display_order: 1, is_known: false),
+        conversation!(remote_id: conv_id!("conv_2"), display_order: 2, is_known: true),
+        conversation!(remote_id: conv_id!("conv_3"), display_order: 3, has_messages: false, num_messages: 1),
+        conversation!(remote_id: conv_id!("conv_4"), display_order: 4, has_messages: true, num_messages: 0),
+    ];
+
+    let trash_clone = trash.clone();
+    tether
+        .tx(async move |bond| {
+            for conversation in conversations.iter_mut() {
+                save_single_conversation(&trash_clone, conversation, bond).await;
+            }
+
+            Result::<(), StashError>::Ok(())
+        })
+        .await
+        .unwrap();
+
+    let unread = ReadFilter::All;
+
+    let mut scroller = ConversationScrollData::builder()
+        .local_label_id(trash.local_id.unwrap())
+        .unread(unread)
+        .remote_conversation_id("conv_1".into())
+        .conversation_time(1)
+        .display_order(1)
+        .build();
+
+    tether
+        .tx::<_, _, StashError>(async |bond| scroller.save(bond).await)
+        .await
+        .unwrap();
+
+    let page_size = 4;
+    let mut cached_scroller = CachedScrollData::<ConversationScrollData>::new(
+        trash.local_id.unwrap(),
+        unread,
+        page_size,
+        &tether,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let items = cached_scroller
+        .visible_element_count(&tether)
+        .await
+        .unwrap();
+
+    assert_eq!(items, 0);
+
+    cached_scroller.fetch_more(&tether).await.unwrap();
+
+    let items = cached_scroller
+        .visible_element_count(&tether)
+        .await
+        .unwrap();
+
+    assert_eq!(items, 4);
+}
