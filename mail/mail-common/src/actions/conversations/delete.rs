@@ -83,13 +83,12 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        action.0.resolve_ids(guard.tether()).await?;
         let remote_label_id = action
             .0
             .remote_label_id
             .clone()
             .ok_or_else(|| AppError::LabelDoesNotHaveRemoteId(action.0.label_id))?;
-
-        action.0.resolve_ids(guard.tether()).await?;
 
         let local_ids_without_remote_id = action
             .0

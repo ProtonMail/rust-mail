@@ -87,7 +87,6 @@ impl ActionHandler for Handler {
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         action.0.resolve_ids(guard.tether()).await?;
-
         let local_ids_without_remote_id = action
             .0
             .unsynced_item_ids(guard.tether())
