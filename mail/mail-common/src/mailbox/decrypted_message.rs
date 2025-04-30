@@ -26,9 +26,17 @@ use tracing::{debug, trace, warn};
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct TransformOpts {
+    /// Whether should show block quotes or not. Default: true
+    #[cfg_attr(feature = "uniffi", uniffi(default = true))]
     pub show_block_quote: bool,
+    /// Whether should hide remote images or not. Default: defined in mail settings
+    #[cfg_attr(feature = "uniffi", uniffi(default = None))]
     pub hide_remote_images: Option<bool>,
+    /// Whether should hide embedded images or not. Default: defined in mail settings
+    #[cfg_attr(feature = "uniffi", uniffi(default = None))]
     pub hide_embedded_images: Option<bool>,
+    /// Current settings related to the color scheme.
+    /// It affects on which CSS style is used in the HTML body of the message
     pub theme: ThemeOpts,
 }
 
@@ -43,6 +51,9 @@ pub struct ThemeOpts {
     /// While using the dark mode, some bodies of messages might be hard to read.
     /// User has an option to override the theme inside of the message (without changing the overall theme).
     ///
+    /// Default: No override provided
+    ///
+    #[cfg_attr(feature = "uniffi", uniffi(default = None))]
     pub theme_override: Option<MailTheme>,
 }
 
