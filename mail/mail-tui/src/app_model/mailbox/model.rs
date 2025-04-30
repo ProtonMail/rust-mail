@@ -358,6 +358,31 @@ impl AppStateHandler for Model {
                     self.filter = ReadFilter::All;
                     return Command::message(Message::Sync(self.mailbox.clone()).into());
                 }
+                KeyCode::F(8) => {
+                    return Command::Message(Messages::SwitchAppState(AppState::Background(
+                        crate::app_model::background::Model::new(
+                            self.ctx.clone(),
+                            Box::new(|ctx| {
+                                Command::batch([
+                                    Command::message(Messages::DisplayBackgroundProgress(
+                                        "Loading mailbox ...".to_owned(),
+                                    )),
+                                    Command::task(async move {
+                                        let model = Model::new(ctx).await;
+                                        let message = match model {
+                                            Ok(model) => Messages::SwitchAppState(model.into()),
+                                            Err(e) => e.into(),
+                                        };
+                                        Command::batch([
+                                            Command::Message(Messages::DismissBackgroundProgress),
+                                            Command::message(message),
+                                        ])
+                                    }),
+                                ])
+                            }),
+                        ),
+                    )));
+                }
                 _ => (),
             }
         }

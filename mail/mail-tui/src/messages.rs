@@ -30,6 +30,8 @@ pub enum Messages {
     DismissPopup,
     /// Raise a dialog to select file paths.
     SelectFilePathPopup(PathSelectClosure),
+    /// Background worker messages
+    BackgroundWorker(crate::app_model::background::Message),
 }
 
 impl Messages {

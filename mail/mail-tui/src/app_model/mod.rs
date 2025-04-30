@@ -1,3 +1,4 @@
+pub mod background;
 pub mod contacts;
 pub mod context_init;
 pub mod login;
@@ -53,6 +54,8 @@ pub enum AppState {
     Mailbox(mailbox::Model),
     /// Display contacts and groups
     Contacts(contacts::Model),
+    /// Background Execution Simulator
+    Background(background::Model),
 }
 
 /// Trait to enforce behavior on each of the app states.
@@ -348,6 +351,7 @@ impl AppStateHandler for AppState {
             AppState::ContextInit(state) => state.on_state_enter(),
             AppState::Mailbox(state) => state.on_state_enter(),
             AppState::Contacts(state) => state.on_state_enter(),
+            AppState::Background(state) => state.on_state_enter(),
         }
     }
 
@@ -359,6 +363,7 @@ impl AppStateHandler for AppState {
             AppState::ContextInit(state) => state.handle_event(event),
             AppState::Mailbox(state) => state.handle_event(event),
             AppState::Contacts(state) => state.handle_event(event),
+            AppState::Background(state) => state.handle_event(event),
         }
     }
 
@@ -370,6 +375,7 @@ impl AppStateHandler for AppState {
             AppState::ContextInit(state) => state.update(ctx, message),
             AppState::Mailbox(state) => state.update(ctx, message),
             AppState::Contacts(state) => state.update(ctx, message),
+            AppState::Background(state) => state.update(ctx, message),
         }
     }
 
@@ -381,6 +387,7 @@ impl AppStateHandler for AppState {
             AppState::ContextInit(state) => state.view(frame, area),
             AppState::Mailbox(state) => state.view(frame, area),
             AppState::Contacts(state) => state.view(frame, area),
+            AppState::Background(state) => state.view(frame, area),
         }
     }
 
@@ -392,6 +399,7 @@ impl AppStateHandler for AppState {
             AppState::ContextInit(state) => state.view_help_bar(frame, area),
             AppState::Mailbox(state) => state.view_help_bar(frame, area),
             AppState::Contacts(state) => state.view_help_bar(frame, area),
+            AppState::Background(state) => state.view_help_bar(frame, area),
         }
     }
 
@@ -403,6 +411,7 @@ impl AppStateHandler for AppState {
             AppState::ContextInit(state) => state.view_status_bar(frame, area),
             AppState::Mailbox(state) => state.view_status_bar(frame, area),
             AppState::Contacts(state) => state.view_status_bar(frame, area),
+            AppState::Background(state) => state.view_status_bar(frame, area),
         }
     }
 
@@ -414,6 +423,7 @@ impl AppStateHandler for AppState {
             AppState::ContextInit(state) => state.help_bar_lines(),
             AppState::Mailbox(state) => state.help_bar_lines(),
             AppState::Contacts(state) => state.help_bar_lines(),
+            AppState::Background(state) => state.help_bar_lines(),
         }
     }
 }
