@@ -2,6 +2,7 @@ use crate::{MailContext, MailContextResult};
 use std::sync::Arc;
 use std::time::Duration;
 
+#[derive(Debug)]
 pub enum BackgroundExecutionStatus {
     /// Skipped due to the lack of logged in and initialized user contexts.
     SkippedNoActiveContexts,
