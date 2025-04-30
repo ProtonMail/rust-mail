@@ -14,10 +14,10 @@ impl AsTable for Vec<ContextualConversation> {
             let num_labels = conv.custom_labels.len();
             let senders = format_senders(&conv.senders);
 
-            let num_messages = if conv.num_messages == 0 {
+            let num_messages = if conv.total_messages == 0 {
                 String::new()
-            } else if conv.num_messages < 100 {
-                format!("[ {:02}]", conv.num_messages)
+            } else if conv.total_messages < 100 {
+                format!("[ {:02}]", conv.total_messages)
             } else {
                 "[99+]".to_owned()
             };
