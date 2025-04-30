@@ -23,8 +23,7 @@ use proton_mail_common::datatypes::{ReadFilter, SystemLabelId, ViewMode};
 use proton_mail_common::draft::Draft;
 use proton_mail_common::draft::observers::DraftSendResultWatcher;
 use proton_mail_common::models::{
-    ConversationCounters, DraftSendFailure, DraftSendResult, DraftSendResultOrigin, MailSettings,
-    MessageCounters,
+    DraftSendFailure, DraftSendResult, DraftSendResultOrigin, LabelWithCounters, MailSettings,
 };
 use proton_mail_common::proton_api_mail::proton_api_core::services::proton::LabelId;
 use proton_mail_common::{
@@ -75,9 +74,7 @@ pub struct Model {
     ctx: Arc<MailUserContext>,
     mailbox: Mailbox,
     mail_settings: Arc<MailSettings>,
-    label: Label,
-    conv_counters: ConversationCounters,
-    msg_counters: MessageCounters,
+    label: LabelWithCounters,
     label_watcher: Option<WatchHandle>,
     state: State,
     cancel_token: CancellationToken,
@@ -97,15 +94,9 @@ impl Model {
         ctx.prefetch().await?;
 
         let tether = ctx.user_stash().connection();
-        let label = Label::find_by_id(mailbox.label_id(), &tether)
+        let label = LabelWithCounters::load(mailbox.label_id(), &tether)
             .await?
             .ok_or(AppError::LabelNotFound(mailbox.label_id()))?;
-        let conv_counters = ConversationCounters::find_by_id(mailbox.label_id(), &tether)
-            .await?
-            .ok_or(AppError::LocalLabelHasNoCounters(mailbox.label_id()))?;
-        let msg_counters = MessageCounters::find_by_id(mailbox.label_id(), &tether)
-            .await?
-            .ok_or(AppError::LocalLabelHasNoCounters(mailbox.label_id()))?;
         let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
         Ok(Self {
             ctx,
@@ -113,8 +104,6 @@ impl Model {
             mail_settings: Arc::new(mail_settings),
             state: State::new_syncing(),
             label,
-            conv_counters,
-            msg_counters,
             cancel_token: CancellationToken::new(),
             label_watcher: None,
             composer: None,
@@ -147,7 +136,7 @@ impl Model {
             Command::task(async move {
                 let stash = ctx.user_stash();
                 let tether = stash.connection();
-                let label = match Label::find_by_id(mbox.label_id(), &tether).await {
+                let label = match LabelWithCounters::load(mbox.label_id(), &tether).await {
                     Ok(Some(label)) => label,
                     Ok(None) => {
                         let e = anyhow!(
@@ -178,7 +167,7 @@ impl Model {
         let stash = self.ctx.user_stash().to_owned();
         Command::task(async move {
             let label = Label::find_by_id(label_id, &stash.connection()).await;
-            let handle = Label::watch(&stash);
+            let handle = LabelWithCounters::watch(&stash);
             let label_and_recevier = label.and_then(|l| handle.map(|h| (l, h)));
             match label_and_recevier {
                 Ok((label, handle)) => {
@@ -192,7 +181,7 @@ impl Model {
                                 async move {
                                     let label_id = label.local_id.unwrap();
 
-                                    Label::find_by_id(label_id, &tether)
+                                    LabelWithCounters::load(label_id, &tether)
                                         .await
                                         .inspect_err(|e| {
                                             tracing::error!("Failed to get label: `{e:?}`");
@@ -227,7 +216,7 @@ impl Model {
     fn open_conversation_view(
         &mut self,
         mbox: Mailbox,
-        label: Label,
+        label: LabelWithCounters,
         state: ConversationsState,
     ) -> Command<Messages> {
         self.mailbox = mbox;
@@ -239,7 +228,7 @@ impl Model {
     fn open_message_view(
         &mut self,
         mbox: Mailbox,
-        label: Label,
+        label: LabelWithCounters,
         state: MessagesState,
     ) -> Command<Messages> {
         self.mailbox = mbox;
@@ -560,9 +549,9 @@ impl AppStateHandler for Model {
                 .unwrap_or(self.label.name.as_str());
 
             let (total, unread) = if self.mailbox.view_mode() == ViewMode::Conversations {
-                (self.conv_counters.total, self.conv_counters.unread)
+                (self.label.total_conv, self.label.unread_conv)
             } else {
-                (self.msg_counters.total, self.msg_counters.unread)
+                (self.label.unread_msg, self.label.unread_msg)
             };
             let counters = format!("T:{total:4} U:{unread:4}");
             let [label_area, _, count_area, filter_area, other_area] = Layout::horizontal([

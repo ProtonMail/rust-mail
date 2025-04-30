@@ -245,7 +245,7 @@ pub struct LabelSelectPopup {
 impl LabelSelectPopup {
     pub async fn new(
         ctx: Arc<MailUserContext>,
-        current_label: &Label,
+        current_label: &LabelWithCounters,
         view_mode: ViewMode,
     ) -> MailContextResult<Self> {
         let tether = ctx.user_stash().connection();
