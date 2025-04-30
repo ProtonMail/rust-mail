@@ -551,7 +551,7 @@ impl AppStateHandler for Model {
             let (total, unread) = if self.mailbox.view_mode() == ViewMode::Conversations {
                 (self.label.total_conv, self.label.unread_conv)
             } else {
-                (self.label.unread_msg, self.label.unread_msg)
+                (self.label.total_msg, self.label.unread_msg)
             };
             let counters = format!("T:{total:4} U:{unread:4}");
             let [label_area, _, count_area, filter_area, other_area] = Layout::horizontal([
