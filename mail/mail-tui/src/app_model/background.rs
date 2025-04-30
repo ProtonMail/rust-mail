@@ -6,13 +6,16 @@ use crate::messages::Messages;
 use anyhow::anyhow;
 use crossterm::event::{Event, KeyCode};
 use futures::FutureExt;
+use proton_core_common::models::{ModelExtension, User};
 use proton_mail_common::background_execution::{
     BackgroundExecutionContext, BackgroundExecutionStatus,
 };
 use proton_mail_common::{MailContext, MailContextResult, MailUserContext};
 use ratatui::Frame;
-use ratatui::layout::Rect;
+use ratatui::layout::{Constraint, Margin, Rect};
 use ratatui::prelude::{Line, Span, Stylize};
+use ratatui::widgets::{Cell, Row, Table};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
@@ -22,6 +25,8 @@ pub struct Model {
     user_context: Arc<MailUserContext>,
     on_close: OnClose,
     background_execution_state: BackgroundExecutionState,
+    last_execution_status: Option<BackgroundExecutionStatus>,
+    stats: Option<BackgroundExecutionStats>,
 }
 
 impl Model {
@@ -30,6 +35,8 @@ impl Model {
             user_context: ctx,
             on_close,
             background_execution_state: BackgroundExecutionState::Stopped,
+            last_execution_status: None,
+            stats: None,
         }
     }
 
@@ -55,25 +62,29 @@ impl Model {
 
         let cancellation_token = CancellationToken::new();
         let cancellation_token_cloned = cancellation_token.clone();
+        let ctx_cloned = ctx.clone();
         self.background_execution_state = BackgroundExecutionState::Running(cancellation_token);
-        Command::background_task(move |sender| {
-            async move {
-                let r = bg_executor
-                    .run(
-                        &ctx,
-                        async {
-                            cancellation_token_cloned.cancelled().await;
-                            true
-                        },
-                        Duration::from_secs(30),
-                    )
-                    .await;
-                let _ = sender
-                    .send_async(Message::BackgroundExecutionFinished(r).into())
-                    .await;
-            }
-            .boxed()
-        })
+        Command::batch([
+            Command::background_task(move |sender| {
+                async move {
+                    let r = bg_executor
+                        .run(
+                            &ctx,
+                            async {
+                                cancellation_token_cloned.cancelled().await;
+                                true
+                            },
+                            Duration::from_secs(30),
+                        )
+                        .await;
+                    let _ = sender
+                        .send_async(Message::BackgroundExecutionFinished(r).into())
+                        .await;
+                }
+                .boxed()
+            }),
+            self.update_stats(ctx_cloned),
+        ])
     }
 
     fn stop_background_execution(&mut self) -> Command<Messages> {
@@ -96,15 +107,116 @@ impl Model {
     ) -> Command<Messages> {
         self.background_execution_state = BackgroundExecutionState::Stopped;
         match result {
-            Ok(status) => Command::message(Messages::DisplayInfo(
-                None,
-                format!("Background Execution finished with status: {status:?}"),
-            )),
+            Ok(status) => {
+                self.last_execution_status = Some(status);
+                Command::none()
+            }
             Err(e) => Command::message(Messages::DisplayError(
                 None,
                 anyhow!("Background execution failed: {e:?}"),
             )),
         }
+    }
+
+    fn update_stats(&self, ctx: Arc<MailContext>) -> Command<Messages> {
+        if let BackgroundExecutionState::Stopped = &self.background_execution_state {
+            return Command::none();
+        }
+        Command::task(async move {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            tracing::info!("Updating background stats");
+            let has_unsent_messages = match ctx.has_users_with_unsent_messages().await {
+                Ok(v) => !v,
+                Err(e) => {
+                    return Command::Message(Messages::DisplayError(
+                        None,
+                        anyhow!("Failed to check for unsent messages: {e}"),
+                    ));
+                }
+            };
+
+            let user_ctxs = match ctx.get_all_logged_in_and_initialized_user_contexts().await {
+                Ok(ctxs) => ctxs,
+                Err(e) => {
+                    return Command::Message(Messages::DisplayError(
+                        None,
+                        anyhow!("Failed to get logged in user ctxs: {e}"),
+                    ));
+                }
+            };
+
+            let mut user_stats = BTreeMap::new();
+            for user_ctx in user_ctxs {
+                let user = match User::find_by_id(
+                    user_ctx.user_id().clone(),
+                    &user_ctx.user_stash().connection(),
+                )
+                .await
+                {
+                    Ok(user) => user,
+                    Err(e) => {
+                        return Command::Message(Messages::DisplayError(
+                            None,
+                            anyhow!("Failed to load user {}: {e:?}", user_ctx.user_id()),
+                        ));
+                    }
+                };
+
+                let Some(user) = user else {
+                    tracing::warn!("Could not find user with id = {}", user_ctx.user_id());
+                    continue;
+                };
+                let pending_count = match user_ctx.action_queue().queued_actions_count().await {
+                    Ok(c) => c,
+                    Err(e) => {
+                        return Command::Message(Messages::DisplayError(
+                            None,
+                            anyhow!(
+                                "Failed to pending action count for user {}: {e:?}",
+                                user_ctx.user_id()
+                            ),
+                        ));
+                    }
+                };
+                let unsent_message_count = match ctx
+                    .get_unsent_messages_ids_for_user(user_ctx.user_id().clone())
+                    .await
+                {
+                    Ok(c) => c.len(),
+                    Err(e) => {
+                        return Command::Message(Messages::DisplayError(
+                            None,
+                            anyhow!(
+                                "Failed to unsent message count for user {}: {e:?}",
+                                user_ctx.user_id()
+                            ),
+                        ));
+                    }
+                };
+
+                user_stats.insert(
+                    user.email,
+                    BackgroundExecutionUserStats {
+                        pending_action_count: pending_count,
+                        unsent_message_count,
+                    },
+                );
+            }
+
+            Message::BackgroundStatsRefreshed(BackgroundExecutionStats {
+                has_unsent_messages,
+                user_stats,
+            })
+            .into()
+        })
+    }
+    fn on_background_stats_update(
+        &mut self,
+        ctx: Arc<MailContext>,
+        background_execution_stats: BackgroundExecutionStats,
+    ) -> Command<Messages> {
+        self.stats = Some(background_execution_stats);
+        self.update_stats(ctx)
     }
 }
 
@@ -113,7 +225,21 @@ pub enum Message {
     StartBackgroundWorker,
     StopBackgroundWorker,
     BackgroundExecutionFinished(MailContextResult<BackgroundExecutionStatus>),
+    BackgroundStatsRefreshed(BackgroundExecutionStats),
     Exit,
+}
+
+/// Collection of background execution info which we can track.
+pub struct BackgroundExecutionStats {
+    has_unsent_messages: bool,
+    /// User statistics by email address
+    user_stats: BTreeMap<String, BackgroundExecutionUserStats>,
+}
+
+/// Collection of background execution info which we can track per user.
+pub struct BackgroundExecutionUserStats {
+    pending_action_count: u64,
+    unsent_message_count: usize,
 }
 
 impl From<Message> for Command<Messages> {
@@ -167,11 +293,55 @@ impl AppStateHandler for Model {
                 (self.on_close)(self.user_context.clone())
             }
             Message::BackgroundExecutionFinished(r) => self.on_background_execution_finished(r),
+            Message::BackgroundStatsRefreshed(state) => {
+                self.on_background_stats_update(ctx.clone(), state)
+            }
         }
     }
 
-    fn view(&mut self, _frame: &mut Frame, _area: Rect) {
-        //TODO: put some useful stats here?
+    fn view(&mut self, frame: &mut Frame, area: Rect) {
+        let mut rows = Vec::with_capacity(8);
+
+        rows.push(Row::new([
+            Cell::from(Span::from("Last Execution Status: ").bold()),
+            Cell::from(
+                self.last_execution_status
+                    .map_or(String::from("None"), |s| format!("{s:?}")),
+            ),
+        ]));
+
+        if let Some(stats) = &self.stats {
+            rows.push(Row::new([
+                Cell::from(Span::from("Unsent Messages: ").bold()),
+                Cell::from(stats.has_unsent_messages.to_string()),
+            ]));
+
+            for (user_id, user_stats) in &stats.user_stats {
+                rows.push(Row::new([Cell::from(""), Cell::from("")]));
+                rows.push(Row::new([
+                    Cell::from(Span::from(user_id.to_string())).bold(),
+                    Cell::from(""),
+                ]));
+                rows.push(Row::new([
+                    Cell::from("Pending Actions: "),
+                    Cell::from(user_stats.pending_action_count.to_string()),
+                ]));
+                rows.push(Row::new([
+                    Cell::from("Unsent Messages: "),
+                    Cell::from(user_stats.unsent_message_count.to_string()),
+                ]));
+            }
+        }
+
+        let widths = [Constraint::Length(40), Constraint::Min(1)];
+        let table = Table::new(rows, widths).column_spacing(1);
+        frame.render_widget(
+            table,
+            area.inner(Margin {
+                horizontal: 2,
+                vertical: 1,
+            }),
+        );
     }
 
     fn view_help_bar(&mut self, frame: &mut Frame, area: Rect) {
