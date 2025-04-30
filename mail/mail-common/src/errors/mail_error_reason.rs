@@ -100,6 +100,7 @@ pub enum ActionErrorReason {
 pub enum ContextErrorReason {
     UnknownLabel,
     DuplicateContext,
+    UserContextNotInitialized(String),
 }
 
 /// Specific Reason for error occurrence within Login Flow.
