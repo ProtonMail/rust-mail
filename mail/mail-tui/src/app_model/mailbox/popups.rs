@@ -50,19 +50,12 @@ impl crate::app_model::Popup for MoveItemPopup {
     }
 
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
+        self.list_state.handle_event(&event);
         let Event::Key(key) = event else {
             return Command::None;
         };
 
         match key.code {
-            KeyCode::Char('k') | KeyCode::Up => {
-                self.list_state.prev();
-                Command::None
-            }
-            KeyCode::Char('j') | KeyCode::Down => {
-                self.list_state.next();
-                Command::None
-            }
             KeyCode::Enter => self
                 .selected_label_id()
                 .map(|id| match self.item {
@@ -140,19 +133,12 @@ impl crate::app_model::Popup for LabelItemPopup {
     }
 
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
+        self.list_state.handle_event(&event);
         let Event::Key(key) = event else {
             return Command::None;
         };
 
         match key.code {
-            KeyCode::Char('k') | KeyCode::Up => {
-                self.list_state.prev();
-                Command::None
-            }
-            KeyCode::Char('j') | KeyCode::Down => {
-                self.list_state.next();
-                Command::None
-            }
             KeyCode::Char('s') => {
                 if let Some(label) = self.selected_label_mut() {
                     label.is_selected = match label.is_selected {

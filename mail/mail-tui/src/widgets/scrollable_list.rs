@@ -1,4 +1,5 @@
 #![allow(unused, clippy::module_name_repetitions)]
+use crossterm::event::{Event, KeyCode};
 use ratatui::prelude::Constraint::Length;
 use ratatui::prelude::*;
 use ratatui::symbols::scrollbar;
@@ -76,6 +77,22 @@ impl ScrollableListState {
 
     pub fn is_focused(&self) -> bool {
         self.focused
+    }
+
+    pub fn handle_event(&mut self, event: &Event) {
+        let Event::Key(key) = event else {
+            return;
+        };
+
+        match key.code {
+            KeyCode::Char('k') | KeyCode::Up => {
+                self.prev();
+            }
+            KeyCode::Char('j') | KeyCode::Down => {
+                self.next();
+            }
+            _ => {}
+        }
     }
 }
 

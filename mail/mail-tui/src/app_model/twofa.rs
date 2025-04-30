@@ -157,6 +157,10 @@ impl AppStateHandler for TwoFaModel {
         );
     }
 
+    fn help_options(&self) -> Vec<(&'static str, &'static str)> {
+        [("esc", "Cancel"), ("Enter", "Submit")].to_vec()
+    }
+
     fn view_status_bar(&mut self, frame: &mut Frame, area: Rect) {
         frame.render_widget(Text::from("TwoFA"), area);
     }

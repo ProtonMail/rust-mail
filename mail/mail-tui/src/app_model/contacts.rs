@@ -464,19 +464,12 @@ impl AppStateHandler for ContactsModel {
         Command::message(Message::Init.into())
     }
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
+        self.list_state.handle_event(&event);
         let Event::Key(key) = event else {
             return Command::None;
         };
 
         match key.code {
-            KeyCode::Char('k') | KeyCode::Up => {
-                self.list_state.prev();
-                Command::None
-            }
-            KeyCode::Char('j') | KeyCode::Down => {
-                self.list_state.next();
-                Command::None
-            }
             KeyCode::Enter => Command::message(Message::OpenContactPopup.into()),
             KeyCode::Esc => {
                 if self.open_contact.is_open() {
@@ -605,6 +598,15 @@ impl AppStateHandler for ContactsModel {
             ]),
             area,
         );
+    }
+
+    fn help_options(&self) -> Vec<(&'static str, &'static str)> {
+        vec![
+            ("k, ▲", "Go up"),
+            ("j, ▼", "Go down"),
+            ("enter", "See details for a contact"),
+            ("esc", "Close the contact"),
+        ]
     }
 
     fn view_status_bar(&mut self, _frame: &mut Frame, _area: Rect) {}

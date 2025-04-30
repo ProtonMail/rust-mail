@@ -372,4 +372,12 @@ impl AppStateHandler for BackgroundModel {
             }
         }
     }
+
+    fn help_options(&self) -> Vec<(&'static str, &'static str)> {
+        vec![
+            ("s", "Start Background Worker"),
+            ("t", "Stop Background Worker"),
+            ("q", "Exit"),
+        ]
+    }
 }

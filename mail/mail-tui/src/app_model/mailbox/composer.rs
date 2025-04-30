@@ -778,6 +778,17 @@ impl Composer {
             }
         }
     }
+
+    pub fn help_options(vec: &mut Vec<(&'static str, &'static str)>) {
+        vec.extend_from_slice(&[
+            ("esc", "Exit composer"),
+            ("tab", "Toggle between fields"),
+            ("Ctrl + s", "Save"),
+            ("Ctrl + t", "Send"),
+            ("Ctrl + a", "Add attachment"),
+            ("Ctrl + d", "Remove attachment"),
+        ]);
+    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]

@@ -139,7 +139,9 @@ impl AppStateHandler for LoginModel {
             }
             Message::LoginSuccess(mut flow) => {
                 if flow.is_awaiting_2fa() {
-                    Command::message(Messages::SwitchAppState(twofa::Model::new(flow).into()))
+                    Command::message(Messages::SwitchAppState(
+                        twofa::TwoFaModel::new(flow).into(),
+                    ))
                 } else {
                     let ctx = Arc::clone(ctx);
                     Command::task(async move {
@@ -210,6 +212,10 @@ impl AppStateHandler for LoginModel {
 
     fn view_status_bar(&mut self, frame: &mut Frame, area: Rect) {
         frame.render_widget(Text::from("Login"), area);
+    }
+
+    fn help_options(&self) -> Vec<(&'static str, &'static str)> {
+        vec![("enter", "Submit"), ("tab", "Switch Input")]
     }
 }
 

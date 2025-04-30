@@ -224,6 +224,16 @@ impl AppStateHandler for SessionSelectModel {
         );
     }
 
+    fn help_options(&self) -> Vec<(&'static str, &'static str)> {
+        vec![
+            ("k, ▲", "Go up"),
+            ("j, ▼", "Go down"),
+            ("enter", "Log in"),
+            ("N", "Log in with a new account"),
+            ("D", "Delete an accound and all of its info"),
+        ]
+    }
+
     fn view_help_bar(&mut self, frame: &mut Frame, area: Rect) {
         frame.render_widget(
             Line::from(vec![
