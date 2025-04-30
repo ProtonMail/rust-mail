@@ -14,13 +14,12 @@ use crate::messages::Messages;
 use messages::BlockOrUnblock;
 pub use model::Model;
 use proton_core_common::datatypes::{LocalIdMarker, LocalLabelId};
-use proton_core_common::models::Label;
 use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::{
     ContextualConversation, LocalAttachmentId, LocalConversationId, LocalMessageId,
 };
 use proton_mail_common::draft::attachments::DraftAttachment;
-use proton_mail_common::models::{Attachment, Message as MailMessage};
+use proton_mail_common::models::{Attachment, LabelWithCounters, Message as MailMessage};
 use search::{Search, SearchStatusBar};
 use std::path::PathBuf;
 
@@ -28,15 +27,15 @@ const ITEM_LIMIT: usize = 50;
 
 pub enum Message {
     Sync(Mailbox),
-    OpenConversationView(Mailbox, Label, ConversationsState),
-    OpenMessageView(Mailbox, Label, MessagesState),
+    OpenConversationView(Mailbox, LabelWithCounters, ConversationsState),
+    OpenMessageView(Mailbox, LabelWithCounters, MessagesState),
     OpenSearchView(Mailbox, MessagesState),
     OpenLabelSelectPopup,
     OpenMoveItemPopup(Item),
     OpenLabelItemPopup(Item),
     SelectLabel(LocalLabelId),
     ConversationState(ConversationMessage),
-    LabelRefreshed(Label),
+    LabelRefreshed(LabelWithCounters),
     #[allow(clippy::enum_variant_names)]
     MessageState(MessageMessage),
     OpenComposer(Composer),

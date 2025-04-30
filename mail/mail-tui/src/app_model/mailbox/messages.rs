@@ -19,7 +19,6 @@ use futures::FutureExt;
 use futures::future::try_join_all;
 use itertools::Itertools as _;
 use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::Label;
 use proton_core_common::os::safe_write;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
 use proton_mail_common::datatypes::{
@@ -30,7 +29,7 @@ use proton_mail_common::draft::ReplyMode;
 use proton_mail_common::mail_scroller::{DataScrollerSource, MailScroller, SearchScrollerSource};
 use proton_mail_common::models::default_location::IncomingDefaultLocation;
 use proton_mail_common::models::{
-    Attachment, MailSettings, Message as MailMessage, MessageScrollData,
+    Attachment, LabelWithCounters, MailSettings, Message as MailMessage, MessageScrollData,
 };
 use proton_mail_common::{AppError, MailContext, MailUserContext, Mailbox, MailboxResult};
 use ratatui::Frame;
@@ -70,7 +69,7 @@ impl MessagesState {
     pub(super) fn build(
         ctx: Arc<MailUserContext>,
         mbox: Mailbox,
-        label: Label,
+        label: LabelWithCounters,
         filter: ReadFilter,
     ) -> Command<Messages> {
         let label_id = mbox.label_id();
