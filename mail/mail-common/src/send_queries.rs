@@ -3,7 +3,6 @@ use crate::{MailContext, MailContextError};
 use proton_api_core::services::proton::UserId;
 use proton_core_common::CoreSessionState;
 use proton_mail_ids::LocalMessageId;
-use std::sync::Arc;
 
 impl MailContext {
     /// Check if any message for all logged in accounts is still pending to send
@@ -11,9 +10,7 @@ impl MailContext {
     /// # Errors
     ///
     /// Returns error if we failed to retrieve the user context or perform the checks.
-    pub async fn has_users_with_unsent_messages(
-        self: &Arc<Self>,
-    ) -> Result<bool, MailContextError> {
+    pub async fn has_users_with_unsent_messages(&self) -> Result<bool, MailContextError> {
         let all_user_ctxs = self
             .get_all_logged_in_and_initialized_user_contexts()
             .await?;
@@ -38,7 +35,7 @@ impl MailContext {
     ///
     /// Returns error if we failed to retrieve the user context or retrieve the messages.
     pub async fn get_unsent_messages_ids_for_user(
-        self: &Arc<Self>,
+        &self,
         user_id: UserId,
     ) -> Result<Vec<LocalMessageId>, MailContextError> {
         let session = self.get_account_sessions(user_id.clone()).await?.pop();

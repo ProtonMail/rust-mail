@@ -356,7 +356,7 @@ impl MailContext {
     /// or access the user database.
     ///
     pub async fn initialized_user_context_from_session(
-        self: &Arc<Self>,
+        &self,
         session: &CoreSession,
         status: Option<StatusWatcher>,
     ) -> MailContextResult<Option<Arc<MailUserContext>>> {
@@ -365,7 +365,7 @@ impl MailContext {
             .user_context_from_session(session, status)
             .await?;
 
-        Arc::clone(self).new_initialized_user_context(ctx).await
+        self.new_initialized_user_context(ctx).await
     }
 
     /// Create a new context from an existing session.
@@ -654,7 +654,7 @@ impl MailContext {
     /// Retrieve initialized user context or return None.
     ///
     async fn new_initialized_user_context(
-        self: Arc<Self>,
+        &self,
         core_context: Arc<UserContext>,
     ) -> Result<Option<Arc<MailUserContext>>, MailContextError> {
         let mut active_contexts = self.active_user_contexts.lock().await;
@@ -748,7 +748,7 @@ impl MailContext {
 
     /// Get all the logged in user context that are active and initialized.
     pub async fn get_all_logged_in_and_initialized_user_contexts(
-        self: &Arc<Self>,
+        &self,
     ) -> MailContextResult<Vec<Arc<MailUserContext>>> {
         let sessions = self.get_sessions().await?;
         let mut ctxs = Vec::with_capacity(sessions.len());
