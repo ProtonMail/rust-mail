@@ -1867,7 +1867,7 @@ impl Conversation {
             let message = Message::find_first(
                 "WHERE local_conversation_id=?
                 AND unread=0
-                ORDER BY time",
+                ORDER BY time DESC",
                 params![conversation_id],
                 bond,
             )

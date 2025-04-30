@@ -7,9 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Update `get_unsent_messages_ids_in_queue`
+
+### Features
+
+- Enable rollback items
+
 ### Fixes
 
 - Sort changelog chronologically
+
+
+## [mail-uniffi-v0.75.2] - 2025-04-30
+
+### Fixes
+
+- Ensure last conversation messages is marked as unread
+
+
+## [mail-uniffi-v0.75.1] - 2025-04-30
+
+### Fixes
+
+- [ET-2804] Delete conversation & message actions now resolve ids before marking message/conversation as deleted
+- [ET-2809] Duplicate entries in trash location should no longer be visible
 
 
 ## [mail-uniffi-v0.75.0] - 2025-04-28
@@ -50,9 +73,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- Decrease memory footprint of the app by compiling the vcard regexes on demand.
 - Improved delete all messages in label
 - Spam and trash folders correctly get assigned in the banner
-- Decrease memory footprint of the app by compiling the vcard regexes on demand.
 - Ensure changelog generation doesn't filter out certain commits
 - Cleanly close git repo when done
 - Google paymentreceipt type.
@@ -101,7 +124,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Only allow one session per user
 - Leaking tracing spans in async code
 - Return cached data from mail scroller immediately
-- Don't hang if transaction never ends
 - Don't send rollback again
 
 
@@ -115,6 +137,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Restore stash debug filter for ios logs
 - Network requests in send preferences tx
+
+
+## [mail-uniffi-v0.72.8] - 2025-04-16
+
+### Fixes
+
+- Don't hang if transaction never ends
 
 
 ## [mail-uniffi-v0.72.7] - 2025-04-16
