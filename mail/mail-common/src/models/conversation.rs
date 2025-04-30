@@ -1940,9 +1940,8 @@ impl Conversation {
                     // should not be modified
                     if total_conversation_message_count == 1 {
                         counter.unread += 1;
+                        counter.save(bond).await?;
                     }
-
-                    counter.save(bond).await?;
                 }
             }
 
