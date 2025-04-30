@@ -2281,6 +2281,8 @@ async fn test_conversation_mark_unread() {
     .unwrap();
     assert_eq!(messages.len(), 1);
     let message = &messages[0];
+    // newest message has time at 400.
+    assert_eq!(message.time, 400);
 
     assert_eq!(message.label_ids[0], *MY_LABEL_ID1);
 
