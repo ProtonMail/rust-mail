@@ -33,7 +33,7 @@ impl<T: MailScrollerSource> Paginator<T> {
         let mut guard = paginator.lock().await;
         let WatcherHandle {
             handle, receiver, ..
-        } = guard.watch()?;
+        } = guard.watch().await?;
         drop(guard);
         let paginator_cloned = Arc::clone(&paginator);
         let (watcher, background_command) =

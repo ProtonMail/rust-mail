@@ -141,7 +141,7 @@ impl Prefetch {
             receiver,
             handle: _,
             ..
-        } = scroller.watch()?;
+        } = scroller.watch().await?;
         yield_now().await;
         // Wait for previous page just in case it arrives
         let _ = tokio::time::timeout(PREVIOUS_PAGE_AWAIT_DURATION, receiver.recv_async()).await;
@@ -200,7 +200,7 @@ impl Prefetch {
             receiver,
             handle: _,
             ..
-        } = scroller.watch()?;
+        } = scroller.watch().await?;
         yield_now().await;
         // Wait for previous page just in case it arrives
         let _ = tokio::time::timeout(PREVIOUS_PAGE_AWAIT_DURATION, receiver.recv_async()).await;

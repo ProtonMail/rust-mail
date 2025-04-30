@@ -20,7 +20,7 @@ pub struct DataScrollerSource<T: RemoteSource> {
     unread: ReadFilter,
     page_size: usize,
     invalidate: Option<flume::Sender<()>>,
-    sync_page_bg: (flume::Sender<()>, flume::Receiver<()>),
+    new_data_callback: (flume::Sender<()>, flume::Receiver<()>),
     state: MailScrollerState<T>,
 }
 
@@ -31,7 +31,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             unread,
             page_size,
             invalidate: None,
-            sync_page_bg: flume::bounded(0),
+            new_data_callback: flume::bounded(0),
             state: MailScrollerState::None,
         }
     }
@@ -142,7 +142,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             remote_label_id,
             unread,
             page_size,
-            self.sync_page_bg.0.clone(),
+            self.new_data_callback.0.clone(),
         )
         .await?;
 
@@ -289,8 +289,9 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
 
         // If we go back online, we need to replace
         // or when we have loaded previous page in bg
-        let replace =
-            (self.state.is_offline() && is_online) || self.sync_page_bg.1.try_recv().is_ok();
+        let new_data_arrived = self.new_data_callback.1.try_recv().is_ok();
+        let connection_returned = self.state.is_offline() && is_online;
+        let replace = connection_returned || new_data_arrived;
 
         // Set state accordingly to the current connection status
         if is_offline && !self.state.has_more_in_order(&tether).await? {

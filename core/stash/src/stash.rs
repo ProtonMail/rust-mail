@@ -538,7 +538,7 @@ impl Stash {
     /// See [`Stash::subscribe()`].
     pub fn subscribe_to<F>(&self, observer: F) -> Result<WatcherHandle, StashError>
     where
-        F: Fn(QueueSender<()>) -> Box<dyn TableObserver>,
+        F: FnOnce(QueueSender<()>) -> Box<dyn TableObserver>,
     {
         let (sender, receiver) = unbounded();
         let handle = self
