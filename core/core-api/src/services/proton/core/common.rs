@@ -93,15 +93,6 @@ pub enum DeviceEnvironment {
 //  TRAITS
 //==============================================================================
 
-/// If the `sql` feature is enabled this marker will contain extra trait boundaries.
-#[cfg(feature = "sql")]
-pub trait ProtonIdSqlMarker: ::stash::exports::ToSql + ::stash::exports::FromSql {}
-
-#[cfg(not(feature = "sql"))]
-/// If the `sql` feature is enabled this marker will contain extra trait boundaries.
-pub trait ProtonIdSqlMarker {}
-
-/// Marker trait assigned to each id that was declared with [`declare_proton_id`].
 pub trait ProtonIdMarker:
     Deref<Target = str>
     + Clone
@@ -110,7 +101,6 @@ pub trait ProtonIdMarker:
     + Eq
     + Hash
     + PartialEq
-    + ProtonIdSqlMarker
     + Serialize
     + Sync
     + Send
@@ -118,51 +108,32 @@ pub trait ProtonIdMarker:
 }
 
 declare_proton_id! {
-    /// Represents the Id of the user.
     pub UserId
 }
-
 declare_proton_id! {
-    /// Represents the Id of a User Address.
     pub AddressId
 }
-
 declare_proton_id! {
-    /// Represents the Id of an active API Session.
     pub SessionId
 }
-
 declare_proton_id! {
-    /// Represents the Id of a Contact.
     pub ContactId
 }
-
 declare_proton_id! {
-    /// Represents the email Id of a Contact.
     pub ContactEmailId
 }
-
 declare_proton_id! {
-    /// Represents the UID of a Contact.
     pub ContactUID
 }
-
 declare_proton_id! {
-    /// Represents the Id of an Event.
     pub EventId
 }
-
 declare_proton_id! {
-    /// Represents the Id of a Label.
     pub LabelId
 }
-
 declare_proton_id! {
-    /// Represents the Id of a crypto salt.
     pub SaltId
 }
-
 declare_proton_id! {
-    /// Represents the Id of an incoming default
     pub IncomingDefaultId
 }

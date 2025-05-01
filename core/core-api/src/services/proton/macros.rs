@@ -1,13 +1,3 @@
-/// Declare a new unique type for a Proton String Identifier.
-///
-/// # Example
-///
-/// ```
-/// use proton_api_core::declare_proton_id;
-/// declare_proton_id!(pub MyProtonId);
-///
-/// let id = MyProtonId::from("my-actual-proton-id");
-/// ```
 #[macro_export]
 macro_rules! declare_proton_id {
     (
@@ -19,28 +9,16 @@ macro_rules! declare_proton_id {
         $visibility struct $ name(String);
 
         impl $name {
-            #[doc ="Create a new [`"]
-            #[doc =stringify!($name)]
-            #[doc ="`] from a [`String`]."]
-            ///
-            /// # Parameters
-            ///
-            /// * `id` - The ID to wrap.
-            ///
             #[must_use]
             pub fn new(id: String) -> Self {
                 Self(id)
             }
 
-            #[doc = "Convert the [`"]
-            #[doc = stringify!($name)]
-            #[doc = "`] into the inner [`String`]."]
             #[must_use]
             pub fn into_inner(self) -> String {
                 self.0
             }
 
-            /// Get a reference to the inner [`String`]
             #[must_use]
             pub fn as_str(&self) -> &str {
                 &self.0
@@ -86,8 +64,6 @@ macro_rules! declare_proton_id {
                 String::column_result(value).map(Self)
             }
         }
-
-        impl $crate::services::proton::ProtonIdSqlMarker for $name {}
 
         impl $crate::services::proton::ProtonIdMarker for $name {}
     }

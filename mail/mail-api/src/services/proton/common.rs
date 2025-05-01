@@ -9,22 +9,15 @@
 
 use proton_api_core::declare_proton_id;
 
-declare_proton_id!(
-    /// Identifier for a proton Attachment.
+declare_proton_id! {
     pub AttachmentId
-);
-
-declare_proton_id!(
-    /// Identifier for a proton Messages.
+}
+declare_proton_id! {
     pub MessageId
-);
-
-declare_proton_id!(
-    /// Identifier for a proton Conversation.
+}
+declare_proton_id! {
     pub ConversationId
-);
-
-declare_proton_id!(
-    /// Identifier for an external message id.
+}
+declare_proton_id! {
     pub ExternalId
-);
+}

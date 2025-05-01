@@ -193,46 +193,29 @@ pub struct Subscription {
 }
 
 declare_proton_id! {
-    /// Represents the Id of a plan.
     pub PlanId
 }
-
 declare_proton_id! {
-    /// Represents the Id of a product.
     pub ProductId
 }
-
 declare_proton_id! {
-    /// Represents the Id of a customer.
     pub CustomerId
 }
-
 declare_proton_id! {
-    /// Represents the Id of a bundle (Apple).
     pub BundleId
 }
-
 declare_proton_id! {
-    /// Represents the Id of a packageName (Google).
     pub PackageNameId
 }
-
 declare_proton_id! {
-    /// Represents the Id of a payment transaction.
     pub TransactionId
 }
-
 declare_proton_id! {
-    /// Represents the Id of a payment order.
     pub OrderId
 }
-
 declare_proton_id! {
-    /// Represents the Id of a payment method.
     pub PaymentMethodId
 }
-
 declare_proton_id! {
-    /// Represents the Id of a subscription.
     pub SubscriptionId
 }
