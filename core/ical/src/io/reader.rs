@@ -147,7 +147,7 @@ impl<'a> IcsReader<'a> {
                 (Some(b'\r'), _) => {
                     self.pos += 1;
                 }
-                (Some(b'\n'), Some(b' ')) => {
+                (Some(b'\n'), Some(b' ' | b'\t')) => {
                     self.pos += 2;
                 }
                 (Some(ch), _) => {
@@ -779,6 +779,25 @@ mod tests {
 
     fn target(s: impl Into<String>) -> IcsReader<'static> {
         IcsReader::new(Box::new(s.into()).leak().as_bytes())
+    }
+
+    #[test]
+    fn folding() {
+        let mut r = target(ics! {"
+            hel
+             lo
+        "});
+
+        assert_eq!("hello", r.rest());
+
+        // ---
+
+        let mut r = target(ics! {"
+            hel
+            \tlo
+        "});
+
+        assert_eq!("hello", r.rest());
     }
 
     #[test_case("BEGIN:VCALENDAR", Some("BEGIN"))]
