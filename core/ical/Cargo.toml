@@ -3,9 +3,17 @@ name = "ical"
 version = "0.1.0"
 edition.workspace = true
 
+[lib]
+crate-type = ["cdylib", "lib"]
+
+[features]
+php = ["ext-php-rs"]
+
 [dependencies]
+ext-php-rs = { workspace = true, optional = true }
 itertools = { workspace = true }
 jiff = { workspace = true }
+strum = { workspace = true, features = ["derive"] }
 thiserror = { workspace = true }
 tynm = { workspace = true }
 utf8-width = { workspace = true }

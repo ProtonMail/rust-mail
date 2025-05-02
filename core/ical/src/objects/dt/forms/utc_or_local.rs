@@ -28,6 +28,24 @@ impl From<DateTime<UtcOrLocalForm>> for DateTime {
     }
 }
 
+impl FromJiffZoned for DateTime<UtcOrLocalForm> {
+    fn from_jiff(jiff: JiffZoned) -> Option<Self> {
+        let dt = DateTime::<AnyForm>::from_jiff(jiff)?;
+
+        let form = match dt.form {
+            AnyForm::Local => UtcOrLocalForm::Local,
+            AnyForm::Utc => UtcOrLocalForm::Utc,
+            AnyForm::Tz(_) => return None,
+        };
+
+        Some(Self {
+            date: dt.date,
+            time: dt.time,
+            form,
+        })
+    }
+}
+
 impl AsJiffZoned for DateTime<UtcOrLocalForm> {
     fn as_jiff(&self) -> Result<JiffZoned, JiffError> {
         DateTime::<AnyForm>::from(*self).as_jiff()

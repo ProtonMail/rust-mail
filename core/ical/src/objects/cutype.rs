@@ -3,7 +3,7 @@ use super::*;
 /// Calendar user type.
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545#section-3.2.3>
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, EnumString)]
 pub enum CuType {
     #[default]
     Individual,
@@ -44,6 +44,28 @@ impl Write<Value> for CuType {
             CuType::Room => "ROOM",
             CuType::Unknown => "UNKNOWN",
         });
+    }
+}
+
+#[cfg(feature = "php")]
+mod php {
+    use super::*;
+
+    impl<'a> FromPhpZval<'a> for CuType {
+        const TYPE: PhpDataType = PhpDataType::String;
+
+        fn from_zval(zval: &'a PhpZval) -> Option<Self> {
+            // Utilizing EnumString's impl
+            <Self as std::str::FromStr>::from_str(zval.str()?).ok()
+        }
+    }
+
+    impl IntoPhpZval for CuType {
+        const TYPE: PhpDataType = PhpDataType::String;
+
+        fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
+            zval.set_string(&format!("{self:?}"), persistent)
+        }
     }
 }
 

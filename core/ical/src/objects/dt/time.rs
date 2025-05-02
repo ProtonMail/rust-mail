@@ -21,6 +21,17 @@ impl Time {
     }
 }
 
+impl From<JiffTime> for Time {
+    fn from(value: JiffTime) -> Self {
+        #[allow(clippy::cast_sign_loss)]
+        Self::new_unchecked(
+            value.hour() as u8,
+            value.minute() as u8,
+            value.second() as u8,
+        )
+    }
+}
+
 impl From<Time> for JiffTime {
     fn from(value: Time) -> Self {
         #[allow(clippy::cast_possible_wrap)]

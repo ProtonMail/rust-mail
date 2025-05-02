@@ -29,6 +29,26 @@ impl DateTime<AnyForm> {
     }
 }
 
+impl FromJiffZoned for DateTime<AnyForm> {
+    fn from_jiff(jiff: JiffZoned) -> Option<Self> {
+        let tz = jiff.time_zone();
+
+        let form = if *tz == JiffTimeZone::unknown() {
+            AnyForm::Local
+        } else if *tz == JiffTimeZone::UTC {
+            AnyForm::Utc
+        } else {
+            AnyForm::Tz(TzId::from(tz.iana_name()?.to_owned()))
+        };
+
+        Some(Self {
+            date: jiff.date().into(),
+            time: jiff.time().into(),
+            form,
+        })
+    }
+}
+
 impl AsJiffZoned for DateTime<AnyForm> {
     fn as_jiff(&self) -> Result<JiffZoned, JiffError> {
         let dt = JiffDateTime::from_parts(self.date.into(), self.time.into());

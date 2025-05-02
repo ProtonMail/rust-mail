@@ -16,3 +16,20 @@ $ cargo run -p ical -- ./examples/example.ical
 ### Rust
 
 See <./tests/acceptance.rs>
+
+### PHP
+
+``` bash
+$ cd core/ical
+$ RUSTFLAGS="-C link-arg=-Wl,-undefined,dynamic_lookup" cargo build -p ical --release --features php
+
+# on Linux
+$ php -d extension=../../target/release/libical.so examples/php/parse.php
+$ php -d extension=../../target/release/libical.so examples/php/print.php
+$ php -d extension=../../target/release/libical.so examples/php/trip.php
+
+# on Mac
+$ php -d extension=../../target/release/libical.dylib examples/php/parse.php
+$ php -d extension=../../target/release/libical.dylib examples/php/print.php
+$ php -d extension=../../target/release/libical.dylib examples/php/trip.php
+```

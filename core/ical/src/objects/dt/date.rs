@@ -64,6 +64,13 @@ impl Date {
     }
 }
 
+impl From<JiffDate> for Date {
+    fn from(value: JiffDate) -> Self {
+        #[allow(clippy::cast_sign_loss)]
+        Self::new_unchecked(value.year() as u16, value.month() as u8, value.day() as u8)
+    }
+}
+
 impl From<Date> for JiffDate {
     fn from(value: Date) -> Self {
         #[allow(clippy::cast_possible_wrap)]
@@ -100,5 +107,31 @@ impl Write<Value> for Date {
             self.month.as_num(),
             self.day.as_num()
         ));
+    }
+}
+
+#[cfg(feature = "php")]
+mod php {
+    use super::*;
+
+    impl<'a> FromPhpZval<'a> for Date {
+        const TYPE: PhpDataType = PhpDataType::Object(None);
+
+        fn from_zval(zval: &'a PhpZval) -> Option<Self> {
+            Some(DateTime::<AnyForm>::from_zval(zval)?.date)
+        }
+    }
+
+    impl IntoPhpZval for Date {
+        const TYPE: PhpDataType = PhpDataType::Object(None);
+
+        fn set_zval(self, zv: &mut PhpZval, persistent: bool) -> PhpResult<()> {
+            DateTime {
+                date: self,
+                time: Time::new_unchecked(0, 0, 0),
+                form: AnyForm::Utc,
+            }
+            .set_zval(zv, persistent)
+        }
     }
 }

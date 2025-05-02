@@ -4,6 +4,7 @@ use super::*;
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545.html#section-3.3.6>
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "php", derive(ZvalConvert))]
 pub struct Duration {
     pub sign: Sign,
     pub amount: DurationAmount,
@@ -89,6 +90,7 @@ impl Write<Value> for Duration {
 
 /// Duration's amount, see [`Duration`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "php", derive(ZvalConvert))]
 pub enum DurationAmount {
     Date(DateDuration),
     Time(TimeDuration),
@@ -216,6 +218,7 @@ impl Write<Value> for DurationAmount {
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545.html#section-3.3.6>
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "php", derive(ZvalConvert))]
 pub struct DateDuration {
     pub days: u32,
     pub time: TimeDuration,
@@ -250,6 +253,7 @@ impl Write<Value> for DateDuration {
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545.html#section-3.3.6>
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "php", derive(ZvalConvert))]
 pub struct TimeDuration {
     pub hours: u32,
     pub minutes: u32,
@@ -312,6 +316,7 @@ impl Write<Value> for TimeDuration {
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545.html#section-3.3.6>
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "php", derive(ZvalConvert))]
 pub struct WeekDuration {
     pub weeks: u32,
 }

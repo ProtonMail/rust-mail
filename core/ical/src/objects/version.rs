@@ -39,6 +39,31 @@ impl Write<Property> for Version {
     }
 }
 
+#[cfg(feature = "php")]
+mod php {
+    use super::*;
+
+    impl<'a> FromPhpZval<'a> for Version {
+        const TYPE: PhpDataType = PhpDataType::String;
+
+        fn from_zval(zval: &'a PhpZval) -> Option<Self> {
+            if zval.str()? == "Two" {
+                Some(Version::Two)
+            } else {
+                None
+            }
+        }
+    }
+
+    impl IntoPhpZval for Version {
+        const TYPE: PhpDataType = PhpDataType::String;
+
+        fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
+            zval.set_string(&format!("{self:?}"), persistent)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

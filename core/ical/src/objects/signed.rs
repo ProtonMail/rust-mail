@@ -2,6 +2,7 @@ use super::*;
 
 /// Positive or negative value.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "php", derive(ZvalConvert))]
 pub struct Signed<T> {
     pub sign: Sign,
     pub value: T,
@@ -89,6 +90,31 @@ impl Write<Value> for Sign {
             Sign::Neg => "-",
             Sign::Pos => "+",
         });
+    }
+}
+
+#[cfg(feature = "php")]
+mod php {
+    use super::*;
+
+    impl<'a> FromPhpZval<'a> for Sign {
+        const TYPE: PhpDataType = PhpDataType::String;
+
+        fn from_zval(zval: &'a PhpZval) -> Option<Self> {
+            match zval.str()? {
+                "Neg" => Some(Sign::Neg),
+                "Pos" => Some(Sign::Pos),
+                _ => None,
+            }
+        }
+    }
+
+    impl IntoPhpZval for Sign {
+        const TYPE: PhpDataType = PhpDataType::String;
+
+        fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
+            zval.set_string(&format!("{self:?}"), persistent)
+        }
     }
 }
 

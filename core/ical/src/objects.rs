@@ -52,7 +52,14 @@ use jiff::{Error as JiffError, Span as JiffSpan, Unit as JiffUnit, Zoned as Jiff
 use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::num::NonZeroI8;
+use strum::EnumString;
 use thiserror::Error;
+
+#[cfg(feature = "php")]
+use ext_php_rs::{
+    convert::FromZval as FromPhpZval, convert::IntoZval as IntoPhpZval, error::Result as PhpResult,
+    flags::DataType as PhpDataType, prelude::*, types::Zval as PhpZval,
+};
 
 pub use self::attendee::*;
 pub use self::caladdress::*;

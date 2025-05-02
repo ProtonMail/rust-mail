@@ -13,6 +13,14 @@ pub use self::time::*;
 pub use self::units::*;
 use super::*;
 
+#[allow(unused)]
+pub(crate) trait FromJiffZoned
+where
+    Self: Sized,
+{
+    fn from_jiff(jiff: JiffZoned) -> Option<Self>;
+}
+
 pub(crate) trait AsJiffZoned {
     fn as_jiff(&self) -> Result<JiffZoned, JiffError>;
 }

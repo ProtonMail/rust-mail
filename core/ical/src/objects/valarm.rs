@@ -187,6 +187,7 @@ impl Write<Property> for VAlarmAction {
 
 /// Alarm that displays a message; see [`VAlarm`].
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "php", derive(ZvalConvert))]
 pub struct DisplayAlarm {
     pub trigger: Trigger,
     pub description: Description,
@@ -232,6 +233,7 @@ impl Write<Component> for DisplayAlarm {
 
 /// Alarm that sends an email; see [`VAlarm`].
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "php", derive(ZvalConvert))]
 pub struct EmailAlarm {
     pub trigger: Trigger,
     pub description: Description,
@@ -308,6 +310,7 @@ impl Write<Component> for EmailAlarm {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "php", derive(ZvalConvert))]
 pub struct DurationAndRepeat {
     pub duration: Duration,
     pub repeat: Repeat,
@@ -332,6 +335,45 @@ pub enum VAlarmViolation {
 
     #[error("alarm has no attendees")]
     NoAttendees,
+}
+
+#[cfg(feature = "php")]
+mod php {
+    use super::*;
+
+    impl<'a> FromPhpZval<'a> for VAlarm {
+        const TYPE: PhpDataType = PhpDataType::Object(None);
+
+        fn from_zval(zval: &'a PhpZval) -> Option<Self> {
+            match zval.object()?.get_property("kind").ok()? {
+                "Display" => Some(VAlarm::Display(DisplayAlarm::from_zval(zval)?)),
+                "Email" => Some(VAlarm::Email(EmailAlarm::from_zval(zval)?)),
+                _ => None,
+            }
+        }
+    }
+
+    impl IntoPhpZval for VAlarm {
+        const TYPE: PhpDataType = PhpDataType::Object(None);
+
+        fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
+            let kind = match self {
+                VAlarm::Display(this) => {
+                    this.set_zval(zval, persistent)?;
+                    "Display"
+                }
+
+                VAlarm::Email(this) => {
+                    this.set_zval(zval, persistent)?;
+                    "Email"
+                }
+            };
+
+            zval.object_mut().unwrap().set_property("kind", kind)?;
+
+            Ok(())
+        }
+    }
 }
 
 #[cfg(test)]

@@ -4,6 +4,7 @@ use super::*;
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545.html#section-3.8.3.1>
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "php", derive(ZvalConvert))]
 pub struct TzId {
     // TODO Text / ParamValue (must not contain dquote)
     pub value: String,

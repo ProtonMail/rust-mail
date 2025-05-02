@@ -4,6 +4,7 @@ use super::*;
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545.html#section-3.6.5>
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "php", derive(ZvalConvert))]
 pub struct VTimeZone {
     pub tzid: TzId,
     pub daylights: Vec<TzProps>,
@@ -126,6 +127,7 @@ pub enum VTimeZoneViolation {
 
 /// Time zone properties; part of a [`VTimeZone`].
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "php", derive(ZvalConvert))]
 pub struct TzProps {
     pub dtstart: DtStart,
     pub tz_offset_from: TzOffsetFrom,

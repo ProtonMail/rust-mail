@@ -40,8 +40,63 @@ impl Write<Value> for CalAddress {
     }
 }
 
+#[cfg(feature = "php")]
+mod php {
+    use super::*;
+
+    #[derive(Clone, Debug, PartialEq, Eq, ZvalConvert)]
+    struct PhpCalAddress {
+        kind: String,
+        value: String,
+    }
+
+    impl From<CalAddress> for PhpCalAddress {
+        fn from(value: CalAddress) -> Self {
+            match value {
+                CalAddress::Email(value) => Self {
+                    kind: "Email".into(),
+                    value: value.value.into_string(),
+                },
+                CalAddress::Url(value) => Self {
+                    kind: "Url".into(),
+                    value: value.value.into_string(),
+                },
+            }
+        }
+    }
+
+    impl TryFrom<PhpCalAddress> for CalAddress {
+        type Error = ();
+
+        fn try_from(value: PhpCalAddress) -> Result<Self, Self::Error> {
+            match value.kind.as_str() {
+                "Email" => Ok(Self::Email(EmailAddress::from(value.value))),
+                "Url" => Ok(Self::Url(UrlAddress::from(value.value))),
+                _ => Err(()),
+            }
+        }
+    }
+
+    impl<'a> FromPhpZval<'a> for CalAddress {
+        const TYPE: PhpDataType = PhpDataType::String;
+
+        fn from_zval(zval: &'a PhpZval) -> Option<Self> {
+            PhpCalAddress::from_zval(zval)?.try_into().ok()
+        }
+    }
+
+    impl IntoPhpZval for CalAddress {
+        const TYPE: PhpDataType = PhpDataType::String;
+
+        fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
+            zval.set_string(&self.to_string(Value), persistent)
+        }
+    }
+}
+
 /// An email address; see [`CalAddress`].
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "php", derive(ZvalConvert))]
 pub struct EmailAddress {
     value: Text,
 }
@@ -103,6 +158,7 @@ impl Write<Property> for EmailAddress {
 
 /// An URL address; see [`CalAddress`].
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "php", derive(ZvalConvert))]
 pub struct UrlAddress {
     value: Text,
 }

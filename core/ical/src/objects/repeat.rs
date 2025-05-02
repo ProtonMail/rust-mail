@@ -4,6 +4,7 @@ use super::*;
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545#section-3.8.6.2>
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "php", derive(ZvalConvert))]
 pub struct Repeat {
     pub value: u32,
 }

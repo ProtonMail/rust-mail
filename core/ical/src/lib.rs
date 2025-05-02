@@ -16,6 +16,7 @@ pub use self::result::*;
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545.html#section-3.4>
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "php", derive(ext_php_rs::ZvalConvert))]
 pub struct VCalendar {
     method: Option<Method>,
     prodid: ProdId,
@@ -351,6 +352,93 @@ impl Write<Component> for VCalendar {
         for event in &self.events {
             w.comp("VEVENT", event);
         }
+    }
+}
+
+#[cfg(feature = "php")]
+mod php {
+    use super::*;
+    use ext_php_rs::{binary_slice::BinarySlice, prelude::*};
+
+    #[derive(Clone, Debug, ZvalConvert)]
+    struct PhpParseResult {
+        calendar: VCalendar,
+        messages: Vec<PhpParseMessage>,
+    }
+
+    #[derive(Clone, Debug, ZvalConvert)]
+    struct PhpParseMessage {
+        kind: String,
+        text: String,
+    }
+
+    /// Creates a new, minimal [`VCalendar`].
+    #[php_function]
+    fn ical_new(prodid: String) -> VCalendar {
+        VCalendar::new(prodid)
+    }
+
+    /// Creates a new, minimal [`VEvent`].
+    #[php_function]
+    fn ical_new_event(uid: String, dtstamp: DateTime) -> VEvent {
+        VEvent::new(uid, dtstamp)
+    }
+
+    /// Converts given string into a calendar.
+    ///
+    /// This function throws an exception if the output could't have been parsed
+    /// whatsoever - otherwise, if anything got parsed correctly, an object with
+    /// the calendar and possible parse errors/warnings is returned.
+    #[allow(clippy::needless_pass_by_value)]
+    #[php_function]
+    fn ical_parse(src: BinarySlice<u8>) -> Result<PhpParseResult, String> {
+        let (calendar, messages) = VCalendar::from_bytes(&src).map_err(|err| err.to_string())?;
+
+        let messages = messages
+            .into_iter()
+            .map(|msg| PhpParseMessage {
+                kind: match msg.kind {
+                    ReadMsgKind::Warning => "Warning".into(),
+                    ReadMsgKind::Error => "Error".into(),
+                    ReadMsgKind::Violation => "Violation".into(),
+                },
+                text: msg.to_string(&**src),
+            })
+            .collect();
+
+        Ok(PhpParseResult { calendar, messages })
+    }
+
+    /// Converts given calendar into a string.
+    #[allow(clippy::needless_pass_by_value)]
+    #[must_use]
+    #[php_function]
+    fn ical_print(src: VCalendar) -> String {
+        src.to_string()
+    }
+
+    /// Creates an iCal-compatible string (with correct newlines).
+    ///
+    /// Sanitizing input is not necessary before calling [`ical_parse()`], since
+    /// the parser will handle bare `\n` newlines just fine.
+    ///
+    /// Rather, this function is useful when you'd like to *compare* a string
+    /// returned from [`ical_print()`] with a string hardcoded into PHP, as the
+    /// latter will contain just `\n`-newlines, while the string returned from
+    /// [`ical_print()`] will be delimited using `\r\n`.
+    #[allow(clippy::needless_pass_by_value)]
+    #[must_use]
+    #[php_function]
+    fn ical_sanitize(src: String) -> String {
+        let mut src = src.lines().collect::<Vec<_>>().join("\r\n");
+
+        src.push_str("\r\n");
+        src
+    }
+
+    #[php_module]
+    fn get_module(module: ModuleBuilder) -> ModuleBuilder {
+        module
     }
 }
 

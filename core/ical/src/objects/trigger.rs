@@ -118,6 +118,92 @@ pub enum TriggerEdge {
     End,
 }
 
+#[cfg(feature = "php")]
+mod php {
+    use super::*;
+
+    #[derive(Clone, Debug, ZvalConvert)]
+    enum PhpTrigger {
+        Absolute(PhpAbsoluteTrigger),
+        Relative(PhpRelativeTrigger),
+    }
+
+    #[derive(Clone, Debug, ZvalConvert)]
+    struct PhpRelativeTrigger {
+        kind: String,
+        edge: TriggerEdge,
+        duration: Duration,
+    }
+
+    #[derive(Clone, Debug, ZvalConvert)]
+    struct PhpAbsoluteTrigger {
+        kind: String,
+        at: DateTime<UtcForm>,
+    }
+
+    impl From<Trigger> for PhpTrigger {
+        fn from(value: Trigger) -> Self {
+            match value {
+                Trigger::Absolute(at) => PhpTrigger::Absolute(PhpAbsoluteTrigger {
+                    kind: "Absolute".into(),
+                    at,
+                }),
+
+                Trigger::Relative(edge, duration) => PhpTrigger::Relative(PhpRelativeTrigger {
+                    kind: "Relative".into(),
+                    edge,
+                    duration,
+                }),
+            }
+        }
+    }
+
+    impl From<PhpTrigger> for Trigger {
+        fn from(value: PhpTrigger) -> Self {
+            match value {
+                PhpTrigger::Absolute(value) => Trigger::Absolute(value.at),
+                PhpTrigger::Relative(value) => Trigger::Relative(value.edge, value.duration),
+            }
+        }
+    }
+
+    impl<'a> FromPhpZval<'a> for Trigger {
+        const TYPE: PhpDataType = <PhpTrigger as FromPhpZval<'a>>::TYPE;
+
+        fn from_zval(zval: &'a PhpZval) -> Option<Self> {
+            Some(PhpTrigger::from_zval(zval)?.into())
+        }
+    }
+
+    impl IntoPhpZval for Trigger {
+        const TYPE: PhpDataType = <PhpTrigger as IntoPhpZval>::TYPE;
+
+        fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
+            PhpTrigger::from(self).set_zval(zval, persistent)
+        }
+    }
+
+    impl<'a> FromPhpZval<'a> for TriggerEdge {
+        const TYPE: PhpDataType = PhpDataType::String;
+
+        fn from_zval(zval: &'a PhpZval) -> Option<Self> {
+            match zval.str()? {
+                "Start" => Some(TriggerEdge::Start),
+                "End" => Some(TriggerEdge::End),
+                _ => None,
+            }
+        }
+    }
+
+    impl IntoPhpZval for TriggerEdge {
+        const TYPE: PhpDataType = PhpDataType::String;
+
+        fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
+            zval.set_string(&format!("{self:?}"), persistent)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -13,6 +13,29 @@ macro_rules! impls {
                 w.value(self.0);
             }
         }
+
+        #[cfg(feature = "php")]
+        impl<'a> FromPhpZval<'a> for $ty {
+            const TYPE: PhpDataType = PhpDataType::Long;
+
+            fn from_zval(zval: &'a PhpZval) -> Option<Self> {
+                let zval = zval.long()?;
+                let zval = zval.try_into().ok()?;
+
+                Self::new(zval).ok()
+            }
+        }
+
+        #[cfg(feature = "php")]
+        impl IntoPhpZval for $ty {
+            const TYPE: PhpDataType = PhpDataType::Long;
+
+            fn set_zval(self, zval: &mut PhpZval, _: bool) -> PhpResult<()> {
+                zval.set_long(self.0);
+
+                Ok(())
+            }
+        }
     };
 }
 
@@ -316,6 +339,33 @@ impl Weekday {
             Weekday::Saturday => JiffWeekday::Saturday,
             Weekday::Sunday => JiffWeekday::Sunday,
         }
+    }
+}
+
+#[cfg(feature = "php")]
+impl<'a> FromPhpZval<'a> for Weekday {
+    const TYPE: PhpDataType = PhpDataType::String;
+
+    fn from_zval(zval: &'a PhpZval) -> Option<Self> {
+        match zval.str()? {
+            "Monday" => Some(Weekday::Monday),
+            "Tuesday" => Some(Weekday::Tuesday),
+            "Wednesday" => Some(Weekday::Wednesday),
+            "Thursday" => Some(Weekday::Thursday),
+            "Friday" => Some(Weekday::Friday),
+            "Saturday" => Some(Weekday::Saturday),
+            "Sunday" => Some(Weekday::Sunday),
+            _ => None,
+        }
+    }
+}
+
+#[cfg(feature = "php")]
+impl IntoPhpZval for Weekday {
+    const TYPE: PhpDataType = PhpDataType::String;
+
+    fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
+        zval.set_string(&format!("{self:?}"), persistent)
     }
 }
 

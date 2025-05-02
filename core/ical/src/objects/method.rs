@@ -3,7 +3,7 @@ use super::*;
 /// Method.
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5546.html#section-3.2>
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString)]
 pub enum Method {
     Publish,
     Request,
@@ -58,6 +58,28 @@ impl Write<Property> for Method {
             Method::Counter => ":COUNTER",
             Method::DeclineCounter => ":DECLINECOUNTER",
         });
+    }
+}
+
+#[cfg(feature = "php")]
+mod php {
+    use super::*;
+
+    impl<'a> FromPhpZval<'a> for Method {
+        const TYPE: PhpDataType = PhpDataType::String;
+
+        fn from_zval(zval: &'a PhpZval) -> Option<Self> {
+            // Utilizing EnumString's impl
+            <Self as std::str::FromStr>::from_str(zval.str()?).ok()
+        }
+    }
+
+    impl IntoPhpZval for Method {
+        const TYPE: PhpDataType = PhpDataType::String;
+
+        fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
+            zval.set_string(&format!("{self:?}"), persistent)
+        }
     }
 }
 

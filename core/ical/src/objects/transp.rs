@@ -3,7 +3,7 @@ use super::*;
 /// Time transparency.
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545.html#section-3.8.2.7>
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, EnumString)]
 pub enum Transp {
     #[default]
     Opaque,
@@ -35,6 +35,28 @@ impl Write<Property> for Transp {
             Transp::Opaque => ":OPAQUE",
             Transp::Transparent => ":TRANSPARENT",
         });
+    }
+}
+
+#[cfg(feature = "php")]
+mod php {
+    use super::*;
+
+    impl<'a> FromPhpZval<'a> for Transp {
+        const TYPE: PhpDataType = PhpDataType::String;
+
+        fn from_zval(zval: &'a PhpZval) -> Option<Self> {
+            // Utilizing EnumString's impl
+            <Self as std::str::FromStr>::from_str(zval.str()?).ok()
+        }
+    }
+
+    impl IntoPhpZval for Transp {
+        const TYPE: PhpDataType = PhpDataType::String;
+
+        fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
+            zval.set_string(&format!("{self:?}"), persistent)
+        }
     }
 }
 

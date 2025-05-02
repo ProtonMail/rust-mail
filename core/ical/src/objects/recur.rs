@@ -7,6 +7,7 @@ use super::*;
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545#section-3.3.10>
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "php", derive(ZvalConvert))]
 pub struct Recur {
     pub freq: Freq,
     pub until: Option<DateOrDt<UtcOrLocalForm>>,
@@ -290,7 +291,7 @@ impl Write<Value> for Recur {
 }
 
 /// Recurrence rule's frequency; see [`Recur`].
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString)]
 pub enum Freq {
     Secondly,
     Minutely,
@@ -428,6 +429,73 @@ impl Write<Value> for ByDay {
 pub enum RecurViolation {
     #[error("interval is zero")]
     ZeroInterval,
+}
+
+#[cfg(feature = "php")]
+mod php {
+    use super::*;
+
+    impl<'a> FromPhpZval<'a> for Freq {
+        const TYPE: PhpDataType = PhpDataType::String;
+
+        fn from_zval(zval: &'a PhpZval) -> Option<Self> {
+            // Utilizing EnumString's impl
+            <Self as std::str::FromStr>::from_str(zval.str()?).ok()
+        }
+    }
+
+    impl IntoPhpZval for Freq {
+        const TYPE: PhpDataType = PhpDataType::String;
+
+        fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
+            zval.set_string(&format!("{self:?}"), persistent)
+        }
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq, ZvalConvert)]
+    struct PhpByDay {
+        nth: Option<i8>,
+        day: Weekday,
+    }
+
+    impl From<PhpByDay> for ByDay {
+        fn from(value: PhpByDay) -> Self {
+            if let Some(nth) = value.nth.and_then(NonZeroI8::new) {
+                ByDay::Specific(nth, value.day)
+            } else {
+                ByDay::Every(value.day)
+            }
+        }
+    }
+
+    impl From<ByDay> for PhpByDay {
+        fn from(value: ByDay) -> Self {
+            match value {
+                ByDay::Every(day) => PhpByDay { nth: None, day },
+
+                ByDay::Specific(nth, day) => PhpByDay {
+                    nth: Some(nth.get()),
+                    day,
+                },
+            }
+        }
+    }
+
+    impl<'a> FromPhpZval<'a> for ByDay {
+        const TYPE: PhpDataType = PhpDataType::Object(None);
+
+        fn from_zval(zval: &'a PhpZval) -> Option<Self> {
+            Some(PhpByDay::from_zval(zval)?.into())
+        }
+    }
+
+    impl IntoPhpZval for ByDay {
+        const TYPE: PhpDataType = PhpDataType::Object(None);
+
+        fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
+            PhpByDay::from(self).set_zval(zval, persistent)
+        }
+    }
 }
 
 #[cfg(test)]

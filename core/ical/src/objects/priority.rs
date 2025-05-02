@@ -67,6 +67,32 @@ impl Write<Property> for Priority {
     }
 }
 
+#[cfg(feature = "php")]
+mod php {
+    use super::*;
+
+    impl<'a> FromPhpZval<'a> for Priority {
+        const TYPE: PhpDataType = PhpDataType::Long;
+
+        fn from_zval(zval: &'a PhpZval) -> Option<Self> {
+            let zval = zval.long()?;
+            let zval = u8::try_from(zval).ok()?;
+
+            Self::new(zval)
+        }
+    }
+
+    impl IntoPhpZval for Priority {
+        const TYPE: PhpDataType = PhpDataType::Long;
+
+        fn set_zval(self, zval: &mut PhpZval, _: bool) -> PhpResult<()> {
+            zval.set_long(self.value);
+
+            Ok(())
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -41,3 +41,95 @@ impl Write<Value> for DtValueType {
         });
     }
 }
+
+#[cfg(feature = "php")]
+mod php {
+    use super::*;
+    use ext_php_rs::{types::ZendObject, zend::ClassEntry};
+
+    fn create_time_zone(tz: &JiffTimeZone, persistent: bool) -> PhpResult<PhpZval> {
+        let name = {
+            let mut zval = PhpZval::new();
+
+            zval.set_string(tz.iana_name().unwrap_or("UTC"), persistent)?;
+            zval
+        };
+
+        let obj = {
+            // Unwrap-safety: `DateTimeZone` is part of the stdlib
+            let tz = ZendObject::new(ClassEntry::try_find("DateTimeZone").unwrap());
+
+            tz.try_call_method("__construct", vec![&name])?;
+            tz
+        };
+
+        let mut zval = PhpZval::new();
+
+        obj.set_zval(&mut zval, persistent)?;
+
+        Ok(zval)
+    }
+
+    impl<'a, F> FromPhpZval<'a> for DateTime<F>
+    where
+        DateTime<F>: FromJiffZoned,
+    {
+        const TYPE: PhpDataType = PhpDataType::Object(Some("DateTimeImmutable"));
+
+        fn from_zval(zval: &'a PhpZval) -> Option<Self> {
+            let ts = zval
+                .try_call_method("getTimestamp", Vec::new())
+                .ok()?
+                .long()?;
+
+            let tz = zval
+                .try_call_method("getTimezone", Vec::new())
+                .ok()?
+                .try_call_method("getName", Vec::new())
+                .ok()?;
+
+            let dt = jiff::Timestamp::from_second(ts)
+                .ok()?
+                .in_tz(tz.str()?)
+                .ok()?;
+
+            Self::from_jiff(dt)
+        }
+    }
+
+    impl<F> IntoPhpZval for DateTime<F>
+    where
+        DateTime<F>: AsJiffZoned,
+    {
+        const TYPE: PhpDataType = PhpDataType::Object(Some("DateTimeImmutable"));
+
+        fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
+            // TODO avoid unwrapping
+            let jiff = self.as_jiff().unwrap();
+
+            let dt = {
+                // Unwrap-safety: `DateTimeImmutable` is part of the stdlib
+                let dt = ZendObject::new(ClassEntry::try_find("DateTimeImmutable").unwrap());
+
+                dt.try_call_method("__construct", Vec::new())?;
+                dt
+            };
+
+            let tz = create_time_zone(jiff.time_zone(), persistent)?;
+
+            let ts = {
+                let mut arg = PhpZval::new();
+
+                arg.set_long(jiff.timestamp().as_second());
+                arg
+            };
+
+            let dt = dt.try_call_method("setTimezone", vec![&tz])?;
+            let dt = dt.try_call_method("setTimestamp", vec![&ts])?;
+
+            *zval = dt;
+
+            Ok(())
+        }
+    }
+}

@@ -155,3 +155,51 @@ where
         }
     }
 }
+
+#[cfg(feature = "php")]
+mod php {
+    use super::*;
+    use ext_php_rs::types::ZendObject;
+
+    impl<'a, F> FromPhpZval<'a> for DateOrDt<F>
+    where
+        DateTime<F>: FromPhpZval<'a>,
+    {
+        const TYPE: PhpDataType = PhpDataType::Object(None);
+
+        fn from_zval(zval: &'a PhpZval) -> Option<Self> {
+            let zval = zval.object()?;
+
+            match zval.get_property("kind").ok()? {
+                "Date" => Some(DateOrDt::Date(zval.get_property("date").ok()?)),
+                "DateTime" => Some(DateOrDt::DateTime(zval.get_property("date").ok()?)),
+                _ => None,
+            }
+        }
+    }
+
+    impl<F> IntoPhpZval for DateOrDt<F>
+    where
+        DateTime<F>: IntoPhpZval,
+    {
+        const TYPE: PhpDataType = PhpDataType::Object(None);
+
+        fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
+            let mut obj = ZendObject::new_stdclass();
+
+            match self {
+                DateOrDt::Date(this) => {
+                    obj.set_property("kind", "Date")?;
+                    obj.set_property("date", this)?;
+                }
+
+                DateOrDt::DateTime(this) => {
+                    obj.set_property("kind", "DateTime")?;
+                    obj.set_property("date", this)?;
+                }
+            }
+
+            obj.set_zval(zval, persistent)
+        }
+    }
+}

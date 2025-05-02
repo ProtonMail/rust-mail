@@ -94,6 +94,97 @@ impl Write<Property> for ExDate {
     }
 }
 
+#[cfg(feature = "php")]
+mod php {
+    use super::*;
+
+    #[derive(Clone, Debug, PartialEq, Eq, ZvalConvert)]
+    struct PhpExDate {
+        kind: String,
+        dates: Vec<DateTime<AnyForm>>,
+    }
+
+    impl From<ExDate> for PhpExDate {
+        fn from(value: ExDate) -> Self {
+            match value {
+                ExDate::Dates(dates) => PhpExDate {
+                    kind: "Dates".into(),
+
+                    dates: dates
+                        .iter()
+                        .copied()
+                        .map(|date| DateTime {
+                            date,
+                            time: Time::new_unchecked(0, 0, 0),
+                            form: AnyForm::Utc,
+                        })
+                        .collect(),
+                },
+
+                ExDate::DateTimes(form, dates) => PhpExDate {
+                    kind: "DateTimes".into(),
+
+                    dates: dates
+                        .iter()
+                        .copied()
+                        .map(|(date, time)| DateTime {
+                            date,
+                            time,
+                            form: form.clone(),
+                        })
+                        .collect(),
+                },
+            }
+        }
+    }
+
+    impl TryFrom<PhpExDate> for ExDate {
+        type Error = ();
+
+        fn try_from(value: PhpExDate) -> Result<Self, Self::Error> {
+            match value.kind.as_str() {
+                "Dates" => Ok(ExDate::Dates(
+                    value.dates.into_iter().map(|dt| dt.date).collect(),
+                )),
+
+                "DateTimes" => {
+                    let form = value
+                        .dates
+                        .first()
+                        .map_or(AnyForm::Utc, |dt| dt.form.clone());
+
+                    Ok(ExDate::DateTimes(
+                        form,
+                        value
+                            .dates
+                            .into_iter()
+                            .map(|dt| (dt.date, dt.time))
+                            .collect(),
+                    ))
+                }
+
+                _ => Err(()),
+            }
+        }
+    }
+
+    impl<'a> FromPhpZval<'a> for ExDate {
+        const TYPE: PhpDataType = PhpDataType::Object(None);
+
+        fn from_zval(zval: &'a PhpZval) -> Option<Self> {
+            PhpExDate::from_zval(zval)?.try_into().ok()
+        }
+    }
+
+    impl IntoPhpZval for ExDate {
+        const TYPE: PhpDataType = PhpDataType::Object(None);
+
+        fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
+            PhpExDate::from(self).set_zval(zval, persistent)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -51,6 +51,29 @@ impl Write<Value> for Rsvp {
     }
 }
 
+#[cfg(feature = "php")]
+mod php {
+    use super::*;
+
+    impl<'a> FromPhpZval<'a> for Rsvp {
+        const TYPE: PhpDataType = PhpDataType::Bool;
+
+        fn from_zval(zval: &'a PhpZval) -> Option<Self> {
+            Some(Self(zval.bool()?))
+        }
+    }
+
+    impl IntoPhpZval for Rsvp {
+        const TYPE: PhpDataType = PhpDataType::Bool;
+
+        fn set_zval(self, zval: &mut PhpZval, _: bool) -> PhpResult<()> {
+            zval.set_bool(self.0);
+
+            Ok(())
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

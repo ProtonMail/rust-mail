@@ -3,7 +3,7 @@ use super::*;
 /// Participation role.
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545#section-3.2.16>
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString)]
 pub enum Role {
     Chair,
     ReqParticipant,
@@ -39,6 +39,28 @@ impl Write<Value> for Role {
             Role::OptParticipant => "OPT-PARTICIPANT",
             Role::NonParticipant => "NON-PARTICIPANT",
         });
+    }
+}
+
+#[cfg(feature = "php")]
+mod php {
+    use super::*;
+
+    impl<'a> FromPhpZval<'a> for Role {
+        const TYPE: PhpDataType = PhpDataType::String;
+
+        fn from_zval(zval: &'a PhpZval) -> Option<Self> {
+            // Utilizing EnumString's impl
+            <Self as std::str::FromStr>::from_str(zval.str()?).ok()
+        }
+    }
+
+    impl IntoPhpZval for Role {
+        const TYPE: PhpDataType = PhpDataType::String;
+
+        fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
+            zval.set_string(&format!("{self:?}"), persistent)
+        }
     }
 }
 

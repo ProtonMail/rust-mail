@@ -140,6 +140,27 @@ impl Write<Value> for ParamValue {
     }
 }
 
+#[cfg(feature = "php")]
+mod php {
+    use super::*;
+
+    impl<'a> FromPhpZval<'a> for ParamValue {
+        const TYPE: PhpDataType = PhpDataType::String;
+
+        fn from_zval(zval: &'a PhpZval) -> Option<Self> {
+            Some(Self::new(zval.str()?))
+        }
+    }
+
+    impl IntoPhpZval for ParamValue {
+        const TYPE: PhpDataType = PhpDataType::String;
+
+        fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
+            zval.set_string(&self.value, persistent)
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ParamValueViolation {
     #[error("illegal character 0x{:04x} at byte {0}", *.1 as u32)]
