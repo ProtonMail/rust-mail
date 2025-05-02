@@ -18,3 +18,27 @@ where
         }
     }
 }
+
+impl Read<Property> for DtStart {
+    fn read(r: &mut Reader) -> Option<Self> {
+        Some(Self { value: r.prop()? })
+    }
+}
+
+impl Write<Property> for DtStart {
+    fn write(&self, w: &mut Writer) {
+        self.value.write(w);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+
+    #[test_case(";VALUE=DATE:20180101")]
+    #[test_case(":20180101T120000Z")]
+    fn smoke(s: &str) {
+        assert_trip!(s, DtStart as Property);
+    }
+}

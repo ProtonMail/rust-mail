@@ -182,3 +182,438 @@ impl VEvent {
         self
     }
 }
+
+impl Read<Component> for VEvent {
+    fn read(r: &mut Reader) -> Option<Self> {
+        let mut uid = None;
+        let mut dtstamp = None;
+        let mut dtstart = None;
+        let mut dtend = None;
+        let mut created = None;
+
+        let mut class = None;
+        let mut transp = None;
+        let mut status = None;
+        let mut priority = None;
+
+        let mut summary = None;
+        let mut location = None;
+        let mut description = None;
+        let mut organizer = None;
+        let mut attendees = Vec::new();
+
+        let mut rrule = None;
+        let mut exdate = None;
+        let mut duration = None;
+        let mut sequence = None;
+        let mut recurrence_id = None;
+
+        let mut alarms = Vec::new();
+
+        while let Some(e) = r.entry() {
+            if e.try_prop(r, "UID", &mut uid)
+                || e.try_prop(r, "DTSTAMP", &mut dtstamp)
+                || e.try_prop(r, "DTSTART", &mut dtstart)
+                || e.try_prop(r, "DTEND", &mut dtend)
+                || e.try_prop(r, "CREATED", &mut created)
+                // ---
+                || e.try_prop(r, "CLASS", &mut class)
+                || e.try_prop(r, "TRANSP", &mut transp)
+                || e.try_prop(r, "STATUS", &mut status)
+                || e.try_prop(r, "PRIORITY", &mut priority)
+                // ---
+                || e.try_prop(r, "SUMMARY", &mut summary)
+                || e.try_prop(r, "LOCATION", &mut location)
+                || e.try_prop(r, "DESCRIPTION", &mut description)
+                || e.try_prop(r, "ORGANIZER", &mut organizer)
+                || e.try_props(r, "ATTENDEE", &mut attendees)
+                // ---
+                || e.try_prop(r, "RRULE", &mut rrule)
+                || e.try_prop(r, "EXDATE", &mut exdate)
+                || e.try_prop(r, "DURATION", &mut duration)
+                || e.try_prop(r, "SEQUENCE", &mut sequence)
+                || e.try_prop(r, "RECURRENCE-ID", &mut recurrence_id)
+                // ---
+                || e.try_comps(r, "VALARM", &mut alarms)
+            {
+                continue;
+            }
+
+            if e.try_comp_end("VEVENT") {
+                break;
+            }
+
+            e.burn(r);
+        }
+
+        let uid = r.unwrap_prop("UID", uid);
+        let dtstamp = r.unwrap_prop("DTSTAMP", dtstamp);
+
+        Some(Self {
+            uid,
+            dtstamp,
+            dtstart,
+            dtend,
+            created,
+
+            class: class.unwrap_or_default(),
+            transp: transp.unwrap_or_default(),
+            status,
+            priority,
+
+            summary,
+            location,
+            description,
+
+            organizer,
+            attendees,
+
+            rrule,
+            exdate,
+            duration,
+            sequence,
+            recurrence_id,
+
+            alarms,
+        })
+    }
+}
+
+impl Write<Component> for VEvent {
+    fn write(&self, w: &mut Writer) {
+        w.prop_opt("UID", self.uid.as_ref());
+        w.prop_opt("DTSTAMP", self.dtstamp.as_ref());
+        w.prop_opt("DTSTART", self.dtstart.as_ref());
+        w.prop_opt("DTEND", self.dtend.as_ref());
+        w.prop_opt("CREATED", self.created.as_ref());
+
+        if self.class == Class::default() {
+            // Implementations tend to omit the default `CLASS:PUBLIC`
+        } else {
+            w.prop("CLASS", self.class);
+        }
+
+        if self.transp == Transp::default() {
+            // Implementations tend to omit the default `TRANSP:OPAQUE`
+        } else {
+            w.prop("TRANSP", self.transp);
+        }
+
+        w.prop_opt("STATUS", self.status);
+        w.prop_opt("PRIORITY", self.priority);
+        w.prop_opt("SUMMARY", self.summary.as_ref());
+        w.prop_opt("LOCATION", self.location.as_ref());
+        w.prop_opt("DESCRIPTION", self.description.as_ref());
+        w.prop_opt("ORGANIZER", self.organizer.as_ref());
+
+        for attendee in &self.attendees {
+            w.prop("ATTENDEE", attendee);
+        }
+
+        w.prop_opt("RRULE", self.rrule.as_ref());
+        w.prop_opt("EXDATE", self.exdate.as_ref());
+        w.prop_opt("DURATION", self.duration.as_ref());
+        w.prop_opt("SEQUENCE", self.sequence.as_ref());
+        w.prop_opt("RECURRENCE-ID", self.recurrence_id.as_ref());
+
+        for alarm in &self.alarms {
+            w.comp("VALARM", alarm);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{CuType, EmailAlarm, Trigger, ical, utils::*};
+    use pretty_assertions as pa;
+
+    fn event() -> VEvent {
+        VEvent::new("1234", dt("20180101T120000Z"))
+    }
+
+    #[track_caller]
+    fn assert(obj: &VEvent, str: &str) {
+        pa::assert_eq!(str, obj.to_string(Component));
+        assert_trip!(str, VEvent as Component("VEVENT"));
+    }
+
+    #[test]
+    fn smoke() {
+        let obj = event();
+
+        let str = ical! {"
+            UID:1234
+            DTSTAMP:20180101T120000Z
+        "};
+
+        assert(&obj, &str);
+    }
+
+    #[test]
+    fn with_dtstart_as_date() {
+        let obj = event().with_dtstart(d("20180101"));
+
+        let str = ical! {"
+            UID:1234
+            DTSTAMP:20180101T120000Z
+            DTSTART;VALUE=DATE:20180101
+        "};
+
+        assert(&obj, &str);
+    }
+
+    #[test]
+    fn with_dtstart_as_datetime() {
+        let obj = event().with_dtstart(dt("20180101T120000"));
+
+        let str = ical! {"
+            UID:1234
+            DTSTAMP:20180101T120000Z
+            DTSTART:20180101T120000
+        "};
+
+        assert(&obj, &str);
+    }
+
+    #[test]
+    fn with_dtend() {
+        let obj = event().with_dtend(d("20180101"));
+
+        let str = ical! {"
+            UID:1234
+            DTSTAMP:20180101T120000Z
+            DTEND;VALUE=DATE:20180101
+        "};
+
+        assert(&obj, &str);
+    }
+
+    #[test]
+    fn with_created() {
+        let obj = event().with_created(dt("20180101T120000"));
+
+        let str = ical! {"
+            UID:1234
+            DTSTAMP:20180101T120000Z
+            CREATED:20180101T120000
+        "};
+
+        assert(&obj, &str);
+    }
+
+    #[test]
+    fn with_class() {
+        let obj = event().with_class(Class::Private);
+
+        let str = ical! {"
+            UID:1234
+            DTSTAMP:20180101T120000Z
+            CLASS:PRIVATE
+        "};
+
+        assert(&obj, &str);
+    }
+
+    #[test]
+    fn with_transp() {
+        let obj = event().with_transp(Transp::Transparent);
+
+        let str = ical! {"
+            UID:1234
+            DTSTAMP:20180101T120000Z
+            TRANSP:TRANSPARENT
+        "};
+
+        assert(&obj, &str);
+    }
+
+    #[test]
+    fn with_status() {
+        let obj = event().with_status(Status::Confirmed);
+
+        let str = ical! {"
+            UID:1234
+            DTSTAMP:20180101T120000Z
+            STATUS:CONFIRMED
+        "};
+
+        assert(&obj, &str);
+    }
+
+    #[test]
+    fn with_priority() {
+        let obj = event().with_priority(7);
+
+        let str = ical! {"
+            UID:1234
+            DTSTAMP:20180101T120000Z
+            PRIORITY:7
+        "};
+
+        assert(&obj, &str);
+    }
+
+    #[test]
+    fn with_summary() {
+        let obj = event().with_summary("couldn't this have been an email?!");
+
+        let str = ical! {"
+            UID:1234
+            DTSTAMP:20180101T120000Z
+            SUMMARY:couldn't this have been an email?!
+        "};
+
+        assert(&obj, &str);
+    }
+
+    #[test]
+    fn with_location() {
+        let obj = event().with_location("Online");
+
+        let str = ical! {"
+            UID:1234
+            DTSTAMP:20180101T120000Z
+            LOCATION:Online
+        "};
+
+        assert(&obj, &str);
+    }
+
+    #[test]
+    fn with_description() {
+        let obj = event().with_description("Very Important Meeting");
+
+        let str = ical! {"
+            UID:1234
+            DTSTAMP:20180101T120000Z
+            DESCRIPTION:Very Important Meeting
+        "};
+
+        assert(&obj, &str);
+    }
+
+    #[test]
+    fn with_organizer() {
+        let obj = event().with_organizer(email("saul@goodman"));
+
+        let str = ical! {"
+            UID:1234
+            DTSTAMP:20180101T120000Z
+            ORGANIZER:mailto:saul@goodman
+        "};
+
+        assert(&obj, &str);
+    }
+
+    #[test]
+    fn with_attendee() {
+        let obj = event().with_attendee(
+            Attendee::from(email("someone@localhost")).with_cutype(CuType::Individual),
+        );
+
+        let str = ical! {"
+            UID:1234
+            DTSTAMP:20180101T120000Z
+            ATTENDEE;CUTYPE=INDIVIDUAL:mailto:someone@localhost
+        "};
+
+        assert(&obj, &str);
+    }
+
+    #[test]
+    fn with_rrule() {
+        let obj = event().with_rrule(Recur::new(Freq::Daily).with_count(5));
+
+        let str = ical! {"
+            UID:1234
+            DTSTAMP:20180101T120000Z
+            RRULE:FREQ=DAILY;COUNT=5
+        "};
+
+        assert(&obj, &str);
+    }
+
+    #[test]
+    fn with_exdate() {
+        let obj = event().with_exdate(ExDate::Dates(vec![
+            d("20180101"),
+            d("20180102"),
+            d("20180103"),
+        ]));
+
+        let str = ical! {"
+            UID:1234
+            DTSTAMP:20180101T120000Z
+            EXDATE;VALUE=DATE:20180101,20180102,20180103
+        "};
+
+        assert(&obj, &str);
+    }
+
+    #[test]
+    fn with_duration() {
+        let obj = event().with_duration(dur("P2D"));
+
+        let str = ical! {"
+            UID:1234
+            DTSTAMP:20180101T120000Z
+            DURATION:P2D
+        "};
+
+        assert(&obj, &str);
+    }
+
+    #[test]
+    fn with_sequence() {
+        let obj = event().with_sequence(123);
+
+        let str = ical! {"
+            UID:1234
+            DTSTAMP:20180101T120000Z
+            SEQUENCE:123
+        "};
+
+        assert(&obj, &str);
+    }
+
+    #[test]
+    fn with_recurrence_id() {
+        let obj = event()
+            .with_dtstart(d("20180101"))
+            .with_recurrence_id(d("20180102"));
+
+        let str = ical! {"
+            UID:1234
+            DTSTAMP:20180101T120000Z
+            DTSTART;VALUE=DATE:20180101
+            RECURRENCE-ID;VALUE=DATE:20180102
+        "};
+
+        assert(&obj, &str);
+    }
+
+    #[test]
+    fn with_alarm() {
+        let obj = event().with_alarm(EmailAlarm::new(
+            Trigger::start(dur("P2D")),
+            "some description",
+            "some summary",
+            email("someone@localhost"),
+        ));
+
+        let str = ical! {"
+            UID:1234
+            DTSTAMP:20180101T120000Z
+            BEGIN:VALARM
+            ACTION:EMAIL
+            TRIGGER:P2D
+            DESCRIPTION:some description
+            SUMMARY:some summary
+            ATTENDEE:mailto:someone@localhost
+            END:VALARM
+        "};
+
+        assert(&obj, &str);
+    }
+}

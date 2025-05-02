@@ -95,8 +95,137 @@ where
     }
 }
 
+impl Read<Value> for ParamValue {
+    fn read(r: &mut Reader) -> Option<Self> {
+        let mut value = String::new();
+        let quoted;
+
+        if r.try_eat('"').is_some() {
+            quoted = true;
+
+            while let Some(ch) = r.char() {
+                if ch == '"' || ch.is_control() {
+                    break;
+                }
+
+                value.push(ch);
+            }
+        } else {
+            quoted = false;
+
+            while let Some(ch) = r.peek() {
+                if ch == ';' || ch == ':' || ch == ',' || ch == '"' || ch.is_control() {
+                    break;
+                }
+
+                value.push(r.char()?);
+            }
+        }
+
+        Some(Self { value, quoted })
+    }
+}
+
+impl Write<Value> for ParamValue {
+    fn write(&self, w: &mut Writer) {
+        if self.quoted {
+            w.raw("\"");
+        }
+
+        w.raw(self.value.as_str());
+
+        if self.quoted {
+            w.raw("\"");
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ParamValueViolation {
     #[error("illegal character 0x{:04x} at byte {0}", *.1 as u32)]
     IllegalCharacter(usize, char),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+
+    #[derive(Debug)]
+    struct TestCase {
+        given: &'static str,
+        expected_new: &'static str,
+        expected_new_checked: Result<&'static str, ParamValueViolation>,
+    }
+
+    const TEST_SMOKE: TestCase = TestCase {
+        given: "Hello World!",
+        expected_new: "Hello World!",
+        expected_new_checked: Ok("Hello World!"),
+    };
+
+    const TEST_SEMICOLON: TestCase = TestCase {
+        given: "Hello ; World!",
+        expected_new: "\"Hello ; World!\"",
+        expected_new_checked: Ok("\"Hello ; World!\""),
+    };
+
+    const TEST_COLON: TestCase = TestCase {
+        given: "Hello : World!",
+        expected_new: "\"Hello : World!\"",
+        expected_new_checked: Ok("\"Hello : World!\""),
+    };
+
+    const TEST_COMMA: TestCase = TestCase {
+        given: "Hello , World!",
+        expected_new: "\"Hello , World!\"",
+        expected_new_checked: Ok("\"Hello , World!\""),
+    };
+
+    const TEST_CONTROL: TestCase = TestCase {
+        given: "Hello \n\0 World!",
+        expected_new: "Hello  World!",
+        expected_new_checked: Err(ParamValueViolation::IllegalCharacter(6, '\n')),
+    };
+
+    const TEST_QUOTE: TestCase = TestCase {
+        given: "Hello \" World!",
+        expected_new: "Hello  World!",
+        expected_new_checked: Err(ParamValueViolation::IllegalCharacter(6, '"')),
+    };
+
+    #[test_case(TEST_SMOKE)]
+    #[test_case(TEST_SEMICOLON)]
+    #[test_case(TEST_COLON)]
+    #[test_case(TEST_COMMA)]
+    #[test_case(TEST_CONTROL)]
+    #[test_case(TEST_QUOTE)]
+    fn test(case: TestCase) {
+        let target = ParamValue::new(case.given);
+
+        assert_eq!(case.expected_new, target.to_string(Value));
+        assert_trip!(case.expected_new, ParamValue as Value);
+
+        // ---
+
+        let target = ParamValue::new_checked(case.given)
+            .map(|txt| txt.to_string(Value))
+            .map_err(|err| err.to_string());
+
+        assert_eq!(
+            case.expected_new_checked
+                .map(ToString::to_string)
+                .map_err(|err| err.to_string()),
+            target,
+        );
+    }
+
+    #[test]
+    fn extra_quotes() {
+        let actual = ParamValue::from_str("\"John Smith\"", Value)
+            .unwrap()
+            .into_string();
+
+        assert_eq!("John Smith", actual);
+    }
 }

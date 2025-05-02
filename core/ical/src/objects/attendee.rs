@@ -52,3 +52,83 @@ where
         }
     }
 }
+
+impl Read<Property> for Attendee {
+    fn read(r: &mut Reader) -> Option<Self> {
+        let mut cn = None;
+        let mut cutype = None;
+        let mut role = None;
+        let mut rsvp = None;
+
+        while let Some(e) = r.entry() {
+            if e.try_param(r, "CN", &mut cn)
+                || e.try_param(r, "CUTYPE", &mut cutype)
+                || e.try_param(r, "ROLE", &mut role)
+                || e.try_param(r, "RSVP", &mut rsvp)
+            {
+                continue;
+            }
+
+            e.burn(r);
+        }
+
+        r.eat(':')?;
+
+        Some(Self {
+            address: r.value()?,
+            cn,
+            cutype,
+            role,
+            rsvp,
+        })
+    }
+}
+
+impl Write<Property> for Attendee {
+    fn write(&self, w: &mut Writer) {
+        w.param_opt("CN", self.cn.as_ref());
+        w.param_opt("CUTYPE", self.cutype.as_ref());
+        w.param_opt("ROLE", self.role.as_ref());
+        w.param_opt("RSVP", self.rsvp.as_ref());
+        w.raw(":");
+        w.value(&self.address);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{ical, utils::*};
+    use pretty_assertions as pa;
+    use test_case::test_case;
+
+    #[test]
+    fn build() {
+        let target = Attendee::from(email("someone@localhost"))
+            .with_cn("Someone Somewhere")
+            .with_cutype(CuType::Individual)
+            .with_role(Role::Chair)
+            .with_rsvp(true);
+
+        let expected = ical! {"
+            ;CN=Someone Somewhere;CUTYPE=INDIVIDUAL;ROLE=CHAIR;RSVP=TRUE:mailto:someone
+             @localhost
+        "};
+
+        pa::assert_eq!(expected, target.to_string(Property));
+    }
+
+    #[test_case(":mailto:someone@localhost")]
+    #[test_case(";CN=Someone:mailto:someone@localhost")]
+    #[test_case(";CN=Someone Somewhere:mailto:someone@localhost")]
+    #[test_case(";CUTYPE=INDIVIDUAL:mailto:someone@localhost")]
+    #[test_case(";CUTYPE=GROUP:mailto:someone@localhost")]
+    #[test_case(";ROLE=CHAIR:mailto:someone@localhost")]
+    #[test_case(";ROLE=OPT-PARTICIPANT:mailto:someone@localhost")]
+    #[test_case(";RSVP=TRUE:mailto:someone@localhost")]
+    #[test_case(";RSVP=FALSE:mailto:someone@localhost")]
+    #[test_case(";CUTYPE=ROOM;ROLE=CHAIR;RSVP=TRUE:mailto:someone@localhost")]
+    fn smoke(s: &str) {
+        assert_trip!(s, Attendee as Property);
+    }
+}

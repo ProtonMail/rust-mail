@@ -42,6 +42,8 @@ mod version;
 mod vevent;
 mod vtimezone;
 
+use super::*;
+use jiff::civil::Date as JiffDate;
 use std::num::NonZeroI8;
 use thiserror::Error;
 
@@ -88,3 +90,12 @@ pub use self::valarm::*;
 pub use self::version::*;
 pub use self::vevent::*;
 pub use self::vtimezone::*;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Component;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Property;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Value;

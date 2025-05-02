@@ -20,3 +20,32 @@ impl Time {
         }
     }
 }
+
+impl Read<Value> for Time {
+    fn read(r: &mut Reader) -> Option<Self> {
+        let hour = r.spanned(|r| r.digits(2))?;
+        let minute = r.spanned(|r| r.digits(2))?;
+        let second = r.spanned(|r| r.digits(2))?;
+
+        let hour = hour.map(Hour::new).unwrap(r)?;
+        let minute = minute.map(Minute::new).unwrap(r)?;
+        let second = second.map(Second::new).unwrap(r)?;
+
+        Some(Self {
+            hour,
+            minute,
+            second,
+        })
+    }
+}
+
+impl Write<Value> for Time {
+    fn write(&self, w: &mut Writer) {
+        w.raw(format_args!(
+            "{:02}{:02}{:02}",
+            self.hour.as_num(),
+            self.minute.as_num(),
+            self.second.as_num()
+        ));
+    }
+}

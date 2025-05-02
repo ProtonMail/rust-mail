@@ -1,3 +1,5 @@
+use super::*;
+
 /// Calendar scale.
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545#section-3.7.1>
@@ -5,4 +7,45 @@
 pub enum CalScale {
     #[default]
     Gregorian,
+}
+
+impl Read<Property> for CalScale {
+    fn read(r: &mut Reader) -> Option<Self> {
+        r.burn_params();
+        r.eat(':')?;
+
+        let value = r.spanned(|r| Some(r.rest()))?;
+        let (span, value) = (value.span, value.as_str());
+
+        if value.eq_ignore_ascii_case("GREGORIAN") {
+            Some(CalScale::Gregorian)
+        } else {
+            r.error(span, format!("unknown calscale `{value}`"));
+            None
+        }
+    }
+
+    fn reasonable_default() -> Option<Self> {
+        Some(CalScale::Gregorian)
+    }
+}
+
+impl Write<Property> for CalScale {
+    fn write(&self, w: &mut Writer) {
+        match self {
+            CalScale::Gregorian => {
+                w.raw(":GREGORIAN");
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn smoke() {
+        assert_trip!(":GREGORIAN", CalScale as Property);
+    }
 }

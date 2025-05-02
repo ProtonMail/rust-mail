@@ -13,3 +13,19 @@ impl From<UtcOffset> for TzOffsetFrom {
         Self { value }
     }
 }
+
+impl Read<Property> for TzOffsetFrom {
+    fn read(r: &mut Reader) -> Option<Self> {
+        r.burn_params();
+        r.eat(':')?;
+
+        Some(Self { value: r.value()? })
+    }
+}
+
+impl Write<Property> for TzOffsetFrom {
+    fn write(&self, w: &mut Writer) {
+        w.raw(":");
+        w.value(self.value);
+    }
+}

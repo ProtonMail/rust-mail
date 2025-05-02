@@ -43,6 +43,50 @@ impl Default for Duration {
     }
 }
 
+impl Read<Property> for Duration {
+    fn read(r: &mut Reader) -> Option<Self> {
+        r.burn_params();
+        r.eat(':')?;
+        r.value()
+    }
+}
+
+impl Write<Property> for Duration {
+    fn write(&self, w: &mut Writer) {
+        w.raw(":");
+        w.value(self);
+    }
+}
+
+impl Read<Value> for Duration {
+    fn read(r: &mut Reader) -> Option<Self> {
+        Some(Self {
+            sign: r.value()?,
+            amount: r.value()?,
+        })
+    }
+}
+
+impl Write<Value> for Duration {
+    fn write(&self, w: &mut Writer) {
+        if self.is_zero() {
+            w.raw("P0D");
+            return;
+        }
+
+        match self.sign {
+            Sign::Pos => {
+                // Duration is implied to be positive, no sign required
+            }
+            Sign::Neg => {
+                w.raw("-");
+            }
+        }
+
+        w.value(self.amount);
+    }
+}
+
 /// Duration's amount, see [`Duration`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DurationAmount {
@@ -86,6 +130,88 @@ impl From<WeekDuration> for DurationAmount {
     }
 }
 
+impl Read<Value> for DurationAmount {
+    fn read(r: &mut Reader) -> Option<Self> {
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        enum Part {
+            DateOrWeek,
+            Time,
+        }
+
+        let mut part = Part::DateOrWeek;
+        let mut weeks = 0;
+        let mut days = 0;
+        let mut hours = 0;
+        let mut minutes = 0;
+        let mut seconds = 0;
+
+        r.eat('P')?;
+
+        while !matches!(r.peek(), Some('\n' | ',') | None) {
+            if r.try_eat('T').is_some() {
+                part = Part::Time;
+            }
+
+            let amount = r.value()?;
+            let unit = r.value::<Spanned<_>>()?;
+
+            match (part, unit.value) {
+                (Part::DateOrWeek, 'w' | 'W') => weeks = amount,
+                (Part::DateOrWeek, 'd' | 'D') => days = amount,
+                (Part::Time, 'h' | 'H') => hours = amount,
+                (Part::Time, 'm' | 'M') => minutes = amount,
+                (Part::Time, 's' | 'S') => seconds = amount,
+
+                _ => {
+                    r.error(unit.span, format!("unknown duration unit `{}`", unit.value));
+                }
+            }
+        }
+
+        if weeks > 0 {
+            for (unit, amount) in [('D', days), ('H', hours), ('M', minutes), ('S', seconds)] {
+                if amount > 0 {
+                    r.error(
+                        None,
+                        format!("duration unit `{unit}` is not supported together with `W`"),
+                    );
+                }
+            }
+
+            return Some(DurationAmount::Week(WeekDuration { weeks }));
+        }
+
+        if days > 0 {
+            return Some(DurationAmount::Date(DateDuration {
+                days,
+                time: TimeDuration {
+                    hours,
+                    minutes,
+                    seconds,
+                },
+            }));
+        }
+
+        Some(DurationAmount::Time(TimeDuration {
+            hours,
+            minutes,
+            seconds,
+        }))
+    }
+}
+
+impl Write<Value> for DurationAmount {
+    fn write(&self, w: &mut Writer) {
+        w.raw("P");
+
+        match self {
+            DurationAmount::Date(this) => w.value(this),
+            DurationAmount::Time(this) => w.value(this),
+            DurationAmount::Week(this) => w.value(this),
+        }
+    }
+}
+
 /// Date and time part of a [`Duration`].
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545.html#section-3.3.6>
@@ -104,6 +230,19 @@ impl DateDuration {
     #[must_use]
     pub fn is_zero(&self) -> bool {
         *self == Self::default()
+    }
+}
+
+impl Write<Value> for DateDuration {
+    fn write(&self, w: &mut Writer) {
+        if self.days > 0 {
+            w.value(self.days);
+            w.raw("D");
+        }
+
+        if !self.time.is_zero() {
+            w.value(self.time);
+        }
     }
 }
 
@@ -148,6 +287,27 @@ impl TimeDuration {
     }
 }
 
+impl Write<Value> for TimeDuration {
+    fn write(&self, w: &mut Writer) {
+        w.raw("T");
+
+        if self.hours > 0 {
+            w.value(self.hours);
+            w.raw("H");
+        }
+
+        if self.minutes > 0 {
+            w.value(self.minutes);
+            w.raw("M");
+        }
+
+        if self.seconds > 0 {
+            w.value(self.seconds);
+            w.raw("S");
+        }
+    }
+}
+
 /// Week part of a [`Duration`].
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545.html#section-3.3.6>
@@ -168,6 +328,15 @@ impl WeekDuration {
     }
 }
 
+impl Write<Value> for WeekDuration {
+    fn write(&self, w: &mut Writer) {
+        if self.weeks > 0 {
+            w.value(self.weeks);
+            w.raw("W");
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -185,6 +354,10 @@ mod tests {
         let target = Duration::pos(target);
 
         assert!(!target.is_zero());
+        assert_eq!("P1DT2H3M4S", target.to_string(Value));
+        assert_eq!(":P1DT2H3M4S", target.to_string(Property));
+        assert_trip!("P1DT2H3M4S", Duration as Value);
+        assert_trip!(":P1DT2H3M4S", Duration as Property);
     }
 
     #[test]
@@ -199,6 +372,10 @@ mod tests {
         let target = Duration::pos(target);
 
         assert!(!target.is_zero());
+        assert_eq!("PT1H2M3S", target.to_string(Value));
+        assert_eq!(":PT1H2M3S", target.to_string(Property));
+        assert_trip!("PT1H2M3S", Duration as Value);
+        assert_trip!(":PT1H2M3S", Duration as Property);
     }
 
     #[test]
@@ -211,6 +388,25 @@ mod tests {
         let target = Duration::pos(target);
 
         assert!(!target.is_zero());
+        assert_eq!("P1W", target.to_string(Value));
+        assert_eq!(":P1W", target.to_string(Property));
+        assert_trip!("P1W", Duration as Value);
+        assert_trip!(":P1W", Duration as Property);
+    }
+
+    #[test]
+    fn negative() {
+        let target = TimeDuration::new(10, 20, 30);
+
+        assert!(!target.is_zero());
+        assert_eq!("PT10H20M30S", Duration::pos(target).to_string(Value));
+        assert_eq!(":PT10H20M30S", Duration::pos(target).to_string(Property));
+        assert_eq!("-PT10H20M30S", Duration::neg(target).to_string(Value));
+        assert_eq!(":-PT10H20M30S", Duration::neg(target).to_string(Property));
+        assert_trip!("PT10H20M30S", Duration as Value);
+        assert_trip!(":PT10H20M30S", Duration as Property);
+        assert_trip!("-PT10H20M30S", Duration as Value);
+        assert_trip!(":-PT10H20M30S", Duration as Property);
     }
 
     #[test]
@@ -218,6 +414,10 @@ mod tests {
         let target = Duration::default();
 
         assert!(target.is_zero());
+        assert_eq!("P0D", target.to_string(Value));
+        assert_eq!(":P0D", target.to_string(Property));
+        assert_trip!("P0D", Duration as Value);
+        assert_trip!(":P0D", Duration as Property);
 
         // ---
 
@@ -231,7 +431,29 @@ mod tests {
 
                 assert!(amount.is_zero());
                 assert!(target.is_zero());
+                assert_eq!("P0D", target.to_string(Value));
+                assert_eq!(":P0D", target.to_string(Property));
             }
         }
+    }
+
+    #[test]
+    fn unsupported_combination() {
+        assert_trip!(
+            "P2W3D" => "P2W", yielding [
+                ReadMsg {
+                    at: None,
+                    msg: "duration unit `D` is not supported together with `W`".into(),
+                    kind: ReadMsgKind::Error,
+                    context: vec![
+                        Spanned {
+                            span: Span::new(0, 1),
+                            value: "`DurationAmount`".into(),
+                        },
+                    ],
+                },
+            ],
+            Duration as Value
+        );
     }
 }

@@ -78,6 +78,31 @@ impl UtcOffset {
     }
 }
 
+impl Read<Value> for UtcOffset {
+    fn read(r: &mut Reader) -> Option<Self> {
+        r.spanned(|r| {
+            let sign = r.value::<Sign>()?;
+            let hours = r.digits(2)?;
+            let minutes = r.digits(2)?;
+            let seconds = r.attempt(|r| r.digits(2)).unwrap_or(0);
+
+            Some(Self::new(sign, hours, minutes, seconds))
+        })?
+        .unwrap(r)
+    }
+}
+
+impl Write<Value> for UtcOffset {
+    fn write(&self, w: &mut Writer) {
+        w.value(self.sign());
+        w.raw(format_args!("{:02}{:02}", self.hours(), self.minutes()));
+
+        if self.seconds() > 0 {
+            w.raw(format_args!("{:02}", self.seconds()));
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum UtcOffsetViolation {
     #[error("hour offset `{0}` is out of range")]
@@ -93,6 +118,7 @@ pub enum UtcOffsetViolation {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use test_case::test_case;
 
     #[test]
     fn new() {
@@ -131,5 +157,28 @@ mod tests {
             Err(UtcOffsetViolation::OutOfRangeSecondOffset(60)),
             UtcOffset::new(Sign::Pos, 0, 0, 60)
         );
+    }
+
+    #[test_case(Sign::Pos, 0, 0, 0, "+0000")]
+    #[test_case(Sign::Neg, 0, 0, 0, "+0000")]
+    #[test_case(Sign::Pos, 0, 1, 0, "+0001")]
+    #[test_case(Sign::Neg, 0, 1, 0, "-0001")]
+    #[test_case(Sign::Pos, 1, 0, 0, "+0100")]
+    #[test_case(Sign::Neg, 1, 0, 0, "-0100")]
+    #[test_case(Sign::Pos, 1, 30, 0, "+0130")]
+    #[test_case(Sign::Neg, 1, 30, 0, "-0130")]
+    #[test_case(Sign::Pos, 2, 0, 0, "+0200")]
+    #[test_case(Sign::Neg, 2, 0, 0, "-0200")]
+    #[test_case(Sign::Pos, 12, 0, 0, "+1200")]
+    #[test_case(Sign::Neg, 12, 0, 0, "-1200")]
+    #[test_case(Sign::Pos, 12, 34, 5, "+123405")]
+    #[test_case(Sign::Neg, 12, 34, 5, "-123405")]
+    #[test_case(Sign::Pos, 12, 34, 56, "+123456")]
+    #[test_case(Sign::Neg, 12, 34, 56, "-123456")]
+    fn write(given_sign: Sign, given_h: u32, given_m: u32, given_s: u32, expected: &str) {
+        let target = UtcOffset::new(given_sign, given_h, given_m, given_s).unwrap();
+
+        assert_eq!(expected, target.to_string(Value));
+        assert_trip!(expected, UtcOffset as Value);
     }
 }

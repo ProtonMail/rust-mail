@@ -28,3 +28,45 @@ where
         }
     }
 }
+
+impl Read<Property> for Organizer {
+    fn read(r: &mut Reader) -> Option<Self> {
+        let mut cn = None;
+
+        while let Some(e) = r.entry() {
+            if e.try_param(r, "CN", &mut cn) {
+                continue;
+            }
+
+            e.burn(r);
+        }
+
+        r.eat(':')?;
+
+        Some(Self {
+            address: r.value()?,
+            cn,
+        })
+    }
+}
+
+impl Write<Property> for Organizer {
+    fn write(&self, w: &mut Writer) {
+        w.param_opt("CN", self.cn.as_ref());
+        w.raw(":");
+        w.value(&self.address);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+
+    #[test_case(":someone@somewhere.com")]
+    #[test_case(":https://somewhere.com")]
+    #[test_case(";CN=Someone At Somewhere:someone@somewhere.com")]
+    fn smoke(s: &str) {
+        assert_trip!(s, Organizer as Property);
+    }
+}

@@ -1,3 +1,5 @@
+use super::*;
+
 /// Participation role.
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545#section-3.2.16>
@@ -7,4 +9,64 @@ pub enum Role {
     ReqParticipant,
     OptParticipant,
     NonParticipant,
+}
+
+impl Read<Value> for Role {
+    fn read(r: &mut Reader) -> Option<Self> {
+        let value = r.value::<Spanned<ParamValue>>()?;
+        let (span, value) = (value.span, value.as_str());
+
+        if value.eq_ignore_ascii_case("CHAIR") {
+            Some(Role::Chair)
+        } else if value.eq_ignore_ascii_case("REQ-PARTICIPANT") {
+            Some(Role::ReqParticipant)
+        } else if value.eq_ignore_ascii_case("OPT-PARTICIPANT") {
+            Some(Role::OptParticipant)
+        } else if value.eq_ignore_ascii_case("NON-PARTICIPANT") {
+            Some(Role::NonParticipant)
+        } else {
+            r.error(span, format!("unknown role `{value}`"));
+            None
+        }
+    }
+}
+
+impl Write<Value> for Role {
+    fn write(&self, w: &mut Writer) {
+        w.raw(match self {
+            Role::Chair => "CHAIR",
+            Role::ReqParticipant => "REQ-PARTICIPANT",
+            Role::OptParticipant => "OPT-PARTICIPANT",
+            Role::NonParticipant => "NON-PARTICIPANT",
+        });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+
+    #[test_case(Role::Chair, "CHAIR")]
+    #[test_case(Role::ReqParticipant, "REQ-PARTICIPANT")]
+    #[test_case(Role::OptParticipant, "OPT-PARTICIPANT")]
+    #[test_case(Role::NonParticipant, "NON-PARTICIPANT")]
+    fn smoke(obj: Role, str: &str) {
+        assert_eq!(str, obj.to_string(Value));
+        assert_trip!(str, Role as Value);
+    }
+
+    #[test]
+    fn unknown() {
+        let expected = vec![ReadMsg {
+            at: Some(Span::new(0, 6)),
+            msg: "unknown role `foobar`".into(),
+            kind: ReadMsgKind::Error,
+            context: Vec::new(),
+        }];
+
+        let actual = Role::from_str("foobar", Value).unwrap_err();
+
+        assert_eq!(expected, actual);
+    }
 }

@@ -1,3 +1,5 @@
+use super::*;
+
 /// Classification.
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545.html#section-3.8.1.3>
@@ -7,4 +9,63 @@ pub enum Class {
     Public,
     Private,
     Confidential,
+}
+
+impl Read<Property> for Class {
+    fn read(r: &mut Reader) -> Option<Self> {
+        r.burn_params();
+        r.eat(':')?;
+
+        let value = r.spanned(|r| Some(r.rest()))?;
+        let (span, value) = (value.span, value.as_str());
+
+        if value.eq_ignore_ascii_case("PUBLIC") {
+            Some(Class::Public)
+        } else if value.eq_ignore_ascii_case("PRIVATE") {
+            Some(Class::Private)
+        } else if value.eq_ignore_ascii_case("CONFIDENTIAL") {
+            Some(Class::Confidential)
+        } else {
+            r.error(span, format!("unknown classification `{value}`"));
+            None
+        }
+    }
+}
+
+impl Write<Property> for Class {
+    fn write(&self, w: &mut Writer) {
+        w.raw(match self {
+            Class::Public => ":PUBLIC",
+            Class::Private => ":PRIVATE",
+            Class::Confidential => ":CONFIDENTIAL",
+        });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+
+    #[test_case(Class::Public, ":PUBLIC")]
+    #[test_case(Class::Private, ":PRIVATE")]
+    #[test_case(Class::Confidential, ":CONFIDENTIAL")]
+    fn smoke(obj: Class, str: &str) {
+        assert_eq!(str, obj.to_string(Property));
+        assert_trip!(str, Class as Property);
+    }
+
+    #[test]
+    fn unknown() {
+        let expected = vec![ReadMsg {
+            at: Some(Span::new(1, 7)),
+            msg: "unknown classification `foobar`".into(),
+            kind: ReadMsgKind::Error,
+            context: Vec::new(),
+        }];
+
+        let actual = Class::from_str(":foobar", Property).unwrap_err();
+
+        assert_eq!(expected, actual);
+    }
 }

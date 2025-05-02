@@ -1,5 +1,21 @@
 use super::*;
 
+macro_rules! impls {
+    ($ty:ident) => {
+        impl Read<Value> for $ty {
+            fn read(r: &mut Reader) -> Option<Self> {
+                r.value::<Spanned<u32>>()?.map(Self::new).unwrap(r)
+            }
+        }
+
+        impl Write<Value> for $ty {
+            fn write(&self, w: &mut Writer) {
+                w.value(self.0);
+            }
+        }
+    };
+}
+
 /// Year, aka `date-fullyear`.
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545.html#section-3.3.4>
@@ -31,6 +47,8 @@ impl Year {
         self.0
     }
 }
+
+impls!(Year);
 
 /// Month, aka `date-month`.
 ///
@@ -64,6 +82,8 @@ impl Month {
     }
 }
 
+impls!(Month);
+
 /// Day in the month, aka `date-mday`.
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545.html#section-3.3.4>
@@ -95,6 +115,8 @@ impl Day {
         self.0
     }
 }
+
+impls!(Day);
 
 /// Hour, aka `time-hour`.
 ///
@@ -128,6 +150,8 @@ impl Hour {
     }
 }
 
+impls!(Hour);
+
 /// Minute, aka `time-minute`.
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545.html#section-3.3.12>
@@ -159,6 +183,8 @@ impl Minute {
         self.0
     }
 }
+
+impls!(Minute);
 
 /// Second, aka `time-second`.
 ///
@@ -194,6 +220,8 @@ impl Second {
     }
 }
 
+impls!(Second);
+
 /// Nth day of the year, aka `ordyrday`.
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545.html#section-3.3.10>
@@ -225,6 +253,8 @@ impl DayOrdinal {
         self.0
     }
 }
+
+impls!(DayOrdinal);
 
 /// Nth week of the year, aka `ordwk`.
 ///
@@ -258,6 +288,8 @@ impl WeekOrdinal {
     }
 }
 
+impls!(WeekOrdinal);
+
 /// Weekday, e.g. Monday or Tuesday.
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545.html#section-3.3.10>
@@ -270,6 +302,45 @@ pub enum Weekday {
     Friday,
     Saturday,
     Sunday,
+}
+
+impl Read<Value> for Weekday {
+    fn read(r: &mut Reader) -> Option<Self> {
+        let Spanned { span, value } = r.spanned(Reader::ident)?;
+
+        if value.eq_ignore_ascii_case("MO") {
+            Some(Weekday::Monday)
+        } else if value.eq_ignore_ascii_case("TU") {
+            Some(Weekday::Tuesday)
+        } else if value.eq_ignore_ascii_case("WE") {
+            Some(Weekday::Wednesday)
+        } else if value.eq_ignore_ascii_case("TH") {
+            Some(Weekday::Thursday)
+        } else if value.eq_ignore_ascii_case("FR") {
+            Some(Weekday::Friday)
+        } else if value.eq_ignore_ascii_case("SA") {
+            Some(Weekday::Saturday)
+        } else if value.eq_ignore_ascii_case("SU") {
+            Some(Weekday::Sunday)
+        } else {
+            r.error(span, format!("unknown weekday `{value}`"));
+            None
+        }
+    }
+}
+
+impl Write<Value> for Weekday {
+    fn write(&self, w: &mut Writer) {
+        w.raw(match self {
+            Weekday::Monday => "MO",
+            Weekday::Tuesday => "TU",
+            Weekday::Wednesday => "WE",
+            Weekday::Thursday => "TH",
+            Weekday::Friday => "FR",
+            Weekday::Saturday => "SA",
+            Weekday::Sunday => "SU",
+        });
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
@@ -305,6 +376,7 @@ pub enum DtUnitViolation {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use test_case::test_case;
 
     #[test]
     fn year() {
@@ -399,5 +471,17 @@ mod tests {
             Err(DtUnitViolation::OutOfRangeWeekOrdinal(54)),
             WeekOrdinal::new(54)
         );
+    }
+
+    #[test_case(Weekday::Monday, "MO")]
+    #[test_case(Weekday::Tuesday, "TU")]
+    #[test_case(Weekday::Wednesday, "WE")]
+    #[test_case(Weekday::Thursday, "TH")]
+    #[test_case(Weekday::Friday, "FR")]
+    #[test_case(Weekday::Saturday, "SA")]
+    #[test_case(Weekday::Sunday, "SU")]
+    fn weekday(obj: Weekday, str: &str) {
+        assert_eq!(str, obj.to_string(Value));
+        assert_trip!(str, Weekday as Value);
     }
 }

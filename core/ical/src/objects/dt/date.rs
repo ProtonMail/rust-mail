@@ -11,9 +11,28 @@ pub struct Date {
 }
 
 impl Date {
-    #[must_use]
-    pub fn new(year: Year, month: Month, day: Day) -> Self {
-        Self { year, month, day }
+    /// Creates an RFC5545-compatible date.
+    ///
+    /// # Requirements
+    ///
+    /// - given date must exist, e.g. 31th of February will get rejected.
+    pub fn new(year: Year, month: Month, day: Day) -> Result<Self, DateTimeViolation> {
+        #[allow(clippy::cast_possible_wrap)]
+        if JiffDate::new(
+            year.as_num() as i16,
+            month.as_num() as i8,
+            day.as_num() as i8,
+        )
+        .is_err()
+        {
+            return Err(DateTimeViolation::UnknownDay {
+                year: u32::from(year.as_num()),
+                month: u32::from(month.as_num()),
+                day: u32::from(day.as_num()),
+            });
+        }
+
+        Ok(Self { year, month, day })
     }
 
     #[must_use]
@@ -38,5 +57,33 @@ impl Date {
     #[must_use]
     pub fn day(&self) -> Day {
         self.day
+    }
+}
+
+impl Read<Value> for Date {
+    fn read(r: &mut Reader) -> Option<Self> {
+        r.spanned(|r| {
+            let y = r.spanned(|r| r.digits(4))?;
+            let m = r.spanned(|r| r.digits(2))?;
+            let d = r.spanned(|r| r.digits(2))?;
+
+            Some(Self::new(
+                y.map(Year::new).unwrap(r)?,
+                m.map(Month::new).unwrap(r)?,
+                d.map(Day::new).unwrap(r)?,
+            ))
+        })?
+        .unwrap(r)
+    }
+}
+
+impl Write<Value> for Date {
+    fn write(&self, w: &mut Writer) {
+        w.raw(format_args!(
+            "{:04}{:02}{:02}",
+            self.year.as_num(),
+            self.month.as_num(),
+            self.day.as_num()
+        ));
     }
 }

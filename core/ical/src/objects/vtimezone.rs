@@ -51,10 +51,49 @@ impl VTimeZone {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Error)]
-pub enum VTimeZoneViolation {
-    #[error("id `{0}` is already taken")]
-    DuplicatedId(String),
+impl Read<Component> for VTimeZone {
+    fn read(r: &mut Reader) -> Option<Self> {
+        let mut tzid = None;
+        let mut daylights = Vec::new();
+        let mut standards = Vec::new();
+
+        while let Some(e) = r.entry() {
+            if e.try_prop(r, "TZID", &mut tzid)
+                || e.try_comps(r, "DAYLIGHT", &mut daylights)
+                || e.try_comps(r, "STANDARD", &mut standards)
+            {
+                continue;
+            }
+
+            if e.try_comp_end("VTIMEZONE") {
+                break;
+            }
+
+            e.burn(r);
+        }
+
+        let tzid = r.unwrap_prop("TZID", tzid);
+
+        Some(Self {
+            tzid: tzid?,
+            daylights,
+            standards,
+        })
+    }
+}
+
+impl Write<Component> for VTimeZone {
+    fn write(&self, w: &mut Writer) {
+        w.prop("TZID", &self.tzid);
+
+        for props in &self.daylights {
+            w.comp("DAYLIGHT", props);
+        }
+
+        for props in &self.standards {
+            w.comp("STANDARD", props);
+        }
+    }
 }
 
 /// Time zone properties; part of a [`VTimeZone`].
@@ -93,5 +132,99 @@ impl TzProps {
     pub fn with_tz_name(mut self, tz_name: impl Into<TzName>) -> Self {
         self.tz_name = Some(tz_name.into());
         self
+    }
+}
+
+impl Read<Component> for TzProps {
+    fn read(r: &mut Reader) -> Option<Self> {
+        let mut dtstart = None;
+        let mut tz_offset_from = None;
+        let mut tz_offset_to = None;
+        let mut rrule = None;
+        let mut tz_name = None;
+
+        while let Some(e) = r.entry() {
+            if e.try_prop(r, "DTSTART", &mut dtstart)
+                || e.try_prop(r, "TZOFFSETFROM", &mut tz_offset_from)
+                || e.try_prop(r, "TZOFFSETTO", &mut tz_offset_to)
+                || e.try_prop(r, "RRULE", &mut rrule)
+                || e.try_prop(r, "TZNAME", &mut tz_name)
+            {
+                continue;
+            }
+
+            if e.try_comp_end("DAYLIGHT") || e.try_comp_end("STANDARD") {
+                break;
+            }
+
+            e.burn(r);
+        }
+
+        let dtstart = r.unwrap_prop("DTSTART", dtstart);
+        let tz_offset_from = r.unwrap_prop("TZOFFSETFROM", tz_offset_from);
+        let tz_offset_to = r.unwrap_prop("TZOFFSETTO", tz_offset_to);
+
+        Some(Self {
+            dtstart: dtstart?,
+            tz_offset_from: tz_offset_from?,
+            tz_offset_to: tz_offset_to?,
+            rrule,
+            tz_name,
+        })
+    }
+}
+
+impl Write<Component> for TzProps {
+    fn write(&self, w: &mut Writer) {
+        w.prop("DTSTART", &self.dtstart);
+        w.prop("TZOFFSETFROM", self.tz_offset_from);
+        w.prop("TZOFFSETTO", self.tz_offset_to);
+        w.prop_opt("RRULE", self.rrule.as_ref());
+        w.prop_opt("TZNAME", self.tz_name.as_ref());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Sign, UtcOffset, ical, utils::*};
+    use pretty_assertions as pa;
+
+    fn tz() -> VTimeZone {
+        VTimeZone::new(
+            "Alice/Wonderland",
+            TzProps::new(
+                dt("20180101T120000"),
+                UtcOffset::new(Sign::Pos, 1, 0, 0).unwrap(),
+                UtcOffset::new(Sign::Pos, 1, 30, 0).unwrap(),
+            ),
+            TzProps::new(
+                dt("20180601T140000"),
+                UtcOffset::new(Sign::Pos, 2, 30, 0).unwrap(),
+                UtcOffset::new(Sign::Pos, 2, 0, 0).unwrap(),
+            ),
+        )
+    }
+
+    #[test]
+    fn smoke() {
+        let obj = tz();
+
+        let str = ical! {"
+            TZID:Alice/Wonderland
+            BEGIN:DAYLIGHT
+            DTSTART:20180101T120000
+            TZOFFSETFROM:+0100
+            TZOFFSETTO:+0130
+            END:DAYLIGHT
+            BEGIN:STANDARD
+            DTSTART:20180601T140000
+            TZOFFSETFROM:+0230
+            TZOFFSETTO:+0200
+            END:STANDARD
+        "};
+
+        pa::assert_eq!(str, obj.to_string(Component));
+        assert_trip!(str, VTimeZone as Component("VTIMEZONE"));
     }
 }

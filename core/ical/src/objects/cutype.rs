@@ -1,3 +1,5 @@
+use super::*;
+
 /// Calendar user type.
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545#section-3.2.3>
@@ -9,4 +11,69 @@ pub enum CuType {
     Resource,
     Room,
     Unknown,
+}
+
+impl Read<Value> for CuType {
+    fn read(r: &mut Reader) -> Option<Self> {
+        let value = r.value::<Spanned<ParamValue>>()?;
+        let (span, value) = (value.span, value.as_str());
+
+        if value.eq_ignore_ascii_case("INDIVIDUAL") {
+            Some(CuType::Individual)
+        } else if value.eq_ignore_ascii_case("GROUP") {
+            Some(CuType::Group)
+        } else if value.eq_ignore_ascii_case("RESOURCE") {
+            Some(CuType::Resource)
+        } else if value.eq_ignore_ascii_case("ROOM") {
+            Some(CuType::Room)
+        } else if value.eq_ignore_ascii_case("UNKNOWN") {
+            Some(CuType::Unknown)
+        } else {
+            r.error(span, format!("unknown cutype `{value}`"));
+            None
+        }
+    }
+}
+
+impl Write<Value> for CuType {
+    fn write(&self, w: &mut Writer) {
+        w.raw(match self {
+            CuType::Individual => "INDIVIDUAL",
+            CuType::Group => "GROUP",
+            CuType::Resource => "RESOURCE",
+            CuType::Room => "ROOM",
+            CuType::Unknown => "UNKNOWN",
+        });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+
+    #[test_case(CuType::Individual, "INDIVIDUAL")]
+    #[test_case(CuType::Group, "GROUP")]
+    #[test_case(CuType::Resource, "RESOURCE")]
+    #[test_case(CuType::Room, "ROOM")]
+    #[test_case(CuType::Unknown, "UNKNOWN")]
+    #[test_case(CuType::default(), "INDIVIDUAL")]
+    fn smoke(obj: CuType, str: &str) {
+        assert_eq!(obj, CuType::from_str(str, Value).unwrap());
+        assert_trip!(str, CuType as Value);
+    }
+
+    #[test]
+    fn unknown() {
+        let expected = vec![ReadMsg {
+            at: Some(Span::new(0, 6)),
+            msg: "unknown cutype `foobar`".into(),
+            kind: ReadMsgKind::Error,
+            context: Vec::new(),
+        }];
+
+        let actual = CuType::from_str("foobar", Value).unwrap_err();
+
+        assert_eq!(expected, actual);
+    }
 }

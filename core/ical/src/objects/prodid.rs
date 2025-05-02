@@ -18,3 +18,23 @@ where
         }
     }
 }
+
+impl Read<Property> for ProdId {
+    fn read(r: &mut Reader) -> Option<Self> {
+        r.burn_params();
+        r.eat(':')?;
+
+        Some(Self { value: r.value()? })
+    }
+
+    fn reasonable_default() -> Option<Self> {
+        Some(Self::from("UNKNOWN"))
+    }
+}
+
+impl Write<Property> for ProdId {
+    fn write(&self, w: &mut Writer) {
+        w.raw(":");
+        w.value(&self.value);
+    }
+}

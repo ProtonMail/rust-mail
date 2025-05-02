@@ -18,3 +18,27 @@ where
         }
     }
 }
+
+impl Read<Value> for Cn {
+    fn read(r: &mut Reader) -> Option<Self> {
+        Some(Self { value: r.value()? })
+    }
+}
+
+impl Write<Value> for Cn {
+    fn write(&self, w: &mut Writer) {
+        self.value.write(w);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test_case::test_case;
+
+    #[test_case("John Smith")]
+    #[test_case("\"Adam, Eve\"")]
+    fn smoke(s: &str) {
+        assert_trip!(s, Cn as Value);
+    }
+}

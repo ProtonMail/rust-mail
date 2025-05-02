@@ -18,3 +18,19 @@ where
         }
     }
 }
+
+impl Read<Property> for Summary {
+    fn read(r: &mut Reader) -> Option<Self> {
+        r.burn_params();
+        r.eat(':')?;
+
+        Some(Self { value: r.value()? })
+    }
+}
+
+impl Write<Property> for Summary {
+    fn write(&self, w: &mut Writer) {
+        w.raw(":");
+        w.value(&self.value);
+    }
+}

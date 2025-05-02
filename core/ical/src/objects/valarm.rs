@@ -39,11 +39,123 @@ impl From<EmailAlarm> for VAlarm {
     }
 }
 
+impl Read<Component> for VAlarm {
+    fn read(r: &mut Reader) -> Option<Self> {
+        let mut action = None;
+        let mut trigger = None;
+        let mut description = None;
+        let mut duration = None;
+        let mut repeat = None;
+        let mut summary = None;
+        let mut attendees = Vec::new();
+
+        while let Some(e) = r.entry() {
+            if e.try_prop(r, "ACTION", &mut action)
+                || e.try_prop(r, "TRIGGER", &mut trigger)
+                || e.try_prop(r, "DESCRIPTION", &mut description)
+                || e.try_prop(r, "DURATION", &mut duration)
+                || e.try_prop(r, "REPEAT", &mut repeat)
+                || e.try_prop(r, "SUMMARY", &mut summary)
+                || e.try_props(r, "ATTENDEE", &mut attendees)
+            {
+                continue;
+            }
+
+            if e.try_comp_end("VALARM") {
+                break;
+            }
+
+            e.burn(r);
+        }
+
+        let duration_and_repeat = if duration.is_some() || repeat.is_some() {
+            DurationAndRepeat::new_opt(
+                r.unwrap_prop("DURATION", duration),
+                r.unwrap_prop("REPEAT", repeat),
+            )
+        } else {
+            None
+        };
+
+        match r.unwrap_prop("ACTION", action)? {
+            VAlarmAction::Display => {
+                let trigger = r.unwrap_prop("TRIGGER", trigger);
+                let description = r.unwrap_prop("DESCRIPTION", description);
+
+                Some(VAlarm::Display(DisplayAlarm {
+                    trigger: trigger?,
+                    description: description?,
+                    duration_and_repeat,
+                }))
+            }
+
+            VAlarmAction::Email => {
+                let trigger = r.unwrap_prop("TRIGGER", trigger);
+                let description = r.unwrap_prop("DESCRIPTION", description);
+                let summary = r.unwrap_prop("SUMMARY", summary);
+
+                Some(VAlarm::Email(EmailAlarm {
+                    trigger: trigger?,
+                    description: description?,
+                    summary: summary?,
+                    attendees,
+                    duration_and_repeat,
+                }))
+            }
+        }
+    }
+}
+
+impl Write<Component> for VAlarm {
+    fn write(&self, w: &mut Writer) {
+        match self {
+            VAlarm::Display(this) => {
+                w.prop("ACTION", VAlarmAction::Display);
+                this.write(w);
+            }
+            VAlarm::Email(this) => {
+                w.prop("ACTION", VAlarmAction::Email);
+                this.write(w);
+            }
+        }
+    }
+}
+
 /// Alarm's type; see [`VAlarm`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VAlarmAction {
     Display,
     Email,
+}
+
+impl Read<Property> for VAlarmAction {
+    fn read(r: &mut Reader) -> Option<Self> {
+        r.burn_params();
+        r.eat(':')?;
+
+        let value = r.spanned(|r| Some(r.rest()))?;
+        let (span, value) = (value.span, value.as_str());
+
+        if value.eq_ignore_ascii_case("DISPLAY") {
+            Some(VAlarmAction::Display)
+        } else if value.eq_ignore_ascii_case("EMAIL") {
+            Some(VAlarmAction::Email)
+        } else {
+            r.error(span, format!("unknown alarm action `{value}`"));
+            None
+        }
+    }
+}
+
+impl Write<Property> for VAlarmAction {
+    fn write(&self, w: &mut Writer) {
+        w.raw(":");
+
+        w.raw(match self {
+            VAlarmAction::Display => "DISPLAY",
+            VAlarmAction::Email => "EMAIL",
+        });
+    }
 }
 
 /// Alarm that displays a message; see [`VAlarm`].
@@ -76,6 +188,18 @@ impl DisplayAlarm {
         });
 
         self
+    }
+}
+
+impl Write<Component> for DisplayAlarm {
+    fn write(&self, w: &mut Writer) {
+        w.prop("TRIGGER", self.trigger);
+        w.prop("DESCRIPTION", &self.description);
+
+        if let Some(dr) = self.duration_and_repeat {
+            w.prop("DURATION", dr.duration);
+            w.prop("REPEAT", dr.repeat);
+        }
     }
 }
 
@@ -129,8 +253,121 @@ impl EmailAlarm {
     }
 }
 
+impl Write<Component> for EmailAlarm {
+    fn write(&self, w: &mut Writer) {
+        w.prop("TRIGGER", self.trigger);
+        w.prop("DESCRIPTION", &self.description);
+        w.prop("SUMMARY", &self.summary);
+
+        for attendee in &self.attendees {
+            w.prop("ATTENDEE", attendee);
+        }
+
+        if let Some(dr) = self.duration_and_repeat {
+            w.prop("DURATION", dr.duration);
+            w.prop("REPEAT", dr.repeat);
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DurationAndRepeat {
     pub duration: Duration,
     pub repeat: Repeat,
+}
+
+impl DurationAndRepeat {
+    fn new_opt(duration: Option<Duration>, repeat: Option<Repeat>) -> Option<Self> {
+        Some(Self {
+            duration: duration?,
+            repeat: repeat?,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ical;
+    use crate::utils::*;
+    use pretty_assertions as pa;
+
+    fn display_target() -> DisplayAlarm {
+        DisplayAlarm::new(Trigger::start(dur("-PT1H")), "some description")
+    }
+
+    fn email_target() -> EmailAlarm {
+        EmailAlarm::new(
+            Trigger::start(dur("-PT1H")),
+            "some description",
+            "some summary",
+            email("someone@localhost"),
+        )
+    }
+
+    #[track_caller]
+    fn assert(obj: &VAlarm, str: &str) {
+        pa::assert_eq!(str, obj.to_string(Component));
+        assert_trip!(str, VAlarm as Component("VALARM"));
+    }
+
+    #[test]
+    fn display_alarm() {
+        let obj = VAlarm::Display(display_target());
+
+        let str = ical! {"
+            ACTION:DISPLAY
+            TRIGGER:-PT1H
+            DESCRIPTION:some description
+        "};
+
+        assert(&obj, &str);
+    }
+
+    #[test]
+    fn repeating_display_alarm() {
+        let obj = VAlarm::Display(display_target().with_duration_and_repeat(dur("PT15M"), 10));
+
+        let str = ical! {"
+            ACTION:DISPLAY
+            TRIGGER:-PT1H
+            DESCRIPTION:some description
+            DURATION:PT15M
+            REPEAT:10
+        "};
+
+        assert(&obj, &str);
+    }
+
+    #[test]
+    fn email_alarm() {
+        let obj = VAlarm::Email(email_target());
+
+        let str = ical! {"
+            ACTION:EMAIL
+            TRIGGER:-PT1H
+            DESCRIPTION:some description
+            SUMMARY:some summary
+            ATTENDEE:mailto:someone@localhost
+        "};
+
+        assert(&obj, &str);
+    }
+
+    #[test]
+    fn repeating_email_alarm() {
+        let obj = VAlarm::Email(email_target().with_duration_and_repeat(dur("PT15M"), 10));
+
+        let str = ical! {"
+            ACTION:EMAIL
+            TRIGGER:-PT1H
+            DESCRIPTION:some description
+            SUMMARY:some summary
+            ATTENDEE:mailto:someone@localhost
+            DURATION:PT15M
+            REPEAT:10
+        "};
+
+        assert(&obj, &str);
+    }
 }
