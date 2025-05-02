@@ -46,7 +46,7 @@ impl TryFrom<JiffZoned> for DateTime<AnyForm> {
     fn try_from(value: JiffZoned) -> Result<Self, Self::Error> {
         let tz = value.time_zone();
 
-        let form = if *tz == JiffTimeZone::unknown() {
+        let form = if tz.is_unknown() {
             AnyForm::Local
         } else if *tz == JiffTimeZone::UTC {
             AnyForm::Utc
