@@ -10,8 +10,7 @@ pub enum Version {
 
 impl Read<Property> for Version {
     fn read(r: &mut Reader) -> Option<Self> {
-        r.burn_params();
-        r.eat(':')?;
+        r.burn_params()?;
 
         let value = r.spanned(|r| Some(r.rest()))?;
         let (span, value) = (value.span, value.as_str());

@@ -85,15 +85,20 @@ impl Read<Property> for DateTime<AnyForm> {
     fn read(r: &mut Reader) -> Option<Self> {
         let mut tzid = None;
 
-        while let Some(e) = r.entry() {
+        loop {
+            let e = r.entry()?;
+
             if e.try_param(r, "TZID", &mut tzid) {
                 continue;
+            }
+
+            if e.is_value() {
+                break;
             }
 
             e.burn(r);
         }
 
-        r.eat(':')?;
         let date = r.value()?;
         r.eat('T')?;
         let time = r.value()?;

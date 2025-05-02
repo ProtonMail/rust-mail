@@ -94,18 +94,6 @@ impl VCalendar {
             }
         }
 
-        while let Some(ch) = r.peek() {
-            if ch.is_whitespace() {
-                _ = r.char();
-            } else {
-                break;
-            }
-        }
-
-        if !r.is_empty() {
-            r.error(Span::new(r.pos(), r.len()), "trailing data");
-        }
-
         let cal = cal.ok_or_else(|| Error::viol([Violation::MissingCalendar]))?;
         let msgs = r.finish();
         let viols = cal.validate().into_viols();
@@ -173,7 +161,9 @@ impl Read<Component> for VCalendar {
         let mut events = Vec::new();
         let mut timezones = Vec::new();
 
-        while let Some(e) = r.entry() {
+        loop {
+            let e = r.entry()?;
+
             if e.try_prop(r, "METHOD", &mut method)
                 || e.try_prop(r, "PRODID", &mut prodid)
                 || e.try_prop(r, "VERSION", &mut version)

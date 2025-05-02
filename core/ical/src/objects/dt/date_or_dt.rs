@@ -57,15 +57,19 @@ impl Read<Property> for DateOrDt {
         let mut tzid = None;
         let mut value = None;
 
-        while let Some(e) = r.entry() {
+        loop {
+            let e = r.entry()?;
+
             if e.try_param(r, "TZID", &mut tzid) || e.try_param(r, "VALUE", &mut value) {
                 continue;
             }
 
+            if e.is_value() {
+                break;
+            }
+
             e.burn(r);
         }
-
-        r.eat(':')?;
 
         match value.unwrap_or_default() {
             DtValueType::Date => {

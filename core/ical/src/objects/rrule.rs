@@ -23,8 +23,7 @@ impl From<Recur> for RRule {
 
 impl Read<Property> for RRule {
     fn read(r: &mut Reader) -> Option<Self> {
-        r.burn_params();
-        r.eat(':')?;
+        r.burn_params()?;
 
         Some(Self { value: r.value()? })
     }

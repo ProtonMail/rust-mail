@@ -17,8 +17,7 @@ impl From<UtcOffset> for TzOffsetTo {
 
 impl Read<Property> for TzOffsetTo {
     fn read(r: &mut Reader) -> Option<Self> {
-        r.burn_params();
-        r.eat(':')?;
+        r.burn_params()?;
 
         Some(Self { value: r.value()? })
     }

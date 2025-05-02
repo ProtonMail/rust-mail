@@ -48,15 +48,19 @@ impl Read<Property> for Trigger {
         let mut related: Option<Spanned<ParamValue>> = None;
         let mut value: Option<Spanned<ParamValue>> = None;
 
-        while let Some(e) = r.entry() {
+        loop {
+            let e = r.entry()?;
+
             if e.try_param(r, "RELATED", &mut related) || e.try_param(r, "VALUE", &mut value) {
                 continue;
             }
 
+            if e.is_value() {
+                break;
+            }
+
             e.burn(r);
         }
-
-        r.eat(':')?;
 
         if let Some(Spanned { span, value }) = value {
             let value = value.as_str();

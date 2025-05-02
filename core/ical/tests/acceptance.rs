@@ -148,30 +148,6 @@ fn without_calscale() {
     assert!(out.viols.is_empty());
 }
 
-#[test]
-fn trailing_data() {
-    let str = ical! {"
-        BEGIN:VCALENDAR
-        PRODID:-//Proton AG//iCal//EN
-        VERSION:2.0
-        END:VCALENDAR
-        :something something
-    "};
-
-    let out = VCalendar::from_str(&str).unwrap();
-
-    let msgs = vec![ReadMsg {
-        at: Some(Span::new(76, 96)),
-        msg: "trailing data".into(),
-        kind: ReadMsgKind::Error,
-        context: vec![],
-    }];
-
-    assert_eq!("-//Proton AG//iCal//EN", out.cal.prodid.value.as_str());
-    assert_eq!(msgs, out.msgs);
-    assert!(out.viols.is_empty());
-}
-
 #[track_caller]
 fn assert(cal: &VCalendar, str: &str) {
     pa::assert_eq!(

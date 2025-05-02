@@ -46,8 +46,7 @@ impl Default for Duration {
 
 impl Read<Property> for Duration {
     fn read(r: &mut Reader) -> Option<Self> {
-        r.burn_params();
-        r.eat(':')?;
+        r.burn_params()?;
         r.value()
     }
 }

@@ -368,7 +368,9 @@ impl Read<Component> for VEvent {
 
         let mut alarms = Vec::new();
 
-        while let Some(e) = r.entry() {
+        loop {
+            let e = r.entry()?;
+
             if e.try_prop(r, "UID", &mut uid)
                 || e.try_prop(r, "DTSTAMP", &mut dtstamp)
                 || e.try_prop(r, "DTSTART", &mut dtstart)

@@ -363,18 +363,10 @@ impl<'a> Reader<'a> {
 
     /// Infers what kind of thing is in front of us (a component, a property,
     /// etc.), eats it, and returns it.
-    ///
-    /// This function returns `None` if the thing we're looking at is property's
-    /// value, like:
-    ///
-    /// ```text
-    /// VERSION:2.0
-    ///        ^---
-    /// ```
     #[must_use]
     pub fn entry(&mut self) -> Option<ReadEntry> {
-        if self.peek() == Some(':') {
-            return None;
+        if self.try_eat(':').is_some() {
+            return Some(ReadEntry::Value);
         }
 
         if self.try_eat(';').is_some() {
@@ -435,7 +427,7 @@ impl<'a> Reader<'a> {
 
     /// Eats all the parameters that follow and throws the "unknown parameter"
     /// message for each.
-    pub fn burn_params(&mut self) {
+    pub fn burn_params(&mut self) -> Option<()> {
         loop {
             let entry = self.attempt(|this| {
                 if let ReadEntry::Param { name } = this.entry()? {
@@ -451,6 +443,15 @@ impl<'a> Reader<'a> {
                 break;
             }
         }
+
+        // Parameters are supposed to be followed by value, as in:
+        //
+        // ```
+        // FOO=TRUE;BAR=FALSE:something
+        // ```
+        //
+        // ... so let's go ahead and consume the value's marker as well.
+        self.eat(':')
     }
 
     #[must_use]
@@ -556,6 +557,9 @@ pub enum ReadEntry {
 
     /// Parameter, as in `;NAME`.
     Param { name: Spanned<String> },
+
+    /// Parameter's value, as in `:something`.
+    Value,
 }
 
 impl ReadEntry {
@@ -691,6 +695,12 @@ impl ReadEntry {
         true
     }
 
+    /// Returns whether this entry is a value.
+    #[must_use]
+    pub fn is_value(&self) -> bool {
+        matches!(self, ReadEntry::Value)
+    }
+
     /// Throws the "unknown property / component / ..." error and recovers.
     pub fn burn(self, r: &mut Reader) {
         match self {
@@ -748,6 +758,13 @@ impl ReadEntry {
                         _ = r.char();
                     }
                 });
+            }
+
+            ReadEntry::Value => {
+                r.error(Span::new(r.pos() - 1, r.pos()), "unexpected value");
+
+                // Recover by skipping rest of the line
+                r.silently(Reader::rest);
             }
         }
     }

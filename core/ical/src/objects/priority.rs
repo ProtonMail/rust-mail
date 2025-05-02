@@ -41,8 +41,7 @@ impl From<u32> for Priority {
 
 impl Read<Property> for Priority {
     fn read(r: &mut Reader) -> Option<Self> {
-        r.burn_params();
-        r.eat(':')?;
+        r.burn_params()?;
 
         let value = r.spanned(Reader::value::<u32>)?;
         let (span, value) = (value.span, value.value);

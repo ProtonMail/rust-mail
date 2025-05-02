@@ -76,7 +76,9 @@ impl Read<Component> for VAlarm {
         let mut summary = None;
         let mut attendees = Vec::new();
 
-        while let Some(e) = r.entry() {
+        loop {
+            let e = r.entry()?;
+
             if e.try_prop(r, "ACTION", &mut action)
                 || e.try_prop(r, "TRIGGER", &mut trigger)
                 || e.try_prop(r, "DESCRIPTION", &mut description)
@@ -157,8 +159,7 @@ pub enum VAlarmAction {
 
 impl Read<Property> for VAlarmAction {
     fn read(r: &mut Reader) -> Option<Self> {
-        r.burn_params();
-        r.eat(':')?;
+        r.burn_params()?;
 
         let value = r.spanned(|r| Some(r.rest()))?;
         let (span, value) = (value.span, value.as_str());

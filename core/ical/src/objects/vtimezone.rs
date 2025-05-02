@@ -80,7 +80,9 @@ impl Read<Component> for VTimeZone {
         let mut daylights = Vec::new();
         let mut standards = Vec::new();
 
-        while let Some(e) = r.entry() {
+        loop {
+            let e = r.entry()?;
+
             if e.try_prop(r, "TZID", &mut tzid)
                 || e.try_comps(r, "DAYLIGHT", &mut daylights)
                 || e.try_comps(r, "STANDARD", &mut standards)
@@ -173,7 +175,9 @@ impl Read<Component> for TzProps {
         let mut rrule = None;
         let mut tz_name = None;
 
-        while let Some(e) = r.entry() {
+        loop {
+            let e = r.entry()?;
+
             if e.try_prop(r, "DTSTART", &mut dtstart)
                 || e.try_prop(r, "TZOFFSETFROM", &mut tz_offset_from)
                 || e.try_prop(r, "TZOFFSETTO", &mut tz_offset_to)

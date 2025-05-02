@@ -14,15 +14,19 @@ impl Read<Property> for ExDate {
         let mut value = None;
         let mut tzid = None;
 
-        while let Some(e) = r.entry() {
+        loop {
+            let e = r.entry()?;
+
             if e.try_param(r, "VALUE", &mut value) || e.try_param(r, "TZID", &mut tzid) {
                 continue;
             }
 
+            if e.is_value() {
+                break;
+            }
+
             e.burn(r);
         }
-
-        r.eat(':')?;
 
         match value.unwrap_or_default() {
             DtValueType::Date => Some(ExDate::Dates(r.value()?)),

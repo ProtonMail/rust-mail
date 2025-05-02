@@ -61,7 +61,9 @@ impl Read<Property> for Attendee {
         let mut role = None;
         let mut rsvp = None;
 
-        while let Some(e) = r.entry() {
+        loop {
+            let e = r.entry()?;
+
             if e.try_param(r, "CN", &mut cn)
                 || e.try_param(r, "CUTYPE", &mut cutype)
                 || e.try_param(r, "ROLE", &mut role)
@@ -70,10 +72,12 @@ impl Read<Property> for Attendee {
                 continue;
             }
 
+            if e.is_value() {
+                break;
+            }
+
             e.burn(r);
         }
-
-        r.eat(':')?;
 
         Some(Self {
             address: r.value()?,

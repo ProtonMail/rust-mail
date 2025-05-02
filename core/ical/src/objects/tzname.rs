@@ -22,8 +22,7 @@ where
 
 impl Read<Property> for TzName {
     fn read(r: &mut Reader) -> Option<Self> {
-        r.burn_params();
-        r.eat(':')?;
+        r.burn_params()?;
 
         Some(Self { value: r.value()? })
     }

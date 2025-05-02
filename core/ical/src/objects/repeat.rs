@@ -17,8 +17,7 @@ impl From<u32> for Repeat {
 
 impl Read<Property> for Repeat {
     fn read(r: &mut Reader) -> Option<Self> {
-        r.burn_params();
-        r.eat(':')?;
+        r.burn_params()?;
 
         Some(Self { value: r.value()? })
     }
