@@ -2645,6 +2645,7 @@ dependencies = [
 name = "ical"
 version = "0.1.0"
 dependencies = [
+ "criterion",
  "ext-php-rs",
  "indoc",
  "itertools 0.13.0",

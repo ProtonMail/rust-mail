@@ -6,6 +6,10 @@ edition.workspace = true
 [lib]
 crate-type = ["cdylib", "lib"]
 
+[[bench]]
+name = "recur"
+harness = false
+
 [features]
 php = ["ext-php-rs"]
 
@@ -19,6 +23,7 @@ tynm = { workspace = true }
 utf8-width = { workspace = true }
 
 [dev-dependencies]
+criterion = "0.5.1"
 indoc = { workspace = true }
 pretty_assertions = { workspace = true }
 test-case = { workspace = true }
