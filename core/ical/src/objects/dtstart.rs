@@ -8,6 +8,12 @@ pub struct DtStart {
     pub value: DateOrDt,
 }
 
+impl DtStart {
+    pub(crate) fn validate(&self, cal: &VCalendar) -> Vec<DtStartViolation> {
+        self.value.validate(cal).into_iter().map_into().collect()
+    }
+}
+
 impl<T> From<T> for DtStart
 where
     T: Into<DateOrDt>,
@@ -29,6 +35,12 @@ impl Write<Property> for DtStart {
     fn write(&self, w: &mut Writer) {
         self.value.write(w);
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum DtStartViolation {
+    #[error("{0}")]
+    InvalidValue(#[from] DateTimeViolation),
 }
 
 #[cfg(test)]

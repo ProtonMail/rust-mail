@@ -9,7 +9,9 @@ fn main() {
         panic!("couldn't read `{path}`: {err}");
     });
 
-    let (cal, msgs) = ical::VCalendar::from_bytes(&src).unwrap();
+    let (cal, msgs) = ical::VCalendar::from_bytes(&src).unwrap_or_else(|err| {
+        panic!("couldn't parse `{path}`: {err:?}");
+    });
 
     if !msgs.is_empty() {
         for msg in msgs {

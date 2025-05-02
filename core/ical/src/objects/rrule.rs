@@ -8,6 +8,12 @@ pub struct RRule {
     pub value: Recur,
 }
 
+impl RRule {
+    pub(crate) fn validate(&self) -> Vec<RRuleViolation> {
+        self.value.validate().into_iter().map_into().collect()
+    }
+}
+
 impl From<Recur> for RRule {
     fn from(value: Recur) -> Self {
         Self { value }
@@ -28,4 +34,10 @@ impl Write<Property> for RRule {
         w.raw(":");
         w.value(&self.value);
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum RRuleViolation {
+    #[error("{0}")]
+    InvalidValue(#[from] RecurViolation),
 }

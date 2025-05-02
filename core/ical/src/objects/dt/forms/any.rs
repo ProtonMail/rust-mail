@@ -10,6 +10,25 @@ pub enum AnyForm {
     Tz(TzId),
 }
 
+impl DateTime<AnyForm> {
+    #[must_use]
+    pub(crate) fn validate(&self, cal: &VCalendar) -> Vec<DateTimeViolation> {
+        let mut viols = Vec::new();
+
+        if let AnyForm::Tz(tzid) = &self.form {
+            if !cal
+                .timezones
+                .iter()
+                .any(|tz| tz.tzid.value.as_str() == tzid.as_str())
+            {
+                viols.push(DateTimeViolation::UnknownTimeZone(tzid.as_str().to_owned()));
+            }
+        }
+
+        viols
+    }
+}
+
 impl Read<Property> for DateTime<AnyForm> {
     fn read(r: &mut Reader) -> Option<Self> {
         let mut tzid = None;

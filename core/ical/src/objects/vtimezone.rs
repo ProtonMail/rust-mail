@@ -49,6 +49,28 @@ impl VTimeZone {
         self.standards.push(props);
         self
     }
+
+    #[must_use]
+    pub(crate) fn validate(
+        &self,
+        cal: &VCalendar,
+        skipping_idx: Option<usize>,
+    ) -> Vec<VTimeZoneViolation> {
+        let mut viols = Vec::new();
+
+        if cal
+            .timezones
+            .iter()
+            .enumerate()
+            .any(|(idx, tz)| Some(idx) != skipping_idx && tz.tzid == self.tzid)
+        {
+            viols.push(VTimeZoneViolation::DuplicatedId(
+                self.tzid.value.as_str().to_owned(),
+            ));
+        }
+
+        viols
+    }
 }
 
 impl Read<Component> for VTimeZone {
@@ -94,6 +116,12 @@ impl Write<Component> for VTimeZone {
             w.comp("STANDARD", props);
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum VTimeZoneViolation {
+    #[error("id `{0}` is already taken")]
+    DuplicatedId(String),
 }
 
 /// Time zone properties; part of a [`VTimeZone`].
@@ -226,5 +254,14 @@ mod tests {
 
         pa::assert_eq!(str, obj.to_string(Component));
         assert_trip!(str, VTimeZone as Component("VTIMEZONE"));
+    }
+
+    #[test]
+    fn viol_duplicated_id() {
+        let cal = cal().with_timezone(tz()).unwrap();
+        let actual = tz().validate(&cal, None);
+        let expected = vec![VTimeZoneViolation::DuplicatedId("Alice/Wonderland".into())];
+
+        assert_eq!(expected, actual);
     }
 }

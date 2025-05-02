@@ -8,6 +8,12 @@ pub struct DtStamp {
     pub value: DateTime,
 }
 
+impl DtStamp {
+    pub(crate) fn validate(&self, cal: &VCalendar) -> Vec<DtStampViolation> {
+        self.value.validate(cal).into_iter().map_into().collect()
+    }
+}
+
 impl From<DateTime> for DtStamp {
     fn from(value: DateTime) -> Self {
         Self { value }
@@ -24,6 +30,12 @@ impl Write<Property> for DtStamp {
     fn write(&self, w: &mut Writer) {
         self.value.write(w);
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum DtStampViolation {
+    #[error("{0}")]
+    InvalidValue(#[from] DateTimeViolation),
 }
 
 #[cfg(test)]

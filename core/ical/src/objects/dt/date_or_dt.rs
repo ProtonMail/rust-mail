@@ -6,6 +6,26 @@ pub enum DateOrDt<F = AnyForm> {
     DateTime(DateTime<F>),
 }
 
+impl<F> DateOrDt<F> {
+    #[must_use]
+    pub(crate) fn ty(&self) -> &'static str {
+        match self {
+            DateOrDt::Date(_) => "date",
+            DateOrDt::DateTime(_) => "date-time",
+        }
+    }
+}
+
+impl DateOrDt<AnyForm> {
+    #[must_use]
+    pub(crate) fn validate(&self, cal: &VCalendar) -> Vec<DateTimeViolation> {
+        match self {
+            DateOrDt::Date(_) => Vec::new(),
+            DateOrDt::DateTime(this) => this.validate(cal),
+        }
+    }
+}
+
 impl From<Date> for DateOrDt {
     fn from(value: Date) -> Self {
         DateOrDt::Date(value)

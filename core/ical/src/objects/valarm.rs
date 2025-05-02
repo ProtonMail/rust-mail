@@ -25,6 +25,33 @@ impl VAlarm {
             VAlarm::Email(this) => &this.description,
         }
     }
+
+    #[must_use]
+    pub(crate) fn validate(&self, evt: &VEvent) -> Vec<VAlarmViolation> {
+        let mut viols = Vec::new();
+
+        match self.trigger() {
+            Trigger::Relative(TriggerEdge::Start, _) => {
+                if evt.dtstart.is_none() {
+                    viols.push(VAlarmViolation::MissingStartDay);
+                }
+            }
+
+            Trigger::Relative(TriggerEdge::End, _) => {
+                if evt.dtend.is_none() && evt.dtstart.is_none() && evt.duration.is_none() {
+                    viols.push(VAlarmViolation::MissingEndDay);
+                }
+            }
+
+            Trigger::Absolute(_) => (),
+        }
+
+        if let VAlarm::Email(this) = self {
+            viols.extend(this.validate());
+        }
+
+        viols
+    }
 }
 
 impl From<DisplayAlarm> for VAlarm {
@@ -251,6 +278,16 @@ impl EmailAlarm {
 
         self
     }
+
+    pub(crate) fn validate(&self) -> Vec<VAlarmViolation> {
+        let mut viols = Vec::new();
+
+        if self.attendees.is_empty() {
+            viols.push(VAlarmViolation::NoAttendees);
+        }
+
+        viols
+    }
 }
 
 impl Write<Component> for EmailAlarm {
@@ -285,6 +322,18 @@ impl DurationAndRepeat {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum VAlarmViolation {
+    #[error("alarm's parent has no start day (dtstart)")]
+    MissingStartDay,
+
+    #[error("alarm's parent has no end day (dtend or dtstart+duration)")]
+    MissingEndDay,
+
+    #[error("alarm has no attendees")]
+    NoAttendees,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -303,6 +352,10 @@ mod tests {
             "some summary",
             email("someone@localhost"),
         )
+    }
+
+    fn event() -> VEvent {
+        VEvent::new("1", dt("20180101T120000Z"))
     }
 
     #[track_caller]
@@ -369,5 +422,115 @@ mod tests {
         "};
 
         assert(&obj, &str);
+    }
+
+    #[test]
+    fn viol_missing_start_day() {
+        let evt = event();
+
+        let target = VAlarm::Display(DisplayAlarm::new(
+            Trigger::start(dur("-PT15M")),
+            "some description",
+        ));
+
+        let expected = vec![VAlarmViolation::MissingStartDay];
+
+        assert_eq!(expected, target.validate(&evt));
+
+        // ---
+        // Make sure that validation passes when event has a start day.
+
+        let evt = event().with_dtstart(dt("20180101T120000Z"));
+
+        let target = VAlarm::Display(DisplayAlarm::new(
+            Trigger::start(dur("-PT15M")),
+            "some description",
+        ));
+
+        assert!(target.validate(&evt).is_empty());
+
+        // ---
+        // Make sure that validation passes when alarm has an absolute trigger.
+
+        let evt = event();
+
+        let target = VAlarm::Display(DisplayAlarm::new(
+            Trigger::abs(dte("20180101T120000Z")),
+            "some description",
+        ));
+
+        assert!(target.validate(&evt).is_empty());
+    }
+
+    #[test]
+    fn viol_missing_end_day() {
+        let evt = event();
+
+        let target = VAlarm::Display(DisplayAlarm::new(
+            Trigger::end(dur("-PT15M")),
+            "some description",
+        ));
+
+        let expected = vec![VAlarmViolation::MissingEndDay];
+
+        assert_eq!(expected, target.validate(&evt));
+
+        // ---
+        // Make sure that validation passes when event has an end day.
+
+        let evt = event().with_dtend(dt("20180101T120000Z"));
+
+        let target = VAlarm::Display(DisplayAlarm::new(
+            Trigger::end(dur("-PT15M")),
+            "some description",
+        ));
+
+        assert!(target.validate(&evt).is_empty());
+
+        // ---
+        // Make sure that validation passes when event has start day and
+        // duration.
+
+        let evt = event()
+            .with_dtstart(dt("20180101T120000Z"))
+            .with_duration(dur("PT1H"));
+
+        let target = VAlarm::Display(DisplayAlarm::new(
+            Trigger::end(dur("-PT15M")),
+            "some description",
+        ));
+
+        assert!(target.validate(&evt).is_empty());
+
+        // ---
+        // Make sure that validation passes when alarm has an absolute trigger.
+
+        let evt = event();
+
+        let target = VAlarm::Display(DisplayAlarm::new(
+            Trigger::abs(dte("20180101T120000Z")),
+            "some description",
+        ));
+
+        assert!(target.validate(&evt).is_empty());
+    }
+
+    #[test]
+    fn viol_no_attendees() {
+        let evt = event().with_dtstart(d("20180101"));
+        let mut target = email_target();
+
+        assert!(VAlarm::Email(target.clone()).validate(&evt).is_empty());
+
+        // ---
+
+        target.attendees.clear();
+
+        // ---
+
+        let actual = VAlarm::Email(target).validate(&evt);
+        let expected = vec![VAlarmViolation::NoAttendees];
+
+        assert_eq!(expected, actual);
     }
 }

@@ -15,6 +15,9 @@ use super::*;
 
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum DateTimeViolation {
+    #[error("time zone `{0}` is not known")]
+    UnknownTimeZone(String),
+
     #[error("day {year:04}-{month:02}-{day:02} (yyyy-mm-dd) does not exist")]
     UnknownDay { year: u32, month: u32, day: u32 },
 }

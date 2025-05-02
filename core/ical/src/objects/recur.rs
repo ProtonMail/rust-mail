@@ -131,6 +131,16 @@ impl Recur {
         self.wkst = Some(wkst);
         self
     }
+
+    pub(crate) fn validate(&self) -> Vec<RecurViolation> {
+        let mut viols = Vec::new();
+
+        if self.interval == Some(0) {
+            viols.push(RecurViolation::ZeroInterval);
+        }
+
+        viols
+    }
 }
 
 impl Read<Value> for Recur {
@@ -385,6 +395,12 @@ impl Write<Value> for ByDay {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum RecurViolation {
+    #[error("interval is zero")]
+    ZeroInterval,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -603,5 +619,22 @@ mod tests {
     fn freq(obj: Freq, str: &str) {
         assert_eq!(str, obj.to_string(Value));
         assert_trip!(str, Freq as Value);
+    }
+
+    #[test]
+    fn viol_zero_interval() {
+        assert!(Recur::new(Freq::Monthly).validate().is_empty());
+
+        assert!(
+            Recur::new(Freq::Monthly)
+                .with_interval(1)
+                .validate()
+                .is_empty()
+        );
+
+        assert_eq!(
+            vec![RecurViolation::ZeroInterval],
+            Recur::new(Freq::Monthly).with_interval(0).validate(),
+        );
     }
 }

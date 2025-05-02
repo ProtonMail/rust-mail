@@ -181,6 +181,94 @@ impl VEvent {
         self.alarms.extend(alarms);
         self
     }
+
+    #[must_use]
+    pub(crate) fn validate(
+        &self,
+        cal: &VCalendar,
+        skipping_idx: Option<usize>,
+    ) -> Vec<VEventViolation> {
+        let mut viols = Vec::new();
+
+        if let Some(uid) = &self.uid {
+            if cal
+                .events
+                .iter()
+                .enumerate()
+                .filter_map(|(idx, evt)| Some((idx, evt.uid.as_ref()?)))
+                .any(|(idx, uid2)| Some(idx) != skipping_idx && uid2.value == uid.value)
+            {
+                viols.push(VEventViolation::DuplicatedUid(
+                    uid.value.as_str().to_owned(),
+                ));
+            }
+        } else {
+            viols.push(VEventViolation::MissingUid);
+        }
+
+        if self.dtend.is_some() && self.duration.is_some() {
+            viols.push(VEventViolation::BothDtEndAndDurationSpecified);
+        }
+
+        if let Some(dtstart) = &self.dtstart {
+            let lhs = dtstart.value.ty();
+
+            if let Some(dtend) = &self.dtend {
+                let rhs = dtend.value.ty();
+
+                if lhs != rhs {
+                    viols.push(VEventViolation::DtStartAndDtEndTypeMismatch(lhs, rhs));
+                }
+            }
+
+            if let Some(recurrence_id) = &self.recurrence_id {
+                let rhs = recurrence_id.value.ty();
+
+                if lhs != rhs {
+                    viols.push(VEventViolation::DtStartAndRecurrenceIdTypeMismatch(
+                        lhs, rhs,
+                    ));
+                }
+            }
+        }
+
+        if let Some(dtstamp) = &self.dtstamp {
+            viols.extend(dtstamp.validate(cal).into_iter().map_into());
+        } else {
+            viols.push(VEventViolation::MissingDtStamp);
+        }
+
+        if let Some(dtstart) = &self.dtstart {
+            viols.extend(dtstart.validate(cal).into_iter().map_into());
+        }
+
+        if let Some(dtend) = &self.dtend {
+            viols.extend(dtend.validate(cal).into_iter().map_into());
+        }
+
+        if let Some(created) = &self.created {
+            viols.extend(created.validate(cal).into_iter().map_into());
+        }
+
+        if let Some(rrule) = &self.rrule {
+            viols.extend(rrule.validate().into_iter().map_into());
+        }
+
+        if let Some(recurrence_id) = &self.recurrence_id {
+            viols.extend(recurrence_id.validate(cal).into_iter().map_into());
+        }
+
+        for (idx, alarm) in self.alarms.iter().enumerate() {
+            viols.extend(
+                alarm
+                    .validate(self)
+                    .into_iter()
+                    .map(|viol| VEventViolation::InvalidAlarm(idx, viol)),
+            );
+        }
+
+        viols
+    }
 }
 
 impl Read<Component> for VEvent {
@@ -322,10 +410,52 @@ impl Write<Component> for VEvent {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum VEventViolation {
+    #[error("uid `{0}` is already taken")]
+    DuplicatedUid(String),
+
+    #[error("uid is missing")]
+    MissingUid,
+
+    #[error("dtend is exclusive with duration")]
+    BothDtEndAndDurationSpecified,
+
+    #[error("dtstart ({0}) has different type than dtend ({0})")]
+    DtStartAndDtEndTypeMismatch(&'static str, &'static str),
+
+    #[error("dtstart ({0}) has different type than recurrence-id ({0})")]
+    DtStartAndRecurrenceIdTypeMismatch(&'static str, &'static str),
+
+    #[error("dtstamp is missing")]
+    MissingDtStamp,
+
+    #[error("dtstamp: {0}")]
+    InvalidDtStamp(#[from] DtStampViolation),
+
+    #[error("dtstart: {0}")]
+    InvalidDtStart(#[from] DtStartViolation),
+
+    #[error("dtend: {0}")]
+    InvalidDtEnd(#[from] DtEndViolation),
+
+    #[error("created: {0}")]
+    InvalidCreated(#[from] CreatedViolation),
+
+    #[error("rrule: {0}")]
+    InvalidRRule(#[from] RRuleViolation),
+
+    #[error("recurrence-id: {0}")]
+    InvalidRecurrenceId(#[from] RecurrenceIdViolation),
+
+    #[error("alarm[{0}]: {1}")]
+    InvalidAlarm(usize, VAlarmViolation),
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{CuType, EmailAlarm, Trigger, ical, utils::*};
+    use crate::{CuType, DateTimeViolation, DisplayAlarm, EmailAlarm, Trigger, ical, utils::*};
     use pretty_assertions as pa;
 
     fn event() -> VEvent {
@@ -615,5 +745,195 @@ mod tests {
         "};
 
         assert(&obj, &str);
+    }
+
+    #[test]
+    fn viol_duplicated_uid() {
+        let mut target = cal();
+
+        for id in ["1", "2", "3"] {
+            target
+                .add_event(VEvent::new(id, dt("20180101T120000Z")))
+                .unwrap();
+        }
+
+        let actual = VEvent::new("2", dt("20180101T120000Z")).validate(&target, None);
+        let expected = vec![VEventViolation::DuplicatedUid("2".into())];
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn viol_missing_uid() {
+        let target = VEvent {
+            uid: None,
+            ..event()
+        };
+
+        let expected = vec![VEventViolation::MissingUid];
+
+        assert_eq!(expected, target.validate(&cal(), None));
+    }
+
+    #[test]
+    fn viol_both_dtend_and_duration_specified() {
+        let target = event()
+            .with_dtend(dt("20180101T120000Z"))
+            .with_duration(dur("P1D"));
+
+        let expected = vec![VEventViolation::BothDtEndAndDurationSpecified];
+
+        assert_eq!(expected, target.validate(&cal(), None));
+    }
+
+    #[test]
+    fn viol_dtstart_and_dtend_type_mismatch() {
+        let target = event()
+            .with_dtstart(d("20180101"))
+            .with_dtend(dt("20180101T120000Z"));
+
+        let expected = vec![VEventViolation::DtStartAndDtEndTypeMismatch(
+            "date",
+            "date-time",
+        )];
+
+        assert_eq!(expected, target.validate(&cal(), None));
+
+        // ---
+
+        let target = event()
+            .with_dtstart(d("20180101"))
+            .with_dtend(d("20180101"));
+
+        assert!(target.validate(&cal(), None).is_empty());
+    }
+
+    #[test]
+    fn viol_dtstart_and_recurrence_id_type_mismatch() {
+        let target = event()
+            .with_dtstart(d("20180101"))
+            .with_recurrence_id(dt("20180101T120000Z"));
+
+        let expected = vec![VEventViolation::DtStartAndRecurrenceIdTypeMismatch(
+            "date",
+            "date-time",
+        )];
+
+        assert_eq!(expected, target.validate(&cal(), None));
+
+        // ---
+
+        let target = event()
+            .with_dtstart(d("20180101"))
+            .with_recurrence_id(d("20180101"));
+
+        assert!(target.validate(&cal(), None).is_empty());
+    }
+
+    #[test]
+    fn viol_missing_dtstamp() {
+        let target = VEvent {
+            dtstamp: None,
+            ..event()
+        };
+
+        let expected = vec![VEventViolation::MissingDtStamp];
+
+        assert_eq!(expected, target.validate(&cal(), None));
+    }
+
+    #[test]
+    fn viol_invalid_dtstamp() {
+        let target = VEvent::new("1", dt(";TZID=Europe/Warsaw:20180101T120000"));
+
+        let expected = vec![VEventViolation::InvalidDtStamp(
+            DtStampViolation::InvalidValue(DateTimeViolation::UnknownTimeZone(
+                "Europe/Warsaw".into(),
+            )),
+        )];
+
+        assert_eq!(expected, target.validate(&cal(), None));
+    }
+
+    #[test]
+    fn viol_invalid_dtstart() {
+        let target = event().with_dtstart(dt(";TZID=Europe/Warsaw:20180101T120000"));
+
+        let expected = vec![VEventViolation::InvalidDtStart(
+            DtStartViolation::InvalidValue(DateTimeViolation::UnknownTimeZone(
+                "Europe/Warsaw".into(),
+            )),
+        )];
+
+        assert_eq!(expected, target.validate(&cal(), None));
+    }
+
+    #[test]
+    fn viol_invalid_created() {
+        let target = event().with_created(dt(";TZID=Europe/Warsaw:20180101T120000"));
+
+        let expected = vec![VEventViolation::InvalidCreated(
+            CreatedViolation::InvalidValue(DateTimeViolation::UnknownTimeZone(
+                "Europe/Warsaw".into(),
+            )),
+        )];
+
+        assert_eq!(expected, target.validate(&cal(), None));
+    }
+
+    #[test]
+    fn viol_invalid_rrule() {
+        let target = event().with_rrule(Recur::new(Freq::Daily).with_interval(0));
+
+        let expected = vec![VEventViolation::InvalidRRule(RRuleViolation::InvalidValue(
+            RecurViolation::ZeroInterval,
+        ))];
+
+        assert_eq!(expected, target.validate(&cal(), None));
+    }
+
+    #[test]
+    fn viol_invalid_recurrence_id() {
+        let target = event().with_recurrence_id(dt(";TZID=Europe/Warsaw:20180101T120000"));
+
+        let expected = vec![VEventViolation::InvalidRecurrenceId(
+            RecurrenceIdViolation::InvalidValue(DateTimeViolation::UnknownTimeZone(
+                "Europe/Warsaw".into(),
+            )),
+        )];
+
+        assert_eq!(expected, target.validate(&cal(), None));
+    }
+
+    #[test]
+    fn viol_invalid_dtend() {
+        let target = event().with_dtend(dt(";TZID=Europe/Warsaw:20180101T120000"));
+
+        let expected = vec![VEventViolation::InvalidDtEnd(DtEndViolation::InvalidValue(
+            DateTimeViolation::UnknownTimeZone("Europe/Warsaw".into()),
+        ))];
+
+        assert_eq!(expected, target.validate(&cal(), None));
+    }
+
+    #[test]
+    fn viol_invalid_alarm() {
+        let target = event().with_alarm(DisplayAlarm::new(
+            Trigger::start(dur("-PT15M")),
+            "some description",
+        ));
+
+        let expected = vec![VEventViolation::InvalidAlarm(
+            0,
+            VAlarmViolation::MissingStartDay,
+        )];
+
+        assert_eq!(expected, target.validate(&cal(), None));
+
+        // ---
+
+        let target = target.with_dtstart(d("20180101"));
+
+        assert!(target.validate(&cal(), None).is_empty());
     }
 }

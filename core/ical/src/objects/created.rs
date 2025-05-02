@@ -8,6 +8,12 @@ pub struct Created {
     pub value: DateTime,
 }
 
+impl Created {
+    pub(crate) fn validate(&self, cal: &VCalendar) -> Vec<CreatedViolation> {
+        self.value.validate(cal).into_iter().map_into().collect()
+    }
+}
+
 impl<T> From<T> for Created
 where
     T: Into<DateTime>,
@@ -29,6 +35,12 @@ impl Write<Property> for Created {
     fn write(&self, w: &mut Writer) {
         self.value.write(w);
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum CreatedViolation {
+    #[error("{0}")]
+    InvalidValue(#[from] DateTimeViolation),
 }
 
 #[cfg(test)]

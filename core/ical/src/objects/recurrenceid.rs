@@ -8,6 +8,12 @@ pub struct RecurrenceId {
     pub value: DateOrDt,
 }
 
+impl RecurrenceId {
+    pub(crate) fn validate(&self, cal: &VCalendar) -> Vec<RecurrenceIdViolation> {
+        self.value.validate(cal).into_iter().map_into().collect()
+    }
+}
+
 impl<T> From<T> for RecurrenceId
 where
     T: Into<DateOrDt>,
@@ -29,6 +35,12 @@ impl Write<Property> for RecurrenceId {
     fn write(&self, w: &mut Writer) {
         self.value.write(w);
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum RecurrenceIdViolation {
+    #[error("{0}")]
+    InvalidValue(#[from] DateTimeViolation),
 }
 
 #[cfg(test)]

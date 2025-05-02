@@ -18,28 +18,30 @@ fn empty() {
 
 #[test]
 fn with_event() {
-    let cal = VCalendar::new("-//Proton AG//test 2.1.3.7//EN").with_event(
-        VEvent::new(
-            "0000-0000-0000-0001",
-            DateTime {
+    let cal = VCalendar::new("-//Proton AG//test 2.1.3.7//EN")
+        .with_event(
+            VEvent::new(
+                "0000-0000-0000-0001",
+                DateTime {
+                    date: Date::new_unchecked(2024, 1, 1),
+                    time: Time::new_unchecked(12, 0, 0),
+                    form: AnyForm::Local,
+                },
+            )
+            .with_dtstart(DateTime {
                 date: Date::new_unchecked(2024, 1, 1),
-                time: Time::new_unchecked(12, 0, 0),
+                time: Time::new_unchecked(10, 0, 0),
                 form: AnyForm::Local,
-            },
+            })
+            .with_rrule(Recur::new(Freq::Daily).with_count(5))
+            .with_alarm(EmailAlarm::new(
+                Trigger::start(Duration::neg(TimeDuration::minutes(10))),
+                "reminder before the meeting!",
+                "just a reminder",
+                EmailAddress::from("someone@localhost"),
+            )),
         )
-        .with_dtstart(DateTime {
-            date: Date::new_unchecked(2024, 1, 1),
-            time: Time::new_unchecked(10, 0, 0),
-            form: AnyForm::Local,
-        })
-        .with_rrule(Recur::new(Freq::Daily).with_count(5))
-        .with_alarm(EmailAlarm::new(
-            Trigger::start(Duration::neg(TimeDuration::minutes(10))),
-            "reminder before the meeting!",
-            "just a reminder",
-            EmailAddress::from("someone@localhost"),
-        )),
-    );
+        .unwrap();
 
     let str = ical! {"
         BEGIN:VCALENDAR
@@ -85,10 +87,12 @@ fn with_broken_event() {
     let exp_msgs = vec![
         "error: missing property `UID`",
         "error: missing property `DTSTAMP`",
+        "viol: event[0]: uid is missing",
+        "viol: event[0]: dtstamp is missing",
     ];
 
     assert_eq!(msgs, exp_msgs);
-    assert_eq!(1, cal.events.len());
+    assert_eq!(1, cal.events().len());
 }
 
 #[test]
@@ -119,7 +123,7 @@ fn without_calscale() {
     let (cal, msgs) = VCalendar::from_str(&str).unwrap();
 
     assert!(msgs.is_empty());
-    assert_eq!(CalScale::Gregorian, cal.calscale);
+    assert_eq!(CalScale::Gregorian, cal.calscale());
 }
 
 #[track_caller]

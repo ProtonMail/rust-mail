@@ -43,6 +43,7 @@ mod vevent;
 mod vtimezone;
 
 use super::*;
+use itertools::Itertools;
 use jiff::civil::Date as JiffDate;
 use std::num::NonZeroI8;
 use thiserror::Error;
