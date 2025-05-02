@@ -6,15 +6,10 @@ use super::*;
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "php", derive(ZvalConvert))]
 pub struct TzId {
-    // TODO Text / ParamValue (must not contain dquote)
+    // Usually we'd use `Text` or `ParamValue`, but `TzId` is a bit awkward in
+    // that it can appear in both positions - so, for convenience, let's just
+    // use `String`.
     pub value: String,
-}
-
-impl TzId {
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        &self.value
-    }
 }
 
 impl<T> From<T> for TzId

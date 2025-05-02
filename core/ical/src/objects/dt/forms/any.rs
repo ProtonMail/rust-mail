@@ -27,12 +27,8 @@ impl DateTime<AnyForm> {
         let mut viols = Vec::new();
 
         if let AnyForm::Tz(tzid) = &self.form {
-            if !cal
-                .timezones
-                .iter()
-                .any(|tz| tz.tzid.value.as_str() == tzid.as_str())
-            {
-                viols.push(DateTimeViolation::UnknownTimeZone(tzid.as_str().to_owned()));
+            if !cal.timezones.iter().any(|tz| tz.tzid.value == tzid.value) {
+                viols.push(DateTimeViolation::UnknownTimeZone(tzid.value.clone()));
             }
         }
 
@@ -76,7 +72,7 @@ impl TryFrom<DateTime<AnyForm>> for JiffZoned {
         match value.form {
             AnyForm::Local => Ok(dt.to_zoned(JiffTimeZone::unknown())?),
             AnyForm::Utc => Ok(dt.to_zoned(JiffTimeZone::UTC)?),
-            AnyForm::Tz(tz) => Ok(dt.in_tz(tz.as_str())?),
+            AnyForm::Tz(tz) => Ok(dt.in_tz(tz.value.as_str())?),
         }
     }
 }
