@@ -2643,23 +2643,6 @@ dependencies = [
 
 [[package]]
 name = "ical"
-version = "0.1.0"
-dependencies = [
- "criterion",
- "ext-php-rs",
- "indoc",
- "itertools 0.13.0",
- "jiff",
- "pretty_assertions",
- "strum",
- "test-case",
- "thiserror 1.0.69",
- "tynm",
- "utf8-width",
-]
-
-[[package]]
-name = "ical"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b7cab7543a8b7729a19e2c04309f902861293dcdae6558dfbeb634454d279f6"
@@ -4717,7 +4700,7 @@ dependencies = [
  "flume",
  "futures",
  "futures-util",
- "ical 0.11.0",
+ "ical",
  "include_dir",
  "indoc",
  "itertools 0.13.0",
@@ -4874,6 +4857,23 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+]
+
+[[package]]
+name = "proton-ical"
+version = "0.1.0"
+dependencies = [
+ "criterion",
+ "ext-php-rs",
+ "indoc",
+ "itertools 0.13.0",
+ "jiff",
+ "pretty_assertions",
+ "strum",
+ "test-case",
+ "thiserror 1.0.69",
+ "tynm",
+ "utf8-width",
 ]
 
 [[package]]
@@ -5171,7 +5171,7 @@ version = "0.2.1"
 dependencies = [
  "base64",
  "chrono",
- "ical 0.11.0",
+ "ical",
  "oxilangtag",
  "paste",
  "regex",

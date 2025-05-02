@@ -1,6 +1,6 @@
 #![allow(clippy::print_stdout)]
 
-use ical::ParsedVCalendar;
+use proton_ical::VCalendar;
 use std::{env, fs};
 
 fn main() {
@@ -10,26 +10,25 @@ fn main() {
         panic!("couldn't read `{path}`: {err}");
     });
 
-    let ParsedVCalendar { cal, msgs, viols } =
-        ical::VCalendar::from_bytes(&src).unwrap_or_else(|err| {
-            panic!("couldn't parse `{path}`: {err:?}");
-        });
+    let out = VCalendar::from_bytes(&src).unwrap_or_else(|err| {
+        panic!("couldn't parse `{path}`: {err:?}");
+    });
 
-    if !msgs.is_empty() {
-        for msg in msgs {
+    if !out.msgs.is_empty() {
+        for msg in out.msgs {
             println!("{}", msg.to_string(&*src));
         }
 
         println!();
     }
 
-    if !viols.is_empty() {
-        for viol in viols {
+    if !out.viols.is_empty() {
+        for viol in out.viols {
             println!("{viol}");
         }
 
         println!();
     }
 
-    println!("{cal:#?}");
+    println!("{:#?}", out.cal);
 }

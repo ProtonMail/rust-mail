@@ -10,7 +10,7 @@ Comprehensive iCalendar parser / generator / editor.
 ### CLI
 
 ``` bash
-$ cargo run -p ical -- ./examples/example.ical
+$ cargo run -p proton-ical -- ./examples/example.ical
 ```
 
 ### Rust
@@ -21,7 +21,7 @@ See <./tests/acceptance.rs>
 
 ``` bash
 $ cd core/ical
-$ RUSTFLAGS="-C link-arg=-Wl,-undefined,dynamic_lookup" cargo build -p ical --release --features php
+$ RUSTFLAGS="-C link-arg=-Wl,-undefined,dynamic_lookup" cargo build -p proton-ical --release --features php
 
 # on Linux
 $ php -d extension=../../target/release/libical.so examples/php/parse.php

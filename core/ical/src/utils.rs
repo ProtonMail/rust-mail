@@ -7,7 +7,7 @@ use super::*;
 /// # Example
 ///
 /// ```
-/// # use ical::ical;
+/// # use proton_ical::ical;
 /// #
 /// ical! {"
 ///     BEGIN:VEVENT

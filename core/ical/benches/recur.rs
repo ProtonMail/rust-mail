@@ -1,6 +1,6 @@
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use ical::RecurIterator;
-use ical::utils::{dt, recur};
+use proton_ical::RecurIterator;
+use proton_ical::utils::{dt, recur};
 
 fn target(recur_s: &str, start_s: &str) -> RecurIterator {
     let recur = recur(recur_s);

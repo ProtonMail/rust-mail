@@ -1,5 +1,5 @@
-use ical::*;
 use pretty_assertions as pa;
+use proton_ical::*;
 
 #[test]
 fn empty() {
