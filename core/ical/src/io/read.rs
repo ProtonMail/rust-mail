@@ -2,7 +2,7 @@ use super::*;
 use std::str::FromStr;
 
 /// Object that can be deserialized from an *.ics string; see [`Reader`].
-pub trait Read<M>
+pub trait IcsRead<M>
 where
     Self: Sized,
 {
@@ -11,7 +11,7 @@ where
     /// If this method returns `None`, it's expected that it reports some errors
     /// through [`Reader::error()`] so that user knows what has failed.
     #[must_use]
-    fn read(r: &mut Reader) -> Option<Self>;
+    fn read(r: &mut IcsReader) -> Option<Self>;
 
     /// Returns name of this type, used for diagnostic purposes.
     #[must_use]
@@ -44,7 +44,7 @@ where
     /// Converts string into this object; see [`Self::from_str()`].
     #[track_caller]
     fn from_str_ex(s: &str, _marker: M) -> (Option<Self>, Vec<ReadMsg>) {
-        let mut r = Reader::new(s.as_bytes());
+        let mut r = IcsReader::new(s.as_bytes());
         let this = Self::read(&mut r);
 
         assert!(r.is_empty(), "parser left some data unread");
@@ -55,14 +55,14 @@ where
     }
 }
 
-impl Read<Value> for char {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Value> for char {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         r.char()
     }
 }
 
-impl Read<Value> for u32 {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Value> for u32 {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         let number = r.spanned(|r| {
             let mut number = String::new();
 
@@ -93,11 +93,11 @@ impl Read<Value> for u32 {
     }
 }
 
-impl<T> Read<Value> for Vec<T>
+impl<T> IcsRead<Value> for Vec<T>
 where
-    T: Read<Value>,
+    T: IcsRead<Value>,
 {
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         let mut values = Vec::new();
 
         loop {

@@ -62,8 +62,8 @@ impl TryFrom<DateTime<UtcForm>> for JiffZoned {
     }
 }
 
-impl Read<Value> for DateTime<UtcForm> {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Value> for DateTime<UtcForm> {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         let date = r.value()?;
         r.eat('T')?;
         let time = r.value()?;
@@ -83,8 +83,8 @@ impl Read<Value> for DateTime<UtcForm> {
     }
 }
 
-impl Write<Value> for DateTime<UtcForm> {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for DateTime<UtcForm> {
+    fn write(&self, w: &mut IcsWriter) {
         w.value(DateTime {
             date: self.date,
             time: self.time,

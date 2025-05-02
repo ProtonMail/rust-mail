@@ -20,16 +20,16 @@ where
     }
 }
 
-impl Read<Property> for Location {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Property> for Location {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         r.burn_params()?;
 
         Some(Self { value: r.value()? })
     }
 }
 
-impl Write<Property> for Location {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Property> for Location {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(":");
         w.value(&self.value);
     }

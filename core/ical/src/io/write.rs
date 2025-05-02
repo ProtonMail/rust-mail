@@ -2,12 +2,11 @@ use super::*;
 use std::fmt::{self, Write as _};
 
 /// Object that can be serialized into an *.ics string; see [`Writer`].
-pub trait Write<M> {
-    fn write(&self, w: &mut Writer);
+pub trait IcsWrite<M> {
+    fn write(&self, w: &mut IcsWriter);
 
-    #[allow(unused)]
     fn to_string(&self, _marker: M) -> String {
-        let mut w = Writer::default();
+        let mut w = IcsWriter::default();
 
         self.write(&mut w);
 
@@ -15,62 +14,62 @@ pub trait Write<M> {
     }
 }
 
-impl Write<Value> for bool {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for bool {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(if *self { "TRUE" } else { "FALSE" });
     }
 }
 
-impl Write<Value> for i8 {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for i8 {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(format_args!("{self}"));
     }
 }
 
-impl Write<Value> for u8 {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for u8 {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(format_args!("{self}"));
     }
 }
 
-impl Write<Value> for i16 {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for i16 {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(format_args!("{self}"));
     }
 }
 
-impl Write<Value> for u16 {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for u16 {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(format_args!("{self}"));
     }
 }
 
-impl Write<Value> for i32 {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for i32 {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(format_args!("{self}"));
     }
 }
 
-impl Write<Value> for u32 {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for u32 {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(format_args!("{self}"));
     }
 }
 
-impl<M, T> Write<M> for &T
+impl<M, T> IcsWrite<M> for &T
 where
-    T: Write<M> + ?Sized,
+    T: IcsWrite<M> + ?Sized,
 {
-    fn write(&self, w: &mut Writer) {
+    fn write(&self, w: &mut IcsWriter) {
         T::write(self, w);
     }
 }
 
-impl<T> Write<Value> for Vec<T>
+impl<T> IcsWrite<Value> for Vec<T>
 where
-    T: Write<Value>,
+    T: IcsWrite<Value>,
 {
-    fn write(&self, w: &mut Writer) {
+    fn write(&self, w: &mut IcsWriter) {
         for (idx, value) in self.iter().enumerate() {
             if idx > 0 {
                 w.raw(",");
@@ -82,17 +81,17 @@ where
 }
 
 pub trait WriteRaw {
-    fn write_raw(&self, w: &mut Writer);
+    fn write_raw(&self, w: &mut IcsWriter);
 }
 
 impl WriteRaw for &str {
-    fn write_raw(&self, w: &mut Writer) {
+    fn write_raw(&self, w: &mut IcsWriter) {
         _ = w.buffer.write_str(self);
     }
 }
 
 impl WriteRaw for fmt::Arguments<'_> {
-    fn write_raw(&self, w: &mut Writer) {
+    fn write_raw(&self, w: &mut IcsWriter) {
         _ = w.buffer.write_fmt(*self);
     }
 }

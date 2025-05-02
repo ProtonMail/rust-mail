@@ -43,8 +43,8 @@ impl Trigger {
     }
 }
 
-impl Read<Property> for Trigger {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Property> for Trigger {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         let mut related: Option<Spanned<ParamValue>> = None;
         let mut value: Option<Spanned<ParamValue>> = None;
 
@@ -90,8 +90,8 @@ impl Read<Property> for Trigger {
     }
 }
 
-impl Write<Property> for Trigger {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Property> for Trigger {
+    fn write(&self, w: &mut IcsWriter) {
         match self {
             Trigger::Relative(TriggerEdge::Start, _) => {
                 // Implied `RELATED=START`

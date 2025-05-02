@@ -21,9 +21,9 @@ impl From<UrlAddress> for CalAddress {
     }
 }
 
-impl Read<Value> for CalAddress {
-    fn read(r: &mut Reader) -> Option<Self> {
-        if let Some(email) = r.attempt(Reader::value) {
+impl IcsRead<Value> for CalAddress {
+    fn read(r: &mut IcsReader) -> Option<Self> {
+        if let Some(email) = r.attempt(IcsReader::value) {
             Some(CalAddress::Email(email))
         } else {
             Some(CalAddress::Url(r.value()?))
@@ -31,8 +31,8 @@ impl Read<Value> for CalAddress {
     }
 }
 
-impl Write<Value> for CalAddress {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for CalAddress {
+    fn write(&self, w: &mut IcsWriter) {
         match self {
             CalAddress::Email(this) => w.value(this),
             CalAddress::Url(this) => w.value(this),
@@ -124,8 +124,8 @@ where
     }
 }
 
-impl Read<Value> for EmailAddress {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Value> for EmailAddress {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         if r.try_string("mailto:").is_some() {
             Some(Self { value: r.value()? })
         } else {
@@ -134,22 +134,22 @@ impl Read<Value> for EmailAddress {
     }
 }
 
-impl Write<Value> for EmailAddress {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for EmailAddress {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw("mailto:");
         w.value(&self.value);
     }
 }
 
-impl Read<Property> for EmailAddress {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Property> for EmailAddress {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         r.burn_params()?;
         r.value()
     }
 }
 
-impl Write<Property> for EmailAddress {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Property> for EmailAddress {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(":");
         w.value(self);
     }
@@ -185,14 +185,14 @@ where
     }
 }
 
-impl Read<Value> for UrlAddress {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Value> for UrlAddress {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         Some(Self { value: r.value()? })
     }
 }
 
-impl Write<Value> for UrlAddress {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for UrlAddress {
+    fn write(&self, w: &mut IcsWriter) {
         w.value(&self.value);
     }
 }

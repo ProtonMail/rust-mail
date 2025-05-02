@@ -28,8 +28,8 @@ where
     }
 }
 
-impl Read<Property> for TzId {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Property> for TzId {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         r.burn_params()?;
 
         Some(Self {
@@ -38,23 +38,23 @@ impl Read<Property> for TzId {
     }
 }
 
-impl Write<Property> for TzId {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Property> for TzId {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(":");
         w.raw(self.value.as_str());
     }
 }
 
-impl Read<Value> for TzId {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Value> for TzId {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         Some(Self {
             value: r.value::<ParamValue>()?.into_string(),
         })
     }
 }
 
-impl Write<Value> for TzId {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for TzId {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(self.value.as_str());
     }
 }

@@ -25,11 +25,11 @@ impl<T> Signed<T> {
     }
 }
 
-impl<T> Read<Value> for Signed<T>
+impl<T> IcsRead<Value> for Signed<T>
 where
-    T: Read<Value>,
+    T: IcsRead<Value>,
 {
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         Some(Self {
             sign: r.value()?,
             value: r.value()?,
@@ -37,11 +37,11 @@ where
     }
 }
 
-impl<T> Write<Value> for Signed<T>
+impl<T> IcsWrite<Value> for Signed<T>
 where
-    T: Write<Value>,
+    T: IcsWrite<Value>,
 {
-    fn write(&self, w: &mut Writer) {
+    fn write(&self, w: &mut IcsWriter) {
         match self.sign {
             Sign::Neg => {
                 self.sign.write(w);
@@ -73,8 +73,8 @@ impl Sign {
     }
 }
 
-impl Read<Value> for Sign {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Value> for Sign {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         if r.try_eat('-').is_some() {
             Some(Sign::Neg)
         } else {
@@ -84,8 +84,8 @@ impl Read<Value> for Sign {
     }
 }
 
-impl Write<Value> for Sign {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for Sign {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(match self {
             Sign::Neg => "-",
             Sign::Pos => "+",

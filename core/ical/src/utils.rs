@@ -97,7 +97,7 @@ pub fn dt(s: &str) -> DateTime {
 #[doc(hidden)]
 pub fn dte<F>(s: &str) -> DateTime<F>
 where
-    DateTime<F>: Read<Value>,
+    DateTime<F>: IcsRead<Value>,
 {
     DateTime::from_str(s, Value).unwrap()
 }

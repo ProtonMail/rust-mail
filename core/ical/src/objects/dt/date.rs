@@ -86,8 +86,8 @@ impl TryFrom<Date> for JiffZoned {
     }
 }
 
-impl Read<Value> for Date {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Value> for Date {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         r.spanned(|r| {
             let y = r.spanned(|r| r.digits(4))?;
             let m = r.spanned(|r| r.digits(2))?;
@@ -103,8 +103,8 @@ impl Read<Value> for Date {
     }
 }
 
-impl Write<Value> for Date {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for Date {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(format_args!(
             "{:04}{:02}{:02}",
             self.year.as_num(),

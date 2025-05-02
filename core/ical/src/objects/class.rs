@@ -11,8 +11,8 @@ pub enum Class {
     Confidential,
 }
 
-impl Read<Property> for Class {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Property> for Class {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         r.burn_params()?;
 
         let value = r.spanned(|r| Some(r.rest()))?;
@@ -34,8 +34,8 @@ impl Read<Property> for Class {
     }
 }
 
-impl Write<Property> for Class {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Property> for Class {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(match self {
             Class::Public => ":PUBLIC",
             Class::Private => ":PRIVATE",

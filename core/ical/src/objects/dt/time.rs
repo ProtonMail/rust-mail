@@ -44,8 +44,8 @@ impl From<Time> for JiffTime {
     }
 }
 
-impl Read<Value> for Time {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Value> for Time {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         let hour = r.spanned(|r| r.digits(2))?;
         let minute = r.spanned(|r| r.digits(2))?;
         let second = r.spanned(|r| r.digits(2))?;
@@ -62,8 +62,8 @@ impl Read<Value> for Time {
     }
 }
 
-impl Write<Value> for Time {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for Time {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(format_args!(
             "{:02}{:02}{:02}",
             self.hour.as_num(),

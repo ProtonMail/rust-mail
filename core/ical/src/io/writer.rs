@@ -6,13 +6,13 @@ use std::fmt;
 /// This is akin to [`std::fmt::Formatter`], but specialized for the *.ics
 /// format.
 #[derive(Debug, Default)]
-pub struct Writer {
-    pub(crate) buffer: WriterBuffer,
+pub struct IcsWriter {
+    pub(crate) buffer: IcsWriterBuffer,
 }
 
-impl Writer {
+impl IcsWriter {
     /// Writes a component (e.g. `VEVENT`).
-    pub fn comp(&mut self, name: &str, value: impl Write<Component>) {
+    pub fn comp(&mut self, name: &str, value: impl IcsWrite<Component>) {
         debug_assert!(
             Self::is_name_valid(name),
             "component name is invalid: `{name}`"
@@ -29,7 +29,7 @@ impl Writer {
 
     /// Writes a property (`NAME:VALUE`).
     #[allow(clippy::needless_pass_by_value)]
-    pub fn prop(&mut self, name: &str, value: impl Write<Property>) {
+    pub fn prop(&mut self, name: &str, value: impl IcsWrite<Property>) {
         debug_assert!(
             Self::is_name_valid(name),
             "property name is invalid: `{name}`"
@@ -45,14 +45,14 @@ impl Writer {
     }
 
     /// Writes a property, if it's present.
-    pub fn prop_opt(&mut self, name: &str, value: Option<impl Write<Property>>) {
+    pub fn prop_opt(&mut self, name: &str, value: Option<impl IcsWrite<Property>>) {
         if let Some(prop) = value {
             self.prop(name, prop);
         }
     }
 
     /// Writes a parameter (`;NAME=VALUE`).
-    pub fn param(&mut self, name: &str, value: impl Write<Value>) {
+    pub fn param(&mut self, name: &str, value: impl IcsWrite<Value>) {
         debug_assert!(
             Self::is_name_valid(name),
             "parameter name is invalid: `{name}`"
@@ -93,14 +93,14 @@ impl Writer {
     }
 
     /// Writes a parameter, if it's present.
-    pub fn param_opt(&mut self, name: &str, value: Option<impl Write<Value>>) {
+    pub fn param_opt(&mut self, name: &str, value: Option<impl IcsWrite<Value>>) {
         if let Some(value) = value {
             self.param(name, value);
         }
     }
 
     /// Writes a value, e.g. a [`Text`].
-    pub fn value(&mut self, value: impl Write<Value>) {
+    pub fn value(&mut self, value: impl IcsWrite<Value>) {
         value.write(self);
     }
 
@@ -132,7 +132,7 @@ impl Writer {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct WriterBuffer {
+pub(crate) struct IcsWriterBuffer {
     out: String,
     line_len: usize,
 }
@@ -144,7 +144,7 @@ pub(crate) struct WriterBuffer {
 /// To prevent people from shooting themselves in feet, this implementation is
 /// hidden within the private [`WriterBuffer`] and exposed to users only via
 /// [`Writer::raw()`] which explicitly mentions this caveat.
-impl fmt::Write for WriterBuffer {
+impl fmt::Write for IcsWriterBuffer {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         // Opportunistically wrap lines that are too long, as per
         // https://www.rfc-editor.org/rfc/rfc5545.html#section-3.1
@@ -186,7 +186,7 @@ mod tests {
 
     #[test]
     fn folding_ascii() {
-        let mut target = Writer::default();
+        let mut target = IcsWriter::default();
 
         target.raw(format_args!(
             "DESCRIPTION: It is impossible to live in the past, difficult to \
@@ -205,7 +205,7 @@ mod tests {
 
     #[test]
     fn folding_unicode() {
-        let mut target = Writer::default();
+        let mut target = IcsWriter::default();
 
         target.raw(format_args!(
             "foo 💘 bar 🔧 foo 🔳 bar 😶 foo 🚯 bar 🎇 foo 🛏 bar 🎙 foo 🐡 \
@@ -225,7 +225,7 @@ mod tests {
 
     #[test]
     fn strings() {
-        let mut target = Writer::default();
+        let mut target = IcsWriter::default();
 
         target.param(
             "LYRICS",

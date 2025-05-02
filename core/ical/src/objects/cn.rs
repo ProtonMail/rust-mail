@@ -20,14 +20,14 @@ where
     }
 }
 
-impl Read<Value> for Cn {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Value> for Cn {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         Some(Self { value: r.value()? })
     }
 }
 
-impl Write<Value> for Cn {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for Cn {
+    fn write(&self, w: &mut IcsWriter) {
         self.value.write(w);
     }
 }

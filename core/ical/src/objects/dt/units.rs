@@ -2,14 +2,14 @@ use super::*;
 
 macro_rules! impls {
     ($ty:ident) => {
-        impl Read<Value> for $ty {
-            fn read(r: &mut Reader) -> Option<Self> {
+        impl IcsRead<Value> for $ty {
+            fn read(r: &mut IcsReader) -> Option<Self> {
                 r.value::<Spanned<u32>>()?.map(Self::new).unwrap(r)
             }
         }
 
-        impl Write<Value> for $ty {
-            fn write(&self, w: &mut Writer) {
+        impl IcsWrite<Value> for $ty {
+            fn write(&self, w: &mut IcsWriter) {
                 w.value(self.0);
             }
         }
@@ -369,9 +369,9 @@ impl IntoPhpZval for Weekday {
     }
 }
 
-impl Read<Value> for Weekday {
-    fn read(r: &mut Reader) -> Option<Self> {
-        let Spanned { span, value } = r.spanned(Reader::ident)?;
+impl IcsRead<Value> for Weekday {
+    fn read(r: &mut IcsReader) -> Option<Self> {
+        let Spanned { span, value } = r.spanned(IcsReader::ident)?;
 
         if value.eq_ignore_ascii_case("MO") {
             Some(Weekday::Monday)
@@ -394,8 +394,8 @@ impl Read<Value> for Weekday {
     }
 }
 
-impl Write<Value> for Weekday {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for Weekday {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(match self {
             Weekday::Monday => "MO",
             Weekday::Tuesday => "TU",

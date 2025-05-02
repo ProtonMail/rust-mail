@@ -30,8 +30,8 @@ where
     }
 }
 
-impl Read<Property> for Organizer {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Property> for Organizer {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         let mut cn = None;
 
         loop {
@@ -55,8 +55,8 @@ impl Read<Property> for Organizer {
     }
 }
 
-impl Write<Property> for Organizer {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Property> for Organizer {
+    fn write(&self, w: &mut IcsWriter) {
         w.param_opt("CN", self.cn.as_ref());
         w.raw(":");
         w.value(&self.address);

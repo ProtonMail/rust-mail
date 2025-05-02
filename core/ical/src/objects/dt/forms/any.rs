@@ -81,8 +81,8 @@ impl TryFrom<DateTime<AnyForm>> for JiffZoned {
     }
 }
 
-impl Read<Property> for DateTime<AnyForm> {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Property> for DateTime<AnyForm> {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         let mut tzid = None;
 
         loop {
@@ -115,8 +115,8 @@ impl Read<Property> for DateTime<AnyForm> {
     }
 }
 
-impl Write<Property> for DateTime<AnyForm> {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Property> for DateTime<AnyForm> {
+    fn write(&self, w: &mut IcsWriter) {
         if let AnyForm::Tz(tzid) = &self.form {
             w.param("TZID", tzid);
         }

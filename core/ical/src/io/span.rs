@@ -74,7 +74,7 @@ impl<T, E> Spanned<Result<T, E>>
 where
     E: fmt::Display,
 {
-    pub fn unwrap(self, r: &mut Reader) -> Option<T> {
+    pub fn unwrap(self, r: &mut IcsReader) -> Option<T> {
         match self.value {
             Ok(value) => Some(value),
 
@@ -94,11 +94,11 @@ impl<T> Deref for Spanned<T> {
     }
 }
 
-impl<T, M> Read<M> for Spanned<T>
+impl<T, M> IcsRead<M> for Spanned<T>
 where
-    T: Read<M>,
+    T: IcsRead<M>,
 {
-    fn read(r: &mut Reader) -> Option<Self> {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         r.spanned(T::read)
     }
 

@@ -52,8 +52,8 @@ where
     }
 }
 
-impl Read<Property> for DateOrDt {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Property> for DateOrDt {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         let mut tzid = None;
         let mut value = None;
 
@@ -85,7 +85,7 @@ impl Read<Property> for DateOrDt {
                     } else {
                         r.error(s.span, "unexpected time component");
 
-                        _ = r.silently(Reader::value::<Time>);
+                        _ = r.silently(IcsReader::value::<Time>);
                     }
                 }
 
@@ -117,8 +117,8 @@ impl Read<Property> for DateOrDt {
     }
 }
 
-impl Write<Property> for DateOrDt {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Property> for DateOrDt {
+    fn write(&self, w: &mut IcsWriter) {
         match self {
             DateOrDt::Date(this) => {
                 w.param("VALUE", DtValueType::Date);
@@ -133,12 +133,12 @@ impl Write<Property> for DateOrDt {
     }
 }
 
-impl<F> Read<Value> for DateOrDt<F>
+impl<F> IcsRead<Value> for DateOrDt<F>
 where
-    DateTime<F>: Read<Value>,
+    DateTime<F>: IcsRead<Value>,
 {
-    fn read(r: &mut Reader) -> Option<Self> {
-        if let Some(value) = r.attempt(Reader::value) {
+    fn read(r: &mut IcsReader) -> Option<Self> {
+        if let Some(value) = r.attempt(IcsReader::value) {
             Some(DateOrDt::DateTime(value))
         } else {
             Some(DateOrDt::Date(r.value()?))
@@ -146,11 +146,11 @@ where
     }
 }
 
-impl<F> Write<Value> for DateOrDt<F>
+impl<F> IcsWrite<Value> for DateOrDt<F>
 where
-    DateTime<F>: Write<Value>,
+    DateTime<F>: IcsWrite<Value>,
 {
-    fn write(&self, w: &mut Writer) {
+    fn write(&self, w: &mut IcsWriter) {
         match self {
             DateOrDt::Date(this) => {
                 this.write(w);

@@ -79,8 +79,8 @@ impl UtcOffset {
     }
 }
 
-impl Read<Value> for UtcOffset {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Value> for UtcOffset {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         r.spanned(|r| {
             let sign = r.value::<Sign>()?;
             let hours = r.digits(2)?;
@@ -93,8 +93,8 @@ impl Read<Value> for UtcOffset {
     }
 }
 
-impl Write<Value> for UtcOffset {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for UtcOffset {
+    fn write(&self, w: &mut IcsWriter) {
         w.value(self.sign());
         w.raw(format_args!("{:02}{:02}", self.hours(), self.minutes()));
 

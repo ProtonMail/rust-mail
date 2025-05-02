@@ -44,22 +44,22 @@ impl Default for Duration {
     }
 }
 
-impl Read<Property> for Duration {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Property> for Duration {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         r.burn_params()?;
         r.value()
     }
 }
 
-impl Write<Property> for Duration {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Property> for Duration {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(":");
         w.value(self);
     }
 }
 
-impl Read<Value> for Duration {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Value> for Duration {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         Some(Self {
             sign: r.value()?,
             amount: r.value()?,
@@ -67,8 +67,8 @@ impl Read<Value> for Duration {
     }
 }
 
-impl Write<Value> for Duration {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for Duration {
+    fn write(&self, w: &mut IcsWriter) {
         if self.is_zero() {
             w.raw("P0D");
             return;
@@ -131,8 +131,8 @@ impl From<WeekDuration> for DurationAmount {
     }
 }
 
-impl Read<Value> for DurationAmount {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Value> for DurationAmount {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         #[derive(Clone, Copy, Debug, PartialEq, Eq)]
         enum Part {
             DateOrWeek,
@@ -201,8 +201,8 @@ impl Read<Value> for DurationAmount {
     }
 }
 
-impl Write<Value> for DurationAmount {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for DurationAmount {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw("P");
 
         match self {
@@ -235,8 +235,8 @@ impl DateDuration {
     }
 }
 
-impl Write<Value> for DateDuration {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for DateDuration {
+    fn write(&self, w: &mut IcsWriter) {
         if self.days > 0 {
             w.value(self.days);
             w.raw("D");
@@ -290,8 +290,8 @@ impl TimeDuration {
     }
 }
 
-impl Write<Value> for TimeDuration {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for TimeDuration {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw("T");
 
         if self.hours > 0 {
@@ -332,8 +332,8 @@ impl WeekDuration {
     }
 }
 
-impl Write<Value> for WeekDuration {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for WeekDuration {
+    fn write(&self, w: &mut IcsWriter) {
         if self.weeks > 0 {
             w.value(self.weeks);
             w.raw("W");

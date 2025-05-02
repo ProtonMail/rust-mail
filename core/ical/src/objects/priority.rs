@@ -39,11 +39,11 @@ impl From<u32> for Priority {
     }
 }
 
-impl Read<Property> for Priority {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Property> for Priority {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         r.burn_params()?;
 
-        let value = r.spanned(Reader::value::<u32>)?;
+        let value = r.spanned(IcsReader::value::<u32>)?;
         let (span, value) = (value.span, value.value);
 
         if value <= 9 {
@@ -59,8 +59,8 @@ impl Read<Property> for Priority {
     }
 }
 
-impl Write<Property> for Priority {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Property> for Priority {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(":");
         w.value(self.value);
     }

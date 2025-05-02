@@ -21,16 +21,16 @@ impl From<Recur> for RRule {
     }
 }
 
-impl Read<Property> for RRule {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Property> for RRule {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         r.burn_params()?;
 
         Some(Self { value: r.value()? })
     }
 }
 
-impl Write<Property> for RRule {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Property> for RRule {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(":");
         w.value(&self.value);
     }

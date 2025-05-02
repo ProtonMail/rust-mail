@@ -8,8 +8,7 @@ mod objects;
 mod result;
 pub mod utils;
 
-pub(crate) use self::io::*;
-pub use self::io::{ReadMsg, ReadMsgKind, Span};
+pub use self::io::*;
 pub use self::objects::*;
 pub use self::result::*;
 
@@ -81,7 +80,7 @@ impl VCalendar {
     ///
     /// See also [`Self::from_str()`].
     pub fn from_bytes(src: &[u8]) -> Result<ParsedVCalendar> {
-        let mut r = Reader::new(src);
+        let mut r = IcsReader::new(src);
         let mut cal: Option<Self> = None;
 
         while !r.is_empty() {
@@ -145,15 +144,15 @@ impl VCalendar {
         reason = "we want users to go through .validate()"
     )]
     fn to_string(&self) -> String {
-        let mut w = Writer::default();
+        let mut w = IcsWriter::default();
 
         w.comp("VCALENDAR", self);
         w.finish()
     }
 }
 
-impl Read<Component> for VCalendar {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Component> for VCalendar {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         let mut method = None;
         let mut prodid = None;
         let mut version = None;
@@ -195,8 +194,8 @@ impl Read<Component> for VCalendar {
     }
 }
 
-impl Write<Component> for VCalendar {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Component> for VCalendar {
+    fn write(&self, w: &mut IcsWriter) {
         w.prop_opt("METHOD", self.method.as_ref());
         w.prop("PRODID", &self.prodid);
         w.prop("VERSION", self.version);

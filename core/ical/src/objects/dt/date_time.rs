@@ -17,8 +17,8 @@ pub enum DtValueType {
     DateTime,
 }
 
-impl Read<Value> for DtValueType {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Value> for DtValueType {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         let value = r.value::<Spanned<ParamValue>>()?;
         let (span, value) = (value.span, value.as_str());
 
@@ -33,8 +33,8 @@ impl Read<Value> for DtValueType {
     }
 }
 
-impl Write<Value> for DtValueType {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for DtValueType {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(match self {
             DtValueType::Date => "DATE",
             DtValueType::DateTime => "DATE-TIME",

@@ -10,8 +10,8 @@ pub enum Status {
     Cancelled,
 }
 
-impl Read<Property> for Status {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Property> for Status {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         r.burn_params()?;
 
         let value = r.spanned(|r| Some(r.rest()))?;
@@ -30,8 +30,8 @@ impl Read<Property> for Status {
     }
 }
 
-impl Write<Property> for Status {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Property> for Status {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(match self {
             Status::Tentative => ":TENTATIVE",
             Status::Confirmed => ":CONFIRMED",

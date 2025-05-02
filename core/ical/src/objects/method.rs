@@ -15,8 +15,8 @@ pub enum Method {
     DeclineCounter,
 }
 
-impl Read<Property> for Method {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Property> for Method {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         r.burn_params()?;
 
         let value = r.spanned(|r| Some(r.rest()))?;
@@ -45,8 +45,8 @@ impl Read<Property> for Method {
     }
 }
 
-impl Write<Property> for Method {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Property> for Method {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(match self {
             Method::Publish => ":PUBLISH",
             Method::Request => ":REQUEST",

@@ -74,8 +74,8 @@ impl VTimeZone {
     }
 }
 
-impl Read<Component> for VTimeZone {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Component> for VTimeZone {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         let mut tzid = None;
         let mut daylights = Vec::new();
         let mut standards = Vec::new();
@@ -107,8 +107,8 @@ impl Read<Component> for VTimeZone {
     }
 }
 
-impl Write<Component> for VTimeZone {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Component> for VTimeZone {
+    fn write(&self, w: &mut IcsWriter) {
         w.prop("TZID", &self.tzid);
 
         for props in &self.daylights {
@@ -167,8 +167,8 @@ impl TzProps {
     }
 }
 
-impl Read<Component> for TzProps {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Component> for TzProps {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         let mut dtstart = None;
         let mut tz_offset_from = None;
         let mut tz_offset_to = None;
@@ -208,8 +208,8 @@ impl Read<Component> for TzProps {
     }
 }
 
-impl Write<Component> for TzProps {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Component> for TzProps {
+    fn write(&self, w: &mut IcsWriter) {
         w.prop("DTSTART", &self.dtstart);
         w.prop("TZOFFSETFROM", self.tz_offset_from);
         w.prop("TZOFFSETTO", self.tz_offset_to);

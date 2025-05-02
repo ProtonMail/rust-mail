@@ -26,14 +26,14 @@ where
     }
 }
 
-impl Read<Property> for DtStart {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Property> for DtStart {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         Some(Self { value: r.prop()? })
     }
 }
 
-impl Write<Property> for DtStart {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Property> for DtStart {
+    fn write(&self, w: &mut IcsWriter) {
         self.value.write(w);
     }
 }

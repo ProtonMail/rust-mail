@@ -8,8 +8,8 @@ pub enum Version {
     Two,
 }
 
-impl Read<Property> for Version {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Property> for Version {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         r.burn_params()?;
 
         let value = r.spanned(|r| Some(r.rest()))?;
@@ -28,8 +28,8 @@ impl Read<Property> for Version {
     }
 }
 
-impl Write<Property> for Version {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Property> for Version {
+    fn write(&self, w: &mut IcsWriter) {
         match self {
             Version::Two => {
                 w.raw(":2.0");

@@ -341,8 +341,8 @@ impl VEvent {
     }
 }
 
-impl Read<Component> for VEvent {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Component> for VEvent {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         let mut uid = None;
         let mut dtstamp = None;
         let mut dtstart = None;
@@ -439,8 +439,8 @@ impl Read<Component> for VEvent {
     }
 }
 
-impl Write<Component> for VEvent {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Component> for VEvent {
+    fn write(&self, w: &mut IcsWriter) {
         w.prop_opt("UID", self.uid.as_ref());
         w.prop_opt("DTSTAMP", self.dtstamp.as_ref());
         w.prop_opt("DTSTART", self.dtstart.as_ref());

@@ -54,8 +54,8 @@ where
     }
 }
 
-impl Read<Property> for Attendee {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Property> for Attendee {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         let mut cn = None;
         let mut cutype = None;
         let mut role = None;
@@ -89,8 +89,8 @@ impl Read<Property> for Attendee {
     }
 }
 
-impl Write<Property> for Attendee {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Property> for Attendee {
+    fn write(&self, w: &mut IcsWriter) {
         w.param_opt("CN", self.cn.as_ref());
         w.param_opt("CUTYPE", self.cutype.as_ref());
         w.param_opt("ROLE", self.role.as_ref());

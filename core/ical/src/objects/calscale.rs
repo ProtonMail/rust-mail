@@ -9,8 +9,8 @@ pub enum CalScale {
     Gregorian,
 }
 
-impl Read<Property> for CalScale {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Property> for CalScale {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         r.burn_params()?;
 
         let value = r.spanned(|r| Some(r.rest()))?;
@@ -29,8 +29,8 @@ impl Read<Property> for CalScale {
     }
 }
 
-impl Write<Property> for CalScale {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Property> for CalScale {
+    fn write(&self, w: &mut IcsWriter) {
         match self {
             CalScale::Gregorian => {
                 w.raw(":GREGORIAN");

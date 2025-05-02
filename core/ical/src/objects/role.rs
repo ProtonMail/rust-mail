@@ -11,8 +11,8 @@ pub enum Role {
     NonParticipant,
 }
 
-impl Read<Value> for Role {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Value> for Role {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         let value = r.value::<Spanned<ParamValue>>()?;
         let (span, value) = (value.span, value.as_str());
 
@@ -34,8 +34,8 @@ impl Read<Value> for Role {
     }
 }
 
-impl Write<Value> for Role {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for Role {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(match self {
             Role::Chair => "CHAIR",
             Role::ReqParticipant => "REQ-PARTICIPANT",

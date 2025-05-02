@@ -82,8 +82,8 @@ where
     }
 }
 
-impl Read<Value> for Text {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Value> for Text {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         let mut text = String::new();
 
         while let Some(ch) = r.char() {
@@ -122,8 +122,8 @@ impl Read<Value> for Text {
     }
 }
 
-impl Write<Value> for Text {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for Text {
+    fn write(&self, w: &mut IcsWriter) {
         w.value(TextRef(&self.0));
     }
 }
@@ -162,8 +162,8 @@ impl<'a> TextRef<'a> {
     }
 }
 
-impl Write<Value> for TextRef<'_> {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for TextRef<'_> {
+    fn write(&self, w: &mut IcsWriter) {
         for ch in self.0.chars() {
             match ch {
                 '\\' => w.raw("\\\\"),

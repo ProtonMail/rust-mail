@@ -13,8 +13,8 @@ pub enum CuType {
     Unknown,
 }
 
-impl Read<Value> for CuType {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Value> for CuType {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         let value = r.value::<Spanned<ParamValue>>()?;
         let (span, value) = (value.span, value.as_str());
 
@@ -38,8 +38,8 @@ impl Read<Value> for CuType {
     }
 }
 
-impl Write<Value> for CuType {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for CuType {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(match self {
             CuType::Individual => "INDIVIDUAL",
             CuType::Group => "GROUP",

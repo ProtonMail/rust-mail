@@ -66,8 +66,8 @@ impl From<EmailAlarm> for VAlarm {
     }
 }
 
-impl Read<Component> for VAlarm {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Component> for VAlarm {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         let mut action = None;
         let mut trigger = None;
         let mut description = None;
@@ -135,8 +135,8 @@ impl Read<Component> for VAlarm {
     }
 }
 
-impl Write<Component> for VAlarm {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Component> for VAlarm {
+    fn write(&self, w: &mut IcsWriter) {
         match self {
             VAlarm::Display(this) => {
                 w.prop("ACTION", VAlarmAction::Display);
@@ -157,8 +157,8 @@ pub enum VAlarmAction {
     Email,
 }
 
-impl Read<Property> for VAlarmAction {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Property> for VAlarmAction {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         r.burn_params()?;
 
         let value = r.spanned(|r| Some(r.rest()))?;
@@ -175,8 +175,8 @@ impl Read<Property> for VAlarmAction {
     }
 }
 
-impl Write<Property> for VAlarmAction {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Property> for VAlarmAction {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(":");
 
         w.raw(match self {
@@ -220,8 +220,8 @@ impl DisplayAlarm {
     }
 }
 
-impl Write<Component> for DisplayAlarm {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Component> for DisplayAlarm {
+    fn write(&self, w: &mut IcsWriter) {
         w.prop("TRIGGER", self.trigger);
         w.prop("DESCRIPTION", &self.description);
 
@@ -293,8 +293,8 @@ impl EmailAlarm {
     }
 }
 
-impl Write<Component> for EmailAlarm {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Component> for EmailAlarm {
+    fn write(&self, w: &mut IcsWriter) {
         w.prop("TRIGGER", self.trigger);
         w.prop("DESCRIPTION", &self.description);
         w.prop("SUMMARY", &self.summary);

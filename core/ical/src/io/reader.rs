@@ -6,14 +6,14 @@ use std::{fmt, mem};
 ///
 /// This is akin to [`std::str::FromStr`], but specialized for the *.ics format.
 #[derive(Debug)]
-pub struct Reader<'a> {
+pub struct IcsReader<'a> {
     src: &'a [u8],
     pos: usize,
     msgs: Vec<ReadMsg>,
     context: Vec<Spanned<String>>,
 }
 
-impl<'a> Reader<'a> {
+impl<'a> IcsReader<'a> {
     #[must_use]
     pub fn new(src: &'a [u8]) -> Self {
         Self {
@@ -86,7 +86,7 @@ impl<'a> Reader<'a> {
     /// whether it returns `Some` or `None`; useful for lookahead.
     #[must_use]
     pub fn attempt<T>(&mut self, f: impl FnOnce(&mut Self) -> Option<T>) -> Option<T> {
-        let mut this = Reader {
+        let mut this = IcsReader {
             src: self.src,
             pos: self.pos,
             msgs: Vec::new(),
@@ -383,7 +383,7 @@ impl<'a> Reader<'a> {
             }
 
             // Recover by skipping rest of the line
-            self.silently(Reader::rest);
+            self.silently(IcsReader::rest);
 
             if self.is_empty() {
                 return None;
@@ -410,7 +410,7 @@ impl<'a> Reader<'a> {
     #[must_use]
     pub fn unwrap_prop<T>(&mut self, name: &str, value: Option<T>) -> Option<T>
     where
-        T: Read<Property>,
+        T: IcsRead<Property>,
     {
         value.or_else(|| {
             let default = T::reasonable_default();
@@ -457,7 +457,7 @@ impl<'a> Reader<'a> {
     #[must_use]
     pub fn prop<T>(&mut self) -> Option<T>
     where
-        T: Read<Property>,
+        T: IcsRead<Property>,
     {
         self.any()
     }
@@ -465,7 +465,7 @@ impl<'a> Reader<'a> {
     #[must_use]
     pub fn value<T>(&mut self) -> Option<T>
     where
-        T: Read<Value>,
+        T: IcsRead<Value>,
     {
         self.any()
     }
@@ -473,7 +473,7 @@ impl<'a> Reader<'a> {
     #[must_use]
     fn any<T, M>(&mut self) -> Option<T>
     where
-        T: Read<M>,
+        T: IcsRead<M>,
     {
         self.context(
             Span::new(self.pos, self.pos + 1),
@@ -566,9 +566,9 @@ impl ReadEntry {
     /// If this entry begins a component named `name`, reads that component and
     /// returns true; returns false otherwise.
     #[must_use]
-    pub fn try_comp<T>(&self, r: &mut Reader, name: &str, value: &mut Option<T>) -> bool
+    pub fn try_comp<T>(&self, r: &mut IcsReader, name: &str, value: &mut Option<T>) -> bool
     where
-        T: Read<Component>,
+        T: IcsRead<Component>,
     {
         let ReadEntry::Comp { name: this } = self else {
             return false;
@@ -589,9 +589,9 @@ impl ReadEntry {
 
     /// Like [`Self::try_comp()`], but allows to read multiple components.
     #[must_use]
-    pub fn try_comps<T>(&self, r: &mut Reader, name: &str, values: &mut Vec<T>) -> bool
+    pub fn try_comps<T>(&self, r: &mut IcsReader, name: &str, values: &mut Vec<T>) -> bool
     where
-        T: Read<Component>,
+        T: IcsRead<Component>,
     {
         let mut value = None;
 
@@ -620,9 +620,9 @@ impl ReadEntry {
     /// If this entry begins a property named `name`, reads that property and
     /// returns true; returns false otherwise.
     #[must_use]
-    pub fn try_prop<T>(&self, r: &mut Reader, name: &str, value: &mut Option<T>) -> bool
+    pub fn try_prop<T>(&self, r: &mut IcsReader, name: &str, value: &mut Option<T>) -> bool
     where
-        T: Read<Property>,
+        T: IcsRead<Property>,
     {
         let ReadEntry::Prop { name: this } = self else {
             return false;
@@ -644,7 +644,7 @@ impl ReadEntry {
             Some(value)
         } else {
             // Recover by skipping rest of the line
-            r.silently(Reader::rest);
+            r.silently(IcsReader::rest);
 
             T::reasonable_default()
         };
@@ -654,9 +654,9 @@ impl ReadEntry {
 
     /// Like [`Self::try_prop()`], but allows to read multiple properties.
     #[must_use]
-    pub fn try_props<T>(&self, r: &mut Reader, name: &str, values: &mut Vec<T>) -> bool
+    pub fn try_props<T>(&self, r: &mut IcsReader, name: &str, values: &mut Vec<T>) -> bool
     where
-        T: Read<Property>,
+        T: IcsRead<Property>,
     {
         let mut value = None;
 
@@ -674,9 +674,9 @@ impl ReadEntry {
     /// If this entry begins a parameter named `name`, reads that parameter and
     /// returs true; returns false otherwise.
     #[must_use]
-    pub fn try_param<T>(&self, r: &mut Reader, name: &str, value: &mut Option<T>) -> bool
+    pub fn try_param<T>(&self, r: &mut IcsReader, name: &str, value: &mut Option<T>) -> bool
     where
-        T: Read<Value>,
+        T: IcsRead<Value>,
     {
         let ReadEntry::Param { name: this } = self else {
             return false;
@@ -702,7 +702,7 @@ impl ReadEntry {
     }
 
     /// Throws the "unknown property / component / ..." error and recovers.
-    pub fn burn(self, r: &mut Reader) {
+    pub fn burn(self, r: &mut IcsReader) {
         match self {
             ReadEntry::Comp { name } => {
                 r.error(name.span, format!("unknown component `{}`", name.value));
@@ -742,7 +742,7 @@ impl ReadEntry {
                 }
 
                 // Recover by skipping rest of the line
-                r.silently(Reader::rest);
+                r.silently(IcsReader::rest);
             }
 
             ReadEntry::Param { name } => {
@@ -764,7 +764,7 @@ impl ReadEntry {
                 r.error(Span::new(r.pos() - 1, r.pos()), "unexpected value");
 
                 // Recover by skipping rest of the line
-                r.silently(Reader::rest);
+                r.silently(IcsReader::rest);
             }
         }
     }
@@ -777,8 +777,8 @@ mod tests {
     use pretty_assertions as pa;
     use test_case::test_case;
 
-    fn target(s: impl Into<String>) -> Reader<'static> {
-        Reader::new(Box::new(s.into()).leak().as_bytes())
+    fn target(s: impl Into<String>) -> IcsReader<'static> {
+        IcsReader::new(Box::new(s.into()).leak().as_bytes())
     }
 
     #[test_case("BEGIN:VCALENDAR", Some("BEGIN"))]

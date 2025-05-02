@@ -21,14 +21,14 @@ impl From<DateTime> for DtStamp {
     }
 }
 
-impl Read<Property> for DtStamp {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Property> for DtStamp {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         Some(Self { value: r.prop()? })
     }
 }
 
-impl Write<Property> for DtStamp {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Property> for DtStamp {
+    fn write(&self, w: &mut IcsWriter) {
         self.value.write(w);
     }
 }

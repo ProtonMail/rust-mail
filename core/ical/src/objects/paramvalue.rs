@@ -95,8 +95,8 @@ where
     }
 }
 
-impl Read<Value> for ParamValue {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Value> for ParamValue {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         let mut value = String::new();
         let quoted;
 
@@ -126,8 +126,8 @@ impl Read<Value> for ParamValue {
     }
 }
 
-impl Write<Value> for ParamValue {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for ParamValue {
+    fn write(&self, w: &mut IcsWriter) {
         if self.quoted {
             w.raw("\"");
         }

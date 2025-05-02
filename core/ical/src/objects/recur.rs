@@ -147,10 +147,10 @@ impl Recur {
     }
 }
 
-impl Read<Value> for Recur {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Value> for Recur {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         /// Recovers reader by skipping to the next recurrence part.
-        fn recover<T>(r: &mut Reader) -> T
+        fn recover<T>(r: &mut IcsReader) -> T
         where
             T: Default,
         {
@@ -180,7 +180,7 @@ impl Read<Value> for Recur {
         let mut wkst = None;
 
         loop {
-            let name = r.spanned(Reader::ident)?;
+            let name = r.spanned(IcsReader::ident)?;
 
             r.eat('=')?;
 
@@ -250,8 +250,8 @@ impl Read<Value> for Recur {
     }
 }
 
-impl Write<Value> for Recur {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for Recur {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw("FREQ=");
         w.value(self.freq);
 
@@ -328,8 +328,8 @@ impl Freq {
     }
 }
 
-impl Read<Value> for Freq {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Value> for Freq {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         let value = r.value::<Spanned<ParamValue>>()?;
         let (span, value) = (value.span, value.as_str());
 
@@ -354,8 +354,8 @@ impl Read<Value> for Freq {
     }
 }
 
-impl Write<Value> for Freq {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for Freq {
+    fn write(&self, w: &mut IcsWriter) {
         w.raw(match self {
             Freq::Secondly => "SECONDLY",
             Freq::Minutely => "MINUTELY",
@@ -377,8 +377,8 @@ pub enum ByDay {
     Specific(NonZeroI8, Weekday),
 }
 
-impl Read<Value> for ByDay {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Value> for ByDay {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         match r.peek()? {
             '+' | '-' | '0'..='9' => {
                 let sign = r.value::<Sign>()?;
@@ -410,8 +410,8 @@ impl Read<Value> for ByDay {
     }
 }
 
-impl Write<Value> for ByDay {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Value> for ByDay {
+    fn write(&self, w: &mut IcsWriter) {
         match self {
             ByDay::Every(day) => {
                 w.value(day);

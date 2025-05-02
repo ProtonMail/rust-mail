@@ -9,8 +9,8 @@ pub enum ExDate {
     DateTimes(AnyForm, Vec<(Date, Time)>),
 }
 
-impl Read<Property> for ExDate {
-    fn read(r: &mut Reader) -> Option<Self> {
+impl IcsRead<Property> for ExDate {
+    fn read(r: &mut IcsReader) -> Option<Self> {
         let mut value = None;
         let mut tzid = None;
 
@@ -56,8 +56,8 @@ impl Read<Property> for ExDate {
     }
 }
 
-impl Write<Property> for ExDate {
-    fn write(&self, w: &mut Writer) {
+impl IcsWrite<Property> for ExDate {
+    fn write(&self, w: &mut IcsWriter) {
         match self {
             ExDate::Dates(_) => {
                 w.param("VALUE", DtValueType::Date);
