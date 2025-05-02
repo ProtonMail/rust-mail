@@ -33,20 +33,3 @@ pub enum Violation {
     #[error("missing calendar")]
     MissingCalendar,
 }
-
-pub trait ViolationExt<T>
-where
-    Self: Sized,
-{
-    fn into_result(self, f: impl Fn(T) -> Violation) -> Result<(), Error>;
-}
-
-impl<T> ViolationExt<T> for Vec<T> {
-    fn into_result(self, f: impl Fn(T) -> Violation) -> Result<(), Error> {
-        if self.is_empty() {
-            Ok(())
-        } else {
-            Err(Error::viol(self.into_iter().map(f)))
-        }
-    }
-}

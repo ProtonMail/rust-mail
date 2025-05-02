@@ -18,30 +18,28 @@ fn empty() {
 
 #[test]
 fn with_event() {
-    let cal = VCalendar::new("-//Proton AG//test 2.1.3.7//EN")
-        .with_event(
-            VEvent::new(
-                "0000-0000-0000-0001",
-                DateTime {
-                    date: Date::new_unchecked(2024, 1, 1),
-                    time: Time::new_unchecked(12, 0, 0),
-                    form: AnyForm::Local,
-                },
-            )
-            .with_dtstart(DateTime {
+    let cal = VCalendar::new("-//Proton AG//test 2.1.3.7//EN").with_event(
+        VEvent::new(
+            "0000-0000-0000-0001",
+            DateTime {
                 date: Date::new_unchecked(2024, 1, 1),
-                time: Time::new_unchecked(10, 0, 0),
+                time: Time::new_unchecked(12, 0, 0),
                 form: AnyForm::Local,
-            })
-            .with_rrule(Recur::new(Freq::Daily).with_count(5))
-            .with_alarm(EmailAlarm::new(
-                Trigger::start(Duration::neg(TimeDuration::minutes(10))),
-                "reminder before the meeting!",
-                "just a reminder",
-                EmailAddress::from("someone@localhost"),
-            )),
+            },
         )
-        .unwrap();
+        .with_dtstart(DateTime {
+            date: Date::new_unchecked(2024, 1, 1),
+            time: Time::new_unchecked(10, 0, 0),
+            form: AnyForm::Local,
+        })
+        .with_rrule(Recur::new(Freq::Daily).with_count(5))
+        .with_alarm(EmailAlarm::new(
+            Trigger::start(Duration::neg(TimeDuration::minutes(10))),
+            "reminder before the meeting!",
+            "just a reminder",
+            EmailAddress::from("someone@localhost"),
+        )),
+    );
 
     let str = ical! {"
         BEGIN:VCALENDAR
@@ -81,18 +79,36 @@ fn with_broken_event() {
         END:VCALENDAR
     "};
 
-    let (cal, msgs) = VCalendar::from_str(&str).unwrap();
-    let msgs: Vec<_> = msgs.into_iter().map(|msg| msg.to_string(None)).collect();
+    let ParsedVCalendar { cal, msgs, viols } = VCalendar::from_str(&str).unwrap();
 
-    let exp_msgs = vec![
+    // ---
+    // Assert calendar
+
+    assert_eq!(1, cal.events.len());
+
+    // ---
+    // Assert messages
+
+    let actual: Vec<_> = msgs.into_iter().map(|msg| msg.to_string(None)).collect();
+
+    let expected = vec![
         "error: missing property `UID`",
         "error: missing property `DTSTAMP`",
-        "viol: event[0]: uid is missing",
-        "viol: event[0]: dtstamp is missing",
     ];
 
-    assert_eq!(msgs, exp_msgs);
-    assert_eq!(1, cal.events().len());
+    assert_eq!(actual, expected);
+
+    // ---
+    // Assert violations
+
+    let actual = viols
+        .into_iter()
+        .map(|viol| viol.to_string())
+        .collect::<Vec<_>>();
+
+    let expected = vec!["event[0]: uid is missing", "event[0]: dtstamp is missing"];
+
+    assert_eq!(actual, expected);
 }
 
 #[test]
@@ -120,10 +136,11 @@ fn without_calscale() {
         END:VCALENDAR
     "};
 
-    let (cal, msgs) = VCalendar::from_str(&str).unwrap();
+    let ParsedVCalendar { cal, msgs, viols } = VCalendar::from_str(&str).unwrap();
 
+    assert_eq!(CalScale::Gregorian, cal.calscale);
     assert!(msgs.is_empty());
-    assert_eq!(CalScale::Gregorian, cal.calscale());
+    assert!(viols.is_empty());
 }
 
 #[track_caller]
@@ -133,15 +150,20 @@ fn assert(cal: &VCalendar, str: &str) {
 
     pa::assert_eq!(
         str.trim(),
-        cal.to_string().trim(),
+        cal.validate().into_clean().unwrap().to_string().trim(),
         "VCalendar->String assertion failed"
     );
 
     // ---
     // Convert string to VCalendar
 
-    let (cal2, msgs) = VCalendar::from_str(str).unwrap();
+    let ParsedVCalendar {
+        cal: cal2,
+        msgs,
+        viols,
+    } = VCalendar::from_str(str).unwrap();
 
-    assert!(msgs.is_empty());
     pa::assert_eq!(cal, &cal2, "String->VCalendar assertion failed");
+    assert!(msgs.is_empty());
+    assert!(viols.is_empty());
 }

@@ -18,12 +18,12 @@ pub use self::result::*;
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "php", derive(ext_php_rs::ZvalConvert))]
 pub struct VCalendar {
-    method: Option<Method>,
-    prodid: ProdId,
-    version: Version,
-    calscale: CalScale,
-    events: Vec<VEvent>,
-    timezones: Vec<VTimeZone>,
+    pub method: Option<Method>,
+    pub prodid: ProdId,
+    pub version: Version,
+    pub calscale: CalScale,
+    pub events: Vec<VEvent>,
+    pub timezones: Vec<VTimeZone>,
 }
 
 impl VCalendar {
@@ -40,211 +40,48 @@ impl VCalendar {
     }
 
     #[must_use]
-    pub fn method(&self) -> Option<Method> {
-        self.method
-    }
-
-    pub fn set_method(&mut self, method: Option<Method>) {
-        self.method = method;
-    }
-
-    #[must_use]
     pub fn with_method(mut self, method: Method) -> Self {
-        self.set_method(Some(method));
+        self.method = Some(method);
         self
     }
 
     #[must_use]
-    pub fn prodid(&self) -> &ProdId {
-        &self.prodid
-    }
-
-    #[must_use]
-    pub fn version(&self) -> Version {
-        self.version
-    }
-
-    #[must_use]
-    pub fn calscale(&self) -> CalScale {
-        self.calscale
-    }
-
-    #[must_use]
-    pub fn events(&self) -> &[VEvent] {
-        &self.events
-    }
-
-    /// Adds an event into the calendar.
-    ///
-    /// Event is validated before the insert and if any violation occurs (event
-    /// refers to an unknown time zone, the calendar already contains event with
-    /// this id etc.), an error is returned and the event is not inserted.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use ical::utils::*;
-    /// use ical::{VCalendar, VEvent, ical};
-    ///
-    /// let mut cal = VCalendar::new("test");
-    ///
-    /// cal.add_event(VEvent::new("1", dt("20180101T120000Z")))
-    ///    .unwrap();
-    ///
-    /// assert_eq!(1, cal.events().len());
-    /// ```
-    pub fn add_event(&mut self, event: VEvent) -> Result<()> {
-        event
-            .validate(self, None)
-            .into_result(|viol| Violation::InvalidEvent(self.events.len(), viol))?;
-
+    pub fn with_event(mut self, event: VEvent) -> Self {
         self.events.push(event);
-
-        Ok(())
-    }
-
-    /// Adds an event into the calendar; see [`Self::add_event()`].
-    pub fn with_event(mut self, event: VEvent) -> Result<Self> {
-        self.add_event(event)?;
-
-        Ok(self)
-    }
-
-    /// Modifies an event in the calendar.
-    ///
-    /// Event is revalidated before replacing the existing one and if any
-    /// violation occurs, an error is returned and the event is not updated.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use ical::utils::*;
-    /// use ical::{VCalendar, VEvent, Uid, ical};
-    ///
-    /// let mut cal = VCalendar::new("test");
-    ///
-    /// cal.add_event(VEvent::new("1", dt("20180101T120000Z")))
-    ///    .unwrap();
-    ///
-    /// cal.edit_event(0, |event| {
-    ///     event.uid = Some("2".into());
-    /// })
-    /// .unwrap();
-    ///
-    /// assert_eq!("2", cal.events()[0].uid.as_ref().unwrap().value.as_str());
-    /// ```
-    pub fn edit_event(&mut self, idx: usize, f: impl FnOnce(&mut VEvent)) -> Result<()> {
-        let mut event = self
-            .events
-            .get_mut(idx)
-            .ok_or(Error::MissingEvent(idx))?
-            .clone();
-
-        f(&mut event);
-
-        event
-            .validate(self, Some(idx))
-            .into_result(|viol| Violation::InvalidEvent(idx, viol))?;
-
-        self.events[idx] = event;
-
-        Ok(())
-    }
-
-    /// Removes event from the calendar.
-    ///
-    /// # Example
-    ///
-    /// ```rust
-    /// use ical::utils::*;
-    /// use ical::{VCalendar, VEvent, Uid, ical};
-    ///
-    /// let mut cal = VCalendar::new("test");
-    ///
-    /// cal.add_event(VEvent::new("1", dt("20180101T120000Z")))
-    ///    .unwrap();
-    ///
-    /// let event = cal.remove_event(0).unwrap();
-    ///
-    /// assert_eq!("1", event.uid.as_ref().unwrap().value.as_str());
-    /// assert_eq!(0, cal.events().len());
-    /// ```
-    pub fn remove_event(&mut self, idx: usize) -> Result<VEvent> {
-        if idx < self.events.len() {
-            Ok(self.events.remove(idx))
-        } else {
-            Err(Error::MissingEvent(idx))
-        }
+        self
     }
 
     #[must_use]
-    pub fn timezones(&self) -> &[VTimeZone] {
-        &self.timezones
-    }
-
-    // TODO docs
-    pub fn add_timezone(&mut self, timezone: VTimeZone) -> Result<()> {
-        timezone
-            .validate(self, None)
-            .into_result(|viol| Violation::InvalidTimeZone(self.timezones.len(), viol))?;
-
+    pub fn with_timezone(mut self, timezone: VTimeZone) -> Self {
         self.timezones.push(timezone);
-
-        Ok(())
-    }
-
-    // TODO docs
-    pub fn with_timezone(mut self, timezone: VTimeZone) -> Result<Self> {
-        self.add_timezone(timezone)?;
-
-        Ok(self)
-    }
-
-    // TODO docs
-    pub fn edit_timezone(&mut self, idx: usize, f: impl FnOnce(&mut VTimeZone)) -> Result<()> {
-        let mut timezone = self
-            .timezones
-            .get_mut(idx)
-            .ok_or(Error::MissingTimeZone(idx))?
-            .clone();
-
-        f(&mut timezone);
-
-        timezone
-            .validate(self, Some(idx))
-            .into_result(|viol| Violation::InvalidTimeZone(idx, viol))?;
-
-        self.timezones[idx] = timezone;
-
-        Ok(())
+        self
     }
 
     /// Converts given string into a calendar.
     ///
     /// See [`Self::from_bytes()`] for more details.
-    #[allow(
-        clippy::should_implement_trait,
-        reason = "can't actually do `impl FromStr for (Self, Vec<...>)`"
-    )]
-    pub fn from_str(src: &str) -> Result<(Self, Vec<ReadMsg>)> {
+    #[allow(clippy::should_implement_trait, reason = "important doc-comment")]
+    pub fn from_str(src: &str) -> Result<ParsedVCalendar> {
         Self::from_bytes(src.as_bytes())
     }
 
     /// Converts given byte-slice into a calendar.
     ///
-    /// This function accepts a byte-slice instead of a string, because it's
-    /// possible for an iCal-string to contain improperly-split Unicode
-    /// characters and this function tries to recover those.
+    /// This function accepts a byte-slice, because it's possible for the input
+    /// data to contain improperly split Unicode characters, which this function
+    /// tries to recover.
     ///
-    /// This function returns both the parsed calendar and a list of messages
-    /// describing errors and/or warnings stumbled upon during parsing - we try
-    /// to recover as much information as possible from the string, even if it's
-    /// malformed.
+    /// (going through `&str` would force the input to be a Unicode string,
+    /// yielding such recovery impossible.)
+    ///
+    /// Note that this function doesn't return the calendar directly - it
+    /// returns a struct containing the calendar, parser messages, and validator
+    /// messages that describe problems with the input data, if any.
     ///
     /// See also [`Self::from_str()`].
-    pub fn from_bytes(src: &[u8]) -> Result<(Self, Vec<ReadMsg>)> {
+    pub fn from_bytes(src: &[u8]) -> Result<ParsedVCalendar> {
         let mut r = Reader::new(src);
-        let mut this = None;
+        let mut cal: Option<Self> = None;
 
         while !r.is_empty() {
             let Some(e) = r.entry() else {
@@ -252,26 +89,62 @@ impl VCalendar {
                 break;
             };
 
-            if !e.try_comp(&mut r, "VCALENDAR", &mut this) {
+            if !e.try_comp(&mut r, "VCALENDAR", &mut cal) {
                 e.burn(&mut r);
             }
         }
 
-        let this = this.ok_or_else(|| Error::viol([Violation::MissingCalendar]))?;
+        let cal = cal.ok_or_else(|| Error::viol([Violation::MissingCalendar]))?;
         let msgs = r.finish();
+        let viols = cal.validate().into_viols();
 
-        Ok((this, msgs))
+        Ok(ParsedVCalendar { cal, msgs, viols })
     }
 
-    /// Converts this calendar into an iCal string.
+    /// Validates that the calendar adheres to RFC (e.g. if a date mentiones a
+    /// time zone, we check that calendar actually contains this time zone).
     ///
-    /// See also: [`Self::from_str()`].
+    /// Calling this function is required to convert calendar into a string,
+    /// hough note that even a calendar which fails the validation *can* be
+    /// converted into string, just with less guarantees regarding the
+    /// comaptibility.
+    ///
+    /// See [`CleanVCalendar::to_string()`] and [`DirtyVCalendar::to_string()`].
+    #[doc(alias = "to_string")]
+    #[must_use]
+    pub fn validate(&self) -> ValidatedVCalendar {
+        let mut viols = Vec::new();
+
+        for (idx, event) in self.events.iter().enumerate() {
+            viols.extend(
+                event
+                    .validate(self, Some(idx))
+                    .into_iter()
+                    .map(|viol| Violation::InvalidEvent(idx, viol)),
+            );
+        }
+
+        for (idx, tz) in self.timezones.iter().enumerate() {
+            viols.extend(
+                tz.validate(self, Some(idx))
+                    .into_iter()
+                    .map(|viol| Violation::InvalidTimeZone(idx, viol)),
+            );
+        }
+
+        if viols.is_empty() {
+            ValidatedVCalendar::Clean(CleanVCalendar { cal: self })
+        } else {
+            ValidatedVCalendar::Dirty(DirtyVCalendar { cal: self, viols })
+        }
+    }
+
     #[must_use]
     #[allow(
         clippy::inherent_to_string,
-        reason = "we don't have `impl FromStr`, so for documentation purposes let's keep .to_string() associated as well"
+        reason = "we want users to go through .validate()"
     )]
-    pub fn to_string(&self) -> String {
+    fn to_string(&self) -> String {
         let mut w = Writer::default();
 
         w.comp("VCALENDAR", self);
@@ -285,8 +158,8 @@ impl Read<Component> for VCalendar {
         let mut prodid = None;
         let mut version = None;
         let mut calscale = None;
-        let mut events: Vec<Spanned<VEvent>> = Vec::new();
-        let mut timezones: Vec<Spanned<VTimeZone>> = Vec::new();
+        let mut events = Vec::new();
+        let mut timezones = Vec::new();
 
         while let Some(e) = r.entry() {
             if e.try_prop(r, "METHOD", &mut method)
@@ -309,32 +182,14 @@ impl Read<Component> for VCalendar {
         let prodid = r.unwrap_prop("PRODID", prodid);
         let version = r.unwrap_prop("VERSION", version);
 
-        let mut this = Self {
+        Some(Self {
             method,
             prodid: prodid?,
             version: version?,
             calscale: calscale.unwrap_or_default(),
-            events: Vec::new(),
-            timezones: Vec::new(),
-        };
-
-        for (idx, Spanned { span, value }) in timezones.into_iter().enumerate() {
-            for viol in value.validate(&this, None) {
-                r.viol(span, Violation::InvalidTimeZone(idx, viol));
-            }
-
-            this.timezones.push(value);
-        }
-
-        for (idx, Spanned { span, value }) in events.into_iter().enumerate() {
-            for viol in value.validate(&this, None) {
-                r.viol(span, Violation::InvalidEvent(idx, viol));
-            }
-
-            this.events.push(value);
-        }
-
-        Some(this)
+            events,
+            timezones,
+        })
     }
 }
 
@@ -352,6 +207,147 @@ impl Write<Component> for VCalendar {
         for event in &self.events {
             w.comp("VEVENT", event);
         }
+    }
+}
+
+/// Outcome of calendar parsing, see [`VCalendar::from_str()`] or
+/// [`VCalendar::from_bytes()`].
+pub struct ParsedVCalendar {
+    pub cal: VCalendar,
+    pub msgs: Vec<ReadMsg>,
+    pub viols: Vec<Violation>,
+}
+
+/// Outcome of calendar validation, see [`VCalendar::validate()`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ValidatedVCalendar<'a> {
+    Clean(CleanVCalendar<'a>),
+    Dirty(DirtyVCalendar<'a>),
+}
+
+impl<'a> ValidatedVCalendar<'a> {
+    /// Converts this enum into [`CleanVCalendar`].
+    #[must_use]
+    pub fn into_clean(self) -> Option<CleanVCalendar<'a>> {
+        match self {
+            ValidatedVCalendar::Clean(this) => Some(this),
+            ValidatedVCalendar::Dirty(_) => None,
+        }
+    }
+
+    /// Converts this enum into [`DirtyVCalendar`].
+    #[must_use]
+    pub fn into_dirty(self) -> Option<DirtyVCalendar<'a>> {
+        match self {
+            ValidatedVCalendar::Clean(_) => None,
+            ValidatedVCalendar::Dirty(this) => Some(this),
+        }
+    }
+
+    /// Returns the underlying calendar.
+    #[must_use]
+    pub fn cal(&self) -> &'a VCalendar {
+        match self {
+            ValidatedVCalendar::Clean(this) => this.cal(),
+            ValidatedVCalendar::Dirty(this) => this.cal(),
+        }
+    }
+
+    /// Returns the validation errors, if any.
+    #[must_use]
+    pub fn viols(&self) -> &[Violation] {
+        match self {
+            ValidatedVCalendar::Clean(_) => &[],
+            ValidatedVCalendar::Dirty(this) => this.viols(),
+        }
+    }
+
+    /// Returns the validation errors, if any.
+    ///
+    /// Returned vector is guaranteed to contain at least one item.
+    #[must_use]
+    pub fn into_viols(self) -> Vec<Violation> {
+        match self {
+            ValidatedVCalendar::Clean(_) => Vec::new(),
+            ValidatedVCalendar::Dirty(this) => this.into_viols(),
+        }
+    }
+}
+
+/// [`VCalendar`] that passed the validation, see [`ValidatedVCalendar`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CleanVCalendar<'a> {
+    cal: &'a VCalendar,
+}
+
+impl<'a> CleanVCalendar<'a> {
+    /// Returns the underlying calendar.
+    #[must_use]
+    pub fn cal(&self) -> &'a VCalendar {
+        self.cal
+    }
+
+    /// Converts this calendar into a string.
+    ///
+    /// Since this calendar has passed the validation, it's guaranteed (modulo
+    /// bugs within this crate) that the returned string is RFC-compliant and
+    /// should be properly understood by all other iCal implementations.
+    #[must_use]
+    #[allow(clippy::inherent_to_string, reason = "important doc-comment")]
+    pub fn to_string(&self) -> String {
+        self.cal.to_string()
+    }
+}
+
+/// [`VCalendar`] that failed to pass the validation, see
+/// [`ValidatedVCalendar`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DirtyVCalendar<'a> {
+    cal: &'a VCalendar,
+    viols: Vec<Violation>,
+}
+
+impl<'a> DirtyVCalendar<'a> {
+    /// Returns the underlying calendar.
+    #[must_use]
+    pub fn cal(&self) -> &'a VCalendar {
+        self.cal
+    }
+
+    /// Returns the validation errors.
+    ///
+    /// Returned slice is guaranteed to contain at least one item.
+    #[must_use]
+    pub fn viols(&self) -> &[Violation] {
+        &self.viols
+    }
+
+    /// Returns the validation errors.
+    ///
+    /// Returned vector is guaranteed to contain at least one item.
+    #[must_use]
+    pub fn into_viols(self) -> Vec<Violation> {
+        self.viols
+    }
+
+    /// Converts this calendar into a string, at your own risk.
+    ///
+    /// Since this calendar has failed to pass the validation, it is *not*
+    /// guaranteed that the returned string will be properly understood by
+    /// another iCal implementation.
+    ///
+    /// For instance, the calendar might be missing a `VTIMEZONE` object and
+    /// implementations are free to reject such calendars.
+    ///
+    /// Still, we allow for this conversion, because it might be handy for
+    /// debugging purposes and so on. This crate itself is also able to parse
+    /// "dirty calendars", so you should be able to pass the returned string to
+    /// [`VCalendar::from_str()`] and get a valid (though still dirty) calendar
+    /// back.
+    #[must_use]
+    #[allow(clippy::inherent_to_string, reason = "important doc-comment")]
+    pub fn to_string(&self) -> String {
+        self.cal.to_string()
     }
 }
 
@@ -392,21 +388,26 @@ mod php {
     #[allow(clippy::needless_pass_by_value)]
     #[php_function]
     fn ical_parse(src: BinarySlice<u8>) -> Result<PhpParseResult, String> {
-        let (calendar, messages) = VCalendar::from_bytes(&src).map_err(|err| err.to_string())?;
+        let ParsedVCalendar { cal, msgs, viols } =
+            VCalendar::from_bytes(&src).map_err(|err| err.to_string())?;
 
-        let messages = messages
-            .into_iter()
-            .map(|msg| PhpParseMessage {
-                kind: match msg.kind {
-                    ReadMsgKind::Warning => "Warning".into(),
-                    ReadMsgKind::Error => "Error".into(),
-                    ReadMsgKind::Violation => "Violation".into(),
-                },
-                text: msg.to_string(&**src),
-            })
-            .collect();
+        let msgs = msgs.into_iter().map(|msg| PhpParseMessage {
+            kind: match msg.kind {
+                ReadMsgKind::Warning => "Warning".into(),
+                ReadMsgKind::Error => "Error".into(),
+            },
+            text: msg.to_string(&**src),
+        });
 
-        Ok(PhpParseResult { calendar, messages })
+        let viols = viols.into_iter().map(|msg| PhpParseMessage {
+            kind: "Violation".into(),
+            text: msg.to_string(),
+        });
+
+        Ok(PhpParseResult {
+            calendar: cal,
+            messages: msgs.chain(viols).collect(),
+        })
     }
 
     /// Converts given calendar into a string.
@@ -444,193 +445,5 @@ mod php {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::utils::*;
-
-    fn event(id: &str) -> VEvent {
-        VEvent::new(id, dt("20180101T120000Z"))
-    }
-
-    fn tz(id: &str) -> VTimeZone {
-        VTimeZone::new_standard(
-            id,
-            TzProps::new(
-                dt("19700329T020000"),
-                UtcOffset::new(Sign::Pos, 1, 0, 0).unwrap(),
-                UtcOffset::new(Sign::Pos, 2, 0, 0).unwrap(),
-            ),
-        )
-    }
-
-    #[test]
-    fn with_method() {
-        assert_eq!(cal().method(), None);
-
-        assert_eq!(
-            cal().with_method(Method::Publish).method(),
-            Some(Method::Publish)
-        );
-    }
-
-    #[test]
-    fn with_event() {
-        let target = cal().with_event(event("1")).unwrap();
-
-        assert_eq!(1, target.events().len());
-    }
-
-    #[test]
-    fn with_duplicated_event() {
-        let actual = cal()
-            .with_event(event("1"))
-            .unwrap()
-            .with_event(event("1"))
-            .unwrap_err();
-
-        let expected = Error::viol([Violation::InvalidEvent(
-            1,
-            VEventViolation::DuplicatedUid("1".into()),
-        )]);
-
-        assert_eq!(expected, actual);
-    }
-
-    #[test]
-    fn edit_event() {
-        let mut target = cal().with_event(event("1")).unwrap();
-
-        assert_eq!(1, target.events.len());
-
-        assert_eq!(
-            1,
-            target.events[0]
-                .dtstamp
-                .as_ref()
-                .unwrap()
-                .value
-                .date
-                .day()
-                .as_num()
-        );
-
-        target
-            .edit_event(0, |event| {
-                event.dtstamp = Some(dt("20180102T120000Z").into());
-            })
-            .unwrap();
-
-        assert_eq!(1, target.events.len());
-
-        assert_eq!(
-            2,
-            target.events[0]
-                .dtstamp
-                .as_ref()
-                .unwrap()
-                .value
-                .date
-                .day()
-                .as_num()
-        );
-    }
-
-    #[test]
-    fn edit_missing_event() {
-        let actual = cal().edit_event(123, |_| ()).unwrap_err();
-        let expected = Error::MissingEvent(123);
-
-        assert_eq!(expected, actual);
-    }
-
-    #[test]
-    fn edit_event_and_make_it_duplicated() {
-        let mut target = cal()
-            .with_event(event("1"))
-            .unwrap()
-            .with_event(event("2"))
-            .unwrap();
-
-        let actual = target
-            .edit_event(0, |event| {
-                event.uid = Some("2".into());
-            })
-            .unwrap_err();
-
-        let expected = Error::viol([Violation::InvalidEvent(
-            0,
-            VEventViolation::DuplicatedUid("2".into()),
-        )]);
-
-        assert_eq!(expected, actual);
-    }
-
-    #[test]
-    fn with_timezone() {
-        let target = cal().with_timezone(tz("Europe/Vatican")).unwrap();
-
-        assert_eq!(1, target.timezones.len());
-    }
-
-    #[test]
-    fn with_duplicated_timezone() {
-        let actual = cal()
-            .with_timezone(tz("Europe/Vatican"))
-            .unwrap()
-            .with_timezone(tz("Europe/Vatican"))
-            .unwrap_err();
-
-        let expected = Error::viol([Violation::InvalidTimeZone(
-            1,
-            VTimeZoneViolation::DuplicatedId("Europe/Vatican".into()),
-        )]);
-
-        assert_eq!(expected, actual);
-    }
-
-    #[test]
-    fn edit_timezone() {
-        let mut target = cal().with_timezone(tz("Europe/Vatican")).unwrap();
-
-        assert_eq!(1, target.timezones.len());
-        assert_eq!(0, target.timezones[0].daylights.len());
-
-        target
-            .edit_timezone(0, |tz| {
-                tz.daylights = tz.standards.clone();
-            })
-            .unwrap();
-
-        assert_eq!(1, target.timezones.len());
-        assert_eq!(1, target.timezones[0].daylights.len());
-    }
-
-    #[test]
-    fn edit_missing_timezone() {
-        let actual = cal().edit_timezone(123, |_| ()).unwrap_err();
-        let expected = Error::MissingTimeZone(123);
-
-        assert_eq!(expected, actual);
-    }
-
-    #[test]
-    fn edit_timezone_and_make_it_duplicated() {
-        let mut target = cal()
-            .with_timezone(tz("Europe/Warsaw"))
-            .unwrap()
-            .with_timezone(tz("Europe/Stockholm"))
-            .unwrap();
-
-        let actual = target
-            .edit_timezone(0, |tz| {
-                tz.tzid = "Europe/Stockholm".into();
-            })
-            .unwrap_err();
-
-        let expected = Error::viol([Violation::InvalidTimeZone(
-            0,
-            VTimeZoneViolation::DuplicatedId("Europe/Stockholm".into()),
-        )]);
-
-        assert_eq!(expected, actual);
-    }
+    // NOTE covered via ../tests/acceptance.rs
 }

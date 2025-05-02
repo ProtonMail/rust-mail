@@ -260,7 +260,7 @@ mod tests {
 
     #[test]
     fn viol_duplicated_id() {
-        let cal = cal().with_timezone(tz()).unwrap();
+        let cal = cal().with_timezone(tz());
         let actual = tz().validate(&cal, None);
         let expected = vec![VTimeZoneViolation::DuplicatedId("Alice/Wonderland".into())];
 

@@ -822,9 +822,7 @@ mod tests {
         let mut target = cal();
 
         for id in ["1", "2", "3"] {
-            target
-                .add_event(VEvent::new(id, dt("20180101T120000Z")))
-                .unwrap();
+            target.events.push(VEvent::new(id, dt("20180101T120000Z")));
         }
 
         let actual = VEvent::new("2", dt("20180101T120000Z")).validate(&target, None);

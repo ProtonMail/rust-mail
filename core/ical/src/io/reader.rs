@@ -72,11 +72,6 @@ impl<'a> Reader<'a> {
         self.msg(at, msg, ReadMsgKind::Error);
     }
 
-    /// Reports a violation.
-    pub fn viol(&mut self, at: impl Into<Option<Span>>, msg: Violation) {
-        self.msg(at, msg, ReadMsgKind::Violation);
-    }
-
     /// Runs `f` under a parser that contains an extra context such as "parsing
     /// `foo`".
     pub fn context<T>(&mut self, span: Span, tag: String, f: impl FnOnce(&mut Self) -> T) -> T {
@@ -511,7 +506,6 @@ impl ReadMsg {
             match self.kind {
                 ReadMsgKind::Warning => "warn",
                 ReadMsgKind::Error => "error",
-                ReadMsgKind::Violation => "viol",
             }
         );
 
@@ -547,10 +541,6 @@ pub enum ReadMsgKind {
     /// An error - the calendar has been parsed *partially*, some parts of it
     /// might be missing.
     Error,
-
-    /// A validation violation - some object has duplicated id, a time zone is
-    /// missing etc.
-    Violation,
 }
 
 #[derive(Clone, Debug)]
