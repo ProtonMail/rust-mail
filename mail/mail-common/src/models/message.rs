@@ -2711,6 +2711,26 @@ impl Message {
         let mut banners = vec![];
 
         let flags = self.flags;
+
+        let settings = &MailSettings::get_or_default(tether).await;
+        let mut autodelete = false;
+        if let Some(days) = settings.auto_delete_spam_and_trash_days {
+            let trash = LabelId::trash();
+            let spam = LabelId::spam();
+
+            if self.label_ids.iter().any(|x| *x == trash || *x == spam) {
+                // FIXME: This is not correct at the moment, but it's better than nothing
+                if let Ok(time) = SystemTime::now().duration_since(UNIX_EPOCH) {
+                    let time = time + Duration::from_secs((days * 24 * 60 * 60) as u64);
+                    banners.push(MessageBanner::AutoDelete {
+                        timestamp: time.as_secs(),
+                        delete_days: days,
+                    });
+                    autodelete = true;
+                }
+            }
+        }
+
         // The user might have marked it manually as not spam, skip that case
         if !flags.contains(MessageFlags::HAM_MANUAL) {
             // Phishing
@@ -2724,30 +2744,19 @@ impl Message {
             } else if flags.intersects(MessageFlags::SPAM_AUTO | MessageFlags::SPAM_MANUAL) {
                 banners.push(MessageBanner::Spam);
             }
-        }
 
-        if self.expiration_time != 0 {
-            banners.push(MessageBanner::Expiry {
-                timestamp: self.expiration_time,
-            });
-        }
-
-        let settings = &MailSettings::get_or_default(tether).await;
-        if let Some(days) = settings.auto_delete_spam_and_trash_days {
-            let trash = LabelId::trash();
-            let spam = LabelId::spam();
-
-            if self.label_ids.iter().any(|x| *x == trash || *x == spam) {
-                // FIXME: This is not correct at the moment, but it's better than nothing
-                if let Ok(time) = SystemTime::now().duration_since(UNIX_EPOCH) {
-                    let time = time + Duration::from_secs((days * 24 * 60 * 60) as u64);
-                    banners.push(MessageBanner::AutoDelete {
-                        timestamp: time.as_secs(),
-                        delete_days: days,
-                    })
-                }
+            // This check is here because we can't clear this on the local action
+            if self.expiration_time != 0
+            // Since the backend sends the expiration time for autodelete we have to do this to
+            // disambiguate between autodelete and expiry and not show 2 banners.
+            && !autodelete
+            {
+                banners.push(MessageBanner::Expiry {
+                    timestamp: self.expiration_time,
+                });
             }
         }
+
         if let Ok(Some(IncomingDefaultLocation::Blocked)) =
             IncomingDefaultLocation::find(self.sender.address.clone(), tether).await
         {
