@@ -9,6 +9,7 @@ mod result;
 pub mod utils;
 
 pub(crate) use self::io::*;
+pub use self::io::{ReadMsg, ReadMsgKind, Span};
 pub use self::objects::*;
 pub use self::result::*;
 
@@ -85,13 +86,24 @@ impl VCalendar {
 
         while !r.is_empty() {
             let Some(e) = r.entry() else {
-                // TODO error: trailing data
                 break;
             };
 
             if !e.try_comp(&mut r, "VCALENDAR", &mut cal) {
                 e.burn(&mut r);
             }
+        }
+
+        while let Some(ch) = r.peek() {
+            if ch.is_whitespace() {
+                _ = r.char();
+            } else {
+                break;
+            }
+        }
+
+        if !r.is_empty() {
+            r.error(Span::new(r.pos(), r.len()), "trailing data");
         }
 
         let cal = cal.ok_or_else(|| Error::viol([Violation::MissingCalendar]))?;
@@ -212,6 +224,7 @@ impl Write<Component> for VCalendar {
 
 /// Outcome of calendar parsing, see [`VCalendar::from_str()`] or
 /// [`VCalendar::from_bytes()`].
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParsedVCalendar {
     pub cal: VCalendar,
     pub msgs: Vec<ReadMsg>,
@@ -445,5 +458,5 @@ mod php {
 
 #[cfg(test)]
 mod tests {
-    // NOTE covered via ../tests/acceptance.rs
+    // Covered via ../tests/acceptance.rs
 }

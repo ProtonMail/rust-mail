@@ -79,17 +79,21 @@ fn with_broken_event() {
         END:VCALENDAR
     "};
 
-    let ParsedVCalendar { cal, msgs, viols } = VCalendar::from_str(&str).unwrap();
+    let out = VCalendar::from_str(&str).unwrap();
 
     // ---
     // Assert calendar
 
-    assert_eq!(1, cal.events.len());
+    assert_eq!(1, out.cal.events.len());
 
     // ---
     // Assert messages
 
-    let actual: Vec<_> = msgs.into_iter().map(|msg| msg.to_string(None)).collect();
+    let actual: Vec<_> = out
+        .msgs
+        .into_iter()
+        .map(|msg| msg.to_string(None))
+        .collect();
 
     let expected = vec![
         "error: missing property `UID`",
@@ -101,7 +105,8 @@ fn with_broken_event() {
     // ---
     // Assert violations
 
-    let actual = viols
+    let actual = out
+        .viols
         .into_iter()
         .map(|viol| viol.to_string())
         .collect::<Vec<_>>();
@@ -136,34 +141,55 @@ fn without_calscale() {
         END:VCALENDAR
     "};
 
-    let ParsedVCalendar { cal, msgs, viols } = VCalendar::from_str(&str).unwrap();
+    let out = VCalendar::from_str(&str).unwrap();
 
-    assert_eq!(CalScale::Gregorian, cal.calscale);
-    assert!(msgs.is_empty());
-    assert!(viols.is_empty());
+    assert_eq!(CalScale::Gregorian, out.cal.calscale);
+    assert!(out.msgs.is_empty());
+    assert!(out.viols.is_empty());
+}
+
+#[test]
+fn trailing_data() {
+    let str = ical! {"
+        BEGIN:VCALENDAR
+        PRODID:-//Proton AG//iCal//EN
+        VERSION:2.0
+        END:VCALENDAR
+        :something something
+    "};
+
+    let out = VCalendar::from_str(&str).unwrap();
+
+    let msgs = vec![ReadMsg {
+        at: Some(Span::new(76, 96)),
+        msg: "trailing data".into(),
+        kind: ReadMsgKind::Error,
+        context: vec![],
+    }];
+
+    assert_eq!("-//Proton AG//iCal//EN", out.cal.prodid.value.as_str());
+    assert_eq!(msgs, out.msgs);
+    assert!(out.viols.is_empty());
 }
 
 #[track_caller]
 fn assert(cal: &VCalendar, str: &str) {
-    // ---
-    // Convert VCalendar to string
-
     pa::assert_eq!(
         str.trim(),
         cal.validate().into_clean().unwrap().to_string().trim(),
-        "VCalendar->String assertion failed"
+        "VCalendar->String conversion returned a different string"
     );
 
     // ---
-    // Convert string to VCalendar
 
-    let ParsedVCalendar {
-        cal: cal2,
-        msgs,
-        viols,
-    } = VCalendar::from_str(str).unwrap();
+    let out = VCalendar::from_str(str).unwrap();
 
-    pa::assert_eq!(cal, &cal2, "String->VCalendar assertion failed");
-    assert!(msgs.is_empty());
-    assert!(viols.is_empty());
+    pa::assert_eq!(
+        cal,
+        &out.cal,
+        "String->VCalendar conversion returned a different object"
+    );
+
+    assert!(out.msgs.is_empty());
+    assert!(out.viols.is_empty());
 }
