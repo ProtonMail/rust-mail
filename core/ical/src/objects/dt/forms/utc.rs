@@ -22,6 +22,12 @@ impl From<DateTime<UtcForm>> for DateTime<AnyForm> {
     }
 }
 
+impl AsJiffZoned for DateTime<UtcForm> {
+    fn as_jiff(&self) -> Result<JiffZoned, JiffError> {
+        DateTime::<AnyForm>::from(*self).as_jiff()
+    }
+}
+
 impl Read<Value> for DateTime<UtcForm> {
     fn read(r: &mut Reader) -> Option<Self> {
         let date = r.value()?;

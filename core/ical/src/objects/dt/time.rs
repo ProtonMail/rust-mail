@@ -21,6 +21,18 @@ impl Time {
     }
 }
 
+impl From<Time> for JiffTime {
+    fn from(value: Time) -> Self {
+        #[allow(clippy::cast_possible_wrap)]
+        jiff::civil::time(
+            value.hour.as_num() as i8,
+            value.minute.as_num() as i8,
+            value.second.as_num() as i8,
+            0,
+        )
+    }
+}
+
 impl Read<Value> for Time {
     fn read(r: &mut Reader) -> Option<Self> {
         let hour = r.spanned(|r| r.digits(2))?;

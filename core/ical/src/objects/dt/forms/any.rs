@@ -29,6 +29,18 @@ impl DateTime<AnyForm> {
     }
 }
 
+impl AsJiffZoned for DateTime<AnyForm> {
+    fn as_jiff(&self) -> Result<JiffZoned, JiffError> {
+        let dt = JiffDateTime::from_parts(self.date.into(), self.time.into());
+
+        match &self.form {
+            AnyForm::Local => dt.to_zoned(JiffTimeZone::unknown()),
+            AnyForm::Utc => dt.to_zoned(JiffTimeZone::UTC),
+            AnyForm::Tz(tz) => dt.in_tz(tz.as_str()),
+        }
+    }
+}
+
 impl Read<Property> for DateTime<AnyForm> {
     fn read(r: &mut Reader) -> Option<Self> {
         let mut tzid = None;

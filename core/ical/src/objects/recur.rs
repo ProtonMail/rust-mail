@@ -1,3 +1,6 @@
+mod iter;
+
+pub use self::iter::*;
 use super::*;
 
 /// Recurrence rule.
@@ -296,6 +299,32 @@ pub enum Freq {
     Weekly,
     Monthly,
     Yearly,
+}
+
+impl Freq {
+    /// Snaps (rounds down) given date to the beginning of this frequency.
+    ///
+    /// E.g. `Freq::Month.first_of(2018-01-07) = 2018-01-01`.
+    pub(crate) fn first_of(self, dt: &JiffZoned) -> Result<JiffZoned, JiffError> {
+        match self {
+            // TODO figure out semantics
+            Freq::Secondly | Freq::Minutely | Freq::Hourly => Ok(dt.clone()),
+
+            Freq::Daily => dt.start_of_day(),
+
+            Freq::Weekly => {
+                // TODO handle WKST
+                if dt.weekday() == JiffWeekday::Monday {
+                    dt.start_of_day()
+                } else {
+                    dt.nth_weekday(-1, JiffWeekday::Monday)?.start_of_day()
+                }
+            }
+
+            Freq::Monthly => dt.first_of_month()?.start_of_day(),
+            Freq::Yearly => dt.first_of_year()?.start_of_day(),
+        }
+    }
 }
 
 impl Read<Value> for Freq {

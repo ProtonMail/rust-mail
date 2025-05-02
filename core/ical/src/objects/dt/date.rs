@@ -58,6 +58,21 @@ impl Date {
     pub fn day(&self) -> Day {
         self.day
     }
+
+    pub(crate) fn as_jiff(self) -> Result<JiffZoned, JiffError> {
+        JiffDate::from(self).at(0, 0, 0, 0).in_tz("UTC")
+    }
+}
+
+impl From<Date> for JiffDate {
+    fn from(value: Date) -> Self {
+        #[allow(clippy::cast_possible_wrap)]
+        jiff::civil::date(
+            value.year.as_num() as i16,
+            value.month.as_num() as i8,
+            value.day.as_num() as i8,
+        )
+    }
 }
 
 impl Read<Value> for Date {

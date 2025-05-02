@@ -13,6 +13,10 @@ pub use self::time::*;
 pub use self::units::*;
 use super::*;
 
+pub(crate) trait AsJiffZoned {
+    fn as_jiff(&self) -> Result<JiffZoned, JiffError>;
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum DateTimeViolation {
     #[error("time zone `{0}` is not known")]

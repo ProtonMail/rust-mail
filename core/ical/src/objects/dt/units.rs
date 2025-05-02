@@ -304,6 +304,21 @@ pub enum Weekday {
     Sunday,
 }
 
+impl Weekday {
+    #[must_use]
+    pub(crate) fn as_jiff(self) -> JiffWeekday {
+        match self {
+            Weekday::Monday => JiffWeekday::Monday,
+            Weekday::Tuesday => JiffWeekday::Tuesday,
+            Weekday::Wednesday => JiffWeekday::Wednesday,
+            Weekday::Thursday => JiffWeekday::Thursday,
+            Weekday::Friday => JiffWeekday::Friday,
+            Weekday::Saturday => JiffWeekday::Saturday,
+            Weekday::Sunday => JiffWeekday::Sunday,
+        }
+    }
+}
+
 impl Read<Value> for Weekday {
     fn read(r: &mut Reader) -> Option<Self> {
         let Spanned { span, value } = r.spanned(Reader::ident)?;

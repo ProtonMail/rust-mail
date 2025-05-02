@@ -28,6 +28,12 @@ impl From<DateTime<UtcOrLocalForm>> for DateTime {
     }
 }
 
+impl AsJiffZoned for DateTime<UtcOrLocalForm> {
+    fn as_jiff(&self) -> Result<JiffZoned, JiffError> {
+        DateTime::<AnyForm>::from(*self).as_jiff()
+    }
+}
+
 impl Read<Value> for DateTime<UtcOrLocalForm> {
     fn read(r: &mut Reader) -> Option<Self> {
         let date = r.value()?;

@@ -143,3 +143,15 @@ where
         }
     }
 }
+
+impl<F> AsJiffZoned for DateOrDt<F>
+where
+    DateTime<F>: AsJiffZoned,
+{
+    fn as_jiff(&self) -> Result<JiffZoned, JiffError> {
+        match self {
+            DateOrDt::Date(this) => this.as_jiff(),
+            DateOrDt::DateTime(this) => this.as_jiff(),
+        }
+    }
+}

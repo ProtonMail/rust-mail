@@ -182,6 +182,75 @@ impl VEvent {
         self
     }
 
+    /// Returns an iterator that goes over occurrences (aka instances,
+    /// repetitions etc.) of this event.
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// # use ical::*;
+    /// # use ical::utils::*;
+    /// #
+    /// let event = VEvent::new("0001", dt("20180101T120000"))
+    ///     .with_dtstart(d("20180101"))
+    ///     .with_rrule(
+    ///         Recur::new(Freq::Daily)
+    ///             .with_by_day([ByDay::Every(Weekday::Monday)]),
+    ///     );
+    ///
+    /// let mut dates = event.occurrences().unwrap();
+    ///
+    /// assert_eq!("2018-01-01T00:00:00+00:00[UTC]", dates.next().unwrap().to_string());
+    /// assert_eq!("2018-01-08T00:00:00+00:00[UTC]", dates.next().unwrap().to_string());
+    /// assert_eq!("2018-01-15T00:00:00+00:00[UTC]", dates.next().unwrap().to_string());
+    /// ```
+    ///
+    /// If this event doesn't repeat, the iterator will emit just one date,
+    /// `DTSTART`:
+    ///
+    /// ```rust
+    /// # use ical::*;
+    /// # use ical::utils::*;
+    /// #
+    /// let event = VEvent::new("0001", dt("20180101T120000"))
+    ///     .with_dtstart(d("20180101"));
+    ///
+    /// let mut dates = event.occurrences().unwrap();
+    ///
+    /// assert_eq!("2018-01-01T00:00:00+00:00[UTC]", dates.next().unwrap().to_string());
+    /// assert!(dates.next().is_none());
+    /// ```
+    ///
+    /// If this event doesn't have `DTSTART`, this function will fail:
+    ///
+    /// ```rust
+    /// # use ical::*;
+    /// # use ical::utils::*;
+    /// #
+    /// let event = VEvent::new("0001", dt("20180101T120000"));
+    ///
+    /// assert!(event.occurrences().is_err());
+    /// ```
+    pub fn occurrences(&self) -> Result<RecurIterator, RecurIteratorError> {
+        let dtstart = self
+            .dtstart
+            .as_ref()
+            .ok_or(RecurIteratorError::MissingDtStart)?;
+
+        let rrule = match &self.rrule {
+            Some(rrule) => Cow::Borrowed(&rrule.value),
+
+            None => {
+                // If `RRULE` is missing, let's return an iterator that emits
+                // just the `DTSTART` - the easiest way is by pretending an
+                // implicit `COUNT=1` rule is actually present
+                Cow::Owned(Recur::new(Freq::Daily).with_count(1))
+            }
+        };
+
+        RecurIterator::new(&rrule, dtstart.value.clone())
+    }
+
     #[must_use]
     pub(crate) fn validate(
         &self,
