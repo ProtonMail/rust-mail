@@ -3,7 +3,7 @@
 $result = ical_parse(
     <<<ICAL
     BEGIN:VCALENDAR
-    PRODID:-//Proton AG//test 2.1.3.7//EN
+    PRODID:-//Proton AG//iCal//EN
     VERSION:2
     BEGIN:VEVENT
     UID:0000-0000-0000-0001

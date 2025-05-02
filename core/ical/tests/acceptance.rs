@@ -3,11 +3,11 @@ use pretty_assertions as pa;
 
 #[test]
 fn empty() {
-    let cal = VCalendar::new("-//Proton AG//test 2.1.3.7//EN");
+    let cal = VCalendar::new("-//Proton AG//iCal//EN");
 
     let str = ical! {"
         BEGIN:VCALENDAR
-        PRODID:-//Proton AG//test 2.1.3.7//EN
+        PRODID:-//Proton AG//iCal//EN
         VERSION:2.0
         CALSCALE:GREGORIAN
         END:VCALENDAR
@@ -18,7 +18,7 @@ fn empty() {
 
 #[test]
 fn with_event() {
-    let cal = VCalendar::new("-//Proton AG//test 2.1.3.7//EN").with_event(
+    let cal = VCalendar::new("-//Proton AG//iCal//EN").with_event(
         VEvent::new(
             "0000-0000-0000-0001",
             DateTime {
@@ -43,7 +43,7 @@ fn with_event() {
 
     let str = ical! {"
         BEGIN:VCALENDAR
-        PRODID:-//Proton AG//test 2.1.3.7//EN
+        PRODID:-//Proton AG//iCal//EN
         VERSION:2.0
         CALSCALE:GREGORIAN
         BEGIN:VEVENT
@@ -69,7 +69,7 @@ fn with_event() {
 fn with_broken_event() {
     let str = ical! {"
         BEGIN:VCALENDAR
-        PRODID:-//Proton AG//test 2.1.3.7//EN
+        PRODID:-//Proton AG//iCal//EN
         VERSION:2.0
         CALSCALE:GREGORIAN
         BEGIN:VEVENT
@@ -113,12 +113,12 @@ fn with_broken_event() {
 
 #[test]
 fn with_method() {
-    let cal = VCalendar::new("-//Proton AG//test 2.1.3.7//EN").with_method(Method::Publish);
+    let cal = VCalendar::new("-//Proton AG//iCal//EN").with_method(Method::Publish);
 
     let str = ical! {"
         BEGIN:VCALENDAR
         METHOD:PUBLISH
-        PRODID:-//Proton AG//test 2.1.3.7//EN
+        PRODID:-//Proton AG//iCal//EN
         VERSION:2.0
         CALSCALE:GREGORIAN
         END:VCALENDAR
@@ -131,7 +131,7 @@ fn with_method() {
 fn without_calscale() {
     let str = ical! {"
         BEGIN:VCALENDAR
-        PRODID:-//Proton AG//test 2.1.3.7//EN
+        PRODID:-//Proton AG//iCal//EN
         VERSION:2.0
         END:VCALENDAR
     "};

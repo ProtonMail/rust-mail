@@ -3,7 +3,7 @@
 $str = ical_sanitize(
     <<<ICAL
     BEGIN:VCALENDAR
-    PRODID:-//Proton AG//test 2.1.3.7//EN
+    PRODID:-//Proton AG//iCal//EN
     VERSION:2.0
     CALSCALE:GREGORIAN
     BEGIN:VEVENT
