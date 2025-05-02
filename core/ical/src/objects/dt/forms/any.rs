@@ -10,6 +10,17 @@ pub enum AnyForm {
     Tz(TzId),
 }
 
+impl AnyForm {
+    #[must_use]
+    pub(crate) fn ty(&self) -> &'static str {
+        match self {
+            AnyForm::Local => "local-form",
+            AnyForm::Utc => "utc-form",
+            AnyForm::Tz(_) => "tz-form",
+        }
+    }
+}
+
 impl DateTime<AnyForm> {
     #[must_use]
     pub(crate) fn validate(&self, cal: &VCalendar) -> Vec<DateTimeViolation> {
@@ -29,34 +40,43 @@ impl DateTime<AnyForm> {
     }
 }
 
-impl FromJiffZoned for DateTime<AnyForm> {
-    fn from_jiff(jiff: JiffZoned) -> Option<Self> {
-        let tz = jiff.time_zone();
+impl TryFrom<JiffZoned> for DateTime<AnyForm> {
+    type Error = DateTimeError;
+
+    fn try_from(value: JiffZoned) -> Result<Self, Self::Error> {
+        let tz = value.time_zone();
 
         let form = if *tz == JiffTimeZone::unknown() {
             AnyForm::Local
         } else if *tz == JiffTimeZone::UTC {
             AnyForm::Utc
         } else {
-            AnyForm::Tz(TzId::from(tz.iana_name()?.to_owned()))
+            let tz = tz
+                .iana_name()
+                .ok_or_else(|| DateTimeError::UnknownTimeZone(value.clone()))?
+                .to_owned();
+
+            AnyForm::Tz(TzId::from(tz))
         };
 
-        Some(Self {
-            date: jiff.date().into(),
-            time: jiff.time().into(),
+        Ok(Self {
+            date: value.date().into(),
+            time: value.time().into(),
             form,
         })
     }
 }
 
-impl AsJiffZoned for DateTime<AnyForm> {
-    fn as_jiff(&self) -> Result<JiffZoned, JiffError> {
-        let dt = JiffDateTime::from_parts(self.date.into(), self.time.into());
+impl TryFrom<DateTime<AnyForm>> for JiffZoned {
+    type Error = DateTimeError;
 
-        match &self.form {
-            AnyForm::Local => dt.to_zoned(JiffTimeZone::unknown()),
-            AnyForm::Utc => dt.to_zoned(JiffTimeZone::UTC),
-            AnyForm::Tz(tz) => dt.in_tz(tz.as_str()),
+    fn try_from(value: DateTime<AnyForm>) -> Result<Self, Self::Error> {
+        let dt = JiffDateTime::from_parts(value.date.into(), value.time.into());
+
+        match value.form {
+            AnyForm::Local => Ok(dt.to_zoned(JiffTimeZone::unknown())?),
+            AnyForm::Utc => Ok(dt.to_zoned(JiffTimeZone::UTC)?),
+            AnyForm::Tz(tz) => Ok(dt.in_tz(tz.as_str())?),
         }
     }
 }
@@ -104,5 +124,58 @@ impl Write<Property> for DateTime<AnyForm> {
         if let AnyForm::Utc = &self.form {
             w.raw("Z");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::utils::*;
+
+    #[test]
+    fn jiff() {
+        let jiff = jz("2018-01-02 12:34:56+00:00[Etc/Unknown]");
+
+        let us = DateTime {
+            date: Date::new_unchecked(2018, 1, 2),
+            time: Time::new_unchecked(12, 34, 56),
+            form: AnyForm::Local,
+        };
+
+        assert_eq!(us, DateTime::try_from(jiff.clone()).unwrap());
+        assert_eq!(jiff, JiffZoned::try_from(us).unwrap());
+
+        // ---
+
+        let jiff = jz("2018-01-02 12:34:56");
+
+        let us = DateTime {
+            date: Date::new_unchecked(2018, 1, 2),
+            time: Time::new_unchecked(12, 34, 56),
+            form: AnyForm::Utc,
+        };
+
+        assert_eq!(us, DateTime::try_from(jiff.clone()).unwrap());
+        assert_eq!(jiff, JiffZoned::try_from(us).unwrap());
+
+        // ---
+
+        let jiff = jz("2018-01-02 12:34:56+01:00[Europe/Stockholm]");
+
+        let us = DateTime {
+            date: Date::new_unchecked(2018, 1, 2),
+            time: Time::new_unchecked(12, 34, 56),
+            form: AnyForm::Tz("Europe/Stockholm".into()),
+        };
+
+        assert_eq!(us, DateTime::try_from(jiff.clone()).unwrap());
+        assert_eq!(jiff, JiffZoned::try_from(us).unwrap());
+    }
+
+    #[test]
+    fn smoke() {
+        assert_trip!(":20180101T123456", DateTime as Property);
+        assert_trip!(":20180101T123456Z", DateTime as Property);
+        assert_trip!(";TZID=Europe/Warsaw:20180101T123456", DateTime as Property);
     }
 }

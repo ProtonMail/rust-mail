@@ -58,10 +58,6 @@ impl Date {
     pub fn day(&self) -> Day {
         self.day
     }
-
-    pub(crate) fn as_jiff(self) -> Result<JiffZoned, JiffError> {
-        JiffDate::from(self).at(0, 0, 0, 0).in_tz("UTC")
-    }
 }
 
 impl From<JiffDate> for Date {
@@ -79,6 +75,14 @@ impl From<Date> for JiffDate {
             value.month.as_num() as i8,
             value.day.as_num() as i8,
         )
+    }
+}
+
+impl TryFrom<Date> for JiffZoned {
+    type Error = DateTimeError;
+
+    fn try_from(value: Date) -> Result<Self, Self::Error> {
+        Ok(JiffDate::from(value).at(0, 0, 0, 0).in_tz("UTC")?)
     }
 }
 

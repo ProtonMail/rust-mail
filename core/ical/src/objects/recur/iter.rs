@@ -234,10 +234,8 @@ impl RecurIterator {
             return Err(RecurIteratorError::ZeroInterval);
         }
 
-        let start = start
-            .into()
-            .as_jiff()
-            .map_err(RecurIteratorError::InvalidDtStart)?;
+        let start =
+            JiffZoned::try_from(start.into()).map_err(RecurIteratorError::InvalidDtStart)?;
 
         let freq = recur.freq;
         let interval = i64::from(recur.interval.unwrap_or(1));
@@ -275,13 +273,14 @@ impl RecurIterator {
             // we must count 2018-01-01 as the first sub-occurrence so that we
             // emit 2018-01-08, not 2018-01-15.
             freq.first_of(&start)
+                .map_err(DateTimeError::Jiff)
                 .map_err(RecurIteratorError::InvalidDtStart)?
         };
 
         #[allow(clippy::redundant_closure_for_method_calls)]
         let until = recur
             .until
-            .map(|until| until.as_jiff())
+            .map(JiffZoned::try_from)
             .transpose()
             .map_err(RecurIteratorError::InvalidUntil)?
             .map(Box::new);
@@ -480,7 +479,7 @@ impl Iterator for RecurIterator {
     }
 }
 
-#[derive(Clone, Debug, Error)]
+#[derive(Debug, Error)]
 pub enum RecurIteratorError {
     #[error("invalid rrule.interval: can't be zero")]
     ZeroInterval,
@@ -489,10 +488,10 @@ pub enum RecurIteratorError {
     MissingDtStart,
 
     #[error("invalid dtstart: {0}")]
-    InvalidDtStart(JiffError),
+    InvalidDtStart(DateTimeError),
 
     #[error("invalid rrule.until: {0}")]
-    InvalidUntil(JiffError),
+    InvalidUntil(DateTimeError),
 
     #[error("invalid rrule: {0}")]
     InvalidRecur(JiffError),

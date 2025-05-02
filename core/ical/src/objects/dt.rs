@@ -13,18 +13,6 @@ pub use self::time::*;
 pub use self::units::*;
 use super::*;
 
-#[allow(unused)]
-pub(crate) trait FromJiffZoned
-where
-    Self: Sized,
-{
-    fn from_jiff(jiff: JiffZoned) -> Option<Self>;
-}
-
-pub(crate) trait AsJiffZoned {
-    fn as_jiff(&self) -> Result<JiffZoned, JiffError>;
-}
-
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum DateTimeViolation {
     #[error("time zone `{0}` is not known")]
@@ -32,4 +20,16 @@ pub enum DateTimeViolation {
 
     #[error("day {year:04}-{month:02}-{day:02} (yyyy-mm-dd) does not exist")]
     UnknownDay { year: u32, month: u32, day: u32 },
+}
+
+#[derive(Debug, Error)]
+pub enum DateTimeError {
+    #[error("can't convert {0} into {1}")]
+    InvalidConversion(&'static str, &'static str),
+
+    #[error("can't infer time zone from `{0}`")]
+    UnknownTimeZone(JiffZoned),
+
+    #[error("{0}")]
+    Jiff(#[from] JiffError),
 }

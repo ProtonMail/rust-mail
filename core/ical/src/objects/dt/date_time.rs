@@ -45,7 +45,16 @@ impl Write<Value> for DtValueType {
 #[cfg(feature = "php")]
 mod php {
     use super::*;
-    use ext_php_rs::{types::ZendObject, zend::ClassEntry};
+    use ext_php_rs::{boxed::ZBox, types::ZendObject, zend::ClassEntry};
+
+    fn create_date_time() -> PhpResult<ZBox<ZendObject>> {
+        // Unwrap-safety: `DateTimeImmutable` is part of the stdlib
+        let dt = ZendObject::new(ClassEntry::try_find("DateTimeImmutable").unwrap());
+
+        dt.try_call_method("__construct", Vec::new())?;
+
+        Ok(dt)
+    }
 
     fn create_time_zone(tz: &JiffTimeZone, persistent: bool) -> PhpResult<PhpZval> {
         let name = {
@@ -70,9 +79,16 @@ mod php {
         Ok(zval)
     }
 
+    fn create_timestamp(jiff: &JiffZoned) -> PhpZval {
+        let mut arg = PhpZval::new();
+
+        arg.set_long(jiff.timestamp().as_second());
+        arg
+    }
+
     impl<'a, F> FromPhpZval<'a> for DateTime<F>
     where
-        DateTime<F>: FromJiffZoned,
+        DateTime<F>: TryFrom<JiffZoned, Error = DateTimeError>,
     {
         const TYPE: PhpDataType = PhpDataType::Object(Some("DateTimeImmutable"));
 
@@ -93,36 +109,23 @@ mod php {
                 .in_tz(tz.str()?)
                 .ok()?;
 
-            Self::from_jiff(dt)
+            dt.try_into().ok()
         }
     }
 
     impl<F> IntoPhpZval for DateTime<F>
     where
-        DateTime<F>: AsJiffZoned,
+        DateTime<F>: TryInto<JiffZoned, Error = DateTimeError>,
     {
         const TYPE: PhpDataType = PhpDataType::Object(Some("DateTimeImmutable"));
 
         fn set_zval(self, zval: &mut PhpZval, persistent: bool) -> PhpResult<()> {
             // TODO avoid unwrapping
-            let jiff = self.as_jiff().unwrap();
+            let jiff: JiffZoned = self.try_into().unwrap();
 
-            let dt = {
-                // Unwrap-safety: `DateTimeImmutable` is part of the stdlib
-                let dt = ZendObject::new(ClassEntry::try_find("DateTimeImmutable").unwrap());
-
-                dt.try_call_method("__construct", Vec::new())?;
-                dt
-            };
-
+            let dt = create_date_time()?;
             let tz = create_time_zone(jiff.time_zone(), persistent)?;
-
-            let ts = {
-                let mut arg = PhpZval::new();
-
-                arg.set_long(jiff.timestamp().as_second());
-                arg
-            };
+            let ts = create_timestamp(&jiff);
 
             let dt = dt.try_call_method("setTimezone", vec![&tz])?;
             let dt = dt.try_call_method("setTimestamp", vec![&ts])?;
@@ -131,38 +134,5 @@ mod php {
 
             Ok(())
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn smoke() {
-        assert_trip!(":20180101T123456", DateTime as Property);
-        assert_trip!(":20180101T123456Z", DateTime as Property);
-        assert_trip!(";TZID=Europe/Warsaw:20180101T123456", DateTime as Property);
-
-        // ---
-
-        assert_trip!("20180101T123456", DateTime<UtcOrLocalForm> as Value);
-        assert_trip!("20180101T123456Z", DateTime<UtcOrLocalForm> as Value);
-
-        // ---
-
-        assert_trip!("20180101T123456Z", DateTime<UtcForm> as Value);
-
-        assert_trip!(
-            "20180101T123456" => "20180101T123456Z", yielding [
-                ReadMsg {
-                    at: Some(Span::new(15, 16)),
-                    msg: "expected utc-date-time (missing `Z` here)".into(),
-                    kind: ReadMsgKind::Warning,
-                    context: Vec::new(),
-                },
-            ],
-            DateTime<UtcForm> as Value
-        );
     }
 }

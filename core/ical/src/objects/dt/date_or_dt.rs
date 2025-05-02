@@ -38,6 +38,20 @@ impl<F> From<DateTime<F>> for DateOrDt<F> {
     }
 }
 
+impl<F> TryFrom<DateOrDt<F>> for JiffZoned
+where
+    DateTime<F>: TryInto<JiffZoned, Error = DateTimeError>,
+{
+    type Error = DateTimeError;
+
+    fn try_from(value: DateOrDt<F>) -> Result<Self, Self::Error> {
+        match value {
+            DateOrDt::Date(value) => value.try_into(),
+            DateOrDt::DateTime(value) => value.try_into(),
+        }
+    }
+}
+
 impl Read<Property> for DateOrDt {
     fn read(r: &mut Reader) -> Option<Self> {
         let mut tzid = None;
@@ -140,18 +154,6 @@ where
             DateOrDt::DateTime(this) => {
                 this.write(w);
             }
-        }
-    }
-}
-
-impl<F> AsJiffZoned for DateOrDt<F>
-where
-    DateTime<F>: AsJiffZoned,
-{
-    fn as_jiff(&self) -> Result<JiffZoned, JiffError> {
-        match self {
-            DateOrDt::Date(this) => this.as_jiff(),
-            DateOrDt::DateTime(this) => this.as_jiff(),
         }
     }
 }

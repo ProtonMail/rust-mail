@@ -1,6 +1,6 @@
 use super::*;
 
-/// Interpretation of [`DateTime`]'s time component; subset of [`AnyForm`].
+/// Marks a UTC-only [`DateTime`]; subset of [`AnyForm`].
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545.html#section-3.3.5>
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -9,6 +9,18 @@ pub struct UtcForm;
 impl From<UtcForm> for AnyForm {
     fn from(_: UtcForm) -> Self {
         AnyForm::Utc
+    }
+}
+
+impl TryFrom<AnyForm> for UtcForm {
+    type Error = DateTimeError;
+
+    fn try_from(value: AnyForm) -> Result<Self, Self::Error> {
+        if value == AnyForm::Utc {
+            Ok(Self)
+        } else {
+            Err(DateTimeError::InvalidConversion(value.ty(), "utc-form"))
+        }
     }
 }
 
@@ -22,25 +34,31 @@ impl From<DateTime<UtcForm>> for DateTime<AnyForm> {
     }
 }
 
-impl FromJiffZoned for DateTime<UtcForm> {
-    fn from_jiff(jiff: JiffZoned) -> Option<Self> {
-        let dt = DateTime::<AnyForm>::from_jiff(jiff)?;
+impl TryFrom<DateTime<AnyForm>> for DateTime<UtcForm> {
+    type Error = DateTimeError;
 
-        if dt.form == AnyForm::Utc {
-            Some(Self {
-                date: dt.date,
-                time: dt.time,
-                form: UtcForm,
-            })
-        } else {
-            None
-        }
+    fn try_from(value: DateTime<AnyForm>) -> Result<Self, Self::Error> {
+        Ok(Self {
+            date: value.date,
+            time: value.time,
+            form: value.form.try_into()?,
+        })
     }
 }
 
-impl AsJiffZoned for DateTime<UtcForm> {
-    fn as_jiff(&self) -> Result<JiffZoned, JiffError> {
-        DateTime::<AnyForm>::from(*self).as_jiff()
+impl TryFrom<JiffZoned> for DateTime<UtcForm> {
+    type Error = DateTimeError;
+
+    fn try_from(value: JiffZoned) -> Result<Self, Self::Error> {
+        DateTime::<AnyForm>::try_from(value)?.try_into()
+    }
+}
+
+impl TryFrom<DateTime<UtcForm>> for JiffZoned {
+    type Error = DateTimeError;
+
+    fn try_from(value: DateTime<UtcForm>) -> Result<Self, Self::Error> {
+        DateTime::<AnyForm>::from(value).try_into()
     }
 }
 
@@ -72,5 +90,27 @@ impl Write<Value> for DateTime<UtcForm> {
             time: self.time,
             form: UtcOrLocalForm::Utc,
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn smoke() {
+        assert_trip!("20180101T123456Z", DateTime<UtcForm> as Value);
+
+        assert_trip!(
+            "20180101T123456" => "20180101T123456Z", yielding [
+                ReadMsg {
+                    at: Some(Span::new(15, 16)),
+                    msg: "expected utc-date-time (missing `Z` here)".into(),
+                    kind: ReadMsgKind::Warning,
+                    context: Vec::new(),
+                },
+            ],
+            DateTime<UtcForm> as Value
+        );
     }
 }
