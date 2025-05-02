@@ -30,7 +30,10 @@ impl Read<Value> for CuType {
             Some(CuType::Unknown)
         } else {
             r.error(span, format!("unknown cutype `{value}`"));
-            None
+
+            // > Applications MUST treat x-name and iana-token values they don't
+            // > recognize the same way as they would the UNKNOWN value.
+            Some(CuType::Unknown)
         }
     }
 }
@@ -87,15 +90,18 @@ mod tests {
 
     #[test]
     fn unknown() {
-        let expected = vec![ReadMsg {
-            at: Some(Span::new(0, 6)),
-            msg: "unknown cutype `foobar`".into(),
-            kind: ReadMsgKind::Error,
-            context: Vec::new(),
-        }];
+        let (obj, errs) = CuType::from_str_ex("foobar", Value);
 
-        let actual = CuType::from_str("foobar", Value).unwrap_err();
+        assert_eq!(Some(CuType::Unknown), obj);
 
-        assert_eq!(expected, actual);
+        assert_eq!(
+            vec![ReadMsg {
+                at: Some(Span::new(0, 6)),
+                msg: "unknown cutype `foobar`".into(),
+                kind: ReadMsgKind::Error,
+                context: Vec::new(),
+            }],
+            errs,
+        );
     }
 }

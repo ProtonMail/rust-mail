@@ -26,7 +26,10 @@ impl Read<Value> for Role {
             Some(Role::NonParticipant)
         } else {
             r.error(span, format!("unknown role `{value}`"));
-            None
+
+            // > Applications MUST treat x-name and iana-token values they don't
+            // > recognize the same way as they would the REQ-PARTICIPANT value.
+            Some(Role::ReqParticipant)
         }
     }
 }
@@ -80,15 +83,18 @@ mod tests {
 
     #[test]
     fn unknown() {
-        let expected = vec![ReadMsg {
-            at: Some(Span::new(0, 6)),
-            msg: "unknown role `foobar`".into(),
-            kind: ReadMsgKind::Error,
-            context: Vec::new(),
-        }];
+        let (obj, errs) = Role::from_str_ex("foobar", Value);
 
-        let actual = Role::from_str("foobar", Value).unwrap_err();
+        assert_eq!(Some(Role::ReqParticipant), obj);
 
-        assert_eq!(expected, actual);
+        assert_eq!(
+            vec![ReadMsg {
+                at: Some(Span::new(0, 6)),
+                msg: "unknown role `foobar`".into(),
+                kind: ReadMsgKind::Error,
+                context: Vec::new(),
+            }],
+            errs,
+        );
     }
 }

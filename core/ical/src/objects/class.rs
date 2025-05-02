@@ -26,7 +26,10 @@ impl Read<Property> for Class {
             Some(Class::Confidential)
         } else {
             r.error(span, format!("unknown classification `{value}`"));
-            None
+
+            // > Applications MUST treat x-name and iana-token values they
+            // > don't recognize the same way as they would the PRIVATE value.
+            Some(Class::Private)
         }
     }
 }
@@ -78,15 +81,18 @@ mod tests {
 
     #[test]
     fn unknown() {
-        let expected = vec![ReadMsg {
-            at: Some(Span::new(1, 7)),
-            msg: "unknown classification `foobar`".into(),
-            kind: ReadMsgKind::Error,
-            context: Vec::new(),
-        }];
+        let (obj, errs) = Class::from_str_ex(":foobar", Property);
 
-        let actual = Class::from_str(":foobar", Property).unwrap_err();
+        assert_eq!(Some(Class::Private), obj);
 
-        assert_eq!(expected, actual);
+        assert_eq!(
+            vec![ReadMsg {
+                at: Some(Span::new(1, 7)),
+                msg: "unknown classification `foobar`".into(),
+                kind: ReadMsgKind::Error,
+                context: Vec::new(),
+            }],
+            errs,
+        );
     }
 }
