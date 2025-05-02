@@ -133,3 +133,36 @@ mod php {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn smoke() {
+        assert_trip!(":20180101T123456", DateTime as Property);
+        assert_trip!(":20180101T123456Z", DateTime as Property);
+        assert_trip!(";TZID=Europe/Warsaw:20180101T123456", DateTime as Property);
+
+        // ---
+
+        assert_trip!("20180101T123456", DateTime<UtcOrLocalForm> as Value);
+        assert_trip!("20180101T123456Z", DateTime<UtcOrLocalForm> as Value);
+
+        // ---
+
+        assert_trip!("20180101T123456Z", DateTime<UtcForm> as Value);
+
+        assert_trip!(
+            "20180101T123456" => "20180101T123456Z", yielding [
+                ReadMsg {
+                    at: Some(Span::new(15, 16)),
+                    msg: "expected utc-date-time (missing `Z` here)".into(),
+                    kind: ReadMsgKind::Warning,
+                    context: Vec::new(),
+                },
+            ],
+            DateTime<UtcForm> as Value
+        );
+    }
+}

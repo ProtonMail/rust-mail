@@ -72,3 +72,19 @@ impl Write<Value> for Time {
         ));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn smoke() {
+        assert_trip!("000000", Time as Value);
+        assert_trip!("000030", Time as Value);
+        assert_trip!("000059", Time as Value);
+        assert_trip!("000060", Time as Value);
+        assert_trip!("010203", Time as Value);
+        assert_trip!("120000", Time as Value);
+        assert_trip!("235959", Time as Value);
+    }
+}

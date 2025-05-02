@@ -135,3 +135,32 @@ mod php {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn smoke() {
+        assert_trip!("20180101", Date as Value);
+        assert_trip!("19980101", Date as Value);
+        assert_trip!("12341210", Date as Value);
+    }
+
+    #[test]
+    fn viol_unknown_day() {
+        let actual = Date::new(
+            Year::new(2018).unwrap(),
+            Month::new(2).unwrap(),
+            Day::new(30).unwrap(),
+        );
+
+        let expected = Err(DateTimeViolation::UnknownDay {
+            year: 2018,
+            month: 2,
+            day: 30,
+        });
+
+        assert_eq!(expected, actual);
+    }
+}

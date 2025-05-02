@@ -203,3 +203,27 @@ mod php {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn smoke() {
+        assert_trip!(";VALUE=DATE:20180101", DateOrDt as Property);
+        assert_trip!(":20180101T120000Z", DateOrDt as Property);
+        assert_trip!(";TZID=Europe/Warsaw:20180101T120000", DateOrDt as Property);
+
+        assert_trip!(
+            ";VALUE=DATE:20180101T000000" => ";VALUE=DATE:20180101", yielding [
+                ReadMsg {
+                    at: Some(Span::new(21, 27)),
+                    msg: "non-conformant: skipping T000000 to coerce this date-time into date".into(),
+                    kind: ReadMsgKind::Warning,
+                    context: Vec::new(),
+                },
+            ],
+            DateOrDt as Property
+        );
+    }
+}
