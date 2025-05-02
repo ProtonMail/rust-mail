@@ -380,7 +380,7 @@ mod php {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ical;
+    use crate::ics;
     use crate::utils::*;
     use pretty_assertions as pa;
 
@@ -411,7 +411,7 @@ mod tests {
     fn display_alarm() {
         let obj = VAlarm::Display(display_target());
 
-        let str = ical! {"
+        let str = ics! {"
             ACTION:DISPLAY
             TRIGGER:-PT1H
             DESCRIPTION:some description
@@ -424,7 +424,7 @@ mod tests {
     fn repeating_display_alarm() {
         let obj = VAlarm::Display(display_target().with_duration_and_repeat(dur("PT15M"), 10));
 
-        let str = ical! {"
+        let str = ics! {"
             ACTION:DISPLAY
             TRIGGER:-PT1H
             DESCRIPTION:some description
@@ -439,7 +439,7 @@ mod tests {
     fn email_alarm() {
         let obj = VAlarm::Email(email_target());
 
-        let str = ical! {"
+        let str = ics! {"
             ACTION:EMAIL
             TRIGGER:-PT1H
             DESCRIPTION:some description
@@ -454,7 +454,7 @@ mod tests {
     fn repeating_email_alarm() {
         let obj = VAlarm::Email(email_target().with_duration_and_repeat(dur("PT15M"), 10));
 
-        let str = ical! {"
+        let str = ics! {"
             ACTION:EMAIL
             TRIGGER:-PT1H
             DESCRIPTION:some description

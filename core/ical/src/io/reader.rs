@@ -197,7 +197,7 @@ impl<'a> IcsReader<'a> {
 
     /// Returns the next character without consuming it.
     ///
-    /// See: [`Self::next()`], [`Self::char()`].
+    /// See: [`Self::char()`].
     #[must_use]
     pub fn peek(&mut self) -> Option<char> {
         let mut ch = None;
@@ -228,7 +228,7 @@ impl<'a> IcsReader<'a> {
 
     /// Eats the next character if it matches `ch`, throws an error otherwise.
     ///
-    /// See: [`Self::try_char()`].
+    /// See: [`Self::peek()`].
     #[must_use]
     pub fn eat(&mut self, ch: char) -> Option<()> {
         if self.try_eat(ch).is_some() {
@@ -773,7 +773,7 @@ impl ReadEntry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ical;
+    use crate::ics;
     use pretty_assertions as pa;
     use test_case::test_case;
 
@@ -792,7 +792,7 @@ mod tests {
 
     #[test]
     fn err_unknown_component() {
-        let mut r = target(ical! {"
+        let mut r = target(ics! {"
             BEGIN:VEVENT
             BEGIN:VALARM
             END:VALARM
@@ -825,7 +825,7 @@ mod tests {
 
     #[test]
     fn err_unknown_property() {
-        let mut r = target(ical! {"
+        let mut r = target(ics! {"
             FOO:one
             BAR:two-three/four
             ZAR:five
@@ -879,7 +879,7 @@ mod tests {
 
     #[test]
     fn err_unknown_parameter() {
-        let mut r = target(ical! {"
+        let mut r = target(ics! {"
             ;FOO=one;BAR=two-tree/four;ZAR=five
         "});
 

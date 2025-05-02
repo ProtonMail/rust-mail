@@ -2,21 +2,24 @@
 
 use super::*;
 
-/// Creates an iCal-compatible string (with correct newlines).
+/// Creates an *.ics-compatible string.
+///
+/// This macro just replaces newlines (`\n`) with the expected ones (`\r\n`), it
+/// doesn't validate given string.
 ///
 /// # Example
 ///
 /// ```
-/// # use proton_ical::ical;
+/// # use proton_ical::ics;
 /// #
-/// ical! {"
+/// ics! {"
 ///     BEGIN:VEVENT
 ///     something something
 ///     END:VEVENT
 /// "};
 /// ```
 #[macro_export]
-macro_rules! ical {
+macro_rules! ics {
     ($str:literal) => {
         indoc::indoc!($str).lines().collect::<Vec<_>>().join("\r\n")
     };

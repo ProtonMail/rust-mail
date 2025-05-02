@@ -527,7 +527,7 @@ pub enum VEventViolation {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{CuType, DateTimeViolation, DisplayAlarm, EmailAlarm, Trigger, ical, utils::*};
+    use crate::{CuType, DateTimeViolation, DisplayAlarm, EmailAlarm, Trigger, ics, utils::*};
     use pretty_assertions as pa;
 
     fn event() -> VEvent {
@@ -544,7 +544,7 @@ mod tests {
     fn smoke() {
         let obj = event();
 
-        let str = ical! {"
+        let str = ics! {"
             UID:1234
             DTSTAMP:20180101T120000Z
         "};
@@ -556,7 +556,7 @@ mod tests {
     fn with_dtstart_as_date() {
         let obj = event().with_dtstart(d("20180101"));
 
-        let str = ical! {"
+        let str = ics! {"
             UID:1234
             DTSTAMP:20180101T120000Z
             DTSTART;VALUE=DATE:20180101
@@ -569,7 +569,7 @@ mod tests {
     fn with_dtstart_as_datetime() {
         let obj = event().with_dtstart(dt("20180101T120000"));
 
-        let str = ical! {"
+        let str = ics! {"
             UID:1234
             DTSTAMP:20180101T120000Z
             DTSTART:20180101T120000
@@ -582,7 +582,7 @@ mod tests {
     fn with_dtend() {
         let obj = event().with_dtend(d("20180101"));
 
-        let str = ical! {"
+        let str = ics! {"
             UID:1234
             DTSTAMP:20180101T120000Z
             DTEND;VALUE=DATE:20180101
@@ -595,7 +595,7 @@ mod tests {
     fn with_created() {
         let obj = event().with_created(dt("20180101T120000"));
 
-        let str = ical! {"
+        let str = ics! {"
             UID:1234
             DTSTAMP:20180101T120000Z
             CREATED:20180101T120000
@@ -608,7 +608,7 @@ mod tests {
     fn with_class() {
         let obj = event().with_class(Class::Private);
 
-        let str = ical! {"
+        let str = ics! {"
             UID:1234
             DTSTAMP:20180101T120000Z
             CLASS:PRIVATE
@@ -621,7 +621,7 @@ mod tests {
     fn with_transp() {
         let obj = event().with_transp(Transp::Transparent);
 
-        let str = ical! {"
+        let str = ics! {"
             UID:1234
             DTSTAMP:20180101T120000Z
             TRANSP:TRANSPARENT
@@ -634,7 +634,7 @@ mod tests {
     fn with_status() {
         let obj = event().with_status(Status::Confirmed);
 
-        let str = ical! {"
+        let str = ics! {"
             UID:1234
             DTSTAMP:20180101T120000Z
             STATUS:CONFIRMED
@@ -647,7 +647,7 @@ mod tests {
     fn with_priority() {
         let obj = event().with_priority(7);
 
-        let str = ical! {"
+        let str = ics! {"
             UID:1234
             DTSTAMP:20180101T120000Z
             PRIORITY:7
@@ -660,7 +660,7 @@ mod tests {
     fn with_summary() {
         let obj = event().with_summary("couldn't this have been an email?!");
 
-        let str = ical! {"
+        let str = ics! {"
             UID:1234
             DTSTAMP:20180101T120000Z
             SUMMARY:couldn't this have been an email?!
@@ -673,7 +673,7 @@ mod tests {
     fn with_location() {
         let obj = event().with_location("Online");
 
-        let str = ical! {"
+        let str = ics! {"
             UID:1234
             DTSTAMP:20180101T120000Z
             LOCATION:Online
@@ -686,7 +686,7 @@ mod tests {
     fn with_description() {
         let obj = event().with_description("Very Important Meeting");
 
-        let str = ical! {"
+        let str = ics! {"
             UID:1234
             DTSTAMP:20180101T120000Z
             DESCRIPTION:Very Important Meeting
@@ -699,7 +699,7 @@ mod tests {
     fn with_organizer() {
         let obj = event().with_organizer(email("saul@goodman"));
 
-        let str = ical! {"
+        let str = ics! {"
             UID:1234
             DTSTAMP:20180101T120000Z
             ORGANIZER:mailto:saul@goodman
@@ -714,7 +714,7 @@ mod tests {
             Attendee::from(email("someone@localhost")).with_cutype(CuType::Individual),
         );
 
-        let str = ical! {"
+        let str = ics! {"
             UID:1234
             DTSTAMP:20180101T120000Z
             ATTENDEE;CUTYPE=INDIVIDUAL:mailto:someone@localhost
@@ -727,7 +727,7 @@ mod tests {
     fn with_rrule() {
         let obj = event().with_rrule(Recur::new(Freq::Daily).with_count(5));
 
-        let str = ical! {"
+        let str = ics! {"
             UID:1234
             DTSTAMP:20180101T120000Z
             RRULE:FREQ=DAILY;COUNT=5
@@ -744,7 +744,7 @@ mod tests {
             d("20180103"),
         ]));
 
-        let str = ical! {"
+        let str = ics! {"
             UID:1234
             DTSTAMP:20180101T120000Z
             EXDATE;VALUE=DATE:20180101,20180102,20180103
@@ -757,7 +757,7 @@ mod tests {
     fn with_duration() {
         let obj = event().with_duration(dur("P2D"));
 
-        let str = ical! {"
+        let str = ics! {"
             UID:1234
             DTSTAMP:20180101T120000Z
             DURATION:P2D
@@ -770,7 +770,7 @@ mod tests {
     fn with_sequence() {
         let obj = event().with_sequence(123);
 
-        let str = ical! {"
+        let str = ics! {"
             UID:1234
             DTSTAMP:20180101T120000Z
             SEQUENCE:123
@@ -785,7 +785,7 @@ mod tests {
             .with_dtstart(d("20180101"))
             .with_recurrence_id(d("20180102"));
 
-        let str = ical! {"
+        let str = ics! {"
             UID:1234
             DTSTAMP:20180101T120000Z
             DTSTART;VALUE=DATE:20180101
@@ -804,7 +804,7 @@ mod tests {
             email("someone@localhost"),
         ));
 
-        let str = ical! {"
+        let str = ics! {"
             UID:1234
             DTSTAMP:20180101T120000Z
             BEGIN:VALARM

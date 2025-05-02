@@ -179,7 +179,7 @@ use self::fact::*;
 use self::picker::*;
 use super::*;
 
-/// Iterator over occurrences of an event, see [`VEvent::ocurrences()`].
+/// Iterator over occurrences of an event, see [`VEvent::occurrences()`].
 #[derive(Clone)]
 pub struct RecurIterator {
     /// Repetition's beginning, aka `DTSTART`.

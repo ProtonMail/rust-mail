@@ -193,7 +193,7 @@ mod php {
 mod tests {
     use super::*;
     use crate::TzId;
-    use crate::ical;
+    use crate::ics;
     use crate::utils::*;
 
     #[test]
@@ -206,7 +206,7 @@ mod tests {
             d("20180110"),
         ]);
 
-        let expected = ical! {"
+        let expected = ics! {"
             ;VALUE=DATE:20180101,20180102,20180103,20180105,20180110
         "};
 
@@ -227,7 +227,7 @@ mod tests {
             ],
         );
 
-        let expected = ical! {"
+        let expected = ics! {"
             :20180101T120000,20180102T110000,20180103T100000,20180105T090000,20180110T0
              80000
         "};
@@ -249,7 +249,7 @@ mod tests {
             ],
         );
 
-        let expected = ical! {"
+        let expected = ics! {"
             :20180101T120000Z,20180102T110000Z,20180103T100000Z,20180105T090000Z,201801
              10T080000Z
         "};
@@ -271,7 +271,7 @@ mod tests {
             ],
         );
 
-        let expected = ical! {"
+        let expected = ics! {"
             ;TZID=Europe/Vatican:20180101T120000,20180102T110000,20180103T100000,201801
              05T090000,20180110T080000
         "};

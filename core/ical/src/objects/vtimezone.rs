@@ -221,7 +221,7 @@ impl IcsWrite<Component> for TzProps {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Sign, UtcOffset, ical, utils::*};
+    use crate::{Sign, UtcOffset, ics, utils::*};
     use pretty_assertions as pa;
 
     fn tz() -> VTimeZone {
@@ -244,7 +244,7 @@ mod tests {
     fn smoke() {
         let obj = tz();
 
-        let str = ical! {"
+        let str = ics! {"
             TZID:Alice/Wonderland
             BEGIN:DAYLIGHT
             DTSTART:20180101T120000

@@ -501,14 +501,14 @@ mod php {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ical, utils::*};
+    use crate::{ics, utils::*};
     use test_case::test_case;
 
     #[test]
     fn smoke() {
         let target = Recur::new(Freq::Minutely);
 
-        let expected = ical! {"
+        let expected = ics! {"
             FREQ=MINUTELY
         "};
 
@@ -520,7 +520,7 @@ mod tests {
     fn with_until() {
         let target = Recur::new(Freq::Minutely).with_until(dte("20180101T120000Z"));
 
-        let expected = ical! {"
+        let expected = ics! {"
             FREQ=MINUTELY;UNTIL=20180101T120000Z
         "};
 
@@ -532,7 +532,7 @@ mod tests {
     fn with_count() {
         let target = Recur::new(Freq::Minutely).with_count(123);
 
-        let expected = ical! {"
+        let expected = ics! {"
             FREQ=MINUTELY;COUNT=123
         "};
 
@@ -544,7 +544,7 @@ mod tests {
     fn with_interval() {
         let target = Recur::new(Freq::Minutely).with_interval(123);
 
-        let expected = ical! {"
+        let expected = ics! {"
             FREQ=MINUTELY;INTERVAL=123
         "};
 
@@ -560,7 +560,7 @@ mod tests {
             Second::new(30).unwrap(),
         ]);
 
-        let expected = ical! {"
+        let expected = ics! {"
             FREQ=MINUTELY;BYSECOND=10,20,30
         "};
 
@@ -576,7 +576,7 @@ mod tests {
             Minute::new(30).unwrap(),
         ]);
 
-        let expected = ical! {"
+        let expected = ics! {"
             FREQ=MINUTELY;BYMINUTE=10,20,30
         "};
 
@@ -592,7 +592,7 @@ mod tests {
             Hour::new(12).unwrap(),
         ]);
 
-        let expected = ical! {"
+        let expected = ics! {"
             FREQ=MINUTELY;BYHOUR=4,8,12
         "};
 
@@ -608,7 +608,7 @@ mod tests {
             ByDay::Specific(NonZeroI8::new(-2).unwrap(), Weekday::Wednesday),
         ]);
 
-        let expected = ical! {"
+        let expected = ics! {"
             FREQ=MINUTELY;BYDAY=MO,1TU,-2WE
         "};
 
@@ -624,7 +624,7 @@ mod tests {
             Signed::pos(Day::new(15).unwrap()),
         ]);
 
-        let expected = ical! {"
+        let expected = ics! {"
             FREQ=MINUTELY;BYMONTHDAY=-10,1,15
         "};
 
@@ -640,7 +640,7 @@ mod tests {
             Signed::pos(DayOrdinal::new(120).unwrap()),
         ]);
 
-        let expected = ical! {"
+        let expected = ics! {"
             FREQ=MINUTELY;BYYEARDAY=-69,1,120
         "};
 
@@ -656,7 +656,7 @@ mod tests {
             Signed::pos(WeekOrdinal::new(32).unwrap()),
         ]);
 
-        let expected = ical! {"
+        let expected = ics! {"
             FREQ=MINUTELY;BYWEEKNO=-16,1,32
         "};
 
@@ -672,7 +672,7 @@ mod tests {
             Month::new(12).unwrap(),
         ]);
 
-        let expected = ical! {"
+        let expected = ics! {"
             FREQ=MINUTELY;BYMONTH=1,6,12
         "};
 
@@ -688,7 +688,7 @@ mod tests {
             Signed::pos(DayOrdinal::new(366).unwrap()),
         ]);
 
-        let expected = ical! {"
+        let expected = ics! {"
             FREQ=MINUTELY;BYSETPOS=1,128,366
         "};
 
@@ -699,7 +699,7 @@ mod tests {
     fn with_wkst() {
         let target = Recur::new(Freq::Minutely).with_wkst(Weekday::Monday);
 
-        let expected = ical! {"
+        let expected = ics! {"
             FREQ=MINUTELY;WKST=MO
         "};
 

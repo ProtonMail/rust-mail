@@ -420,7 +420,7 @@ mod php {
         src.to_string()
     }
 
-    /// Creates an iCal-compatible string (with correct newlines).
+    /// Creates an *.ics string.
     ///
     /// Sanitizing input is not necessary before calling [`ical_parse()`], since
     /// the parser will handle bare `\n` newlines just fine.

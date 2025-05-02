@@ -1,7 +1,7 @@
 use super::*;
 use std::str::FromStr;
 
-/// Object that can be deserialized from an *.ics string; see [`Reader`].
+/// Object that can be deserialized from an *.ics string; see [`IcsReader`].
 pub trait IcsRead<M>
 where
     Self: Sized,
@@ -9,7 +9,7 @@ where
     /// Reads this object from stream, returning `None` if the parsing failed.
     ///
     /// If this method returns `None`, it's expected that it reports some errors
-    /// through [`Reader::error()`] so that user knows what has failed.
+    /// through [`IcsReader::error()`] so that user knows what has failed.
     #[must_use]
     fn read(r: &mut IcsReader) -> Option<Self>;
 

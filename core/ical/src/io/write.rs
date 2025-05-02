@@ -1,7 +1,7 @@
 use super::*;
 use std::fmt::{self, Write as _};
 
-/// Object that can be serialized into an *.ics string; see [`Writer`].
+/// Object that can be serialized into an *.ics string; see [`IcsWriter`].
 pub trait IcsWrite<M> {
     fn write(&self, w: &mut IcsWriter);
 

@@ -5,7 +5,7 @@ use proton_ical::*;
 fn empty() {
     let cal = VCalendar::new("-//Proton AG//iCal//EN");
 
-    let str = ical! {"
+    let str = ics! {"
         BEGIN:VCALENDAR
         PRODID:-//Proton AG//iCal//EN
         VERSION:2.0
@@ -41,7 +41,7 @@ fn with_event() {
         )),
     );
 
-    let str = ical! {"
+    let str = ics! {"
         BEGIN:VCALENDAR
         PRODID:-//Proton AG//iCal//EN
         VERSION:2.0
@@ -67,7 +67,7 @@ fn with_event() {
 
 #[test]
 fn with_broken_event() {
-    let str = ical! {"
+    let str = ics! {"
         BEGIN:VCALENDAR
         PRODID:-//Proton AG//iCal//EN
         VERSION:2.0
@@ -120,7 +120,7 @@ fn with_broken_event() {
 fn with_method() {
     let cal = VCalendar::new("-//Proton AG//iCal//EN").with_method(Method::Publish);
 
-    let str = ical! {"
+    let str = ics! {"
         BEGIN:VCALENDAR
         METHOD:PUBLISH
         PRODID:-//Proton AG//iCal//EN
@@ -134,7 +134,7 @@ fn with_method() {
 
 #[test]
 fn without_calscale() {
-    let str = ical! {"
+    let str = ics! {"
         BEGIN:VCALENDAR
         PRODID:-//Proton AG//iCal//EN
         VERSION:2.0

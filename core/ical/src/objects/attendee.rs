@@ -103,7 +103,7 @@ impl IcsWrite<Property> for Attendee {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{ical, utils::*};
+    use crate::{ics, utils::*};
     use pretty_assertions as pa;
     use test_case::test_case;
 
@@ -115,7 +115,7 @@ mod tests {
             .with_role(Role::Chair)
             .with_rsvp(true);
 
-        let expected = ical! {"
+        let expected = ics! {"
             ;CN=Someone Somewhere;CUTYPE=INDIVIDUAL;ROLE=CHAIR;RSVP=TRUE:mailto:someone
              @localhost
         "};

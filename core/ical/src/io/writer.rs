@@ -116,7 +116,7 @@ impl IcsWriter {
         value.write_raw(self);
     }
 
-    /// Completes the writing process and returns an iCal-string representing
+    /// Completes the writing process and returns an *.ics string representing
     /// the serialized structure.
     ///
     /// String returned by this function is already line-wrapped according to
@@ -142,8 +142,8 @@ pub(crate) struct IcsWriterBuffer {
 /// appears so it might be totally fine it contains actual, god-loving newlines.
 ///
 /// To prevent people from shooting themselves in feet, this implementation is
-/// hidden within the private [`WriterBuffer`] and exposed to users only via
-/// [`Writer::raw()`] which explicitly mentions this caveat.
+/// hidden within the private [`IcsWriterBuffer`] and exposed to users only via
+/// [`IcsWriter::raw()`] which explicitly mentions this caveat.
 impl fmt::Write for IcsWriterBuffer {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         // Opportunistically wrap lines that are too long, as per
