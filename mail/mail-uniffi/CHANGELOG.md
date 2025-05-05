@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.75.3] - 2025-05-05
+
+### Fixes
+
+- [ET-2716] Autodelete banner no longer waits for the event loop to clear upon mark as legitimate and expiry and autodelete banners don't show both
+- [ET-2716] Auto-delete banner no longer visible after disabling auto-delete
+
+
 ## [mail-uniffi-v0.75.2] - 2025-04-30
 
 ### Fixes
