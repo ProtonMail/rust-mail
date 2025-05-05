@@ -464,15 +464,15 @@ impl MailUserContext {
     /// - Drafts
     /// - AllDrafts
     pub async fn prefetch(self: &Arc<Self>) -> MailContextResult<()> {
-        self.prefetch_locations(Default::default()).await
+        self.queue_prefetch_jobs(Default::default()).await
     }
 
-    pub async fn prefetch_locations(
+    pub async fn queue_prefetch_jobs(
         self: &Arc<Self>,
-        locations: Vec<PrefetchJob>,
+        jobs: Vec<PrefetchJob>,
     ) -> MailContextResult<()> {
         if let Some(sender) = self.prefetch.get() {
-            sender.send_async(locations).await.map_err(|_| {
+            sender.send_async(jobs).await.map_err(|_| {
                 MailContextError::Other(anyhow!("Failed to send prefetch signal to prefetcher"))
             })?;
 
@@ -487,7 +487,7 @@ impl MailUserContext {
             self.prefetch
                 .get()
                 .unwrap()
-                .send_async(locations)
+                .send_async(jobs)
                 .await
                 .map_err(|_| {
                     MailContextError::Other(anyhow!("Failed to send prefetch signal to prefetcher"))

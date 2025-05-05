@@ -2,6 +2,7 @@ use crate::AppError;
 use crate::events::ConversationEvent;
 use crate::models::Conversation;
 use proton_core_common::events::Action;
+use proton_mail_ids::LocalConversationId;
 use stash::params;
 use stash::stash::Bond;
 use tracing::warn;
@@ -9,7 +10,8 @@ use tracing::warn;
 pub async fn handle_conversation_events(
     tx: &Bond<'_>,
     conversation_events: &[ConversationEvent],
-) -> Result<(), AppError> {
+) -> Result<Vec<LocalConversationId>, AppError> {
+    let mut ids = Vec::with_capacity(conversation_events.len());
     for conversation_event in conversation_events {
         match conversation_event.action {
             Action::Delete => {
@@ -21,7 +23,10 @@ pub async fn handle_conversation_events(
             }
             Action::Create => {
                 if let Some(conversation) = conversation_event.conversation.clone() {
-                    Conversation::create_or_update_conversations(vec![conversation], tx).await?;
+                    let created =
+                        Conversation::create_or_update_conversations(vec![conversation], tx)
+                            .await?;
+                    ids.extend(created);
                 } else {
                     warn!("Received create without conversation");
                 }
@@ -35,5 +40,5 @@ pub async fn handle_conversation_events(
             }
         }
     }
-    Ok(())
+    Ok(ids)
 }
