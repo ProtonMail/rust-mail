@@ -62,7 +62,7 @@ use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
+use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
 use std::collections::btree_map::Entry;
 use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -1829,10 +1829,10 @@ impl Message {
     pub async fn fetch_message_body(
         &self,
         ctx: &MailUserContext,
-        tether: &mut Tether,
+        mut run_tx: impl RunTransaction,
     ) -> Result<DecryptedMessageBody, MailContextError> {
         if let Some(decrypted) =
-            Self::load_decrypted_message_from_cache(self.local_id.unwrap(), tether).await?
+            Self::load_decrypted_message_from_cache(self.local_id.unwrap(), run_tx.tether()).await?
         {
             debug!("Found message body in cache.");
             return Ok(decrypted);
@@ -1850,24 +1850,33 @@ impl Message {
             )));
         }
 
-        let (_, encrypted_body) = Self::sync_message_and_body(remote_id, ctx.api(), tether).await?;
+        let (_, encrypted_body) =
+            Self::sync_message_and_body(remote_id, ctx.api(), &mut run_tx).await?;
         trace!("Message successfully downloaded. Decrypting...");
 
-        let decrypted =
-            Self::decrypt_message_body(ctx, &self.remote_address_id, encrypted_body, tether, true)
-                .await?;
+        let decrypted = Self::decrypt_message_body(
+            ctx,
+            &self.remote_address_id,
+            encrypted_body,
+            run_tx.tether(),
+            true,
+        )
+        .await?;
         trace!("Message successfully decrypted. Caching...");
 
-        tether
-            .tx(async |tx| {
+        run_tx
+            .run_tx(async |tx| {
                 Self::store_decrypted_message_body(
                     self.local_id.unwrap(),
                     decrypted.body.clone(),
                     tx,
                 )
-                .await
+                .await?;
+
+                Ok(())
             })
-            .await?;
+            .await
+            .map_err(MailContextError::Other)?;
 
         debug!("Message successfully synced.");
         Ok(decrypted)
@@ -2551,31 +2560,35 @@ impl Message {
     ///
     /// Returns error if the message failed to fetch from the server or update the
     /// metadata on the server.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(api, tether))]
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip(api, run_tx))]
     async fn sync_message_and_body(
         message_id: MessageId,
         api: &Proton,
-        tether: &mut Tether,
+        mut run_tx: impl RunTransaction,
     ) -> Result<(Message, EncryptedMessageBody), MailContextError> {
         let message = api.get_message(message_id).await.map(|v| v.message)?;
 
-        let (mut message, mut body_metadata, body) = Message::from_api_data(message, tether)
-            .await
-            .inspect_err(|e| {
-                error!("Failed to convert message from api: {e:?}");
-            })?;
+        let (mut message, mut body_metadata, body) =
+            Message::from_api_data(message, run_tx.tether())
+                .await
+                .inspect_err(|e| {
+                    error!("Failed to convert message from api: {e:?}");
+                })?;
 
-        tether
-            .tx(async |tx| {
+        run_tx
+            .run_tx(async |tx| {
                 message.save(tx).await.inspect_err(|e| {
                     error!("Failed to save message metadata: {e:?}");
                 })?;
 
                 body_metadata.save(tx).await.inspect_err(|e| {
                     error!("Failed to save message body metadata: {e:?}");
-                })
+                })?;
+
+                Ok(())
             })
-            .await?;
+            .await
+            .map_err(MailContextError::Other)?;
 
         Ok((
             message,
