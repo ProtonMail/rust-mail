@@ -2715,18 +2715,20 @@ impl Message {
         let settings = &MailSettings::get_or_default(tether).await;
         let mut autodelete = false;
         if let Some(days) = settings.auto_delete_spam_and_trash_days {
-            let trash = LabelId::trash();
-            let spam = LabelId::spam();
+            if days != 0 {
+                let trash = LabelId::trash();
+                let spam = LabelId::spam();
 
-            if self.label_ids.iter().any(|x| *x == trash || *x == spam) {
-                // FIXME: This is not correct at the moment, but it's better than nothing
-                if let Ok(time) = SystemTime::now().duration_since(UNIX_EPOCH) {
-                    let time = time + Duration::from_secs((days * 24 * 60 * 60) as u64);
-                    banners.push(MessageBanner::AutoDelete {
-                        timestamp: time.as_secs(),
-                        delete_days: days,
-                    });
-                    autodelete = true;
+                if self.label_ids.iter().any(|x| *x == trash || *x == spam) {
+                    // FIXME: This is not correct at the moment, but it's better than nothing
+                    if let Ok(time) = SystemTime::now().duration_since(UNIX_EPOCH) {
+                        let time = time + Duration::from_secs((days * 24 * 60 * 60) as u64);
+                        banners.push(MessageBanner::AutoDelete {
+                            timestamp: time.as_secs(),
+                            delete_days: days,
+                        });
+                        autodelete = true;
+                    }
                 }
             }
         }
