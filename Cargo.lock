@@ -54,6 +54,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "aes-kw"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69fa2b352dcefb5f7f3a5fb840e02665d311d878955380515e4fd50095dd3d8c"
+dependencies = [
+ "aes",
+]
+
+[[package]]
 name = "ahash"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -168,6 +177,7 @@ dependencies = [
  "blake2",
  "cpufeatures",
  "password-hash",
+ "zeroize",
 ]
 
 [[package]]
@@ -448,7 +458,7 @@ dependencies = [
  "bitflags 2.9.0",
  "cexpr",
  "clang-sys",
- "itertools 0.13.0",
+ "itertools 0.10.5",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -1175,7 +1185,7 @@ dependencies = [
  "cpufeatures",
  "curve25519-dalek-derive",
  "digest",
- "fiat-crypto",
+ "fiat-crypto 0.2.9",
  "rustc_version",
  "subtle",
  "zeroize",
@@ -1562,6 +1572,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ed448-goldilocks"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "87b5fa9e9e3dd5fe1369f380acd3dcdfa766dbd0a1cd5b048fb40e38a6a78e79"
+dependencies = [
+ "fiat-crypto 0.1.20",
+ "hex",
+ "subtle",
+]
+
+[[package]]
 name = "either"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1704,6 +1725,12 @@ dependencies = [
  "rand_core 0.6.4",
  "subtle",
 ]
+
+[[package]]
+name = "fiat-crypto"
+version = "0.1.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e825f6987101665dea6ec934c09ec6d721de7bc1bf92248e1d5810c8cd636b77"
 
 [[package]]
 name = "fiat-crypto"
@@ -2096,9 +2123,9 @@ dependencies = [
 
 [[package]]
 name = "gopenpgp-sys"
-version = "0.2.16"
+version = "0.2.17"
 source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "875f0d89ec1e19e3bdeb037519a9dea50f5497a6a77ee1f2454c5eb378153fe6"
+checksum = "a008e8c7c23d97a6c88bc9a49c1cc8f9ea91a98c28a67bbd3c5d649255cd1161"
 dependencies = [
  "base64",
  "bindgen 0.70.1",
@@ -2977,7 +3004,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc2f4eb4bc735547cfed7c0a4922cbd04a4655978c09b54f1f7b228750664c34"
 dependencies = [
  "cfg-if",
- "windows-targets 0.52.6",
+ "windows-targets 0.48.5",
 ]
 
 [[package]]
@@ -3293,7 +3320,7 @@ dependencies = [
  "num",
  "num_cpus",
  "pin-project",
- "proton-srp",
+ "proton-srp 0.6.1",
  "rand 0.8.5",
  "reqwest",
  "rustls-native-certs",
@@ -3871,6 +3898,73 @@ dependencies = [
 ]
 
 [[package]]
+name = "pgp"
+version = "0.14.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1877a97fd422433220ad272eb008ec55691944b1200e9eb204e3cb2cb69d34e9"
+dependencies = [
+ "aes",
+ "aes-gcm",
+ "aes-kw",
+ "argon2",
+ "base64",
+ "bitfield",
+ "block-padding",
+ "blowfish",
+ "bstr",
+ "buffer-redux",
+ "byteorder",
+ "camellia",
+ "cast5",
+ "cfb-mode",
+ "chrono",
+ "cipher",
+ "const-oid",
+ "crc24",
+ "curve25519-dalek",
+ "derive_builder",
+ "derive_more 1.0.0",
+ "des",
+ "digest",
+ "dsa",
+ "eax",
+ "ecdsa",
+ "ed25519-dalek",
+ "elliptic-curve",
+ "flate2",
+ "generic-array",
+ "hex",
+ "hkdf",
+ "idea",
+ "iter-read",
+ "k256",
+ "log",
+ "md-5",
+ "nom",
+ "num-bigint-dig",
+ "num-traits",
+ "num_enum",
+ "ocb3",
+ "p256",
+ "p384",
+ "p521",
+ "rand 0.8.5",
+ "ripemd",
+ "rsa",
+ "sha1",
+ "sha1-checked",
+ "sha2",
+ "sha3",
+ "signature",
+ "smallvec",
+ "thiserror 1.0.69",
+ "twofish",
+ "x25519-dalek",
+ "x448",
+ "zeroize",
+]
+
+[[package]]
 name = "phf"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4430,14 +4524,14 @@ dependencies = [
 
 [[package]]
 name = "proton-crypto"
-version = "0.4.14"
+version = "0.4.15"
 source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "528c0b1afba1140278bc839c7a796d36c9bc8eafeb751df6622889988a99339e"
+checksum = "285f08fb1ceacf45b5a8d1fb1f28163d6524fec0d3874588bb0c9e6051618892"
 dependencies = [
  "gopenpgp-sys",
  "hex",
  "parking_lot",
- "proton-srp",
+ "proton-srp 0.7.0",
  "rand 0.8.5",
  "serde",
  "subtle",
@@ -4446,9 +4540,9 @@ dependencies = [
 
 [[package]]
 name = "proton-crypto-account"
-version = "0.10.0"
+version = "0.10.1"
 source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "181b779c675cb02f63aac6197fee51879014cd5c180e2b82a0aa6aef85bffd70"
+checksum = "fc5998360cc8e2aaabc8b0285c2b09e0a462170f9c5186c0f1de0d478ca4ef36"
 dependencies = [
  "base64",
  "derive_more 2.0.1",
@@ -4692,7 +4786,7 @@ dependencies = [
 
 [[package]]
 name = "proton-mail-uniffi"
-version = "0.75.2"
+version = "0.75.3"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4772,7 +4866,23 @@ dependencies = [
  "base64",
  "bcrypt",
  "crypto-bigint",
- "pgp",
+ "pgp 0.13.2",
+ "rand 0.8.5",
+ "sha2",
+ "thiserror 1.0.69",
+ "zeroize",
+]
+
+[[package]]
+name = "proton-srp"
+version = "0.7.0"
+source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
+checksum = "dc3c8c19e85a279efb4d6bd4187e07fa46ab63d2a3d90959ea8be31a959f6222"
+dependencies = [
+ "base64",
+ "bcrypt",
+ "crypto-bigint",
+ "pgp 0.14.2",
  "rand 0.8.5",
  "sha2",
  "thiserror 1.0.69",
@@ -5748,6 +5858,7 @@ checksum = "89f599ac0c323ebb1c6082821a54962b839832b03984598375bff3975b804423"
 dependencies = [
  "digest",
  "sha1",
+ "zeroize",
 ]
 
 [[package]]
@@ -7525,6 +7636,17 @@ dependencies = [
  "rand_core 0.6.4",
  "serde",
  "zeroize",
+]
+
+[[package]]
+name = "x448"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4cd07d4fae29e07089dbcacf7077cd52dce7760125ca9a4dd5a35ca603ffebb"
+dependencies = [
+ "ed448-goldilocks",
+ "hex",
+ "rand_core 0.5.1",
 ]
 
 [[package]]
