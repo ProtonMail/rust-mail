@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - Sort changelog chronologically
+- [ET-2716] Autodelete banner no longer waits for the event loop to clear upon mark as legitimate and expiry and autodelete banners don't show both
+- [ET-2716] Auto-delete banner no longer visible after disabling auto-delete
 
 
 ## [mail-uniffi-v0.75.2] - 2025-04-30
@@ -43,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
+- Et-2713: guarantee a single observability background job even when multiple sessions are created
 - Send tracing logs both to file and to ios os-logger
 - [ET-2375] Quick actions for push notifications
 - [ET-2731] Remove attachments from draft with content-id
@@ -69,13 +72,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Features
 
 - Et-2713: expose observability features via uniffi
-- Et-2713: guarantee a single observability background job even when multiple sessions are created
 
 ### Fixes
 
-- Decrease memory footprint of the app by compiling the vcard regexes on demand.
 - Improved delete all messages in label
 - Spam and trash folders correctly get assigned in the banner
+- Decrease memory footprint of the app by compiling the vcard regexes on demand.
 - Ensure changelog generation doesn't filter out certain commits
 - Cleanly close git repo when done
 - Google paymentreceipt type.
