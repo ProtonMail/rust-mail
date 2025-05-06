@@ -11,15 +11,32 @@ pub struct Priority {
 impl Priority {
     /// Creates a new priority.
     ///
-    /// 0 represents an undefined priority, 1 represents the highest priority,
-    /// and the lowest priority is 9 (i.e. value passed here must be <= 9).
+    /// See: [`Self::undefined()`], [`Self::highest()`], [`Self::lowest()`],
     #[must_use]
     pub fn new(value: u8) -> Option<Self> {
-        if value <= 9 {
+        if value <= Self::lowest().value {
             Some(Self { value })
         } else {
             None
         }
+    }
+
+    /// Creates the undefined priority (0).
+    #[must_use]
+    pub fn undefined() -> Self {
+        Self { value: 0 }
+    }
+
+    /// Creates the highest priority (1).
+    #[must_use]
+    pub fn highest() -> Self {
+        Self { value: 1 }
+    }
+
+    /// Creates the lowest priority (9).
+    #[must_use]
+    pub fn lowest() -> Self {
+        Self { value: 9 }
     }
 
     #[must_use]
@@ -46,7 +63,7 @@ impl IcsRead<Property> for Priority {
         let value = r.spanned(IcsReader::value::<u32>)?;
         let (span, value) = (value.span, value.value);
 
-        if value <= 9 {
+        if value <= u32::from(Self::lowest().value) {
             #[allow(
                 clippy::cast_possible_truncation,
                 reason = "we've just checked it's in range"
