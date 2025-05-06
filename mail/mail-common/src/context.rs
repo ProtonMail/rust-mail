@@ -10,14 +10,14 @@ use proton_api_core::services::proton::{SessionId, UserId};
 use proton_api_core::session::Config;
 use proton_api_core::status_watcher::StatusWatcher;
 use proton_api_core::verification::DynChallengeNotifier;
+use proton_core_common::UserDatabaseInitializer;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::models::LabelError;
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::{
     ContactError, Context, CoreAccountState, CoreContextError, CoreSessionState, KeyHandlingError,
-    OnSessionCloseNOP, UserContext,
+    UserContext,
 };
-use proton_core_common::{OnSessionCloseHook, UserDatabaseInitializer};
 use proton_crypto_inbox::attachment::AttachmentEncryptionError;
 use proton_crypto_inbox::keys::EncryptionPreferencesError;
 use proton_event_loop::EventLoopError;
@@ -329,7 +329,6 @@ impl MailContext {
     pub async fn user_context_from_login_flow(
         self: &Arc<Self>,
         login_flow: &mut Flow,
-        on_session_close_hook: impl OnSessionCloseHook,
     ) -> MailContextResult<Arc<MailUserContext>> {
         let ctx = self
             .core_context
@@ -337,11 +336,7 @@ impl MailContext {
             .await?;
 
         Arc::clone(self)
-            .new_user_context(
-                ctx,
-                ShouldInitializeMailUserContext::Yes,
-                on_session_close_hook,
-            )
+            .new_user_context(ctx, ShouldInitializeMailUserContext::Yes)
             .await
     }
 
@@ -359,15 +354,13 @@ impl MailContext {
         self: &Arc<Self>,
         session: &CoreSession,
         status: Option<StatusWatcher>,
-        on_session_close_hook: impl OnSessionCloseHook,
     ) -> MailContextResult<Option<Arc<MailUserContext>>> {
         let ctx = self
             .core_context
             .user_context_from_session(session, status)
             .await?;
 
-        self.new_initialized_user_context(ctx, on_session_close_hook)
-            .await
+        self.new_initialized_user_context(ctx).await
     }
 
     /// Create a new context from an existing session.
@@ -379,16 +372,13 @@ impl MailContext {
         session: &CoreSession,
         status: Option<StatusWatcher>,
         init: ShouldInitializeMailUserContext,
-        on_session_close_hook: impl OnSessionCloseHook,
     ) -> MailContextResult<Arc<MailUserContext>> {
         let ctx = self
             .core_context
             .user_context_from_session(session, status)
             .await?;
 
-        Arc::clone(self)
-            .new_user_context(ctx, init, on_session_close_hook)
-            .await
+        Arc::clone(self).new_user_context(ctx, init).await
     }
 
     /// Create all new contexts from all existing sessions.
@@ -412,7 +402,6 @@ impl MailContext {
                         &session,
                         None,
                         ShouldInitializeMailUserContext::No,
-                        OnSessionCloseNOP,
                     )
                     .await?,
                 );
@@ -450,7 +439,6 @@ impl MailContext {
                         &session,
                         None,
                         ShouldInitializeMailUserContext::No,
-                        OnSessionCloseNOP,
                     )
                     .await?,
                 );
@@ -660,15 +648,10 @@ impl MailContext {
     async fn new_initialized_user_context(
         self: &Arc<Self>,
         core_context: Arc<UserContext>,
-        on_session_close_hook: impl OnSessionCloseHook,
     ) -> Result<Option<Arc<MailUserContext>>, MailContextError> {
         let context = self
             .clone()
-            .new_user_context(
-                core_context,
-                ShouldInitializeMailUserContext::No,
-                on_session_close_hook,
-            )
+            .new_user_context(core_context, ShouldInitializeMailUserContext::No)
             .await?;
         if !context.is_initialized().await? {
             tracing::debug!("Existing context is not initialized");
@@ -683,7 +666,6 @@ impl MailContext {
         self: Arc<Self>,
         core_context: Arc<UserContext>,
         init: ShouldInitializeMailUserContext,
-        on_session_close_hook: impl OnSessionCloseHook,
     ) -> Result<Arc<MailUserContext>, MailContextError> {
         let mut active_contexts = self.active_user_contexts.lock().await;
 
@@ -708,7 +690,7 @@ impl MailContext {
             }
         }
 
-        let ctx = MailUserContext::new(self.clone(), core_context, on_session_close_hook).await?;
+        let ctx = MailUserContext::new(self.clone(), core_context).await?;
 
         active_contexts.insert(ctx.user_id().clone(), Arc::downgrade(&ctx));
 
@@ -746,7 +728,7 @@ impl MailContext {
         for session in sessions {
             if let CoreSessionState::Authenticated = CoreSessionState::of(&session) {
                 match self
-                    .initialized_user_context_from_session(&session, None, OnSessionCloseNOP)
+                    .initialized_user_context_from_session(&session, None)
                     .await
                 {
                     Ok(Some(user_context)) => ctxs.push(user_context),

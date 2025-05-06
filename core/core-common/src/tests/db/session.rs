@@ -2,7 +2,8 @@
 
 use crate::datatypes::AuthScopes;
 use crate::db::account::{
-    CoreAccount, CoreSession, EncryptedAccessToken, EncryptedRefreshToken, SessionEncryptionKey,
+    CoreAccount, CoreSession, CoreSessionObserver, CoreSessionObserverNotification,
+    EncryptedAccessToken, EncryptedRefreshToken, SessionEncryptionKey,
 };
 use crate::models::ModelExtension;
 use proton_api_core::auth::{Tokens, UserKeySecret};
@@ -12,6 +13,7 @@ use stash::orm::Model;
 use stash::params;
 use stash::stash::{Stash, StashConfiguration, StashError, Tether};
 use std::io::stdout;
+use std::time::Duration;
 use tracing::Level;
 use tracing::subscriber::set_global_default;
 use tracing_subscriber::fmt::layer;
@@ -236,4 +238,119 @@ async fn multiple_sessions_per_account_is_an_error() {
         })
         .await
         .expect("failed");
+}
+
+#[tokio::test]
+#[allow(clippy::match_wildcard_for_single_variants)] // We only care about one variant per check.
+async fn test_session_observer() {
+    let key = SessionEncryptionKey::random();
+    let stash = new_test_connection().await;
+    let mut tether = stash.connection();
+
+    let user_id1 = UserId::from("user-1");
+    let user_id2 = UserId::from("user-2");
+
+    tether
+        .tx(async |tx| {
+            CoreAccount::new(user_id1.clone(), String::from("name_or_addr"))
+                .save(tx)
+                .await?;
+            CoreAccount::new(user_id2.clone(), String::from("name_or_addr"))
+                .save(tx)
+                .await
+        })
+        .await
+        .unwrap();
+
+    let mut observer = CoreSessionObserver::new(stash.clone()).await.unwrap();
+
+    let session_id1 = SessionId::from("remote_id");
+    let session_id2 = SessionId::from("remote_id2");
+    let tokens = new_test_tokens();
+
+    let mut session =
+        CoreSession::new(user_id1.clone(), session_id1.clone(), &tokens, &key).unwrap();
+
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            session.save(tx).await.expect("failed to store session");
+            Ok(())
+        })
+        .await
+        .expect("failed");
+
+    let notifications = tokio::time::timeout(Duration::from_secs(1), observer.next())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(notifications.len(), 1);
+    match &notifications[0] {
+        CoreSessionObserverNotification::Created(new_session_id, new_user_id) => {
+            assert_eq!(*new_session_id, session_id1);
+            assert_eq!(*new_user_id, user_id1);
+        }
+        _ => panic!("unexpected value"),
+    };
+
+    // Create another session
+    let mut session =
+        CoreSession::new(user_id2.clone(), session_id2.clone(), &tokens, &key).unwrap();
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            session.save(tx).await.expect("failed to store session");
+            Ok(())
+        })
+        .await
+        .expect("failed");
+
+    let notifications = tokio::time::timeout(Duration::from_secs(1), observer.next())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(notifications.len(), 1);
+    match &notifications[0] {
+        CoreSessionObserverNotification::Created(new_session_id, new_user_id) => {
+            assert_eq!(*new_session_id, session_id2);
+            assert_eq!(*new_user_id, user_id2);
+        }
+        _ => panic!("unexpected value"),
+    };
+
+    // Remove a session
+    tether
+        .tx(async |tx| CoreSession::delete_by_id(session_id2.clone(), tx).await)
+        .await
+        .unwrap();
+
+    let notifications = tokio::time::timeout(Duration::from_secs(1), observer.next())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(notifications.len(), 1);
+    match &notifications[0] {
+        CoreSessionObserverNotification::Deleted(new_session_id, new_user_id) => {
+            assert_eq!(*new_session_id, session_id2);
+            assert_eq!(*new_user_id, user_id2);
+        }
+        _ => panic!("unexpected value"),
+    };
+
+    // Remove the other session
+    tether
+        .tx(async |tx| CoreSession::delete_by_id(session_id1.clone(), tx).await)
+        .await
+        .unwrap();
+
+    let notifications = tokio::time::timeout(Duration::from_secs(1), observer.next())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(notifications.len(), 1);
+    match &notifications[0] {
+        CoreSessionObserverNotification::Deleted(new_session_id, new_user_id) => {
+            assert_eq!(*new_session_id, session_id1);
+            assert_eq!(*new_user_id, user_id1);
+        }
+        _ => panic!("unexpected value"),
+    };
 }

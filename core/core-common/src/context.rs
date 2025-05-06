@@ -5,7 +5,10 @@ use crate::auth_store::{AuthStore, DecryptExt};
 use crate::datatypes::{
     LocalContactId, PasswordMode, StoredDevicePrivateKey, StoredDevicePublicKey, TfaStatus,
 };
-use crate::db::account::{CoreAccount, CoreSession, SessionEncryptionKey};
+use crate::db::account::{
+    CoreAccount, CoreSession, CoreSessionObserver, CoreSessionObserverNotification,
+    SessionEncryptionKey,
+};
 use crate::db::migrations::migrate_account_db;
 use crate::models::ModelExtension;
 use crate::os::{KeyChain, KeyChainError, KeyChainExt, StoreInKeyChain};
@@ -36,7 +39,7 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 use thiserror::Error;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, broadcast};
 use tokio::task::{JoinError, JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tracing::{Level, error, info, warn};
@@ -246,7 +249,10 @@ pub struct Context {
     hv_notifier: Option<DynChallengeNotifier>,
     cancellation_token: CancellationToken,
     task_service: BackgroundAwareTaskService,
+    on_session_deleted_broadcast: broadcast::Sender<(SessionId, UserId)>,
 }
+
+const SESSION_OBSERVER_BROADCAST_CAPACITY: usize = 8;
 
 impl Context {
     /// Create a new context by specifying the `account_db_path` where the account database will be created,
@@ -294,6 +300,18 @@ impl Context {
 
         let task_service = TaskService::new()?;
 
+        let (broadcast_sender, _) = broadcast::channel(SESSION_OBSERVER_BROADCAST_CAPACITY);
+
+        let session_observer = CoreSessionObserver::new(account_stash.clone())
+            .await
+            .inspect_err(|e| tracing::error!("Failed to create session observer: {e:?}"))?;
+
+        let sender = broadcast_sender.clone();
+
+        task_service.spawn(async move {
+            on_session_deletion(session_observer, sender).await;
+        });
+
         Ok(Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             user_db_path,
@@ -308,6 +326,7 @@ impl Context {
             hv_notifier,
             cancellation_token: CancellationToken::new(),
             task_service: BackgroundAwareTaskService::new(task_service),
+            on_session_deleted_broadcast: broadcast_sender,
         }))
     }
 
@@ -969,6 +988,30 @@ impl Context {
     pub fn task_service(&self) -> &BackgroundAwareTaskService {
         &self.task_service
     }
+
+    /// Subscribes for the event of closing the session. Use it to cleanup any remaining tasks
+    /// or memory footprints.
+    ///
+    pub fn on_session_deleted(&self, hook: impl OnSessionDeleted) {
+        let mut receiver = self.on_session_deleted_broadcast.subscribe();
+        self.task_service.spawn(async move {
+            loop {
+                match receiver.recv().await {
+                    Ok((session_id, user_id)) => {
+                        if hook.on_session_deleted(session_id, user_id).await
+                            == OnSessionDeletedResponse::Terminate
+                        {
+                            return;
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(_) => {
+                        return;
+                    }
+                }
+            }
+        });
+    }
 }
 
 fn get_account_db_path(path: impl AsRef<Path>) -> PathBuf {
@@ -977,4 +1020,53 @@ fn get_account_db_path(path: impl AsRef<Path>) -> PathBuf {
 
 fn get_user_db_path(path: impl AsRef<Path>, user_id: &UserId) -> PathBuf {
     path.as_ref().join(user_id.to_string()).with_extension("db")
+}
+
+pub trait OnSessionDeleted: Send + 'static {
+    /// Return true to be notified of further changes.
+    fn on_session_deleted(
+        &self,
+        session_id: SessionId,
+        user_id: UserId,
+    ) -> impl Future<Output = OnSessionDeletedResponse> + Send;
+}
+
+/// Controls the behavior of future invocations to the session deleted observer.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub enum OnSessionDeletedResponse {
+    /// Keep this subscriber alive.
+    Continue,
+    /// Subscription no longer required.
+    Terminate,
+}
+
+impl<H, Fut> OnSessionDeleted for H
+where
+    H: Fn(SessionId, UserId) -> Fut + Send + 'static,
+    Fut: Future<Output = OnSessionDeletedResponse> + Send,
+{
+    fn on_session_deleted(
+        &self,
+        session_id: SessionId,
+        user_id: UserId,
+    ) -> impl Future<Output = OnSessionDeletedResponse> + Send {
+        self(session_id, user_id)
+    }
+}
+#[tracing::instrument(skip_all)]
+async fn on_session_deletion(
+    mut observer: CoreSessionObserver,
+    hook_sender: broadcast::Sender<(SessionId, UserId)>,
+) {
+    tracing::debug!("Starting task");
+    while let Ok(notifications) = observer.next().await {
+        tracing::debug!("Task received: {:?}", notifications);
+        for notification in notifications {
+            if let CoreSessionObserverNotification::Deleted(session_id, user_id) = notification {
+                tracing::debug!("User {user_id}'s session {session_id} has been deleted");
+                _ = hook_sender.send((session_id, user_id));
+            }
+        }
+    }
+    tracing::debug!("Stopping task");
 }

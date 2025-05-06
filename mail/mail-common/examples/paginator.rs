@@ -2,7 +2,6 @@ use clap::Parser;
 use proton_api_core::services::proton::LabelId;
 use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_api_core::session::Config;
-use proton_core_common::OnSessionCloseNOP;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::models::Label;
 use proton_core_common::models::ModelIdExtension;
@@ -77,10 +76,7 @@ async fn main() {
         .await
         .unwrap();
 
-    let user_ctx = ctx
-        .user_context_from_login_flow(&mut flow, OnSessionCloseNOP)
-        .await
-        .unwrap();
+    let user_ctx = ctx.user_context_from_login_flow(&mut flow).await.unwrap();
 
     let tether = user_ctx.user_stash().connection();
     let label = Label::find_by_remote_id(LabelId::inbox(), &tether)

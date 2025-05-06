@@ -1,7 +1,7 @@
 use crate::models::DraftMetadata;
 use crate::{MailContext, MailContextError};
 use proton_api_core::services::proton::UserId;
-use proton_core_common::{CoreSessionState, OnSessionCloseNOP};
+use proton_core_common::CoreSessionState;
 use proton_mail_ids::LocalMessageId;
 use std::sync::Arc;
 
@@ -51,7 +51,7 @@ impl MailContext {
                 ) =>
             {
                 let Some(user_ctx) = self
-                    .initialized_user_context_from_session(&session, None, OnSessionCloseNOP)
+                    .initialized_user_context_from_session(&session, None)
                     .await?
                 else {
                     return Err(MailContextError::UserContextNotInitialized(user_id));

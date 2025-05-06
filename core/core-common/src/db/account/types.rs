@@ -27,7 +27,7 @@ use stash::macros::Model;
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use stash::{params, sql_using_serde};
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::ops::Deref;
 use std::string::FromUtf8Error;
 use thiserror::Error;
@@ -753,5 +753,95 @@ impl SessionEncryptionKey {
         let key = Self::with_bytes(bytes).map_err(|_| InvalidLengthOfSessionKey)?;
 
         Ok(key)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum CoreSessionObserverNotification {
+    Created(SessionId, UserId),
+    Deleted(SessionId, UserId),
+}
+
+#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+struct CoreSessionObserverValue {
+    session_id: SessionId,
+    user_id: UserId,
+}
+
+impl From<CoreSession> for CoreSessionObserverValue {
+    fn from(value: CoreSession) -> Self {
+        Self {
+            session_id: value.remote_id,
+            user_id: value.account_id,
+        }
+    }
+}
+
+/// This observer only issues a series of notifications when changes occur in the session table.
+pub struct CoreSessionObserver {
+    sessions: HashSet<CoreSessionObserverValue>,
+    stash: Stash,
+    watcher: WatcherHandle,
+}
+
+impl CoreSessionObserver {
+    pub async fn new(stash: Stash) -> Result<Self, StashError> {
+        let tether = stash.connection();
+        let existing = CoreSession::all(&tether)
+            .await?
+            .into_iter()
+            .map(Into::into)
+            .collect::<HashSet<_>>();
+        let watcher = CoreSession::watch(&stash)?;
+
+        Ok(Self {
+            sessions: existing,
+            stash,
+            watcher,
+        })
+    }
+
+    pub async fn next(&mut self) -> Result<Vec<CoreSessionObserverNotification>, StashError> {
+        loop {
+            self.watcher
+                .receiver
+                .recv_async()
+                .await
+                .map_err(|e| StashError::WatcherError(e.to_string()))?;
+
+            let tether = self.stash.connection();
+            // Get all sessions
+            let current = CoreSession::all(&tether)
+                .await?
+                .into_iter()
+                .map(Into::into)
+                .collect::<HashSet<_>>();
+            drop(tether);
+
+            // Nothing changed
+            if current == self.sessions {
+                continue;
+            }
+
+            let mut result = Vec::new();
+
+            for session in self.sessions.difference(&current) {
+                result.push(CoreSessionObserverNotification::Deleted(
+                    session.session_id.clone(),
+                    session.user_id.clone(),
+                ));
+            }
+
+            for session in current.difference(&self.sessions) {
+                result.push(CoreSessionObserverNotification::Created(
+                    session.session_id.clone(),
+                    session.user_id.clone(),
+                ));
+            }
+
+            self.sessions = current;
+
+            return Ok(result);
+        }
     }
 }

@@ -1,11 +1,10 @@
 pub use self::keys::*;
 use crate::datatypes::AccountDetails;
-use crate::db::account::{CoreAccount, CoreSession};
+use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
-use crate::models::{InitializationWatcher, ModelExtension, UserSettings};
-use crate::{Context, CoreContextError, CoreContextResult};
+use crate::models::{InitializationWatcher, UserSettings};
+use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse};
 use anyhow::Context as _;
-use futures::StreamExt;
 use proton_action_queue::queue::Queue;
 use proton_api_core::connection_status::ConnectionStatus;
 use proton_api_core::services::proton::{SessionId, UserId};
@@ -13,14 +12,13 @@ use proton_api_core::session::Session;
 use proton_sqlite3::MigratorError;
 use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use stash::orm::Model;
-use stash::stash::{Stash, StashConfiguration, WatcherHandle};
+use stash::stash::{Stash, StashConfiguration};
 use std::fmt::{Debug, Formatter};
 use std::fs::{self};
 use std::future::Future;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, warn};
@@ -59,35 +57,6 @@ pub struct UserContext {
     cancellation_token: CancellationToken,
     pub cache_path: PathBuf,
     pub initialization_watcher: Arc<InitializationWatcher>,
-    on_session_close_hook_sender: watch::Sender<(SessionId, UserId)>,
-}
-
-pub trait OnSessionCloseHook: Send + 'static {
-    fn on_session_close(
-        self,
-        session_id: SessionId,
-        user_id: UserId,
-    ) -> impl Future<Output = ()> + Send;
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct OnSessionCloseNOP;
-impl OnSessionCloseHook for OnSessionCloseNOP {
-    async fn on_session_close(self, _session_id: SessionId, _user_id: UserId) {}
-}
-
-impl<H, Fut> OnSessionCloseHook for H
-where
-    H: FnOnce(SessionId, UserId) -> Fut + Send + 'static,
-    Fut: Future<Output = ()> + Send,
-{
-    fn on_session_close(
-        self,
-        session_id: SessionId,
-        user_id: UserId,
-    ) -> impl Future<Output = ()> + Send {
-        self(session_id, user_id)
-    }
 }
 
 impl Debug for UserContext {
@@ -112,9 +81,6 @@ impl UserContext {
         let cancellation_token = context.new_child_cancellation_token();
         let queue = Queue::new(user_stash.clone()).await?;
         let initialization_watcher = InitializationWatcher::new(&user_stash)?;
-        let (on_session_close_hook_sender, _) =
-            watch::channel((session_id.clone(), user_id.clone()));
-        let on_session_close_hook_sender_clone = on_session_close_hook_sender.clone();
         let this = Arc::new(Self {
             session,
             context,
@@ -126,7 +92,6 @@ impl UserContext {
             cache_path,
             cancellation_token,
             initialization_watcher,
-            on_session_close_hook_sender,
         });
         let this_weak = Arc::downgrade(&this);
 
@@ -144,31 +109,25 @@ impl UserContext {
                 error!("Initialization watcher finished with error: {e:?}");
             }
         });
-        let clone_of_this = this.clone();
-        let handle = CoreSession::watch(this.context.account_stash())?;
 
-        this.spawn(async move {
-            session_cleanup_task(handle, clone_of_this, on_session_close_hook_sender_clone).await
+        // Register task cancellation when session is deleted.
+        let this_user_id = this.user_id.clone();
+        let this_weak = Arc::downgrade(&this);
+        this.context.on_session_deleted(move |_, user_id| {
+            let this_user_id = this_user_id.clone();
+            let this_weak = this_weak.clone();
+            async move {
+                if user_id == this_user_id {
+                    if let Some(ctx) = this_weak.upgrade() {
+                        ctx.cancel_all_tasks();
+                    }
+                    return OnSessionDeletedResponse::Terminate;
+                }
+                OnSessionDeletedResponse::Continue
+            }
         });
 
         Ok(this)
-    }
-
-    /// Subscribes for the event of closing the session. Use it to cleanup any remaining tasks
-    /// or memory footprints.
-    ///
-    pub fn on_session_close_hook(&self, hook: impl OnSessionCloseHook) {
-        let mut receiver = self.on_session_close_hook_sender.subscribe();
-        // We are not using cancellable futures here because it wont hurt if for any reason it outlives the context.
-        // Worst case we will return error because sender was already dropped.
-        self.context.task_service().spawn(async move {
-            if receiver.changed().await.is_err() {
-                tracing::error!("Sender was dropped before handling this hook");
-                return;
-            }
-            let (session_id, user_id) = receiver.borrow_and_update().clone();
-            hook.on_session_close(session_id, user_id).await;
-        });
     }
 
     /// Get the network session.
@@ -309,6 +268,11 @@ impl UserContext {
             .spawn_cancellable_with::<S, _>(token, task)
     }
 
+    #[must_use]
+    pub fn did_receive_task_cancellation_request(&self) -> bool {
+        self.cancellation_token.is_cancelled()
+    }
+
     /// Cancel all tasks which are bound to this context.
     pub fn cancel_all_tasks(&self) {
         self.cancellation_token.cancel();
@@ -381,30 +345,4 @@ pub enum DeleteFilesSafeError {
 
     /// Not all files could be deleted. Next time they probably will.
     Moved(io::Error),
-}
-
-#[tracing::instrument(skip_all)]
-async fn session_cleanup_task(
-    handle: WatcherHandle,
-    this: Arc<UserContext>,
-    hook_sender: watch::Sender<(SessionId, UserId)>,
-) -> CoreContextResult<()> {
-    let mut receiver = handle.receiver.into_stream();
-    tracing::debug!("Starting cleanup task");
-    while receiver.next().await.is_some() {
-        tracing::debug!("Detected change in core_session table");
-        let tether = this.context.account_stash().connection();
-        let maybe_session = CoreSession::find_by_id(this.session_id.clone(), &tether).await?;
-        if maybe_session.is_none() {
-            tracing::warn!("Core session for {:?} not found.", this.session_id);
-            tracing::warn!("Clearing tasks...");
-            // Core session has been deleted.
-            // Clearup
-            _ = hook_sender.send((this.session_id.clone(), this.user_id.clone()));
-            this.cancel_all_tasks();
-            break;
-        }
-    }
-    tracing::warn!("User context cleanup task has ended");
-    Ok::<_, CoreContextError>(())
 }

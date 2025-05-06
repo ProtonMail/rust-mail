@@ -26,7 +26,7 @@ use proton_core_common::{
 use proton_event_loop::Event;
 use proton_sqlite3::MigratorError;
 use serde::Deserialize;
-use stash::stash::{Stash, StashConfiguration, StashError};
+use stash::stash::{Stash, StashError};
 use std::io::stdout;
 use std::sync::Arc;
 use std::sync::Weak;
@@ -207,7 +207,7 @@ impl TestContext {
 
         // Generate a fake session and write it to the database
         let (core_account, core_session) = Self::new_account_impl(
-            &tmp_dir,
+            &context,
             user_id.clone(),
             Self::test_uid(),
             user_key_secret,
@@ -238,11 +238,11 @@ impl TestContext {
     ) -> (CoreAccount, CoreSession) {
         let key = self.key.clone();
         let user_key_secret = user_key_secret.unwrap_or_else(testdata_user_secret);
-        Self::new_account_impl(&self.tmp_dir, user_id, session_id, user_key_secret, key).await
+        Self::new_account_impl(&self.context, user_id, session_id, user_key_secret, key).await
     }
 
     async fn new_account_impl(
-        tmp_dir: &TempDir,
+        context: &Context,
         user_id: UserId,
         session_id: SessionId,
         user_key_secret: UserKeySecret,
@@ -250,10 +250,7 @@ impl TestContext {
     ) -> (CoreAccount, CoreSession) {
         let (core_account, core_session) = {
             // Create a temporary stash just to insert the fake data.
-            let path = tmp_dir.path().join("account.db");
-            let stash = Stash::new(StashConfiguration::test_with_path(&path))
-                .expect("failed to create stash");
-            let mut tether = stash.connection();
+            let mut tether = context.account_stash().connection();
             tether
                 .tx::<_, _, StashError>(async |tx| {
                     // Create
