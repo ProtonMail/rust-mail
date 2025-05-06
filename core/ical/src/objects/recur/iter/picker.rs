@@ -132,6 +132,10 @@ impl<T> Picker<T> {
     /// ¹ e.g. there's `BYSETPOS=2`, but we're witnessing the first item
     pub fn push(&mut self, item: T) -> Option<T> {
         let PickerState::Opened { len } = &mut self.state else {
+            #[cfg(debug_assertions)]
+            unreachable!();
+
+            #[cfg(not(debug_assertions))]
             return None;
         };
 
@@ -169,6 +173,10 @@ impl<T> Picker<T> {
     /// [`Self::push()`] .
     pub fn close(&mut self) {
         let PickerState::Opened { len } = self.state else {
+            #[cfg(debug_assertions)]
+            unreachable!();
+
+            #[cfg(not(debug_assertions))]
             return;
         };
 
@@ -188,8 +196,8 @@ impl<T> Picker<T> {
 
     /// Pulls item from the collection.
     ///
-    /// This function can be called only after [`Self::close()`] - it's used to
-    /// handle cases B and C as described in the top-comment.
+    /// This function is used to handle cases B and C as described in the
+    /// top-comment.
     pub fn pull(&mut self) -> Option<T>
     where
         T: Ord,
