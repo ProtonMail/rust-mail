@@ -1,6 +1,9 @@
 /// Represents different types of banners that can be displayed for a given message.
 /// These banners indicate various security warnings, expiration notices,
 /// or content-related alerts.
+///
+/// The order of the variants is important as they are sorted.
+/// Check with product before adding new banners to check the order of the new banner.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum MessageBanner {

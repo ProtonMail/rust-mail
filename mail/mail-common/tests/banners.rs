@@ -95,7 +95,7 @@ async fn banners() {
         };
 
         let mut msg_phishing = Message {
-            flags: MessageFlags::FLAG_SUSPICIOUS,
+            flags: MessageFlags::PHISHING_AUTO,
             remote_id: Some("phishing".into()),
             ..msg_normal.clone()
         };
@@ -104,6 +104,13 @@ async fn banners() {
             remote_id: Some("spam".into()),
             ..msg_normal.clone()
         };
+
+        let mut msg_sus = Message {
+            flags: MessageFlags::FLAG_SUSPICIOUS,
+            remote_id: Some("sus".into()),
+            ..msg_normal.clone()
+        };
+
         let msg_expiry = Message {
             expiration_time: 42,
             remote_id: Some("expiry".into()),
@@ -130,6 +137,7 @@ async fn banners() {
             vec![MessageBanner::Spam],
             msg_spam.get_banners(tether).await
         );
+        assert_eq!(vec![MessageBanner::Spam], msg_sus.get_banners(tether).await);
         assert_eq!(
             vec![MessageBanner::Expiry { timestamp: 42 }],
             msg_expiry.get_banners(tether).await
@@ -144,6 +152,7 @@ async fn banners() {
                 msg_normal.save(tx).await?;
                 msg_spam.save(tx).await?;
                 msg_phishing.save(tx).await?;
+                msg_sus.save(tx).await?;
 
                 MessageBodyMetadata {
                     local_message_id: msg_normal.local_id,
