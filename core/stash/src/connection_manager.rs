@@ -1,6 +1,7 @@
-use parking_lot::Mutex;
+use parking_lot::{Condvar, Mutex};
 pub use rusqlite;
-use rusqlite::{Connection, Error, OpenFlags};
+use rusqlite::{Connection, Error, InterruptHandle, OpenFlags};
+use slotmap::SlotMap;
 use sqlite_watcher::connection::State;
 use sqlite_watcher::statement::Statement;
 use std::ops::{Deref, DerefMut};
@@ -15,14 +16,17 @@ enum Source {
 }
 
 type InitFn = dyn Fn(&mut Connection) -> Result<(), Error> + Send + Sync + 'static;
-
+type NotifierFn = dyn Fn() + Send + Sync + 'static;
 /// Maintains a pool of sqlite connections.
 pub struct StashConnectionPool {
     connections: Mutex<Vec<Connection>>,
+    interrupt_handles: Mutex<SlotMap<InterruptHandleKey, InterruptData>>,
     source: Source,
     max_connections: usize,
     init_fn: Box<InitFn>,
     flags: OpenFlags,
+    interrupted: Mutex<bool>,
+    wait_resume: Condvar,
 }
 
 impl StashConnectionPool {
@@ -36,10 +40,13 @@ impl StashConnectionPool {
     ) -> Arc<Self> {
         Arc::new(Self {
             connections: Default::default(),
+            interrupt_handles: Default::default(),
             source: Source::File(path.into()),
             max_connections,
             init_fn,
             flags: Default::default(),
+            interrupted: Default::default(),
+            wait_resume: Condvar::new(),
         })
     }
 
@@ -54,26 +61,88 @@ impl StashConnectionPool {
         let tmp_dir = TempDir::new("stash-tmp").expect("failed to create temp dir");
         Arc::new(Self {
             connections: Default::default(),
+            interrupt_handles: Default::default(),
             source: Source::TmpFile(tmp_dir),
             max_connections,
             init_fn,
             flags: Default::default(),
+            interrupted: Default::default(),
+            wait_resume: Condvar::new(),
         })
     }
 
     /// Acquire a new connection from the pool.
+    ///
+    /// `notify_interrupt` is required so that all active connections can be notified of a request
+    /// to interrupt the exeuction of sql code.
     ///
     /// If connections are available in the pool we use one of those, otherwise we create a new one.
     ///
     /// # Errors
     ///
     /// Returns error if we failed to initialize a connection.
-    pub fn acquire(self: &Arc<Self>) -> Result<StashPooledConnection, Error> {
-        self.create_or_acquire()
-            .map(|c| StashPooledConnection::new(c, Arc::downgrade(self)))
+    pub fn acquire(
+        self: &Arc<Self>,
+        notify_interrupt: Box<NotifierFn>,
+    ) -> Result<StashPooledConnection, Error> {
+        let connection = self.create_or_acquire()?;
+
+        let mut interrupt_handles = self.interrupt_handles.lock();
+        let key = interrupt_handles.insert(InterruptData {
+            handle: connection.get_interrupt_handle(),
+            notifier: notify_interrupt,
+        });
+        drop(interrupt_handles);
+
+        Ok(StashPooledConnection::new(
+            connection,
+            key,
+            Arc::downgrade(self),
+        ))
     }
 
-    fn create_or_acquire(&self) -> Result<Connection, Error> {
+    /// Interrupt all ongoing queries and rollback any active transactions.
+    ///
+    /// This method is useful on iOS to ensure that the db file locks are released and no new
+    /// transaction is started until `resume()` is called.
+    pub fn interrupt(&self) {
+        let was_interrupted = {
+            let mut interrupted = self.interrupted.lock();
+            let old_value = *interrupted;
+            *interrupted = true;
+            drop(interrupted);
+            old_value
+        };
+
+        // interrupt all connections
+        if !was_interrupted {
+            tracing::info!("Interrupting stash");
+            let interrupt_handles = self.interrupt_handles.lock();
+            for handle in interrupt_handles.values() {
+                handle.interrupt()
+            }
+        }
+    }
+
+    /// Resume execution and allow the tethers to proceed.
+    pub fn resume(&self) {
+        tracing::info!("Resuming stash");
+        let mut is_interrupted = self.interrupted.lock();
+        *is_interrupted = false;
+        self.wait_resume.notify_all();
+    }
+
+    /// Check whether we can proceed with new sql queries or wait on the user to call `resume()`.
+    pub fn check_interrupted_or_wait_resume(&self) {
+        let mut interrupted = self.interrupted.lock();
+        if !*interrupted {
+            return;
+        }
+        tracing::info!("Stash is interrupted, waiting on resume");
+        self.wait_resume.wait(&mut interrupted);
+    }
+
+    pub fn create_or_acquire(&self) -> Result<Connection, Error> {
         let mut connections = self.connections.lock();
         while let Some(connection) = connections.pop() {
             if Self::is_connection_valid(&connection) {
@@ -105,7 +174,10 @@ impl StashConnectionPool {
     }
 
     /// Release a connection back to the pool.
-    fn release(&self, connection: Connection) {
+    fn release(&self, connection: Connection, interrupt_handle_key: InterruptHandleKey) {
+        let mut interrupt_handles = self.interrupt_handles.lock();
+        interrupt_handles.remove(interrupt_handle_key);
+        drop(interrupt_handles);
         let mut connections = self.connections.lock();
         if connections.len() < self.max_connections {
             connections.push(connection);
@@ -119,13 +191,19 @@ impl StashConnectionPool {
 pub struct StashPooledConnection {
     conn: Option<Connection>,
     pool: Weak<StashConnectionPool>,
+    interrupt_handle_key: InterruptHandleKey,
 }
 
 impl StashPooledConnection {
-    fn new(connection: Connection, pool: Weak<StashConnectionPool>) -> Self {
+    fn new(
+        connection: Connection,
+        interrupt_handle_key: InterruptHandleKey,
+        pool: Weak<StashConnectionPool>,
+    ) -> Self {
         Self {
             conn: Some(connection),
             pool,
+            interrupt_handle_key,
         }
     }
 }
@@ -133,7 +211,10 @@ impl StashPooledConnection {
 impl Drop for StashPooledConnection {
     fn drop(&mut self) {
         if let Some(pool) = self.pool.upgrade() {
-            pool.release(self.conn.take().expect("Should be set"));
+            pool.release(
+                self.conn.take().expect("Should be set"),
+                self.interrupt_handle_key,
+            );
         }
     }
 }
@@ -148,5 +229,21 @@ impl Deref for StashPooledConnection {
 impl DerefMut for StashPooledConnection {
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.conn.as_mut().expect("Should be set")
+    }
+}
+
+slotmap::new_key_type! {
+    pub(crate) struct InterruptHandleKey;
+}
+
+struct InterruptData {
+    handle: InterruptHandle,
+    notifier: Box<NotifierFn>,
+}
+
+impl InterruptData {
+    fn interrupt(&self) {
+        self.handle.interrupt();
+        (self.notifier)();
     }
 }

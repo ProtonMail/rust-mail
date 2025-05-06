@@ -88,6 +88,7 @@ rusqlite = { version = "0.32.1", features = [
 ] }
 sqlite-watcher = { version = "0.5.1", features = ["rusqlite"] }
 scraper = "0.19.1"
+slotmap = "1.0.7"
 secrecy = { version = "0.8", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde-aux = "4.5"

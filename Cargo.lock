@@ -6062,6 +6062,7 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
+ "slotmap",
  "sqlite-watcher",
  "stash-macros",
  "tempdir",

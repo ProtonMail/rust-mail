@@ -645,3 +645,63 @@ mod orm_tests {
         Ok(())
     }
 }
+
+mod interrupt {
+    use super::*;
+
+    #[tokio::test]
+    async fn transactions_are_interrupted() -> anyhow::Result<()> {
+        let db_dir = tempfile::tempdir().unwrap();
+        let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
+        let mut conn = stash.connection();
+        let (sender, receiver) = tokio::sync::oneshot::channel::<()>();
+        let (sender_interrupt, receiver_interrupt) = tokio::sync::oneshot::channel::<()>();
+        let join_handle = tokio::spawn(async move {
+            conn.tx(async move |tx| {
+                sender.send(()).unwrap();
+                receiver_interrupt.await.unwrap();
+                tx.execute(r#"CREATE TABLE test_kv (value TEXT NOT NULL)"#, vec![])
+                    .await
+            })
+            .await
+        });
+
+        receiver.await?;
+        stash.interrupt();
+        sender_interrupt.send(()).unwrap();
+
+        let err = join_handle.await?.unwrap_err();
+        assert!(err.was_interrupt());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn new_transactions_wait_until_resume() -> anyhow::Result<()> {
+        let db_dir = tempfile::tempdir().unwrap();
+        let stash = Stash::new(Some(&db_dir.path().join("test"))).expect("Failed to create Stash");
+        stash.interrupt();
+        let mut conn = stash.connection();
+        let stash_cloned = stash.clone();
+        let (sender, receiver) = tokio::sync::oneshot::channel::<()>();
+        tokio::spawn(async move {
+            sender.send(()).unwrap();
+            sleep(Duration::from_millis(400)).await;
+            stash_cloned.resume();
+        });
+
+        receiver.await?;
+
+        tokio::time::timeout(
+            Duration::from_secs(1),
+            conn.tx(async |tx| {
+                tx.execute(r#"CREATE TABLE test_kv (value TEXT NOT NULL)"#, vec![])
+                    .await
+            }),
+        )
+        .await
+        .unwrap()?;
+
+        Ok(())
+    }
+}
