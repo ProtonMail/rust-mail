@@ -13,11 +13,9 @@ impl Priority {
     ///
     /// See: [`Self::undefined()`], [`Self::highest()`], [`Self::lowest()`],
     #[must_use]
-    pub fn new(value: u8) -> Option<Self> {
-        if value <= Self::lowest().value {
-            Some(Self { value })
-        } else {
-            None
+    pub fn new(value: u8) -> Self {
+        Self {
+            value: value.min(9),
         }
     }
 
@@ -52,7 +50,7 @@ impl Priority {
 
 impl From<u32> for Priority {
     fn from(value: u32) -> Self {
-        Priority::new_unchecked(value.min(9) as u8)
+        Priority::new(value.min(9) as u8)
     }
 }
 
@@ -94,7 +92,7 @@ mod php {
             let zval = zval.long()?;
             let zval = u8::try_from(zval).ok()?;
 
-            Self::new(zval)
+            Some(Self::new(zval))
         }
     }
 
@@ -114,16 +112,16 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[test_case(Priority::new(0).unwrap(), ":0")]
-    #[test_case(Priority::new(1).unwrap(), ":1")]
-    #[test_case(Priority::new(2).unwrap(), ":2")]
-    #[test_case(Priority::new(3).unwrap(), ":3")]
-    #[test_case(Priority::new(4).unwrap(), ":4")]
-    #[test_case(Priority::new(5).unwrap(), ":5")]
-    #[test_case(Priority::new(6).unwrap(), ":6")]
-    #[test_case(Priority::new(7).unwrap(), ":7")]
-    #[test_case(Priority::new(8).unwrap(), ":8")]
-    #[test_case(Priority::new(9).unwrap(), ":9")]
+    #[test_case(Priority::new(0), ":0")]
+    #[test_case(Priority::new(1), ":1")]
+    #[test_case(Priority::new(2), ":2")]
+    #[test_case(Priority::new(3), ":3")]
+    #[test_case(Priority::new(4), ":4")]
+    #[test_case(Priority::new(5), ":5")]
+    #[test_case(Priority::new(6), ":6")]
+    #[test_case(Priority::new(7), ":7")]
+    #[test_case(Priority::new(8), ":8")]
+    #[test_case(Priority::new(9), ":9")]
     fn smoke(obj: Priority, str: &str) {
         assert_eq!(str, obj.to_string(Property));
         assert_trip!(str, Priority as Property);
@@ -132,14 +130,13 @@ mod tests {
     #[test]
     fn constructors() {
         for value in 0..=9 {
-            assert_eq!(value, Priority::new(value).unwrap().value);
+            assert_eq!(value, Priority::new(value).value);
         }
-
         for value in 0..=9 {
             assert_eq!(value, Priority::from(u32::from(value)).value);
         }
 
-        assert_eq!(None, Priority::new(10));
+        assert_eq!(9, Priority::new(10).value);
         assert_eq!(9, Priority::from(10).value);
     }
 
