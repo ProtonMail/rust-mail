@@ -26,7 +26,6 @@ use proton_core_common::utils::MapVec as _;
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
 use std::collections::HashSet;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::MailContextResult;
 use crate::actions::{
@@ -2734,14 +2733,12 @@ impl Message {
         // The user might have marked it manually as not spam, skip that case
         if !flags.contains(MessageFlags::HAM_MANUAL) {
             // Phishing
-            if flags.intersects(
-                MessageFlags::FLAG_SUSPICIOUS
-                    | MessageFlags::PHISHING_AUTO
-                    | MessageFlags::PHISHING_MANUAL,
-            ) {
+            if flags.intersects(MessageFlags::PHISHING_AUTO | MessageFlags::PHISHING_MANUAL) {
                 banners.push(MessageBanner::PhishingAttempt);
             // Regular old spam
-            } else if flags.intersects(MessageFlags::SPAM_AUTO | MessageFlags::SPAM_MANUAL) {
+            } else if flags.intersects(
+                MessageFlags::SPAM_AUTO | MessageFlags::SPAM_MANUAL | MessageFlags::FLAG_SUSPICIOUS,
+            ) {
                 banners.push(MessageBanner::Spam);
             }
 
