@@ -1,13 +1,16 @@
+use crate::MailUserContext;
 use crate::actions::MailActionError;
 use crate::models::Message;
-use crate::{AppError, MailUserContext};
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
+use proton_action_queue::action::{
+    Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
+};
 use proton_mail_ids::LocalMessageId;
 use serde::{self, Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::Bond;
+use tracing::error;
 
-/// Prefetch conversation data action.
+/// Prefetch message body action.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Prefetch {
     local_id: LocalMessageId,
@@ -23,6 +26,7 @@ impl Prefetch {
 impl Action for Prefetch {
     const TYPE: Type = Type("prefetch_message");
     const VERSION: u32 = 1;
+    const PRIORITY: Priority = Priority::Low;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
@@ -72,11 +76,16 @@ impl proton_action_queue::action::Handler for Handler {
             local_id = action.local_id
         );
 
-        let saved_message = Message::load(action.local_id, guard.tether())
-            .await?
-            .ok_or(AppError::MessageMissing(action.local_id))?;
+        let Some(local_message) = Message::load(action.local_id, guard.tether()).await? else {
+            error!(
+                "Message not found for prefetch action, message_id: `{}`",
+                action.local_id
+            );
 
-        if let Err(e) = saved_message.fetch_message_body(ctx, &mut guard).await {
+            return Ok(());
+        };
+
+        if let Err(e) = local_message.fetch_message_body(ctx, &mut guard).await {
             tracing::error!("Couldn't prefetch message body, details: `{e}`");
         };
 

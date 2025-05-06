@@ -105,7 +105,6 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
                 SubscriberError::Other(e)
             })?;
 
-        // TODO: How to figure out label here
         let label_id = SystemLabel::AllMail.local_id(&tether).await?.unwrap();
         let conversation_jobs = conversation_ids
             .into_iter()
