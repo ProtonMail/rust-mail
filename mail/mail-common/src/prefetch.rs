@@ -8,7 +8,6 @@ use proton_action_queue::queue::Queue;
 use proton_core_common::datatypes::{LocalLabelId, SystemLabel};
 use proton_mail_ids::{LocalConversationId, LocalMessageId};
 use stash::stash::{Tether, WatcherHandle};
-use tokio::task::yield_now;
 use tracing::instrument;
 
 use crate::{
@@ -116,7 +115,6 @@ impl Prefetch {
     ) -> Result<(), MailContextError> {
         let queue = ctx.action_queue();
         for location in prefetch_locations {
-            yield_now().await;
             match location {
                 PrefetchJob::LocationCnvView(label_id) => {
                     tracing::debug!("Prefetching conversations for label {label_id}");
@@ -176,7 +174,6 @@ impl Prefetch {
             handle: _,
             ..
         } = scroller.watch().await?;
-        yield_now().await;
         // Wait for previous page just in case it arrives
         let _ = tokio::time::timeout(PREVIOUS_PAGE_AWAIT_DURATION, receiver.recv_async()).await;
 
@@ -192,7 +189,6 @@ impl Prefetch {
             if let Err(error) = queue.queue_action(action).await {
                 tracing::error!("Failed to prefetch conversation {local_id}, {error}",);
             }
-            yield_now().await;
         }
 
         Ok(())
@@ -222,21 +218,17 @@ impl Prefetch {
             handle: _,
             ..
         } = scroller.watch().await?;
-        yield_now().await;
         // Wait for previous page just in case it arrives
         let _ = tokio::time::timeout(PREVIOUS_PAGE_AWAIT_DURATION, receiver.recv_async()).await;
 
         let items = scroller.fetch_more().await?;
 
-        yield_now().await;
         for item in items.into_iter().take(PREFETCH_COUNT) {
             let local_id = item.local_id.unwrap();
             let action = messages::Prefetch::new(local_id);
             if let Err(error) = queue.queue_action(action).await {
                 tracing::error!("Failed to prefetch message {local_id}, {error}",);
             }
-
-            yield_now().await;
         }
 
         Ok(())
