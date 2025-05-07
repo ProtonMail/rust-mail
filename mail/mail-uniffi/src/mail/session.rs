@@ -11,6 +11,7 @@ use crate::{
     LiveQueryCallback, WatchHandle, async_runtime, async_runtime_slim, uniffi_async, watch_channel,
 };
 use futures::TryFutureExt;
+use proton_core_common::OnSessionDeletedResponse;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::models::{AppSettings as RealAppSettings, PinProtection};
 use proton_core_common::os::KeyChainExt;
@@ -207,9 +208,28 @@ async fn create_mail_session_inner(
     )
     .await?;
 
+    let user_ctx_map = MailUserContextMap::new();
+    let weak_user_ctx_map = Arc::downgrade(&user_ctx_map);
+
+    // Register session cleanup
+    mail_ctx
+        .core_context()
+        .on_session_deleted(move |_session_id, user_id| {
+            let weak_user_ctx_map = weak_user_ctx_map.clone();
+            async move {
+                tracing::warn!("Session ended. Removing from the map");
+                if let Some(ctx) = weak_user_ctx_map.upgrade() {
+                    ctx.remove(&user_id);
+                    OnSessionDeletedResponse::Continue
+                } else {
+                    OnSessionDeletedResponse::Terminate
+                }
+            }
+        });
+
     Ok(Arc::new(MailSession {
         mail_ctx,
-        user_ctx: MailUserContextMap::new(),
+        user_ctx: user_ctx_map,
         _log_guard: maybe_log_guard,
     }))
 }
@@ -263,21 +283,11 @@ impl MailSession {
         let ctx = self.mail_ctx.clone();
 
         let user_ctx = self.user_ctx.clone();
-        let weak_user_ctx = Arc::downgrade(&user_ctx);
         let user_ctx = uniffi_async(async move {
-            ctx.initialized_user_context_from_session(
-                session.session(),
-                None,
-                move |_session_id, user_id| async move {
-                    tracing::warn!("Session ended. Removing from the map");
-                    if let Some(ctx) = weak_user_ctx.upgrade() {
-                        ctx.remove(&user_id);
-                    }
-                },
-            )
-            .map_err(RealProtonMailError::from)
-            .await
-            .map(|ctx| ctx.map(|ctx| user_ctx.insert(ctx)))
+            ctx.initialized_user_context_from_session(session.session(), None)
+                .map_err(RealProtonMailError::from)
+                .await
+                .map(|ctx| ctx.map(|ctx| user_ctx.insert(ctx)))
         })
         .map_ok(|ctx| ctx.map(MailUserSession::new))
         .await?;
@@ -294,17 +304,10 @@ impl MailSession {
 
         let user_ctx = self.user_ctx.clone();
         let user_ctx = uniffi_async(async move {
-            let weak_user_ctx = Arc::downgrade(&user_ctx);
             ctx.user_context_from_session(
                 session.session(),
                 None,
                 ShouldInitializeMailUserContext::Yes,
-                move |_session_id, user_id| async move {
-                    tracing::warn!("Session ended. Removing from the map");
-                    if let Some(ctx) = weak_user_ctx.upgrade() {
-                        ctx.remove(&user_id);
-                    }
-                },
             )
             .map_err(RealProtonMailError::from)
             .await
