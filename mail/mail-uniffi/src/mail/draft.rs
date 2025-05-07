@@ -210,6 +210,9 @@ impl Draft {
         async_runtime()
             .block_on(async {
                 let mut instance = self.instance.write().await;
+                if instance.subject == subject {
+                    return Ok(());
+                }
                 instance.subject = subject;
                 save_draft(&ctx, &mut instance)
                     .await
@@ -230,6 +233,9 @@ impl Draft {
         async_runtime()
             .block_on(async {
                 let mut instance = self.instance.write().await;
+                if instance.body() == body {
+                    return Ok(());
+                }
                 instance.set_body(body);
                 save_draft(&ctx, &mut instance)
                     .await
