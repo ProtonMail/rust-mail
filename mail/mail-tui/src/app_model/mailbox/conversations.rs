@@ -11,12 +11,11 @@ use crate::widgets::{AsTable, CenteredThrobber, ScrollableTable, ScrollableTable
 use anyhow::anyhow;
 use futures::FutureExt;
 use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::Label;
 use proton_mail_common::datatypes::folder_banner::{AutoDeleteBanner, AutoDeleteState};
 use proton_mail_common::datatypes::{ContextualConversation, LocalConversationId, ReadFilter};
 use proton_mail_common::mail_scroller::{DataScrollerSource, MailScroller};
 use proton_mail_common::models::{
-    Conversation, ConversationScrollData, MailSettings, Message as MailMessage,
+    Conversation, ConversationScrollData, LabelWithCounters, MailSettings, Message as MailMessage,
 };
 use proton_mail_common::{MailContext, MailUserContext, Mailbox, MailboxResult};
 use ratatui::Frame;
@@ -43,7 +42,7 @@ impl ConversationsState {
     pub(super) fn build(
         ctx: Arc<MailUserContext>,
         mbox: Mailbox,
-        label: Label,
+        label: LabelWithCounters,
         filter: ReadFilter,
     ) -> Command<Messages> {
         let label_id = mbox.label_id();

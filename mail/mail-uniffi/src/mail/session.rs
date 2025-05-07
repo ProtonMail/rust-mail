@@ -11,18 +11,15 @@ use crate::{
     LiveQueryCallback, WatchHandle, async_runtime, async_runtime_slim, uniffi_async, watch_channel,
 };
 use futures::TryFutureExt;
-use itertools::Itertools;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::models::{AppSettings as RealAppSettings, PinProtection};
 use proton_core_common::os::KeyChainExt;
 use proton_core_common::pin_code::PinCode;
-use proton_core_common::{CoreSessionState, OnSessionCloseNOP};
+use proton_core_common::utils::MapVec;
 use proton_mail_common::MailContext;
-use proton_mail_common::actions::draft::Send;
 use proton_mail_common::context::{EventPollMode, ShouldInitializeMailUserContext};
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::errors::unexpected::Unexpected;
-use proton_mail_common::models::DraftMetadata;
 use stash::stash::{Stash, WatcherHandle};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -258,21 +255,29 @@ impl MailSession {
     /// Get initialized user context from stored session.
     /// If context exists but it is not initialized yet, it returns `None`.
     ///
-    /// This method **does NOT** initialize context itself. It also **does NOT**
-    /// create a new context.
-    ///
+    /// This method **does NOT** initialize context itself.
     pub async fn initialized_user_context_from_session(
-        &self,
+        self: Arc<Self>,
         session: Arc<StoredSession>,
     ) -> Result<Option<Arc<MailUserSession>>, UserSessionError> {
         let ctx = self.mail_ctx.clone();
 
         let user_ctx = self.user_ctx.clone();
+        let weak_user_ctx = Arc::downgrade(&user_ctx);
         let user_ctx = uniffi_async(async move {
-            ctx.initialized_user_context_from_session(session.session(), None)
-                .map_err(RealProtonMailError::from)
-                .await
-                .map(|ctx| ctx.map(|ctx| user_ctx.insert(ctx)))
+            ctx.initialized_user_context_from_session(
+                session.session(),
+                None,
+                move |_session_id, user_id| async move {
+                    tracing::warn!("Session ended. Removing from the map");
+                    if let Some(ctx) = weak_user_ctx.upgrade() {
+                        ctx.remove(&user_id);
+                    }
+                },
+            )
+            .map_err(RealProtonMailError::from)
+            .await
+            .map(|ctx| ctx.map(|ctx| user_ctx.insert(ctx)))
         })
         .map_ok(|ctx| ctx.map(MailUserSession::new))
         .await?;
@@ -677,24 +682,8 @@ impl MailSession {
     ///
     pub async fn all_messages_were_sent(&self) -> Result<bool, UserSessionError> {
         let ctx = self.mail_ctx.clone();
-
         uniffi_async(async move {
-            let all_user_ctxs = ctx
-                .get_all_logged_in_and_initialized_user_contexts()
-                .await?;
-            let mut all_messages_were_sent = true;
-
-            for user_ctx in &all_user_ctxs {
-                let send_task_count_eq_zero = user_ctx
-                    .action_queue()
-                    .typed_actions_count::<Send>()
-                    .await?
-                    == 0;
-
-                all_messages_were_sent &= send_task_count_eq_zero;
-            }
-
-            Result::<_, RealProtonMailError>::Ok(all_messages_were_sent)
+            Result::<_, RealProtonMailError>::Ok(ctx.has_users_with_unsent_messages().await?)
         })
         .await
         .map_err(UserSessionError::from)
@@ -709,35 +698,12 @@ impl MailSession {
         let ctx = self.mail_ctx.clone();
 
         uniffi_async(async move {
-            let session = ctx.get_account_sessions(user_id.into()).await?.pop();
-
-            let msg_ids = match session {
-                Some(session)
-                    if matches!(
-                        ctx.get_session_state(session.remote_id.clone()).await?,
-                        Some(CoreSessionState::Authenticated)
-                    ) =>
-                {
-                    let user_ctx = ctx
-                        .user_context_from_session(
-                            &session,
-                            None,
-                            ShouldInitializeMailUserContext::Yes,
-                            OnSessionCloseNOP,
-                        )
-                        .await?;
-                    let tether = user_ctx.user_stash().connection();
-
-                    DraftMetadata::messages_with_pending_send(&tether)
-                        .await?
-                        .into_iter()
-                        .map_into()
-                        .collect()
-                }
-                _ => vec![],
-            };
-
-            Result::<_, RealProtonMailError>::Ok(msg_ids)
+            Result::<_, RealProtonMailError>::Ok(
+                ctx.get_unsent_messages_ids_for_user(user_id.into())
+                    .await?
+                    .into_iter()
+                    .map_vec(),
+            )
         })
         .await
         .map_err(UserSessionError::from)

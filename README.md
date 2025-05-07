@@ -20,11 +20,26 @@ For instance for the `mail-uniffi` crate this would translate into:
 * Branch: `releases/mail-uniffi/0.55`
 * Tag: `mail-uniffi/0.55`
 
+### Procedure of the release
+
+#### New release
+
+* Bump version in **master**.
+* Run the script for generating changelog.
+* Create the respective tag an push it.
+* Create the respective branch and push it.
+* Notify Slack channel about the pipeline with gist from the changelog.
+
+#### Fix Releases
+
+* Bump version in the respective **Release Branch**
+* Run the script for generating changelog.
+* Create the tag and push it.
+* Merge branch back to `master` (but do not delete source branch!)
+* Notify Slack channel about the pipeline with gist from the changelog.
+
 ### Guidelines
 
-* After creating a release, the version in the master branch should be bumped to the next release
-  candidate.
-* Tags should **always be created from the release branches**.
 * If you are working on bug fix or improvement directly related to the release, create a merge
   request targeting the release branch and then port the release to master.
 * Backporting fixes from master should be avoided if possible as you are likely to pull in new
@@ -51,18 +66,6 @@ feat*: this will not be in the changelog
 ```
 feat(ET-1234)*: This will also not be in the changelog
 ```
-
-## Procedure of the release
-
-* Create a new release branch / Merge hotfix directly into existing release branch
-* Bump Cargo.toml version in the uniffi crate.
-* Run the script for generating changelog using `<future tag>` as an argument.
-* Tag the commit with `git tag <future tag>`
-* Push it
-* Merge branch back to `master` (but do not delete source branch!)
-* Notify Slack channel about the pipeline with gist from the changelog.
-
-
 
 ## Crate Publishing
 

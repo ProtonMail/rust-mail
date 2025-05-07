@@ -30,9 +30,12 @@ use derivative::Derivative;
 use flume::{Receiver as QueueReceiver, Sender as QueueSender, unbounded};
 use indoc::formatdoc;
 use proton_task_service::IntoNonPausableFuture;
+use rusqlite::ffi::SQLITE_INTERRUPT;
 use rusqlite::hooks::Action;
 use rusqlite::types::FromSql;
-use rusqlite::{Connection, Error as SqliteError, Rows, ToSql, Transaction, TransactionBehavior};
+use rusqlite::{
+    Connection, Error as SqliteError, Rows, ToSql, Transaction, TransactionBehavior, ffi,
+};
 use sqlite_watcher::connection::State;
 use sqlite_watcher::statement::Statement;
 use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
@@ -73,6 +76,10 @@ enum Operation {
     Transaction(OperationTransaction),
     /// Only the operations related to execution
     Execution(OperationExec),
+    /// Signal an interruption of execution.
+    Interrupt,
+    /// Quit the worker thread.
+    Quit,
 }
 
 /// Distinguishes transaction change detection behavior
@@ -213,6 +220,25 @@ pub enum StashError {
     /// Custom variant that is not critical
     #[error("Critical error: {0}")]
     Custom(anyhow::Error),
+}
+
+impl StashError {
+    pub fn interrupted() -> Self {
+        StashError::ExecutionError(SqliteError::SqliteFailure(
+            ffi::Error::new(SQLITE_INTERRUPT),
+            None,
+        ))
+    }
+    pub fn was_interrupt(&self) -> bool {
+        match self {
+            StashError::ExecutionError(SqliteError::SqliteFailure(err, _))
+            | StashError::PreparationError(SqliteError::SqliteFailure(err, _))
+            | StashError::TransactionError(SqliteError::SqliteFailure(err, _)) => {
+                err.code == rusqlite::ErrorCode::OperationInterrupted
+            }
+            _ => false,
+        }
+    }
 }
 
 /// An operation to be executed by the worker, which does not return any data.
@@ -551,6 +577,18 @@ impl Stash {
             })?;
 
         Ok(WatcherHandle { receiver, handle })
+    }
+
+    /// Interrupt all ongoing queries and transactions.
+    ///
+    /// This method will also prevent new transactions from executing until [`resume()`] is called.
+    pub fn interrupt(&self) {
+        self.pool.interrupt();
+    }
+
+    /// Resume execution of transactions after a call to [`interrupt()`].
+    pub fn resume(&self) {
+        self.pool.resume();
     }
 }
 
@@ -1036,6 +1074,8 @@ impl Tether {
     /// * `stash`       - The associated [`Stash`] instance for the operations.
     ///
     fn new(stash: &Stash) -> Self {
+        // We either receive a command from the `Tether` or from the connection pool, so we only need
+        // to be able to have at most 2 items in the queue.
         let (tether_sender, tether_receiver) = flume::unbounded::<Operation>();
         let pool = stash.pool.clone();
 
@@ -1045,12 +1085,16 @@ impl Tether {
         debug!("Spawning worker task...");
         // TODO: replace me with a thread pool.
         let watcher = stash.watcher.clone();
+        let tether_sender_cloned = tether_sender.clone();
         let thread_builder = thread::Builder::new().name("Tether worker".to_string());
         _ = thread_builder.spawn(move || {
             debug!("Creating worker thread");
 
             let connection = pool
-                .acquire()
+                .acquire(Box::new(move || {
+                    let _ = tether_sender_cloned.send(Operation::Interrupt);
+                }))
+                .inspect_err(|e| error!("Failed acquire connection: {e:?}"))
                 .context("Could not connect to the database")
                 .map_err(StashError::from);
 
@@ -1092,6 +1136,12 @@ impl Tether {
                         Operation::Transaction(OperationTransaction::RollbackAbort) => {
                             unreachable!("This cannot happen at this point")
                         }
+                        Operation::Interrupt => {
+                            // Do nothing,
+                        }
+                        Operation::Quit => {
+                            // Do nothing;
+                        }
                     };
                     return;
                 }
@@ -1106,11 +1156,18 @@ impl Tether {
                 connection: &connection,
                 state: State::new(),
                 watcher: &watcher,
+                was_interrupted: false,
             };
-            sm.handle_operation(first_operation);
+
+            if sm.handle_operation(first_operation, &pool) {
+                sm.handle_close();
+                return;
+            }
 
             while let Ok(operation) = tether_receiver.recv() {
-                sm.handle_operation(operation);
+                if sm.handle_operation(operation, &pool) {
+                    break;
+                }
             }
             sm.handle_close();
         });
@@ -1126,6 +1183,14 @@ impl Tether {
 impl Debug for Tether {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Tether").finish_non_exhaustive()
+    }
+}
+
+impl Drop for Tether {
+    fn drop(&mut self) {
+        // We need an explicit quit as the sender is shared with connection pool
+        // to receive interruption requests.
+        let _ = self.sender.send(Operation::Quit);
     }
 }
 
@@ -1293,6 +1358,7 @@ struct TetheredWorkerStateMachine<'a> {
     connection: &'a Connection,
     state: State,
     watcher: &'a Watcher,
+    was_interrupted: bool,
 }
 
 impl<'a> TetheredWorkerStateMachine<'a> {
@@ -1317,19 +1383,77 @@ impl<'a> TetheredWorkerStateMachine<'a> {
     /// * `stash`       - The associated [`Stash`] instance for the operation.
     /// * `queue`       - The main operations queue for the central worker.
     ///
-    fn handle_operation(&mut self, operation: Operation) {
+    fn handle_operation(&mut self, operation: Operation, pool: &StashConnectionPool) -> bool {
+        // If we were interrupted during a transaction, this value will be true.
+        let mut should_quit = false;
+        if self.was_interrupted {
+            self.was_interrupted = false;
+            // Any other operation that happens during the transaction needs to be notified
+            // that the execution was interrupted.
+            match operation {
+                Operation::Transaction(op) => match op {
+                    OperationTransaction::Commit(_, s) | OperationTransaction::Rollback(s) => {
+                        let _ = s.send(Err(StashError::interrupted()));
+                    }
+                    OperationTransaction::Start(_, _) => {
+                        // Starting a new transaction after an interrupt is fine since we
+                        // wait until resume was called.
+                        self.handle_transaction(op, pool);
+                    }
+                    OperationTransaction::RollbackAbort => {
+                        //nothing to do
+                    }
+                },
+                Operation::Execution(op) => match op {
+                    OperationExec::Instruct(o) => {
+                        let _ = o.sender.send(Err(StashError::interrupted()));
+                    }
+                    OperationExec::Batch(o) => {
+                        let _ = o.sender.send(Err(StashError::interrupted()));
+                    }
+                    OperationExec::Query(o) => {
+                        let _ = o.sender.send(Err(StashError::interrupted()));
+                    }
+                },
+                Operation::Interrupt => {
+                    // do nothing.
+                }
+                Operation::Quit => {
+                    should_quit = true;
+                }
+            };
+            return should_quit;
+        }
+
         match operation {
             Operation::Transaction(operation) => {
-                self.handle_transaction(operation);
+                self.handle_transaction(operation, pool);
             }
             Operation::Execution(operation) => {
                 self.handle_exec(operation);
             }
+            Operation::Interrupt => {
+                self.handle_interrupt();
+            }
+            Operation::Quit => {
+                should_quit = true;
+            }
         }
+
+        should_quit
     }
-    fn handle_transaction(&mut self, operation: OperationTransaction) {
+
+    fn handle_interrupt(&mut self) {
+        self.was_interrupted = self.transaction.is_some();
+        // Rollback any active transactions.
+        self.transaction = None;
+    }
+
+    fn handle_transaction(&mut self, operation: OperationTransaction, pool: &StashConnectionPool) {
         match operation {
             OperationTransaction::Start(policy, send_back) => {
+                // Check whether we can start a new transaction or wait until we are allowed to.
+                pool.check_interrupted_or_wait_resume();
                 // In theory this should be impossible since we require a `&mut Tether` to start a
                 // transaction
                 assert!(self.transaction.is_none(), "Started transaction twice");

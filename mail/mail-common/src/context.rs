@@ -98,6 +98,8 @@ pub enum MailContextError {
     DuplicateContext(UserId),
     #[error("The context instance is missing")]
     MissingContext,
+    #[error("The user context for {0} is not initialized")]
+    UserContextNotInitialized(UserId),
     #[error("A task was cancelled")]
     TaskCancelled,
     #[error("Queue Write Guard Expired")]
@@ -357,13 +359,15 @@ impl MailContext {
         self: &Arc<Self>,
         session: &CoreSession,
         status: Option<StatusWatcher>,
+        on_session_close_hook: impl OnSessionCloseHook,
     ) -> MailContextResult<Option<Arc<MailUserContext>>> {
         let ctx = self
             .core_context
             .user_context_from_session(session, status)
             .await?;
 
-        Arc::clone(self).new_initialized_user_context(ctx).await
+        self.new_initialized_user_context(ctx, on_session_close_hook)
+            .await
     }
 
     /// Create a new context from an existing session.
@@ -651,39 +655,27 @@ impl MailContext {
 
     /// Retrieve initialized user context or return None.
     ///
+    /// Initialized means that we are fully logged in and all the initialization stages
+    /// have finished executing.
     async fn new_initialized_user_context(
-        self: Arc<Self>,
+        self: &Arc<Self>,
         core_context: Arc<UserContext>,
+        on_session_close_hook: impl OnSessionCloseHook,
     ) -> Result<Option<Arc<MailUserContext>>, MailContextError> {
-        let mut active_contexts = self.active_user_contexts.lock().await;
-
-        active_contexts.retain(|_, ctx| ctx.strong_count() != 0);
-
-        let Some(existing) = active_contexts.get(core_context.user_id()) else {
-            tracing::debug!("There is no existing context");
-            return Ok(None);
-        };
-
-        let Some(upgraded) = existing.upgrade() else {
-            tracing::debug!("Can't upgrade existing context");
-            return Ok(None);
-        };
-
-        // This should be handled by the core context creating,
-        // but if for some reason it slips through the cracks,
-        // catch it again.
-        if upgraded.session_id() != core_context.session_id() {
-            return Err(MailContextError::DuplicateContext(
-                core_context.user_id().clone(),
-            ));
-        }
-
-        if !upgraded.is_initialized().await? {
+        let context = self
+            .clone()
+            .new_user_context(
+                core_context,
+                ShouldInitializeMailUserContext::No,
+                on_session_close_hook,
+            )
+            .await?;
+        if !context.is_initialized().await? {
             tracing::debug!("Existing context is not initialized");
             return Ok(None);
         }
 
-        Ok(Some(upgraded))
+        Ok(Some(context))
     }
 
     /// Create a new user context or return an existing one.
@@ -754,7 +746,7 @@ impl MailContext {
         for session in sessions {
             if let CoreSessionState::Authenticated = CoreSessionState::of(&session) {
                 match self
-                    .initialized_user_context_from_session(&session, None)
+                    .initialized_user_context_from_session(&session, None, OnSessionCloseNOP)
                     .await
                 {
                     Ok(Some(user_context)) => ctxs.push(user_context),

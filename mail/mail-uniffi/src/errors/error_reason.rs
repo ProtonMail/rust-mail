@@ -42,6 +42,7 @@ impl From<RealActionErrorReason> for ActionErrorReason {
 pub enum SessionErrorReason {
     UnknownLabel,
     DuplicateContext,
+    UserContextNotInitialized,
 }
 
 impl From<RealContextErrorReason> for SessionErrorReason {
@@ -49,6 +50,9 @@ impl From<RealContextErrorReason> for SessionErrorReason {
         match reason {
             RealContextErrorReason::UnknownLabel => SessionErrorReason::UnknownLabel,
             RealContextErrorReason::DuplicateContext => SessionErrorReason::DuplicateContext,
+            RealContextErrorReason::UserContextNotInitialized(_) => {
+                SessionErrorReason::UserContextNotInitialized
+            }
         }
     }
 }

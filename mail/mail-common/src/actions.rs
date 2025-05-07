@@ -6,6 +6,7 @@ pub mod event_poll;
 pub mod labels;
 pub mod messages;
 pub mod notifications_quick_actions;
+pub mod rollback;
 
 pub use self::available_action::*;
 use crate::AppError;
@@ -130,6 +131,7 @@ pub(crate) fn register_mail_actions(queue: &Queue) {
     register_action::<draft::AttachmentUpload>(queue);
     register_action::<draft::AttachmentRemove>(queue);
     register_action::<event_poll::EventPoll>(queue);
+    register_action::<rollback::RollbackAction>(queue);
 }
 
 /// Convenience type which contains data common to many actions.

@@ -1,4 +1,4 @@
-{ pkgs, lib, config, inputs, ... }:
+{ pkgs, lib, config, ... }:
 
 # Before you start
 # Make sure, that you have created `devenv.local.nix` file with following content
@@ -19,6 +19,8 @@ in
 {
   packages = [
     pkgs.bashInteractive
+    pkgs.php # For iCal
+    pkgs.php.unwrapped.dev # For iCal
     pkgs.sql-formatter
     pkgs.git-cliff
   ] ++ lib.optionals pkgs.stdenv.isDarwin (

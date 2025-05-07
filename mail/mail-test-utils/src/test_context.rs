@@ -207,6 +207,7 @@ impl MailTestContext {
             .initialized_user_context_from_session(
                 &self.core_session,
                 Some(StatusWatcher::with_observer(StatusObserver::test())),
+                OnSessionCloseNOP,
             )
             .await
             .unwrap()?;

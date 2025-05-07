@@ -62,6 +62,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 'seen' should consider both commit and tag
 
 
+## [mail-uniffi-v0.72.13] - 2025-04-25
+
+### Fixes
+
+- [ET-2763] Mailscroller will not send data requests when offline
+- [ET-2754] Draft now holds weak handle to `mailusercontext`.
+- [ET-2754] Decrypted message now hold s weak handle to the `mailusercontext`
+- Do not sync mailbox, fix of b8a6329bb0fe62a7cc3acc8676ea6553d3f2eeca
+
+
 ## [mail-uniffi-v0.74.0] - 2025-04-24
 
 ### Features
@@ -80,16 +90,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove timeout on transactions
 
 
-## [mail-uniffi-v0.72.13] - 2025-04-25
-
-### Fixes
-
-- [ET-2763] Mailscroller will not send data requests when offline
-- [ET-2754] Draft now holds weak handle to `mailusercontext`.
-- [ET-2754] Decrypted message now hold s weak handle to the `mailusercontext`
-- Do not sync mailbox, fix of b8a6329bb0fe62a7cc3acc8676ea6553d3f2eeca
-
-
 ## [mail-uniffi-v0.72.12] - 2025-04-24
 
 ### Fixes
@@ -99,11 +99,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-2765] Make minor adjustments
 
 
-## [mail-uniffi-v0.72.7] - 2025-04-16
+## [mail-uniffi-v0.72.11] - 2025-04-23
 
 ### Fixes
 
-- Return cached data from mail scroller immediately
+- [ET-2698] Handle a case where authentication scope is not enough
+
+
+## [mail-uniffi-v0.72.10] - 2025-04-23
+
+### Fixes
+
+- Remove event debug print
+- One transaction per event
 
 
 ## [mail-uniffi-v0.73.0] - 2025-04-17
@@ -128,11 +136,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Don't send rollback again
 
 
-## [mail-uniffi-v0.72.11] - 2025-04-23
+## [mail-uniffi-v0.72.9] - 2025-04-17
+
+### Changed
+
+- Synchronize db writes
 
 ### Fixes
 
-- [ET-2698] Handle a case where authentication scope is not enough
+- Restore stash debug filter for ios logs
+- Network requests in send preferences tx
+
+
+## [mail-uniffi-v0.72.7] - 2025-04-16
+
+### Fixes
+
+- Return cached data from mail scroller immediately
 
 
 ## [mail-uniffi-v0.72.6] - 2025-04-14
@@ -140,14 +160,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - Restore manual event loop polling with `force_event_loop_poll`
-
-
-## [mail-uniffi-v0.72.10] - 2025-04-23
-
-### Fixes
-
-- Remove event debug print
-- One transaction per event
 
 
 ## [mail-uniffi-v0.72.5] - 2025-04-14
@@ -174,18 +186,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Leaking tracing spans in async code
 
 
-## [mail-uniffi-v0.72.9] - 2025-04-17
-
-### Changed
-
-- Synchronize db writes
-
-### Fixes
-
-- Restore stash debug filter for ios logs
-- Network requests in send preferences tx
-
-
 ## [mail-uniffi-v0.72.3] - 2025-04-11
 
 ### Fixes
@@ -198,13 +198,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - Correct background task execution
-
-
-## [mail-uniffi-v0.70.10] - 2025-04-09
-
-### Fixes
-
-- [ET-2699] Blocked banner now properly gets updated on the event loop and block_address now takes a string instead of an id
 
 
 ## [mail-uniffi-v0.72.0] - 2025-04-10
@@ -227,6 +220,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Core: fix status watcher's shared state
 - [ET-2601] Improve initialization by waiting when failure of dependency happen
+
+
+## [mail-uniffi-v0.70.10] - 2025-04-09
+
+### Fixes
+
+- [ET-2699] Blocked banner now properly gets updated on the event loop and block_address now takes a string instead of an id
 
 
 ## [mail-uniffi-v0.70.9] - 2025-04-09
@@ -288,6 +288,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-2581] Don't show embedded and remote banners when there is no remote/embedded content.
 
 
+## [mail-uniffi-v0.70.1] - 2025-04-04
+
+### Fixes
+
+- Do not delete draft attachments
+- [ET-2671] Persist recipient removal
+
+
 ## [mail-uniffi-v0.70.0] - 2025-04-03
 
 ### Changed
@@ -306,14 +314,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-2614] Correctly format bug report description to include all provided fields
 - [ET-2592] Replace r2d2 with basic replacement
 - Missing pinned and blocked system label migration
-
-
-## [mail-uniffi-v0.70.1] - 2025-04-04
-
-### Fixes
-
-- Do not delete draft attachments
-- [ET-2671] Persist recipient removal
 
 
 ## [mail-uniffi-v0.69.0] - 2025-04-02

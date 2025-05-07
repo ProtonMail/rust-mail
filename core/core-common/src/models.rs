@@ -55,6 +55,7 @@ use crate::datatypes::LocalIdMarker;
 use indoc::formatdoc;
 use itertools::Itertools as _;
 use proton_api_core::services::proton::ProtonIdMarker;
+use stash::exports::FromSql;
 use stash::exports::{SqliteError, ToSql};
 use stash::orm::Model;
 use stash::params;
@@ -314,7 +315,7 @@ pub trait ModelExtension: Model {
 #[allow(async_fn_in_trait)]
 pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
     /// Remote Id type.
-    type RemoteId: ProtonIdMarker;
+    type RemoteId: ProtonIdMarker + ToSql + FromSql;
 
     /// Return the remote id for this model.
     fn remote_id(&self) -> Option<&Self::RemoteId>;
