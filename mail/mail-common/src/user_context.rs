@@ -8,7 +8,7 @@ use crate::actions::register_mail_actions;
 use crate::context::EventPollMode;
 use crate::draft::attachments::DraftStagingAreaCleaner;
 use crate::models::{Conversation, Message};
-use crate::prefetch::{Prefetch, PrefetchNotify};
+use crate::prefetch::{Prefetch, PrefetchJob, PrefetchNotify};
 use crate::user_context::initialization::InitializationMediator;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
@@ -42,6 +42,7 @@ use tokio::task::JoinHandle;
 use tracing::error;
 
 const DEFAULT_SEND_QUEUE_POOL_SIZE: usize = 4;
+const DEFAULT_PREFETCH_BOUND: usize = 4;
 
 pub struct MailUserContext {
     this: Weak<Self>,
@@ -459,22 +460,35 @@ impl MailUserContext {
     /// - Drafts
     /// - AllDrafts
     pub async fn prefetch(self: &Arc<Self>) -> MailContextResult<()> {
+        self.prefetch_locations(Default::default()).await
+    }
+
+    pub async fn prefetch_locations(
+        self: &Arc<Self>,
+        locations: Vec<PrefetchJob>,
+    ) -> MailContextResult<()> {
         if let Some(sender) = self.prefetch.get() {
-            sender.send(()).map_err(|_| {
+            sender.send_async(locations).await.map_err(|_| {
                 MailContextError::Other(anyhow!("Failed to send prefetch signal to prefetcher"))
             })?;
 
             Ok(())
         } else {
-            let (sender, receiver) = flume::unbounded();
+            let (sender, receiver) = flume::bounded(DEFAULT_PREFETCH_BOUND);
 
             self.prefetch.set(sender).map_err(|e| {
                 MailContextError::Other(anyhow!("Failed to set prefetch sender: {e:?}"))
             })?;
             Prefetch::initialize(self.clone(), receiver).await;
-            self.prefetch.get().unwrap().send(()).map_err(|_| {
-                MailContextError::Other(anyhow!("Failed to send prefetch signal to prefetcher"))
-            })?;
+            // unwrap safety: `self.prefetch` is set just above, it cannot be `None`.
+            self.prefetch
+                .get()
+                .unwrap()
+                .send_async(locations)
+                .await
+                .map_err(|_| {
+                    MailContextError::Other(anyhow!("Failed to send prefetch signal to prefetcher"))
+                })?;
 
             Ok(())
         }
