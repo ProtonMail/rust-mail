@@ -484,6 +484,7 @@ impl MailUserContext {
                 MailContextError::Other(anyhow!("Failed to set prefetch sender: {e:?}"))
             })?;
             Prefetch::initialize(self.clone(), receiver).await;
+            // unwrap safety: `self.prefetch` is set just above, it cannot be `None`.
             self.prefetch
                 .get()
                 .unwrap()
