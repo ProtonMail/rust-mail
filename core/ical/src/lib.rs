@@ -265,8 +265,6 @@ impl<'a> ValidatedVCalendar<'a> {
     }
 
     /// Returns the validation errors, if any.
-    ///
-    /// Returned vector is guaranteed to contain at least one item.
     #[must_use]
     pub fn into_viols(self) -> Vec<Violation> {
         match self {

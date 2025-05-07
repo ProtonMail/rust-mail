@@ -48,6 +48,7 @@ color-backtrace = "0.6.1"
 colored = "2.2.0"
 common-multipart-rfc7578 = { version = "0.7.0", default-features = false }
 cookie = "0.18.1"
+criterion = "0.5.1"
 ctor = "0.2.9"
 derivative = "2.2.0"
 non-empty-string = { version = "0.2.5", features = ["serde"] }

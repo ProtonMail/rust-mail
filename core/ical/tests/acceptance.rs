@@ -1,5 +1,9 @@
+use insta::assert_snapshot;
 use pretty_assertions as pa;
 use proton_ical::*;
+use std::fmt::Write;
+use std::{fs, path::Path};
+use test_case::test_case;
 
 #[test]
 fn empty() {
@@ -146,6 +150,84 @@ fn without_calscale() {
     assert_eq!(CalScale::Gregorian, out.cal.calscale);
     assert!(out.msgs.is_empty());
     assert!(out.viols.is_empty());
+}
+
+/// Make sure we can parse various atypical and funny cases.
+///
+/// Fixtures here were taken from the surgery dataset, but since we don't have
+/// the surgery logic here yet, what we do is that we simply parse the files and
+/// make sure the output looks reasonable enough.
+#[test_case("broken-attendee-1")]
+#[test_case("broken-attendee-1-email")]
+#[test_case("broken-organizer-broken-cn-non-strict")]
+#[test_case("broken-organizer-broken-cn-strict")]
+#[test_case("dtend-before-dtstart")]
+#[test_case("duration-dst")]
+#[test_case("floating-no-wr-timezone")]
+#[test_case("floating-time")]
+#[test_case("floating-time-pm")]
+#[test_case("floating-time-zulu")]
+#[test_case("format-exdate")]
+#[test_case("format-for-full-day-event")]
+#[test_case("long-event-description")]
+#[test_case("long-event-description-special-chars")]
+#[test_case("lower-case-tz")]
+#[test_case("missing-dtstamp")]
+#[test_case("missing-dtstamp-email")]
+#[test_case("missing-organizer")]
+#[test_case("missing-organizer-email")]
+#[test_case("missing-partstat")]
+#[test_case("missing-sequence")]
+#[test_case("multiple-exdates")]
+#[test_case("multiple-exdates-tz")]
+#[test_case("nuku-alofa-tz")]
+#[test_case("outside-uid")]
+#[test_case("tentative-status")]
+#[test_case("upper-case-status")]
+fn atypical_case(name: &str) {
+    let dir = Path::new("acceptance").join("atypical-cases").join(name);
+    let src = fs::read(Path::new("tests").join(&dir).join("input.ics")).unwrap();
+    let cal = VCalendar::from_bytes(&src).unwrap();
+
+    let output = {
+        let mut buf = String::new();
+
+        _ = writeln!(buf, "```");
+        _ = writeln!(buf, "{:#?}", cal.cal);
+        _ = writeln!(buf, "```");
+
+        if !cal.msgs.is_empty() {
+            _ = writeln!(buf);
+            _ = writeln!(buf, "# messages");
+
+            for msg in cal.msgs {
+                _ = writeln!(buf);
+                _ = writeln!(buf, "{}", msg.to_string(src.as_slice()).trim_end());
+            }
+        }
+
+        if !cal.viols.is_empty() {
+            _ = writeln!(buf);
+            _ = writeln!(buf, "# violations");
+
+            for viol in cal.viols {
+                _ = writeln!(buf);
+                _ = writeln!(buf, "- {viol}");
+            }
+        }
+
+        buf
+    };
+
+    let mut cfg = insta::Settings::clone_current();
+
+    cfg.set_snapshot_path(&dir);
+    cfg.set_omit_expression(true);
+    cfg.set_prepend_module_to_snapshot(false);
+
+    cfg.bind(|| {
+        assert_snapshot!("output", output);
+    });
 }
 
 #[track_caller]

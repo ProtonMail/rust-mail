@@ -23,8 +23,9 @@ tynm = { workspace = true }
 utf8-width = { workspace = true }
 
 [dev-dependencies]
-criterion = "0.5.1"
+criterion = { workspace = true }
 indoc = { workspace = true }
+insta = { workspace = true }
 pretty_assertions = { workspace = true }
 test-case = { workspace = true }
 

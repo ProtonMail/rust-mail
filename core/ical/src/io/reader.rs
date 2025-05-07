@@ -735,10 +735,12 @@ impl ReadEntry {
                 // don't have to support those and they shouldn't affect the
                 // semantics of the calendar in a major way, so let's emit those
                 // as warnings instead of errors
+                let msg = format!("unknown property `{}`", name.value);
+
                 if name.starts_with("x-") || name.starts_with("X-") {
-                    r.warn(name.span, format!("unknown property `{}`", name.value));
+                    r.warn(name.span, msg);
                 } else {
-                    r.error(name.span, format!("unknown property `{}`", name.value));
+                    r.error(name.span, msg);
                 }
 
                 // Recover by skipping rest of the line
@@ -746,7 +748,16 @@ impl ReadEntry {
             }
 
             ReadEntry::Param { name } => {
-                r.error(name.span, format!("unknown parameter `{}`", name.value));
+                // Same as with properties, the `X-` prefix marks something
+                // vendor-specific - if we happen not to support anything, no
+                // need to sweat over it
+                let msg = format!("unknown parameter `{}`", name.value);
+
+                if name.starts_with("x-") || name.starts_with("X-") {
+                    r.warn(name.span, msg);
+                } else {
+                    r.error(name.span, msg);
+                }
 
                 // Recover by skipping the parameter
                 r.silently(|r| {

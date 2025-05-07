@@ -4866,6 +4866,7 @@ dependencies = [
  "criterion",
  "ext-php-rs",
  "indoc",
+ "insta",
  "itertools 0.13.0",
  "jiff",
  "pretty_assertions",
