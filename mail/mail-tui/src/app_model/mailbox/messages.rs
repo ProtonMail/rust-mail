@@ -809,6 +809,7 @@ impl DecryptedMessage {
         frame.render_stateful_widget(paragraph, message_area, &mut self.scroll_state);
     }
 
+    #[allow(clippy::cast_possible_wrap)]
     pub fn draw_banners(&self, frame: &mut Frame, rect: Rect) {
         let rows = self.banners.iter().map(|banner| match banner {
             MessageBanner::BlockedSender => ListItem::from("You blocked this sender."),
