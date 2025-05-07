@@ -2714,44 +2714,43 @@ impl Message {
         let settings = &MailSettings::get_or_default(tether).await;
 
         let mut autodelete = false;
-        if let Some(days) = settings.auto_delete_spam_and_trash_days {
-            // TODO: let chains
-            if days != 0 && self.expiration_time != 0 {
-                let trash = LabelId::trash();
-                let spam = LabelId::spam();
 
-                if self.label_ids.iter().any(|x| *x == trash || *x == spam) {
+        // Banners that can only be displayed if the message is in the trash or spam folder:
+        // Autodelete
+        // Phishing OR SpamAuto
+        if self
+            .label_ids
+            .iter()
+            .any(|label| *label == LabelId::trash() || *label == LabelId::spam())
+        {
+            if let Some(days) = settings.auto_delete_spam_and_trash_days {
+                // TODO: let chains
+                if days != 0 && self.expiration_time != 0 {
                     banners.push(MessageBanner::AutoDelete {
                         timestamp: self.expiration_time,
-                        delete_days: days,
                     });
                     autodelete = true;
                 }
             }
-        }
 
-        // The user might have marked it manually as not spam, skip that case
-        if !flags.contains(MessageFlags::HAM_MANUAL) {
-            // Phishing
             if flags.intersects(MessageFlags::PHISHING_AUTO | MessageFlags::PHISHING_MANUAL) {
                 banners.push(MessageBanner::PhishingAttempt);
-            // Regular old spam
-            } else if flags.intersects(
-                MessageFlags::SPAM_AUTO | MessageFlags::SPAM_MANUAL | MessageFlags::FLAG_SUSPICIOUS,
-            ) {
+            } else if flags.intersects(MessageFlags::SPAM_AUTO) {
                 banners.push(MessageBanner::Spam);
+            } else {
+                // manual spam don't get a banner
             }
+        }
 
-            // This check is here because we can't clear this on the local action
-            if self.expiration_time != 0
+        // This check is here because we can't clear this on the local action
+        if self.expiration_time != 0
             // Since the backend sends the expiration time for autodelete we have to do this to
             // disambiguate between autodelete and expiry and not show 2 banners.
             && !autodelete
-            {
-                banners.push(MessageBanner::Expiry {
-                    timestamp: self.expiration_time,
-                });
-            }
+        {
+            banners.push(MessageBanner::Expiry {
+                timestamp: self.expiration_time,
+            });
         }
 
         if let Ok(Some(IncomingDefaultLocation::Blocked)) =
