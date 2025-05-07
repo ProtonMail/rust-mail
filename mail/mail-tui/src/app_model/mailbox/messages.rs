@@ -810,22 +810,27 @@ impl DecryptedMessage {
     }
 
     pub fn draw_banners(&self, frame: &mut Frame, rect: Rect) {
-        let rows = self.banners.iter().map(|banner| {
-             match banner {
-                    MessageBanner::BlockedSender => ListItem::from("You blocked this sender."),
-                    MessageBanner::PhishingAttempt => {
-                        ListItem::from("The system thinks that this is a phishing attempt")
-                    }
-                    MessageBanner::Spam => ListItem::from("This message was automatically marked as spam"),
-                    MessageBanner::Expiry { timestamp } => ListItem::from(format!("This message will self-destruct at {timestamp:?}")),
-                    MessageBanner::AutoDelete {
-                        timestamp,
-                        delete_days,
-                    } => ListItem::from(format!("Messages in the trash get deleted after {delete_days}. This message will get deleted at {timestamp:?}")),
-                    MessageBanner::RemoteContent => ListItem::from("This message contains remote images. Use the --browser flag to see them."),
-                    MessageBanner::EmbeddedImages => ListItem::from("This message contains embedded images, which can't be shown in the TUI."),
-                    _ => ListItem::from("unimplemented"),
-                }
+        let rows = self.banners.iter().map(|banner| match banner {
+            MessageBanner::BlockedSender => ListItem::from("You blocked this sender."),
+            MessageBanner::PhishingAttempt => {
+                ListItem::from("The system thinks that this is a phishing attempt")
+            }
+            MessageBanner::Spam => ListItem::from("This message was automatically marked as spam"),
+            MessageBanner::Expiry { timestamp } => ListItem::from(format!(
+                "This message will expire at {}",
+                chrono::DateTime::from_timestamp(*timestamp as i64, 0).unwrap()
+            )),
+            MessageBanner::AutoDelete { timestamp } => ListItem::from(format!(
+                "This message will auto-delete at {}",
+                chrono::DateTime::from_timestamp(*timestamp as i64, 0).unwrap()
+            )),
+            MessageBanner::RemoteContent => ListItem::from(
+                "This message contains remote images. Use the --browser flag to see them.",
+            ),
+            MessageBanner::EmbeddedImages => ListItem::from(
+                "This message contains embedded images, which can't be shown in the TUI.",
+            ),
+            _ => ListItem::from("unimplemented"),
         });
         frame.render_widget(List::new(rows), rect);
     }

@@ -13,7 +13,7 @@ pub enum MessageBanner {
     /// The message might be a phishing attempt.
     PhishingAttempt,
 
-    /// The message has been marked as spam.
+    /// The system marked the message as spam.
     Spam,
 
     /// The message has an expiration date.
@@ -22,13 +22,10 @@ pub enum MessageBanner {
         timestamp: u64,
     },
 
-    /// The message is scheduled for automatic deletion at a specific time.
+    /// The message is scheduled for automatic deletion at a specific time because it is in spam or trash.
     AutoDelete {
         /// The Unix timestamp indicating when the message will be deleted.
         timestamp: u64,
-        /// How many days a message will stay in trash/spam until it expires
-        // FIXME: Delete this field in favor of timestamp
-        delete_days: u32,
     },
 
     /// The message provides an option to unsubscribe from a newsletter.
