@@ -1,0 +1,189 @@
+---
+source: core/ical/tests/acceptance.rs
+---
+```
+VCalendar {
+    method: Some(
+        Request,
+    ),
+    prodid: ProdId {
+        value: Text(
+            "-//Google Inc//Google Calendar 70.9054//EN",
+        ),
+    },
+    version: Two,
+    calscale: Gregorian,
+    events: [
+        VEvent {
+            uid: Some(
+                Uid {
+                    value: Text(
+                        "1o2b18ap2lqbcgckgugthjic1de1@google.com",
+                    ),
+                },
+            ),
+            dtstamp: Some(
+                DtStamp {
+                    value: DateTime {
+                        date: Date {
+                            year: Year(
+                                2021,
+                            ),
+                            month: Month(
+                                11,
+                            ),
+                            day: Day(
+                                29,
+                            ),
+                        },
+                        time: Time {
+                            hour: Hour(
+                                13,
+                            ),
+                            minute: Minute(
+                                4,
+                            ),
+                            second: Second(
+                                15,
+                            ),
+                        },
+                        form: Utc,
+                    },
+                },
+            ),
+            dtstart: Some(
+                DtStart {
+                    value: DateTime(
+                        DateTime {
+                            date: Date {
+                                year: Year(
+                                    2021,
+                                ),
+                                month: Month(
+                                    11,
+                                ),
+                                day: Day(
+                                    30,
+                                ),
+                            },
+                            time: Time {
+                                hour: Hour(
+                                    8,
+                                ),
+                                minute: Minute(
+                                    0,
+                                ),
+                                second: Second(
+                                    0,
+                                ),
+                            },
+                            form: Utc,
+                        },
+                    ),
+                },
+            ),
+            dtend: Some(
+                DtEnd {
+                    value: DateTime(
+                        DateTime {
+                            date: Date {
+                                year: Year(
+                                    2021,
+                                ),
+                                month: Month(
+                                    10,
+                                ),
+                                day: Day(
+                                    30,
+                                ),
+                            },
+                            time: Time {
+                                hour: Hour(
+                                    9,
+                                ),
+                                minute: Minute(
+                                    0,
+                                ),
+                                second: Second(
+                                    0,
+                                ),
+                            },
+                            form: Utc,
+                        },
+                    ),
+                },
+            ),
+            created: Some(
+                Created {
+                    value: DateTime {
+                        date: Date {
+                            year: Year(
+                                2021,
+                            ),
+                            month: Month(
+                                11,
+                            ),
+                            day: Day(
+                                29,
+                            ),
+                        },
+                        time: Time {
+                            hour: Hour(
+                                13,
+                            ),
+                            minute: Minute(
+                                4,
+                            ),
+                            second: Second(
+                                14,
+                            ),
+                        },
+                        form: Utc,
+                    },
+                },
+            ),
+            class: Public,
+            transp: Opaque,
+            status: Some(
+                Confirmed,
+            ),
+            priority: None,
+            summary: Some(
+                Summary {
+                    value: Text(
+                        "End date is earlier2",
+                    ),
+                },
+            ),
+            location: None,
+            description: Some(
+                Description {
+                    value: Text(
+                        "Lorem ipsum dolor sit amet, consectetur adipiscing elit, seddo eiusmod tempor incididunt ut labore et dolore magna aliqua.Lorem ipsum d",
+                    ),
+                },
+            ),
+            organizer: None,
+            attendees: [],
+            rrule: None,
+            exdate: None,
+            duration: None,
+            sequence: Some(
+                Sequence {
+                    value: 0,
+                },
+            ),
+            recurrence_id: None,
+            alarms: [],
+        },
+    ],
+    timezones: [],
+}
+```
+
+# messages
+
+error: unknown property `LAST-MODIFIED`
+ --> at 14:1..13
+  | when parsing `VEvent` at 7:1
+  | when parsing `VCalendar` at 2:1

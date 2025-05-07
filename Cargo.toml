@@ -7,7 +7,9 @@ members = [
     "core/core-common",
     "core/core-test-utils",
     "core/event-loop",
-    "core/proton-canonical-email", "core/task-service",
+    "core/ical",
+    "core/proton-canonical-email",
+    "core/task-service",
     "core/sqlite3",
     "core/stash",
     "core/stash-macros",
@@ -46,11 +48,13 @@ color-backtrace = "0.6.1"
 colored = "2.2.0"
 common-multipart-rfc7578 = { version = "0.7.0", default-features = false }
 cookie = "0.18.1"
+criterion = "0.5.1"
 ctor = "0.2.9"
 derivative = "2.2.0"
 non-empty-string = { version = "0.2.5", features = ["serde"] }
 derive_more = { version = "2.0", features = ["full"] }
 email_address = { version = "0.2.9", features = ["serde"] }
+ext-php-rs = "0.13.1"
 flume = "0.11"
 futures = "0.3.31"
 function_name = "0.3.0"
@@ -63,6 +67,7 @@ insta = { version = "1.42.0", features = ["toml"] }
 indexmap = { version = "2.7.1", features = ["serde"] }
 itertools = "0.13.0"
 html2text = "0.14.2"
+jiff = "0.2.4"
 file-format = { version = "0.26.0", features = ["reader"] }
 lazy_static = "1"
 mime = "0.3.17"
@@ -97,6 +102,7 @@ serde_repr = "0.1"
 serde_with = "3.12.0"
 serde_qs = "0.13.0"
 smart-default = "0.7.1"
+strum = "0.26.3"
 tempdir = "0.3.7"
 tempfile = "3.15.0"
 test-case = "3.3.1"
@@ -106,10 +112,12 @@ tokio-util = { version = "0.7", features = ["rt"] }
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tynm = "0.1"
 typed-builder = "0.20.0"
 unicode-segmentation = "1.12.0"
 uniffi = { version = "0.29.1", features = ["tokio"] }
 url = { version = "2.5.4", features = ["serde"] }
+utf8-width = "0.1.7"
 uuid = { version = "1.12.1", features = ["serde", "v4"] }
 velcro = "0.5.4"
 wiremock = "0.6.2"
