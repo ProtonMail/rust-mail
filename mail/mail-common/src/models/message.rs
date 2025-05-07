@@ -26,7 +26,6 @@ use proton_core_common::utils::MapVec as _;
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
 use std::collections::HashSet;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crate::MailContextResult;
 use crate::actions::{
@@ -2713,22 +2712,20 @@ impl Message {
         let flags = self.flags;
 
         let settings = &MailSettings::get_or_default(tether).await;
+
         let mut autodelete = false;
         if let Some(days) = settings.auto_delete_spam_and_trash_days {
-            if days != 0 {
+            // TODO: let chains
+            if days != 0 && self.expiration_time != 0 {
                 let trash = LabelId::trash();
                 let spam = LabelId::spam();
 
                 if self.label_ids.iter().any(|x| *x == trash || *x == spam) {
-                    // FIXME: This is not correct at the moment, but it's better than nothing
-                    if let Ok(time) = SystemTime::now().duration_since(UNIX_EPOCH) {
-                        let time = time + Duration::from_secs((days * 24 * 60 * 60) as u64);
-                        banners.push(MessageBanner::AutoDelete {
-                            timestamp: time.as_secs(),
-                            delete_days: days,
-                        });
-                        autodelete = true;
-                    }
+                    banners.push(MessageBanner::AutoDelete {
+                        timestamp: self.expiration_time,
+                        delete_days: days,
+                    });
+                    autodelete = true;
                 }
             }
         }
@@ -2736,14 +2733,12 @@ impl Message {
         // The user might have marked it manually as not spam, skip that case
         if !flags.contains(MessageFlags::HAM_MANUAL) {
             // Phishing
-            if flags.intersects(
-                MessageFlags::FLAG_SUSPICIOUS
-                    | MessageFlags::PHISHING_AUTO
-                    | MessageFlags::PHISHING_MANUAL,
-            ) {
+            if flags.intersects(MessageFlags::PHISHING_AUTO | MessageFlags::PHISHING_MANUAL) {
                 banners.push(MessageBanner::PhishingAttempt);
             // Regular old spam
-            } else if flags.intersects(MessageFlags::SPAM_AUTO | MessageFlags::SPAM_MANUAL) {
+            } else if flags.intersects(
+                MessageFlags::SPAM_AUTO | MessageFlags::SPAM_MANUAL | MessageFlags::FLAG_SUSPICIOUS,
+            ) {
                 banners.push(MessageBanner::Spam);
             }
 

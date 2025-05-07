@@ -5,19 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Changed
-
-- Update `get_unsent_messages_ids_in_queue`
-
-### Features
-
-- Enable rollback items
+## [mail-uniffi-v0.75.5] - 2025-05-06
 
 ### Fixes
 
-- Sort changelog chronologically
+- Properly calculate when messages will get autodeleted.
+- The phishing banner was shown for suspicious messages, now the spam banner is shown instead
+
+
+## [mail-uniffi-v0.75.4] - 2025-05-05
+
+### Fixes
+
+- Run 'cargo generate-lockfile' for proton-mail-uniffi@0.75.4
+
+
+## [mail-uniffi-v0.75.3] - 2025-05-05
+
+### Fixes
+
 - [ET-2716] Autodelete banner no longer waits for the event loop to clear upon mark as legitimate and expiry and autodelete banners don't show both
 - [ET-2716] Auto-delete banner no longer visible after disabling auto-delete
 
@@ -45,7 +51,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-- Et-2713: guarantee a single observability background job even when multiple sessions are created
 - Send tracing logs both to file and to ios os-logger
 - [ET-2375] Quick actions for push notifications
 - [ET-2731] Remove attachments from draft with content-id
@@ -72,6 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Features
 
 - Et-2713: expose observability features via uniffi
+- Et-2713: guarantee a single observability background job even when multiple sessions are created
 
 ### Fixes
 
@@ -126,6 +132,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Only allow one session per user
 - Leaking tracing spans in async code
 - Return cached data from mail scroller immediately
+- Don't hang if transaction never ends
 - Don't send rollback again
 
 
@@ -139,13 +146,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Restore stash debug filter for ios logs
 - Network requests in send preferences tx
-
-
-## [mail-uniffi-v0.72.8] - 2025-04-16
-
-### Fixes
-
-- Don't hang if transaction never ends
 
 
 ## [mail-uniffi-v0.72.7] - 2025-04-16
