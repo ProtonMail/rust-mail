@@ -5,7 +5,6 @@
 mod tests;
 
 use kuchikiki::{NodeData, NodeRef, iter::NodeEdge};
-use lazy_static::lazy_static;
 
 const BLOCKQUOTE_SELECTORS: [&str; 22] = [
     ".protonmail_quote", // Proton Mail
@@ -35,13 +34,11 @@ const BLOCKQUOTE_SELECTORS: [&str; 22] = [
     r#"[name="quote"]"#, // gmx
 ];
 
-lazy_static! {
-    static ref BLOCKQUOTE_SELECTOR: String = {
-        BLOCKQUOTE_SELECTORS
-            .map(|v| format!("{v}:not(:empty)"))
-            .join(",")
-    };
-}
+static BLOCKQUOTE_SELECTOR: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+    BLOCKQUOTE_SELECTORS
+        .map(|v| format!("{v}:not(:empty)"))
+        .join(",")
+});
 
 /// This is the result of calling [`locate_blockquote`].
 pub struct SplitDoc {

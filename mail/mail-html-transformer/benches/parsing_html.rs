@@ -5,7 +5,9 @@ mod profiler;
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 
 use proton_mail_html_transformer::{
-    Transformer, message_detector, remote_content, sanitizer, transforms, utm,
+    Transformer, message_detector, remote_content, sanitizer,
+    transforms::{self, styles::BrowserCapabilities},
+    utm,
 };
 
 static AMOS_HTTP: &str = include_str!("./amos_http.html");
@@ -69,7 +71,13 @@ pub fn parse(c: &mut Criterion) {
         c.bench_function("inject style", |b| {
             b.iter(|| {
                 let tr = tr.clone();
-                transforms::inject_style(tr.document(), transforms::Stylesheet::LightMode);
+                transforms::styles::transform_style(
+                    tr.document(),
+                    transforms::ColorMode::LightMode,
+                    BrowserCapabilities {
+                        supports_dark_mode_via_media_query: true,
+                    },
+                );
             })
         });
 
@@ -117,7 +125,12 @@ pub fn all_transforms(c: &mut Criterion) {
                 t.disable_content(true, true);
                 t.inject_ios_content_size();
                 _ = t.strip_whitelist();
-                t.inject_style(transforms::Stylesheet::LightMode);
+                t.inject_style(
+                    transforms::ColorMode::LightMode,
+                    BrowserCapabilities {
+                        supports_dark_mode_via_media_query: true,
+                    },
+                );
                 _ = t.strip_blockquote();
                 let tok = t.add_noreferrer();
                 t.insert_links(tok);

@@ -12,8 +12,8 @@
 mod tests;
 
 use kuchikiki::NodeRef;
-use lazy_static::lazy_static;
 use std::collections::HashSet;
+use std::sync::LazyLock;
 use url::Url;
 
 #[derive(Debug, thiserror::Error)]
@@ -90,8 +90,8 @@ pub fn strip_from_string(url: &str) -> Result<(Url, u64), url::ParseError> {
     Ok(strip_from_url(&url))
 }
 
-lazy_static! {
-    static ref GLOBAL_RULES: HashSet<&'static str> = HashSet::from_iter([
+static GLOBAL_RULES: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
+    HashSet::from_iter([
         // https://en.wikipedia.org/wiki/UTM_parameters
         "utm_source",
         "utm_medium",
@@ -218,5 +218,5 @@ lazy_static! {
         "mbid",
         // Reddit Ads (https://github.com/DrKain/tidy-url/issues/31)
         "rdt_cid",
-    ]);
-}
+    ])
+});

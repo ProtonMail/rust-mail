@@ -11,7 +11,8 @@ use crate::models::{
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use parking_lot::Mutex;
 use proton_mail_html_transformer::Transformer;
-use proton_mail_html_transformer::transforms::Stylesheet;
+use proton_mail_html_transformer::transforms::ColorMode;
+use proton_mail_html_transformer::transforms::styles::BrowserCapabilities;
 use proton_task_service::AsyncTaskResult;
 use serde_json::Value;
 use stash::orm::Model;
@@ -399,10 +400,10 @@ pub fn transform_html(html: &str, opts: TransformOptsResolved, mime_type: MimeTy
     transform_html_with_banners(html, opts, mime_type, vec![])
 }
 
-fn resolve_style(theme: ThemeOpts) -> Stylesheet {
+fn resolve_style(theme: ThemeOpts) -> ColorMode {
     match theme.theme() {
-        MailTheme::LightMode => Stylesheet::LightMode,
-        MailTheme::DarkMode => Stylesheet::DarkMode,
+        MailTheme::LightMode => ColorMode::LightMode,
+        MailTheme::DarkMode => ColorMode::DarkMode,
     }
 }
 
@@ -456,7 +457,13 @@ mime_type: {mime_type:?}"
         transformer.inject_ios_content_size();
     }
 
-    transformer.inject_style(resolve_style(theme));
+    transformer.inject_style(
+        resolve_style(theme),
+        BrowserCapabilities {
+            // TODO: Pass it via ThemeOpts
+            supports_dark_mode_via_media_query: true,
+        },
+    );
 
     if opts.hide_remote_images && remote_images_count > 0 {
         prev_banners.push(MessageBanner::RemoteContent);

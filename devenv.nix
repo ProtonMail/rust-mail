@@ -28,7 +28,7 @@ in
       libiconv
       findutils
       darwin.xcode_16_2
-      pkgsCross.x86_64-darwin.apple-sdk_15
+      # pkgsCross.x86_64-darwin.apple-sdk_15
     ]
   );
 
@@ -41,12 +41,13 @@ in
       # iOS cross compilation
       "aarch64-apple-ios"
       "aarch64-apple-ios-sim"
-      "x86_64-apple-ios"
+      # "x86_64-apple-ios"
     ];
   };
   languages.go.enable = true; # For PGP 
   languages.python.enable = true; # For changelog
   languages.python.uv.enable = true;
+  languages.php.enable = true; # For iCal
   
   scripts.xcode = if pkgs.stdenv.isDarwin then {
     description = "Opens XCode";
