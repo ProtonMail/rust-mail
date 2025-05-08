@@ -85,9 +85,11 @@ async fn validation_max_attempts() {
 
     assert!(matches!(error, PinError::TooManyAttempts));
 
-    let pin_metadata = PinProtection::get(&tether).await.unwrap().unwrap();
+    let mut pin_metadata = PinProtection::get(&tether).await.unwrap().unwrap();
 
     assert_eq!(pin_metadata.attempts, 11);
+
+    pin_metadata.last_access_reset(&mut tether).await.unwrap();
 
     // Pin code is not responsible to do anything regarding `TooManyAttempts`
     // error. In production flow there is catch on this error

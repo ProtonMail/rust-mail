@@ -155,9 +155,7 @@ impl PinCode {
             if success {
                 Ok(())
             } else if pin_protection.attempts >= Self::MAX_ATTEMPTS {
-                tracing::error!(
-                    "All attemps to validate PIN have been used, nuking application data"
-                );
+                tracing::error!("All attemps to validate PIN have been used");
 
                 Err(PinError::TooManyAttempts)
             } else {
@@ -214,7 +212,7 @@ impl PinCode {
     }
 }
 
-struct PinHash(ProtonArgon2Hash);
+pub(crate) struct PinHash(ProtonArgon2Hash);
 
 impl Deref for PinHash {
     type Target = ProtonArgon2Hash;

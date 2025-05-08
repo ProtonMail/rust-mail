@@ -453,16 +453,15 @@ impl MailUserContext {
         let all_ctxs = self.all_mail_user_ctxs().await?;
 
         for ctx in all_ctxs {
-            ctx.delete_account().await?;
+            // If for any reason we fail to delete account
+            // it will be brought down by tear_down in the next step
+            let _ = ctx
+                .delete_account()
+                .await
+                .inspect_err(|e| tracing::error!("Could not remove account, `{e}`"));
         }
 
-        self.mail_context()
-            .core_context()
-            .tear_down_account_database()
-            .await
-            .map_err(MailContextError::from)?;
-
-        self.mail_context().core_context().delete_core_cache().await;
+        self.mail_context().core_context().tear_down().await;
 
         Ok(())
     }

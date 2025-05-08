@@ -66,14 +66,17 @@ pub async fn rename_database_files(path: impl AsRef<Path>) {
 
 pub async fn remove_or_clear_dir_safe(path: impl AsRef<Path>) {
     let path = path.as_ref().to_path_buf();
-    // Try remove whole directory
+    // Try remove whole directory.
+    // It may unfortunately fail on certain operating systems such as Windows:
+    // https://github.com/rust-lang/rust/issues/29497
     let result = fs::remove_dir_all(&path).await;
 
     // When it fails, fallback to deleting one-by-one
     if result.is_err() {
+        let path_clone = path.clone();
         // Get all files paths in max_depth eq 2
         let Ok(all_files) = task::spawn_blocking(move || {
-            WalkDir::new(format!("{}/**", path.display()))
+            WalkDir::new(format!("{}/**", path_clone.display()))
                 .max_depth(2)
                 .into_iter()
                 .filter_map(|entry| {
@@ -89,16 +92,19 @@ pub async fn remove_or_clear_dir_safe(path: impl AsRef<Path>) {
         })
         .await
         else {
-            // unlikely to happen as the closure is non failing
+            // Unlikely to happen as the closure is non failing
             tracing::error!("Could not join task when gathering all files to remove");
             return;
         };
 
         let failed = remove_files(&all_files).await;
 
-        // We have still some files not removed
-        // lets derefer this to the background
-        if !failed.is_empty() {
+        if failed.is_empty() {
+            // Clean the folder structure
+            let _ = fs::remove_dir_all(&path).await;
+        } else {
+            // We have still some files not removed
+            // lets derefer this to the background
             task::spawn(async move {
                 let max_wait: Duration = Duration::from_secs(5);
                 let retry_interval: Duration = Duration::from_millis(100);
@@ -109,6 +115,7 @@ pub async fn remove_or_clear_dir_safe(path: impl AsRef<Path>) {
                     failed = remove_files(&failed).await;
                     if failed.is_empty() {
                         tracing::info!("Whole path was cleared in the background");
+                        let _ = fs::remove_dir_all(&path).await;
                         break;
                     }
                     if start.elapsed() >= max_wait {
@@ -125,9 +132,19 @@ async fn remove_files(paths: &[PathBuf]) -> Vec<PathBuf> {
     let mut failed = vec![];
 
     for file in paths {
-        if let Err(e) = fs::remove_file(file).await {
-            tracing::error!("Could not remove `{}`, details: `{e}`", file.display());
-            failed.push(file.clone());
+        if file.exists() {
+            if let Err(e) = fs::remove_file(file).await {
+                tracing::error!("Could not remove `{}`, details: `{e}`", file.display());
+                let ext = file
+                    .extension()
+                    .and_then(|ext| ext.to_str())
+                    .map_or("nuked".to_string(), |ext| format!("{ext}.nuked"));
+                let new_path = file.with_extension(ext);
+                match fs::rename(file, &new_path).await {
+                    Ok(()) => failed.push(new_path),
+                    Err(_) => failed.push(file.clone()),
+                }
+            }
         }
     }
 

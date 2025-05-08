@@ -15,6 +15,7 @@ use crate::nuke_utils::{
     drop_all_tables_in_database, remove_or_clear_dir_safe, rename_database_files,
 };
 use crate::os::{KeyChain, KeyChainError, KeyChainExt, StoreInKeyChain};
+use crate::pin_code::PinHash;
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{Error as AnyhowError, anyhow};
 use futures::TryFutureExt;
@@ -766,26 +767,39 @@ impl Context {
         Ok(())
     }
 
-    pub async fn delete_core_cache(&self) {
-        remove_or_clear_dir_safe(self.get_cache_location()).await;
-    }
-
-    /// Removes all data from account database by dropping all tables,
-    /// and renaming empty database file to include `.nuked` extension.
+    /// Removes all data associated with the context, that includes:
+    /// * Account database - drop all data, remove files
+    /// * Core cache - all files under the cache path
+    /// * Keychain - all secrets
     ///
     /// # Errors
     ///
     /// Returns an error if data can not be removed or the db operation failed.
     ///
-    pub async fn tear_down_account_database(&self) -> CoreContextResult<()> {
+    pub async fn tear_down(&self) {
         tracing::warn!("Remove all accounts data");
         let tether = self.account_stash().connection();
-        drop_all_tables_in_database(tether).await?;
-        tracing::warn!("Archive account database");
+        let _ = drop_all_tables_in_database(tether).await.inspect_err(|e| {
+            tracing::error!(
+                "Could not drop database tables: `{e}`, will try to remove files anyway"
+            );
+        });
+        tracing::warn!("Archive & remove account database");
         let account_db_location = self.get_account_db_location();
         rename_database_files(account_db_location).await;
+        remove_or_clear_dir_safe(account_db_location).await;
+        tracing::warn!("Clear cache");
+        remove_or_clear_dir_safe(self.get_cache_location()).await;
 
-        Ok(())
+        let _ = self
+            .delete_secret::<SessionEncryptionKey>()
+            .inspect_err(|e| tracing::error!("Could not remove session key: `{e}`"));
+        let _ = self
+            .delete_secret::<PinHash>()
+            .inspect_err(|e| tracing::error!("Could not remove pin hash: `{e}`"));
+        let _ = self
+            .delete_secret::<StoredDevicePrivateKey>()
+            .inspect_err(|e| tracing::error!("Could not remove device key: `{e}`"));
     }
 
     #[tracing::instrument(err, skip(self))]

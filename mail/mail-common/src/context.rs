@@ -625,6 +625,7 @@ impl MailContext {
     /// Removes a user's cached data
     ///
     pub async fn delete_user_cache(&self, user_id: &UserId) {
+        self.active_user_contexts.lock().await.remove(user_id);
         remove_or_clear_dir_safe(self.mail_cache_path(user_id)).await;
     }
 
