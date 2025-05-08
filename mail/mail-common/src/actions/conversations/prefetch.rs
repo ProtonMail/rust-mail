@@ -1,7 +1,9 @@
 use crate::MailUserContext;
 use crate::actions::MailActionError;
 use crate::models::{Conversation, Message};
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
+use proton_action_queue::action::{
+    Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
+};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label;
 use proton_mail_ids::LocalConversationId;
@@ -30,6 +32,7 @@ impl Prefetch {
 impl Action for Prefetch {
     const TYPE: Type = Type("prefetch_conversation");
     const VERSION: u32 = 1;
+    const PRIORITY: Priority = Priority::Low;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
@@ -44,7 +47,6 @@ pub struct Handler {}
 
 impl proton_action_queue::action::Handler for Handler {
     type Action = Prefetch;
-
     type Context = MailUserContext;
 
     async fn apply_local(
@@ -80,7 +82,7 @@ impl proton_action_queue::action::Handler for Handler {
         let messages = Message::in_conversation(action.local_id, guard.tether()).await?;
         let Some(label) = Label::load(action.local_label_id, guard.tether()).await? else {
             error!(
-                "Label not found for prefetch action: {}",
+                "Label not found for prefetch action, label_id: `{}`",
                 action.local_label_id
             );
             return Ok(());
@@ -88,15 +90,27 @@ impl proton_action_queue::action::Handler for Handler {
         let Ok(message_id_to_open) =
             Conversation::message_id_to_open(action.local_id, &label, &messages)
         else {
-            error!("Message not found for prefetch action: {}", action.local_id);
+            error!(
+                "Message id to open was not found for prefetch action, conversation_id: `{}`",
+                action.local_id
+            );
             return Ok(());
         };
         tracing::debug!(
-            "Prefetching message {message_id_to_open} body for conversation {local_id}",
+            "Prefetching message {message_id_to_open} body for conversation `{local_id}`",
             local_id = action.local_id
         );
-        // Unrwap safty: ctx is alive as the queue is alive
-        let _ = Message::message_body(ctx, message_id_to_open).await;
+        let Some(local_message) = Message::load(message_id_to_open, guard.tether()).await? else {
+            error!(
+                "Message not found for prefetch action, conversation_id: `{}`",
+                action.local_id
+            );
+            return Ok(());
+        };
+
+        if let Err(e) = local_message.fetch_message_body(ctx, &mut guard).await {
+            tracing::error!("Couldn't prefetch message body, details: `{e}`");
+        };
 
         Ok(())
     }
