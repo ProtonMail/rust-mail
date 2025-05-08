@@ -111,18 +111,19 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
             .map(|id| PrefetchJob::Conversation(id, label_id))
             .collect();
         let message_jobs = message_ids.into_iter().map(PrefetchJob::Message).collect();
-        ctx.queue_prefetch_jobs(conversation_jobs)
+
+        let _ = ctx
+            .queue_prefetch_jobs(conversation_jobs)
             .await
-            .map_err(|e| {
-                let e = anyhow!("Failed to queue jobs for prefetch: {e}");
-                error!("{e:?}");
-                SubscriberError::Other(e)
-            })?;
-        ctx.queue_prefetch_jobs(message_jobs).await.map_err(|e| {
-            let e = anyhow!("Failed to queue jobs for prefetch: {e}");
-            error!("{e:?}");
-            SubscriberError::Other(e)
-        })?;
+            .inspect_err(|e| {
+                error!("Failed to queue cnv jobs for prefetch: {e}");
+            });
+        let _ = ctx
+            .queue_prefetch_jobs(message_jobs)
+            .await
+            .inspect_err(|e| {
+                error!("Failed to queue msg jobs for prefetch: {e}");
+            });
 
         if queue_incoming_default {
             IncomingDefaultLocation::action_resync(ctx.action_queue()).await;
