@@ -1,29 +1,18 @@
 use velcro::hash_set;
 
 use crate::ParameterType;
-use crate::properties::time_zone::{TimeZone, TimeZoneValue, validate_tz};
+use crate::properties::time_zone::{TimeZoneValue, validate_tz};
 use crate::test::{make_property, property_reject_parameters};
-use crate::values::text::Text;
-use crate::values::uri::Uri;
-use crate::values::utc_offset::UTCOffset;
 
 #[test]
 fn time_zone_struct() {
-    let time_zone = TimeZone::new_validated("text").unwrap();
-    assert_eq!(
-        time_zone.value,
-        TimeZoneValue::Text(Text::new_unchecked("text"))
-    );
-    let time_zone = TimeZone::new_validated("uri:uri").unwrap();
-    assert_eq!(
-        time_zone.value,
-        TimeZoneValue::Uri(Uri::new_validated("uri:uri").unwrap())
-    );
-    let time_zone = TimeZone::new_validated("+0130").unwrap();
-    assert_eq!(
-        time_zone.value,
-        TimeZoneValue::UtcOffset(UTCOffset::new_with_minute(1, 30))
-    );
+    let tz_text = TimeZoneValue::from("text");
+    let tz_uri = TimeZoneValue::from("uri:uri");
+    let tz_tz = TimeZoneValue::from("+0130");
+
+    assert!(matches!(tz_text, TimeZoneValue::Text(_)));
+    assert!(matches!(tz_uri, TimeZoneValue::Uri(_)));
+    assert!(matches!(tz_tz, TimeZoneValue::UtcOffset(_)));
 }
 
 #[test]

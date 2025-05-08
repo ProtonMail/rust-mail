@@ -1,0 +1,75 @@
+---
+source: core/core-common/src/models/contact.rs
+expression: get_vcard(real)
+---
+Snapshot {
+    vcard: "BEGIN:VCARD\r\nVERSION:4.0\r\nURL:https://github.com/oriongonza\r\nORG:Proton AG\r\nLANG:English\r\nLANG:Spanish\r\nN:González;Orión;;;\r\nTEL;PREF=1:+34 652522142\r\nBDAY:20001004\r\nADR;PREF=1:;;;Palencia;Castilla y León;;Spain\r\nTZ:CET\r\nROLE:Software Engineer\r\nEND:VCARD\r\n",
+    card: ContactDetailCard {
+        extended_name: Some(
+            ExtendedName {
+                last: Some(
+                    "González",
+                ),
+                first: Some(
+                    "Orión",
+                ),
+                additional: Some(
+                    "",
+                ),
+                prefix: Some(
+                    "",
+                ),
+                suffix: Some(
+                    "",
+                ),
+            },
+        ),
+        address: [
+            ContactDetailAddress {
+                street: "",
+                city: "Palencia",
+                region: "Castilla y León",
+                postal_code: "",
+                country: "Spain",
+                addr_type: [],
+            },
+        ],
+        phones: [
+            Telephone {
+                number: "+34 652522142",
+                tel_types: [],
+            },
+        ],
+        birthday: Some(
+            DateAndOrTime(
+                DaoT(DateTimeValue { year: Some(2000), month: Some(10), day: Some(4), hour: None, minute: None, second: None, zone: None }),
+            ),
+        ),
+        notes: [],
+        anniversary: None,
+        urls: [
+            VCardUrl {
+                url: "https://github.com/oriongonza",
+                url_type: [],
+            },
+        ],
+        gender: None,
+        photos: [],
+        logos: [],
+        titles: [],
+        roles: [
+            "Software Engineer",
+        ],
+        languages: [
+            "English",
+            "Spanish",
+        ],
+        timezones: [
+            "CET",
+        ],
+        members: [],
+        organizations: [
+            "Proton AG",
+        ],
+    },
+}

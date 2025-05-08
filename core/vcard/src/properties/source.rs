@@ -14,7 +14,7 @@ use crate::parameters::preference::Preference;
 use crate::parameters::value::ValueType;
 use crate::properties::{VcardProperty, any_debug, optional_debug, validate_parameters};
 use crate::validation::get_property_kind;
-use crate::values::uri::{Uri, is_uri_value};
+use crate::values::uri::Uri;
 use crate::vcard::group_from_name;
 use crate::{PropertyKind, VCardError, VCardResult};
 
@@ -165,7 +165,7 @@ pub fn validate_source(property: &IcalProperty) -> VcardValidationResult<()> {
     // SOURCE-param = "VALUE=uri" / pid-param / pref-param / altid-param / mediatype-param / any-param
     // SOURCE-value = URI
     if let Some(value) = &property.value {
-        if is_uri_value(value) {
+        if Url::parse(value).is_ok() {
             validate_parameters(
                 property,
                 ValueType::Uri,

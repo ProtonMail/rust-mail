@@ -290,7 +290,7 @@ async fn test_session_observer() {
             assert_eq!(*new_user_id, user_id1);
         }
         _ => panic!("unexpected value"),
-    };
+    }
 
     // Create another session
     let mut session =
@@ -314,7 +314,7 @@ async fn test_session_observer() {
             assert_eq!(*new_user_id, user_id2);
         }
         _ => panic!("unexpected value"),
-    };
+    }
 
     // Remove a session
     tether
@@ -333,7 +333,7 @@ async fn test_session_observer() {
             assert_eq!(*new_user_id, user_id2);
         }
         _ => panic!("unexpected value"),
-    };
+    }
 
     // Remove the other session
     tether
@@ -352,5 +352,5 @@ async fn test_session_observer() {
             assert_eq!(*new_user_id, user_id1);
         }
         _ => panic!("unexpected value"),
-    };
+    }
 }

@@ -1,21 +1,17 @@
 use crate::ParameterType;
 use crate::properties::telephone::{Telephone, TelephoneValue, validate_tel};
 use crate::test::{make_property, property_reject_parameters};
-use crate::values::text::Text;
-use crate::values::uri::Uri;
 use velcro::hash_set;
 
 #[test]
 fn telephone_struct() {
-    let telephone = Telephone::new_validated("text").unwrap();
+    let telephone = Telephone::new("text".to_string());
+    assert_eq!(telephone.value, TelephoneValue::Text("text".to_string()));
+
+    let telephone = Telephone::new("uri:uri".to_string());
     assert_eq!(
         telephone.value,
-        TelephoneValue::Text(Text::new_unchecked("text"))
-    );
-    let telephone = Telephone::new_validated("uri:uri").unwrap();
-    assert_eq!(
-        telephone.value,
-        TelephoneValue::Uri(Uri::new_validated("uri:uri").unwrap())
+        TelephoneValue::Uri("uri:uri".parse().unwrap())
     );
 }
 

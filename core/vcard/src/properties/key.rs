@@ -1,6 +1,6 @@
 use ical::generator::Property as IcalProperty;
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 use url::Url;
 use velcro::hash_set;
 
@@ -12,21 +12,18 @@ use crate::parameters::pid::Pid;
 use crate::parameters::preference::Preference;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
-use crate::properties::{
-    VcardProperty, any_debug, get_value_type, loop_debug, optional_debug, validate_parameters,
-};
+use crate::properties::{VcardProperty, get_value_type, validate_parameters};
 use crate::validation::get_property_kind;
-use crate::values::text::{Text, is_text_value};
-use crate::values::uri::{Uri, is_uri_value};
+use crate::values::uri::MaybeUri;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify a public key or authentication certificate associated with the object that the vCard
 /// represents.
-#[derive(Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct Key {
     /// Value (ex: (text) <ftp://example.com/keys/jdoe>, (uri) <data:application/pgp-keys;base64,MIICajCCAdOgAwIBAgICBEUw...>)
-    pub value: KeyValue,
+    pub value: MaybeUri,
     /// type of the value (here nothing or "uri" or "text")
     pub value_type: Option<ValueType>,
     /// Media type linked by the value
@@ -44,73 +41,6 @@ pub struct Key {
     pub any: HashSet<Any>,
     /// Group this `CalendarUserAddress` belong to
     pub group: Option<String>,
-}
-
-impl Key {
-    /// Create a new KEY property from an Url
-    #[must_use]
-    pub fn new(url: Url) -> Self {
-        Self {
-            value: KeyValue::Uri(Uri::new(url)),
-            value_type: None,
-            media_type: None,
-            alternative_id: None,
-            pid: None,
-            preference: None,
-            r#type: HashSet::new(),
-            any: HashSet::new(),
-            group: None,
-        }
-    }
-
-    /// Create a new KEY property from a str (no validation are done)
-    #[must_use]
-    pub fn new_unchecked(value: &str) -> Self {
-        Self {
-            value: KeyValue::Text(Text::new_unchecked(value)),
-            value_type: None,
-            media_type: None,
-            alternative_id: None,
-            pid: None,
-            preference: None,
-            r#type: HashSet::new(),
-            any: HashSet::new(),
-            group: None,
-        }
-    }
-
-    /// Create a new KEY property from a str (no validation are done)
-    ///
-    /// # Errors
-    ///   * if given value is not a valid text or uri value
-    pub fn new_validated(value: &str) -> VCardResult<Self> {
-        Ok(Self {
-            value: KeyValue::try_from(value)?,
-            value_type: None,
-            media_type: None,
-            alternative_id: None,
-            pid: None,
-            preference: None,
-            r#type: HashSet::new(),
-            any: HashSet::new(),
-            group: None,
-        })
-    }
-}
-
-impl Debug for Key {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Key {{{:?}", self.value)?;
-        optional_debug!(self, f, VALUE, value_type);
-        optional_debug!(self, f, MEDIATYPE, media_type);
-        optional_debug!(self, f, ALTID, alternative_id);
-        optional_debug!(self, f, PID, pid);
-        optional_debug!(self, f, PREF, preference);
-        loop_debug!(self, f, TYPE, r#type);
-        any_debug!(self, f, any);
-        optional_debug!(self, f, group, group);
-        write!(f, "}}")
-    }
 }
 
 impl TryFrom<&IcalProperty> for Key {
@@ -180,36 +110,8 @@ impl TryFrom<&IcalProperty> for Key {
                 }
             }
         }
-        let real_value_type = if let Some(value_type) = value_type {
-            value_type
-        } else if is_uri_value(value) {
-            ValueType::Uri
-        } else if is_text_value(value) {
-            ValueType::Text
-        } else {
-            return Err(VCardError::InvalidValue(
-                PropertyKind::Key,
-                value.to_owned(),
-            ));
-        };
-        let value = match real_value_type {
-            ValueType::Text => KeyValue::Text(
-                Text::try_from(value.as_str())
-                    .map_err(VCardError::from_value_error(PropertyKind::Key))?,
-            ),
-            ValueType::Uri => KeyValue::Uri(
-                Uri::try_from(value.as_str())
-                    .map_err(VCardError::from_value_error(PropertyKind::Key))?,
-            ),
-            _ => {
-                return Err(VCardError::InvalidValue(
-                    PropertyKind::Key,
-                    value.to_owned(),
-                ));
-            }
-        };
         Ok(Self {
-            value,
+            value: value.into(),
             value_type,
             media_type,
             alternative_id,
@@ -225,38 +127,6 @@ impl TryFrom<&IcalProperty> for Key {
 impl VcardProperty for Key {
     fn get_preference(&self) -> Option<Preference> {
         self.preference
-    }
-}
-
-#[derive(Clone, PartialEq)]
-pub enum KeyValue {
-    Text(Text),
-    Uri(Uri),
-}
-
-impl Debug for KeyValue {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            KeyValue::Text(v) => write!(f, "{v:?}"),
-            KeyValue::Uri(v) => write!(f, "{v:?}"),
-        }
-    }
-}
-
-impl TryFrom<&str> for KeyValue {
-    type Error = VCardError;
-
-    fn try_from(value: &str) -> VCardResult<Self> {
-        if let Ok(url) = value.parse() {
-            Ok(Self::Uri(Uri::new(url)))
-        } else if is_text_value(value) {
-            Ok(Self::Text(Text::new_unchecked(value)))
-        } else {
-            Err(VCardError::InvalidValue(
-                PropertyKind::Key,
-                value.to_owned(),
-            ))
-        }
     }
 }
 
@@ -279,25 +149,18 @@ pub fn validate_key(property: &IcalProperty) -> VcardValidationResult<()> {
     // KEY-param =/ altid-param / pid-param / pref-param / type-param / any-param
     if let Some(value) = &property.value {
         let value_type = if let Some(value_type) = get_value_type(property)? {
-            let validated = match value_type {
-                ValueType::Text => is_text_value(value),
-                ValueType::Uri => is_uri_value(value),
-                _ => false,
+            match value_type {
+                ValueType::Text => true,
+                ValueType::Uri => Url::parse(value).is_ok(),
+                _ => {
+                    return Err(VcardValidationError::InvalidPropertyValue(
+                        get_property_kind(&property.name)?,
+                    ));
+                }
             };
-            if !validated {
-                return Err(VcardValidationError::InvalidPropertyValue(
-                    get_property_kind(&property.name)?,
-                ));
-            }
             value_type
-        } else if is_text_value(value) {
-            ValueType::Text
-        } else if is_uri_value(value) {
-            ValueType::Uri
         } else {
-            return Err(VcardValidationError::InvalidPropertyValue(
-                get_property_kind(&property.name)?,
-            ));
+            ValueType::Text
         };
         let allowed = if matches!(value_type, ValueType::Text) {
             hash_set!(

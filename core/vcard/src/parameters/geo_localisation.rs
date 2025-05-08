@@ -4,7 +4,7 @@ use crate::errors::{VCardParameterError, VCardParameterResult};
 use url::Url;
 
 use crate::ParameterType;
-use crate::values::uri::{Uri, is_uri_value};
+use crate::values::uri::Uri;
 
 /// The GEO parameter can be used to indicate global positioning information that is specific to an
 /// address.
@@ -62,5 +62,9 @@ impl TryFrom<&[String]> for GeoLocalisation {
 #[must_use]
 pub fn is_geo_param(values: &[String]) -> bool {
     // geo-parameter = "GEO=" DQUOTE URI DQUOTE
-    values.len() == 1 && is_uri_value(&values[0])
+    values.len() == 1 && {
+        let value: &str = &values[0];
+        // URI               ; from Section 3 of [RFC3986]
+        Url::parse(value).is_ok()
+    }
 }

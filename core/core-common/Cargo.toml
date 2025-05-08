@@ -57,6 +57,7 @@ wiremock = { workspace = true }
 proton-core-test-utils = { workspace = true }
 clap = { workspace = true }
 rand = { workspace = true }
+insta = { workspace = true }
 
 [lints]
 workspace = true

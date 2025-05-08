@@ -1,25 +1,7 @@
 use crate::ParameterType;
-use crate::properties::birthday::{Birthday, BirthdayValue, validate_bday};
+use crate::properties::birthday::validate_bday;
 use crate::test::{make_property, property_reject_parameters};
-use crate::values::date_and_or_time::DateAndOrTimeValue;
-use crate::values::text::Text;
 use velcro::hash_set;
-
-#[test]
-fn birthday_struct() {
-    let birthday = Birthday::new_validated("some text").unwrap();
-    assert_eq!(
-        birthday.value,
-        BirthdayValue::Text(Text::new_unchecked("some text"))
-    );
-    let birthday = Birthday::new_validated("20001231T125959+0100").unwrap();
-    assert_eq!(
-        birthday.value,
-        BirthdayValue::DateAndOrTime(
-            DateAndOrTimeValue::new_validated("20001231T125959+0100").unwrap()
-        )
-    );
-}
 
 #[test]
 fn bday_property() {

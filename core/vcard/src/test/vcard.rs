@@ -1,4 +1,3 @@
-use crate::VCardError;
 use crate::vcard::VCard;
 use ical::VcardParser;
 
@@ -42,54 +41,6 @@ END:VCARD";
     for card in vcard {
         let card = card.unwrap();
         VCard::try_from(card).unwrap();
-    }
-}
-
-#[test]
-fn import_no_version() {
-    // vcard as exported via proton-web with all field used
-    let vcard = b"BEGIN:VCARD
-END:VCARD";
-    let vcard = VcardParser::new(&vcard[..]);
-    for card in vcard {
-        let card = card.unwrap();
-        assert_eq!(
-            VCard::try_from(card).unwrap_err(),
-            VCardError::MissingVersion
-        );
-    }
-}
-
-#[test]
-fn import_misplaced_version() {
-    // vcard as exported via proton-web with all field used
-    let vcard = b"BEGIN:VCARD
-FN:Foo Bar
-VERSION:4.0
-END:VCARD";
-    let vcard = VcardParser::new(&vcard[..]);
-    for card in vcard {
-        let card = card.unwrap();
-        assert_eq!(
-            VCard::try_from(card).unwrap_err(),
-            VCardError::MissingVersion
-        );
-    }
-}
-
-#[test]
-fn import_no_formatted_name() {
-    // vcard as exported via proton-web with all field used
-    let vcard = b"BEGIN:VCARD
-VERSION:4.0
-END:VCARD";
-    let vcard = VcardParser::new(&vcard[..]);
-    for card in vcard {
-        let card = card.unwrap();
-        assert_eq!(
-            VCard::try_from(card).unwrap_err(),
-            VCardError::MissingFormattedName
-        );
     }
 }
 

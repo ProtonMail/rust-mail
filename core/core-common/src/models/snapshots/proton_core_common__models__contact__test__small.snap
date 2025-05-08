@@ -1,0 +1,25 @@
+---
+source: core/core-common/src/models/contact.rs
+expression: get_vcard(small)
+---
+Snapshot {
+    vcard: "BEGIN:VCARD\r\nVERSION:4.0\r\nPRODID:-//ProtonMail//ProtonMail vCard 1.0.0//EN\r\nFN:Anonymous\r\nUID:proton-autosave-fe9bcd4d-c797-4e43-b22a-807354d7824e\r\nitem1.EMAIL;PREF=1:anonymous@pm.me\r\nEND:VCARD\r\n",
+    card: ContactDetailCard {
+        extended_name: None,
+        address: [],
+        phones: [],
+        birthday: None,
+        notes: [],
+        anniversary: None,
+        urls: [],
+        gender: None,
+        photos: [],
+        logos: [],
+        titles: [],
+        roles: [],
+        languages: [],
+        timezones: [],
+        members: [],
+        organizations: [],
+    },
+}

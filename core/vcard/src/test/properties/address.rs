@@ -1,51 +1,7 @@
 use crate::ParameterType;
-use crate::properties::address::{Address, validate_adr};
+use crate::properties::address::validate_adr;
 use crate::test::{make_property, property_reject_parameters};
-use crate::values::component::Component;
-use crate::values::list_component::ListComponent;
 use velcro::hash_set;
-
-#[test]
-fn address_struct() {
-    let adr = Address::new_validated(
-        "pobox1,pobox2",
-        "ext1,ext2",
-        "street1,street2",
-        "locality1,locality2",
-        "region1,region2",
-        "code1,code2",
-        "country1,country2",
-    )
-    .unwrap();
-    assert_eq!(
-        adr.post_office_box,
-        ListComponent::new(&[Component::new("pobox1"), Component::new("pobox2")])
-    );
-    assert_eq!(
-        adr.extension,
-        ListComponent::new(&[Component::new("ext1"), Component::new("ext2")])
-    );
-    assert_eq!(
-        adr.street,
-        ListComponent::new(&[Component::new("street1"), Component::new("street2")])
-    );
-    assert_eq!(
-        adr.locality,
-        ListComponent::new(&[Component::new("locality1"), Component::new("locality2")])
-    );
-    assert_eq!(
-        adr.region,
-        ListComponent::new(&[Component::new("region1"), Component::new("region2")])
-    );
-    assert_eq!(
-        adr.code,
-        ListComponent::new(&[Component::new("code1"), Component::new("code2")])
-    );
-    assert_eq!(
-        adr.country,
-        ListComponent::new(&[Component::new("country1"), Component::new("country2")])
-    );
-}
 
 #[test]
 fn adr_property() {

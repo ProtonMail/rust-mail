@@ -14,16 +14,14 @@ use crate::parameters::preference::Preference;
 use crate::parameters::value::ValueType;
 use crate::properties::{VcardProperty, any_debug, optional_debug, validate_parameters};
 use crate::validation::get_property_kind;
-use crate::values::uri::{Uri, is_uri_value};
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 ///  To include a member in the group this vCard represents.
 #[derive(Clone)]
 pub struct Member {
-    /// uri
-    pub value: Uri,
-    /// type of the value (here nothing or "uri")
+    /// Normally a URI but in reality it can be anything.
+    pub value: String,
     pub value_type: Option<ValueType>,
     /// The PID parameter is used to identify a specific property among multiple instances.
     pub pid: Option<Pid>,
@@ -43,9 +41,9 @@ pub struct Member {
 impl Member {
     /// Create a new MEMBER property without any parameter or group
     #[must_use]
-    pub fn new(value: Url) -> Self {
+    pub fn new(value: String) -> Self {
         Self {
-            value: Uri::new(value),
+            value,
             value_type: None,
             pid: None,
             preference: None,
@@ -54,24 +52,6 @@ impl Member {
             any: HashSet::new(),
             group: None,
         }
-    }
-
-    /// Try to create a new MEMBER property without any parameter or group
-    ///
-    /// # Errors
-    ///   * if given value is not a valid uri value
-    pub fn new_validated(value: &str) -> VCardResult<Self> {
-        Ok(Self {
-            value: Uri::new_validated(value)
-                .map_err(VCardError::from_value_error(PropertyKind::Member))?,
-            value_type: None,
-            pid: None,
-            preference: None,
-            media_type: None,
-            alternative_id: None,
-            any: HashSet::new(),
-            group: None,
-        })
     }
 }
 
@@ -89,14 +69,14 @@ impl Debug for Member {
     }
 }
 
-impl TryFrom<&IcalProperty> for Member {
+impl TryFrom<IcalProperty> for Member {
     type Error = VCardError;
 
-    fn try_from(property: &IcalProperty) -> VCardResult<Self> {
-        let Some(value) = &property.value else {
+    fn try_from(property: IcalProperty) -> VCardResult<Self> {
+        let Some(value) = property.value else {
             return Err(VCardError::MissingValue(PropertyKind::Member));
         };
-        let mut result = Self::new_validated(value.as_str())?;
+        let mut result = Self::new(value);
         result.group = group_from_name(&property.name);
         if let Some(parameters) = &property.params {
             for (name, values) in parameters {
@@ -165,7 +145,7 @@ pub fn validate_member(property: &IcalProperty) -> VcardValidationResult<()> {
     // MEMBER-param = "VALUE=uri" / pid-param / pref-param / altid-param / mediatype-param / any-param
     // MEMBER-value = URI
     if let Some(value) = &property.value {
-        if is_uri_value(value) {
+        if Url::parse(value).is_ok() {
             validate_parameters(
                 property,
                 ValueType::Uri,

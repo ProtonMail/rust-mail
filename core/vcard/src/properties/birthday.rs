@@ -1,7 +1,8 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 use ical::generator::Property as IcalProperty;
+use tracing::warn;
 use velcro::hash_set;
 
 use crate::errors::{VcardValidationError, VcardValidationResult};
@@ -10,18 +11,17 @@ use crate::parameters::any::Any;
 use crate::parameters::calendar_scale::CalendarScale;
 use crate::parameters::language::Language;
 use crate::parameters::value::ValueType;
-use crate::properties::{any_debug, get_value_type, optional_debug, validate_parameters};
+use crate::properties::{get_value_type, validate_parameters};
 use crate::validation::get_property_kind;
-use crate::values::date_and_or_time::{DateAndOrTimeValue, is_date_and_or_time_value};
-use crate::values::text::{Text, is_text_value};
+use crate::values::date_and_or_time::{MaybeDateAndOrTime, is_date_and_or_time_value};
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify the birthdate of the object the vCard represents.
-#[derive(Clone)]
+#[derive(Clone, Default, Debug)]
 pub struct Birthday {
     /// Value (ex: --0415 or circa 1800)
-    pub value: BirthdayValue,
+    pub value: MaybeDateAndOrTime,
     /// type of the value (here nothing or "date-and-or-time" of "text")
     pub value_type: Option<ValueType>,
     /// The ALTID parameter is used to "tag" property instances as being alternative representations
@@ -44,28 +44,9 @@ impl Birthday {
     ///   * if given value is neither a date-and-or-time value nor a text
     pub fn new_validated(value: &str) -> VCardResult<Self> {
         Ok(Self {
-            value: BirthdayValue::try_from(value)?,
-            value_type: None,
-            alternative_id: None,
-            calendar_scale: None,
-            language: None,
-            any: HashSet::new(),
-            group: None,
+            value: value.into(),
+            ..Default::default()
         })
-    }
-}
-
-impl Debug for Birthday {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Birthday {{{:?}", self.value)?;
-        optional_debug!(self, f, VALUE, value_type);
-        optional_debug!(self, f, CALSCALE, calendar_scale);
-        optional_debug!(self, f, ALTID, alternative_id);
-        optional_debug!(self, f, LANG, language);
-        optional_debug!(self, f, VALUE, value_type);
-        any_debug!(self, f, any);
-        optional_debug!(self, f, group, group);
-        write!(f, "}}")
     }
 }
 
@@ -104,7 +85,7 @@ impl TryFrom<&IcalProperty> for Birthday {
                     }
                     ParameterType::Language => {
                         language = Some(
-                            Language::try_from(values.as_slice())
+                            Language::try_from(values.clone())
                                 .map_err(VCardError::from_parameter_error(PropertyKind::BDay))?,
                         );
                     }
@@ -115,42 +96,14 @@ impl TryFrom<&IcalProperty> for Birthday {
                         );
                     }
                     parameter_type => {
-                        return Err(VCardError::UnexpectedParameter(
-                            PropertyKind::BDay,
-                            parameter_type,
-                        ));
+                        warn!("Unexpected parameter: {parameter_type:?}");
                     }
                 }
             }
         }
 
-        let real_value_type = if let Some(value_type) = value_type {
-            value_type
-        } else if is_date_and_or_time_value(value) {
-            ValueType::DateAndOrTime
-        } else if is_text_value(value) {
-            ValueType::Text
-        } else {
-            return Err(VCardError::InvalidValue(PropertyKind::BDay, value.clone()));
-        };
-        let value = match real_value_type {
-            ValueType::DateAndOrTime => BirthdayValue::DateAndOrTime(
-                DateAndOrTimeValue::try_from(value.as_str())
-                    .map_err(VCardError::from_value_error(PropertyKind::BDay))?,
-            ),
-            ValueType::Text => BirthdayValue::Text(
-                Text::try_from(value.as_str())
-                    .map_err(VCardError::from_value_error(PropertyKind::BDay))?,
-            ),
-            _ => {
-                return Err(VCardError::InvalidValue(
-                    PropertyKind::BDay,
-                    value.to_owned(),
-                ));
-            }
-        };
         Ok(Self {
-            value,
+            value: value.into(),
             value_type,
             alternative_id,
             calendar_scale,
@@ -158,56 +111,6 @@ impl TryFrom<&IcalProperty> for Birthday {
             any,
             group: group_from_name(&property.name),
         })
-    }
-}
-
-/// Possible value type for the BDAY property
-#[derive(Clone, PartialEq)]
-pub enum BirthdayValue {
-    /// A Date or Time or Datetime
-    DateAndOrTime(DateAndOrTimeValue),
-    /// Free text
-    Text(Text),
-}
-
-impl BirthdayValue {
-    /// Try to create a new Value for BDAY property
-    ///
-    /// # Errors
-    ///   * if given value is neither a date-and-or-time value nor a text
-    pub fn new_validated(value: &str) -> VCardResult<Self> {
-        Self::try_from(value)
-    }
-}
-
-impl Debug for BirthdayValue {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Text(v) => write!(f, "{v:?}"),
-            Self::DateAndOrTime(v) => write!(f, "{v:?}"),
-        }
-    }
-}
-
-impl TryFrom<&str> for BirthdayValue {
-    type Error = VCardError;
-
-    fn try_from(value: &str) -> VCardResult<Self> {
-        if is_date_and_or_time_value(value) {
-            Ok(Self::DateAndOrTime(
-                DateAndOrTimeValue::try_from(value)
-                    .map_err(VCardError::from_value_error(PropertyKind::BDay))?,
-            ))
-        } else if is_text_value(value) {
-            Ok(Self::Text(Text::try_from(value).map_err(
-                VCardError::from_value_error(PropertyKind::BDay),
-            )?))
-        } else {
-            Err(VCardError::InvalidValue(
-                PropertyKind::BDay,
-                value.to_owned(),
-            ))
-        }
     }
 }
 
@@ -232,7 +135,11 @@ pub fn validate_bday(property: &IcalProperty) -> VcardValidationResult<()> {
         let value_type = if let Some(value_type) = get_value_type(property)? {
             let validated = match value_type {
                 ValueType::DateAndOrTime => is_date_and_or_time_value(value),
-                ValueType::Text => is_text_value(value),
+                ValueType::Text => {
+                    let _: &str = value;
+                    // I don't think that it makes sense to reject invalid texts when parsing, as we can still display them.
+                    true
+                }
                 _ => false,
             };
             if !validated {
@@ -243,12 +150,8 @@ pub fn validate_bday(property: &IcalProperty) -> VcardValidationResult<()> {
             value_type
         } else if is_date_and_or_time_value(value) {
             ValueType::DateAndOrTime
-        } else if is_text_value(value) {
-            ValueType::Text
         } else {
-            return Err(VcardValidationError::InvalidPropertyValue(
-                get_property_kind(&property.name)?,
-            ));
+            ValueType::Text
         };
 
         validate_parameters(

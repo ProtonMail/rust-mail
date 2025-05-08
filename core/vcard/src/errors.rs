@@ -1,6 +1,5 @@
 use crate::validation::Cardinality;
 use crate::{ParameterType, PropertyKind, ValueType};
-use oxilangtag::LanguageTagParseError;
 use thiserror::Error;
 
 #[derive(Debug, Error, PartialEq)]
@@ -19,8 +18,6 @@ pub enum VCardError {
     InvalidValue(PropertyKind, String),
     #[error("Invalid parameter value for {0:?}: {2:?} expected a {1:?}")]
     InvalidValueWithType(PropertyKind, ValueType, String),
-    #[error("No property FN (formatted name)")]
-    MissingFormattedName,
     #[error("No property VERSION a vCard beginning")]
     MissingVersion,
     #[error("Property {0:?} is missing a value")]
@@ -34,7 +31,7 @@ pub enum VCardError {
     #[error("Unexpected parameter for {0:?}: {1:?}")]
     UnexpectedParameter(PropertyKind, ParameterType),
     #[error("vCard version unsupported: {0:?}")]
-    UnsupportedVersion(Option<String>),
+    UnsupportedVersion(String),
 }
 
 pub type VCardResult<T> = Result<T, VCardError>;
@@ -126,40 +123,26 @@ pub enum VCardValueError {
 
 pub type VCardValueResult<T> = Result<T, VCardValueError>;
 
-/// Errors from vCard validation
 #[derive(Debug, Error)]
 pub enum VcardValidationError {
-    /// Invalid property value
     #[error("Invalid property value: {0:?}")]
     InvalidPropertyValue(PropertyKind),
-    /// Invalid Property value
     #[error("Invalid property name: {0:?}")]
     InvalidPropertyName(String),
-    /// Invalid Property parameter
     #[error("Invalid property parameter: {0:?}:{1:?}")]
     InvalidPropertyParam(PropertyKind, String),
-    /// Invalid Property order
     #[error("Invalid properties order")]
     InvalidPropertiesOrder,
-    /// Invalid Property order
     #[error("Invalid properties cardinality: {0:?} expected {1:?}")]
     InvalidPropertiesCardinality(PropertyKind, Cardinality),
-    /// Invalid Property group name
     #[error("Invalid properties group name: {0:?}")]
     InvalidPropertyGroupName(String),
-    /// Invalid Property
     #[error("Unexpected param: {0:?}:{1:?}")]
     UnexpectedPropertyParam(PropertyKind, String),
-    /// Invalid Property order
     #[error("Unexpected parameter name: {0:?}")]
     UnexpectedPropertyParamName(String),
-    /// Error from `ICal` Parser
     #[error("ICal parser error: {0}")]
     ICalParserError(#[from] ical::parser::ParserError),
-    /// Error from oxilangtag
-    #[error("Language tag error: {0}")]
-    LanguageTagError(#[from] LanguageTagParseError),
-    /// Error from `Url`
     #[error("URI error: {0}")]
     UriDecodeError(#[from] url::ParseError),
 }

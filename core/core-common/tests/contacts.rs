@@ -303,13 +303,9 @@ async fn test_sync_and_modify_event_contact() {
         modified_contact.contact_emails.len()
     );
     let expected_cards: Vec<ContactCard> = modified_contact.cards.clone();
-    let mut cards = contact
-        .cards(&conn)
-        .await
-        .expect("Failed to query cards")
-        .clone();
-    prune_cards!(cards);
-    assert_eq!(cards, expected_cards);
+    contact.cards(&conn).await.expect("Failed to query cards");
+    prune_cards!(contact.cards);
+    assert_eq!(contact.cards, expected_cards);
 }
 
 #[tokio::test]

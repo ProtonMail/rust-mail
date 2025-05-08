@@ -2,8 +2,8 @@ use crossterm::event::{Event, KeyCode};
 use futures::FutureExt;
 use itertools::Itertools;
 use proton_core_common::{
-    datatypes::{ContactItemType, GroupedContacts},
-    models::{Contact, ContactListWatcher},
+    datatypes::{ContactGroupItem, ContactItem, ContactItemType, GroupedContacts, LocalContactId},
+    models::{Contact, ContactDetailCard, ContactDetails, ContactListWatcher},
 };
 use proton_mail_common::MailUserContext;
 use ratatui::{
@@ -15,6 +15,7 @@ use ratatui::{
     widgets::{Block, Borders, Cell, List, ListItem, Row, Table},
 };
 use stash::stash::{Tether, WatcherHandle};
+use std::fmt::Write as _;
 use std::sync::Arc;
 use tracing::error;
 
@@ -54,28 +55,27 @@ impl From<FlatContact> for ListItem<'_> {
 pub enum Message {
     Init,
     LoadContacts(Vec<FlatContact>),
+    LoadContactDetails(ContactDetails),
     OpenContactPopup,
 }
 
 #[derive(Default)]
-struct OpenedContact {
-    contact: Option<ContactItemType>,
+enum OpenedContactState {
+    #[default]
+    None,
+    Loading(ContactItem),
+    Contact(ContactDetails),
+    Group(ContactGroupItem),
 }
 
-impl OpenedContact {
-    fn some(contact: ContactItemType) -> Self {
-        Self {
-            contact: Some(contact),
-        }
-    }
-    fn none() -> Self {
-        Self::default()
-    }
+impl OpenedContactState {
     fn is_open(&self) -> bool {
-        self.contact.is_some()
+        !matches!(self, Self::None)
     }
+
+    /// Returns the area to be used for the list
     fn draw(&mut self, frame: &mut Frame, area: Rect) -> Option<Rect> {
-        let (list_area, box_area, contact_area) =
+        let (list_area, _border_area, contact_area) =
             if area.width <= CONTACT_DISPLAY_SIZE + MIN_LIST_DISPLAY_SIZE {
                 (None, Rect::default(), area)
             } else {
@@ -88,50 +88,250 @@ impl OpenedContact {
                 (Some(list_area), box_area, contact_area)
             };
 
-        match &mut self.contact {
-            None => return Some(area),
-            Some(state) => {
-                frame.render_widget(Block::new().borders(Borders::LEFT), box_area);
-                Self::draw_contact(frame, contact_area, state);
+        match self {
+            OpenedContactState::None => return Some(area),
+            OpenedContactState::Loading(contact_item) => {
+                Self::draw_contact_item(frame, contact_area, contact_item);
+            }
+            OpenedContactState::Contact(items) => {
+                Self::draw_contact_details(frame, contact_area, items);
+            }
+            OpenedContactState::Group(group) => {
+                Self::draw_group(frame, contact_area, group);
             }
         }
 
         list_area
     }
 
-    fn draw_contact(frame: &mut Frame, area: Rect, contact: &mut ContactItemType) {
-        let rows = match contact {
-            ContactItemType::Contact(contact_item) => vec![
-                Row::new([Cell::from("Name:"), Cell::from(contact_item.name.as_str())]).bold(),
-                Row::new([
-                    Cell::from("Emails:"),
-                    Cell::from(
-                        contact_item
-                            .emails
-                            .iter()
-                            .map(|email| email.email.as_str())
-                            .join(", "),
-                    ),
-                ]),
-            ],
-            ContactItemType::Group(contact_group_item) => vec![
-                Row::new([
-                    Cell::from("Name:"),
-                    Cell::from(contact_group_item.name.as_str()),
-                ])
-                .bold(),
-                Row::new([
-                    Cell::from("Members:"),
-                    Cell::from(
-                        contact_group_item
-                            .contacts
-                            .iter()
-                            .map(|contact| contact.name.as_str())
-                            .join(", "),
-                    ),
-                ]),
-            ],
-        };
+    fn draw_contact_item(frame: &mut Frame, area: Rect, contact: &ContactItem) {
+        let rows = [
+            Row::new([Cell::from("Name:"), Cell::from(contact.name.as_str())]).bold(),
+            Row::new([
+                Cell::from("Emails:"),
+                Cell::from(
+                    contact
+                        .emails
+                        .iter()
+                        .map(|email| email.email.as_str())
+                        .join(", "),
+                ),
+            ]),
+        ];
+
+        let widths = [Constraint::Length(20), Constraint::Fill(1)];
+        let table = Table::new(rows, widths).column_spacing(1);
+        frame.render_widget(table, area);
+    }
+
+    #[allow(
+        clippy::too_many_lines,
+        reason = "It's a straightforward renedering function with no logic and no further fn calls"
+    )]
+    fn draw_contact_details(frame: &mut Frame, area: Rect, contacts: &ContactDetails) {
+        let mut rows = vec![];
+        rows.push(Row::new([Cell::from("Name:"), Cell::from(&*contacts.item.name)]).bold());
+        rows.push(Row::new([
+            Cell::from("Emails:"),
+            Cell::from(
+                contacts
+                    .item
+                    .emails
+                    .iter()
+                    .map(|email| &*email.email)
+                    .join(", "),
+            ),
+        ]));
+
+        for ContactDetailCard {
+            extended_name,
+            address,
+            phones,
+            birthday,
+            anniversary,
+            urls,
+            gender,
+            notes,
+            photos,
+            logos,
+            titles,
+            roles,
+            languages,
+            timezones,
+            members: member,
+            organizations,
+        } in &contacts.cards
+        {
+            if let Some(proton_core_common::models::ExtendedName {
+                last,
+                first,
+                additional,
+                prefix,
+                suffix,
+            }) = extended_name
+            {
+                let mut extended_name_repr = String::new();
+                if let Some(prefix) = prefix {
+                    write!(&mut extended_name_repr, "{prefix} ").unwrap();
+                }
+                if let Some(first) = first {
+                    write!(&mut extended_name_repr, "{first} ").unwrap();
+                }
+                if let Some(last) = last {
+                    write!(&mut extended_name_repr, "{last} ").unwrap();
+                }
+                if let Some(suffix) = suffix {
+                    write!(&mut extended_name_repr, "{suffix}").unwrap();
+                }
+                if let Some(additional) = additional {
+                    write!(&mut extended_name_repr, " {additional}").unwrap();
+                }
+
+                let extended_name = extended_name_repr.trim().to_string();
+                if !extended_name.is_empty() {
+                    rows.push(Row::new([
+                        Cell::from("Extended Name: "),
+                        Cell::from(extended_name),
+                    ]));
+                }
+            }
+
+            for address in address {
+                let addr_type = address.addr_type.iter().map(ToString::to_string).join(", ");
+                rows.push(Row::new([Cell::from(
+                    format!("Address {addr_type}").bold(),
+                )]));
+                if !address.street.is_empty() {
+                    rows.push(Row::new([
+                        Cell::from("Street:"),
+                        Cell::from(&*address.street),
+                    ]));
+                }
+                if !address.city.is_empty() {
+                    rows.push(Row::new([Cell::from("City:"), Cell::from(&*address.city)]));
+                }
+                if !address.region.is_empty() {
+                    rows.push(Row::new([
+                        Cell::from("Region:"),
+                        Cell::from(&*address.region),
+                    ]));
+                }
+                if !address.postal_code.is_empty() {
+                    rows.push(Row::new([
+                        Cell::from("Postal Code:"),
+                        Cell::from(&*address.postal_code),
+                    ]));
+                }
+                if !address.country.is_empty() {
+                    rows.push(Row::new([
+                        Cell::from("Country:"),
+                        Cell::from(&*address.country),
+                    ]));
+                }
+            }
+            for phone in phones {
+                rows.push(Row::new([Cell::from("Phone:"), Cell::from(&*phone.number)]));
+            }
+            if let Some(birthday) = birthday {
+                rows.push(Row::new([
+                    Cell::from("Birthday:"),
+                    Cell::from(birthday.to_string()),
+                ]));
+            }
+
+            if let Some(anniversary) = anniversary {
+                rows.push(Row::new([
+                    Cell::from("Anniversary:"),
+                    Cell::from(anniversary.to_string()),
+                ]));
+            }
+
+            for url in urls {
+                rows.push(Row::new([Cell::from("Url:"), Cell::from(&*url.url)]));
+            }
+
+            for note in notes {
+                // FIXME: This might not fit!
+                rows.push(Row::new([Cell::from("Note:"), Cell::from(&**note)]));
+            }
+
+            if let Some(gender) = gender {
+                rows.push(Row::new([
+                    Cell::from("Gender: "),
+                    Cell::from(gender.to_string()),
+                ]));
+            }
+
+            if !photos.is_empty() {
+                rows.push(Row::new([
+                    Cell::from("Photos:"),
+                    Cell::from(photos.len().to_string()),
+                ]));
+            }
+
+            if !logos.is_empty() {
+                rows.push(Row::new([
+                    Cell::from("Logos:"),
+                    Cell::from(logos.len().to_string()),
+                ]));
+            }
+
+            for title in titles {
+                rows.push(Row::new([Cell::from("Title:"), Cell::from(title.as_str())]));
+            }
+
+            for role in roles {
+                rows.push(Row::new([Cell::from("Role:"), Cell::from(role.as_str())]));
+            }
+
+            for language in languages {
+                rows.push(Row::new([
+                    Cell::from("Language:"),
+                    Cell::from(language.as_str()),
+                ]));
+            }
+
+            for timezone in timezones {
+                rows.push(Row::new([
+                    Cell::from("Timezone:"),
+                    Cell::from(timezone.as_str()),
+                ]));
+            }
+
+            for member_entry in member {
+                rows.push(Row::new([
+                    Cell::from("Member:"),
+                    Cell::from(member_entry.as_str()),
+                ]));
+            }
+
+            for org in organizations {
+                rows.push(Row::new([
+                    Cell::from("Organization:"),
+                    Cell::from(org.as_str()),
+                ]));
+            }
+        }
+
+        let widths = [Constraint::Length(10), Constraint::Fill(1)];
+        let table = Table::new(rows, widths).column_spacing(1);
+        frame.render_widget(table, area);
+    }
+
+    fn draw_group(frame: &mut Frame, area: Rect, group: &ContactGroupItem) {
+        let rows = [
+            Row::new([Cell::from("Name:"), Cell::from(group.name.as_str())]).bold(),
+            Row::new([
+                Cell::from("Members:"),
+                Cell::from(
+                    group
+                        .contacts
+                        .iter()
+                        .map(|contact| contact.name.as_str())
+                        .join(", "),
+                ),
+            ]),
+        ];
 
         let widths = [Constraint::Length(10), Constraint::Fill(1)];
         let table = Table::new(rows, widths).column_spacing(1);
@@ -142,7 +342,7 @@ impl OpenedContact {
 pub struct Model {
     ctx: Arc<MailUserContext>,
     contacts: Vec<FlatContact>,
-    open_contact: OpenedContact,
+    open_contact: OpenedContactState,
     list_state: ScrollableListState,
     watcher: Option<WatchHandle>,
 }
@@ -153,7 +353,7 @@ impl Model {
             ctx,
             contacts: Vec::default(),
             list_state: ScrollableListState::new(None),
-            open_contact: OpenedContact::default(),
+            open_contact: OpenedContactState::default(),
             watcher: None,
         }
     }
@@ -171,6 +371,20 @@ impl Model {
     async fn load_contacts(tether: &Tether) -> anyhow::Result<Vec<FlatContact>> {
         let list = Contact::contact_list(tether).await?;
         Ok(Self::flatten_contacts(list))
+    }
+
+    fn load_contact_details(&self, contact_id: LocalContactId) -> Command<Messages> {
+        let ctx = self.ctx.clone();
+        Command::task(async move {
+            let ctx = ctx.user_context();
+            match ContactDetails::get_from_contact(ctx, contact_id).await {
+                Ok(details) => Command::Message(Message::LoadContactDetails(details).into()),
+                Err(e) => {
+                    tracing::error!("{e:?}");
+                    Command::message(e.into())
+                }
+            }
+        })
     }
 
     fn flatten_contacts(contacts: Vec<GroupedContacts>) -> Vec<FlatContact> {
@@ -279,7 +493,7 @@ impl AppStateHandler for Model {
             KeyCode::Enter => Command::message(Message::OpenContactPopup.into()),
             KeyCode::Esc => {
                 if self.open_contact.is_open() {
-                    self.open_contact = OpenedContact::none();
+                    self.open_contact = OpenedContactState::None;
                     Command::none()
                 } else {
                     let ctx = self.ctx.clone();
@@ -328,11 +542,23 @@ impl AppStateHandler for Model {
                 Command::none()
             }
             Message::OpenContactPopup => {
-                let Some(item) = self.selected_contact_item() else {
-                    return Command::none();
-                };
-
-                self.open_contact = OpenedContact::some(item.clone());
+                match self.selected_contact_item().cloned() {
+                    // For contacts we load the details
+                    Some(ContactItemType::Contact(contact)) => {
+                        let id = contact.local_id;
+                        self.open_contact = OpenedContactState::Loading(contact);
+                        self.load_contact_details(id)
+                    }
+                    // For groups for now we use the available data (to be changed in the future)
+                    Some(ContactItemType::Group(group)) => {
+                        self.open_contact = OpenedContactState::Group(group);
+                        Command::None
+                    }
+                    None => Command::none(),
+                }
+            }
+            Message::LoadContactDetails(contacts) => {
+                self.open_contact = OpenedContactState::Contact(contacts);
                 Command::none()
             }
         }

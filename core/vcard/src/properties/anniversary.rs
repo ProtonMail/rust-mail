@@ -10,20 +10,20 @@ use crate::parameters::any::Any;
 use crate::parameters::calendar_scale::CalendarScale;
 use crate::parameters::preference::Preference;
 use crate::parameters::value::ValueType;
-use crate::properties::{
-    VcardProperty, any_debug, get_value_type, optional_debug, validate_parameters,
-};
+use crate::properties::{VcardProperty, get_value_type, validate_parameters};
 use crate::validation::get_property_kind;
-use crate::values::date_and_or_time::{DateAndOrTimeValue, is_date_and_or_time_value};
-use crate::values::text::{Text, is_text_value};
+use crate::values::date_and_or_time::{
+    DateAndOrTimeValue, MaybeDateAndOrTime, is_date_and_or_time_value,
+};
+use crate::values::text::Text;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// The date of marriage, or equivalent, of the object the vCard represents.
-#[derive(Clone)]
+#[derive(Clone, Default, Debug)]
 pub struct Anniversary {
     /// Value (ex: 19960415)
-    pub value: AnniversaryValue,
+    pub value: MaybeDateAndOrTime,
     /// type of the value (here nothing or "date-and-or-time" of "text")
     pub value_type: Option<ValueType>,
     /// The ALTID parameter is used to "tag" property instances as being alternative representations
@@ -44,25 +44,13 @@ impl Anniversary {
     ///   * if the given value is neither a date-and-or-time nor a text
     pub fn new_validated(value: &str) -> VCardResult<Self> {
         Ok(Self {
-            value: AnniversaryValue::try_from(value)?,
+            value: value.into(),
             value_type: None,
             alternative_id: None,
             calendar_scale: None,
             any: HashSet::new(),
             group: None,
         })
-    }
-}
-
-impl Debug for Anniversary {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Anniversary {{{:?}", self.value)?;
-        optional_debug!(self, f, VALUE, value_type);
-        optional_debug!(self, f, CALSCALE, calendar_scale);
-        optional_debug!(self, f, ALTID, alternative_id);
-        any_debug!(self, f, any);
-        optional_debug!(self, f, group, group);
-        write!(f, "}}",)
     }
 }
 
@@ -112,36 +100,8 @@ impl TryFrom<&IcalProperty> for Anniversary {
             }
         }
 
-        let real_value_type = if let Some(value_type) = value_type {
-            value_type
-        } else if is_date_and_or_time_value(value) {
-            ValueType::DateAndOrTime
-        } else if is_text_value(value) {
-            ValueType::Text
-        } else {
-            return Err(VCardError::InvalidValue(
-                PropertyKind::Anniversary,
-                value.clone(),
-            ));
-        };
-        let value = match real_value_type {
-            ValueType::DateAndOrTime => AnniversaryValue::DateAndOrTime(
-                DateAndOrTimeValue::try_from(value.as_str())
-                    .map_err(VCardError::from_value_error(PropertyKind::Anniversary))?,
-            ),
-            ValueType::Text => AnniversaryValue::Text(
-                Text::try_from(value.as_str())
-                    .map_err(VCardError::from_value_error(PropertyKind::Anniversary))?,
-            ),
-            _ => {
-                return Err(VCardError::InvalidValue(
-                    PropertyKind::Anniversary,
-                    value.to_owned(),
-                ));
-            }
-        };
         Ok(Self {
-            value,
+            value: value.into(),
             value_type,
             alternative_id,
             calendar_scale,
@@ -167,8 +127,8 @@ impl AnniversaryValue {
     ///
     /// # Errors
     ///   * if given value is neither a date-and-or-time value nor a text
-    pub fn new_validated(value: &str) -> VCardResult<Self> {
-        Self::try_from(value)
+    pub fn new_validated(value: impl AsRef<str>) -> Self {
+        Self::from(value)
     }
 }
 
@@ -181,24 +141,11 @@ impl Debug for AnniversaryValue {
     }
 }
 
-impl TryFrom<&str> for AnniversaryValue {
-    type Error = VCardError;
-
-    fn try_from(value: &str) -> VCardResult<Self> {
-        if is_date_and_or_time_value(value) {
-            Ok(Self::DateAndOrTime(
-                DateAndOrTimeValue::try_from(value)
-                    .map_err(VCardError::from_value_error(PropertyKind::Anniversary))?,
-            ))
-        } else if is_text_value(value) {
-            Ok(Self::Text(Text::try_from(value).map_err(
-                VCardError::from_value_error(PropertyKind::Anniversary),
-            )?))
-        } else {
-            Err(VCardError::InvalidValue(
-                PropertyKind::Anniversary,
-                value.to_owned(),
-            ))
+impl<T: AsRef<str>> From<T> for AnniversaryValue {
+    fn from(value: T) -> Self {
+        match DateAndOrTimeValue::try_from(value.as_ref()) {
+            Ok(v) => Self::DateAndOrTime(v),
+            _ => Self::Text(value.into()),
         }
     }
 }
@@ -223,7 +170,7 @@ pub fn validate_anniversary(property: &IcalProperty) -> VcardValidationResult<()
         let value_type = if let Some(value_type) = get_value_type(property)? {
             let validated = match value_type {
                 ValueType::DateAndOrTime => is_date_and_or_time_value(value),
-                ValueType::Text => is_text_value(value),
+                ValueType::Text => true,
                 _ => false,
             };
             if !validated {
@@ -234,12 +181,8 @@ pub fn validate_anniversary(property: &IcalProperty) -> VcardValidationResult<()
             value_type
         } else if is_date_and_or_time_value(value) {
             ValueType::DateAndOrTime
-        } else if is_text_value(value) {
-            ValueType::Text
         } else {
-            return Err(VcardValidationError::InvalidPropertyValue(
-                get_property_kind(&property.name)?,
-            ));
+            ValueType::Text
         };
         let allowed = match value_type {
             ValueType::DateAndOrTime => hash_set!(

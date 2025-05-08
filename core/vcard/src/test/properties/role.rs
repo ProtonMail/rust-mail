@@ -1,15 +1,8 @@
 use velcro::hash_set;
 
 use crate::ParameterType;
-use crate::properties::role::{Role, validate_role};
+use crate::properties::role::validate_role;
 use crate::test::{make_property, property_reject_parameters};
-use crate::values::text::Text;
-
-#[test]
-fn role_struct() {
-    let role = Role::new_validated("text").unwrap();
-    assert_eq!(role.value, Text::new_unchecked("text"));
-}
 
 #[test]
 fn role_property() {

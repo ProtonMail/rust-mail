@@ -17,7 +17,7 @@ use crate::properties::{
     VcardProperty, any_debug, loop_debug, optional_debug, validate_parameters,
 };
 use crate::validation::get_property_kind;
-use crate::values::uri::{Uri, is_uri_value};
+use crate::values::uri::Uri;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
@@ -179,7 +179,7 @@ pub fn validate_photo(property: &IcalProperty) -> VcardValidationResult<()> {
     // PHOTO-param = "VALUE=uri" / altid-param / type-param / mediatype-param / pref-param / pid-param / any-param
     // PHOTO-value = URI
     if let Some(value) = &property.value {
-        if is_uri_value(value) {
+        if Url::parse(value).is_ok() {
             validate_parameters(
                 property,
                 ValueType::Uri,

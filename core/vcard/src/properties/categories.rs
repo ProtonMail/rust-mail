@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 use ical::generator::Property as IcalProperty;
 use velcro::hash_set;
@@ -11,16 +11,14 @@ use crate::parameters::pid::Pid;
 use crate::parameters::preference::Preference;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
-use crate::properties::{
-    VcardProperty, any_debug, loop_debug, optional_debug, validate_parameters,
-};
+use crate::properties::{VcardProperty, validate_parameters};
 use crate::validation::get_property_kind;
-use crate::values::text_list::{TextList, is_text_list_value};
+use crate::values::text_list::TextList;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify application category information about the vCard, also known as "tags".
-#[derive(Clone)]
+#[derive(Clone, Default, Debug)]
 pub struct Category {
     /// Value
     pub value: TextList,
@@ -41,55 +39,6 @@ pub struct Category {
     pub group: Option<String>,
 }
 
-impl Category {
-    /// Create a new CATEGORIES property
-    #[must_use]
-    pub fn new_unchecked(value: &[String]) -> Self {
-        Self {
-            value: TextList::new_unchecked(value),
-            value_type: None,
-            pid: None,
-            preference: None,
-            r#type: HashSet::new(),
-            alternative_id: None,
-            any: HashSet::new(),
-            group: None,
-        }
-    }
-
-    /// Try to create a new CATEGORIES property
-    ///
-    /// # Errors
-    ///   * if any of the value is not a valid text value
-    pub fn new_validated(value: &[String]) -> VCardResult<Self> {
-        Ok(Self {
-            value: TextList::new_validated(value)
-                .map_err(VCardError::from_value_error(PropertyKind::Categories))?,
-            value_type: None,
-            pid: None,
-            preference: None,
-            r#type: HashSet::new(),
-            alternative_id: None,
-            any: HashSet::new(),
-            group: None,
-        })
-    }
-}
-
-impl Debug for Category {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Category {{{:?}", self.value)?;
-        optional_debug!(self, f, VALUE, value_type);
-        optional_debug!(self, f, PID, pid);
-        optional_debug!(self, f, PREF, preference);
-        loop_debug!(self, f, TYPE, r#type);
-        optional_debug!(self, f, ALTID, alternative_id);
-        any_debug!(self, f, any);
-        optional_debug!(self, f, group, group);
-        write!(f, "}}",)
-    }
-}
-
 impl TryFrom<&IcalProperty> for Category {
     type Error = VCardError;
 
@@ -98,15 +47,9 @@ impl TryFrom<&IcalProperty> for Category {
             return Err(VCardError::MissingValue(PropertyKind::Categories));
         };
         let mut result = Self {
-            value: TextList::try_from(value.as_str())
-                .map_err(VCardError::from_value_error(PropertyKind::Categories))?,
-            value_type: None,
-            pid: None,
-            preference: None,
-            r#type: HashSet::new(),
-            alternative_id: None,
-            any: HashSet::new(),
+            value: value.into(),
             group: group_from_name(&property.name),
+            ..Default::default()
         };
         if let Some(parameters) = &property.params {
             for (name, values) in parameters {
@@ -173,25 +116,19 @@ impl VcardProperty for Category {
 pub fn validate_categories(property: &IcalProperty) -> VcardValidationResult<()> {
     // CATEGORIES-param = "VALUE=text" / pid-param / pref-param / type-param / altid-param / any-param
     // CATEGORIES-value = text-list
-    if let Some(value) = &property.value {
-        if is_text_list_value(value) {
-            validate_parameters(
-                property,
-                ValueType::Text,
-                &hash_set!(
-                    ParameterType::Value,
-                    ParameterType::Pid,
-                    ParameterType::Pref,
-                    ParameterType::Type,
-                    ParameterType::AltId,
-                    ParameterType::Any,
-                ),
-            )?;
-        } else {
-            return Err(VcardValidationError::InvalidPropertyValue(
-                get_property_kind(&property.name)?,
-            ));
-        }
+    if property.value.is_some() {
+        validate_parameters(
+            property,
+            ValueType::Text,
+            &hash_set!(
+                ParameterType::Value,
+                ParameterType::Pid,
+                ParameterType::Pref,
+                ParameterType::Type,
+                ParameterType::AltId,
+                ParameterType::Any,
+            ),
+        )?;
     } else {
         return Err(VcardValidationError::InvalidPropertyValue(
             get_property_kind(&property.name)?,

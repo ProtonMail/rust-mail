@@ -18,7 +18,7 @@ use crate::properties::{
     VcardProperty, any_debug, loop_debug, optional_debug, validate_parameters,
 };
 use crate::validation::get_property_kind;
-use crate::values::uri::{Uri, is_uri_value};
+use crate::values::uri::Uri;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
@@ -124,7 +124,7 @@ impl TryFrom<&IcalProperty> for Sound {
                     }
                     ParameterType::Language => {
                         result.language = Some(
-                            Language::try_from(values.as_slice())
+                            Language::try_from(values.clone())
                                 .map_err(VCardError::from_parameter_error(PropertyKind::Sound))?,
                         );
                     }
@@ -190,7 +190,7 @@ pub fn validate_sound(property: &IcalProperty) -> VcardValidationResult<()> {
     // SOUND-param = "VALUE=uri" / language-param / pid-param / pref-param / type-param / mediatype-param / altid-param / any-param
     // SOUND-value = URI
     if let Some(value) = &property.value {
-        if is_uri_value(value) {
+        if Url::parse(value).is_ok() {
             validate_parameters(
                 property,
                 ValueType::Uri,

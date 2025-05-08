@@ -4,10 +4,11 @@ use crate::errors::{VCardValueError, VCardValueResult};
 use crate::values::check_list;
 use crate::values::component::{Component, is_component_value};
 use crate::vcard::split_list;
+use itertools::Itertools as _;
 
 /// A list of component values
 #[derive(Clone, PartialEq)]
-pub struct ListComponent(pub(crate) Vec<Component>);
+pub struct ListComponent(pub Vec<Component>);
 
 impl ListComponent {
     /// Create a new `ListComponent`
@@ -28,6 +29,21 @@ impl ListComponent {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    #[must_use]
+    pub fn to_vec_string(&self) -> Vec<String> {
+        self.0.clone().into_iter().map(|v| v.0).collect()
+    }
+
+    /// Concats all elements into a string if there is at least one element
+    #[must_use]
+    pub fn concat_to_string(&self, sep: &str) -> Option<String> {
+        if self.is_empty() {
+            return None;
+        }
+
+        Some(self.0.iter().map(|x| &x.0).join(sep))
     }
 }
 

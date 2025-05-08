@@ -3,7 +3,6 @@ mod date;
 mod date_and_or_time;
 mod dates_and_times;
 mod iana_token;
-mod langauge_tag;
 mod list_component;
 mod param_value;
 mod text;

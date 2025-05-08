@@ -33,7 +33,7 @@ mod tests;
 
 mod address;
 mod app_settings;
-mod contact;
+pub mod contact;
 mod contact_card;
 mod contact_email;
 mod initialized_components;

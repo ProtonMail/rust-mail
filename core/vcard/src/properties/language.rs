@@ -15,7 +15,6 @@ use crate::properties::{
     VcardProperty, any_debug, loop_debug, optional_debug, validate_parameters,
 };
 use crate::validation::get_property_kind;
-use crate::values::language_tag::{LanguageTag, is_language_tag_value};
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
@@ -23,7 +22,7 @@ use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 #[derive(Clone)]
 pub struct Language {
     /// value
-    pub value: LanguageTag,
+    pub value: String,
     /// type of the value (here nothing or "uri")
     pub value_type: Option<ValueType>,
     /// The PID parameter is used to identify a specific property among multiple instances.
@@ -44,7 +43,7 @@ pub struct Language {
 impl Language {
     /// Create a new LANG property without any parameter or group
     #[must_use]
-    pub fn new(value: LanguageTag) -> Self {
+    pub fn new(value: String) -> Self {
         Self {
             value,
             value_type: None,
@@ -55,16 +54,6 @@ impl Language {
             any: HashSet::new(),
             group: None,
         }
-    }
-
-    /// Try to create a new LANG property without any parameter or group
-    ///
-    /// # Errors
-    ///   * if value is not a valid language-tag value
-    pub fn new_validated(value: &str) -> VCardResult<Self> {
-        Ok(Self::new(LanguageTag::try_from(value).map_err(
-            VCardError::from_value_error(PropertyKind::Lang),
-        )?))
     }
 }
 
@@ -90,8 +79,7 @@ impl TryFrom<&IcalProperty> for Language {
             return Err(VCardError::MissingValue(PropertyKind::Lang));
         };
         let mut result = Self {
-            value: LanguageTag::try_from(value.as_str())
-                .map_err(VCardError::from_value_error(PropertyKind::Lang))?,
+            value: value.clone(),
             value_type: None,
             pid: None,
             preference: None,
@@ -164,25 +152,19 @@ impl VcardProperty for Language {
 pub fn validate_lang(property: &IcalProperty) -> VcardValidationResult<()> {
     // LANG-param = "VALUE=language-tag" / pid-param / pref-param / altid-param / type-param / any-param
     // LANG-value = Language-Tag
-    if let Some(value) = &property.value {
-        if is_language_tag_value(value) {
-            validate_parameters(
-                property,
-                ValueType::LanguageTag,
-                &hash_set!(
-                    ParameterType::Value,
-                    ParameterType::Pid,
-                    ParameterType::Pref,
-                    ParameterType::AltId,
-                    ParameterType::Type,
-                    ParameterType::Any
-                ),
-            )?;
-        } else {
-            return Err(VcardValidationError::InvalidPropertyValue(
-                get_property_kind(&property.name)?,
-            ));
-        }
+    if property.value.is_some() {
+        validate_parameters(
+            property,
+            ValueType::LanguageTag,
+            &hash_set!(
+                ParameterType::Value,
+                ParameterType::Pid,
+                ParameterType::Pref,
+                ParameterType::AltId,
+                ParameterType::Type,
+                ParameterType::Any
+            ),
+        )?;
     } else {
         return Err(VcardValidationError::InvalidPropertyValue(
             get_property_kind(&property.name)?,

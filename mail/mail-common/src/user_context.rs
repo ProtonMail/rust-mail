@@ -13,7 +13,6 @@ use crate::user_context::initialization::InitializationMediator;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 use proton_action_queue::queue::{Queue, QueueAutoExecutor, QueueAutoExecutorPool};
-use proton_core_api::auth::UserKeySecret;
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::crypto_clock;
 use proton_core_api::services::proton::{AddressId, SessionId, UserId};
@@ -21,7 +20,7 @@ use proton_core_api::services::proton::{Proton, ProtonCore};
 use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::datatypes::{AccountDetails, LocalAddressId};
 use proton_core_common::models::{Address, User, UserSettings};
-use proton_core_common::{ContactError, CoreContextError, LoadKeySecret, UserContext};
+use proton_core_common::{ContactError, CoreContextError, UserContext};
 use proton_crypto_inbox::keys::{ComposerPreference, CryptoMailSettings, SendPreferences};
 use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
@@ -301,7 +300,7 @@ impl MailUserContext {
     ) -> MailContextResult<UnlockedUserKeys<Provider>> {
         let keys = self
             .user_context
-            .unlocked_user_keys(pgp_provider, conn, self)
+            .unlocked_user_keys(pgp_provider, conn, self.session())
             .await?;
         Ok(keys)
     }
@@ -325,7 +324,7 @@ impl MailUserContext {
     ) -> MailContextResult<UnlockedAddressKeys<Provider>> {
         let keys = self
             .user_context
-            .unlocked_address_keys(pgp_provider, conn, self, address_id)
+            .unlocked_address_keys(pgp_provider, conn, self.session(), address_id)
             .await?;
         Ok(keys)
     }
@@ -574,11 +573,5 @@ impl MailUserContext {
         F: Future<Output: Send> + Send + 'static,
     {
         self.user_context.spawn_with::<S, _>(task)
-    }
-}
-
-impl LoadKeySecret for MailUserContext {
-    fn key_secret(&self) -> impl Future<Output = Option<UserKeySecret>> {
-        self.session().expose_key_secret()
     }
 }

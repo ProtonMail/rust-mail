@@ -7,7 +7,7 @@ use crate::parameters::value::ValueType;
 
 /// Represent a iana-token value from vCard RFC6350
 #[derive(Clone, Eq, Hash, PartialEq)]
-pub struct IanaToken(pub(crate) String);
+pub struct IanaToken(pub String);
 
 impl IanaToken {
     /// Create a new iana-token (no check is done)

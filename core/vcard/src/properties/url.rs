@@ -17,17 +17,16 @@ use crate::properties::{
     VcardProperty, any_debug, loop_debug, optional_debug, validate_parameters,
 };
 use crate::validation::get_property_kind;
-use crate::values::uri::{Uri, is_uri_value};
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify a uniform resource locator associated with the object to which the vCard refers.
 /// Examples for individuals include personal websites, blogs, and social networking site
 /// identifiers.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct VcardUrl {
     /// Value (ex: <http://example.org/restaurant.french/~chezchic.html>)
-    pub value: Uri,
+    pub value: String,
     /// type of the value (here nothing or "uri")
     pub value_type: Option<ValueType>,
     /// The PID parameter is used to identify a specific property among multiple instances.
@@ -50,37 +49,11 @@ pub struct VcardUrl {
 impl VcardUrl {
     /// Create a new URL property without any parameter or group
     #[must_use]
-    pub fn new(value: Url) -> Self {
+    pub fn new(value: String) -> Self {
         Self {
-            value: Uri::new(value),
-            value_type: None,
-            pid: None,
-            preference: None,
-            r#type: HashSet::new(),
-            media_type: None,
-            alternative_id: None,
-            any: HashSet::new(),
-            group: None,
+            value,
+            ..Default::default()
         }
-    }
-
-    /// Try to create a new URL property without any parameter or group
-    ///
-    /// # Errors
-    ///   * If given value is not a valid Uri
-    pub fn new_validated(value: &str) -> VCardResult<Self> {
-        Ok(Self {
-            value: Uri::new_validated(value)
-                .map_err(VCardError::from_value_error(PropertyKind::Url))?,
-            value_type: None,
-            pid: None,
-            preference: None,
-            r#type: HashSet::new(),
-            media_type: None,
-            alternative_id: None,
-            any: HashSet::new(),
-            group: None,
-        })
     }
 }
 
@@ -99,14 +72,14 @@ impl Debug for VcardUrl {
     }
 }
 
-impl TryFrom<&IcalProperty> for VcardUrl {
+impl TryFrom<IcalProperty> for VcardUrl {
     type Error = VCardError;
 
-    fn try_from(property: &IcalProperty) -> VCardResult<Self> {
-        let Some(value) = &property.value else {
+    fn try_from(property: IcalProperty) -> VCardResult<Self> {
+        let Some(value) = property.value else {
             return Err(VCardError::MissingValue(PropertyKind::Url));
         };
-        let mut result = Self::new_validated(value.as_str())?;
+        let mut result = Self::new(value);
         result.group = group_from_name(&property.name);
         if let Some(parameters) = &property.params {
             for (name, values) in parameters {
@@ -179,7 +152,7 @@ pub fn validate_url(property: &IcalProperty) -> VcardValidationResult<()> {
     // URL-param = "VALUE=uri" / pid-param / pref-param / type-param / mediatype-param / altid-param / any-param
     // URL-value = URI
     if let Some(value) = &property.value {
-        if is_uri_value(value) {
+        if Url::parse(value).is_ok() {
             validate_parameters(
                 property,
                 ValueType::Uri,

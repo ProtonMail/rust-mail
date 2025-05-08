@@ -1,65 +1,32 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 use ical::generator::Property as IcalProperty;
+use url::Url;
 use velcro::hash_set;
 
 use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::any::Any;
 use crate::parameters::preference::Preference;
 use crate::parameters::value::ValueType;
-use crate::properties::{
-    VcardProperty, any_debug, get_value_type, optional_debug, validate_parameters,
-};
+use crate::properties::{VcardProperty, get_value_type, validate_parameters};
 use crate::validation::get_property_kind;
-use crate::values::text::{Text, is_text_value};
-use crate::values::uri::{Uri, is_uri_value};
+use crate::values::uri::MaybeUri;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify a value that represents a globally unique identifier corresponding to the entity
 /// associated with the vCard.
-#[derive(Clone)]
+#[derive(Clone, Default, Debug)]
 pub struct VcardUid {
     /// Value (ex: urn:uuid:f81d4fae-7dec-11d0-a765-00a0c91e6bf6)
-    pub value: UidValue,
+    pub value: MaybeUri,
     /// type of the value (here nothing or "uri")
     pub value_type: Option<ValueType>,
     /// Free parameters
     pub any: HashSet<Any>,
     /// Group this `CalendarUserAddress` belong to
     pub group: Option<String>,
-}
-
-impl VcardUid {
-    /// Create a new UID property (no check is done)
-    #[must_use]
-    pub fn new(value: UidValue) -> Self {
-        Self {
-            value,
-            value_type: None,
-            any: HashSet::new(),
-            group: None,
-        }
-    }
-
-    /// Try to create a new UID property
-    ///
-    /// # Errors
-    ///   * if given value is not a valid uri
-    pub fn new_validated(value: &str) -> VCardResult<Self> {
-        Ok(Self::new(UidValue::try_from(value)?))
-    }
-}
-
-impl Debug for VcardUid {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Uid {{{:?}", self.value)?;
-        optional_debug!(self, f, VALUE, value_type);
-        any_debug!(self, f, any);
-        optional_debug!(self, f, group, group);
-        write!(f, "}}",)
-    }
 }
 
 impl TryFrom<&IcalProperty> for VcardUid {
@@ -95,36 +62,9 @@ impl TryFrom<&IcalProperty> for VcardUid {
                 }
             }
         }
-        let real_value_type = if let Some(value_type) = value_type {
-            value_type
-        } else if is_uri_value(value) {
-            ValueType::Uri
-        } else if is_text_value(value) {
-            ValueType::Text
-        } else {
-            return Err(VCardError::InvalidValue(
-                PropertyKind::UId,
-                value.to_owned(),
-            ));
-        };
-        let value = match real_value_type {
-            ValueType::Text => UidValue::Text(
-                Text::try_from(value.as_str())
-                    .map_err(VCardError::from_value_error(PropertyKind::UId))?,
-            ),
-            ValueType::Uri => UidValue::Uri(
-                Uri::try_from(value.as_str())
-                    .map_err(VCardError::from_value_error(PropertyKind::UId))?,
-            ),
-            _ => {
-                return Err(VCardError::InvalidValue(
-                    PropertyKind::UId,
-                    value.to_owned(),
-                ));
-            }
-        };
+
         Ok(Self {
-            value,
+            value: value.into(),
             value_type,
             any,
             group: group_from_name(&property.name),
@@ -135,38 +75,6 @@ impl TryFrom<&IcalProperty> for VcardUid {
 impl VcardProperty for VcardUid {
     fn get_preference(&self) -> Option<Preference> {
         None
-    }
-}
-
-#[derive(Clone, PartialEq)]
-pub enum UidValue {
-    Text(Text),
-    Uri(Uri),
-}
-
-impl Debug for UidValue {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            UidValue::Text(v) => write!(f, "{v:?}"),
-            UidValue::Uri(v) => write!(f, "{v:?}"),
-        }
-    }
-}
-
-impl TryFrom<&str> for UidValue {
-    type Error = VCardError;
-
-    fn try_from(value: &str) -> VCardResult<Self> {
-        if let Ok(value) = value.parse() {
-            Ok(Self::Uri(Uri::new(value)))
-        } else if is_text_value(value) {
-            Ok(Self::Text(Text::new_unchecked(value)))
-        } else {
-            Err(VCardError::InvalidValue(
-                PropertyKind::UId,
-                value.to_owned(),
-            ))
-        }
     }
 }
 
@@ -190,8 +98,8 @@ pub fn validate_uid(property: &IcalProperty) -> VcardValidationResult<()> {
     if let Some(value) = &property.value {
         let value_type = if let Some(value_type) = get_value_type(property)? {
             let validated = match value_type {
-                ValueType::Text => is_text_value(value),
-                ValueType::Uri => is_uri_value(value),
+                ValueType::Text => true,
+                ValueType::Uri => Url::parse(value).is_ok(),
                 _ => false,
             };
             if !validated {
@@ -200,14 +108,8 @@ pub fn validate_uid(property: &IcalProperty) -> VcardValidationResult<()> {
                 ));
             }
             value_type
-        } else if is_text_value(value) {
-            ValueType::Text
-        } else if is_uri_value(value) {
-            ValueType::Uri
         } else {
-            return Err(VcardValidationError::InvalidPropertyValue(
-                get_property_kind(&property.name)?,
-            ));
+            ValueType::Text
         };
         validate_parameters(
             property,

@@ -1,0 +1,25 @@
+---
+source: core/core-common/src/models/contact.rs
+expression: get_vcard(real_autosave)
+---
+Snapshot {
+    vcard: "BEGIN:VCARD\r\nVERSION:4.0\r\nPRODID;VALUE=TEXT:-//ProtonMail//ProtonMail vCard 1.0.0//EN\r\nFN;PREF=1:Orión\r\nUID:proton-autosave-036bcd9a-0818-45b0-b54c-2238891dc39d\r\nITEM1.EMAIL;PREF=1:oriongonza42@pm.me\r\nITEM2.EMAIL;TYPE=work;PREF=2:orion.gonzalez@external.proton.ch\r\nITEM3.EMAIL;TYPE=other;PREF=3:oriongonza@gmail.com\r\nEND:VCARD",
+    card: ContactDetailCard {
+        extended_name: None,
+        address: [],
+        phones: [],
+        birthday: None,
+        notes: [],
+        anniversary: None,
+        urls: [],
+        gender: None,
+        photos: [],
+        logos: [],
+        titles: [],
+        roles: [],
+        languages: [],
+        timezones: [],
+        members: [],
+        organizations: [],
+    },
+}

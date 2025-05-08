@@ -1,23 +1,7 @@
 use crate::ParameterType;
-use crate::properties::related::{Related, RelatedValue, validate_related};
+use crate::properties::related::validate_related;
 use crate::test::{make_property, property_reject_parameters};
-use crate::values::text::Text;
-use crate::values::uri::Uri;
 use velcro::hash_set;
-
-#[test]
-fn related_struct() {
-    let related = Related::new_validated("text").unwrap();
-    assert_eq!(
-        related.value,
-        RelatedValue::Text(Text::new_unchecked("text"))
-    );
-    let related = Related::new_validated("uri:uri").unwrap();
-    assert_eq!(
-        related.value,
-        RelatedValue::Uri(Uri::new_validated("uri:uri").unwrap())
-    );
-}
 
 #[allow(clippy::too_many_lines)]
 #[test]

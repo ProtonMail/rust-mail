@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
 use crate::errors::{VCardValueError, VCardValueResult};
 use crate::parameters::value::ValueType;
@@ -9,7 +9,54 @@ use crate::values::time::{TimeValue, is_time_value};
 // TODO: transform into an enum with all 3 cases
 /// Representation of a date-and-or-time value from vCard RFC6350
 #[derive(Clone, Copy, PartialEq)]
-pub struct DateAndOrTimeValue(pub(crate) DateTimeValue);
+pub struct DateAndOrTimeValue(pub DateTimeValue);
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum MaybeDateAndOrTime {
+    DateAndOrTime(DateAndOrTimeValue),
+    Text(String),
+}
+impl Default for MaybeDateAndOrTime {
+    fn default() -> Self {
+        Self::Text(String::new())
+    }
+}
+
+impl Display for MaybeDateAndOrTime {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Text(s) => write!(f, "{s}")?,
+            Self::DateAndOrTime(date) => {
+                if let Some(year) = date.0.year {
+                    write!(f, "{year}")?;
+                } else {
+                    write!(f, "?")?;
+                }
+                if let Some(month) = date.0.month {
+                    write!(f, "/{month}")?;
+                } else {
+                    write!(f, "/?")?;
+                }
+                if let Some(day) = date.0.day {
+                    write!(f, "/{day}")?;
+                } else {
+                    write!(f, "/?")?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<T: AsRef<str>> From<T> for MaybeDateAndOrTime {
+    fn from(value: T) -> Self {
+        let value = value.as_ref();
+        match DateAndOrTimeValue::try_from(value) {
+            Ok(v) => Self::DateAndOrTime(v),
+            _ => Self::Text(value.into()),
+        }
+    }
+}
 
 impl DateAndOrTimeValue {
     /// Try to create a new `DateAndOrTimeValue`

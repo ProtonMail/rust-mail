@@ -19,21 +19,15 @@ use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify the components of the name of the object the vCard represents.
 pub struct Name {
-    /// last name
     pub last: ListComponent,
-    /// first name
     pub first: ListComponent,
-    /// additional names
     pub additional: ListComponent,
-    /// honorific prefix
+    /// honorific prefix like Dr, Mr, Don
     pub prefix: ListComponent,
-    /// honorific suffix
+    /// honorific suffix like `PhD`
     pub suffix: ListComponent,
-    /// type of the value (here nothing or "uri")
     pub value_type: Option<ValueType>,
-    /// When displaying, sort this property as:
     pub sort_as: Option<SortAs>,
-    /// Language for this property
     pub language: Option<Language>,
     /// The ALTID parameter is used to "tag" property instances as being alternative representations
     /// of the same logical property.
@@ -157,7 +151,7 @@ impl TryFrom<&IcalProperty> for Name {
                     }
                     ParameterType::Language => {
                         result.language = Some(
-                            Language::try_from(values.as_slice())
+                            Language::try_from(values.clone())
                                 .map_err(VCardError::from_parameter_error(PropertyKind::N))?,
                         );
                     }

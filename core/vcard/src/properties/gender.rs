@@ -10,7 +10,6 @@ use crate::parameters::preference::Preference;
 use crate::parameters::value::ValueType;
 use crate::properties::{VcardProperty, any_debug, optional_debug, validate_parameters};
 use crate::validation::get_property_kind;
-use crate::values::text::is_text_value;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
@@ -111,6 +110,7 @@ pub enum GenderValue {
     NotApplicable(String),
     Unknown(String),
     None(String),
+    Custom(String),
 }
 
 impl TryFrom<&str> for GenderValue {
@@ -129,10 +129,7 @@ impl TryFrom<&str> for GenderValue {
             "N" | "n" => Ok(Self::NotApplicable(message)),
             "U" | "u" => Ok(Self::Unknown(message)),
             "" => Ok(Self::None(message)),
-            _ => Err(VCardError::InvalidValue(
-                PropertyKind::Gender,
-                value.to_owned(),
-            )),
+            rest => Ok(Self::Custom(rest.to_owned())),
         }
     }
 }
@@ -148,15 +145,9 @@ pub fn validate_gender(property: &IcalProperty) -> VcardValidationResult<()> {
     // sex = "" / "M" / "F" / "O" / "N" / "U"
 
     if let Some(value) = &property.value {
-        let value = if let Some((value, message)) = value.split_once(';') {
-            if !is_text_value(message) {
-                return Err(VcardValidationError::InvalidPropertyValue(
-                    get_property_kind(&property.name)?,
-                ));
-            }
-            value
-        } else {
-            value
+        let value = match value.split_once(';') {
+            Some((new_value, _)) => new_value,
+            None => value,
         };
         if value.is_empty() || "MFONUmfonu".contains(value) {
             validate_parameters(

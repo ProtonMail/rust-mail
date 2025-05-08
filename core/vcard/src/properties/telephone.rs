@@ -1,7 +1,8 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
 use ical::generator::Property as IcalProperty;
+use url::Url;
 use velcro::hash_set;
 
 use crate::errors::{VcardValidationError, VcardValidationResult};
@@ -16,8 +17,6 @@ use crate::properties::{
     VcardProperty, any_debug, get_value_type, loop_debug, optional_debug, validate_parameters,
 };
 use crate::validation::get_property_kind;
-use crate::values::text::{Text, is_text_value};
-use crate::values::uri::{Uri, is_uri_value};
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
@@ -27,14 +26,14 @@ use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 pub struct Telephone {
     /// Value (ex: tel:+33-01-23-45-67)
     pub value: TelephoneValue,
-    /// type of the value (here nothing or "uri")
+    /// type of the value (Uri or Text)
     pub value_type: Option<ValueType>,
     /// The PID parameter is used to identify a specific property among multiple instances.
     pub pid: Option<Pid>,
     /// Preference between other CALADRURI property
     pub preference: Option<Preference>,
     /// Type for this property
-    pub r#type: HashSet<TelType>,
+    pub tel_type: HashSet<TelType>,
     /// Media type linked by the value
     pub media_type: Option<MediaType>,
     /// The ALTID parameter is used to "tag" property instances as being alternative representations
@@ -49,26 +48,18 @@ pub struct Telephone {
 impl Telephone {
     /// Create a new TEL property
     #[must_use]
-    pub fn new(value: TelephoneValue) -> Self {
+    pub fn new(telephone: String) -> Self {
         Self {
-            value,
+            value: telephone.into(),
             value_type: None,
             pid: None,
             preference: None,
-            r#type: HashSet::new(),
+            tel_type: HashSet::new(),
             media_type: None,
             alternative_id: None,
             any: HashSet::new(),
             group: None,
         }
-    }
-
-    /// Try to create a new TEL property
-    ///
-    /// # Errors
-    ///   * if the value is not a text value or an uri value
-    pub fn new_validated(value: &str) -> VCardResult<Self> {
-        Ok(Self::new(TelephoneValue::try_from(value)?))
     }
 }
 
@@ -78,7 +69,7 @@ impl Debug for Telephone {
         optional_debug!(self, f, VALUE, value_type);
         optional_debug!(self, f, PID, pid);
         optional_debug!(self, f, PREF, preference);
-        loop_debug!(self, f, TYPE, r#type);
+        loop_debug!(self, f, TYPE, tel_type);
         optional_debug!(self, f, MEDIATYPE, media_type);
         optional_debug!(self, f, ALTID, alternative_id);
         any_debug!(self, f, any);
@@ -154,45 +145,33 @@ impl TryFrom<&IcalProperty> for Telephone {
                 }
             }
         }
-        let real_value_type = if let Some(value_type) = value_type {
-            value_type
-        } else if is_uri_value(value) {
-            ValueType::Uri
-        } else if is_text_value(value) {
-            ValueType::Text
-        } else {
-            return Err(VCardError::InvalidValue(
-                PropertyKind::Tel,
-                value.to_owned(),
-            ));
-        };
-        let value = match real_value_type {
-            ValueType::Text => TelephoneValue::Text(
-                Text::try_from(value.as_str())
-                    .map_err(VCardError::from_value_error(PropertyKind::Tel))?,
-            ),
-            ValueType::Uri => TelephoneValue::Uri(
-                Uri::try_from(value.as_str())
-                    .map_err(VCardError::from_value_error(PropertyKind::Tel))?,
-            ),
-            _ => {
-                return Err(VCardError::InvalidValue(
-                    PropertyKind::Tel,
-                    value.to_owned(),
-                ));
-            }
-        };
+
         Ok(Self {
-            value,
+            value: TelephoneValue::from(value.clone()),
             value_type,
             pid,
             preference,
-            r#type,
+            tel_type: r#type,
             media_type,
             alternative_id,
             any,
             group: group_from_name(&property.name),
         })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum TelephoneValue {
+    Text(String),
+    Uri(Url),
+}
+
+impl Display for TelephoneValue {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Text(v) => write!(f, "{v}"),
+            Self::Uri(v) => write!(f, "{}", v.path()),
+        }
     }
 }
 
@@ -202,34 +181,12 @@ impl VcardProperty for Telephone {
     }
 }
 
-#[derive(Clone, PartialEq)]
-pub enum TelephoneValue {
-    Text(Text),
-    Uri(Uri),
-}
-
-impl Debug for TelephoneValue {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Text(v) => write!(f, "{v:?}"),
-            Self::Uri(v) => write!(f, "{v:?}"),
-        }
-    }
-}
-
-impl TryFrom<&str> for TelephoneValue {
-    type Error = VCardError;
-
-    fn try_from(value: &str) -> VCardResult<Self> {
-        if let Ok(url) = value.parse() {
-            Ok(Self::Uri(Uri::new(url)))
-        } else if is_text_value(value) {
-            Ok(Self::Text(Text::new_unchecked(value)))
+impl From<String> for TelephoneValue {
+    fn from(value: String) -> Self {
+        if let Ok(url) = value.parse::<Url>() {
+            Self::Uri(url)
         } else {
-            Err(VCardError::InvalidValue(
-                PropertyKind::Tel,
-                value.to_owned(),
-            ))
+            Self::Text(value)
         }
     }
 }
@@ -258,8 +215,12 @@ pub fn validate_tel(property: &IcalProperty) -> VcardValidationResult<()> {
     if let Some(value) = &property.value {
         let value_type = if let Some(value_type) = get_value_type(property)? {
             let validated = match value_type {
-                ValueType::Text => is_text_value(value),
-                ValueType::Uri => is_uri_value(value),
+                ValueType::Text => {
+                    let _: &str = value;
+                    // I don't think that it makes sense to reject invalid texts when parsing, as we can still display them.
+                    true
+                }
+                ValueType::Uri => Url::parse(value).is_ok(),
                 _ => false,
             };
             if !validated {
@@ -268,14 +229,8 @@ pub fn validate_tel(property: &IcalProperty) -> VcardValidationResult<()> {
                 ));
             }
             value_type
-        } else if is_text_value(value) {
-            ValueType::Text
-        } else if is_uri_value(value) {
-            ValueType::Uri
         } else {
-            return Err(VcardValidationError::InvalidPropertyValue(
-                get_property_kind(&property.name)?,
-            ));
+            ValueType::Text
         };
 
         let allowed = match value_type {

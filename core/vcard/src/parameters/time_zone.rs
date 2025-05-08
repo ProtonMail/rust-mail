@@ -5,7 +5,7 @@ use url::Url;
 use crate::ParameterType;
 use crate::errors::{VCardParameterError, VCardParameterResult};
 use crate::values::param_value::{ParamValue, is_param_value};
-use crate::values::uri::{Uri, is_uri_value};
+use crate::values::uri::Uri;
 
 /// The TZ parameter can be used to indicate time zone information that is specific to an address.
 #[derive(Clone, PartialEq)]
@@ -77,5 +77,10 @@ impl TryFrom<&str> for TimeZone {
 pub fn is_tz_param(values: &[String]) -> bool {
     // TODO: check if ICal do remove the double quote
     // tz-parameter = "TZ=" (param-value / DQUOTE URI DQUOTE)
-    values.len() == 1 && (is_param_value(&values[0]) || is_uri_value(&values[0]))
+    values.len() == 1
+        && (is_param_value(&values[0]) || {
+            let value: &str = &values[0];
+            // URI               ; from Section 3 of [RFC3986]
+            Url::parse(value).is_ok()
+        })
 }

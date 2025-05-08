@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 use ical::generator::Property as IcalProperty;
 use velcro::hash_set;
@@ -7,14 +7,14 @@ use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::alternative_id::AlternativeId;
 use crate::parameters::preference::Preference;
 use crate::parameters::value::ValueType;
-use crate::properties::{VcardProperty, optional_debug, validate_parameters};
+use crate::properties::{VcardProperty, validate_parameters};
 use crate::validation::get_property_kind;
-use crate::values::text::{Text, is_text_value};
+use crate::values::text::Text;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To include extended XML-encoded vCard data in a plain vCard.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Xml {
     /// Value
     pub value: Text,
@@ -27,42 +27,6 @@ pub struct Xml {
     pub group: Option<String>,
 }
 
-impl Xml {
-    /// Create a new Xml property
-    #[must_use]
-    pub fn new_unchecked(value: &str) -> Self {
-        Self {
-            value: Text::new_unchecked(value),
-            value_type: None,
-            alternative_id: None,
-            group: None,
-        }
-    }
-
-    /// Try to create new Xml property
-    ///
-    /// # Errors
-    ///   * if given value is not a valid text value
-    pub fn new_validated(value: &str) -> VCardResult<Self> {
-        Ok(Self {
-            value: Text::new_validated(value)
-                .map_err(VCardError::from_value_error(PropertyKind::Xml))?,
-            value_type: None,
-            alternative_id: None,
-            group: None,
-        })
-    }
-}
-
-impl Debug for Xml {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Xml {{{:?}", self.value)?;
-        optional_debug!(self, f, VALUE, value_type);
-        optional_debug!(self, f, group, group);
-        write!(f, "}}")
-    }
-}
-
 impl TryFrom<&IcalProperty> for Xml {
     type Error = VCardError;
 
@@ -71,8 +35,7 @@ impl TryFrom<&IcalProperty> for Xml {
             return Err(VCardError::MissingValue(PropertyKind::Xml));
         };
         let mut result = Self {
-            value: Text::try_from(value.as_str())
-                .map_err(VCardError::from_value_error(PropertyKind::Xml))?,
+            value: value.into(),
             value_type: None,
             alternative_id: None,
             group: group_from_name(&property.name),
@@ -119,14 +82,12 @@ impl VcardProperty for Xml {
 pub fn validate_xml(property: &IcalProperty) -> VcardValidationResult<()> {
     // XML-param = "VALUE=text" / altid-param
     // XML-value = text
-    if let Some(value) = &property.value {
-        if is_text_value(value) {
-            validate_parameters(
-                property,
-                ValueType::Text,
-                &hash_set!(ParameterType::Value, ParameterType::AltId),
-            )?;
-        }
+    if property.value.is_some() {
+        validate_parameters(
+            property,
+            ValueType::Text,
+            &hash_set!(ParameterType::Value, ParameterType::AltId),
+        )?;
     } else {
         return Err(VcardValidationError::InvalidPropertyValue(
             get_property_kind(&property.name)?,
