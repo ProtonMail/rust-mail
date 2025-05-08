@@ -16,7 +16,6 @@ use crate::actions::{
     AllBottomBarMessageActions, BottomBarActions, MailActionError, MovableSystemFolderAction,
     filter_responses,
 };
-use crate::datatypes::message_banner::MessageBanner;
 use crate::models::*;
 use crate::{MailContextError, find_in_query};
 use futures::try_join;
@@ -67,8 +66,6 @@ use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::future::Future;
 use tracing::{debug, error, info, trace, warn};
-
-use super::default_location::IncomingDefaultLocation;
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("messages")]
@@ -2701,67 +2698,6 @@ impl Message {
         }
         let (message, _) = Self::force_sync_message_and_body(ctx, remote_id, false).await?;
         Ok(message.local_id.expect("Local ID"))
-    }
-
-    /// Get message banners.
-    ///
-    /// Fails if time went backwards
-    pub async fn get_banners(&self, tether: &Tether) -> Vec<MessageBanner> {
-        let mut banners = vec![];
-
-        let flags = self.flags;
-
-        let settings = &MailSettings::get_or_default(tether).await;
-
-        let mut autodelete = false;
-        if let Some(days) = settings.auto_delete_spam_and_trash_days {
-            // TODO: let chains
-            if days != 0 && self.expiration_time != 0 {
-                let trash = LabelId::trash();
-                let spam = LabelId::spam();
-
-                if self.label_ids.iter().any(|x| *x == trash || *x == spam) {
-                    banners.push(MessageBanner::AutoDelete {
-                        timestamp: self.expiration_time,
-                        delete_days: days,
-                    });
-                    autodelete = true;
-                }
-            }
-        }
-
-        // The user might have marked it manually as not spam, skip that case
-        if !flags.contains(MessageFlags::HAM_MANUAL) {
-            // Phishing
-            if flags.intersects(MessageFlags::PHISHING_AUTO | MessageFlags::PHISHING_MANUAL) {
-                banners.push(MessageBanner::PhishingAttempt);
-            // Regular old spam
-            } else if flags.intersects(
-                MessageFlags::SPAM_AUTO | MessageFlags::SPAM_MANUAL | MessageFlags::FLAG_SUSPICIOUS,
-            ) {
-                banners.push(MessageBanner::Spam);
-            }
-
-            // This check is here because we can't clear this on the local action
-            if self.expiration_time != 0
-            // Since the backend sends the expiration time for autodelete we have to do this to
-            // disambiguate between autodelete and expiry and not show 2 banners.
-            && !autodelete
-            {
-                banners.push(MessageBanner::Expiry {
-                    timestamp: self.expiration_time,
-                });
-            }
-        }
-
-        if let Ok(Some(IncomingDefaultLocation::Blocked)) =
-            IncomingDefaultLocation::find(self.sender.address.clone(), tether).await
-        {
-            banners.push(MessageBanner::BlockedSender);
-        }
-
-        banners.sort_unstable();
-        banners
     }
 
     /// Set the flags without loading the whole model
