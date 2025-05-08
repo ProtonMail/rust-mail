@@ -130,15 +130,6 @@ async fn banners() {
             msg_normal.get_banners(tether).await
         );
         assert_eq!(
-            vec![MessageBanner::PhishingAttempt],
-            msg_phishing.get_banners(tether).await
-        );
-        assert_eq!(
-            vec![MessageBanner::Spam],
-            msg_spam.get_banners(tether).await
-        );
-        assert_eq!(vec![MessageBanner::Spam], msg_sus.get_banners(tether).await);
-        assert_eq!(
             vec![MessageBanner::Expiry { timestamp: 42 }],
             msg_expiry.get_banners(tether).await
         );
@@ -147,8 +138,8 @@ async fn banners() {
             msg_blocked.get_banners(tether).await
         );
 
-        let (msg_normal_id, msg_spam_id, msg_phishing_id) = tether
-            .tx::<_, _, StashError>(async |tx| {
+        let (msg_normal_id, msg_spam_id, msg_phishing_id, msg_sus_id) = tether
+            .tx::<_, _, anyhow::Error>(async |tx| {
                 msg_normal.save(tx).await?;
                 msg_spam.save(tx).await?;
                 msg_phishing.save(tx).await?;
@@ -168,13 +159,56 @@ async fn banners() {
                 )
                 .await?;
 
+                let spam = Label::remote_id_counterpart(LabelId::spam(), tx)
+                    .await?
+                    .unwrap();
+                let inbox = Label::remote_id_counterpart(LabelId::inbox(), tx)
+                    .await?
+                    .unwrap();
+
+                Message::move_messages(
+                    inbox,
+                    spam,
+                    vec![
+                        msg_phishing.local_id.unwrap(),
+                        msg_spam.local_id.unwrap(),
+                        msg_sus.local_id.unwrap(),
+                    ],
+                    tx,
+                )
+                .await?;
+
                 Ok((
                     msg_normal.local_id.unwrap(),
                     msg_spam.local_id.unwrap(),
                     msg_phishing.local_id.unwrap(),
+                    msg_sus.local_id.unwrap(),
                 ))
             })
             .await?;
+
+        let msg_normal = Message::load(msg_normal_id, tether).await?.unwrap();
+        let msg_spam = Message::load(msg_spam_id, tether).await?.unwrap();
+        let msg_phishing = Message::load(msg_phishing_id, tether).await?.unwrap();
+        let msg_sus = Message::load(msg_sus_id, tether).await?.unwrap();
+
+        assert_eq!(
+            Vec::<MessageBanner>::new(),
+            msg_normal.get_banners(tether).await
+        );
+        assert_eq!(
+            vec![MessageBanner::PhishingAttempt],
+            msg_phishing.get_banners(tether).await
+        );
+        assert_eq!(
+            vec![MessageBanner::Spam],
+            msg_spam.get_banners(tether).await
+        );
+        assert_eq!(
+            Vec::<MessageBanner>::new(),
+            msg_sus.get_banners(tether).await,
+            "sus messages don't warrant a banner"
+        );
 
         // Let's block, unblock and report phishing to see how labels change
 

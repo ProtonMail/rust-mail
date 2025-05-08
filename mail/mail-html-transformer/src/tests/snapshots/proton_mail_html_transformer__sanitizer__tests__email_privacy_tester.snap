@@ -1,12 +1,13 @@
 ---
-source: proton-mail-html-transformer/src/tests/sanitizer.rs
+source: mail/mail-html-transformer/src/tests/sanitizer.rs
 expression: html
+snapshot_kind: text
 ---
 <!DOCTYPE html><html lang="en-GB"><head>
       
       
       
-      
+      <title>Email Privacy Tester</title>
       
       
       
@@ -27,6 +28,8 @@ expression: html
       <div id="cssEscape"></div>
       <style type="text/css"></style>
       
+         
+      
       <span></span><img width="16" height="16" src="baseimg"><img src="#" width="16" height="16"><a href="http://code.anchor-test.ept.emailprivacytester.com"></a>
       
       
@@ -39,6 +42,9 @@ expression: html
       <audio src="baseaudio" preload="metadata" width="1" height="1"></audio>
       <span></span><span></span>
       <p style="background-color:expression((document.createElement('img'))['src']=basecssExpression);"></p>
+      
+         
+         
       
       <span></span>
    
