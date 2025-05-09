@@ -744,37 +744,80 @@ impl Context {
         Ok(())
     }
 
-    /// Removes an account, deleting all associated sessions and data.
+    /// Logs out and removes an account, dropping associated data from user
+    /// database and renaming empty database file to include `.nuked` extension,
+    /// after which try to remove any remaining files from the hard drive
+    /// including archived databases and supplied caches.
     ///
-    /// # Errors
+    /// ### Errors
     ///
-    /// Returns an error if data can not be removed or the db operation failed.
-    pub async fn delete_account(&self, user_id: UserId) -> CoreContextResult<()> {
-        self.cancel_user_tasks(&user_id).await;
-        self.delete_user_db(&user_id);
+    /// Returns an error if db operation failed on removing account.
+    ///
+    /// ### Notes
+    ///
+    ///  Function assumes seperatnes between database files as in
+    /// `Account` and `User` databases
+    ///
+    pub async fn delete_account(
+        &self,
+        user_id: UserId,
+        caches: Vec<PathBuf>,
+    ) -> CoreContextResult<()> {
+        tracing::warn!("Loging out user");
 
-        // TODO(ET-231): User cache paths.
+        if let Err(e) = self.logout_account(user_id.clone()).await {
+            tracing::error!("Could not logout account, details: `{e}`");
+        }
 
+        tracing::warn!("Kill all background tasks for this user");
+        self.cancel_all_tasks();
+
+        let session = self
+            .get_account_sessions(user_id.clone())
+            .await?
+            .into_iter()
+            .find(|session| CoreSessionState::Authenticated == CoreSessionState::of(session));
+
+        if let Some(session) = session {
+            tracing::warn!("Clear all user data from database");
+            if let Ok(user_ctx) = self.user_context_from_session(&session, None).await {
+                let tether = user_ctx.stash().connection();
+
+                if let Err(e) = drop_all_tables_in_database(tether).await {
+                    tracing::error!("Could not clean user database, details: `{e}`");
+                }
+            }
+        }
+
+        tracing::warn!("Archive & try to remove user database");
+        let user_db_location = self.get_user_db_location();
+        rename_database_files(&user_db_location).await;
+        remove_or_clear_dir_safe(&user_db_location).await;
+
+        tracing::warn!("Clear user associated caches");
+        for cache_path in caches {
+            remove_or_clear_dir_safe(cache_path).await;
+        }
+
+        tracing::warn!("Remove account");
         let mut tether = self.account_stash().connection();
         tether
             .tx(async |tx| {
                 CoreAccount::delete_by_id(user_id, tx)
-                    .inspect_err(|e| error!("Failed to delete account from db: {e:?}"))
                     .await
+                    .inspect_err(|e| tracing::error!("Failed to delete account from db: {e:?}"))
             })
             .await?;
 
         Ok(())
     }
 
-    /// Removes all data associated with the context, that includes:
+    /// Removes all data associated with the context.
+    ///
+    ///  That includes:
     /// * Account database - drop all data, remove files
     /// * Core cache - all files under the cache path
     /// * Keychain - all secrets
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if data can not be removed or the db operation failed.
     ///
     pub async fn tear_down(&self) {
         tracing::warn!("Remove all accounts data");
@@ -891,26 +934,6 @@ impl Context {
     /// Get the stash in use
     pub fn account_stash(&self) -> &Stash {
         &self.account_stash
-    }
-
-    /// Delete the user's database files.
-    ///
-    /// This method just makes a best-effort attempt to delete the files it can find.
-    /// Any errors are logged but not returned.
-    fn delete_user_db(&self, user_id: &UserId) {
-        let db = get_user_db_path(&self.user_db_path, user_id);
-        let shm = db.with_extension("db-shm");
-        let wal = db.with_extension("db-wal");
-
-        for path in [db, shm, wal] {
-            let Ok(true) = path.try_exists() else {
-                continue;
-            };
-
-            if let Err(err) = std::fs::remove_file(&path) {
-                error!(?err, "failed to erase user database file");
-            }
-        }
     }
 
     /// Create a new instance of a use context.

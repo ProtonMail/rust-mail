@@ -427,6 +427,7 @@ impl MailUserContext {
     }
 
     /// Logs this user out.
+    ///
     pub async fn logout(&self) -> MailContextResult<()> {
         self.mail_context
             .logout_account(self.user_id().to_owned())
@@ -435,28 +436,51 @@ impl MailUserContext {
         Ok(())
     }
 
-    /// Delete account.
+    /// Sign this user out.
     ///
-    pub async fn delete_account(&self) -> MailContextResult<()> {
-        // `UserContext::delete_account` already performs all
-        // neccessary actions in order to sort out online logout
-        // and local data removal.
-        self.user_context.delete_account().await?;
-        // Last thing to do is to remove user cache as `UserContext`
-        // has no knowledge of the `MailContext::cache`
-        self.mail_context.delete_user_cache(self.user_id()).await;
+    /// Method will delete user's account and data from the device.
+    ///
+    pub async fn sign_out(&self) -> MailContextResult<()> {
+        self.mail_context
+            .delete_account(self.user_id().clone())
+            .await?;
 
         Ok(())
     }
 
+    /// Sign out from all accounts.
+    ///
+    /// This method will perform:
+    /// * Each user logout
+    /// * Clear all user data
+    /// * Clear keychains
+    /// * Remove all account data & caches
+    ///
+    /// There are sevral layers to this function in which most of them
+    /// are non failing and retrying in cases where we could fail.
+    ///
+    /// ### Errors
+    ///
+    /// The method may fail to gather users. This will happen if for any
+    /// reason we will be unable to read sessions from account database.
+    ///
+    /// ### Notes
+    ///
+    /// There are no guarantees to clear everything especially on
+    /// operating systems which locks files (looking at you Windows)
+    /// though it will make best effort to get rid of any information
+    /// app has stored over the course of its life.
+    ///
     pub async fn sign_out_all(&self) -> MailContextResult<()> {
         let all_ctxs = self.all_mail_user_ctxs().await?;
 
         for ctx in all_ctxs {
-            // If for any reason we fail to delete account
-            // it will be brought down by tear_down in the next step
+            // If for any reason we fail to sign out account it will
+            // be brought down anyway by tear_down in the next step
+            // which also will get rid of key which is essential to
+            // read data from API
             let _ = ctx
-                .delete_account()
+                .sign_out()
                 .await
                 .inspect_err(|e| tracing::error!("Could not remove account, `{e}`"));
         }
