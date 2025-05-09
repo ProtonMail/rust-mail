@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.75.6] - 2025-05-09
+
+### Fixes
+
+- Spam banner only shown for messages marked as such by the backend
+- [ET-2895] Do not remove inner html when sanitizing content
+
+
 ## [mail-uniffi-v0.75.5] - 2025-05-06
 
 ### Fixes
