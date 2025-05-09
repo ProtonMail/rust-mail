@@ -1,5 +1,5 @@
 use crate::actions::draft::SEND_ACTION_GROUP;
-use crate::draft::AttachmentError;
+use crate::draft::{AttachmentRemoveError, AttachmentUploadError};
 use crate::models::{
     Attachment, AttachmentType, DraftAttachmentMetadata, DraftAttachmentOwnership, DraftMetadata,
     MetadataId,
@@ -43,7 +43,7 @@ impl AttachmentRemove {
             })?
         else {
             error!("Could not find metadata {:?}", self.metadata_id);
-            return Err(AttachmentError::MetadataNotFound(self.metadata_id).into());
+            return Err(AttachmentUploadError::MetadataNotFound(self.metadata_id).into());
         };
 
         Ok(metadata.local_message_id)
@@ -82,7 +82,9 @@ impl proton_action_queue::action::Handler for Handler {
                 .await
                 .inspect_err(|e| error!("Failed to load draft attachment metadata: {e:?}"))?
         else {
-            return Err(AttachmentError::AttachmentMetadataNotFound(action.attachment_id).into());
+            return Err(
+                AttachmentRemoveError::AttachmentMetadataNotFound(action.attachment_id).into(),
+            );
         };
 
         // find message
@@ -154,7 +156,9 @@ impl proton_action_queue::action::Handler for Handler {
                 .await
                 .inspect_err(|e| error!("Failed to load draft attachment metadata: {e:?}"))?
         else {
-            return Err(AttachmentError::AttachmentMetadataNotFound(action.attachment_id).into());
+            return Err(
+                AttachmentRemoveError::AttachmentMetadataNotFound(action.attachment_id).into(),
+            );
         };
 
         // if owned delete on the backend

@@ -1,6 +1,6 @@
 use super::mail_error_reason::*;
 use crate::actions::MailActionError;
-use crate::draft::{AttachmentError, PackageError};
+use crate::draft::{AttachmentRemoveError, AttachmentUploadError, PackageError};
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
 use crate::{
@@ -246,7 +246,13 @@ impl From<DraftError> for ProtonMailError {
             DraftError::Send(v) => v.into(),
             DraftError::Discard(v) => v.into(),
             DraftError::Undo(v) => v.into(),
-            DraftError::Attachment(v) => v.into(),
+            DraftError::AttachmentUpload(v) => v.into(),
+            DraftError::AttachmentRemove(v) => match v {
+                AttachmentRemoveError::MetadataNotFound(_)
+                | AttachmentRemoveError::AttachmentMetadataNotFound(_) => {
+                    Self::Unexpected(Unexpected::Draft)
+                }
+            },
         }
     }
 }
@@ -365,48 +371,57 @@ impl From<DraftDiscardError> for ProtonMailError {
     }
 }
 
-impl From<AttachmentError> for ProtonMailError {
-    fn from(value: AttachmentError) -> Self {
+impl From<AttachmentUploadError> for ProtonMailError {
+    fn from(value: AttachmentUploadError) -> Self {
         match value {
-            AttachmentError::MetadataNotFound(_) | AttachmentError::MessageDoesNotExist => {
-                Self::Reason(MailErrorReason::DraftAttachmentReason(
-                    DraftAttachmentErrorReason::MessageDoesNotExist,
+            AttachmentUploadError::MetadataNotFound(_)
+            | AttachmentUploadError::MessageDoesNotExist => {
+                Self::Reason(MailErrorReason::DraftAttachmentUploadReason(
+                    DraftAttachmentUploadErrorReason::MessageDoesNotExist,
                 ))
             }
-            AttachmentError::MessageDoesNotExistOnServer(_) => {
-                Self::Reason(MailErrorReason::DraftAttachmentReason(
-                    DraftAttachmentErrorReason::MessageDoesNotExistOnServer,
+            AttachmentUploadError::MessageDoesNotExistOnServer(_) => {
+                Self::Reason(MailErrorReason::DraftAttachmentUploadReason(
+                    DraftAttachmentUploadErrorReason::MessageDoesNotExistOnServer,
                 ))
             }
-            AttachmentError::AttachmentDataMissing(_) => Self::Unexpected(Unexpected::Internal),
-            AttachmentError::MissingContentId(_) => Self::Unexpected(Unexpected::Internal),
-            AttachmentError::Crypto(_) => Self::Reason(MailErrorReason::DraftAttachmentReason(
-                DraftAttachmentErrorReason::Crypto,
-            )),
-            AttachmentError::ExistingUploadActionExist(_) => Self::Unexpected(Unexpected::Internal),
-            AttachmentError::AttachmentAlreadyUploaded(_) => Self::Unexpected(Unexpected::Internal),
-            AttachmentError::TooManyAttachments => {
-                Self::Reason(MailErrorReason::DraftAttachmentReason(
-                    DraftAttachmentErrorReason::TooManyAttachments,
-                ))
-            }
-            AttachmentError::MessageAlreadySent => {
-                Self::Reason(MailErrorReason::DraftAttachmentReason(
-                    DraftAttachmentErrorReason::MessageAlreadySent,
-                ))
-            }
-            AttachmentError::AttachmentMetadataNotFound(_)
-            | AttachmentError::AttachmentMetadataNotFoundCid(_) => {
+            AttachmentUploadError::AttachmentDataMissing(_) => {
                 Self::Unexpected(Unexpected::Internal)
             }
-            AttachmentError::AttachmentTooLarge => {
-                Self::Reason(MailErrorReason::DraftAttachmentReason(
-                    DraftAttachmentErrorReason::AttachmentTooLarge,
+            AttachmentUploadError::MissingContentId(_) => Self::Unexpected(Unexpected::Internal),
+            AttachmentUploadError::Crypto(_) => {
+                Self::Reason(MailErrorReason::DraftAttachmentUploadReason(
+                    DraftAttachmentUploadErrorReason::Crypto,
                 ))
             }
-            AttachmentError::RetryInvalidState(_) => {
-                Self::Reason(MailErrorReason::DraftAttachmentReason(
-                    DraftAttachmentErrorReason::RetryInvalidState,
+            AttachmentUploadError::ExistingUploadActionExist(_) => {
+                Self::Unexpected(Unexpected::Internal)
+            }
+            AttachmentUploadError::AttachmentAlreadyUploaded(_) => {
+                Self::Unexpected(Unexpected::Internal)
+            }
+            AttachmentUploadError::TooManyAttachments => {
+                Self::Reason(MailErrorReason::DraftAttachmentUploadReason(
+                    DraftAttachmentUploadErrorReason::TooManyAttachments,
+                ))
+            }
+            AttachmentUploadError::MessageAlreadySent => {
+                Self::Reason(MailErrorReason::DraftAttachmentUploadReason(
+                    DraftAttachmentUploadErrorReason::MessageAlreadySent,
+                ))
+            }
+            AttachmentUploadError::AttachmentMetadataNotFound(_)
+            | AttachmentUploadError::AttachmentMetadataNotFoundCid(_) => {
+                Self::Unexpected(Unexpected::Internal)
+            }
+            AttachmentUploadError::AttachmentTooLarge => {
+                Self::Reason(MailErrorReason::DraftAttachmentUploadReason(
+                    DraftAttachmentUploadErrorReason::AttachmentTooLarge,
+                ))
+            }
+            AttachmentUploadError::RetryInvalidState(_) => {
+                Self::Reason(MailErrorReason::DraftAttachmentUploadReason(
+                    DraftAttachmentUploadErrorReason::RetryInvalidState,
                 ))
             }
         }

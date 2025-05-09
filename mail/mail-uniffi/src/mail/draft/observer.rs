@@ -1,6 +1,6 @@
 use crate::core::datatypes::Id;
 use crate::errors::{
-    DraftAttachmentErrorReason, DraftSaveErrorReason, DraftSendErrorReason, ProtonError,
+    DraftAttachmentUploadErrorReason, DraftSaveErrorReason, DraftSendErrorReason, ProtonError,
     VoidProtonResult,
 };
 use crate::mail::MailUserSession;
@@ -57,7 +57,7 @@ pub enum DraftSendStatus {
 pub enum DraftSendFailure {
     Save(DraftSaveErrorReason),
     Send(DraftSendErrorReason),
-    AttachmentUpload(DraftAttachmentErrorReason),
+    AttachmentUpload(DraftAttachmentUploadErrorReason),
     Other(ProtonError),
 }
 
@@ -93,7 +93,7 @@ impl From<RealDraftSendResult> for DraftSendResult {
                             DraftSendStatus::Failure(DraftSendFailure::Save(e.into()))
                         }
                         RealProtonMailError::Reason(
-                            RealMailErrorReason::DraftAttachmentReason(e),
+                            RealMailErrorReason::DraftAttachmentUploadReason(e),
                         ) => DraftSendStatus::Failure(DraftSendFailure::AttachmentUpload(e.into())),
                         _ => DraftSendStatus::Failure(DraftSendFailure::Other(proton_error.into())),
                     }

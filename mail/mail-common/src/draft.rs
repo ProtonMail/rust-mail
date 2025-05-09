@@ -67,7 +67,9 @@ pub enum Error {
     #[error(transparent)]
     Undo(#[from] UndoError),
     #[error(transparent)]
-    Attachment(#[from] AttachmentError),
+    AttachmentUpload(#[from] AttachmentUploadError),
+    #[error(transparent)]
+    AttachmentRemove(#[from] AttachmentRemoveError),
 }
 
 /// Errors that occur during draft creation or opening an existing draft.
@@ -151,7 +153,7 @@ impl From<SaveError> for MailContextError {
 
 /// Errors that occur while attempting to upload an attachment
 #[derive(Debug, thiserror::Error)]
-pub enum AttachmentError {
+pub enum AttachmentUploadError {
     #[error("Metadata with Id {0} does not exist")]
     MetadataNotFound(MetadataId),
     #[error("Attachment Metadata for Attachment {0} does not exist")]
@@ -182,8 +184,22 @@ pub enum AttachmentError {
     RetryInvalidState(LocalAttachmentId),
 }
 
-impl From<AttachmentError> for MailContextError {
-    fn from(err: AttachmentError) -> Self {
+impl From<AttachmentUploadError> for MailContextError {
+    fn from(err: AttachmentUploadError) -> Self {
+        Self::Draft(err.into())
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum AttachmentRemoveError {
+    #[error("Metadata with Id {0} does not exist")]
+    MetadataNotFound(MetadataId),
+    #[error("Attachment Metadata for Attachment {0} does not exist")]
+    AttachmentMetadataNotFound(LocalAttachmentId),
+}
+
+impl From<AttachmentRemoveError> for MailContextError {
+    fn from(err: AttachmentRemoveError) -> Self {
         Self::Draft(err.into())
     }
 }
@@ -1501,7 +1517,9 @@ impl DraftAttachmentUploadQueuer {
             let Some(attachment_metadata) =
                 DraftAttachmentMetadata::find_by_id(self.attachment_id, tether).await?
             else {
-                return Err(AttachmentError::AttachmentDataMissing(self.attachment_id).into());
+                return Err(
+                    AttachmentUploadError::AttachmentDataMissing(self.attachment_id).into(),
+                );
             };
 
             // If the state is not error, we should not allow the retry.
@@ -1510,7 +1528,7 @@ impl DraftAttachmentUploadQueuer {
                     "Attempting attachment ({}) upload retry on non error state",
                     self.attachment_id
                 );
-                return Err(AttachmentError::RetryInvalidState(self.attachment_id).into());
+                return Err(AttachmentUploadError::RetryInvalidState(self.attachment_id).into());
             }
 
             // In case there is still an action, we only want to run after that. Action id is
@@ -1562,7 +1580,7 @@ impl DraftAttachmentRemovalQueuer {
                 {
                     attachment_metadata
                 } else {
-                    return Err(AttachmentError::AttachmentMetadataNotFound(id).into());
+                    return Err(AttachmentUploadError::AttachmentMetadataNotFound(id).into());
                 }
             }
             AttachmentRemovalId::Cid(id) => {
@@ -1572,7 +1590,7 @@ impl DraftAttachmentRemovalQueuer {
                 {
                     attachment_metadata
                 } else {
-                    return Err(AttachmentError::AttachmentMetadataNotFoundCid(id).into());
+                    return Err(AttachmentUploadError::AttachmentMetadataNotFoundCid(id).into());
                 }
             }
         };

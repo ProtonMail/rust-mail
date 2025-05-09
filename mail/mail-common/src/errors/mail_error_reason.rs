@@ -13,7 +13,7 @@ pub enum MailErrorReason {
     DraftSendReason(DraftSendErrorReason),
     DraftUndoSendReason(DraftUndoSendErrorReason),
     DraftDiscardReason(DraftDiscardErrorReason),
-    DraftAttachmentReason(DraftAttachmentErrorReason),
+    DraftAttachmentUploadReason(DraftAttachmentUploadErrorReason),
     EventReason(EventErrorReason),
     PinSetReson(PinSetErrorReason),
     PinAuthReson(PinAuthErrorReason),
@@ -204,7 +204,7 @@ pub enum DraftUndoSendErrorReason {
 
 /// Failure cases for draft attachment errors.
 #[derive(Debug)]
-pub enum DraftAttachmentErrorReason {
+pub enum DraftAttachmentUploadErrorReason {
     /// This message no longer exists.
     MessageDoesNotExist,
     /// Message does not exist on the server

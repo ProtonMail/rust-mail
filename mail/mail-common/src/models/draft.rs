@@ -5,11 +5,11 @@ mod draft_metadata;
 use crate::MailContextError;
 use crate::datatypes::LocalMessageId;
 use crate::datatypes::attachment::ContentId;
-use crate::draft::{AttachmentError, Error, PackageError, ReplyMode, SaveError, SendError};
+use crate::draft::{AttachmentUploadError, Error, PackageError, ReplyMode, SaveError, SendError};
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
 use crate::errors::{
-    DraftAttachmentErrorReason, DraftSaveErrorReason, DraftSendErrorReason, MailErrorReason,
+    DraftAttachmentUploadErrorReason, DraftSaveErrorReason, DraftSendErrorReason, MailErrorReason,
     ProtonMailError,
 };
 use crate::models::{Attachment, Message, MessageBodyMetadata};
@@ -610,21 +610,21 @@ impl DraftSendFailure {
                 SendError::NoRecipients => Self::Send(DraftSendFailureSend::NoRecipients),
                 _ => Self::Internal,
             },
-            Error::Attachment(e) => match e {
-                AttachmentError::MessageDoesNotExist
-                | AttachmentError::MessageDoesNotExistOnServer(_) => {
+            Error::AttachmentUpload(e) => match e {
+                AttachmentUploadError::MessageDoesNotExist
+                | AttachmentUploadError::MessageDoesNotExistOnServer(_) => {
                     Self::Attachment(DraftSendFailureAttachment::MessageDoesNotExist)
                 }
-                AttachmentError::Crypto(e) => {
+                AttachmentUploadError::Crypto(e) => {
                     Self::Attachment(DraftSendFailureAttachment::Crypto(e.to_string()))
                 }
-                AttachmentError::AttachmentAlreadyUploaded(_) => {
+                AttachmentUploadError::AttachmentAlreadyUploaded(_) => {
                     Self::Attachment(DraftSendFailureAttachment::AttachmentAlreadyUploaded)
                 }
-                AttachmentError::TooManyAttachments => {
+                AttachmentUploadError::TooManyAttachments => {
                     Self::Attachment(DraftSendFailureAttachment::TooManyAttachments)
                 }
-                AttachmentError::AttachmentTooLarge => {
+                AttachmentUploadError::AttachmentTooLarge => {
                     Self::Attachment(DraftSendFailureAttachment::AttachmentTooLarge)
                 }
                 _ => Self::Internal,
@@ -719,25 +719,27 @@ impl From<DraftSendFailure> for ProtonMailError {
                 }))
             }
             DraftSendFailure::Attachment(err) => match err {
-                DraftSendFailureAttachment::Crypto(_) => Self::Reason(
-                    MailErrorReason::DraftAttachmentReason(DraftAttachmentErrorReason::Crypto),
-                ),
+                DraftSendFailureAttachment::Crypto(_) => {
+                    Self::Reason(MailErrorReason::DraftAttachmentUploadReason(
+                        DraftAttachmentUploadErrorReason::Crypto,
+                    ))
+                }
                 DraftSendFailureAttachment::TooManyAttachments => {
-                    Self::Reason(MailErrorReason::DraftAttachmentReason(
-                        DraftAttachmentErrorReason::TooManyAttachments,
+                    Self::Reason(MailErrorReason::DraftAttachmentUploadReason(
+                        DraftAttachmentUploadErrorReason::TooManyAttachments,
                     ))
                 }
                 DraftSendFailureAttachment::AttachmentTooLarge => {
-                    Self::Reason(MailErrorReason::DraftAttachmentReason(
-                        DraftAttachmentErrorReason::AttachmentTooLarge,
+                    Self::Reason(MailErrorReason::DraftAttachmentUploadReason(
+                        DraftAttachmentUploadErrorReason::AttachmentTooLarge,
                     ))
                 }
                 DraftSendFailureAttachment::AttachmentAlreadyUploaded => {
                     Self::Unexpected(Unexpected::Draft)
                 }
                 DraftSendFailureAttachment::MessageDoesNotExist => {
-                    Self::Reason(MailErrorReason::DraftAttachmentReason(
-                        DraftAttachmentErrorReason::MessageDoesNotExist,
+                    Self::Reason(MailErrorReason::DraftAttachmentUploadReason(
+                        DraftAttachmentUploadErrorReason::MessageDoesNotExist,
                     ))
                 }
                 DraftSendFailureAttachment::Other(_) => Self::Unexpected(Unexpected::Draft),
@@ -1197,13 +1199,13 @@ impl DraftAttachmentUploadError {
     pub fn from_mail_context_error(error: &MailContextError) -> Self {
         match error {
             MailContextError::Api(e) => Self::Server(e.to_string()),
-            MailContextError::Draft(Error::Attachment(AttachmentError::MessageAlreadySent)) => {
-                Self::MessageAlreadySent
-            }
-            MailContextError::Draft(Error::Attachment(AttachmentError::TooManyAttachments)) => {
-                Self::TooManyAttachments
-            }
-            MailContextError::Draft(Error::Attachment(AttachmentError::Crypto(e))) => {
+            MailContextError::Draft(Error::AttachmentUpload(
+                AttachmentUploadError::MessageAlreadySent,
+            )) => Self::MessageAlreadySent,
+            MailContextError::Draft(Error::AttachmentUpload(
+                AttachmentUploadError::TooManyAttachments,
+            )) => Self::TooManyAttachments,
+            MailContextError::Draft(Error::AttachmentUpload(AttachmentUploadError::Crypto(e))) => {
                 Self::Crypto(e.to_string())
             }
             MailContextError::AttachmentEncryption(e) => Self::Crypto(e.to_string()),

@@ -1,7 +1,7 @@
 use crate::UniffiEnum;
 use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ContextErrorReason as RealContextErrorReason,
-    DraftAttachmentErrorReason as RealDraftAttachmentErrorReason,
+    DraftAttachmentUploadErrorReason as RealDraftAttachmentErrorReason,
     DraftDiscardErrorReason as RealDraftDiscardErrorReason,
     DraftOpenErrorReason as RealDraftOpenErrorReason,
     DraftSaveErrorReason as RealDraftSaveErrorReason,
@@ -258,7 +258,7 @@ impl From<RealDraftDiscardErrorReason> for DraftDiscardErrorReason {
 }
 
 #[derive(Debug, UniffiEnum)]
-pub enum DraftAttachmentErrorReason {
+pub enum DraftAttachmentUploadErrorReason {
     /// This message no longer exists.
     MessageDoesNotExist,
     /// Message does not exist on the server
@@ -275,7 +275,7 @@ pub enum DraftAttachmentErrorReason {
     RetryInvalidState,
 }
 
-impl From<RealDraftAttachmentErrorReason> for DraftAttachmentErrorReason {
+impl From<RealDraftAttachmentErrorReason> for DraftAttachmentUploadErrorReason {
     fn from(value: RealDraftAttachmentErrorReason) -> Self {
         match value {
             RealDraftAttachmentErrorReason::MessageDoesNotExist => Self::MessageDoesNotExist,
