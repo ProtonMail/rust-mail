@@ -65,7 +65,7 @@ pub async fn rename_database_files(path: impl AsRef<Path>) {
 }
 
 pub async fn remove_or_clear_dir_safe(path: impl AsRef<Path>) {
-    let path = path.as_ref().to_path_buf();
+    let path = path.as_ref();
     // Try remove whole directory.
     // It may unfortunately fail on certain operating systems such as Windows:
     // https://github.com/rust-lang/rust/issues/29497
@@ -73,58 +73,63 @@ pub async fn remove_or_clear_dir_safe(path: impl AsRef<Path>) {
 
     // When it fails, fallback to deleting one-by-one
     if result.is_err() {
-        let path_clone = path.clone();
-        // Get all files paths in max_depth eq 2
-        let Ok(all_files) = task::spawn_blocking(move || {
-            WalkDir::new(format!("{}/**", path_clone.display()))
-                .max_depth(2)
-                .into_iter()
-                .filter_map(|entry| {
-                    let entry = entry.ok()?;
-                    let meta = entry.metadata().ok()?;
-                    if meta.is_file() {
-                        Some(entry.into_path())
-                    } else {
-                        None
-                    }
-                })
-                .collect_vec()
-        })
-        .await
-        else {
-            // Unlikely to happen as the closure is non failing
-            tracing::error!("Could not join task when gathering all files to remove");
-            return;
-        };
+        clear_dir_safe(path).await;
+    }
+}
 
-        let failed = remove_files(&all_files).await;
-
-        if failed.is_empty() {
-            // Clean the folder structure
-            let _ = fs::remove_dir_all(&path).await;
-        } else {
-            // We have still some files not removed
-            // lets derefer this to the background
-            task::spawn(async move {
-                let max_wait: Duration = Duration::from_secs(5);
-                let retry_interval: Duration = Duration::from_millis(100);
-                let start = Instant::now();
-                let mut failed = failed;
-                loop {
-                    tokio::time::sleep(retry_interval).await;
-                    failed = remove_files(&failed).await;
-                    if failed.is_empty() {
-                        tracing::info!("Whole path was cleared in the background");
-                        let _ = fs::remove_dir_all(&path).await;
-                        break;
-                    }
-                    if start.elapsed() >= max_wait {
-                        tracing::error!("Unfortunatelly we were unable to clear the path.");
-                        break;
-                    }
+async fn clear_dir_safe(path: impl AsRef<Path>) {
+    let path = path.as_ref().to_path_buf();
+    let path_clone = path.clone();
+    // Get all files paths in max_depth eq 4
+    let Ok(all_files) = task::spawn_blocking(move || {
+        WalkDir::new(path_clone)
+            .max_depth(4)
+            .into_iter()
+            .filter_map(|entry| {
+                let entry = entry.ok()?;
+                let meta = entry.metadata().ok()?;
+                if meta.is_file() {
+                    Some(entry.into_path())
+                } else {
+                    None
                 }
-            });
-        }
+            })
+            .collect_vec()
+    })
+    .await
+    else {
+        // Unlikely to happen as the closure is non failing
+        tracing::error!("Could not join task when gathering all files to remove");
+        return;
+    };
+
+    let failed = remove_files(&all_files).await;
+
+    if failed.is_empty() {
+        // Clean the folder structure
+        let _ = fs::remove_dir_all(&path).await;
+    } else {
+        // We have still some files not removed
+        // lets derefer this to the background
+        task::spawn(async move {
+            let max_wait: Duration = Duration::from_secs(5);
+            let retry_interval: Duration = Duration::from_millis(100);
+            let start = Instant::now();
+            let mut failed = failed;
+            loop {
+                tokio::time::sleep(retry_interval).await;
+                failed = remove_files(&failed).await;
+                if failed.is_empty() {
+                    tracing::info!("Whole path was cleared in the background");
+                    let _ = fs::remove_dir_all(&path).await;
+                    break;
+                }
+                if start.elapsed() >= max_wait {
+                    tracing::error!("Unfortunatelly we were unable to clear the path.");
+                    break;
+                }
+            }
+        });
     }
 }
 
@@ -149,4 +154,91 @@ async fn remove_files(paths: &[PathBuf]) -> Vec<PathBuf> {
     }
 
     failed
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::*;
+    use tempdir::TempDir;
+
+    #[tokio::test]
+    async fn remove_or_clear_dir_safe_non_existend_directory() {
+        let path = Path::new("./this/path/does/not_exist");
+        assert!(!path.exists());
+        remove_or_clear_dir_safe(path).await;
+    }
+
+    #[tokio::test]
+    async fn remove_or_clear_dir_safe_when_path_points_to_empty_directory() {
+        let tmp_dir = TempDir::new("empty").expect("failed to create temp dir");
+        let path = tmp_dir.path();
+        assert!(path.exists());
+        remove_or_clear_dir_safe(path).await;
+        assert!(!path.exists());
+    }
+
+    #[tokio::test]
+    async fn remove_or_clear_dir_safe_when_path_points_to_file() {
+        let tmp_dir = TempDir::new("test").expect("failed to create temp dir");
+        let path = tmp_dir.path();
+        let contents = "First line.\nSecond line.\nThird line.\n";
+        let file_path = path.join("file.txt");
+
+        fs::write(&file_path, contents.as_bytes()).await.unwrap();
+
+        assert!(file_path.exists());
+        remove_or_clear_dir_safe(&file_path).await;
+        assert!(!file_path.exists());
+    }
+
+    #[tokio::test]
+    async fn clear_dir_safe_when_files_lives_at_depth_of_4() {
+        let tmp_dir = TempDir::new("test").expect("failed to create temp dir");
+        let original_path = tmp_dir.path();
+        let nested_path = original_path.join("one/two/three");
+        fs::create_dir_all(&nested_path).await.unwrap();
+
+        let contents = "First line.\nSecond line.\nThird line.\n";
+        let file_path = nested_path.join("four.txt");
+
+        fs::write(&file_path, contents.as_bytes()).await.unwrap();
+
+        assert!(file_path.exists());
+
+        // Since it is not easy to decouple if the file
+        // was removed in walkdir search or later
+        // by removing whole directory I've made sure
+        // manually that indeed this file is removed
+        // in walkdir search.
+        clear_dir_safe(&original_path).await;
+        assert!(!file_path.exists());
+        assert!(!original_path.exists());
+    }
+
+    #[tokio::test]
+    async fn clear_dir_safe_when_files_lives_at_depth_of_6() {
+        let tmp_dir = TempDir::new("test").expect("failed to create temp dir");
+        let original_path = tmp_dir.path();
+        let nested_path = original_path.join("one/two/three/four/five");
+        fs::create_dir_all(&nested_path).await.unwrap();
+
+        let contents = "First line.\nSecond line.\nThird line.\n";
+        let file_path = nested_path.join("six.txt");
+
+        fs::write(&file_path, contents.as_bytes()).await.unwrap();
+
+        assert!(file_path.exists());
+
+        // due to the fact that `clear_dir_safe`
+        // does a clean up of the path when there are no more entries
+        // to delete it will `remove_dir_all` at the end to make sure
+        // to not leave any remaining folder structure behind which
+        // in most cases will also remove any files which depth is more
+        // than walkdir search
+        clear_dir_safe(&original_path).await;
+        assert!(!file_path.exists());
+        assert!(!original_path.exists());
+    }
 }

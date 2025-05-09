@@ -408,13 +408,6 @@ impl Context {
         self.cache_path.as_path()
     }
 
-    /// Get path of the user database parent directory location
-    ///
-    #[must_use]
-    pub(crate) fn get_user_db_location(&self) -> &Path {
-        self.user_db_path.as_path()
-    }
-
     /// Get path of account's database parent directory location
     ///
     #[must_use]
@@ -763,14 +756,8 @@ impl Context {
         user_id: UserId,
         caches: Vec<PathBuf>,
     ) -> CoreContextResult<()> {
-        tracing::warn!("Loging out user");
-
-        if let Err(e) = self.logout_account(user_id.clone()).await {
-            tracing::error!("Could not logout account, details: `{e}`");
-        }
-
         tracing::warn!("Kill all background tasks for this user");
-        self.cancel_all_tasks();
+        self.cancel_user_tasks(&user_id).await;
 
         let session = self
             .get_account_sessions(user_id.clone())
@@ -789,8 +776,16 @@ impl Context {
             }
         }
 
+        tracing::warn!("Logout user");
+        if let Err(e) = self.logout_account(user_id.clone()).await {
+            tracing::error!("Could not logout account, details: `{e}`");
+        }
+
+        tracing::warn!("Remove user from active_contexts");
+        self.active_user_contexts.lock().await.remove(&user_id);
+
         tracing::warn!("Archive & try to remove user database");
-        let user_db_location = self.get_user_db_location();
+        let user_db_location = self.user_db_path(&user_id);
         rename_database_files(&user_db_location).await;
         remove_or_clear_dir_safe(&user_db_location).await;
 
@@ -820,6 +815,10 @@ impl Context {
     /// * Keychain - all secrets
     ///
     pub async fn tear_down(&self) {
+        tracing::warn!("Kill all background tasks");
+        self.cancel_all_tasks();
+        tracing::warn!("Remove all users from active_contexts");
+        self.active_user_contexts.lock().await.clear();
         tracing::warn!("Remove all accounts data");
         let tether = self.account_stash().connection();
         let _ = drop_all_tables_in_database(tether).await.inspect_err(|e| {
@@ -900,7 +899,7 @@ impl Context {
         self.key_chain.delete::<S>()
     }
 
-    fn user_db_path(&self, user_id: &UserId) -> PathBuf {
+    pub(crate) fn user_db_path(&self, user_id: &UserId) -> PathBuf {
         get_user_db_path(&self.user_db_path, user_id)
     }
 
