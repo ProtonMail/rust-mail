@@ -277,3 +277,13 @@ similar.opt-level = 3
 
 [profile.release]
 panic = "unwind"
+
+# This profile gets about a 50% reduction in size compared to the default release profile.
+[profile.small]
+inherits = "release"
+opt-level = "s" # We might want to experiment with "z" instead.
+# Move the debug info to a separate file.
+# At the time of writing, this reduces the size of the binary by 9MB.
+split-debuginfo = "packed" 
+lto = true # "Fat" LTO
+# panic = 'abort' We might want to enable this
