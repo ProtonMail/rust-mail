@@ -27,7 +27,7 @@ members = [
     "mail/mail-uniffi",
     "mail/mail-wasm",
     "mail/uniffi-bindgen",
-    "mail/uniffi-macros", "payment/payment", "payment/payment-sdk", "payment/payment-uniffi", "payment/payment-crux",
+    "mail/uniffi-macros", "payment/payment-sdk", "payment/payment-uniffi", "payment/payment-crux",
 ]
 
 [workspace.package]
@@ -241,6 +241,10 @@ version = "0.1"
 path = "core/task-service"
 registry = "proton"
 
+[workspace.dependencies.proton-payment-sdk]
+version = "0.1.0"
+path = "payment/payment-sdk"
+registry = "proton"
 
 
 [workspace.lints.rust]
