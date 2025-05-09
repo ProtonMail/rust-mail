@@ -616,12 +616,22 @@ impl MailContext {
     ///
     /// # Errors
     ///
-    /// Returns error if data can not be removed or the db operation failed.
+    /// Returns error if the db operation failed. Though it will remove all user data
+    /// first, which is non failing operations.
+    ///
     pub async fn delete_account(&self, user_id: UserId) -> MailContextResult<()> {
-        Ok(self.core_context.delete_account(user_id).await?)
+        tracing::warn!("Delete account `{user_id}`");
+        self.active_user_contexts.lock().await.remove(&user_id);
+        let mail_cache_path = self.mail_cache_path(&user_id);
+
+        Ok(self
+            .core_context
+            .delete_account(user_id, vec![mail_cache_path])
+            .await?)
     }
 
     /// Path where mail content should be cached for user with `user_id`.
+    ///
     pub fn mail_cache_path(&self, user_id: &UserId) -> PathBuf {
         self.mail_cache_path.join(user_id.to_string())
     }

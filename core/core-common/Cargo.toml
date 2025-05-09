@@ -47,6 +47,7 @@ itertools = { workspace = true }
 pretty_assertions = { workspace = true }
 sqlite-watcher = { workspace = true }
 async_zip = { version = "0.0.15", features = ["deflate", "chrono"] }
+walkdir = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }

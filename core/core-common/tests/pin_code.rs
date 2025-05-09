@@ -1,5 +1,5 @@
 use proton_core_common::{
-    models::{AppProtection, AppSettings, Label, ModelExtension, PinProtection},
+    models::{AppProtection, AppSettings, ModelExtension, PinProtection},
     pin_code::{PinCode, PinError},
 };
 use proton_core_test_utils::test_context::TestContext;
@@ -57,7 +57,6 @@ async fn create_and_delete_pin() {
 async fn validation_max_attempts() {
     let test_ctx = TestContext::new().await;
     let core_ctx = test_ctx.core_context();
-    let user_ctx = test_ctx.user_context().await;
     let pin = vec![1, 2, 3, 4];
     let incorrect_pin = vec![0, 0, 0, 0];
 
@@ -80,20 +79,30 @@ async fn validation_max_attempts() {
         .await
         .unwrap();
 
+    let error = PinCode::validate_pin(core_ctx.clone(), incorrect_pin.clone())
+        .await
+        .unwrap_err();
+
+    assert!(matches!(error, PinError::TooManyAttempts));
+
+    let mut pin_metadata = PinProtection::get(&tether).await.unwrap().unwrap();
+
+    assert_eq!(pin_metadata.attempts, 11);
+
+    pin_metadata.last_access_reset(&mut tether).await.unwrap();
+
+    // Pin code is not responsible to do anything regarding `TooManyAttempts`
+    // error. In production flow there is catch on this error
+    // which nukes databases and caches.
     let error = PinCode::validate_pin(core_ctx.clone(), incorrect_pin)
         .await
         .unwrap_err();
 
     assert!(matches!(error, PinError::TooManyAttempts));
 
-    let error = PinProtection::get(&tether).await.unwrap_err();
+    let pin_metadata = PinProtection::get(&tether).await.unwrap().unwrap();
 
-    assert!(error.to_string().contains("no such table: pin_protection"));
-
-    let tether = user_ctx.stash().connection();
-    let error = Label::all(&tether).await.unwrap_err();
-
-    assert!(error.to_string().contains("no such table: labels"));
+    assert_eq!(pin_metadata.attempts, 12);
 }
 
 trait PinProtectionExt {

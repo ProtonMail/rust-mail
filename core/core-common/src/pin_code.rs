@@ -10,7 +10,6 @@ use thiserror::Error;
 use tokio::task::JoinError;
 
 use crate::models::{AppProtection, AppSettings, ModelExtension, PinProtection};
-use crate::nuke_utils::nuke_application_data;
 use crate::os::{KeyChainError, StoreInKeyChain};
 use crate::{Context, CoreContextError};
 
@@ -156,12 +155,7 @@ impl PinCode {
             if success {
                 Ok(())
             } else if pin_protection.attempts >= Self::MAX_ATTEMPTS {
-                tracing::error!(
-                    "All attemps to validate PIN have been used, nuking application data"
-                );
-                if let Err(e) = nuke_application_data(ctx).await {
-                    tracing::error!("Could not clear application data, details `{e}`");
-                }
+                tracing::error!("All attemps to validate PIN have been used");
 
                 Err(PinError::TooManyAttempts)
             } else {
@@ -218,7 +212,7 @@ impl PinCode {
     }
 }
 
-struct PinHash(ProtonArgon2Hash);
+pub(crate) struct PinHash(ProtonArgon2Hash);
 
 impl Deref for PinHash {
     type Target = ProtonArgon2Hash;
