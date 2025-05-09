@@ -4,7 +4,8 @@ use proton_mail_common::errors::{
     DraftAttachmentErrorReason as RealDraftAttachmentErrorReason,
     DraftDiscardErrorReason as RealDraftDiscardErrorReason,
     DraftOpenErrorReason as RealDraftOpenErrorReason,
-    DraftSaveSendErrorReason as RealDraftSaveSendErrorReason,
+    DraftSaveErrorReason as RealDraftSaveErrorReason,
+    DraftSendErrorReason as RealDraftSendErrorReason,
     DraftUndoSendErrorReason as RealDraftUndoSendErrorReason,
     EventErrorReason as RealEventErrorReason, LoginErrorReason as RealLoginErrorReason,
     OtherErrorReason as RealOtherErrorReason, PinAuthErrorReason as RealPinAuthErrorReason,
@@ -109,13 +110,32 @@ impl From<RealDraftOpenErrorReason> for DraftOpenErrorReason {
     }
 }
 
-/// Specific Reason when opening a draft save or send fails.
-///
-/// This enum is used to represent the specific reason for an error that occurred
-/// while saving or sending a draft in order to provide only the necessary
-/// information to the user.
+/// Specific Reason when saving a draft
 #[derive(Debug, UniffiEnum)]
-pub enum DraftSaveSendErrorReason {
+pub enum DraftSaveErrorReason {
+    /// Address does not have a primary key
+    AddressDoesNotHavePrimaryKey(String),
+    /// Recipient email is invalid
+    RecipientEmailInvalid(String),
+    /// This Proton recipient does not exist.
+    ProtonRecipientDoesNotExist(String),
+    /// Some other validation error occurred for this recipient
+    UnknownRecipientValidationError(String),
+    /// This address is disabled and can't be used for sending
+    AddressDisabled(String),
+    /// Message was already sent.
+    MessageAlreadySent,
+    /// This draft was already sent and can't be modified
+    AlreadySent,
+    /// This message no longer exists.
+    MessageDoesNotExist,
+    /// Message is not a draft
+    MessageIsNotADraft,
+}
+
+/// Specific Reason when saving a draft
+#[derive(Debug, UniffiEnum)]
+pub enum DraftSendErrorReason {
     /// Message has no recipients
     NoRecipients,
     /// Address does not have a primary key
@@ -138,38 +158,51 @@ pub enum DraftSaveSendErrorReason {
     MessageDoesNotExist,
     /// Message is not a draft
     MessageIsNotADraft,
-    /// Some attachments have not yet been uploaded.
+    /// Message is missing attachment uploads
     MissingAttachmentUploads,
-    /// Save/Send failed due to attachment upload error.
-    AttachmentUpload,
 }
 
-impl From<RealDraftSaveSendErrorReason> for DraftSaveSendErrorReason {
-    fn from(value: RealDraftSaveSendErrorReason) -> Self {
+impl From<RealDraftSaveErrorReason> for DraftSaveErrorReason {
+    fn from(value: RealDraftSaveErrorReason) -> Self {
         match value {
-            RealDraftSaveSendErrorReason::NoRecipients => Self::NoRecipients,
-            RealDraftSaveSendErrorReason::AddressDoesNotHavePrimaryKey(value) => {
+            RealDraftSaveErrorReason::AddressDoesNotHavePrimaryKey(value) => {
                 Self::AddressDoesNotHavePrimaryKey(value.into_inner())
             }
-            RealDraftSaveSendErrorReason::RecipientEmailInvalid(value) => {
+            RealDraftSaveErrorReason::RecipientEmailInvalid(value) => {
                 Self::RecipientEmailInvalid(value)
             }
-            RealDraftSaveSendErrorReason::ProtonRecipientDoesNotExist(value) => {
+            RealDraftSaveErrorReason::ProtonRecipientDoesNotExist(value) => {
                 Self::ProtonRecipientDoesNotExist(value)
             }
-            RealDraftSaveSendErrorReason::UnknownRecipientValidationError(value) => {
+            RealDraftSaveErrorReason::UnknownRecipientValidationError(value) => {
                 Self::UnknownRecipientValidationError(value)
             }
-            RealDraftSaveSendErrorReason::AddressDisabled(value) => Self::AddressDisabled(value),
-            RealDraftSaveSendErrorReason::MessageAlreadySent => Self::MessageAlreadySent,
-            RealDraftSaveSendErrorReason::PackageError(value) => Self::PackageError(value),
-            RealDraftSaveSendErrorReason::AlreadySent => Self::AlreadySent,
-            RealDraftSaveSendErrorReason::MessageDoesNotExist => Self::MessageDoesNotExist,
-            RealDraftSaveSendErrorReason::MessageIsNotADraft => Self::MessageIsNotADraft,
-            RealDraftSaveSendErrorReason::MissingAttachmentUploads => {
-                Self::MissingAttachmentUploads
+            RealDraftSaveErrorReason::AddressDisabled(value) => Self::AddressDisabled(value),
+            RealDraftSaveErrorReason::MessageAlreadySent => Self::MessageAlreadySent,
+            RealDraftSaveErrorReason::AlreadySent => Self::AlreadySent,
+            RealDraftSaveErrorReason::MessageDoesNotExist => Self::MessageDoesNotExist,
+            RealDraftSaveErrorReason::MessageIsNotADraft => Self::MessageIsNotADraft,
+        }
+    }
+}
+
+impl From<RealDraftSendErrorReason> for DraftSendErrorReason {
+    fn from(value: RealDraftSendErrorReason) -> Self {
+        match value {
+            RealDraftSendErrorReason::NoRecipients => Self::NoRecipients,
+            RealDraftSendErrorReason::RecipientEmailInvalid(value) => {
+                Self::RecipientEmailInvalid(value)
             }
-            RealDraftSaveSendErrorReason::AttachmentUpload => Self::AttachmentUpload,
+            RealDraftSendErrorReason::ProtonRecipientDoesNotExist(value) => {
+                Self::ProtonRecipientDoesNotExist(value)
+            }
+            RealDraftSendErrorReason::UnknownRecipientValidationError(value) => {
+                Self::UnknownRecipientValidationError(value)
+            }
+            RealDraftSendErrorReason::PackageError(value) => Self::PackageError(value),
+            RealDraftSendErrorReason::MessageDoesNotExist => Self::MessageDoesNotExist,
+            RealDraftSendErrorReason::MessageIsNotADraft => Self::MessageIsNotADraft,
+            RealDraftSendErrorReason::MissingAttachmentUploads => Self::MissingAttachmentUploads,
         }
     }
 }

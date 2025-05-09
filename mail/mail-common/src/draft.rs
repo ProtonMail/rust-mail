@@ -59,7 +59,9 @@ pub enum Error {
     #[error(transparent)]
     Open(#[from] OpenError),
     #[error(transparent)]
-    SaveOrSend(#[from] SaveOrSendError),
+    Send(#[from] SendError),
+    #[error(transparent)]
+    Save(#[from] SaveError),
     #[error(transparent)]
     Discard(#[from] DiscardError),
     #[error(transparent)]
@@ -89,13 +91,36 @@ impl From<OpenError> for MailContextError {
     }
 }
 
-/// Errors that occur during sending or saving a draft.
-///
-/// While these could in theory be separate errors, there is a lot of overlap
-/// between the two, so we group them together. Additionally send always depends
-/// on save, so these two will always come together.
+/// Errors that occur when sending a draft.
 #[derive(Debug, thiserror::Error)]
-pub enum SaveOrSendError {
+pub enum SendError {
+    #[error("Message {0} is not a draft")]
+    MessageNotADraft(LocalMessageId),
+    #[error("Metadata with Id {0} does not exist")]
+    MetadataNotFound(MetadataId),
+    #[error("Draft has no message")]
+    LocalDraftWithoutMessage,
+    #[error("Draft send failed: {0}")]
+    SendMessage(#[from] PackageError),
+    #[error("Draft has no recipients")]
+    NoRecipients,
+    #[error("Draft does not exist on server")]
+    DraftDoesNotExistOnServer,
+    #[error("Draft has attachments which have not uploaded")]
+    MissingAttachmentUploads,
+    #[error("Message Body for {0} missing")]
+    MessageBodyMissing(LocalMessageId),
+}
+
+impl From<SendError> for MailContextError {
+    fn from(err: SendError) -> Self {
+        Self::Draft(err.into())
+    }
+}
+
+/// Errors that occur when saving a draft.
+#[derive(Debug, thiserror::Error)]
+pub enum SaveError {
     #[error("No addresses found for current user")]
     UserHasNoAddresses,
     #[error("User Address {0} not found")]
@@ -114,18 +139,12 @@ pub enum SaveOrSendError {
     LocalDraftWithoutMessage,
     #[error("Can not update a draft that was sent")]
     AlreadySent,
-    #[error("Draft send failed: {0}")]
-    SendMessage(#[from] PackageError),
-    #[error("Draft has no recipients")]
-    NoRecipients,
     #[error("Draft does not exist on server")]
     DraftDoesNotExistOnServer,
-    #[error("Draft has attachments which have not uploaded")]
-    MissingAttachmentUploads,
 }
 
-impl From<SaveOrSendError> for MailContextError {
-    fn from(err: SaveOrSendError) -> Self {
+impl From<SaveError> for MailContextError {
+    fn from(err: SaveError) -> Self {
         Self::Draft(err.into())
     }
 }
@@ -787,7 +806,7 @@ impl Draft {
                 continue;
             };
             let Some(key_packets) = attachment.key_packets.clone() else {
-                return Err(SaveOrSendError::AttachmentDoesNotHaveKeyPackets(
+                return Err(SaveError::AttachmentDoesNotHaveKeyPackets(
                     attachment.local_id.unwrap(),
                 )
                 .into());
@@ -850,7 +869,7 @@ impl Draft {
                 continue;
             };
             let Some(key_packets) = attachment.key_packets.clone() else {
-                return Err(SaveOrSendError::AttachmentDoesNotHaveKeyPackets(
+                return Err(SaveError::AttachmentDoesNotHaveKeyPackets(
                     attachment.local_id.unwrap(),
                 )
                 .into());
@@ -866,11 +885,11 @@ impl Draft {
             Err(e) => {
                 if let Some(proton_error) = e.to_proton_error() {
                     if proton_error.code == Mail::MessageAlreadySent as u32 {
-                        return Err(SaveOrSendError::AlreadySent.into());
+                        return Err(SaveError::AlreadySent.into());
                     } else if proton_error.code == Mail::MessageUpdateDraftNotDraft as u32 {
-                        return Err(SaveOrSendError::MessageNotADraft(local_message_id).into());
+                        return Err(SaveError::MessageNotADraft(local_message_id).into());
                     } else if proton_error.code == Mail::MessageUpdateDraftNotExist as u32 {
-                        return Err(SaveOrSendError::DraftDoesNotExistOnServer.into());
+                        return Err(SaveError::DraftDoesNotExistOnServer.into());
                     }
                 }
                 Err(e.into())
@@ -978,7 +997,7 @@ impl Draft {
     /// Returns error if the action failed to execute.
     pub fn to_send_action(&self) -> Result<DraftSendActionQueuer, Error> {
         if self.to_list.is_empty() && self.cc_list.is_empty() && self.bcc_list.is_empty() {
-            return Err(SaveOrSendError::NoRecipients.into());
+            return Err(SendError::NoRecipients.into());
         }
         let save_action = Save::new(self, DraftSendResultOrigin::SaveBeforeSend);
         let send_action = draft::Send::new(self);

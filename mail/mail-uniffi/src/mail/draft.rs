@@ -5,9 +5,9 @@ mod recipients;
 use crate::core::datatypes::Id;
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{
-    DraftDiscardError, DraftOpenError, DraftSaveSendError, DraftUndoSendError,
-    EmbeddedAttachmentInfoResult, ProtonError, VoidDraftDiscardResult, VoidDraftSaveSendResult,
-    VoidDraftUndoSendResult,
+    DraftDiscardError, DraftOpenError, DraftSaveError, DraftSendError, DraftUndoSendError,
+    EmbeddedAttachmentInfoResult, ProtonError, VoidDraftDiscardResult, VoidDraftSaveResult,
+    VoidDraftSendResult, VoidDraftUndoSendResult,
 };
 use crate::mail::MailUserSession;
 use crate::mail::datatypes::MimeType;
@@ -200,10 +200,10 @@ impl Draft {
     }
 
     /// Set the draft's `subject`.
-    #[returns(VoidDraftSaveSendResult)]
-    pub fn set_subject(&self, subject: String) -> Result<(), DraftSaveSendError> {
+    #[returns(VoidDraftSaveResult)]
+    pub fn set_subject(&self, subject: String) -> Result<(), DraftSaveError> {
         let Some(ctx) = self.ctx.upgrade() else {
-            return Err(DraftSaveSendError::Other(ProtonError::Unexpected(
+            return Err(DraftSaveError::Other(ProtonError::Unexpected(
                 UnexpectedError::Internal,
             )));
         };
@@ -218,15 +218,15 @@ impl Draft {
                     .await
                     .map_err(RealProtonMailError::from)
             })
-            .map_err(DraftSaveSendError::from)
+            .map_err(DraftSaveError::from)
             .into()
     }
 
     /// Set the draft's `body`.
-    #[returns(VoidDraftSaveSendResult)]
-    pub fn set_body(&self, body: String) -> Result<(), DraftSaveSendError> {
+    #[returns(VoidDraftSaveResult)]
+    pub fn set_body(&self, body: String) -> Result<(), DraftSaveError> {
         let Some(ctx) = self.ctx.upgrade() else {
-            return Err(DraftSaveSendError::Other(ProtonError::Unexpected(
+            return Err(DraftSaveError::Other(ProtonError::Unexpected(
                 UnexpectedError::Internal,
             )));
         };
@@ -241,7 +241,7 @@ impl Draft {
                     .await
                     .map_err(RealProtonMailError::from)
             })
-            .map_err(DraftSaveSendError::from)
+            .map_err(DraftSaveError::from)
             .into()
     }
 
@@ -334,10 +334,10 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    #[returns(VoidDraftSaveSendResult)]
-    pub async fn save(self: Arc<Self>) -> Result<(), DraftSaveSendError> {
+    #[returns(VoidDraftSaveResult)]
+    pub async fn save(self: Arc<Self>) -> Result<(), DraftSaveError> {
         let Some(ctx) = self.ctx.upgrade() else {
-            return Err(DraftSaveSendError::Other(ProtonError::Unexpected(
+            return Err(DraftSaveError::Other(ProtonError::Unexpected(
                 UnexpectedError::Internal,
             )));
         };
@@ -350,7 +350,7 @@ impl Draft {
             Result::<_, RealProtonMailError>::Ok(())
         })
         .await
-        .map_err(DraftSaveSendError::from)
+        .map_err(DraftSaveError::from)
         .into()
     }
 
@@ -361,10 +361,10 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    #[returns(VoidDraftSaveSendResult)]
-    pub async fn send(self: Arc<Self>) -> Result<(), DraftSaveSendError> {
+    #[returns(VoidDraftSendResult)]
+    pub async fn send(self: Arc<Self>) -> Result<(), DraftSendError> {
         let Some(ctx) = self.ctx.upgrade() else {
-            return Err(DraftSaveSendError::Other(ProtonError::Unexpected(
+            return Err(DraftSendError::Other(ProtonError::Unexpected(
                 UnexpectedError::Internal,
             )));
         };
@@ -378,7 +378,7 @@ impl Draft {
             Result::<_, RealProtonMailError>::Ok(())
         })
         .await
-        .map_err(DraftSaveSendError::from)
+        .map_err(DraftSendError::from)
         .into()
     }
 

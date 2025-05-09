@@ -91,7 +91,8 @@ macro_rules! export_typed_result {
 export_void_result! {
     VoidActionResult(ActionError),
     VoidDraftDiscardResult(DraftDiscardError),
-    VoidDraftSaveSendResult(DraftSaveSendError),
+    VoidDraftSendResult(DraftSendError),
+    VoidDraftSaveResult(DraftSaveError),
     VoidDraftUndoSendResult(DraftUndoSendError),
     VoidEventResult(EventError),
     VoidLoginResult(LoginError),
