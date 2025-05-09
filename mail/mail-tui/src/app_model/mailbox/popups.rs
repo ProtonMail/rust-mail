@@ -7,7 +7,7 @@ use proton_core_common::models::Label;
 use proton_mail_common::actions::LabelAsAction;
 use proton_mail_common::datatypes::ViewMode;
 use proton_mail_common::models::{Conversation, LabelWithCounters, MailLabel};
-use proton_mail_common::{MailContextResult, MailUserContext};
+use proton_mail_common::{MailContextResult, MailUserContext, Sidebar};
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::text::Span;
@@ -247,11 +247,19 @@ impl LabelSelectPopup {
         ctx: Arc<MailUserContext>,
         current_label: &LabelWithCounters,
         view_mode: ViewMode,
-    ) -> MailContextResult<Self> {
+    ) -> anyhow::Result<Self> {
         let tether = ctx.user_stash().connection();
-        let system = LabelWithCounters::find_by_kind(LabelType::System, &tether).await?;
-        let folders = LabelWithCounters::find_by_kind(LabelType::Folder, &tether).await?;
-        let labels = LabelWithCounters::find_by_kind(LabelType::Label, &tether).await?;
+        let sidebar = Sidebar;
+        let system = sidebar.system_labels(&tether).await?;
+        let labels = sidebar.custom_labels(&tether).await?;
+        let folders = sidebar.custom_folders(&tether).await?;
+
+        let system =
+            LabelWithCounters::from_ids(&tether, system.iter().map(|x| x.local_id)).await?;
+        let labels =
+            LabelWithCounters::from_ids(&tether, labels.iter().map(|x| x.local_id)).await?;
+        let folders =
+            LabelWithCounters::from_ids(&tether, folders.iter().map(|x| x.local_id)).await?;
 
         let system_index = system
             .iter()
