@@ -25,8 +25,8 @@ pub trait ProtonCalendar {
     /// <https://protonmail.gitlab-pages.protontech.ch/Slim-API/calendar/#tag/Event/operation/get_calendar-%7B_version%7D-%7BcalID%7D-events-%7BeventID%7D>
     fn get_calendar_event(
         &self,
-        uid: &CalendarEventId,
-        recurrence_id: Option<&CalendarEventRecurrenceId>,
+        event_id: &CalendarEventId,
+        recur_id: Option<&CalendarEventRecurrenceId>,
     ) -> impl Future<Output = ApiServiceResult<Option<CalendarEvent>>> + Send;
 }
 
@@ -44,16 +44,16 @@ impl ProtonCalendar for Proton {
 
     async fn get_calendar_event(
         &self,
-        uid: &CalendarEventId,
-        recurrence_id: Option<&CalendarEventRecurrenceId>,
+        event_id: &CalendarEventId,
+        recur_id: Option<&CalendarEventRecurrenceId>,
     ) -> ApiServiceResult<Option<CalendarEvent>> {
         let req = GET!("{CALENDAR_V1}/events")
-            .query(("UID", uid))
+            .query(("UID", event_id))
             .query(("Page", 0))
             .query(("PageSize", 100))
             .query(("CalendarType", 0));
 
-        let req = match recurrence_id {
+        let req = match recur_id {
             Some(id) => req.query(("RecurrenceID", id)),
             None => req,
         };
