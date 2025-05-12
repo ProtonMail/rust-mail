@@ -105,6 +105,7 @@ impl MailLabel for Label {
                 || *remote_id == LabelId::all_drafts()
                 || *remote_id == LabelId::all_sent()
                 || *remote_id == LabelId::all_scheduled()
+                || *remote_id == LabelId::outbox()
             {
                 return Ok(ViewMode::Messages);
             }
