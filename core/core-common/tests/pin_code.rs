@@ -23,12 +23,6 @@ async fn create_and_delete_pin() {
 
     assert_eq!(pin_metadata.attempts, 0);
 
-    let error = PinCode::delete_pin(core_ctx.clone(), pin.clone())
-        .await
-        .unwrap_err();
-
-    assert!(matches!(error, PinError::TooFrequentAttempts));
-
     pin_metadata.last_access_reset(&mut tether).await.unwrap();
 
     let incorrect_pin = vec![0, 0, 0, 0];

@@ -1,6 +1,7 @@
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::queue::{QueuedActionState, QueuedResult};
 use proton_core_api::auth::UserKeySecret;
+use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::services::proton::UserId;
 use proton_core_api::status_observer::StatusObserver;
 use proton_core_api::status_watcher::StatusWatcher;
@@ -14,6 +15,7 @@ use proton_mail_common::context::{
 use proton_mail_common::{MailContext, MailContextResult, MailUserContext};
 pub use secrecy::{ExposeSecret, SecretString as RealSecretString};
 use std::sync::Arc;
+use std::time::Duration;
 use tempdir::TempDir;
 use tracing::info;
 use wiremock::MockServer;
@@ -287,6 +289,8 @@ pub trait MailUserContextTestExtension {
     async fn execute_all_send_actions(&self) -> QueuedResult<usize> {
         self.execute_all_actions_with_group(SEND_ACTION_GROUP).await
     }
+
+    async fn wait_for(&self, timeout: Option<Duration>, fun: impl Fn(ConnectionStatus) -> bool);
 }
 
 impl MailUserContextTestExtension for MailUserContext {
@@ -304,5 +308,21 @@ impl MailUserContextTestExtension for MailUserContext {
     ) -> QueuedResult<usize> {
         let executor = self.action_queue().new_executor_with_group(action_group);
         executor.execute_all().await
+    }
+
+    async fn wait_for(&self, timeout: Option<Duration>, fun: impl Fn(ConnectionStatus) -> bool) {
+        if let Some(timeout) = timeout {
+            tokio::time::timeout(timeout, wait_for_impl(self, fun))
+                .await
+                .unwrap();
+        } else {
+            wait_for_impl(self, fun).await;
+        }
+    }
+}
+
+async fn wait_for_impl(user_ctx: &MailUserContext, fun: impl Fn(ConnectionStatus) -> bool) {
+    while !fun(user_ctx.session().status().await) {
+        tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }

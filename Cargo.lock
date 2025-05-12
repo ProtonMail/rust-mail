@@ -4997,6 +4997,7 @@ dependencies = [
  "stash",
  "tempdir",
  "tempfile",
+ "tokio",
  "tracing",
  "tracing-subscriber",
  "velcro",

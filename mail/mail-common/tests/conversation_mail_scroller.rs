@@ -15,9 +15,11 @@ use proton_mail_common::{
     mail_scroller::{DataScrollerSource, MailScroller},
     models::{Conversation, ConversationCounters, ConversationScrollData},
 };
-use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::{
     conv_id, conv_label, conversation, label, lbl_id, test_context::MailTestContext,
+};
+use proton_mail_test_utils::{
+    init::Params as TestParams, test_context::MailUserContextTestExtension,
 };
 use stash::stash::StashError;
 use stash::{
@@ -25,7 +27,6 @@ use stash::{
     stash::{Bond, Tether, WatcherHandle},
 };
 use std::{collections::HashMap, time::Duration};
-use tokio::time::sleep;
 use velcro::hash_map;
 use wiremock::{
     Mock, ResponseTemplate,
@@ -597,10 +598,10 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
         ..
     } = scroller.watch().await.unwrap();
 
-    // Its faster for test purpose than `wait_for_online`
-    while user_ctx.session().status().await.is_offline() {
-        sleep(Duration::from_millis(100)).await;
-    }
+    let timeout = Some(Duration::from_secs(3));
+    user_ctx
+        .wait_for(timeout, |status| status.is_online())
+        .await;
 
     // `all_items` will react to the online data being available
     // listing will be done in correct the order of the cache
@@ -657,7 +658,9 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     ctx.mock_server().reset().await;
     mock_not_responsive_api(&ctx).await;
     ctx.catch_all().await;
-    sleep(Duration::from_secs(3)).await;
+    user_ctx
+        .wait_for(timeout, |status| status.is_offline())
+        .await;
 
     assert_scroller_content(
         &mut scroller,
