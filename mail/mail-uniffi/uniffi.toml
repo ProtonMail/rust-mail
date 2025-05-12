@@ -1,6 +1,6 @@
 [bindings.swift]
-experimental_sendable_value_types=true
+experimental_sendable_value_types = true
 
 [bindings.kotlin]
-android=true
-android_cleaner=true
+android = true
+android_cleaner = true

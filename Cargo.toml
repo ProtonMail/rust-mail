@@ -2,38 +2,38 @@
 resolver = "2"
 
 members = [
-    "calendar/calendar-api",
-    "calendar/calendar-common",
-    "core/action-queue",
-    "core/core-api",
-    "core/core-common",
-    "core/core-test-utils",
-    "core/event-loop",
-    "core/ical",
-    "core/proton-canonical-email",
-    "core/sqlite3",
-    "core/stash",
-    "core/stash-macros",
-    "core/task-service",
-    "core/vcard",
-    "crypto/crypto-calendar",
-    "crypto/crypto-inbox",
-    "crypto/crypto-inbox-mime",
-    "crypto/crypto-notifications",
-    "crypto/crypto-pin-hash",
-    "mail/mail-api",
-    "mail/mail-common",
-    "mail/mail-html-transformer",
-    "mail/mail-ids",
-    "mail/mail-test-utils",
-    "mail/mail-tui",
-    "mail/mail-uniffi",
-    "mail/mail-wasm",
-    "mail/uniffi-bindgen",
-    "mail/uniffi-macros",
-    "payment/payment-sdk",
-    "payment/payment-uniffi",
-    "payment/payment-crux",
+  "calendar/calendar-api",
+  "calendar/calendar-common",
+  "core/action-queue",
+  "core/core-api",
+  "core/core-common",
+  "core/core-test-utils",
+  "core/event-loop",
+  "core/ical",
+  "core/proton-canonical-email",
+  "core/sqlite3",
+  "core/stash",
+  "core/stash-macros",
+  "core/task-service",
+  "core/vcard",
+  "crypto/crypto-calendar",
+  "crypto/crypto-inbox",
+  "crypto/crypto-inbox-mime",
+  "crypto/crypto-notifications",
+  "crypto/crypto-pin-hash",
+  "mail/mail-api",
+  "mail/mail-common",
+  "mail/mail-html-transformer",
+  "mail/mail-ids",
+  "mail/mail-test-utils",
+  "mail/mail-tui",
+  "mail/mail-uniffi",
+  "mail/mail-wasm",
+  "mail/uniffi-bindgen",
+  "mail/uniffi-macros",
+  "payment/payment-sdk",
+  "payment/payment-uniffi",
+  "payment/payment-crux",
 ]
 
 [workspace.package]
@@ -87,7 +87,13 @@ rand = "0.8"
 regex = "1.11.1"
 rmp = "0.8"
 rmp-serde = "1.3"
-rusqlite = { version = "0.32.1", features = ["bundled", "chrono", "functions", "trace", "uuid"] }
+rusqlite = { version = "0.32.1", features = [
+  "bundled",
+  "chrono",
+  "functions",
+  "trace",
+  "uuid",
+] }
 sqlite-watcher = { version = "0.5.1", features = ["rusqlite"] }
 slotmap = "1.0.7"
 secrecy = { version = "0.8", features = ["serde"] }
@@ -299,11 +305,11 @@ panic = "unwind"
 # This profile gets about a 50% reduction in size compared to the default release profile.
 [profile.small]
 inherits = "release"
-opt-level = "s" # We might want to experiment with "z" instead.
+opt-level = "s"      # We might want to experiment with "z" instead.
 # Move the debug info to a separate file.
 # At the time of writing, this reduces the size of the binary by 9MB.
 split-debuginfo = "packed"
-lto = true # "Fat" LTO
+lto = true                 # "Fat" LTO
 # panic = 'abort' We might want to enable this
 
 [patch."crates-io"]

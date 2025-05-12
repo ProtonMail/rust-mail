@@ -11,17 +11,17 @@ fixedbitset = "0.5"
 flume = { workspace = true }
 futures = { workspace = true }
 notify = { version = "6", default-features = false, features = [
-    "macos_fsevent",
+  "macos_fsevent",
 ], optional = true }
 parking_lot = { workspace = true }
 paste = { workspace = true }
 rusqlite = { workspace = true, features = [
-    "bundled",
-    "modern_sqlite",
-    "uuid",
-    "chrono",
-    "functions",
-    "trace",
+  "bundled",
+  "modern_sqlite",
+  "uuid",
+  "chrono",
+  "functions",
+  "trace",
 ] }
 serde = { workspace = true }
 slotmap = "1"

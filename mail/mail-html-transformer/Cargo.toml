@@ -25,4 +25,3 @@ pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }
 [[bench]]
 name = "parsing_html"
 harness = false
-
