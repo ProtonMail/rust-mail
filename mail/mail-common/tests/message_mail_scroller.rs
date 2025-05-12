@@ -1,5 +1,4 @@
 use itertools::Itertools;
-use maplit::btreemap;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::{
     datatypes::SystemLabel,
@@ -17,6 +16,7 @@ use proton_mail_common::{
 use proton_mail_test_utils::{api_message_meta, utils::create_address};
 use proton_mail_test_utils::{conv_id, conversation, label, lbl_id, message, msg_id};
 use proton_mail_test_utils::{init::Params as TestParams, test_context::MailTestContext};
+use velcro::btree_map;
 
 use stash::stash::StashError;
 use stash::{
@@ -88,9 +88,9 @@ async fn test_message_mail_scroller_reads_correct_items_within_visible_range_for
     let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
 
-    let mut data: BTreeMap<&str, Vec<Message>> = btreemap! {
-        REMOTE_LABEL_ID => test_message(100, 100),
-        "rid2" => test_message(50, 0),
+    let mut data = btree_map! {
+        REMOTE_LABEL_ID: test_message(100, 100),
+        "rid2": test_message(50, 0),
     };
 
     save_to_database(&mut data, &mut tether).await;
