@@ -1,20 +1,20 @@
 [package]
-  name = "stash-macros"
-  version = "0.2.0"
-  edition.workspace = true
+name = "stash-macros"
+version = "0.2.0"
+edition.workspace = true
 
-  # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-  proc-macro = true
+proc-macro = true
 
 [dependencies]
-  proc-macro2 = "1.0.93"
-  quote = "1.0.38"
-  syn = "2.0.96"
+proc-macro2 = "1.0.93"
+quote = "1.0.38"
+syn = "2.0.96"
 
 [dev-dependencies]
-  rusqlite = { workspace = true }
-  serde = { workspace = true }
-  stash = { workspace = true }
-  uuid = { workspace = true }
+rusqlite = { workspace = true }
+serde = { workspace = true }
+stash = { workspace = true }
+uuid = { workspace = true }

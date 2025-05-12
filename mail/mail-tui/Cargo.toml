@@ -1,53 +1,53 @@
 [package]
-  name = "proton-mail-tui"
-  version = "0.4.1"
-  edition.workspace = true
+name = "proton-mail-tui"
+version = "0.4.1"
+edition.workspace = true
 
-  # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-  # proton deps
-  proton-action-queue = { workspace = true }
-  proton-core-common = { workspace = true }
-  proton-mail-common = { workspace = true }
-  stash = { workspace = true }
+# proton deps
+proton-action-queue = { workspace = true }
+proton-core-common = { workspace = true }
+proton-mail-common = { workspace = true }
+stash = { workspace = true }
 
-  # Tui deps
-  anyhow = "1"
-  chrono = { workspace = true }
-  crossterm = "0.28.1"
-  clap = { workspace = true }
-  dirs = "5"
-  flume = { workspace = true }
-  futures = { workspace = true }
-  hex = "0.4"
-  html2text = { workspace = true }
-  log = "0.4.25"
-  ratatui = { version = "0.28.1", features = ["all-widgets"] }
-  itertools = { workspace = true }
-  scopeguard = "1.2"
-  secrecy = "0.8"
-  thiserror = "1"
-  throbber-widgets-tui = "0.7.1"
-  tokio = { workspace = true }
-  tracing = { workspace = true }
-  tracing-appender = { workspace = true }
-  tracing-error = "0.2"
-  tracing-subscriber = { workspace = true }
-  tokio-util = { workspace = true }
-  tui-input = "0.10.1"
-  tui-logger = { version = "0.12.1", features = ["tracing-support"] }
-  tui-textarea = { version = "0.6.1", features = ["ratatui"] }
-  ratatui-explorer = { version = "=0.1.2", features = ["crossterm"] }
-  unicode-width = "0.1"
-  sqlite-watcher = { workspace = true }
+# Tui deps
+anyhow = "1"
+chrono = { workspace = true }
+crossterm = "0.28.1"
+clap = { workspace = true }
+dirs = "5"
+flume = { workspace = true }
+futures = { workspace = true }
+hex = "0.4"
+html2text = { workspace = true }
+log = "0.4.25"
+ratatui = { version = "0.28.1", features = ["all-widgets"] }
+itertools = { workspace = true }
+scopeguard = "1.2"
+secrecy = "0.8"
+thiserror = "1"
+throbber-widgets-tui = "0.7.1"
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-appender = { workspace = true }
+tracing-error = "0.2"
+tracing-subscriber = { workspace = true }
+tokio-util = { workspace = true }
+tui-input = "0.10.1"
+tui-logger = { version = "0.12.1", features = ["tracing-support"] }
+tui-textarea = { version = "0.6.1", features = ["ratatui"] }
+ratatui-explorer = { version = "=0.1.2", features = ["crossterm"] }
+unicode-width = "0.1"
+sqlite-watcher = { workspace = true }
 
 [target.'cfg(target_os="linux")'.dependencies]
-  keyring = { version = "3.6.1", features = ["linux-native"] }
+keyring = { version = "3.6.1", features = ["linux-native"] }
 
 [target.'cfg(target_os="macos")'.dependencies]
-  keyring = { version = "3.6.1", features = ["apple-native"] }
+keyring = { version = "3.6.1", features = ["apple-native"] }
 
 
 [lints]
-  workspace = true
+workspace = true

@@ -1,29 +1,29 @@
 [package]
-  name = "proton-event-loop"
-  version = "0.7.29"
-  edition.workspace = true
+name = "proton-event-loop"
+version = "0.7.29"
+edition.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-  anyhow = { workspace = true }
-  async-trait = { workspace = true }
-  flume = { workspace = true }
-  futures = { workspace = true }
-  parking_lot = { workspace = true }
-  paste = { workspace = true }
-  proton-core-api = { workspace = true }
-  serde = { workspace = true }
-  stash = { workspace = true }
-  thiserror = { workspace = true }
-  tokio = { workspace = true }
-  tokio-util = { workspace = true }
-  tracing = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+flume = { workspace = true }
+futures = { workspace = true }
+parking_lot = { workspace = true }
+paste = { workspace = true }
+proton-core-api = { workspace = true }
+serde = { workspace = true }
+stash = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
-  mockall = { workspace = true }
+mockall = { workspace = true }
 
 [features]
-  default = []
+default = []
 
 [lints]
-  workspace = true
+workspace = true

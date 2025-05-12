@@ -1,20 +1,20 @@
 [package]
-  name = "proton-crypto-inbox-mime"
-  version = "0.4.1"
-  edition = "2021"
+name = "proton-crypto-inbox-mime"
+version = "0.4.1"
+edition = "2021"
 
-  # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-  mail-parser = "0.10.2"
-  mail-builder = "0.4.2"
-  thiserror = { workspace = true }
-  hex = { workspace = true }
-  rand = { workspace = true }
-  serde = { workspace = true, features = ["derive"] }
+mail-parser = "0.10.2"
+mail-builder = "0.4.2"
+thiserror = { workspace = true }
+hex = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
-  proton-crypto = { workspace = true }
+proton-crypto = { workspace = true }
 
 [lints]
-  workspace = true
+workspace = true
