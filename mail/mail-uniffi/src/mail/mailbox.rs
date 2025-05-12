@@ -4,7 +4,7 @@ use crate::core::datatypes::Id;
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{ProtonError, UserSessionError};
 use crate::mail::MailUserSession;
-use crate::mail::datatypes::ViewMode;
+use crate::mail::datatypes::{MessageRecipientDisplayMode, ViewMode};
 use crate::mail::state::MailUserContextPtr;
 use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
 use proton_core_api::services::proton::LabelId as RealLabelId;
@@ -148,6 +148,10 @@ impl Mailbox {
         self.mbox.view_mode().into()
     }
 
+    #[must_use]
+    pub fn recipient_display_mode(&self) -> MessageRecipientDisplayMode {
+        self.mbox.recipient_display_mode().into()
+    }
     /// Get the number of unread items in this mailbox.
     ///
     /// # Errors

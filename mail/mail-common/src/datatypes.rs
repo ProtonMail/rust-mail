@@ -750,6 +750,13 @@ impl ToSql for ViewMode {
     }
 }
 
+/// In certain label locations the message either needs to display the sender or the recipient.
+#[derive(Debug, Copy, Clone, Eq, Hash, PartialEq)]
+pub enum MessageRecipientDisplayMode {
+    Recipients,
+    Sender,
+}
+
 //  STRUCTS
 //==============================================================================
 
