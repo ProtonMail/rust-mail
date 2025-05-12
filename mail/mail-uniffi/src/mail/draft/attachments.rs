@@ -1,7 +1,7 @@
 use crate::core::datatypes::Id;
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::UnexpectedError;
-use crate::errors::{DraftAttachmentError, DraftAttachmentErrorReason, ProtonError};
+use crate::errors::{DraftAttachmentUploadError, DraftAttachmentUploadErrorReason, ProtonError};
 use crate::mail::datatypes::AttachmentMetadata;
 use crate::mail::draft::Draft;
 use crate::{AsyncLiveQueryCallback, uniffi_async};
@@ -14,7 +14,9 @@ use proton_mail_common::draft::attachments::{
 };
 use proton_mail_common::draft::observers::DraftAttachmentObserver;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use proton_mail_common::models::{Attachment as RealAttachment, DraftAttachmentUploadError};
+use proton_mail_common::models::{
+    Attachment as RealAttachment, DraftAttachmentUploadError as RealDraftAttachmentUploadError,
+};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 use tokio::task::AbortHandle;
@@ -30,7 +32,7 @@ pub enum DraftAttachmentState {
     /// Attachment has failed uploading
     Uploaded,
     /// An error occurred during upload.
-    Error(DraftAttachmentError),
+    Error(DraftAttachmentUploadError),
     /// Attachment is awaiting upload
     Pending,
 }
@@ -47,26 +49,26 @@ impl From<RealDraftAttachmentState> for DraftAttachmentState {
     }
 }
 
-impl From<DraftAttachmentUploadError> for DraftAttachmentError {
-    fn from(value: DraftAttachmentUploadError) -> Self {
+impl From<RealDraftAttachmentUploadError> for DraftAttachmentUploadError {
+    fn from(value: RealDraftAttachmentUploadError) -> Self {
         match value {
-            DraftAttachmentUploadError::Crypto(_) => {
-                Self::Reason(DraftAttachmentErrorReason::Crypto)
+            RealDraftAttachmentUploadError::Crypto(_) => {
+                Self::Reason(DraftAttachmentUploadErrorReason::Crypto)
             }
-            DraftAttachmentUploadError::TooManyAttachments => {
-                Self::Reason(DraftAttachmentErrorReason::TooManyAttachments)
+            RealDraftAttachmentUploadError::TooManyAttachments => {
+                Self::Reason(DraftAttachmentUploadErrorReason::TooManyAttachments)
             }
-            DraftAttachmentUploadError::MessageAlreadySent => {
-                Self::Reason(DraftAttachmentErrorReason::MessageAlreadySent)
+            RealDraftAttachmentUploadError::MessageAlreadySent => {
+                Self::Reason(DraftAttachmentUploadErrorReason::MessageAlreadySent)
             }
-            DraftAttachmentUploadError::Server(e) => {
+            RealDraftAttachmentUploadError::Server(e) => {
                 // There is no good conversion here, however it should be very rare as all
                 // the important cases are intercepted.
                 Self::Other(ProtonError::ServerError(
                     UserApiServiceError::OtherHttpError(0, e),
                 ))
             }
-            DraftAttachmentUploadError::Unexpected => {
+            RealDraftAttachmentUploadError::Unexpected => {
                 Self::Other(ProtonError::Unexpected(UnexpectedError::Draft))
             }
         }
@@ -118,15 +120,15 @@ impl AttachmentList {
         &self,
         path: String,
         filename_override: Option<String>,
-    ) -> Result<(), DraftAttachmentError> {
+    ) -> Result<(), DraftAttachmentUploadError> {
         let Some(draft) = self.draft.upgrade() else {
-            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
+            return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
                 UnexpectedError::Draft,
             )));
         };
 
         let Some(ctx) = draft.ctx.upgrade() else {
-            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
+            return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
                 UnexpectedError::Internal,
             )));
         };
@@ -159,7 +161,7 @@ impl AttachmentList {
             Ok(())
         })
         .await
-        .map_err(DraftAttachmentError::from)
+        .map_err(DraftAttachmentUploadError::from)
     }
 
     /// Add a new inline attachment to this draft. If `filename_override` is present, that will become
@@ -170,14 +172,14 @@ impl AttachmentList {
         &self,
         path: String,
         filename_override: Option<String>,
-    ) -> Result<String, DraftAttachmentError> {
+    ) -> Result<String, DraftAttachmentUploadError> {
         let Some(draft) = self.draft.upgrade() else {
-            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
+            return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
                 UnexpectedError::Draft,
             )));
         };
         let Some(ctx) = draft.ctx.upgrade() else {
-            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
+            return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
                 UnexpectedError::Internal,
             )));
         };
@@ -216,22 +218,18 @@ impl AttachmentList {
             Ok(content_id.into_inner())
         })
         .await
-        .map_err(DraftAttachmentError::from)
+        .map_err(DraftAttachmentUploadError::from)
     }
 
     /// Remove an attachment from this draft.
-    pub async fn remove(&self, id: Id) -> Result<(), DraftAttachmentError> {
+    pub async fn remove(&self, id: Id) -> Result<(), ProtonError> {
         let id: LocalAttachmentId = id.into();
         let Some(draft) = self.draft.upgrade() else {
-            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
-                UnexpectedError::Draft,
-            )));
+            return Err(ProtonError::Unexpected(UnexpectedError::Draft));
         };
 
         let Some(ctx) = draft.ctx.upgrade() else {
-            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
-                UnexpectedError::Internal,
-            )));
+            return Err(ProtonError::Unexpected(UnexpectedError::Internal));
         };
 
         uniffi_async::<(), RealProtonMailError, _>(async move {
@@ -240,20 +238,23 @@ impl AttachmentList {
             Ok(())
         })
         .await
-        .map_err(DraftAttachmentError::from)
+        .map_err(ProtonError::from)
     }
 
     /// Remove an attachment from this draft by `content-id`.
-    pub async fn remove_with_cid(&self, content_id: String) -> Result<(), DraftAttachmentError> {
+    pub async fn remove_with_cid(
+        &self,
+        content_id: String,
+    ) -> Result<(), DraftAttachmentUploadError> {
         let id = ContentId::from(content_id);
         let Some(draft) = self.draft.upgrade() else {
-            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
+            return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
                 UnexpectedError::Draft,
             )));
         };
 
         let Some(ctx) = draft.ctx.upgrade() else {
-            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
+            return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
                 UnexpectedError::Internal,
             )));
         };
@@ -264,7 +265,7 @@ impl AttachmentList {
             Ok(())
         })
         .await
-        .map_err(DraftAttachmentError::from)
+        .map_err(DraftAttachmentUploadError::from)
     }
 
     /// Retry the upload of a failed attachment.
@@ -273,15 +274,15 @@ impl AttachmentList {
     ///
     /// Returns error if the attachment is not in the error state or the action could not
     /// be queued.
-    pub async fn retry(&self, attachment_id: Id) -> Result<(), DraftAttachmentError> {
+    pub async fn retry(&self, attachment_id: Id) -> Result<(), DraftAttachmentUploadError> {
         let Some(draft) = self.draft.upgrade() else {
-            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
+            return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
                 UnexpectedError::Draft,
             )));
         };
 
         let Some(ctx) = draft.ctx.upgrade() else {
-            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
+            return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
                 UnexpectedError::Internal,
             )));
         };
@@ -294,7 +295,7 @@ impl AttachmentList {
             Ok(())
         })
         .await
-        .map_err(DraftAttachmentError::from)
+        .map_err(DraftAttachmentUploadError::from)
     }
 
     /// Get the directory for attachment uploads.
@@ -305,15 +306,15 @@ impl AttachmentList {
     /// Get the list of attachments.
     pub async fn attachments(
         self: Arc<Self>,
-    ) -> Result<Vec<DraftAttachment>, DraftAttachmentError> {
+    ) -> Result<Vec<DraftAttachment>, DraftAttachmentUploadError> {
         let Some(draft) = self.draft.upgrade() else {
-            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
+            return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
                 UnexpectedError::Draft,
             )));
         };
 
         let Some(ctx) = draft.ctx.upgrade() else {
-            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
+            return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
                 UnexpectedError::Internal,
             )));
         };
@@ -325,21 +326,21 @@ impl AttachmentList {
             Ok(attachments.into_iter().map(DraftAttachment::from).collect())
         })
         .await
-        .map_err(DraftAttachmentError::from)
+        .map_err(DraftAttachmentUploadError::from)
     }
 
     /// Create a new watcher for attachment status updates..
     pub async fn watcher(
         &self,
         callback: Arc<dyn AsyncLiveQueryCallback>,
-    ) -> Result<Arc<DraftAttachmentWatcher>, DraftAttachmentError> {
+    ) -> Result<Arc<DraftAttachmentWatcher>, DraftAttachmentUploadError> {
         let Some(draft) = self.draft.upgrade() else {
-            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
+            return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
                 UnexpectedError::Draft,
             )));
         };
         let Some(ctx) = draft.ctx.upgrade() else {
-            return Err(DraftAttachmentError::Other(ProtonError::Unexpected(
+            return Err(DraftAttachmentUploadError::Other(ProtonError::Unexpected(
                 UnexpectedError::Internal,
             )));
         };
@@ -369,7 +370,7 @@ impl AttachmentList {
             }))
         })
         .await
-        .map_err(DraftAttachmentError::from)
+        .map_err(DraftAttachmentUploadError::from)
     }
 }
 

@@ -9,10 +9,11 @@ pub enum MailErrorReason {
     SessionReason(ContextErrorReason),
     LoginReason(LoginErrorReason),
     DraftOpenReason(DraftOpenErrorReason),
-    DraftSaveSendReason(DraftSaveSendErrorReason),
+    DraftSaveReason(DraftSaveErrorReason),
+    DraftSendReason(DraftSendErrorReason),
     DraftUndoSendReason(DraftUndoSendErrorReason),
     DraftDiscardReason(DraftDiscardErrorReason),
-    DraftAttachmentReason(DraftAttachmentErrorReason),
+    DraftAttachmentUploadReason(DraftAttachmentUploadErrorReason),
     EventReason(EventErrorReason),
     PinSetReson(PinSetErrorReason),
     PinAuthReson(PinAuthErrorReason),
@@ -43,9 +44,15 @@ impl From<DraftOpenErrorReason> for MailErrorReason {
     }
 }
 
-impl From<DraftSaveSendErrorReason> for MailErrorReason {
-    fn from(value: DraftSaveSendErrorReason) -> Self {
-        Self::DraftSaveSendReason(value)
+impl From<DraftSendErrorReason> for MailErrorReason {
+    fn from(value: DraftSendErrorReason) -> Self {
+        Self::DraftSendReason(value)
+    }
+}
+
+impl From<DraftSaveErrorReason> for MailErrorReason {
+    fn from(value: DraftSaveErrorReason) -> Self {
+        Self::DraftSaveReason(value)
     }
 }
 
@@ -134,15 +141,9 @@ pub enum DraftOpenErrorReason {
     MessageBodyMissing,
 }
 
-/// Specific Reason when opening a draft save or send fails.
-///
-/// This enum is used to represent the specific reason for an error that occurred
-/// while saving or sending a draft in order to provide only the necessary
-/// information to the user.
+/// Specific Reason when saving a draft
 #[derive(Debug)]
-pub enum DraftSaveSendErrorReason {
-    /// Message has no recipients
-    NoRecipients,
+pub enum DraftSaveErrorReason {
     /// Address does not have a primary key
     AddressDoesNotHavePrimaryKey(AddressId),
     /// Recipient email is invalid
@@ -155,18 +156,33 @@ pub enum DraftSaveSendErrorReason {
     AddressDisabled(String),
     /// Message was already sent.
     MessageAlreadySent,
-    /// A packaging error occurred
-    PackageError(String),
     /// This draft was already sent and can't be modified
     AlreadySent,
     /// This message no longer exists.
     MessageDoesNotExist,
     /// Message is not a draft
     MessageIsNotADraft,
+}
+
+/// Specific Reason when saving a draft
+#[derive(Debug)]
+pub enum DraftSendErrorReason {
+    /// Message has no recipients
+    NoRecipients,
+    /// Recipient email is invalid
+    RecipientEmailInvalid(String),
+    /// This Proton recipient does not exist.
+    ProtonRecipientDoesNotExist(String),
+    /// Some other validation error occurred for this recipient
+    UnknownRecipientValidationError(String),
+    /// A packaging error occurred
+    PackageError(String),
+    /// This message no longer exists.
+    MessageDoesNotExist,
+    /// Message is not a draft
+    MessageIsNotADraft,
     /// Message is missing attachment uploads
     MissingAttachmentUploads,
-    /// Failed to send due to attachment upload.
-    AttachmentUpload,
 }
 
 /// Specific Reason when attempting to cancel sending of an already sent draft.
@@ -188,7 +204,7 @@ pub enum DraftUndoSendErrorReason {
 
 /// Failure cases for draft attachment errors.
 #[derive(Debug)]
-pub enum DraftAttachmentErrorReason {
+pub enum DraftAttachmentUploadErrorReason {
     /// This message no longer exists.
     MessageDoesNotExist,
     /// Message does not exist on the server

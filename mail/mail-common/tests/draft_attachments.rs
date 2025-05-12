@@ -232,8 +232,8 @@ async fn remove_attachment_by_cid() {
         .unwrap_err();
     assert!(matches!(
         err,
-        MailContextError::Draft(draft::Error::Attachment(
-            draft::AttachmentError::AttachmentMetadataNotFoundCid(_)
+        MailContextError::Draft(draft::Error::AttachmentUpload(
+            draft::AttachmentUploadError::AttachmentMetadataNotFoundCid(_)
         ))
     ));
 

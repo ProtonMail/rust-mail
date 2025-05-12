@@ -1,6 +1,6 @@
 use super::{
-    DraftAttachmentErrorReason, DraftDiscardErrorReason, DraftOpenErrorReason,
-    DraftSaveSendErrorReason, DraftUndoSendErrorReason, ProtonError,
+    DraftAttachmentUploadErrorReason, DraftDiscardErrorReason, DraftOpenErrorReason,
+    DraftSaveErrorReason, DraftSendErrorReason, DraftUndoSendErrorReason, ProtonError,
 };
 use crate::UniffiEnum;
 use derive_more::From;
@@ -9,28 +9,51 @@ use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use tracing::error;
 
 #[derive(Debug, From, UniffiEnum)]
-pub enum DraftSaveSendError {
-    Reason(DraftSaveSendErrorReason),
+pub enum DraftSaveError {
+    Reason(DraftSaveErrorReason),
     Other(ProtonError),
 }
 
-impl From<RealProtonMailError> for DraftSaveSendError {
+impl From<RealProtonMailError> for DraftSaveError {
     fn from(error: RealProtonMailError) -> Self {
-        error!("DraftSaveSendError from {error:?}");
+        error!("DraftSendError from {error:?}");
         match error {
             RealProtonMailError::Reason(reason) => reason.into(),
-            mail_error => DraftSaveSendError::Other(ProtonError::from(mail_error)),
+            mail_error => DraftSaveError::Other(ProtonError::from(mail_error)),
         }
     }
 }
 
-impl From<RealMailErrorReason> for DraftSaveSendError {
+impl From<RealMailErrorReason> for DraftSaveError {
     fn from(reason: RealMailErrorReason) -> Self {
         match reason {
-            RealMailErrorReason::DraftSaveSendReason(reason) => {
-                DraftSaveSendError::Reason(reason.into())
-            }
-            other_reason => DraftSaveSendError::Other(ProtonError::from(other_reason)),
+            RealMailErrorReason::DraftSaveReason(reason) => DraftSaveError::Reason(reason.into()),
+            other_reason => DraftSaveError::Other(ProtonError::from(other_reason)),
+        }
+    }
+}
+
+#[derive(Debug, From, UniffiEnum)]
+pub enum DraftSendError {
+    Reason(DraftSendErrorReason),
+    Other(ProtonError),
+}
+
+impl From<RealProtonMailError> for DraftSendError {
+    fn from(error: RealProtonMailError) -> Self {
+        error!("DraftSendError from {error:?}");
+        match error {
+            RealProtonMailError::Reason(reason) => reason.into(),
+            mail_error => DraftSendError::Other(ProtonError::from(mail_error)),
+        }
+    }
+}
+
+impl From<RealMailErrorReason> for DraftSendError {
+    fn from(reason: RealMailErrorReason) -> Self {
+        match reason {
+            RealMailErrorReason::DraftSendReason(reason) => DraftSendError::Reason(reason.into()),
+            other_reason => DraftSendError::Other(ProtonError::from(other_reason)),
         }
     }
 }
@@ -111,12 +134,12 @@ impl From<RealMailErrorReason> for DraftDiscardError {
 }
 
 #[derive(Debug, From, UniffiEnum)]
-pub enum DraftAttachmentError {
-    Reason(DraftAttachmentErrorReason),
+pub enum DraftAttachmentUploadError {
+    Reason(DraftAttachmentUploadErrorReason),
     Other(ProtonError),
 }
 
-impl From<RealProtonMailError> for DraftAttachmentError {
+impl From<RealProtonMailError> for DraftAttachmentUploadError {
     fn from(error: RealProtonMailError) -> Self {
         error!("DraftDiscardError from {error:?}");
         match error {
@@ -126,10 +149,10 @@ impl From<RealProtonMailError> for DraftAttachmentError {
     }
 }
 
-impl From<RealMailErrorReason> for DraftAttachmentError {
+impl From<RealMailErrorReason> for DraftAttachmentUploadError {
     fn from(reason: RealMailErrorReason) -> Self {
         match reason {
-            RealMailErrorReason::DraftAttachmentReason(reason) => Self::Reason(reason.into()),
+            RealMailErrorReason::DraftAttachmentUploadReason(reason) => Self::Reason(reason.into()),
             other_reason => Self::Other(ProtonError::from(other_reason)),
         }
     }

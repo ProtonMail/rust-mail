@@ -26,8 +26,8 @@ use proton_mail_common::draft::compose::DEFAULT_SUBJECT;
 use proton_mail_common::draft::observers::DraftSendResultWatcher;
 use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry};
 use proton_mail_common::models::{
-    DraftSendFailure, DraftSendResult, DraftSendResultOrigin, MailSettings, Message,
-    MessageBodyMetadata,
+    DraftSendFailure, DraftSendFailureSend, DraftSendResult, DraftSendResultOrigin, MailSettings,
+    Message, MessageBodyMetadata,
 };
 use proton_mail_common::{MailContextError, MailUserContext, draft};
 use proton_mail_ids::LocalMessageId;
@@ -216,8 +216,8 @@ async fn send_fails_if_recipient_is_not_valid() {
         .unwrap();
     assert!(matches!(
         err,
-        ActionError::Action(MailContextError::Draft(draft::Error::SaveOrSend(
-            draft::SaveOrSendError::SendMessage(draft::PackageError::RecipientEmailInvalid(_))
+        ActionError::Action(MailContextError::Draft(draft::Error::Send(
+            draft::SendError::SendMessage(draft::PackageError::RecipientEmailInvalid(_))
         )))
     ));
 }
@@ -232,10 +232,8 @@ async fn send_fails_if_recipient_is_not_a_known_proton_address() {
         .unwrap();
     assert!(matches!(
         err,
-        ActionError::Action(MailContextError::Draft(draft::Error::SaveOrSend(
-            draft::SaveOrSendError::SendMessage(draft::PackageError::ProtonRecipientDoesNotExist(
-                _
-            ))
+        ActionError::Action(MailContextError::Draft(draft::Error::Send(
+            draft::SendError::SendMessage(draft::PackageError::ProtonRecipientDoesNotExist(_))
         )))
     ));
 }
@@ -251,7 +249,9 @@ async fn send_fail_recorded_to_db() {
         .unwrap();
     assert!(!send_result.is_success());
     assert!(!send_result.seen);
-    assert!(matches! { send_result.error, Some(DraftSendFailure::RecipientEmailInvalid(_))});
+    assert!(
+        matches! { send_result.error, Some(DraftSendFailure::Send(DraftSendFailureSend::RecipientEmailInvalid(_)))}
+    );
     assert_eq!(send_result.origin, DraftSendResultOrigin::Send);
 }
 
@@ -384,9 +384,7 @@ async fn save_after_send_is_an_error() {
     };
     assert!(matches!(
         e,
-        MailContextError::Draft(draft::Error::SaveOrSend(
-            draft::SaveOrSendError::AlreadySent
-        ))
+        MailContextError::Draft(draft::Error::Save(draft::SaveError::AlreadySent))
     ));
 }
 

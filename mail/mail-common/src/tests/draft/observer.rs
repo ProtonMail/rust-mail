@@ -1,7 +1,7 @@
 use crate::draft::observers::{DraftAttachmentObserver, DraftSendResultWatcher};
 use crate::models::{
     Attachment, Conversation, DraftAttachmentMetadata, DraftMetadata, DraftSendFailure,
-    DraftSendResult, DraftSendResultOrigin, Message,
+    DraftSendFailureSave, DraftSendResult, DraftSendResultOrigin, Message,
 };
 use proton_core_api::services::proton::AddressId;
 use proton_core_common::datatypes::{AddressStatus, AddressType};
@@ -194,7 +194,7 @@ async fn draft_send_observer_re_triggers_for_same_message_with_different_error()
     let mut v2 = DraftSendResult::failure(
         LocalMessageId::from(1),
         DraftSendResultOrigin::SaveBeforeSend,
-        DraftSendFailure::MessageDoesNotExist,
+        DraftSendFailure::Save(DraftSendFailureSave::MessageDoesNotExist),
     );
 
     // insert first record

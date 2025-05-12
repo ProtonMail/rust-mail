@@ -1,6 +1,6 @@
 use crate::datatypes::{MessageRecipient, MessageSender, MimeType, PmSignature};
 use crate::draft::recipients::{ContactGroupResolver, RecipientList};
-use crate::draft::{Draft, ReplyMode, SaveOrSendError};
+use crate::draft::{Draft, ReplyMode, SaveError};
 use crate::models::{MailSettings, Message};
 use crate::{MailContextError, MailUserContext};
 use chrono::DateTime;
@@ -139,7 +139,7 @@ pub(super) async fn encrypt_draft_body(
             error!(
                 "Unable to find the primary address key to encrypt the draft for address with id: {address_id}"
             );
-            SaveOrSendError::AddressWithoutPrimaryKey(address_id.clone())
+            SaveError::AddressWithoutPrimaryKey(address_id.clone())
         })?;
     draft_body
         .encrypt_draft_body(&pgp_provider, &draft_encryption_key)
