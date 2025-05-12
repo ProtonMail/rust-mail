@@ -1,28 +1,27 @@
 [package]
-name = "proton-mail-html-transformer"
-version = "0.2.1"
-edition.workspace = true
+  name = "proton-mail-html-transformer"
+  version = "0.2.1"
+  edition.workspace = true
 
 [dependencies]
-# kuchikiki requires this verion of html5ever at this time.
-html5ever = "=0.26"
-kuchikiki = "=0.8.2"
-lazy_static = { workspace = true }
-thiserror = { workspace = true }
-url = { workspace = true }
-velcro = { workspace = true }
-tracing = { workspace = true }
+  # kuchikiki requires this verion of html5ever at this time.
+  html5ever = "=0.26"
+  kuchikiki = "=0.8.2"
+  lazy_static = { workspace = true }
+  thiserror = { workspace = true }
+  url = { workspace = true }
+  velcro = { workspace = true }
+  tracing = { workspace = true }
 
 [lints]
-workspace = true
+  workspace = true
 
 [dev-dependencies]
-cpuprofiler = "0.0.4"
-criterion = "0.5.1"
-insta = { workspace = true }
-pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }
+  cpuprofiler = "0.0.4"
+  criterion = "0.5.1"
+  insta = { workspace = true }
+  pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }
 
 [[bench]]
-name = "parsing_html"
-harness = false
-
+  name = "parsing_html"
+  harness = false

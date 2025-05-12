@@ -1,10 +1,10 @@
 [package]
-name = "uniffi-bindgen"
-version = "0.1.1"
-edition.workspace = true
-publish = false
+  name = "uniffi-bindgen"
+  version = "0.1.1"
+  edition.workspace = true
+  publish = false
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+  # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-uniffi = { workspace = true, features = ["cli"] }
+  uniffi = { workspace = true, features = ["cli"] }

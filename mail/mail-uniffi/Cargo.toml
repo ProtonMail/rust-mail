@@ -1,53 +1,53 @@
 [package]
-name = "proton-mail-uniffi"
-version = "0.76.1"
-edition.workspace = true
-publish = false
+  name = "proton-mail-uniffi"
+  version = "0.76.1"
+  edition.workspace = true
+  publish = false
 
 [lib]
-crate-type = ["staticlib", "cdylib"]
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+  crate-type = ["staticlib", "cdylib"]
+  # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = { workspace = true }
-async-trait = { workspace = true }
-derive_more = { workspace = true }
-flume = { workspace = true }
-futures = { workspace = true }
-itertools = { workspace = true }
-muon = { workspace = true }
-parking_lot = { workspace = true }
-proton-action-queue = { workspace = true }
-proton-core-api = { workspace = true }
-proton-mail-api = { workspace = true }
-proton-core-common = { workspace = true }
-proton-crypto-account = { workspace = true }
-proton-event-loop = { workspace = true }
-proton-mail-common = { workspace = true, features = ["uniffi"] }
-proton-task-service = { workspace = true }
-proton-uniffi-macros = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-smart-default = { workspace = true }
-stash = { workspace = true }
-secrecy = { workspace = true }
-thiserror = { workspace = true }
-tokio = { workspace = true }
-tracing = { workspace = true }
-tracing-appender = { workspace = true }
-tracing-subscriber = { workspace = true }
-uniffi = { workspace = true }
-sqlite-watcher = { workspace = true }
-non-empty-string = { workspace = true }
+  anyhow = { workspace = true }
+  async-trait = { workspace = true }
+  derive_more = { workspace = true }
+  flume = { workspace = true }
+  futures = { workspace = true }
+  itertools = { workspace = true }
+  muon = { workspace = true }
+  parking_lot = { workspace = true }
+  proton-action-queue = { workspace = true }
+  proton-core-api = { workspace = true }
+  proton-mail-api = { workspace = true }
+  proton-core-common = { workspace = true }
+  proton-crypto-account = { workspace = true }
+  proton-event-loop = { workspace = true }
+  proton-mail-common = { workspace = true, features = ["uniffi"] }
+  proton-task-service = { workspace = true }
+  proton-uniffi-macros = { workspace = true }
+  serde = { workspace = true }
+  serde_json = { workspace = true }
+  smart-default = { workspace = true }
+  stash = { workspace = true }
+  secrecy = { workspace = true }
+  thiserror = { workspace = true }
+  tokio = { workspace = true }
+  tracing = { workspace = true }
+  tracing-appender = { workspace = true }
+  tracing-subscriber = { workspace = true }
+  uniffi = { workspace = true }
+  sqlite-watcher = { workspace = true }
+  non-empty-string = { workspace = true }
 
 [target.'cfg(target_os = "ios")'.dependencies]
-tracing-oslog = "0.2.0"
+  tracing-oslog = "0.2.0"
 
 [dev-dependencies]
-proton-mail-api = { workspace = true }
-proton-mail-test-utils = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["env-filter"] }
-pretty_assertions = { workspace = true }
+  proton-mail-api = { workspace = true }
+  proton-mail-test-utils = { workspace = true }
+  tracing-subscriber = { workspace = true, features = ["env-filter"] }
+  pretty_assertions = { workspace = true }
 
 [lints]
-workspace = true
+  workspace = true

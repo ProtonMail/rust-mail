@@ -1,19 +1,19 @@
 [package]
-name = "proton-vcard"
-version = "0.2.1"
-edition.workspace = true
+  name = "proton-vcard"
+  version = "0.2.1"
+  edition.workspace = true
 
 [dependencies]
-base64 = { workspace = true }
-chrono = { workspace = true }
-ical = { workspace = true }
-oxilangtag = { workspace = true }
-paste = { workspace = true }
-regex = { workspace = true }
-thiserror = { workspace = true }
-tracing = { workspace = true }
-url = { workspace = true }
-velcro = { workspace = true }
+  base64 = { workspace = true }
+  chrono = { workspace = true }
+  ical = { workspace = true }
+  oxilangtag = { workspace = true }
+  paste = { workspace = true }
+  regex = { workspace = true }
+  thiserror = { workspace = true }
+  tracing = { workspace = true }
+  url = { workspace = true }
+  velcro = { workspace = true }
 
 [lints]
-workspace = true
+  workspace = true

@@ -1,4 +1,4 @@
 fix = true
 
 [lint]
-select = ["E", "F", "I"]
+  select = ["E", "F", "I"]

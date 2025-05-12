@@ -1,48 +1,48 @@
 [package]
-name = "proton-core-api"
-version = "0.8.1"
-edition.workspace = true
-keywords = ["proton", "rest", "api"]
-categories = ["api-bindings"]
+  name = "proton-core-api"
+  version = "0.8.1"
+  edition.workspace = true
+  keywords = ["proton", "rest", "api"]
+  categories = ["api-bindings"]
 
 [dependencies]
-anyhow = { workspace = true }
-async-trait = { workspace = true }
-bytes = { workspace = true }
-cfg-if = { workspace = true }
-chrono = { workspace = true }
-cookie = { workspace = true }
-derive_more = { workspace = true }
-flume = { workspace = true }
-futures = { workspace = true }
-muon = { workspace = true }
-parking_lot = { workspace = true }
-proton-crypto-account = { workspace = true }
-secrecy = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-serde_qs = { workspace = true }
-serde_repr = { workspace = true }
-serde_with = { workspace = true }
-serde-aux = { workspace = true }
-smart-default = { workspace = true }
-stash = { workspace = true, optional = true }
-thiserror = { workspace = true }
-tokio = { workspace = true }
-tokio-util = { workspace = true }
-tracing = { workspace = true }
-url = { workspace = true }
+  anyhow = { workspace = true }
+  async-trait = { workspace = true }
+  bytes = { workspace = true }
+  cfg-if = { workspace = true }
+  chrono = { workspace = true }
+  cookie = { workspace = true }
+  derive_more = { workspace = true }
+  flume = { workspace = true }
+  futures = { workspace = true }
+  muon = { workspace = true }
+  parking_lot = { workspace = true }
+  proton-crypto-account = { workspace = true }
+  secrecy = { workspace = true }
+  serde = { workspace = true }
+  serde_json = { workspace = true }
+  serde_qs = { workspace = true }
+  serde_repr = { workspace = true }
+  serde_with = { workspace = true }
+  serde-aux = { workspace = true }
+  smart-default = { workspace = true }
+  stash = { workspace = true, optional = true }
+  thiserror = { workspace = true }
+  tokio = { workspace = true }
+  tokio-util = { workspace = true }
+  tracing = { workspace = true }
+  url = { workspace = true }
 
 [features]
-default = []
-sql = ["dep:stash"]
+  default = []
+  sql = ["dep:stash"]
 
 [dev-dependencies]
-tokio = { workspace = true }
-tracing-subscriber = { workspace = true }
+  tokio = { workspace = true }
+  tracing-subscriber = { workspace = true }
 
 [[example]]
-name = "user_id"
+  name = "user_id"
 
 [lints]
-workspace = true
+  workspace = true
