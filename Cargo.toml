@@ -27,7 +27,10 @@ members = [
     "mail/mail-uniffi",
     "mail/mail-wasm",
     "mail/uniffi-bindgen",
-    "mail/uniffi-macros", "payment/payment-sdk", "payment/payment-uniffi", "payment/payment-crux",
+    "mail/uniffi-macros", 
+    "payment/payment-sdk",
+    "payment/payment-uniffi",
+    "payment/payment-crux",
 ]
 
 [workspace.package]
