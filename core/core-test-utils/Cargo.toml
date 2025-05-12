@@ -8,7 +8,7 @@ publish = false
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
-proton-api-core = { workspace = true, features = ["sql"] }
+proton-core-api = { workspace = true, features = ["sql"] }
 proton-crypto-account = { workspace = true, features = ["sql"] }
 proton-event-loop = { workspace = true }
 proton-core-common = { workspace = true }

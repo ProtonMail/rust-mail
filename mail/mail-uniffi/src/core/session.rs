@@ -1,7 +1,7 @@
 use std::{borrow::Borrow, sync::Arc};
 
 use crate::core::datatypes::AccountDetails;
-use proton_api_core::services::proton::SessionId;
+use proton_core_api::services::proton::SessionId;
 use proton_core_common::{CoreAccountState, CoreSessionState};
 use proton_core_common::{
     datatypes::{PasswordMode, TfaStatus},

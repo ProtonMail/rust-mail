@@ -1,14 +1,14 @@
 use crate::datatypes::{MessageRecipient, MessageSender, MimeType, PmSignature};
 use crate::draft::recipients::{ContactGroupResolver, RecipientList};
-use crate::draft::{Draft, ReplyMode, SaveOrSendError};
+use crate::draft::{Draft, ReplyMode, SaveError};
 use crate::models::{MailSettings, Message};
 use crate::{MailContextError, MailUserContext};
 use chrono::DateTime;
-use proton_api_core::services::proton::AddressId;
-use proton_api_mail::services::proton::request_data::DraftRecipient;
+use proton_core_api::services::proton::AddressId;
 use proton_core_common::models::Address;
 use proton_crypto_inbox::message::{EncryptableDraft, EncryptedDraft};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
+use proton_mail_api::services::proton::request_data::DraftRecipient;
 use proton_mail_html_transformer::Transformer;
 use std::borrow::Cow;
 use std::fmt::Display;
@@ -139,7 +139,7 @@ pub(super) async fn encrypt_draft_body(
             error!(
                 "Unable to find the primary address key to encrypt the draft for address with id: {address_id}"
             );
-            SaveOrSendError::AddressWithoutPrimaryKey(address_id.clone())
+            SaveError::AddressWithoutPrimaryKey(address_id.clone())
         })?;
     draft_body
         .encrypt_draft_body(&pgp_provider, &draft_encryption_key)

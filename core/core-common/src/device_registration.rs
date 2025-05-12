@@ -6,7 +6,7 @@ use std::{collections::HashSet, sync::Arc};
 
 use futures::StreamExt;
 use itertools::Itertools;
-use proton_api_core::{
+use proton_core_api::{
     service::ApiServiceError,
     services::proton::{ProtonCore, SessionId, muon::Status, prelude::RegisterDeviceRequest},
     session::CoreSession as _,

@@ -1,5 +1,5 @@
-use proton_api_mail::services::proton::common::MessageId;
 use proton_core_common::{datatypes::SystemLabel, models::ModelExtension};
+use proton_mail_api::services::proton::common::MessageId;
 use stash::stash::StashError;
 
 use crate::{

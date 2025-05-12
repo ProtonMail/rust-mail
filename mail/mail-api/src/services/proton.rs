@@ -10,12 +10,12 @@
 //! Note that this module extends the code Proton API service with additional
 //! functionality relating to mail.
 //!
-//! For full documentation on the core API implementation, see [`Proton`](proton_api_core::services::proton::Proton).
+//! For full documentation on the core API implementation, see [`Proton`](proton_core_api::services::proton::Proton).
 //!
 
 use bytes::Bytes;
-use proton_api_core::service::ApiServiceResult;
-use proton_api_core::services::proton::{IncomingDefaultId, LabelId};
+use proton_core_api::service::ApiServiceResult;
+use proton_core_api::services::proton::{IncomingDefaultId, LabelId};
 use std::time::Duration;
 
 use crate::services::proton::prelude::*;

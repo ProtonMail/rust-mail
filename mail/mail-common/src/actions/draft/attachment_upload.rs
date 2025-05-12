@@ -1,6 +1,6 @@
 use crate::actions::draft::SEND_ACTION_GROUP;
 use crate::datatypes::Disposition;
-use crate::draft::AttachmentError;
+use crate::draft::AttachmentUploadError;
 use crate::models::{
     Attachment, AttachmentType, DraftAttachmentMetadata, DraftAttachmentUploadError,
     DraftAttachmentUploadState, DraftMetadata, DraftSendFailure, DraftSendResult,
@@ -11,12 +11,12 @@ use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Error, Priority, Type, WriterGuard,
     WriterGuardError,
 };
-use proton_api_core::consts::Mail;
-use proton_api_core::services::proton::AddressId;
-use proton_api_mail::services::proton::ProtonMail;
-use proton_api_mail::services::proton::common::MessageId;
-use proton_api_mail::services::proton::prelude::{NewAttachmentDisposition, NewAttachmentParams};
+use proton_core_api::consts::Mail;
+use proton_core_api::services::proton::AddressId;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
+use proton_mail_api::services::proton::ProtonMail;
+use proton_mail_api::services::proton::common::MessageId;
+use proton_mail_api::services::proton::prelude::{NewAttachmentDisposition, NewAttachmentParams};
 use proton_mail_ids::{LocalAttachmentId, LocalMessageId};
 use serde::{Deserialize, Serialize};
 use stash::params;
@@ -67,11 +67,11 @@ impl AttachmentUpload {
             })?
         else {
             error!("Could not find metadata {:?}", self.metadata_id);
-            return Err(AttachmentError::MetadataNotFound(self.metadata_id).into());
+            return Err(AttachmentUploadError::MetadataNotFound(self.metadata_id).into());
         };
 
         let Some(message_id) = metadata.local_message_id else {
-            return Err(AttachmentError::MessageDoesNotExist.into());
+            return Err(AttachmentUploadError::MessageDoesNotExist.into());
         };
 
         Ok(message_id)
@@ -127,7 +127,7 @@ impl proton_action_queue::action::Handler for AttachmentUploadHandler {
             error!(
                 "Attempting to create new attachment upload action when existing action ({id}) exists"
             );
-            return Err(AttachmentError::ExistingUploadActionExist(id).into());
+            return Err(AttachmentUploadError::ExistingUploadActionExist(id).into());
         }
 
         if matches!(
@@ -135,7 +135,9 @@ impl proton_action_queue::action::Handler for AttachmentUploadHandler {
             DraftAttachmentUploadState::Uploaded
         ) {
             error!("This attachment has already been uploaded");
-            return Err(AttachmentError::AttachmentAlreadyUploaded(action.attachment_id).into());
+            return Err(
+                AttachmentUploadError::AttachmentAlreadyUploaded(action.attachment_id).into(),
+            );
         }
 
         attachment_upload_metadata.action_id = Some(this_id);
@@ -209,14 +211,16 @@ impl AttachmentUpload {
         let Some(remote_message_id) =
             Message::local_id_counterpart(local_message_id, writer_guard.tether()).await?
         else {
-            return Err(AttachmentError::MessageDoesNotExistOnServer(local_message_id).into());
+            return Err(
+                AttachmentUploadError::MessageDoesNotExistOnServer(local_message_id).into(),
+            );
         };
 
         // Get the attachment.
         let Some(mut attachment) =
             Attachment::find_by_id(self.attachment_id, writer_guard.tether()).await?
         else {
-            return Err(AttachmentError::AttachmentDataMissing(self.attachment_id).into());
+            return Err(AttachmentUploadError::AttachmentDataMissing(self.attachment_id).into());
         };
 
         if attachment.remote_id().is_some() {
@@ -289,7 +293,9 @@ async fn encrypt_and_upload_attachment(
         Disposition::Attachment => NewAttachmentDisposition::Attachment,
         Disposition::Inline => {
             let Some(content_id) = &attachment.content_id else {
-                return Err(AttachmentError::MissingContentId(attachment.local_id.unwrap()).into());
+                return Err(
+                    AttachmentUploadError::MissingContentId(attachment.local_id.unwrap()).into(),
+                );
             };
             NewAttachmentDisposition::Inline(content_id.clone().into_inner())
         }
@@ -301,7 +307,7 @@ async fn encrypt_and_upload_attachment(
         Err(err) => {
             error!("{err}");
             return Err(
-                AttachmentError::AttachmentDataMissing(attachment.local_id.unwrap()).into(),
+                AttachmentUploadError::AttachmentDataMissing(attachment.local_id.unwrap()).into(),
             );
         }
     };
@@ -334,9 +340,9 @@ async fn encrypt_and_upload_attachment(
             };
 
             if proton_error.code == Mail::AttachmentMessageAlreadySent as u32 {
-                AttachmentError::MessageAlreadySent.into()
+                AttachmentUploadError::MessageAlreadySent.into()
             } else if proton_error.code == Mail::TooManyAttachments as u32 {
-                AttachmentError::TooManyAttachments.into()
+                AttachmentUploadError::TooManyAttachments.into()
             } else {
                 e.into()
             }
@@ -361,7 +367,7 @@ async fn encrypt_and_upload_attachment(
             let Some(mut draft_attachment_metadata) =
                 DraftAttachmentMetadata::find_by_id(attachment.local_id.unwrap(), tx).await?
             else {
-                return Err(AttachmentError::AttachmentMetadataNotFound(
+                return Err(AttachmentUploadError::AttachmentMetadataNotFound(
                     attachment.local_id.unwrap(),
                 )
                 .into());

@@ -2,19 +2,19 @@ use crate::drafts_common::{
     draft_message, draft_test_params, draft_test_params_with_mime_type,
     expected_create_draft_params, expected_create_reply_draft_params,
 };
-use proton_api_core::consts::Mail;
-use proton_api_core::services::proton::UserId;
-use proton_api_core::services::proton::common::ApiErrorInfo;
-use proton_api_mail::services::proton::common::MessageId;
-use proton_api_mail::services::proton::prelude::{
-    AttachmentId, DraftAction, DraftAttachmentKeyPackets, MessageAttachmentHeaders, MessageFlags,
-    NewAttachmentDisposition, NewAttachmentResponse, PostAttachmentResponse,
-};
-use proton_api_mail::services::proton::request_data::NewAttachmentParams;
+use proton_core_api::consts::Mail;
+use proton_core_api::services::proton::UserId;
+use proton_core_api::services::proton::common::ApiErrorInfo;
 use proton_core_common::models::ModelExtension;
 use proton_crypto_inbox::attachment::{
     BinaryAttachmentEncryptedSignature, BinaryAttachmentSignature, KeyPackets,
 };
+use proton_mail_api::services::proton::common::MessageId;
+use proton_mail_api::services::proton::prelude::{
+    AttachmentId, DraftAction, DraftAttachmentKeyPackets, MessageAttachmentHeaders, MessageFlags,
+    NewAttachmentDisposition, NewAttachmentResponse, PostAttachmentResponse,
+};
+use proton_mail_api::services::proton::request_data::NewAttachmentParams;
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::{Disposition, MimeType};
 use proton_mail_common::draft::attachments::DraftAttachmentState;
@@ -232,8 +232,8 @@ async fn remove_attachment_by_cid() {
         .unwrap_err();
     assert!(matches!(
         err,
-        MailContextError::Draft(draft::Error::Attachment(
-            draft::AttachmentError::AttachmentMetadataNotFoundCid(_)
+        MailContextError::Draft(draft::Error::AttachmentUpload(
+            draft::AttachmentUploadError::AttachmentMetadataNotFoundCid(_)
         ))
     ));
 
@@ -372,7 +372,7 @@ async fn removing_uploaded_attachment() {
                 file_name: "new_file_name".to_string(),
                 file_size: 1024,
                 disposition:
-                    proton_api_mail::services::proton::response_data::Disposition::Attachment,
+                    proton_mail_api::services::proton::response_data::Disposition::Attachment,
                 key_packets: KeyPackets::from(""),
                 signature: None,
                 enc_signature: None,
@@ -476,7 +476,7 @@ async fn draft_reply_or_forward_creates_new_attachments() {
     message.body.attachments = remote_existing_message.body.attachments.clone();
     if reply_mode != ReplyMode::Forward {
         message.body.attachments.retain(|a| {
-            a.disposition == proton_api_mail::services::proton::prelude::Disposition::Inline
+            a.disposition == proton_mail_api::services::proton::prelude::Disposition::Inline
         })
     }
     ctx.mock_get_message(
@@ -529,10 +529,10 @@ async fn draft_reply_or_forward_creates_new_attachments() {
                     file_size: attachment.size,
                     disposition: match attachment.disposition {
                         Disposition::Attachment => {
-                            proton_api_mail::services::proton::response_data::Disposition::Attachment
+                            proton_mail_api::services::proton::response_data::Disposition::Attachment
                         }
                         Disposition::Inline => {
-                            proton_api_mail::services::proton::response_data::Disposition::Inline
+                            proton_mail_api::services::proton::response_data::Disposition::Inline
                         }
                     },
                     key_packets: new_key_packets,
@@ -637,7 +637,7 @@ async fn deleting_draft_metadata_cleans_not_uploaded_attachments() {
     message.body.attachments = remote_existing_message.body.attachments.clone();
     if reply_mode != ReplyMode::Forward {
         message.body.attachments.retain(|a| {
-            a.disposition == proton_api_mail::services::proton::prelude::Disposition::Inline
+            a.disposition == proton_mail_api::services::proton::prelude::Disposition::Inline
         })
     }
     ctx.mock_get_message(

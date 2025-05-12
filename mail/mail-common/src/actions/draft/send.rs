@@ -4,7 +4,7 @@ use crate::actions::draft::{
 };
 use crate::datatypes::{LocalMessageId, MessageFlags, MimeType, RollbackItemType};
 use crate::draft::send::{build_packages, load_send_preferences_for_recipients};
-use crate::draft::{Draft, ReplyMode, SaveOrSendError, draft_attachment_staging_path};
+use crate::draft::{Draft, ReplyMode, SendError, draft_attachment_staging_path};
 use crate::models::{
     Conversation, DraftAttachmentMetadata, DraftMetadata, DraftSendFailure, DraftSendResult,
     DraftSendResultOrigin, MailSettings, Message, MetadataId, RollbackItem,
@@ -14,12 +14,12 @@ use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
     WriterGuardError,
 };
-use proton_api_core::consts::Mail;
-use proton_api_core::services::proton::prelude::AddressId;
-use proton_api_mail::services::proton::ProtonMail;
-use proton_api_mail::services::proton::common::MessageId;
+use proton_core_api::consts::Mail;
+use proton_core_api::services::proton::prelude::AddressId;
 use proton_core_common::models::ModelExtension;
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
+use proton_mail_api::services::proton::ProtonMail;
+use proton_mail_api::services::proton::common::MessageId;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::Bond;
@@ -95,7 +95,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         // Get recipient emails.
         if action.recipients.is_empty() {
             error!("No recipients associated with the current draft");
-            return Err(SaveOrSendError::NoRecipients.into());
+            return Err(SendError::NoRecipients.into());
         }
 
         let local_draft_label_id = local_draft_label_id(tx).await?;
@@ -109,12 +109,12 @@ impl proton_action_queue::action::Handler for SendHandler {
             })?
         else {
             error!("Could not find metadata {:?}", action.metadata_id);
-            return Err(SaveOrSendError::MetadataNotFound(action.metadata_id).into());
+            return Err(SendError::MetadataNotFound(action.metadata_id).into());
         };
 
         let Some(local_message_id) = metadata.local_message_id else {
             error!("The Draft does not have message yet");
-            return Err(SaveOrSendError::LocalDraftWithoutMessage.into());
+            return Err(SendError::LocalDraftWithoutMessage.into());
         };
 
         let Some(mut message) = Message::find_by_id(local_message_id, tx)
@@ -219,7 +219,7 @@ impl Send {
             .await?
         {
             error!("Draft has attachments that have not been uploaded");
-            return Err(SaveOrSendError::MissingAttachmentUploads.into());
+            return Err(SendError::MissingAttachmentUploads.into());
         }
 
         let Some(draft_metadata) = DraftMetadata::find_by_id(action.metadata_id, guard.tether())
@@ -229,7 +229,7 @@ impl Send {
             })?
         else {
             error!("Could not find metadata {:?}", action.metadata_id);
-            return Err(SaveOrSendError::MetadataNotFound(action.metadata_id).into());
+            return Err(SendError::MetadataNotFound(action.metadata_id).into());
         };
 
         let Some(message_metadata) = Message::find_by_id(local_message_id, guard.tether()).await?
@@ -255,7 +255,7 @@ impl Send {
         )
         .await?
         else {
-            return Err(AppError::MessageBodyMissing(message_metadata.local_id.unwrap()).into());
+            return Err(SendError::MessageBodyMissing(message_metadata.local_id.unwrap()).into());
         };
 
         let pgp_provider = new_pgp_provider();
@@ -300,7 +300,7 @@ impl Send {
             guard,
         )
         .await
-        .map_err(SaveOrSendError::SendMessage)
+        .map_err(SendError::SendMessage)
         .inspect_err(|err| error!("Failed build packages for recipients: {err:?}"))?;
 
         let auto_save_contacts = Some(mail_settings.auto_save_contacts);

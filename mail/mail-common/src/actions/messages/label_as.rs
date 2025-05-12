@@ -6,11 +6,11 @@ use itertools::Itertools;
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler as ActionHandler, Type, WriterGuard,
 };
-use proton_api_core::services::proton::LabelId;
-use proton_api_core::session::CoreSession;
-use proton_api_mail::services::proton::ProtonMail;
+use proton_core_api::services::proton::LabelId;
+use proton_core_api::session::CoreSession;
 use proton_core_common::datatypes::{LabelType, LocalLabelId};
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
+use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{Bond, Tether};

@@ -12,13 +12,13 @@ use crate::models::{
 use crate::{AppError, MailContextResult, MailUserContext};
 use futures::try_join;
 use itertools::Itertools;
-use proton_api_core::services::proton::LabelId;
-use proton_api_core::session::Session;
-use proton_api_mail::services::proton::common::ConversationId;
+use proton_core_api::services::proton::LabelId;
+use proton_core_api::session::Session;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{
     Label, LabelError, ModelExtension, ModelIdExtension as _, PaidSubscription, User,
 };
+use proton_mail_api::services::proton::common::ConversationId;
 use proton_mail_ids::LocalConversationId;
 use sqlite_watcher::watcher::TableObserver;
 use stash::orm::Model;

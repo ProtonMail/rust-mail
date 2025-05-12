@@ -2,8 +2,8 @@ use crate::datatypes::{
     DateFormat, Density, Email, HighSecurity, LogAuth, Password, Phone, Referral, SettingsFlags,
     TimeFormat, TwoFa, WeekStart,
 };
-use proton_api_core::services::proton::UserId;
-use proton_api_core::services::proton::UserSettings as ApiUserSettings;
+use proton_core_api::services::proton::UserId;
+use proton_core_api::services::proton::UserSettings as ApiUserSettings;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::stash::Bond;

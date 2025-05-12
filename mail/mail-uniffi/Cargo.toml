@@ -1,6 +1,6 @@
 [package]
 name = "proton-mail-uniffi"
-version = "0.75.5"
+version = "0.76.1"
 edition.workspace = true
 publish = false
 
@@ -18,8 +18,8 @@ itertools = { workspace = true }
 muon = { workspace = true }
 parking_lot = { workspace = true }
 proton-action-queue = { workspace = true }
-proton-api-core = { workspace = true }
-proton-api-mail = { workspace = true }
+proton-core-api = { workspace = true }
+proton-mail-api = { workspace = true }
 proton-core-common = { workspace = true }
 proton-crypto-account = { workspace = true }
 proton-event-loop = { workspace = true }
@@ -44,7 +44,7 @@ non-empty-string = { workspace = true }
 tracing-oslog = "0.2.0"
 
 [dev-dependencies]
-proton-api-mail = { workspace = true }
+proton-mail-api = { workspace = true }
 proton-mail-test-utils = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 pretty_assertions = { workspace = true }

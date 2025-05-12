@@ -142,8 +142,8 @@ mod revert_local {
 mod apply_remote {
     use super::*;
     use proton_action_queue::action::Handler as _;
-    use proton_api_core::services::proton::{response_data::ApiErrorInfo, Config};
-    use proton_api_mail::services::proton::{
+    use proton_core_api::services::proton::{response_data::ApiErrorInfo, Config};
+    use proton_mail_api::services::proton::{
         requests::PatchLabelRequest, response_data::OperationResult, responses::PatchLabelResponse,
     };
     use stash::stash::Interface;

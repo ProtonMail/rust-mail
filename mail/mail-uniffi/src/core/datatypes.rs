@@ -57,18 +57,18 @@ pub use connection_status::*;
 pub use contact_list::*;
 pub use issue_report::*;
 use itertools::Itertools;
-use proton_api_core::auth::UserKeySecret;
-use proton_api_core::services::proton::muon::client::flow::LoginFlowData;
-use proton_api_core::services::proton::muon::error::ParseEndpointErr;
-use proton_api_core::store::UserData;
-use proton_api_mail::services::proton::common::MessageId;
+use proton_core_api::auth::UserKeySecret;
+use proton_core_api::services::proton::muon::client::flow::LoginFlowData;
+use proton_core_api::services::proton::muon::error::ParseEndpointErr;
+use proton_core_api::store::UserData;
+use proton_mail_api::services::proton::common::MessageId;
 use secrecy::SecretString;
 use stash::stash::Tether;
 use tracing::error;
 
 use core::fmt;
-use proton_api_core::auth::PasswordMode as RealPasswordMode;
-use proton_api_core::session::Config as RealApiConfig;
+use proton_core_api::auth::PasswordMode as RealPasswordMode;
+use proton_core_api::session::Config as RealApiConfig;
 use proton_core_common::datatypes::{
     AddressSignedKeyList as RealAddressSignedKeyList, AddressStatus as RealAddressStatus,
     AddressType as RealAddressType, ContactSendingPreferences as RealContactSendingPreferences,
@@ -1677,22 +1677,22 @@ impl From<RealUserSettings> for UserSettings {
     }
 }
 
-use proton_api_core::services::proton::AppleRecurringReceiptDetails as RealAppleRecurringReceiptDetails;
-use proton_api_core::services::proton::GetPaymentsPlansOptions as RealGetPaymentsPlansOptions;
-use proton_api_core::services::proton::GoogleRecurringReceiptDetails as RealGoogleRecurringReceiptDetails;
-use proton_api_core::services::proton::NewSubscription as RealNewSubscription;
-use proton_api_core::services::proton::NewSubscriptionValues as RealNewSubscriptionValues;
-use proton_api_core::services::proton::PaymentReceipt as RealPaymentReceipt;
-use proton_api_core::services::proton::Plan as RealPlan;
-use proton_api_core::services::proton::PlanDecoration as RealPlanDecoration;
-use proton_api_core::services::proton::PlanEntitlement as RealPlanEntitlement;
-use proton_api_core::services::proton::PlanInstance as RealPlanInstance;
-use proton_api_core::services::proton::PlanPrice as RealPlanPrice;
-use proton_api_core::services::proton::PlanType as RealPlanType;
-use proton_api_core::services::proton::PlanVendor as RealPlanVendor;
-use proton_api_core::services::proton::PlanVendorName as RealPlanVendorName;
-use proton_api_core::services::proton::Subscription as RealSubscription;
-use proton_api_core::services::proton::SubscriptionId;
+use proton_core_api::services::proton::AppleRecurringReceiptDetails as RealAppleRecurringReceiptDetails;
+use proton_core_api::services::proton::GetPaymentsPlansOptions as RealGetPaymentsPlansOptions;
+use proton_core_api::services::proton::GoogleRecurringReceiptDetails as RealGoogleRecurringReceiptDetails;
+use proton_core_api::services::proton::NewSubscription as RealNewSubscription;
+use proton_core_api::services::proton::NewSubscriptionValues as RealNewSubscriptionValues;
+use proton_core_api::services::proton::PaymentReceipt as RealPaymentReceipt;
+use proton_core_api::services::proton::Plan as RealPlan;
+use proton_core_api::services::proton::PlanDecoration as RealPlanDecoration;
+use proton_core_api::services::proton::PlanEntitlement as RealPlanEntitlement;
+use proton_core_api::services::proton::PlanInstance as RealPlanInstance;
+use proton_core_api::services::proton::PlanPrice as RealPlanPrice;
+use proton_core_api::services::proton::PlanType as RealPlanType;
+use proton_core_api::services::proton::PlanVendor as RealPlanVendor;
+use proton_core_api::services::proton::PlanVendorName as RealPlanVendorName;
+use proton_core_api::services::proton::Subscription as RealSubscription;
+use proton_core_api::services::proton::SubscriptionId;
 
 /// Represents a single payment plan from the Proton API.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]

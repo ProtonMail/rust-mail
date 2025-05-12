@@ -1,8 +1,8 @@
 #![allow(clippy::print_stdout)]
 use clap::Parser;
-use proton_api_core::login::Flow;
-use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
-use proton_api_core::session::Session;
+use proton_core_api::login::Flow;
+use proton_core_api::services::proton::muon::client::flow::LoginExtraInfo;
+use proton_core_api::session::Session;
 use proton_mail_common::errors::ProtonMailError;
 
 #[derive(Parser, Debug)]

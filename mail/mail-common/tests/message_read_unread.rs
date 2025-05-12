@@ -1,10 +1,10 @@
 use itertools::Itertools;
-use proton_api_core::services::proton::LabelId;
-use proton_api_mail::services::proton::common::MessageId;
-use proton_api_mail::services::proton::response_data::MailSettings as ApiMailSettings;
-use proton_api_mail::services::proton::response_data::MessageMetadata as ApiMessageMetadata;
-use proton_api_mail::services::proton::response_data::ViewMode as ApiViewMode;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::models::ModelIdExtension;
+use proton_mail_api::services::proton::common::MessageId;
+use proton_mail_api::services::proton::response_data::MailSettings as ApiMailSettings;
+use proton_mail_api::services::proton::response_data::MessageMetadata as ApiMessageMetadata;
+use proton_mail_api::services::proton::response_data::ViewMode as ApiViewMode;
 use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{Conversation, Message};

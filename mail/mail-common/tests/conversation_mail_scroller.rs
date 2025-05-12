@@ -1,14 +1,13 @@
 use itertools::Itertools;
-use maplit::hashmap;
-use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::LabelId;
-use proton_api_mail::services::proton::{
-    common::ConversationId, prelude::GetConversationsResponse,
-    response_data::Conversation as ApiConversation,
-};
+use proton_core_api::service::ApiServiceError;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::{
     datatypes::SystemLabel,
     models::{Label, ModelExtension, ModelIdExtension},
+};
+use proton_mail_api::services::proton::{
+    common::ConversationId, prelude::GetConversationsResponse,
+    response_data::Conversation as ApiConversation,
 };
 use proton_mail_common::{
     MailContextError,
@@ -16,9 +15,11 @@ use proton_mail_common::{
     mail_scroller::{DataScrollerSource, MailScroller},
     models::{Conversation, ConversationCounters, ConversationScrollData},
 };
-use proton_mail_test_utils::init::Params as TestParams;
 use proton_mail_test_utils::{
     conv_id, conv_label, conversation, label, lbl_id, test_context::MailTestContext,
+};
+use proton_mail_test_utils::{
+    init::Params as TestParams, test_context::MailUserContextTestExtension,
 };
 use stash::stash::StashError;
 use stash::{
@@ -26,7 +27,7 @@ use stash::{
     stash::{Bond, Tether, WatcherHandle},
 };
 use std::{collections::HashMap, time::Duration};
-use tokio::time::sleep;
+use velcro::hash_map;
 use wiremock::{
     Mock, ResponseTemplate,
     matchers::{method, path, query_param_contains},
@@ -108,9 +109,9 @@ async fn test_conversation_mail_scroller_reads_correct_items_within_visible_rang
     let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
 
-    let mut data: HashMap<&str, Vec<Conversation>> = hashmap! {
-        REMOTE_LABEL_ID => test_conversations(100, 100),
-        "rid2" => test_conversations(50, 0),
+    let mut data = hash_map! {
+        REMOTE_LABEL_ID: test_conversations(100, 100),
+        "rid2": test_conversations(50, 0),
     };
 
     save_to_database(&mut data, &mut tether).await;
@@ -490,9 +491,9 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     let unread = ReadFilter::All;
     // Set up cached data
     let remote_label_id = SystemLabel::Inbox.remote_id();
-    let mut data = hashmap! {
-        remote_label_id.as_str() => test_conversations(1, 100),
-        "rid2" => test_conversations(50, 0),
+    let mut data = hash_map! {
+        remote_label_id.as_str(): test_conversations(1, 100),
+        "rid2": test_conversations(50, 0),
     };
     save_to_database(&mut data, &mut tether).await;
 
@@ -541,9 +542,9 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     let unread = ReadFilter::All;
     // Set up cached data
     let remote_label_id = SystemLabel::Inbox.remote_id();
-    let mut data: HashMap<&str, Vec<Conversation>> = hashmap! {
-        remote_label_id.as_str() => test_conversations(11, 100),
-        "rid2" => test_conversations(50, 0),
+    let mut data = hash_map! {
+        remote_label_id.as_str(): test_conversations(11, 100),
+        "rid2": test_conversations(50, 0),
     };
     save_to_database(&mut data, &mut tether).await;
 
@@ -597,10 +598,10 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
         ..
     } = scroller.watch().await.unwrap();
 
-    // Its faster for test purpose than `wait_for_online`
-    while user_ctx.session().status().await.is_offline() {
-        sleep(Duration::from_millis(100)).await;
-    }
+    let timeout = Some(Duration::from_secs(3));
+    user_ctx
+        .wait_for(timeout, |status| status.is_online())
+        .await;
 
     // `all_items` will react to the online data being available
     // listing will be done in correct the order of the cache
@@ -657,7 +658,9 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     ctx.mock_server().reset().await;
     mock_not_responsive_api(&ctx).await;
     ctx.catch_all().await;
-    sleep(Duration::from_secs(3)).await;
+    user_ctx
+        .wait_for(timeout, |status| status.is_offline())
+        .await;
 
     assert_scroller_content(
         &mut scroller,
@@ -751,9 +754,9 @@ async fn test_conversation_mail_scroller_reads_cached_data_and_return_error_on_o
 
     // Set up cached data
     let remote_label_id = SystemLabel::Inbox.remote_id();
-    let mut data: HashMap<&str, Vec<Conversation>> = hashmap! {
-        remote_label_id.as_str() => test_conversations(100, 100),
-        "rid2" => test_conversations(50, 0),
+    let mut data = hash_map! {
+        remote_label_id.as_str(): test_conversations(100, 100),
+        "rid2": test_conversations(50, 0),
     };
 
     save_to_database(&mut data, &mut tether).await;

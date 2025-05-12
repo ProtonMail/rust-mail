@@ -24,13 +24,13 @@
 //!
 
 use crate::services::proton::common::{AttachmentId, ConversationId, ExternalId, MessageId};
-use proton_api_core::services::proton::GetEventResponse;
-use proton_api_core::services::proton::LabelEvent;
-use proton_api_core::services::proton::common::ApiErrorInfo;
-use proton_api_core::services::proton::{
+use proton_core_api::services::proton::GetEventResponse;
+use proton_core_api::services::proton::LabelEvent;
+use proton_core_api::services::proton::common::ApiErrorInfo;
+use proton_core_api::services::proton::{
     Action, AddressEvent, ContactEmailEvent, ContactEvent, ProductUsedSpace, User, UserSettings,
 };
-use proton_api_core::services::proton::{AddressId, EventId, LabelId};
+use proton_core_api::services::proton::{AddressId, EventId, LabelId};
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
 };

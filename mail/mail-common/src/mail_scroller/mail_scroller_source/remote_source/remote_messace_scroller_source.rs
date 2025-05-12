@@ -1,12 +1,12 @@
 use anyhow::anyhow;
-use proton_api_core::{
+use proton_core_api::{
     services::proton::LabelId,
     session::{CoreSession, Session},
 };
-use proton_api_mail::services::proton::{
+use proton_core_common::datatypes::LocalLabelId;
+use proton_mail_api::services::proton::{
     ProtonMail, common::MessageId, prelude::GetMessagesOptions,
 };
-use proton_core_common::datatypes::LocalLabelId;
 use stash::stash::{Bond, Stash, Tether};
 use tracing::debug;
 

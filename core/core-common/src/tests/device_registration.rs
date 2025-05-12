@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use proton_api_core::services::proton::{SessionId, UserId};
+use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_test_utils::test_context::TestContext;
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
@@ -41,7 +41,7 @@ async fn initial_registration() {
         &ctx,
         PartialTestRegisterDeviceRequest {
             device_token: "ABCD".to_string(),
-            environment: proton_api_core::services::proton::DeviceEnvironment::Google,
+            environment: proton_core_api::services::proton::DeviceEnvironment::Google,
             ping_notification_status: None,
             push_notification_status: None,
         },
@@ -91,7 +91,7 @@ async fn initial_registration_when_device_key_already_exist_in_keychain() {
         &ctx,
         PartialTestRegisterDeviceRequest {
             device_token: "ABCD".to_string(),
-            environment: proton_api_core::services::proton::DeviceEnvironment::Google,
+            environment: proton_core_api::services::proton::DeviceEnvironment::Google,
             ping_notification_status: None,
             push_notification_status: None,
         },
@@ -150,7 +150,7 @@ async fn test_device_token_changed() {
         &ctx,
         PartialTestRegisterDeviceRequest {
             device_token: "ABCD".to_string(),
-            environment: proton_api_core::services::proton::DeviceEnvironment::Google,
+            environment: proton_core_api::services::proton::DeviceEnvironment::Google,
             ping_notification_status: None,
             push_notification_status: None,
         },
@@ -188,7 +188,7 @@ async fn test_device_token_changed() {
         &ctx,
         PartialTestRegisterDeviceRequest {
             device_token: "EFGH".to_string(),
-            environment: proton_api_core::services::proton::DeviceEnvironment::Google,
+            environment: proton_core_api::services::proton::DeviceEnvironment::Google,
             ping_notification_status: None,
             push_notification_status: None,
         },
@@ -238,7 +238,7 @@ async fn register_more_than_one_session() {
         &ctx,
         PartialTestRegisterDeviceRequest {
             device_token: "ABCD".to_string(),
-            environment: proton_api_core::services::proton::DeviceEnvironment::Google,
+            environment: proton_core_api::services::proton::DeviceEnvironment::Google,
             ping_notification_status: None,
             push_notification_status: None,
         },
@@ -288,7 +288,7 @@ async fn register_new_session() {
         &ctx,
         PartialTestRegisterDeviceRequest {
             device_token: "ABCD".to_string(),
-            environment: proton_api_core::services::proton::DeviceEnvironment::Google,
+            environment: proton_core_api::services::proton::DeviceEnvironment::Google,
             ping_notification_status: None,
             push_notification_status: None,
         },
@@ -320,7 +320,7 @@ async fn register_new_session() {
         &ctx,
         PartialTestRegisterDeviceRequest {
             device_token: "ABCD".to_string(),
-            environment: proton_api_core::services::proton::DeviceEnvironment::Google,
+            environment: proton_core_api::services::proton::DeviceEnvironment::Google,
             ping_notification_status: None,
             push_notification_status: None,
         },
@@ -387,7 +387,7 @@ pub struct PartialTestRegisterDeviceRequest {
     /// Device token
     pub device_token: String,
     /// Environment to which we register
-    pub environment: proton_api_core::services::proton::DeviceEnvironment,
+    pub environment: proton_core_api::services::proton::DeviceEnvironment,
     /// TODO: Document this field
     pub ping_notification_status: Option<i32>,
     /// TODO: Document this field

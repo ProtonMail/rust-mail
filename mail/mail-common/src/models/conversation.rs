@@ -23,24 +23,24 @@ use futures::future;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
-use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::Proton;
-use proton_api_core::services::proton::{LabelId, ProtonIdMarker};
-use proton_api_core::session::{CoreSession, Session};
-use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
-use proton_api_mail::services::proton::ProtonMail;
-use proton_api_mail::services::proton::common::ConversationId;
-use proton_api_mail::services::proton::requests::GetConversationsOptions;
-use proton_api_mail::services::proton::response_data::{
-    Conversation as ApiConversation, ConversationLabel as ApiConversationLabel,
-    MessageMetadata as ApiMessageMetadata, OperationResult,
-};
+use proton_core_api::service::ApiServiceError;
+use proton_core_api::services::proton::Proton;
+use proton_core_api::services::proton::{LabelId, ProtonIdMarker};
+use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::datatypes::{InitializationKey, LabelType, LocalLabelId, SystemLabel};
 use proton_core_common::models::{
     InitializationError, InitializationWatcher, InitializedComponent, Label, ModelExtension,
     ModelIdExtension,
 };
 use proton_core_common::utils::MapVec as _;
+use proton_mail_api::MAX_PAGE_ELEMENT_COUNT;
+use proton_mail_api::services::proton::ProtonMail;
+use proton_mail_api::services::proton::common::ConversationId;
+use proton_mail_api::services::proton::requests::GetConversationsOptions;
+use proton_mail_api::services::proton::response_data::{
+    Conversation as ApiConversation, ConversationLabel as ApiConversationLabel,
+    MessageMetadata as ApiMessageMetadata, OperationResult,
+};
 use proton_mail_ids::LocalConversationId;
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
@@ -48,7 +48,7 @@ use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
+use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
 use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::future::Future;
@@ -2774,10 +2774,11 @@ impl Conversation {
     /// Returns error if the queries failed or if the server request failed.
     pub async fn sync_conversation_messages(
         local_conversation_id: LocalConversationId,
-        tether: &mut Tether,
+        mut run_tx: impl RunTransaction,
         session: &Session,
     ) -> Result<(), AppError> {
-        let Some(conversation) = Self::find_by_id(local_conversation_id, tether).await? else {
+        let Some(conversation) = Self::find_by_id(local_conversation_id, run_tx.tether()).await?
+        else {
             return Err(AppError::ConversationNotFound(local_conversation_id));
         };
 
@@ -2799,8 +2800,8 @@ impl Conversation {
                 AppError::from(e)
             })?;
 
-            tether
-                .tx::<_, _, AppError>(async |tx| {
+            run_tx
+                .run_tx::<_, _>(async |tx| {
                     let message_metadata: Vec<ApiMessageMetadata> = conversation_response.messages;
                     let mut new_conversation: Conversation =
                         conversation_response.conversation.into();
@@ -2823,7 +2824,8 @@ impl Conversation {
 
                     Ok(())
                 })
-                .await?;
+                .await
+                .map_err(AppError::Other)?;
         } else {
             debug!("Conversation messages already synced")
         }

@@ -4,17 +4,17 @@ use crate as proton_mail_common;
 use crate::datatypes::ReadFilter;
 use crate::models::{CachedScrollData, MessageScrollData, ScrollCursor};
 use crate::models::{Message, ScrollData};
-use maplit::btreemap;
-use proton_api_core::services::proton::LabelId;
-use proton_api_mail::services::proton::common::MessageId;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
+use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_ids::LocalMessageId;
 use proton_mail_test_utils::db::new_test_connection;
 use proton_mail_test_utils::utils::create_address;
 use proton_mail_test_utils::{conv_id, conversation, label, lbl_id, message, msg_id};
 use stash::orm::Model;
 use stash::stash::{Bond, StashError, Tether};
+use velcro::btree_map;
 
 fn test_message(n: usize, order_shift: u64) -> Vec<Message> {
     (0..n)
@@ -69,9 +69,9 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
 
     let stash = new_test_connection().await;
     let mut tether = stash.connection();
-    let mut data: BTreeMap<&str, Vec<Message>> = btreemap! {
-        REMOTE_LABEL_ID => test_message(100, 100),
-        "rid2" => test_message(50, 0),
+    let mut data = btree_map! {
+        REMOTE_LABEL_ID: test_message(100, 100),
+        "rid2": test_message(50, 0),
     };
 
     save_to_database(&mut data, &mut tether).await;
@@ -199,9 +199,9 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
 
     let stash = new_test_connection().await;
     let mut tether = stash.connection();
-    let mut data: BTreeMap<&str, Vec<Message>> = btreemap! {
-        REMOTE_LABEL_ID => test_message(100, 100),
-        "rid2" => test_message(50, 0),
+    let mut data = btree_map! {
+        REMOTE_LABEL_ID: test_message(100, 100),
+        "rid2": test_message(50, 0),
     };
 
     save_to_database(&mut data, &mut tether).await;
@@ -450,9 +450,9 @@ async fn test_cashed_scroller_reads_last_two_pages_together_when_last_page_is_no
 
     let stash = new_test_connection().await;
     let mut tether = stash.connection();
-    let mut data: BTreeMap<&str, Vec<Message>> = btreemap! {
-        REMOTE_LABEL_ID => test_message(5, 100),
-        "rid2" => test_message(50, 0),
+    let mut data = btree_map! {
+        REMOTE_LABEL_ID: test_message(5, 100),
+        "rid2": test_message(50, 0),
     };
 
     save_to_database(&mut data, &mut tether).await;

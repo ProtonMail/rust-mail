@@ -3,9 +3,9 @@ use std::sync::LazyLock;
 use crate::search::{MY_ADDRESS_ID, MY_LABEL_ID1, MY_LABEL_ID2, test_label1, test_label2};
 use crate::utils::{TestDBState, test_address};
 use lazy_static::lazy_static;
-use proton_api_core::services::proton::LabelId;
-use proton_api_mail::services::proton::common::{AttachmentId, ConversationId, MessageId};
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::models::Label;
+use proton_mail_api::services::proton::common::{AttachmentId, ConversationId, MessageId};
 use proton_mail_common::datatypes::{
     AttachmentMetadata, Disposition, MessageRecipients, SystemLabelId as _, attachment,
 };

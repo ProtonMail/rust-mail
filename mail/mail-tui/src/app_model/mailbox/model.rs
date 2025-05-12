@@ -25,7 +25,7 @@ use proton_mail_common::draft::observers::DraftSendResultWatcher;
 use proton_mail_common::models::{
     DraftSendFailure, DraftSendResult, DraftSendResultOrigin, LabelWithCounters, MailSettings,
 };
-use proton_mail_common::proton_api_mail::proton_api_core::services::proton::LabelId;
+use proton_mail_common::proton_mail_api::proton_core_api::services::proton::LabelId;
 use proton_mail_common::{
     AppError, MailContext, MailUserContext, Mailbox, MailboxError, MailboxResult,
 };

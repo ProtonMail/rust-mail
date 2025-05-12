@@ -6,9 +6,9 @@ use crate::models::{InitializationWatcher, UserSettings};
 use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse};
 use anyhow::Context as _;
 use proton_action_queue::queue::Queue;
-use proton_api_core::connection_status::ConnectionStatus;
-use proton_api_core::services::proton::{SessionId, UserId};
-use proton_api_core::session::Session;
+use proton_core_api::connection_status::ConnectionStatus;
+use proton_core_api::services::proton::{SessionId, UserId};
+use proton_core_api::session::Session;
 use proton_sqlite3::MigratorError;
 use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use stash::orm::Model;
@@ -166,10 +166,10 @@ impl UserContext {
         self.context.get_log_path()
     }
 
-    /// Get path to the log file.
+    /// Get path to the database file
     #[must_use]
-    pub fn get_user_db_path(&self) -> &Path {
-        self.context.get_user_db_location()
+    pub fn get_user_db_path(&self) -> PathBuf {
+        self.context.user_db_path(self.user_id())
     }
 
     /// Retrieves the current user's account details.

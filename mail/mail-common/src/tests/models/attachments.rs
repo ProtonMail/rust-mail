@@ -2,16 +2,16 @@
 
 use super::*;
 use crate::AppError;
-use proton_api_mail::services::proton::response_data::{
-    Attachment as ApiAttachment, AttachmentMetadata as ApiAttachmentMetadata,
-    Disposition as ApiDisposition, MessageFlags as ApiMessageFlags,
-    MessageMetadata as ApiMessageMetadata, MessageSender as ApiMessageSender,
-};
 use proton_core_common::datatypes::{AddressKeys, AddressStatus, AddressType};
 use proton_core_common::models::Address;
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature as RealAttachmentEncryptedSignature,
     AttachmentSignature as RealAttachmentSignature, KeyPackets as RealKeyPackets,
+};
+use proton_mail_api::services::proton::response_data::{
+    Attachment as ApiAttachment, AttachmentMetadata as ApiAttachmentMetadata,
+    Disposition as ApiDisposition, MessageFlags as ApiMessageFlags,
+    MessageMetadata as ApiMessageMetadata, MessageSender as ApiMessageSender,
 };
 use proton_mail_test_utils::db::new_test_connection_file;
 use stash::orm::Model;

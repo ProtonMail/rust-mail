@@ -1,24 +1,24 @@
 use chrono::Utc;
 use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
-use proton_api_core::consts::{CoreBundle, Mail};
-use proton_api_core::services::proton::GetKeysAllResponse;
-use proton_api_core::services::proton::common::ApiErrorInfo;
-use proton_api_core::services::proton::{
+use proton_core_api::consts::{CoreBundle, Mail};
+use proton_core_api::services::proton::GetKeysAllResponse;
+use proton_core_api::services::proton::common::ApiErrorInfo;
+use proton_core_api::services::proton::{
     Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
     AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
 };
-use proton_api_core::services::proton::{AddressId, LabelId, UserId};
-use proton_api_mail::services::proton::request_data::{
-    DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
-};
-use proton_api_mail::services::proton::response_data::{
-    Conversation as ApiConversation, ConversationLabel, MessageFlags, MessageRecipient,
-};
+use proton_core_api::services::proton::{AddressId, LabelId, UserId};
 use proton_core_common::models::ModelExtension;
 use proton_crypto_account::keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature};
 use proton_crypto_inbox::message::EncryptedDraft;
 use proton_crypto_inbox::proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, KeyFlag, KeyId, LockedKey,
+};
+use proton_mail_api::services::proton::request_data::{
+    DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
+};
+use proton_mail_api::services::proton::response_data::{
+    Conversation as ApiConversation, ConversationLabel, MessageFlags, MessageRecipient,
 };
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::draft::Draft;
@@ -26,8 +26,8 @@ use proton_mail_common::draft::compose::DEFAULT_SUBJECT;
 use proton_mail_common::draft::observers::DraftSendResultWatcher;
 use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry};
 use proton_mail_common::models::{
-    DraftSendFailure, DraftSendResult, DraftSendResultOrigin, MailSettings, Message,
-    MessageBodyMetadata,
+    DraftSendFailure, DraftSendFailureSend, DraftSendResult, DraftSendResultOrigin, MailSettings,
+    Message, MessageBodyMetadata,
 };
 use proton_mail_common::{MailContextError, MailUserContext, draft};
 use proton_mail_ids::LocalMessageId;
@@ -216,8 +216,8 @@ async fn send_fails_if_recipient_is_not_valid() {
         .unwrap();
     assert!(matches!(
         err,
-        ActionError::Action(MailContextError::Draft(draft::Error::SaveOrSend(
-            draft::SaveOrSendError::SendMessage(draft::PackageError::RecipientEmailInvalid(_))
+        ActionError::Action(MailContextError::Draft(draft::Error::Send(
+            draft::SendError::SendMessage(draft::PackageError::RecipientEmailInvalid(_))
         )))
     ));
 }
@@ -232,10 +232,8 @@ async fn send_fails_if_recipient_is_not_a_known_proton_address() {
         .unwrap();
     assert!(matches!(
         err,
-        ActionError::Action(MailContextError::Draft(draft::Error::SaveOrSend(
-            draft::SaveOrSendError::SendMessage(draft::PackageError::ProtonRecipientDoesNotExist(
-                _
-            ))
+        ActionError::Action(MailContextError::Draft(draft::Error::Send(
+            draft::SendError::SendMessage(draft::PackageError::ProtonRecipientDoesNotExist(_))
         )))
     ));
 }
@@ -251,7 +249,9 @@ async fn send_fail_recorded_to_db() {
         .unwrap();
     assert!(!send_result.is_success());
     assert!(!send_result.seen);
-    assert!(matches! { send_result.error, Some(DraftSendFailure::RecipientEmailInvalid(_))});
+    assert!(
+        matches! { send_result.error, Some(DraftSendFailure::Send(DraftSendFailureSend::RecipientEmailInvalid(_)))}
+    );
     assert_eq!(send_result.origin, DraftSendResultOrigin::Send);
 }
 
@@ -384,9 +384,7 @@ async fn save_after_send_is_an_error() {
     };
     assert!(matches!(
         e,
-        MailContextError::Draft(draft::Error::SaveOrSend(
-            draft::SaveOrSendError::AlreadySent
-        ))
+        MailContextError::Draft(draft::Error::Save(draft::SaveError::AlreadySent))
     ));
 }
 

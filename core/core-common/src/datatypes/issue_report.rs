@@ -6,9 +6,9 @@ use async_zip::base::write::ZipFileWriter;
 use chrono::DateTime;
 use chrono::Utc;
 use futures::io::AsyncWriteExt;
-use proton_api_core::services::proton::PostReportBug;
-use proton_api_core::services::proton::ProtonCore;
-use proton_api_core::session::CoreSession;
+use proton_core_api::services::proton::PostReportBug;
+use proton_core_api::services::proton::ProtonCore;
+use proton_core_api::session::CoreSession;
 use std::io::Cursor;
 use std::path::Path;
 use tokio::{

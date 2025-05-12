@@ -1,12 +1,9 @@
 use crate::datatypes::{Disposition, MimeType};
 use crate::draft::recipients::ValidationState;
-use crate::draft::{PackageError, SaveOrSendError, compose::html_to_text};
+use crate::draft::{PackageError, SendError, compose::html_to_text};
 use crate::models::Attachment;
 use crate::{MailContextError, MailContextResult, MailUserContext};
 use proton_action_queue::action::WriterGuard;
-use proton_api_mail::services::proton::request_data::{
-    AddressSubPackage, Package, PackageSignaturesMode,
-};
 use proton_crypto_account::keys::{
     PrimaryUnlockedAddressKey, UnlockedAddressKey, UnlockedAddressKeys,
 };
@@ -19,6 +16,9 @@ use proton_crypto_inbox::message::packages::{
     EncryptedPackageBody, PackageMimeType, package_body_encrypt,
 };
 use proton_crypto_inbox::proton_crypto_inbox_mime::write::InboxMimeBuilder;
+use proton_mail_api::services::proton::request_data::{
+    AddressSubPackage, Package, PackageSignaturesMode,
+};
 use stash::stash::RunTransaction;
 use std::collections::{HashMap, HashSet};
 use tracing::{Instrument, debug, debug_span, error};
@@ -52,21 +52,21 @@ pub async fn load_send_preferences_for_recipients<Provider: PGPProviderSync>(
                 if let MailContextError::Api(err) = &err {
                     match ValidationState::from(err) {
                         ValidationState::InvalidEmail => {
-                            return SaveOrSendError::SendMessage(
-                                PackageError::RecipientEmailInvalid(recipient.clone()),
-                            )
+                            return SendError::SendMessage(PackageError::RecipientEmailInvalid(
+                                recipient.clone(),
+                            ))
                             .into();
                         }
                         ValidationState::DoesNotExist => {
-                            return SaveOrSendError::SendMessage(
+                            return SendError::SendMessage(
                                 PackageError::ProtonRecipientDoesNotExist(recipient.clone()),
                             )
                             .into();
                         }
                         ValidationState::Unknown => {
-                            return SaveOrSendError::SendMessage(
-                                PackageError::RecipientEmailInvalid(recipient.clone()),
-                            )
+                            return SendError::SendMessage(PackageError::RecipientEmailInvalid(
+                                recipient.clone(),
+                            ))
                             .into();
                         }
                         _ => {}

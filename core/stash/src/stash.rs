@@ -1348,6 +1348,20 @@ pub trait RunTransaction {
         F: AsyncFnOnce(&Bond<'_>) -> Result<T, anyhow::Error>;
 }
 
+impl<RT: RunTransaction> RunTransaction for &mut RT {
+    fn tether(&self) -> &Tether {
+        RT::tether(self)
+    }
+
+    #[allow(clippy::manual_async_fn)]
+    fn run_tx<T, F>(&mut self, closure: F) -> impl Future<Output = anyhow::Result<T>>
+    where
+        F: AsyncFnOnce(&Bond<'_>) -> Result<T, anyhow::Error>,
+    {
+        async move { RT::run_tx(self, closure).await }
+    }
+}
+
 /// This encapsulates the logic of handling [`TetherOperation`]s.
 /// An actor owning a queue in `Tether` should create this. This should be cleaned up when that
 /// `Tether` gets dropped.

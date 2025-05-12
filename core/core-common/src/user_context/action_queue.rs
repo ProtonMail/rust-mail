@@ -1,6 +1,6 @@
 use crate::models::LabelError;
 use proton_action_queue::action::WriterGuardError;
-use proton_api_core::service::ApiServiceError;
+use proton_core_api::service::ApiServiceError;
 use stash::stash::StashError;
 
 #[derive(Debug, thiserror::Error)]

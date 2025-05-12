@@ -5,7 +5,7 @@
 #[path = "../tests/models/mailbox_labels.rs"]
 mod mailbox_labels;
 
-use proton_api_core::services::proton::LabelId;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::LabelType;
 use proton_core_common::models::ModelExtension;
 use proton_core_common::{datatypes::LocalLabelId, models::Label};

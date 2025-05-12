@@ -1,5 +1,5 @@
 [package]
-name = "proton-api-core"
+name = "proton-core-api"
 version = "0.8.1"
 edition.workspace = true
 keywords = ["proton", "rest", "api"]

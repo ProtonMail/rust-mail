@@ -16,7 +16,6 @@ use crate::actions::{
     AllBottomBarMessageActions, BottomBarActions, MailActionError, MovableSystemFolderAction,
     filter_responses,
 };
-use crate::datatypes::message_banner::MessageBanner;
 use crate::models::*;
 use crate::{MailContextError, find_in_query};
 use futures::try_join;
@@ -40,35 +39,33 @@ use crate::mailbox::decrypted_message::DecryptedMessageBody;
 use crate::{AppError, MailUserContext};
 use anyhow::{Context, anyhow};
 use itertools::Itertools;
-use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::{AddressId, LabelId};
-use proton_api_core::services::proton::{Proton, ProtonCore};
-use proton_api_core::session::{CoreSession, Session};
-use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
-use proton_api_mail::services::proton::ProtonMail;
-use proton_api_mail::services::proton::common::{ConversationId, ExternalId, MessageId};
-use proton_api_mail::services::proton::requests::GetMessagesOptions;
-use proton_api_mail::services::proton::response_data::{
-    Message as ApiMessage, MessageBody as ApiMessageBody, MessageMetadata as ApiMessageMetadata,
-    MessageMetadata, OperationResult,
-};
-use proton_api_mail::services::proton::responses::GetMessagesResponse;
+use proton_core_api::service::ApiServiceError;
+use proton_core_api::services::proton::{AddressId, LabelId};
+use proton_core_api::services::proton::{Proton, ProtonCore};
+use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::datatypes::{LabelType, LocalAddressId, LocalLabelId, SystemLabel};
 use proton_core_common::models::{Address, Label, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::proton_crypto;
+use proton_mail_api::MAX_PAGE_ELEMENT_COUNT;
+use proton_mail_api::services::proton::ProtonMail;
+use proton_mail_api::services::proton::common::{ConversationId, ExternalId, MessageId};
+use proton_mail_api::services::proton::requests::GetMessagesOptions;
+use proton_mail_api::services::proton::response_data::{
+    Message as ApiMessage, MessageBody as ApiMessageBody, MessageMetadata as ApiMessageMetadata,
+    MessageMetadata, OperationResult,
+};
+use proton_mail_api::services::proton::responses::GetMessagesResponse;
 use proton_mail_ids::LocalConversationId;
 use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
-use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
+use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
 use std::collections::btree_map::Entry;
 use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::future::Future;
 use tracing::{debug, error, info, trace, warn};
-
-use super::default_location::IncomingDefaultLocation;
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("messages")]
@@ -1828,10 +1825,10 @@ impl Message {
     pub async fn fetch_message_body(
         &self,
         ctx: &MailUserContext,
-        tether: &mut Tether,
+        mut run_tx: impl RunTransaction,
     ) -> Result<DecryptedMessageBody, MailContextError> {
         if let Some(decrypted) =
-            Self::load_decrypted_message_from_cache(self.local_id.unwrap(), tether).await?
+            Self::load_decrypted_message_from_cache(self.local_id.unwrap(), run_tx.tether()).await?
         {
             debug!("Found message body in cache.");
             return Ok(decrypted);
@@ -1849,24 +1846,33 @@ impl Message {
             )));
         }
 
-        let (_, encrypted_body) = Self::sync_message_and_body(remote_id, ctx.api(), tether).await?;
+        let (_, encrypted_body) =
+            Self::sync_message_and_body(remote_id, ctx.api(), &mut run_tx).await?;
         trace!("Message successfully downloaded. Decrypting...");
 
-        let decrypted =
-            Self::decrypt_message_body(ctx, &self.remote_address_id, encrypted_body, tether, true)
-                .await?;
+        let decrypted = Self::decrypt_message_body(
+            ctx,
+            &self.remote_address_id,
+            encrypted_body,
+            run_tx.tether(),
+            true,
+        )
+        .await?;
         trace!("Message successfully decrypted. Caching...");
 
-        tether
-            .tx(async |tx| {
+        run_tx
+            .run_tx(async |tx| {
                 Self::store_decrypted_message_body(
                     self.local_id.unwrap(),
                     decrypted.body.clone(),
                     tx,
                 )
-                .await
+                .await?;
+
+                Ok(())
             })
-            .await?;
+            .await
+            .map_err(MailContextError::Other)?;
 
         debug!("Message successfully synced.");
         Ok(decrypted)
@@ -2550,31 +2556,35 @@ impl Message {
     ///
     /// Returns error if the message failed to fetch from the server or update the
     /// metadata on the server.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(api, tether))]
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip(api, run_tx))]
     async fn sync_message_and_body(
         message_id: MessageId,
         api: &Proton,
-        tether: &mut Tether,
+        mut run_tx: impl RunTransaction,
     ) -> Result<(Message, EncryptedMessageBody), MailContextError> {
         let message = api.get_message(message_id).await.map(|v| v.message)?;
 
-        let (mut message, mut body_metadata, body) = Message::from_api_data(message, tether)
-            .await
-            .inspect_err(|e| {
-                error!("Failed to convert message from api: {e:?}");
-            })?;
+        let (mut message, mut body_metadata, body) =
+            Message::from_api_data(message, run_tx.tether())
+                .await
+                .inspect_err(|e| {
+                    error!("Failed to convert message from api: {e:?}");
+                })?;
 
-        tether
-            .tx(async |tx| {
+        run_tx
+            .run_tx(async |tx| {
                 message.save(tx).await.inspect_err(|e| {
                     error!("Failed to save message metadata: {e:?}");
                 })?;
 
                 body_metadata.save(tx).await.inspect_err(|e| {
                     error!("Failed to save message body metadata: {e:?}");
-                })
+                })?;
+
+                Ok(())
             })
-            .await?;
+            .await
+            .map_err(MailContextError::Other)?;
 
         Ok((
             message,
@@ -2701,67 +2711,6 @@ impl Message {
         }
         let (message, _) = Self::force_sync_message_and_body(ctx, remote_id, false).await?;
         Ok(message.local_id.expect("Local ID"))
-    }
-
-    /// Get message banners.
-    ///
-    /// Fails if time went backwards
-    pub async fn get_banners(&self, tether: &Tether) -> Vec<MessageBanner> {
-        let mut banners = vec![];
-
-        let flags = self.flags;
-
-        let settings = &MailSettings::get_or_default(tether).await;
-
-        let mut autodelete = false;
-        if let Some(days) = settings.auto_delete_spam_and_trash_days {
-            // TODO: let chains
-            if days != 0 && self.expiration_time != 0 {
-                let trash = LabelId::trash();
-                let spam = LabelId::spam();
-
-                if self.label_ids.iter().any(|x| *x == trash || *x == spam) {
-                    banners.push(MessageBanner::AutoDelete {
-                        timestamp: self.expiration_time,
-                        delete_days: days,
-                    });
-                    autodelete = true;
-                }
-            }
-        }
-
-        // The user might have marked it manually as not spam, skip that case
-        if !flags.contains(MessageFlags::HAM_MANUAL) {
-            // Phishing
-            if flags.intersects(MessageFlags::PHISHING_AUTO | MessageFlags::PHISHING_MANUAL) {
-                banners.push(MessageBanner::PhishingAttempt);
-            // Regular old spam
-            } else if flags.intersects(
-                MessageFlags::SPAM_AUTO | MessageFlags::SPAM_MANUAL | MessageFlags::FLAG_SUSPICIOUS,
-            ) {
-                banners.push(MessageBanner::Spam);
-            }
-
-            // This check is here because we can't clear this on the local action
-            if self.expiration_time != 0
-            // Since the backend sends the expiration time for autodelete we have to do this to
-            // disambiguate between autodelete and expiry and not show 2 banners.
-            && !autodelete
-            {
-                banners.push(MessageBanner::Expiry {
-                    timestamp: self.expiration_time,
-                });
-            }
-        }
-
-        if let Ok(Some(IncomingDefaultLocation::Blocked)) =
-            IncomingDefaultLocation::find(self.sender.address.clone(), tether).await
-        {
-            banners.push(MessageBanner::BlockedSender);
-        }
-
-        banners.sort_unstable();
-        banners
     }
 
     /// Set the flags without loading the whole model

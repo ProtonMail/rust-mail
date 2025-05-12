@@ -6,11 +6,11 @@ use crate::{MailContextError, MailUserContext};
 use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
 };
-use proton_api_core::consts::General;
-use proton_api_core::services::proton::LabelId;
-use proton_api_core::session::CoreSession;
-use proton_api_mail::services::proton::ProtonMail;
+use proton_core_api::consts::General;
+use proton_core_api::services::proton::LabelId;
+use proton_core_api::session::CoreSession;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
+use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_ids::{LocalConversationId, LocalMessageId};
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;

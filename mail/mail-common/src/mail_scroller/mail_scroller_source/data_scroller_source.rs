@@ -1,5 +1,5 @@
 use anyhow::anyhow;
-use proton_api_core::services::proton::LabelId;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::{
     datatypes::LocalLabelId,
     models::{Label, ModelExtension},

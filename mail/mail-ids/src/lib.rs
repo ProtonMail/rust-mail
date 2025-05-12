@@ -35,8 +35,8 @@
 //      |                                ^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Message::mark_read`
 //      = note: this error originates in the macro `declare_local_id` (in Nightly builds, run with -Z macro-backtrace for more info)
 
-use proton_api_mail::services::proton::common::{AttachmentId, ConversationId, MessageId};
 use proton_core_common::declare_local_id;
+use proton_mail_api::services::proton::common::{AttachmentId, ConversationId, MessageId};
 
 declare_local_id!(pub LocalAttachmentId => AttachmentId);
 declare_local_id!(pub LocalMessageId => MessageId);

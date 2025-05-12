@@ -11,21 +11,25 @@ use crate::db::account::{
 };
 use crate::db::migrations::migrate_account_db;
 use crate::models::ModelExtension;
+use crate::nuke_utils::{
+    drop_all_tables_in_database, remove_or_clear_dir_safe, rename_database_files,
+};
 use crate::os::{KeyChain, KeyChainError, KeyChainExt, StoreInKeyChain};
+use crate::pin_code::PinHash;
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{Error as AnyhowError, anyhow};
 use futures::TryFutureExt;
 use itertools::Itertools;
 use proton_action_queue::action::{Action, WriterGuardError};
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
-use proton_api_core::login::{Flow, LoginError};
-use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::BuildError;
-use proton_api_core::services::proton::{SessionId, UserId};
-use proton_api_core::session::Config as ApiConfig;
-use proton_api_core::session::Session as ApiSession;
-use proton_api_core::status_watcher::StatusWatcher;
-use proton_api_core::verification::DynChallengeNotifier;
+use proton_core_api::login::{Flow, LoginError};
+use proton_core_api::service::ApiServiceError;
+use proton_core_api::services::proton::BuildError;
+use proton_core_api::services::proton::{SessionId, UserId};
+use proton_core_api::session::Config as ApiConfig;
+use proton_core_api::session::Session as ApiSession;
+use proton_core_api::status_watcher::StatusWatcher;
+use proton_core_api::verification::DynChallengeNotifier;
 use proton_crypto_account::keys::PGPDeviceKey;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_sqlite3::MigratorError;
@@ -404,13 +408,6 @@ impl Context {
         self.cache_path.as_path()
     }
 
-    /// Get path of the user database parent directory location
-    ///
-    #[must_use]
-    pub(crate) fn get_user_db_location(&self) -> &Path {
-        self.user_db_path.as_path()
-    }
-
     /// Get path of account's database parent directory location
     ///
     #[must_use]
@@ -740,27 +737,111 @@ impl Context {
         Ok(())
     }
 
-    /// Removes an account, deleting all associated sessions and data.
+    /// Logs out and removes an account, dropping associated data from user
+    /// database and renaming empty database file to include `.nuked` extension,
+    /// after which try to remove any remaining files from the hard drive
+    /// including archived databases and supplied caches.
     ///
-    /// # Errors
+    /// ### Errors
     ///
-    /// Returns an error if data can not be removed or the db operation failed.
-    pub async fn delete_account(&self, user_id: UserId) -> CoreContextResult<()> {
+    /// Returns an error if db operation failed on removing account.
+    ///
+    /// ### Notes
+    ///
+    ///  Function assumes seperatnes between database files as in
+    /// `Account` and `User` databases
+    ///
+    pub async fn delete_account(
+        &self,
+        user_id: UserId,
+        caches: Vec<PathBuf>,
+    ) -> CoreContextResult<()> {
+        tracing::warn!("Kill all background tasks for this user");
         self.cancel_user_tasks(&user_id).await;
-        self.delete_user_db(&user_id);
 
-        // TODO(ET-231): User cache paths.
+        let session = self
+            .get_account_sessions(user_id.clone())
+            .await?
+            .into_iter()
+            .find(|session| CoreSessionState::Authenticated == CoreSessionState::of(session));
 
+        if let Some(session) = session {
+            tracing::warn!("Clear all user data from database");
+            if let Ok(user_ctx) = self.user_context_from_session(&session, None).await {
+                let tether = user_ctx.stash().connection();
+
+                if let Err(e) = drop_all_tables_in_database(tether).await {
+                    tracing::error!("Could not clean user database, details: `{e}`");
+                }
+            }
+        }
+
+        tracing::warn!("Logout user");
+        if let Err(e) = self.logout_account(user_id.clone()).await {
+            tracing::error!("Could not logout account, details: `{e}`");
+        }
+
+        tracing::warn!("Remove user from active_contexts");
+        self.active_user_contexts.lock().await.remove(&user_id);
+
+        tracing::warn!("Archive & try to remove user database");
+        let user_db_location = self.user_db_path(&user_id);
+        rename_database_files(&user_db_location).await;
+        remove_or_clear_dir_safe(&user_db_location).await;
+
+        tracing::warn!("Clear user associated caches");
+        for cache_path in caches {
+            remove_or_clear_dir_safe(cache_path).await;
+        }
+
+        tracing::warn!("Remove account");
         let mut tether = self.account_stash().connection();
         tether
             .tx(async |tx| {
                 CoreAccount::delete_by_id(user_id, tx)
-                    .inspect_err(|e| error!("Failed to delete account from db: {e:?}"))
                     .await
+                    .inspect_err(|e| tracing::error!("Failed to delete account from db: {e:?}"))
             })
             .await?;
 
         Ok(())
+    }
+
+    /// Removes all data associated with the context.
+    ///
+    ///  That includes:
+    /// * Account database - drop all data, remove files
+    /// * Core cache - all files under the cache path
+    /// * Keychain - all secrets
+    ///
+    pub async fn tear_down(&self) {
+        tracing::warn!("Kill all background tasks");
+        self.cancel_all_tasks();
+        tracing::warn!("Remove all users from active_contexts");
+        self.active_user_contexts.lock().await.clear();
+        tracing::warn!("Remove all accounts data");
+        let tether = self.account_stash().connection();
+        let _ = drop_all_tables_in_database(tether).await.inspect_err(|e| {
+            tracing::error!(
+                "Could not drop database tables: `{e}`, will try to remove files anyway"
+            );
+        });
+        tracing::warn!("Archive & remove account database");
+        let account_db_location = self.get_account_db_location();
+        rename_database_files(account_db_location).await;
+        remove_or_clear_dir_safe(account_db_location).await;
+        tracing::warn!("Clear cache");
+        remove_or_clear_dir_safe(self.get_cache_location()).await;
+
+        let _ = self
+            .delete_secret::<SessionEncryptionKey>()
+            .inspect_err(|e| tracing::error!("Could not remove session key: `{e}`"));
+        let _ = self
+            .delete_secret::<PinHash>()
+            .inspect_err(|e| tracing::error!("Could not remove pin hash: `{e}`"));
+        let _ = self
+            .delete_secret::<StoredDevicePrivateKey>()
+            .inspect_err(|e| tracing::error!("Could not remove device key: `{e}`"));
     }
 
     #[tracing::instrument(err, skip(self))]
@@ -818,7 +899,7 @@ impl Context {
         self.key_chain.delete::<S>()
     }
 
-    fn user_db_path(&self, user_id: &UserId) -> PathBuf {
+    pub(crate) fn user_db_path(&self, user_id: &UserId) -> PathBuf {
         get_user_db_path(&self.user_db_path, user_id)
     }
 
@@ -852,26 +933,6 @@ impl Context {
     /// Get the stash in use
     pub fn account_stash(&self) -> &Stash {
         &self.account_stash
-    }
-
-    /// Delete the user's database files.
-    ///
-    /// This method just makes a best-effort attempt to delete the files it can find.
-    /// Any errors are logged but not returned.
-    fn delete_user_db(&self, user_id: &UserId) {
-        let db = get_user_db_path(&self.user_db_path, user_id);
-        let shm = db.with_extension("db-shm");
-        let wal = db.with_extension("db-wal");
-
-        for path in [db, shm, wal] {
-            let Ok(true) = path.try_exists() else {
-                continue;
-            };
-
-            if let Err(err) = std::fs::remove_file(&path) {
-                error!(?err, "failed to erase user database file");
-            }
-        }
     }
 
     /// Create a new instance of a use context.

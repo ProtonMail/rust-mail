@@ -1,4 +1,4 @@
-//! Implementation of the [`AuthStore`](proton-api-core::auth::Store) over the database.
+//! Implementation of the [`AuthStore`](proton-core-api::auth::Store) over the database.
 
 use crate::db::account::{CoreAccount, CoreSession, EncryptedData, SessionEncryptionKey};
 use crate::models::ModelExtension;
@@ -6,9 +6,9 @@ use crate::os::{KeyChain, KeyChainExt};
 use anyhow::{Context, bail};
 use async_trait::async_trait;
 use futures::TryFutureExt;
-use proton_api_core::auth::{Auth, Tokens, UserKeySecret};
-use proton_api_core::services::proton::{SessionId, UserId};
-use proton_api_core::store::{AuthInfo, Store, StoreError, UserData};
+use proton_core_api::auth::{Auth, Tokens, UserKeySecret};
+use proton_core_api::services::proton::{SessionId, UserId};
+use proton_core_api::store::{AuthInfo, Store, StoreError, UserData};
 use secrecy::{ExposeSecret, SecretString, SecretVec};
 use stash::orm::Model;
 use stash::stash::Stash;

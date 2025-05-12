@@ -1,6 +1,6 @@
 use super::attachment::{testdata_attachment_metadata, testdata_attachment_metadata_complete};
 use crate::test_context::MailTestContext;
-use proton_api_core::services::proton::{
+use proton_core_api::services::proton::{
     Address as ApiAddress, AddressSignedKeyList, AddressStatus as ApiAddressStatus,
     AddressType as ApiAddressType, ContactBasic as ApiContactBasic,
     ContactEmail as ApiContactEmail, DateFormat as ApiDateFormat, DelinquentState,
@@ -11,18 +11,18 @@ use proton_api_core::services::proton::{
     UserMnemonicStatus as ApiUserMnemonicStatus, UserSettings as ApiUserSettings,
     UserType as ApiUserType, WeekStart as ApiWeekStart,
 };
-use proton_api_core::services::proton::{
+use proton_core_api::services::proton::{
     AddressId, EventId, LabelId, LabelType as ApiLabelType, UserId,
 };
-use proton_api_core::services::proton::{
+use proton_core_api::services::proton::{
     GetAddressesResponse, GetContactsEmailsResponse, GetContactsResponse, GetEventsLatestResponse,
     GetKeysAllResponse, GetLabelsResponse, GetSettingsResponse as GetCoreSettingsResponse,
     GetUsersResponse,
 };
-use proton_api_mail::services::proton::common::{ConversationId, MessageId};
-use proton_api_mail::services::proton::prelude::GetIncomingDefaultResponse;
-use proton_api_mail::services::proton::response_data::MessageMetadata;
-use proton_api_mail::services::proton::response_data::{
+use proton_mail_api::services::proton::common::{ConversationId, MessageId};
+use proton_mail_api::services::proton::prelude::GetIncomingDefaultResponse;
+use proton_mail_api::services::proton::response_data::MessageMetadata;
+use proton_mail_api::services::proton::response_data::{
     AlmostAllMail, Attachment as ApiAttachment, ComposerDirection, ComposerMode,
     Conversation as ApiConversation, ConversationCount as ApiConversationCount,
     ConversationLabel as ApiConversationLabel, MailSettings as ApiMailSettings, MessageButtons,
@@ -31,10 +31,6 @@ use proton_api_mail::services::proton::response_data::{
     SwipeAction, ViewLayout, ViewMode,
 };
 
-use proton_api_mail::services::proton::responses::{
-    GetConversationResponse, GetConversationsCountResponse, GetConversationsResponse,
-    GetMailSettingsResponse, GetMessagesCountResponse, GetMessagesResponse,
-};
 use proton_core_common::datatypes::ALL_LABEL_TYPES;
 use proton_core_test_utils::account::{
     TEST_ADDRESS_ID, TEST_ADDRESS_KEY_SIGNATURE, TEST_USER_ID, TEST_USER_MAIL,
@@ -42,6 +38,10 @@ use proton_core_test_utils::account::{
 };
 use proton_core_test_utils::addresses_public::{
     TEST_OTHER_USER_EMAIL, testdata_address_keys_other_user,
+};
+use proton_mail_api::services::proton::responses::{
+    GetConversationResponse, GetConversationsCountResponse, GetConversationsResponse,
+    GetMailSettingsResponse, GetMessagesCountResponse, GetMessagesResponse,
 };
 use proton_mail_common::datatypes::SystemLabelId;
 use std::collections::{BTreeMap, HashMap};

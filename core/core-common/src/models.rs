@@ -54,7 +54,7 @@ pub use self::user_settings::*;
 use crate::datatypes::LocalIdMarker;
 use indoc::formatdoc;
 use itertools::Itertools as _;
-use proton_api_core::services::proton::ProtonIdMarker;
+use proton_core_api::services::proton::ProtonIdMarker;
 use stash::exports::FromSql;
 use stash::exports::{SqliteError, ToSql};
 use stash::orm::Model;

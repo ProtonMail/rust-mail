@@ -22,7 +22,7 @@ ical = { workspace = true }
 include_dir = { workspace = true }
 num_enum = { workspace = true }
 parking_lot = { workspace = true }
-proton-api-core = { workspace = true, features = ["sql"] }
+proton-core-api = { workspace = true, features = ["sql"] }
 proton-action-queue = { workspace = true }
 proton-crypto = { workspace = true }
 proton-crypto-account = { workspace = true, features = ["sql"] }
@@ -47,6 +47,7 @@ itertools = { workspace = true }
 pretty_assertions = { workspace = true }
 sqlite-watcher = { workspace = true }
 async_zip = { version = "0.0.15", features = ["deflate", "chrono"] }
+walkdir = { workspace = true }
 
 [dev-dependencies]
 futures = { workspace = true }
@@ -62,4 +63,4 @@ workspace = true
 
 [features]
 default = ["sql"]
-sql = ["proton-api-core/sql"]
+sql = ["proton-core-api/sql"]

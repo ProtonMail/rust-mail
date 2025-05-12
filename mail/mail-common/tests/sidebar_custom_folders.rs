@@ -1,6 +1,6 @@
-use proton_api_core::services::proton::Label as ApiLabel;
-use proton_api_core::services::proton::LabelId;
-use proton_api_core::services::proton::LabelType;
+use proton_core_api::services::proton::Label as ApiLabel;
+use proton_core_api::services::proton::LabelId;
+use proton_core_api::services::proton::LabelType;
 use proton_mail_common::Sidebar;
 use proton_mail_common::datatypes::labels::custom_folder::CustomFolder;
 use proton_mail_test_utils::init::Params as TestParams;

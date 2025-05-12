@@ -1,4 +1,4 @@
-use proton_api_mail::services::proton::response_data::MailEvent;
+use proton_mail_api::services::proton::response_data::MailEvent;
 
 #[test]
 fn test_deserialize() {

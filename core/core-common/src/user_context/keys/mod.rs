@@ -14,8 +14,8 @@ use crate::{
 use crate::{CoreContextResult, UserContext};
 use ical::{VcardParser, parser::ParserError};
 pub use manager::*;
-use proton_api_core::services::proton::AddressId;
-use proton_api_core::{auth::UserKeySecret, session::CoreSession};
+use proton_core_api::services::proton::AddressId;
+use proton_core_api::{auth::UserKeySecret, session::CoreSession};
 use proton_crypto_account::{
     contacts::{ContactCardType, DecryptableVerifiableCard},
     errors::CardCryptoError,

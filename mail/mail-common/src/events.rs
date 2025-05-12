@@ -36,14 +36,8 @@ mod tests;
 
 use crate::datatypes::{ConversationLabelsCount, MessageLabelsCount};
 use crate::models::{Conversation, MailSettings};
-use proton_api_core::services::proton::LabelEvent as ApiLabelEvent;
-use proton_api_core::services::proton::{EventId, LabelId};
-use proton_api_mail::services::proton::common::{ConversationId, MessageId};
-use proton_api_mail::services::proton::prelude::IncomingDefault;
-use proton_api_mail::services::proton::response_data::{
-    ConversationEvent as ApiConversationEvent, MailEvent as ApiMailEvent,
-    MessageEvent as ApiMessageEvent, MessageMetadata,
-};
+use proton_core_api::services::proton::LabelEvent as ApiLabelEvent;
+use proton_core_api::services::proton::{EventId, LabelId};
 use proton_core_common::CoreEvent;
 use proton_core_common::datatypes::ProductUsedSpace;
 use proton_core_common::events::ContactEvent;
@@ -51,6 +45,12 @@ use proton_core_common::events::{Action, AddressEvent, ContactEmailEvent};
 use proton_core_common::models::{Label, User, UserSettings};
 use proton_core_common::utils::MapVec as _;
 use proton_event_loop::Event;
+use proton_mail_api::services::proton::common::{ConversationId, MessageId};
+use proton_mail_api::services::proton::prelude::IncomingDefault;
+use proton_mail_api::services::proton::response_data::{
+    ConversationEvent as ApiConversationEvent, MailEvent as ApiMailEvent,
+    MessageEvent as ApiMessageEvent, MessageMetadata,
+};
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, PartialEq)]

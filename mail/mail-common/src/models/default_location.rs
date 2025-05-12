@@ -3,16 +3,16 @@ use std::{iter, sync::Arc, time::Instant};
 use derive_more::TryFrom;
 use indoc::indoc;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
-use proton_api_core::service::ApiServiceResult;
-use proton_api_core::services::proton::Proton;
+use proton_core_api::service::ApiServiceResult;
+use proton_core_api::services::proton::Proton;
 
-use proton_api_mail::services::proton::response_data::IncomingDefault;
-use proton_api_mail::services::proton::response_data::IncomingDefaultLocation as ApiIncomingDefaultLocation;
-use proton_api_mail::{INCOMING_DEFAULTS_PAGE_SIZE, services::proton::ProtonMail};
 use proton_core_common::{
     datatypes::InitializationKey,
     models::{Address, InitializationError, InitializationWatcher, InitializedComponent},
 };
+use proton_mail_api::services::proton::response_data::IncomingDefault;
+use proton_mail_api::services::proton::response_data::IncomingDefaultLocation as ApiIncomingDefaultLocation;
+use proton_mail_api::{INCOMING_DEFAULTS_PAGE_SIZE, services::proton::ProtonMail};
 use stash::{
     exports::{FromSql, FromSqlError, SqliteError, ToSql, ToSqlOutput, Value},
     params,

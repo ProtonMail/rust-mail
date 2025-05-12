@@ -1,10 +1,10 @@
-use proton_api_core::services::proton::Label as ApiLabel;
-use proton_api_core::services::proton::LabelId;
-use proton_api_core::services::proton::LabelType;
-use proton_api_mail::services::proton::response_data::{
+use proton_core_api::services::proton::Label as ApiLabel;
+use proton_core_api::services::proton::LabelId;
+use proton_core_api::services::proton::LabelType;
+use proton_core_common::models::{Label, ModelIdExtension};
+use proton_mail_api::services::proton::response_data::{
     AlmostAllMail, MailSettings as ApiMailSettings, MessageCount as ApiMessageCount, ShowMoved,
 };
-use proton_core_common::models::{Label, ModelIdExtension};
 use proton_mail_common::Sidebar;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_test_utils::init::Params as TestParams;

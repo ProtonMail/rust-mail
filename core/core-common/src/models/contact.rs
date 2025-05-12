@@ -15,15 +15,15 @@ use futures::future::try_join;
 use futures::try_join;
 use itertools::Itertools;
 use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput};
-use proton_api_core::SYNC_CONTACT_PAGE_SIZE;
-use proton_api_core::consts::General;
-use proton_api_core::services::proton::ContactId;
-use proton_api_core::services::proton::ContactUID;
-use proton_api_core::services::proton::{
+use proton_core_api::SYNC_CONTACT_PAGE_SIZE;
+use proton_core_api::consts::General;
+use proton_core_api::services::proton::ContactId;
+use proton_core_api::services::proton::ContactUID;
+use proton_core_api::services::proton::{
     ContactBasic as ApiContactBasic, ContactFull as ApiContactFull,
 };
-use proton_api_core::services::proton::{GetContactsEmailsOptions, GetContactsOptions};
-use proton_api_core::services::proton::{Proton, ProtonCore};
+use proton_core_api::services::proton::{GetContactsEmailsOptions, GetContactsOptions};
+use proton_core_api::services::proton::{Proton, ProtonCore};
 use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
 use stash::orm::Model;

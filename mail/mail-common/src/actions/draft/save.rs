@@ -7,7 +7,7 @@ use crate::datatypes::{
 };
 use crate::draft::compose::maybe_sanitize;
 use crate::draft::recipients::RecipientList;
-use crate::draft::{Draft, ReplyMode, SaveOrSendError, compose};
+use crate::draft::{Draft, ReplyMode, SaveError, compose};
 use crate::models::{
     Attachment, Conversation, DraftAttachmentMetadata, DraftAttachmentOwnership, DraftMetadata,
     DraftSendFailure, DraftSendResult, DraftSendResultOrigin, Message, MessageBodyMetadata,
@@ -19,13 +19,13 @@ use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
     WriterGuardError,
 };
-use proton_api_core::services::proton::{AddressId, LabelId};
-use proton_api_mail::services::proton::prelude::{
-    DraftParams, DraftReplyOrForwardParams, ExternalId,
-};
-use proton_api_mail::services::proton::request_data::DraftSender;
+use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::message::EncryptedDraft;
+use proton_mail_api::services::proton::prelude::{
+    DraftParams, DraftReplyOrForwardParams, ExternalId,
+};
+use proton_mail_api::services::proton::request_data::DraftSender;
 use proton_mail_ids::{LocalAttachmentId, LocalConversationId};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
@@ -173,7 +173,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             })?
         else {
             error!("Could not find metadata {:?}", action.metadata_id);
-            return Err(SaveOrSendError::MetadataNotFound(action.metadata_id).into());
+            return Err(SaveError::MetadataNotFound(action.metadata_id).into());
         };
 
         let body_len = action.body.len() as u64;
@@ -182,7 +182,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             .inspect_err(|e| error!("Failed to load address: {e:?}"))?
         else {
             error!("Address with remote id {:?} not found.", action.address_id);
-            return Err(SaveOrSendError::AddressNotFound(action.address_id.clone()).into());
+            return Err(SaveError::AddressNotFound(action.address_id.clone()).into());
         };
 
         let attachments = action
@@ -234,7 +234,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 || message.label_ids.contains(&LabelId::sent())
             {
                 error!("Can't update a draft that was already sent");
-                return Err(SaveOrSendError::AlreadySent.into());
+                return Err(SaveError::AlreadySent.into());
             }
 
             action.update_message(

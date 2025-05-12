@@ -5,7 +5,7 @@ use crate::messages::Messages::DismissBackgroundProgress;
 use crate::widgets::{TextInput, TextInputState};
 use anyhow::anyhow;
 use proton_mail_common::MailContext;
-use proton_mail_common::proton_api_mail::proton_api_core::login::{Flow, LoginError};
+use proton_mail_common::proton_mail_api::proton_core_api::login::{Flow, LoginError};
 use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Flex;
 use ratatui::prelude::*;

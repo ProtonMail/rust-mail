@@ -7,7 +7,7 @@ use crate::{
 };
 use anyhow::Context as _;
 use indoc::indoc;
-use proton_api_core::services::proton::LabelId;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::DeleteFilesSafeError;
 use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::ModelExtension as _;
@@ -716,7 +716,7 @@ mod test {
     use std::sync::atomic::AtomicU64;
 
     use itertools::Itertools as _;
-    use proton_api_core::services::proton::LabelId;
+    use proton_core_api::services::proton::LabelId;
 
     use crate::datatypes::SystemLabelId as _;
 

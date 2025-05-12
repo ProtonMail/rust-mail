@@ -61,15 +61,15 @@ pub use attachment::*;
 pub use available_action::*;
 use core::fmt;
 pub use mail_scroller::*;
-use proton_api_mail::MAX_PAGE_ELEMENT_COUNT_U64;
-use proton_api_mail::services::proton::request_data::MessageMetadataSortMode as RealMessageMetadataSortMode;
-use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use proton_core_common::datatypes::{
     AvatarInformation as RealAvatarInformation, LabelColor as RealLabelColor,
     LabelType as RealLabelType, LocalAddressId, LocalLabelId,
 };
 use proton_core_common::models::{Address as RealAddress, Label as RealLabel, ModelIdExtension};
 use proton_core_common::utils::MapVec as _;
+use proton_mail_api::MAX_PAGE_ELEMENT_COUNT_U64;
+use proton_mail_api::services::proton::request_data::MessageMetadataSortMode as RealMessageMetadataSortMode;
+use proton_mail_api::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use proton_mail_common::AppError;
 use proton_mail_common::datatypes::{
     AlmostAllMail as RealAlmostAllMail, AttachmentMetadata as RealAttachmentMetadata,

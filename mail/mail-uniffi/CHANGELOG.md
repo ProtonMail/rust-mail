@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [mail-uniffi-v0.76.1] - 2025-05-08
+
+### Fixes
+
+- Spam banner only shown for messages marked as such by the backend
+- [ET-2895] Do not remove inner html when sanitizing content
+
+
+## [mail-uniffi-v0.76.0] - 2025-05-07
+
+### Changed
+
+- Ical: simplify violation management
+- Ical: shuffle date-time tests around
+- Ical: simplify date-time management
+- Ical: simplify test-only prodids
+- Ical: support `readentry::value`
+- Update `get_unsent_messages_ids_in_queue`
+- Ical: s/ical/proton-ical
+- Ical: use `tz.is_unknown()`
+- Ical: address compatibility issues around a couple enums
+- Ical: s/read/icsread, s/write/icswrite
+- Ical: address tzid's todo comment
+- Ical: clarify terminology (ical -> ics)
+- Ical: support \t within content lines
+
+### Features
+
+- Ical: implement models
+- Ical: implement writer & reader
+- Ical: implement validator
+- Ical: implement rrule iterator
+- Ical: implement php module
+- Ical: add benchmarks
+- Ical: handle trailing data
+- Enable rollback items
+- Db interruption
+
+### Fixes
+
+- Sort changelog chronologically
+- [ET-2850] Prevent double compression in pgp/mime sending
+- [ET-2783] Ensure all logged in and intialized contexts are used
+- [ET-2786] Only save draft if body and/or subject differ
+
+
 ## [mail-uniffi-v0.75.5] - 2025-05-06
 
 ### Fixes

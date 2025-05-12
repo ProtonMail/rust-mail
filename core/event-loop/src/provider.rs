@@ -1,13 +1,13 @@
 #![allow(clippy::module_name_repetitions)]
 
 use async_trait::async_trait;
-use proton_api_core::services::proton::GetEventOptions;
-use proton_api_core::services::proton::ProtonCore;
+use proton_core_api::services::proton::GetEventOptions;
+use proton_core_api::services::proton::ProtonCore;
 // avoid namespace conflicts
 use crate::Event;
-use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::EventId;
-use proton_api_core::session::{CoreSession, Session};
+use proton_core_api::service::ApiServiceError;
+use proton_core_api::services::proton::EventId;
+use proton_core_api::session::{CoreSession, Session};
 
 /// This trait allows abstraction over how to request the next event from the API.
 #[cfg_attr(test, mockall::automock)]

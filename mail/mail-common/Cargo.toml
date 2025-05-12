@@ -23,8 +23,8 @@ lazy_static = { workspace = true }
 mime = { workspace = true }
 parking_lot = { workspace = true }
 proton-action-queue = { workspace = true }
-proton-api-core = { workspace = true, features = ["sql"] }
-proton-api-mail = { workspace = true, features = ["sql"] }
+proton-core-api = { workspace = true, features = ["sql"] }
+proton-mail-api = { workspace = true, features = ["sql"] }
 proton-core-common = { workspace = true }
 proton-crypto-account = { workspace = true }
 proton-crypto-inbox = { workspace = true }
@@ -57,8 +57,8 @@ color-backtrace = { workspace = true }
 insta = { workspace = true }
 lazy_static = { workspace = true }
 pretty_assertions = { workspace = true }
-proton-api-core = { workspace = true }
-proton-api-mail = { workspace = true }
+proton-core-api = { workspace = true }
+proton-mail-api = { workspace = true }
 secrecy = { workspace = true }
 serde_with = { workspace = true }
 tempdir = { workspace = true }
@@ -71,7 +71,6 @@ velcro = { workspace = true }
 wiremock = { workspace = true }
 proton-core-test-utils = { workspace = true }
 proton-mail-test-utils = { workspace = true }
-maplit = { workspace = true }
 
 # not compatible with global clippy configuration yet
 # [lints]
@@ -99,4 +98,4 @@ wrong_self_convention = "warn"
 
 [features]
 default = ["sql"]
-sql = ["proton-api-core/sql", "proton-api-mail/sql"]
+sql = ["proton-core-api/sql", "proton-mail-api/sql"]

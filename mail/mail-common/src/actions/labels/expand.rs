@@ -2,7 +2,7 @@ use crate::datatypes::RollbackItemType;
 use crate::models::RollbackItem;
 use crate::{AppError, MailUserContext, actions::MailActionError};
 use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
-use proton_api_core::services::proton::LabelId;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label;
 use serde::{Deserialize, Serialize};

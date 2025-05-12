@@ -1,7 +1,7 @@
 use crate::actions::labels::Expand;
 use crate::datatypes::labels::hierarchy::custom_folder_hierarchy;
 use crate::{AppError, MailContextError, MailUserContext};
-use proton_api_core::services::proton::LabelId;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::{LabelType, LocalLabelId};
 use proton_core_common::models::Label;
 use stash::params;

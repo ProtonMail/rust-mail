@@ -2,6 +2,7 @@ use crate::AppError;
 use crate::events::MessageEvent;
 use crate::models::{DraftMetadata, Message};
 use proton_core_common::events::Action;
+use proton_mail_ids::LocalMessageId;
 use stash::params;
 use stash::stash::Bond;
 use tracing::{debug, warn};
@@ -9,7 +10,8 @@ use tracing::{debug, warn};
 pub async fn handle_message_events(
     tx: &Bond<'_>,
     message_events: &[MessageEvent],
-) -> Result<(), AppError> {
+) -> Result<Vec<LocalMessageId>, AppError> {
+    let mut ids = Vec::with_capacity(message_events.len());
     for message_event in message_events {
         match message_event.action {
             Action::Delete => {
@@ -21,8 +23,10 @@ pub async fn handle_message_events(
             }
             Action::Create => {
                 if let Some(message) = &message_event.message {
-                    Message::create_or_update_messages_from_metadata(vec![message.clone()], tx)
-                        .await?;
+                    let created =
+                        Message::create_or_update_messages_from_metadata(vec![message.clone()], tx)
+                            .await?;
+                    ids.extend(created);
                 } else {
                     warn!("Received create message without message");
                 }
@@ -49,5 +53,6 @@ pub async fn handle_message_events(
             }
         }
     }
-    Ok(())
+
+    Ok(ids)
 }

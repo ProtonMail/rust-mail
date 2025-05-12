@@ -10,14 +10,8 @@ use anyhow::{Context as _, anyhow};
 use bytes::Bytes;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
-use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::AddressId;
-use proton_api_mail::services::proton::ProtonMail;
-use proton_api_mail::services::proton::common::{AttachmentId, ConversationId, MessageId};
-use proton_api_mail::services::proton::response_data::{
-    Attachment as ApiAttachment, MessageAttachment as ApiMessageAttachment,
-};
-use proton_api_mail::services::proton::responses::GetAttachmentMetadataResponse;
+use proton_core_api::service::ApiServiceError;
+use proton_core_api::services::proton::AddressId;
 use proton_core_common::datatypes::LocalAddressId;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_core_common::utils::MapVec as _;
@@ -27,6 +21,12 @@ use proton_crypto_inbox::attachment::{
     EncryptedAttachment, KeyPackets as RealKeyPackets,
 };
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
+use proton_mail_api::services::proton::ProtonMail;
+use proton_mail_api::services::proton::common::{AttachmentId, ConversationId, MessageId};
+use proton_mail_api::services::proton::response_data::{
+    Attachment as ApiAttachment, MessageAttachment as ApiMessageAttachment,
+};
+use proton_mail_api::services::proton::responses::GetAttachmentMetadataResponse;
 use proton_mail_ids::LocalConversationId;
 use serde::{Deserialize, Serialize};
 use stash::exports::{SqliteError, ToSql};
@@ -668,9 +668,11 @@ impl Attachment {
 
         // Attachment should be <= 25 MB
         if file_metadata.size() > 25 * 1024 * 1024 {
-            return Err(MailContextError::Draft(crate::draft::Error::Attachment(
-                crate::draft::AttachmentError::AttachmentTooLarge,
-            )));
+            return Err(MailContextError::Draft(
+                crate::draft::Error::AttachmentUpload(
+                    crate::draft::AttachmentUploadError::AttachmentTooLarge,
+                ),
+            ));
         }
         // File name
         let file_name = file_name_override.unwrap_or(file_name.to_string_lossy().to_string());

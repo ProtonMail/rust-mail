@@ -1,6 +1,6 @@
 use insta::assert_snapshot;
 use itertools::Itertools;
-use proton_api_core::services::proton::LabelId;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::SystemLabel;
 use proton_mail_common::datatypes::exclusive_location::ExclusiveLocation;
 use proton_mail_common::datatypes::{Disposition, SystemLabelId as _};

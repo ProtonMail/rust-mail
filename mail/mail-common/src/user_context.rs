@@ -8,17 +8,17 @@ use crate::actions::register_mail_actions;
 use crate::context::EventPollMode;
 use crate::draft::attachments::DraftStagingAreaCleaner;
 use crate::models::{Conversation, Message};
-use crate::prefetch::{Prefetch, PrefetchNotify};
+use crate::prefetch::{Prefetch, PrefetchJob, PrefetchNotify};
 use crate::user_context::initialization::InitializationMediator;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 use proton_action_queue::queue::{Queue, QueueAutoExecutor, QueueAutoExecutorPool};
-use proton_api_core::auth::UserKeySecret;
-use proton_api_core::connection_status::ConnectionStatus;
-use proton_api_core::crypto_clock;
-use proton_api_core::services::proton::{AddressId, SessionId, UserId};
-use proton_api_core::services::proton::{Proton, ProtonCore};
-use proton_api_core::session::{CoreSession, Session};
+use proton_core_api::auth::UserKeySecret;
+use proton_core_api::connection_status::ConnectionStatus;
+use proton_core_api::crypto_clock;
+use proton_core_api::services::proton::{AddressId, SessionId, UserId};
+use proton_core_api::services::proton::{Proton, ProtonCore};
+use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::datatypes::{AccountDetails, LocalAddressId};
 use proton_core_common::models::{Address, User, UserSettings};
 use proton_core_common::{ContactError, CoreContextError, LoadKeySecret, UserContext};
@@ -42,6 +42,7 @@ use tokio::task::JoinHandle;
 use tracing::error;
 
 const DEFAULT_SEND_QUEUE_POOL_SIZE: usize = 4;
+const DEFAULT_PREFETCH_BOUND: usize = 4;
 
 pub struct MailUserContext {
     this: Weak<Self>,
@@ -427,10 +428,65 @@ impl MailUserContext {
     }
 
     /// Logs this user out.
+    ///
     pub async fn logout(&self) -> MailContextResult<()> {
         self.mail_context
             .logout_account(self.user_id().to_owned())
             .await?;
+
+        Ok(())
+    }
+
+    /// Sign this user out.
+    ///
+    /// Method will delete user's account and data from the device.
+    ///
+    pub async fn sign_out(&self) -> MailContextResult<()> {
+        self.mail_context
+            .delete_account(self.user_id().clone())
+            .await?;
+
+        Ok(())
+    }
+
+    /// Sign out from all accounts.
+    ///
+    /// This method will perform:
+    /// * Each user logout
+    /// * Clear all user data
+    /// * Clear keychains
+    /// * Remove all account data & caches
+    ///
+    /// There are sevral layers to this function in which most of them
+    /// are non failing and retrying in cases where we could fail.
+    ///
+    /// ### Errors
+    ///
+    /// The method may fail to gather users. This will happen if for any
+    /// reason we will be unable to read sessions from account database.
+    ///
+    /// ### Notes
+    ///
+    /// There are no guarantees to clear everything especially on
+    /// operating systems which locks files (looking at you Windows)
+    /// though it will make best effort to get rid of any information
+    /// app has stored over the course of its life.
+    ///
+    pub async fn sign_out_all(&self) -> MailContextResult<()> {
+        let all_ctxs = self.all_mail_user_ctxs().await?;
+
+        for ctx in all_ctxs {
+            // If for any reason we fail to sign out account it will
+            // be brought down anyway by tear_down in the next step
+            // which also will get rid of key which is essential to
+            // read data from API
+            let _ = ctx
+                .sign_out()
+                .await
+                .inspect_err(|e| tracing::error!("Could not remove account, `{e}`"));
+        }
+
+        self.mail_context().core_context().tear_down().await;
 
         Ok(())
     }
@@ -459,22 +515,35 @@ impl MailUserContext {
     /// - Drafts
     /// - AllDrafts
     pub async fn prefetch(self: &Arc<Self>) -> MailContextResult<()> {
+        self.queue_prefetch_jobs(Default::default()).await
+    }
+
+    pub async fn queue_prefetch_jobs(
+        self: &Arc<Self>,
+        jobs: Vec<PrefetchJob>,
+    ) -> MailContextResult<()> {
         if let Some(sender) = self.prefetch.get() {
-            sender.send(()).map_err(|_| {
+            sender.send_async(jobs).await.map_err(|_| {
                 MailContextError::Other(anyhow!("Failed to send prefetch signal to prefetcher"))
             })?;
 
             Ok(())
         } else {
-            let (sender, receiver) = flume::unbounded();
+            let (sender, receiver) = flume::bounded(DEFAULT_PREFETCH_BOUND);
 
             self.prefetch.set(sender).map_err(|e| {
                 MailContextError::Other(anyhow!("Failed to set prefetch sender: {e:?}"))
             })?;
             Prefetch::initialize(self.clone(), receiver).await;
-            self.prefetch.get().unwrap().send(()).map_err(|_| {
-                MailContextError::Other(anyhow!("Failed to send prefetch signal to prefetcher"))
-            })?;
+            // unwrap safety: `self.prefetch` is set just above, it cannot be `None`.
+            self.prefetch
+                .get()
+                .unwrap()
+                .send_async(jobs)
+                .await
+                .map_err(|_| {
+                    MailContextError::Other(anyhow!("Failed to send prefetch signal to prefetcher"))
+                })?;
 
             Ok(())
         }

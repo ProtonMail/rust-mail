@@ -430,6 +430,5 @@ mime_type: {mime_type:?}"
         body_banners: prev_banners,
     };
     debug!("HTML Transform done");
-    trace!("BodyOutput: {output:#?}");
     output
 }

@@ -36,17 +36,17 @@ mod basic {
 mod messages {
     use super::*;
 
-    use proton_api_core::status_observer::StatusObserver;
-    use proton_api_core::status_watcher::StatusWatcher;
+    use proton_core_api::status_observer::StatusObserver;
+    use proton_core_api::status_watcher::StatusWatcher;
     use serde_json::json;
     use test_case::test_case;
     use wiremock::matchers::path_regex;
 
-    use proton_api_core::session::{Config, EnvId};
-    use proton_api_core::session::{CoreSession, Session};
-    use proton_api_mail::MAX_PAGE_ELEMENT_COUNT_U64;
-    use proton_api_mail::services::proton::{ProtonMail, requests::GetMessagesOptions};
+    use proton_core_api::session::{Config, EnvId};
+    use proton_core_api::session::{CoreSession, Session};
     use proton_core_test_utils::test_context::MockApiEnv;
+    use proton_mail_api::MAX_PAGE_ELEMENT_COUNT_U64;
+    use proton_mail_api::services::proton::{ProtonMail, requests::GetMessagesOptions};
 
     type Result<T, E = Box<dyn std::error::Error + Send + Sync>> = std::result::Result<T, E>;
 
