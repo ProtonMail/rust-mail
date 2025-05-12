@@ -152,6 +152,7 @@ VCalendar {
                     cutype: None,
                     role: None,
                     rsvp: None,
+                    x_pm_token: None,
                 },
             ],
             rrule: None,

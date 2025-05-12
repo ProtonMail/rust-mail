@@ -11,6 +11,9 @@ pub struct Attendee {
     pub cutype: Option<CuType>,
     pub role: Option<Role>,
     pub rsvp: Option<Rsvp>,
+
+    // TODO(NGC-36) hacky - X- params should be handled separately from the RFC ones
+    pub x_pm_token: Option<ParamValue>,
 }
 
 impl Attendee {
@@ -37,6 +40,12 @@ impl Attendee {
         self.rsvp = Some(rsvp.into());
         self
     }
+
+    #[must_use]
+    pub fn with_x_pm_token(mut self, x_pm_token: impl Into<ParamValue>) -> Self {
+        self.x_pm_token = Some(x_pm_token.into());
+        self
+    }
 }
 
 impl<T> From<T> for Attendee
@@ -50,6 +59,7 @@ where
             cutype: None,
             role: None,
             rsvp: None,
+            x_pm_token: None,
         }
     }
 }
@@ -60,6 +70,7 @@ impl IcsRead<Property> for Attendee {
         let mut cutype = None;
         let mut role = None;
         let mut rsvp = None;
+        let mut x_pm_token = None;
 
         loop {
             let e = r.entry()?;
@@ -68,6 +79,7 @@ impl IcsRead<Property> for Attendee {
                 || e.try_param(r, "CUTYPE", &mut cutype)
                 || e.try_param(r, "ROLE", &mut role)
                 || e.try_param(r, "RSVP", &mut rsvp)
+                || e.try_param(r, "X-PM-TOKEN", &mut x_pm_token)
             {
                 continue;
             }
@@ -85,6 +97,7 @@ impl IcsRead<Property> for Attendee {
             cutype,
             role,
             rsvp,
+            x_pm_token,
         })
     }
 }
@@ -95,6 +108,7 @@ impl IcsWrite<Property> for Attendee {
         w.param_opt("CUTYPE", self.cutype.as_ref());
         w.param_opt("ROLE", self.role.as_ref());
         w.param_opt("RSVP", self.rsvp.as_ref());
+        w.param_opt("X-PM-TOKEN", self.x_pm_token.as_ref());
         w.raw(":");
         w.value(&self.address);
     }
@@ -133,6 +147,7 @@ mod tests {
     #[test_case(";RSVP=TRUE:mailto:someone@localhost")]
     #[test_case(";RSVP=FALSE:mailto:someone@localhost")]
     #[test_case(";CUTYPE=ROOM;ROLE=CHAIR;RSVP=TRUE:mailto:someone@localhost")]
+    #[test_case(";X-PM-TOKEN=dc5d4a72:mailto:someone@localhost")]
     fn smoke(s: &str) {
         assert_trip!(s, Attendee as Property);
     }
