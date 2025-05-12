@@ -192,12 +192,20 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
             debug!("We have paginated here before, create cached scroller");
             let task = match scroller.scroll_data_begin(&tether).await? {
                 Some(scroll_data) => {
-                    debug!("Syncing previous page in background");
-                    self.sync_previous_page(ctx, &scroll_data, remote_label_id)
-                        .await?;
+                    if !scroller.has_more_than_a_page(&tether).await?
+                        && total > self.page_size as u64
+                    {
+                        debug!("Syncing next page in a task");
+                        self.sync_next_page(ctx, &scroll_data, remote_label_id)
+                            .await?
+                    } else {
+                        debug!("Syncing previous page in background");
+                        self.sync_previous_page(ctx, &scroll_data, remote_label_id)
+                            .await?;
 
-                    // Previous page should not be awaited
-                    None
+                        // Previous page should not be awaited
+                        None
+                    }
                 }
                 // When someone decides to oblitarate its mails it may happen that we think we have data in order
                 // but in reality the cursor cant get anything and this can lead to undefined behaviors.
