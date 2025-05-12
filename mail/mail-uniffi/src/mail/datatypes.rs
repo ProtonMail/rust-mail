@@ -78,13 +78,15 @@ use proton_mail_common::datatypes::{
     Disposition as RealDisposition, LabelDescription as RealLabelDescription, LocalConversationId,
     LocalMessageId, MailSettingsId, MessageButtons as RealMessageButtons,
     MessageFlags as RealMessageFlags, MessageLabelsCount as RealMessageCount,
-    MessageRecipient as RealMessageRecipient, MessageReplyTo as RealMessageReplyTo,
-    MessageSender as RealMessageSender, MimeType as RealMimeType,
-    MobileSetting as RealMobileSetting, MobileSettings as RealMobileSettings,
-    NextMessageOnMove as RealNextMessageOnMove, ParsedHeaderValue as RealParsedHeaderValue,
-    PgpScheme as RealPgpScheme, PmSignature as RealPmSignature, ShowImages as RealShowImages,
-    ShowMoved as RealShowMoved, SpamAction as RealSpamAction, SwipeAction as RealSwipeAction,
-    ViewLayout as RealViewLayout, ViewMode as RealViewMode,
+    MessageRecipient as RealMessageRecipient,
+    MessageRecipientDisplayMode as RealMessageRecipientDisplayMode,
+    MessageReplyTo as RealMessageReplyTo, MessageSender as RealMessageSender,
+    MimeType as RealMimeType, MobileSetting as RealMobileSetting,
+    MobileSettings as RealMobileSettings, NextMessageOnMove as RealNextMessageOnMove,
+    ParsedHeaderValue as RealParsedHeaderValue, PgpScheme as RealPgpScheme,
+    PmSignature as RealPmSignature, ShowImages as RealShowImages, ShowMoved as RealShowMoved,
+    SpamAction as RealSpamAction, SwipeAction as RealSwipeAction, ViewLayout as RealViewLayout,
+    ViewMode as RealViewMode,
 };
 use proton_mail_common::datatypes::{
     ContextualConversation, ExclusiveLocation as RealExclusiveLocation,
@@ -801,6 +803,21 @@ impl From<RealViewMode> for ViewMode {
         match value {
             RealViewMode::Conversations => ViewMode::Conversations,
             RealViewMode::Messages => ViewMode::Messages,
+        }
+    }
+}
+
+#[derive(UniffiEnum)]
+pub enum MessageRecipientDisplayMode {
+    Recipients,
+    Sender,
+}
+
+impl From<RealMessageRecipientDisplayMode> for MessageRecipientDisplayMode {
+    fn from(value: RealMessageRecipientDisplayMode) -> Self {
+        match value {
+            RealMessageRecipientDisplayMode::Recipients => Self::Recipients,
+            RealMessageRecipientDisplayMode::Sender => Self::Sender,
         }
     }
 }

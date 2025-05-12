@@ -1,7 +1,7 @@
 mod centered_throbber;
 mod conversations;
 mod labels;
-mod messages;
+pub mod messages;
 mod scrollable_list;
 mod scrollable_paragraph;
 mod scrollable_table;

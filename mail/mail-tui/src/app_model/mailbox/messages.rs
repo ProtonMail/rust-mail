@@ -11,7 +11,7 @@ use crate::app_model::watcher::WatchHandle;
 use crate::messages::Messages;
 use crate::widgets::utils::{date_from_timestamp, format_recipients, format_sender};
 use crate::widgets::{
-    AsTable, CenteredThrobber, ScrollableParagraph, ScrollableParagraphState, ScrollableTable,
+    CenteredThrobber, ScrollableParagraph, ScrollableParagraphState, ScrollableTable,
     ScrollableTableState,
 };
 use anyhow::{Context, anyhow};
@@ -22,7 +22,8 @@ use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::os::safe_write;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
 use proton_mail_common::datatypes::{
-    ContextualConversation, LocalConversationId, LocalMessageId, ReadFilter, SearchOptions,
+    ContextualConversation, LocalConversationId, LocalMessageId, MessageRecipientDisplayMode,
+    ReadFilter, SearchOptions,
 };
 use proton_mail_common::decrypted_message::{DecryptedMessageBody, TransformOpts};
 use proton_mail_common::draft::ReplyMode;
@@ -54,6 +55,7 @@ pub struct MessagesState {
     table_state: ScrollableTableState,
     open_message: DecryptedMessageStatus,
     mode: Mode,
+    recipient_display_mode: MessageRecipientDisplayMode,
 }
 
 #[allow(dead_code)] // Watcher handle is needed to keep state
@@ -73,8 +75,9 @@ impl MessagesState {
         filter: ReadFilter,
     ) -> Command<Messages> {
         let label_id = mbox.label_id();
+        let recipient_display_mode = mbox.recipient_display_mode();
         Command::task(async move {
-            match Self::new_impl(ctx, label_id, filter).await {
+            match Self::new_impl(ctx, label_id, filter, recipient_display_mode).await {
                 Ok((state, background_command)) => Command::batch([
                     Command::message(Message::OpenMessageView(mbox, label, state).into()),
                     background_command,
@@ -87,6 +90,7 @@ impl MessagesState {
         ctx: Arc<MailUserContext>,
         label_id: LocalLabelId,
         filter: ReadFilter,
+        recipient_display_mode: MessageRecipientDisplayMode,
     ) -> MailboxResult<(Self, Command<Messages>)> {
         let context = ctx.clone();
         let (paginator, command) = Paginator::new(
@@ -115,6 +119,7 @@ impl MessagesState {
                 table_state: ScrollableTableState::new(Some(0)),
                 open_message: DecryptedMessageStatus::None,
                 mode: Mode::Label(paginator),
+                recipient_display_mode,
             },
             command,
         ))
@@ -174,6 +179,7 @@ impl MessagesState {
                 table_state: ScrollableTableState::new(Some(0)),
                 open_message: DecryptedMessageStatus::None,
                 mode: Mode::Search(paginator),
+                recipient_display_mode: MessageRecipientDisplayMode::Sender,
             },
             Command::batch(vec![
                 Command::message(
@@ -259,6 +265,7 @@ impl MessagesState {
                 table_state: ScrollableTableState::new(Some(index)),
                 open_message: DecryptedMessageStatus::None,
                 mode: Mode::Conversation(watcher),
+                recipient_display_mode: MessageRecipientDisplayMode::Sender,
             },
             background_command,
         ))
@@ -621,7 +628,11 @@ impl StateHandler for MessagesState {
         let table_area = self.open_message.draw(frame, area);
 
         if let Some(table_area) = table_area {
-            let table = self.messages.as_table();
+            let table = crate::widgets::messages::message_as_table(
+                &self.messages,
+                self.recipient_display_mode,
+            );
+
             let scrollable_table = ScrollableTable::new(table, self.messages.len());
 
             frame.render_stateful_widget(scrollable_table, table_area, &mut self.table_state);

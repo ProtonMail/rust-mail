@@ -16,7 +16,7 @@ use stash::{
     stash::{Bond, StashError},
 };
 
-use crate::datatypes::{SystemLabelId, ViewMode};
+use crate::datatypes::{MessageRecipientDisplayMode, SystemLabelId, ViewMode};
 
 use super::MailSettings;
 
@@ -93,6 +93,8 @@ pub trait MailLabel {
 
     /// TODO: Document this function.
     fn is_movable_folder(&self) -> bool;
+
+    fn recipient_display_mode(&self) -> MessageRecipientDisplayMode;
 }
 
 impl MailLabel for Label {
@@ -103,6 +105,7 @@ impl MailLabel for Label {
                 || *remote_id == LabelId::all_drafts()
                 || *remote_id == LabelId::all_sent()
                 || *remote_id == LabelId::all_scheduled()
+                || *remote_id == LabelId::outbox()
             {
                 return Ok(ViewMode::Messages);
             }
@@ -126,5 +129,22 @@ impl MailLabel for Label {
                 .remote_id
                 .as_ref()
                 .is_some_and(|rid| LabelId::movable_sys_folder_list().contains(rid))
+    }
+
+    fn recipient_display_mode(&self) -> MessageRecipientDisplayMode {
+        let Some(remote_id) = self.remote_id.as_ref() else {
+            return MessageRecipientDisplayMode::Sender;
+        };
+        if *remote_id == LabelId::drafts()
+            || *remote_id == LabelId::sent()
+            || *remote_id == LabelId::all_drafts()
+            || *remote_id == LabelId::all_sent()
+            || *remote_id == LabelId::all_scheduled()
+            || *remote_id == LabelId::outbox()
+        {
+            MessageRecipientDisplayMode::Recipients
+        } else {
+            MessageRecipientDisplayMode::Sender
+        }
     }
 }

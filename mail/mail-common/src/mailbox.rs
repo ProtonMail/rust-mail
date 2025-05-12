@@ -2,7 +2,7 @@ pub mod attachments;
 
 pub mod decrypted_message;
 
-use crate::datatypes::{LocalAttachmentId, ViewMode};
+use crate::datatypes::{LocalAttachmentId, MessageRecipientDisplayMode, ViewMode};
 use crate::models::{
     Conversation, ConversationCounters, MailLabel, MailboxLabels, Message, MessageCounters,
 };
@@ -69,6 +69,7 @@ pub type MailboxResult<T> = Result<T, MailboxError>;
 pub struct Mailbox {
     label_id: LocalLabelId,
     view_mode: ViewMode,
+    recipient_display_mode: MessageRecipientDisplayMode,
 }
 
 impl Mailbox {
@@ -83,6 +84,7 @@ impl Mailbox {
         Ok(Self {
             label_id,
             view_mode,
+            recipient_display_mode: label.recipient_display_mode(),
         })
     }
 
@@ -98,6 +100,7 @@ impl Mailbox {
         Ok(Self {
             label_id,
             view_mode,
+            recipient_display_mode: label.recipient_display_mode(),
         })
     }
 
@@ -167,6 +170,10 @@ impl Mailbox {
     /// The mailbox's current view mode.
     pub fn view_mode(&self) -> ViewMode {
         self.view_mode
+    }
+
+    pub fn recipient_display_mode(&self) -> MessageRecipientDisplayMode {
+        self.recipient_display_mode
     }
 
     /// Get the number of unread items in this mailbox.
