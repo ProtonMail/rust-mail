@@ -218,6 +218,7 @@ VCalendar {
                             true,
                         ),
                     ),
+                    x_pm_token: None,
                 },
                 Attendee {
                     address: Email(
@@ -246,6 +247,7 @@ VCalendar {
                             true,
                         ),
                     ),
+                    x_pm_token: None,
                 },
             ],
             rrule: Some(

@@ -2,6 +2,8 @@
 resolver = "2"
 
 members = [
+    "calendar/calendar-api",
+    "calendar/calendar-common",
     "core/action-queue",
     "core/core-api",
     "core/core-common",
@@ -9,11 +11,12 @@ members = [
     "core/event-loop",
     "core/ical",
     "core/proton-canonical-email",
-    "core/task-service",
     "core/sqlite3",
     "core/stash",
     "core/stash-macros",
+    "core/task-service",
     "core/vcard",
+    "crypto/crypto-calendar",
     "crypto/crypto-inbox",
     "crypto/crypto-inbox-mime",
     "crypto/crypto-notifications",
@@ -27,7 +30,7 @@ members = [
     "mail/mail-uniffi",
     "mail/mail-wasm",
     "mail/uniffi-bindgen",
-    "mail/uniffi-macros", 
+    "mail/uniffi-macros",
     "payment/payment-sdk",
     "payment/payment-uniffi",
     "payment/payment-crux",
@@ -149,6 +152,9 @@ version = "0.1"
 path = "core/proton-canonical-email"
 registry = "proton"
 
+[workspace.dependencies.proton-ical]
+path = "core/ical"
+
 [workspace.dependencies.proton-vcard]
 version = "0.2"
 path = "core/vcard"
@@ -240,6 +246,20 @@ version = "0.1.0"
 path = "payment/payment-sdk"
 registry = "proton"
 
+[workspace.dependencies.proton-calendar-api]
+version = "0.1"
+path = "calendar/calendar-api"
+registry = "proton"
+
+[workspace.dependencies.proton-calendar-common]
+version = "0.1"
+path = "calendar/calendar-common"
+registry = "proton"
+
+[workspace.dependencies.proton-crypto-calendar]
+version = "0.1"
+path = "crypto/crypto-calendar"
+registry = "proton"
 
 [workspace.lints.rust]
 trivial_numeric_casts = "warn"
@@ -282,6 +302,11 @@ inherits = "release"
 opt-level = "s" # We might want to experiment with "z" instead.
 # Move the debug info to a separate file.
 # At the time of writing, this reduces the size of the binary by 9MB.
-split-debuginfo = "packed" 
+split-debuginfo = "packed"
 lto = true # "Fat" LTO
 # panic = 'abort' We might want to enable this
+
+[patch."crates-io"]
+# TODO https://github.com/hyperium/hyper/pull/3887
+# TODO https://protonmail.slack.com/archives/C07FCLA1RQW/p1746692300139499
+hyper = { git = "https://github.com/Patryk27/hyper", rev = "f1ee16c0e1ef72c5f467fdf142e6525ffa03059a" }

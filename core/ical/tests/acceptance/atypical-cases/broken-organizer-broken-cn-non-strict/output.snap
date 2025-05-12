@@ -184,6 +184,7 @@ VCalendar {
                             true,
                         ),
                     ),
+                    x_pm_token: None,
                 },
             ],
             rrule: None,

@@ -2589,8 +2589,7 @@ checksum = "df3b46402a9d5adb4c86a0cf463f42e19994e3ee891101b1841f30a545cb49a9"
 [[package]]
 name = "hyper"
 version = "1.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc2b571658e38e0c01b1fdca3bbbe93c00d3d71693ff2770043f8c29bc7d6f80"
+source = "git+https://github.com/Patryk27/hyper?rev=f1ee16c0e1ef72c5f467fdf142e6525ffa03059a#f1ee16c0e1ef72c5f467fdf142e6525ffa03059a"
 dependencies = [
  "bytes",
  "futures-channel",
@@ -4619,6 +4618,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "proton-calendar-api"
+version = "0.1.0"
+dependencies = [
+ "function_name",
+ "muon",
+ "pretty_assertions",
+ "proton-core-api",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "serde_with",
+ "stash",
+ "test-case",
+ "wiremock",
+]
+
+[[package]]
+name = "proton-calendar-common"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "indoc",
+ "pretty_assertions",
+ "proton-calendar-api",
+ "proton-core-api",
+ "proton-core-test-utils",
+ "proton-crypto",
+ "proton-crypto-account",
+ "proton-crypto-calendar",
+ "proton-ical",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "proton-canonical-email"
 version = "0.1.0"
 dependencies = [
@@ -4767,6 +4802,23 @@ dependencies = [
  "serde_json",
  "serde_repr",
  "serde_with",
+ "thiserror 1.0.69",
+ "zeroize",
+]
+
+[[package]]
+name = "proton-crypto-calendar"
+version = "0.1.0"
+dependencies = [
+ "base64",
+ "indoc",
+ "pretty_assertions",
+ "proton-calendar-api",
+ "proton-crypto",
+ "proton-crypto-account",
+ "serde",
+ "serde_json",
+ "serde_repr",
  "thiserror 1.0.69",
  "zeroize",
 ]

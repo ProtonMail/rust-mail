@@ -216,7 +216,11 @@ impl IcsWrite<Component> for VCalendar {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParsedVCalendar {
     pub cal: VCalendar,
+
+    /// Parsing messages (e.g. a syntax error somewhere in the file).
     pub msgs: Vec<ReadMsg>,
+
+    /// Validation messages (e.g. misconfigured event).
     pub viols: Vec<Violation>,
 }
 
