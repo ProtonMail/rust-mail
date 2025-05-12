@@ -4638,7 +4638,6 @@ dependencies = [
 name = "proton-calendar-common"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "chrono",
  "indoc",
  "pretty_assertions",
@@ -4811,7 +4810,6 @@ dependencies = [
 name = "proton-crypto-calendar"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "base64",
  "indoc",
  "pretty_assertions",

@@ -1,5 +1,4 @@
-use crate::{EncryptedIcs, KeyPacket, KeyPackets, Signature, UnlockedCalendarKey};
-use anyhow::{Context, Result};
+use crate::{EncryptedIcs, Error, KeyPacket, KeyPackets, Result, Signature, UnlockedCalendarKey};
 use proton_crypto::crypto::{
     DataEncoding, Encryptor, EncryptorSync, PGPMessage, PGPProviderSync, SessionKeyAlgorithm,
     Signer, SignerSync,
@@ -24,7 +23,7 @@ where
     pub fn for_address(pgp: &P, address_keys: &'a UnlockedAddressKeys<P>) -> Result<Self> {
         let address_key = address_keys
             .primary_default()
-            .context("Couldn't find the primary address key")?;
+            .ok_or(Error::CouldntFindPrimaryAddressKey)?;
 
         Self::new(
             pgp,
@@ -41,7 +40,7 @@ where
     ) -> Result<Self> {
         let address_key = address_keys
             .primary_default()
-            .context("Couldn't find the primary address key")?;
+            .ok_or(Error::CouldntFindPrimaryAddressKey)?;
 
         Self::new(
             pgp,
@@ -59,7 +58,7 @@ where
     ) -> Result<Self> {
         let session_key = pgp
             .session_key_generate(SessionKeyAlgorithm::default())
-            .context("Couldn't generate session key")?;
+            .map_err(Error::CouldntGenerateSessionKey)?;
 
         Ok(Self {
             mode,
@@ -69,20 +68,23 @@ where
         })
     }
 
+    #[allow(clippy::missing_panics_doc)]
     pub fn encrypt(&self, pgp: &P, ics: &[u8]) -> Result<(EncryptedIcs, Signature)> {
         let sig = pgp
             .new_signer()
             .with_signing_key(self.signing_key)
             .sign_detached(ics, DataEncoding::Armor)
-            .context("Couldn't sign *.ics")?;
+            .map_err(Error::CouldntSignIcs)?;
 
-        let sig = Signature::from_armored(String::from_utf8(sig)?);
+        // Unwrap-safety: String is armor-encoded
+        let sig = String::from_utf8(sig).unwrap();
+        let sig = Signature::from_armored(sig);
 
         let ics = pgp
             .new_encryptor()
             .with_session_key_ref(&self.session_key)
             .encrypt(ics)
-            .context("Couldn't encrypt *.ics")?
+            .map_err(Error::CouldntEncryptIcs)?
             .as_data_packet()
             .to_vec();
 
@@ -95,7 +97,8 @@ where
         let key_packet = pgp
             .new_encryptor()
             .with_encryption_key(self.encryption_key)
-            .encrypt_session_key(&self.session_key)?;
+            .encrypt_session_key(&self.session_key)
+            .map_err(Error::CouldntEncryptSessionKey)?;
 
         let key_packet = KeyPacket::from_bytes(&key_packet);
 

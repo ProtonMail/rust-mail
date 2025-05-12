@@ -1,6 +1,5 @@
 mod fetch;
 
-use anyhow::{Context, anyhow};
 use chrono::{DateTime, NaiveDate, Utc};
 use proton_calendar_api::{CalendarAttendeeStatus, CalendarEventId, CalendarEventRecurrenceId};
 use proton_core_api::{service::ApiServiceError, services::proton::Proton};
@@ -28,22 +27,20 @@ impl RsvpEventId {
         let cal = ical::VCalendar::from_bytes(ics)?.cal;
 
         if cal.method != Some(Method::Request) {
-            return Err(RsvpError::Other(anyhow!("*.ics is not an RSVP request")));
+            return Err(RsvpError::IcsIsNotRsvpRequest);
         }
 
         let mut event = cal
             .events
             .into_iter()
             .next()
-            .context("*.ics contains no events")
-            .map_err(RsvpError::Other)?;
+            .ok_or(RsvpError::IcsContainsNoEvents)?;
 
         let uid = CalendarEventId::new(
             event
                 .uid
                 .take()
-                .context("*.ics contains an event without uid")
-                .map_err(RsvpError::Other)?
+                .ok_or(RsvpError::IcsEventHasNoUid)?
                 .value
                 .into_string(),
         );
@@ -81,11 +78,10 @@ impl RsvpEventId {
             }
         }
 
-        let uid = uid
-            .context("Missing X-PM-UID header")
-            .map_err(RsvpError::Other)?;
-
-        Ok(Self { uid, recurrence_id })
+        Ok(Self {
+            uid: uid.ok_or(RsvpError::MissingXPmUidHeader)?,
+            recurrence_id,
+        })
     }
 
     /// Fetches event from the API, decrypts it, and returns its contents.
@@ -157,6 +153,42 @@ pub type RsvpResult<T> = Result<T, RsvpError>;
 
 #[derive(Debug, Error)]
 pub enum RsvpError {
+    #[error("*.ics is not an RSVP request")]
+    IcsIsNotRsvpRequest,
+
+    #[error("*.ics contains more than one event")]
+    IcsContainsMoreThanOneEvent,
+
+    #[error("*.ics contains no events")]
+    IcsContainsNoEvents,
+
+    #[error("*.ics contains an event without uid")]
+    IcsEventHasNoUid,
+
+    #[error("*.ics contains an event without summary")]
+    IcsEventHasNoSummary,
+
+    #[error("Missing X-PM-UID header")]
+    MissingXPmUidHeader,
+
+    #[error("Couldn't find shared event")]
+    CouldntFindSharedEvent,
+
+    #[error("Event's start time is out of range")]
+    EventStartTimeIsOutOfRange,
+
+    #[error("Event's end time is out of range")]
+    EventEndTimeIsOutOfRange,
+
+    #[error("Attendee has a non-email address")]
+    AttendeeHasNonEmailAddress,
+
+    #[error("Attendee has no X-PM-TOKEN")]
+    AttendeeHasNoXPmToken,
+
+    #[error("Attendee has unknown status")]
+    AttendeeHasUnknownStatus,
+
     #[error("{0}")]
     Api(#[from] ApiServiceError),
 
@@ -165,9 +197,6 @@ pub enum RsvpError {
 
     #[error("{0}")]
     Ical(#[from] IcalError),
-
-    #[error("{0}")]
-    Other(anyhow::Error),
 }
 
 #[cfg(test)]

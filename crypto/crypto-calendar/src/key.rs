@@ -1,5 +1,4 @@
-use crate::Result;
-use anyhow::Context;
+use crate::{Error, Result};
 use base64::{prelude::BASE64_STANDARD, Engine};
 use proton_calendar_api::CalendarBootstrap;
 use proton_crypto::crypto::{
@@ -33,17 +32,14 @@ impl<'a> LockedCalendarKey<'a> {
     pub fn from_bootstrap(calendar: &'a CalendarBootstrap) -> Result<Self> {
         let key = &calendar
             .primary_key()
-            .context("Calendar has no primary key")?
+            .ok_or(Error::CouldntFindPrimaryCalendarKey)?
             .private_key;
 
         let member = &calendar
             .passphrase
             .for_member(&calendar.member().id)
-            .with_context(|| {
-                format!(
-                    "Calendar has no passphrase for member {}",
-                    calendar.member().id
-                )
+            .ok_or_else(|| {
+                Error::CouldntFindCalendarPassphrase(calendar.member().id.to_string())
             })?;
 
         Ok(Self {
@@ -98,7 +94,7 @@ impl<'a> LockedCalendarKey<'a> {
     where
         P: PGPProviderSync,
     {
-        let token = pgp
+        let passphrase = pgp
             .new_decryptor()
             .with_decryption_key_refs(address_keys)
             .with_verification_key_refs(address_keys)
@@ -108,15 +104,15 @@ impl<'a> LockedCalendarKey<'a> {
                 true,
             )
             .decrypt(self.passphrase(), DataEncoding::Armor)
-            .context("Couldn't decrypt the token")?;
+            .map_err(Error::CouldntDecryptCalendarPassphrase)?;
 
-        token
+        passphrase
             .verification_result()
-            .context("Couldn't verify calendar key's signature")?;
+            .map_err(Error::CouldntVerifyCalendarPassphrase)?;
 
         let private_key = pgp
-            .private_key_import(self.key(), token, DataEncoding::Armor)
-            .context("Couldn't import calendar key")?;
+            .private_key_import(self.key(), passphrase, DataEncoding::Armor)
+            .map_err(Error::CouldntImportCalendarPrivateKey)?;
 
         UnlockedCalendarKey::wrap(pgp, private_key)
     }
@@ -141,7 +137,7 @@ where
     pub fn wrap(pgp: &P, private_key: P::PrivateKey) -> Result<Self> {
         let public_key = pgp
             .private_key_to_public_key(&private_key)
-            .context("Couldn't convert calendar's private key into public key")?;
+            .map_err(Error::CouldntConvertCalendarPrivateKeyToPublic)?;
 
         Ok(Self {
             private_key,
@@ -154,7 +150,7 @@ where
             .new_key_generator()
             .with_user_id("Calendar key", "Calendar key")
             .generate()
-            .context("Couldn't generate calendar key")?;
+            .map_err(Error::CouldntGenerateCalendarKey)?;
 
         Self::wrap(pgp, private_key)
     }
@@ -165,32 +161,32 @@ where
         pgp: &P,
         address_key: &UnlockedAddressKey<P>,
     ) -> Result<LockedCalendarKey<'static>> {
-        let token = Zeroizing::new(proton_crypto::generate_secure_random_bytes::<32>());
-        let token = Zeroizing::new(BASE64_STANDARD.encode(&token));
+        let passphrase = Zeroizing::new(proton_crypto::generate_secure_random_bytes::<32>());
+        let passphrase = Zeroizing::new(BASE64_STANDARD.encode(&passphrase));
 
         let key = String::from_utf8(
-            pgp.private_key_export(&self.private_key, &token, DataEncoding::Armor)
-                .context("Couldn't export the private key")?
+            pgp.private_key_export(&self.private_key, &passphrase, DataEncoding::Armor)
+                .map_err(Error::CouldntExportCalendarPrivateKey)?
                 .as_ref()
                 .to_vec(),
-        );
-
-        let passphrase = String::from_utf8(
-            pgp.new_encryptor()
-                .with_encryption_key(address_key.as_public_key())
-                .with_utf8()
-                .encrypt(&token)
-                .context("Couldn't encrypt the token")?
-                .armor()
-                .context("Couldn't armor the token")?,
         );
 
         let signature = String::from_utf8(
             pgp.new_signer()
                 .with_signing_key(address_key.as_ref())
                 .with_utf8()
-                .sign_detached(&token, DataEncoding::Armor)
-                .context("Couldn't sign the token")?,
+                .sign_detached(&passphrase, DataEncoding::Armor)
+                .map_err(Error::CouldntSignCalendarPassphrase)?,
+        );
+
+        let passphrase = String::from_utf8(
+            pgp.new_encryptor()
+                .with_encryption_key(address_key.as_public_key())
+                .with_utf8()
+                .encrypt(&passphrase)
+                .map_err(Error::CouldntEncryptCalendarPassphrase)?
+                .armor()
+                .map_err(Error::CouldntArmorCalendarPassphrase)?,
         );
 
         // Unwrap-safety: All three are armor-encoded

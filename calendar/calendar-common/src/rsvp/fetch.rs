@@ -1,5 +1,4 @@
 use crate::{RsvpAttendee, RsvpCalendar, RsvpEvent, RsvpEventId, RsvpOccurrence, RsvpResult};
-use anyhow::{Context, anyhow};
 use chrono::DateTime;
 use proton_calendar_api::{
     CalendarAttendeeStatus, CalendarBootstrap, CalendarEvent, CalendarEventPayload, ProtonCalendar,
@@ -151,16 +150,13 @@ where
     let cal = out.cal;
 
     if cal.events.len() > 1 {
-        return Err(RsvpError::Other(anyhow!(
-            "*.ics contains more than one event"
-        )));
+        return Err(RsvpError::IcsContainsMoreThanOneEvent);
     }
 
     cal.events
         .into_iter()
         .next()
-        .context("*.ics contains no events")
-        .map_err(RsvpError::Other)
+        .ok_or(RsvpError::IcsContainsNoEvents)
 }
 
 fn extract_metadata<P>(
@@ -177,15 +173,13 @@ where
         .shared_events
         .iter()
         .find(|event| event.ty.is_encrypted())
-        .context("Couldn't find shared event")
-        .map_err(RsvpError::Other)?;
+        .ok_or(RsvpError::CouldntFindSharedEvent)?;
 
     let event = decrypt_and_parse(pgp, event, decryptor)?;
 
     let title = event
         .summary
-        .context("*.ics contains an event without summary")
-        .map_err(RsvpError::Other)?
+        .ok_or(RsvpError::IcsEventHasNoSummary)?
         .value
         .into_string();
 
@@ -203,12 +197,10 @@ fn extract_occurrence(event: &CalendarEvent) -> RsvpResult<RsvpOccurrence> {
     debug!("Extracting event's occurrence");
 
     let starts_at = DateTime::from_timestamp(event.start_time, 0)
-        .context("Event's start time is out of range")
-        .map_err(RsvpError::Other)?;
+        .ok_or(RsvpError::EventStartTimeIsOutOfRange)?;
 
-    let ends_at = DateTime::from_timestamp(event.end_time, 0)
-        .context("Event's end time is out of range")
-        .map_err(RsvpError::Other)?;
+    let ends_at =
+        DateTime::from_timestamp(event.end_time, 0).ok_or(RsvpError::EventEndTimeIsOutOfRange)?;
 
     if event.full_day {
         Ok(RsvpOccurrence::Date {
@@ -264,24 +256,20 @@ fn map_attendee(
     let email = match attendee.address {
         ical::CalAddress::Email(email) => email.into_value().into_string(),
         _ => {
-            return Err(RsvpError::Other(anyhow!(
-                "Attendee has a non-email address"
-            )));
+            return Err(RsvpError::AttendeeHasNonEmailAddress);
         }
     };
 
     let token = attendee
         .x_pm_token
-        .context("Attendee has no X-PM-TOKEN")
-        .map_err(RsvpError::Other)?
+        .ok_or(RsvpError::AttendeeHasNoXPmToken)?
         .into_string();
 
     let name = attendee.cn.map(|cn| cn.value.into_string());
 
     let status = *statuses
         .get(&token.as_str())
-        .context("Attendee has unknown status")
-        .map_err(RsvpError::Other)?;
+        .ok_or(RsvpError::AttendeeHasUnknownStatus)?;
 
     Ok(RsvpAttendee {
         email,

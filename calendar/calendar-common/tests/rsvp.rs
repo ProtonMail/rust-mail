@@ -6,7 +6,9 @@ use proton_calendar_api::{
     CalendarEventPayload, CalendarEventPayloadType, CalendarKey, CalendarKeyFlags, CalendarMember,
     CalendarMemberPassphrase, CalendarPassphrase, ProtonCalendarMock,
 };
-use proton_calendar_common::{RsvpAttendee, RsvpCalendar, RsvpEvent, RsvpEventId, RsvpOccurrence};
+use proton_calendar_common::{
+    RsvpAttendee, RsvpCalendar, RsvpError, RsvpEvent, RsvpEventId, RsvpOccurrence,
+};
 use proton_core_api::session::{Config, Session};
 use proton_core_test_utils::test_context::{MockApiEnv, TestContext};
 use proton_crypto::crypto::{KeyGeneratorAlgorithm, PGPProviderSync};
@@ -191,11 +193,13 @@ async fn err_unknown_attendee_status() {
         .unwrap()
         .fetch(&world.sess, &world.pgp, &world.address_keys)
         .await
-        .unwrap_err()
-        .to_string();
+        .unwrap_err();
 
     // Attendee `zar@localhost` is not present in the `CalendarEvent`
-    assert_eq!("Attendee has unknown status", actual);
+    assert_eq!(
+        RsvpError::AttendeeHasUnknownStatus.to_string(),
+        actual.to_string()
+    );
 }
 
 #[tokio::test]
@@ -230,10 +234,12 @@ async fn err_missing_x_pm_token() {
         .unwrap()
         .fetch(&world.sess, &world.pgp, &world.address_keys)
         .await
-        .unwrap_err()
-        .to_string();
+        .unwrap_err();
 
-    assert_eq!("Attendee has no X-PM-TOKEN", actual);
+    assert_eq!(
+        RsvpError::AttendeeHasNoXPmToken.to_string(),
+        actual.to_string()
+    );
 }
 
 #[tokio::test]
@@ -270,10 +276,12 @@ async fn err_many_events_in_ics() {
         .unwrap()
         .fetch(&world.sess, &world.pgp, &world.address_keys)
         .await
-        .unwrap_err()
-        .to_string();
+        .unwrap_err();
 
-    assert_eq!("*.ics contains more than one event", actual);
+    assert_eq!(
+        RsvpError::IcsContainsMoreThanOneEvent.to_string(),
+        actual.to_string()
+    );
 }
 
 struct World<P>

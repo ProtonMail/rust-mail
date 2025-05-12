@@ -2,7 +2,6 @@ use crate::{
     DecryptedIcs, EncryptedIcsRef, Error, KeyPacketRef, KeyPackets, Result, SignatureRef,
     UnlockedCalendarKey,
 };
-use anyhow::{anyhow, Context};
 use base64::{prelude::BASE64_STANDARD, Engine};
 use proton_crypto::crypto::{
     AsPublicKeyRef, DataEncoding, Decryptor, DecryptorSync, DetachedSignatureVariant,
@@ -36,7 +35,7 @@ where
                 packet,
                 address_keys.iter(),
                 address_keys.iter(),
-                "address key packet",
+                "address",
             )
         } else if let Some(packet) = key_packets.shared_key_packet {
             Self::new_ex(
@@ -44,12 +43,10 @@ where
                 packet,
                 iter::once(calendar_key),
                 address_keys.iter(),
-                "shared key packet",
+                "shared",
             )
         } else {
-            Err(Error::from(anyhow!(
-                "Both address key packet and shared key packet are missing"
-            )))
+            Err(Error::BothKeyPacketsAreMissing)
         }
     }
 
@@ -58,7 +55,7 @@ where
         packet: KeyPacketRef,
         decryption_keys: impl IntoIterator<Item = &'b D>,
         verification_keys: impl IntoIterator<Item = &'a V>,
-        ty: &str,
+        ty: &'static str,
     ) -> Result<Self>
     where
         D: AsRef<P::PrivateKey> + 'b,
@@ -66,7 +63,7 @@ where
     {
         let packet = BASE64_STANDARD
             .decode(packet.as_base64())
-            .with_context(|| format!("Couldn't decode {ty}"))?;
+            .map_err(|err| Error::CouldntDecodeKeyPacket { ty, err })?;
 
         let decryption_keys: Vec<_> = decryption_keys.into_iter().collect();
 
@@ -79,7 +76,7 @@ where
             .new_decryptor()
             .with_decryption_key_refs(&decryption_keys)
             .decrypt_session_key(&packet)
-            .with_context(|| format!("Couldn't decrypt {ty}"))?;
+            .map_err(|err| Error::CouldntDecryptKeyPacket { ty, err })?;
 
         Ok(Self {
             session_key,
@@ -98,7 +95,7 @@ where
     {
         let ics = BASE64_STANDARD
             .decode(ics.as_base64())
-            .context("Couldn't decode *.ics")?;
+            .map_err(Error::CouldntDecodeIcs)?;
 
         let decryptor = {
             let decryptor = pgp.new_decryptor().with_session_key_ref(&self.session_key);
@@ -118,10 +115,10 @@ where
 
         let ics = decryptor
             .decrypt(ics, DataEncoding::Bytes)
-            .context("Couldn't decrypt *.ics")?;
+            .map_err(Error::CouldntDecryptIcs)?;
 
         if sign.is_some() {
-            ics.verification_result().context("Couldn't verify *.ics")?;
+            ics.verification_result().map_err(Error::CouldntVerifyIcs)?;
         }
 
         Ok(DecryptedIcs::from_bytes(ics.into_vec()))
