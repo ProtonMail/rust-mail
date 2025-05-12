@@ -1,6 +1,6 @@
 use crate::actions::draft::{
-    SEND_ACTION_GROUP, local_all_draft_label_id, local_draft_label_id, local_outbox_label_id,
-    local_sent_label_id,
+    SEND_ACTION_GROUP, local_all_draft_label_id, local_all_scheduled_label_id,
+    local_draft_label_id, local_outbox_label_id, local_sent_label_id,
 };
 use crate::datatypes::{LocalMessageId, MessageFlags, MimeType, RollbackItemType};
 use crate::draft::send::{build_packages, load_send_preferences_for_recipients};
@@ -10,9 +10,10 @@ use crate::models::{
     DraftSendResultOrigin, MailSettings, Message, MetadataId, RollbackItem,
 };
 use crate::{AppError, MailContextError, MailUserContext};
+use chrono::{DateTime, Local};
 use proton_action_queue::action::{
-    Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
-    WriterGuardError,
+    Action, ActionGroup, ActionId, FactoryError, FactoryResult, Priority, Type, VersionConverter,
+    VersionConverterError, WriterGuard, WriterGuardError, deserialize,
 };
 use proton_core_api::consts::Mail;
 use proton_core_api::services::proton::prelude::AddressId;
@@ -34,6 +35,8 @@ pub struct Send {
     local_message_id: Option<LocalMessageId>,
     recipients: Vec<String>,
     mime_type: MimeType,
+    #[serde(default)]
+    delivery_time: Option<u64>,
 }
 
 impl Send {
@@ -44,6 +47,18 @@ impl Send {
             address_id: draft.address_id.clone(),
             recipients: Self::combine_recipients(draft),
             mime_type: draft.mime_type(),
+            delivery_time: None,
+        }
+    }
+
+    pub fn scheduled(draft: &Draft, delivery_time: DateTime<Local>) -> Self {
+        Self {
+            metadata_id: draft.metadata_id,
+            local_message_id: None,
+            address_id: draft.address_id.clone(),
+            recipients: Self::combine_recipients(draft),
+            mime_type: draft.mime_type(),
+            delivery_time: Some(delivery_time.timestamp().unsigned_abs()),
         }
     }
 
@@ -61,21 +76,56 @@ impl Send {
 
         recipient_emails.into_iter().collect::<Vec<_>>()
     }
+
+    fn is_scheduled(&self) -> bool {
+        self.delivery_time.is_some()
+    }
+
+    fn update_sent_flag(&self, message: &mut Message, value: bool) {
+        if self.is_scheduled() {
+            message.flags.set(MessageFlags::SCHEDULED_SEND, value);
+        } else {
+            message.flags.set(MessageFlags::SENT, value);
+        }
+    }
 }
 
 pub type UndoTimestamp = u64;
 
+const SEND_ACTION_VERSION: u32 = 2;
 impl Action for Send {
     const TYPE: Type = Type("send_draft");
-    const VERSION: u32 = 1;
+    const VERSION: u32 = SEND_ACTION_VERSION;
     const PRIORITY: Priority = Priority::High;
     const GROUP: ActionGroup = SEND_ACTION_GROUP;
-    type VersionConverter = DefaultVersionConverter<Self>;
+    type VersionConverter = SendVersionConverter;
     type Handler = SendHandler;
     type RemoteOutput = (MessageId, UndoTimestamp);
     type LocalOutput = ();
     type Error = MailContextError;
     type Context = MailUserContext;
+}
+
+pub struct SendVersionConverter;
+
+impl VersionConverter for SendVersionConverter {
+    type Output = Send;
+
+    fn convert(old_version: u32, current_version: u32, data: &[u8]) -> FactoryResult<Self::Output> {
+        if current_version > SEND_ACTION_VERSION {
+            return Err(FactoryError::VersionConverter(
+                VersionConverterError::InvalidVersion(current_version),
+            ));
+        }
+        if old_version <= 2 {
+            // deserializing an extra optional is fine when it does not exist.
+            Ok(deserialize::<Send>(data)?)
+        } else {
+            Err(FactoryError::VersionConverter(
+                VersionConverterError::InvalidVersion(old_version),
+            ))
+        }
+    }
 }
 
 #[derive(Default)]
@@ -101,6 +151,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         let local_draft_label_id = local_draft_label_id(tx).await?;
         let local_outbox_label_id = local_outbox_label_id(tx).await?;
         let local_all_draft_label_id = local_all_draft_label_id(tx).await?;
+        let local_all_scheduled_label_id = local_all_scheduled_label_id(tx).await?;
 
         let Some(mut metadata) = DraftMetadata::find_by_id(action.metadata_id, tx)
             .await
@@ -125,7 +176,11 @@ impl proton_action_queue::action::Handler for SendHandler {
             return Err(AppError::MessageMissing(local_message_id).into());
         };
 
-        message.flags.set(MessageFlags::SENT, true);
+        action.update_sent_flag(&mut message, true);
+        // When schedule sending the time of the message is the expected delivery time.
+        if let Some(delivery_time) = action.delivery_time {
+            message.time = delivery_time;
+        };
         message.save(tx).await.inspect_err(|e| {
             error!("Failed to update message sent flag: {e:?}");
         })?;
@@ -136,9 +191,15 @@ impl proton_action_queue::action::Handler for SendHandler {
         Message::remove_label(local_all_draft_label_id, [local_message_id], tx)
             .await
             .inspect_err(|e| error!("Failed to remove all draft label: {e:?}"))?;
-        Message::apply_label(local_outbox_label_id, [local_message_id], tx)
-            .await
-            .inspect_err(|e| error!("Failed to apply outbox label: {e:?}"))?;
+        if action.is_scheduled() {
+            Message::apply_label(local_all_scheduled_label_id, [local_message_id], tx)
+                .await
+                .inspect_err(|e| error!("Failed to apply scheduled label: {e:?}"))?;
+        } else {
+            Message::apply_label(local_outbox_label_id, [local_message_id], tx)
+                .await
+                .inspect_err(|e| error!("Failed to apply outbox label: {e:?}"))?;
+        }
 
         action.local_message_id = Some(local_message_id);
 
@@ -162,6 +223,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         let local_draft_label_id = local_draft_label_id(tx).await?;
         let local_outbox_label_id = local_outbox_label_id(tx).await?;
         let local_all_draft_label_id = local_all_draft_label_id(tx).await?;
+        let local_all_scheduled_label_id = local_all_scheduled_label_id(tx).await?;
 
         let Some(mut message) = Message::find_by_id(local_message_id, tx)
             .await
@@ -171,14 +233,20 @@ impl proton_action_queue::action::Handler for SendHandler {
             return Err(AppError::MessageMissing(local_message_id).into());
         };
 
-        message.flags.set(MessageFlags::SENT, false);
+        action.update_sent_flag(&mut message, false);
         message.save(tx).await.inspect_err(|e| {
             error!("Failed to update message sent flag (revert): {e:?}");
         })?;
 
-        Message::remove_label(local_outbox_label_id, [local_message_id], tx)
-            .await
-            .inspect_err(|e| error!("Failed to remove outbox label: {e:?}"))?;
+        if action.is_scheduled() {
+            Message::remove_label(local_all_scheduled_label_id, [local_message_id], tx)
+                .await
+                .inspect_err(|e| error!("Failed to remove scheduled label: {e:?}"))?;
+        } else {
+            Message::remove_label(local_outbox_label_id, [local_message_id], tx)
+                .await
+                .inspect_err(|e| error!("Failed to remove outbox label: {e:?}"))?;
+        }
         Message::apply_label(local_draft_label_id, [local_message_id], tx)
             .await
             .inspect_err(|e| error!("Failed to apply draft label: {e:?}"))?;
@@ -204,6 +272,8 @@ impl proton_action_queue::action::Handler for SendHandler {
     }
 }
 
+const SEND_DELIVERY_DELTA_INTERVAL: Duration = Duration::from_secs(60);
+
 impl Send {
     async fn apply_remote_impl(
         context: &<Self as Action>::Context,
@@ -211,8 +281,21 @@ impl Send {
         guard: &mut WriterGuard<'_>,
     ) -> Result<<Self as Action>::RemoteOutput, <Self as Action>::Error> {
         let local_message_id = action.local_message_id.expect("Should be set");
+
+        if let Some(delivery_time) = action.delivery_time {
+            let current_time_stamp =
+                Local::now().timestamp().unsigned_abs() + SEND_DELIVERY_DELTA_INTERVAL.as_secs();
+            if current_time_stamp > delivery_time {
+                error!(
+                    "Unable to schedule sending of message {local_message_id}: schedule date is past"
+                );
+                return Err(SendError::SechduleSendExpired.into());
+            }
+        }
+
         let local_outbox_label_id = local_outbox_label_id(guard.tether()).await?;
         let local_sent_label_id = local_sent_label_id(guard.tether()).await?;
+        let local_all_scheduled_id = local_all_scheduled_label_id(guard.tether()).await?;
 
         // Check if there are any new attachments that have not yet finished loading.
         if DraftAttachmentMetadata::has_unsynced_attachments(action.metadata_id, guard.tether())
@@ -312,6 +395,7 @@ impl Send {
                 packages,
                 auto_save_contacts,
                 Some(Duration::from_secs(mail_settings.delay_send_seconds as u64)),
+                action.delivery_time,
             )
             .await
         {
@@ -371,10 +455,15 @@ impl Send {
                         Message::remove_label(local_outbox_label_id, [local_message_id], tx)
                             .await
                             .inspect_err(|e| error!("Failed to remove outbox label: {e:?}"))?;
-                        Message::apply_label(local_sent_label_id, [local_message_id], tx)
-                            .await
-                            .inspect_err(|e| error!("Failed to apply sent label: {e:?}"))?;
-
+                        if action.is_scheduled() {
+                            Message::apply_label(local_all_scheduled_id, [local_message_id], tx)
+                                .await
+                                .inspect_err(|e| error!("Failed to apply all scheduled label: {e:?}"))?;
+                        } else {
+                            Message::apply_label(local_sent_label_id, [local_message_id], tx)
+                                .await
+                                .inspect_err(|e| error!("Failed to apply sent label: {e:?}"))?;
+                        }
                         // Delete draft metadata
                         DraftMetadata::delete(action.metadata_id, tx)
                             .await
@@ -442,11 +531,17 @@ async fn save_send_status(
     guard: &mut WriterGuard<'_>,
     status: &Result<<Send as Action>::RemoteOutput, MailContextError>,
 ) -> Result<(), WriterGuardError> {
+    let origin = if action.is_scheduled() {
+        DraftSendResultOrigin::ScheduleSend
+    } else {
+        DraftSendResultOrigin::Send
+    };
     let mut send_result = match status {
         Ok((remote_id, delivery_time)) => DraftSendResult::success(
             action.local_message_id.expect("Should be set"),
             remote_id.clone(),
             (*delivery_time).try_into().unwrap_or(0),
+            origin,
         ),
         Err(error) => {
             let error = DraftSendFailure::from_mail_context_error(error);
@@ -455,7 +550,7 @@ async fn save_send_status(
             } else {
                 DraftSendResult::failure(
                     action.local_message_id.expect("Should be set by now"),
-                    DraftSendResultOrigin::Send,
+                    origin,
                     error,
                 )
             }

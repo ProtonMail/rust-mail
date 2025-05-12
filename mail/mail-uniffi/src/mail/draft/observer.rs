@@ -29,6 +29,8 @@ pub enum DraftSendResultOrigin {
     Send,
     /// When uploading an attachment.
     AttachmentUpload,
+    /// We failed when scheduling a message send
+    ScheduleSend,
 }
 
 impl From<RealDraftSendResultOrigin> for DraftSendResultOrigin {
@@ -38,6 +40,7 @@ impl From<RealDraftSendResultOrigin> for DraftSendResultOrigin {
             RealDraftSendResultOrigin::SaveBeforeSend => Self::SaveBeforeSend,
             RealDraftSendResultOrigin::Send => Self::Send,
             RealDraftSendResultOrigin::AttachmentUpload => Self::AttachmentUpload,
+            RealDraftSendResultOrigin::ScheduleSend => Self::ScheduleSend,
         }
     }
 }

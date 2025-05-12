@@ -11,6 +11,7 @@ crate-type = ["staticlib", "cdylib"]
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
+chrono = { workspace = true }
 derive_more = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }

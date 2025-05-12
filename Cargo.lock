@@ -5097,6 +5097,7 @@ version = "0.76.1"
 dependencies = [
  "anyhow",
  "async-trait",
+ "chrono",
  "derive_more 2.0.1",
  "flume",
  "futures",

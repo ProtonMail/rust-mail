@@ -16,9 +16,10 @@ use crate::mail::draft::observer::DraftSendResult;
 use crate::mail::messages::EmbeddedAttachmentInfo;
 use crate::mail::state::MailUserContextPtr;
 use crate::{async_runtime, uniffi_async};
+use chrono::{Local, MappedLocalTime, TimeZone};
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::draft::{
-    Draft as RealDraft, DraftSyncStatus as RealDraftSyncStatus, ReplyMode,
+    Draft as RealDraft, DraftSyncStatus as RealDraftSyncStatus, ReplyMode, ScheduleSendOptions,
 };
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::DraftMetadata;
@@ -38,6 +39,23 @@ pub enum DraftCreateMode {
     ReplyAll(Id),
     /// Forward the message to
     Forward(Id),
+}
+
+#[derive(Debug, uniffi::Record)]
+pub struct DraftScheduleSendOption {
+    pub tomorrow: u64,
+    pub next_monday: u64,
+    pub is_custom_option_available: bool,
+}
+
+impl From<ScheduleSendOptions<Local>> for DraftScheduleSendOption {
+    fn from(value: ScheduleSendOptions<Local>) -> Self {
+        Self {
+            tomorrow: value.time_tomorrow.timestamp().unsigned_abs(),
+            next_monday: value.time_next_monday.timestamp().unsigned_abs(),
+            is_custom_option_available: value.is_custom_datetime_available,
+        }
+    }
 }
 
 /// Represents a draft message which can be crafted as empty or as a reply/forward
@@ -380,6 +398,56 @@ impl Draft {
         .await
         .map_err(DraftSendError::from)
         .into()
+    }
+
+    /// Schedule the sending of the given draft at the `timestamp`.
+    #[returns(VoidDraftSendResult)]
+    pub async fn schedule(self: Arc<Self>, timestamp: u64) -> Result<(), DraftSendError> {
+        let Some(ctx) = self.ctx.upgrade() else {
+            return Err(DraftSendError::Other(ProtonError::Unexpected(
+                UnexpectedError::Internal,
+            )));
+        };
+        #[allow(clippy::cast_possible_wrap)] // we manually limit this.
+        let timestamp = match Local.timestamp_opt(timestamp.min(i64::MAX as u64) as i64, 0) {
+            MappedLocalTime::Single(v) => v,
+            MappedLocalTime::None | MappedLocalTime::Ambiguous(_, _) => {
+                tracing::error!("Invalid time offset");
+                return Err(DraftSendError::Other(ProtonError::Unexpected(
+                    UnexpectedError::Internal,
+                )));
+            }
+        };
+        uniffi_async(async move {
+            let mut instance = self.instance.write().await;
+            instance
+                .schedule_send(
+                    timestamp,
+                    ctx.action_queue(),
+                    &ctx.user_stash().connection(),
+                )
+                .await
+                .map_err(RealProtonMailError::from)?;
+
+            Result::<_, RealProtonMailError>::Ok(())
+        })
+        .await
+        .map_err(DraftSendError::from)
+        .into()
+    }
+
+    pub async fn schedule_send_options(&self) -> Result<DraftScheduleSendOption, ProtonError> {
+        let Some(ctx) = self.ctx.upgrade() else {
+            return Err(ProtonError::Unexpected(UnexpectedError::Internal));
+        };
+        uniffi_async(async move {
+            RealDraft::schedule_send_options(&ctx)
+                .await
+                .map_err(RealProtonMailError::from)
+        })
+        .await
+        .map_err(ProtonError::from)
+        .map(Into::into)
     }
 
     /// Discard the draft.

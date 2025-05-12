@@ -58,7 +58,7 @@ async fn local_all_mail_label_id(tether: &Tether) -> Result<LocalLabelId, MailCo
 async fn local_sent_label_id(tether: &Tether) -> Result<LocalLabelId, MailContextError> {
     let Some(local_draft_label_id) = Label::remote_id_counterpart(LabelId::sent(), tether).await?
     else {
-        return Err(AppError::RemoteLabelDoesNotExist(LabelId::drafts()).into());
+        return Err(AppError::RemoteLabelDoesNotExist(LabelId::sent()).into());
     };
 
     Ok(local_draft_label_id)
@@ -69,7 +69,17 @@ async fn local_outbox_label_id(tether: &Tether) -> Result<LocalLabelId, MailCont
     let Some(local_draft_label_id) =
         Label::remote_id_counterpart(LabelId::outbox(), tether).await?
     else {
-        return Err(AppError::RemoteLabelDoesNotExist(LabelId::drafts()).into());
+        return Err(AppError::RemoteLabelDoesNotExist(LabelId::outbox()).into());
+    };
+
+    Ok(local_draft_label_id)
+}
+
+async fn local_all_scheduled_label_id(tether: &Tether) -> Result<LocalLabelId, MailContextError> {
+    let Some(local_draft_label_id) =
+        Label::remote_id_counterpart(LabelId::all_scheduled(), tether).await?
+    else {
+        return Err(AppError::RemoteLabelDoesNotExist(LabelId::all_scheduled()).into());
     };
 
     Ok(local_draft_label_id)

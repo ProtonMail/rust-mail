@@ -3,7 +3,9 @@ use crate::draft::recipients::ValidationState;
 use crate::draft::{PackageError, SendError, compose::html_to_text};
 use crate::models::Attachment;
 use crate::{MailContextError, MailContextResult, MailUserContext};
+use chrono::{DateTime, Datelike, Days, Local, LocalResult, NaiveTime};
 use proton_action_queue::action::WriterGuard;
+use proton_core_common::models::PaidSubscription;
 use proton_crypto_account::keys::{
     PrimaryUnlockedAddressKey, UnlockedAddressKey, UnlockedAddressKeys,
 };
@@ -494,4 +496,104 @@ fn process_attachments<Provider: PGPProviderSync>(
     }
     address_package.signature = Some(PackageSignaturesMode::from(sign));
     Ok(())
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("An invalid date time was generated")]
+pub struct ScheduleSendOptionsDateTimeError;
+
+pub struct ScheduleSendOptions<Tz: chrono::TimeZone> {
+    /// Timestamp for the next day at 8:00
+    pub time_tomorrow: DateTime<Tz>,
+    /// Timestamp for the next Monday at 8:00
+    pub time_next_monday: DateTime<Tz>,
+    /// Indicates whether the custom date time picker is available, paying users only.
+    pub is_custom_datetime_available: bool,
+}
+
+impl ScheduleSendOptions<Local> {
+    pub fn new(
+        user_subscriptions: PaidSubscription,
+    ) -> Result<Self, ScheduleSendOptionsDateTimeError> {
+        let now = Local::now();
+        Ok(Self {
+            time_tomorrow: Self::calculate_tomorrow(now)?,
+            time_next_monday: Self::calculate_next_monday(now)?,
+            is_custom_datetime_available: user_subscriptions.contains(PaidSubscription::MAIL),
+        })
+    }
+}
+
+impl<Tz: chrono::TimeZone> ScheduleSendOptions<Tz> {
+    fn calculate_tomorrow(
+        now: DateTime<Tz>,
+    ) -> Result<DateTime<Tz>, ScheduleSendOptionsDateTimeError> {
+        Self::calculate_next(now, 1)
+    }
+    fn calculate_next_monday(
+        now: DateTime<Tz>,
+    ) -> Result<DateTime<Tz>, ScheduleSendOptionsDateTimeError> {
+        let days = 7 - now.weekday().num_days_from_monday();
+        Self::calculate_next(now, days as u64)
+    }
+
+    fn calculate_next(
+        now: DateTime<Tz>,
+        days: u64,
+    ) -> Result<DateTime<Tz>, ScheduleSendOptionsDateTimeError> {
+        let Some(tomorrow) = now.checked_add_days(Days::new(days)) else {
+            error!("Failed to calculate next date");
+            return Err(ScheduleSendOptionsDateTimeError);
+        };
+
+        match tomorrow.with_time(NaiveTime::from_hms_opt(8, 0, 0).expect("Should never fail")) {
+            LocalResult::Single(v) => Ok(v),
+            LocalResult::Ambiguous(v1, _) => Ok(v1),
+            LocalResult::None => {
+                error!("Failed to calculate date time at 08:00");
+                Err(ScheduleSendOptionsDateTimeError)
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // All test need to run with utc timezone, but the real code should use local timezone.
+    use super::*;
+    use chrono::Utc;
+    use test_case::test_case;
+
+    #[test]
+    fn calculate_tomorrow() {
+        let now: DateTime<Utc> = DateTime::parse_from_rfc2822("Mon, 12 May 2025 09:30:00 GMT")
+            .unwrap()
+            .into();
+        let expected: DateTime<Utc> = DateTime::parse_from_rfc2822("Tue, 13 May 2025 08:00:00 GMT")
+            .unwrap()
+            .into();
+
+        let output = ScheduleSendOptions::calculate_tomorrow(now).unwrap();
+        assert_eq!(output, expected);
+    }
+
+    #[test_case("Mon, 12 May 2025 09:30:00 GMT", "Mon, 19 May 2025 08:00:00 GMT"; "monday to monday" )]
+    #[test_case("Wed, 14 May 2025 12:30:00 GMT", "Mon, 19 May 2025 08:00:00 GMT"; "wednesday to monday" )]
+    #[test_case("Sun, 18 May 2025 23:30:00 GMT", "Mon, 19 May 2025 08:00:00 GMT"; "Sunday to monday" )]
+    #[test_case("Sun, 30 Mar 2025 23:30:00 GMT", "Mon, 31 Mar 2025 08:00:00 GMT"; "Daylight Savings" )]
+    fn calculate_next_monday(input: &str, expected: &str) {
+        let now: DateTime<Utc> = DateTime::parse_from_rfc2822(input).unwrap().into();
+        let expected: DateTime<Utc> = DateTime::parse_from_rfc2822(expected).unwrap().into();
+
+        let output: DateTime<Utc> = ScheduleSendOptions::calculate_next_monday(now).unwrap();
+        assert_eq!(output, expected);
+    }
+
+    #[test]
+    fn send_options_custom_option_available_only_for_paid_users() {
+        let options = ScheduleSendOptions::new(PaidSubscription::empty()).unwrap();
+        assert!(!options.is_custom_datetime_available);
+        let options = ScheduleSendOptions::new(PaidSubscription::MAIL).unwrap();
+        assert!(options.is_custom_datetime_available)
+    }
 }

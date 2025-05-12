@@ -1,4 +1,4 @@
-use chrono::Utc;
+use chrono::{Days, Local, Months, Utc};
 use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
 use proton_core_api::consts::{CoreBundle, Mail};
 use proton_core_api::services::proton::GetKeysAllResponse;
@@ -206,6 +206,297 @@ async fn basic_send_check() {
     assert!(!send_result.seen);
 }
 
+#[tokio::test]
+async fn basic_schedule_send_check() {
+    // Check :
+    // * Draft is saved before sent
+    // * Send API endpoint is updated
+    // * Draft is moved to all_sent folder
+
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.to_list.push(MessageRecipient {
+        address: "foo@bar.com".to_string(),
+        is_proton: false,
+        name: "".to_string(),
+        group: None,
+    });
+    let mut sent_message = message.clone();
+    message.metadata.label_ids.push(LabelId::drafts());
+    sent_message
+        .metadata
+        .label_ids
+        .push(LabelId::all_scheduled());
+    sent_message
+        .metadata
+        .flags
+        .set(MessageFlags::SCHEDULED_SEND, true);
+    sent_message.body.header = "Fancy new header".to_owned();
+
+    let sent_conversation = ApiConversation {
+        id: message.metadata.conversation_id.clone(),
+        attachment_info: Default::default(),
+        attachments_metadata: vec![],
+        display_snooze_reminder: false,
+        expiration_time: 0,
+        labels: vec![ConversationLabel {
+            id: LabelId::sent(),
+            context_expiration_time: 0,
+            context_num_attachments: 0,
+            context_num_messages: 1,
+            context_num_unread: 0,
+            context_size: 0,
+            context_snooze_time: 0,
+            context_time: 0,
+        }],
+        num_attachments: 0,
+        num_messages: 1,
+        subject: sent_message.metadata.subject.clone(),
+        ..Default::default()
+    };
+
+    let expected_draft_params = expected_create_draft_params();
+    let delivery_time = Local::now().checked_add_months(Months::new(1)).unwrap();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_create_draft(
+        expected_draft_params.clone(),
+        None,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+    ctx.mock_update_draft(
+        message.metadata.id.clone(),
+        expected_draft_params,
+        message.clone(),
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+    ctx.mock_send_draft(
+        message.metadata.id.clone(),
+        default_mock_schedule_send_params(delivery_time.timestamp().unsigned_abs()),
+        sent_message.clone(),
+        sent_conversation,
+        delivery_time.timestamp().unsigned_abs(),
+    )
+    .await;
+    ctx.core_test_context()
+        .mock_get_keys_all(
+            "foo@bar.com",
+            GetKeysAllResponse {
+                address_keys: Default::default(),
+                catch_all_keys: None,
+                is_proton: false,
+                proton_mx: false,
+                unverified_keys: None,
+                warnings: vec![],
+            },
+        )
+        .await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+    let tether = user_ctx.user_stash().connection();
+
+    // Create draft.
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    draft
+        .to_list
+        .add_single(RecipientEntry {
+            email: "foo@bar.com".into(),
+            display_name: MaybeEmptyString(None),
+        })
+        .unwrap();
+    draft
+        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
+
+    // Save at least once so we can retrieve the message id.
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    // get draft message id.
+    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+
+    draft
+        .schedule_send(
+            delivery_time,
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+        )
+        .await
+        .unwrap();
+
+    // Check draft is in outbox.
+    let draft_message = Message::load(draft_message_id, &tether)
+        .await
+        .unwrap()
+        .expect("failed to load message");
+
+    assert!(draft_message.label_ids.contains(&LabelId::all_scheduled()));
+    assert!(!draft_message.label_ids.contains(&LabelId::outbox()));
+    assert!(!draft_message.label_ids.contains(&LabelId::drafts()));
+    assert!(!draft_message.label_ids.contains(&LabelId::all_drafts()));
+    // Time of the message should match the delivery time.
+    assert_eq!(draft_message.time, delivery_time.timestamp().unsigned_abs());
+
+    // Execute action.
+    user_ctx.execute_all_send_actions().await.unwrap();
+    let tether = user_ctx.user_stash().connection();
+    let draft_message = Message::load(draft_message_id, &tether)
+        .await
+        .unwrap()
+        .expect("failed to load message");
+
+    // Check message is in the sent folder
+    assert!(!draft_message.label_ids.contains(&LabelId::outbox()));
+    assert!(!draft_message.label_ids.contains(&LabelId::drafts()));
+    assert!(draft_message.label_ids.contains(&LabelId::all_scheduled()));
+    assert_eq!(draft_message.remote_id, Some(message.metadata.id));
+    assert!(
+        draft_message
+            .flags
+            .contains(MessageFlags::SCHEDULED_SEND.into())
+    );
+
+    // Check body metadata was updated.
+    let body_metadata = MessageBodyMetadata::for_message(draft_message_id, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(body_metadata.header, sent_message.body.header);
+
+    // Check send result was created.
+
+    let send_result = DraftSendResult::find_by_id(draft_message_id, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(send_result.is_success());
+    assert_eq!(
+        send_result.remote_message_id,
+        Some(draft_message.remote_id.unwrap())
+    );
+    assert!(send_result.timestamp < send_result.undo_timestamp);
+    assert!(!send_result.seen);
+}
+
+#[tokio::test]
+async fn schedule_send_with_old_delivery_time_fails() {
+    // When schedule sending a message with a time in the past, we should fail.
+
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.to_list.push(MessageRecipient {
+        address: "foo@bar.com".to_string(),
+        is_proton: false,
+        name: "".to_string(),
+        group: None,
+    });
+    let mut sent_message = message.clone();
+    message.metadata.label_ids.push(LabelId::drafts());
+    sent_message
+        .metadata
+        .label_ids
+        .push(LabelId::all_scheduled());
+    sent_message
+        .metadata
+        .flags
+        .set(MessageFlags::SCHEDULED_SEND, true);
+    sent_message.body.header = "Fancy new header".to_owned();
+
+    let expected_draft_params = expected_create_draft_params();
+    let delivery_time = Local::now().checked_sub_days(Days::new(2)).unwrap();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_create_draft(
+        expected_draft_params.clone(),
+        None,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+    let tether = user_ctx.user_stash().connection();
+
+    // Create draft.
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    draft
+        .to_list
+        .add_single(RecipientEntry {
+            email: "foo@bar.com".into(),
+            display_name: MaybeEmptyString(None),
+        })
+        .unwrap();
+
+    draft
+        .schedule_send(
+            delivery_time,
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+        )
+        .await
+        .unwrap();
+
+    let Err(QueuedError::Action(schedule_send_error, _)) =
+        user_ctx.execute_all_send_actions().await
+    else {
+        unreachable!();
+    };
+    let schedule_send_error = schedule_send_error
+        .as_action_error::<proton_mail_common::actions::draft::Send>()
+        .unwrap();
+    assert!(matches!(
+        schedule_send_error,
+        ActionError::Action(MailContextError::Draft(draft::Error::Send(
+            draft::SendError::SechduleSendExpired,
+        )))
+    ));
+
+    // get draft message id.
+    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+
+    // Check draft is back in the drafts folder
+    let draft_message = Message::load(draft_message_id, &tether)
+        .await
+        .unwrap()
+        .expect("failed to load message");
+
+    assert!(!draft_message.label_ids.contains(&LabelId::all_scheduled()));
+    assert!(!draft_message.label_ids.contains(&LabelId::outbox()));
+    assert!(draft_message.label_ids.contains(&LabelId::drafts()));
+    assert!(draft_message.label_ids.contains(&LabelId::all_drafts()));
+
+    // Check send result was created.
+    let send_result = DraftSendResult::find_by_id(draft_message_id, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!send_result.is_success());
+    assert!(matches!(
+        send_result.error,
+        Some(DraftSendFailure::Send(
+            DraftSendFailureSend::ScheduleSendExpired
+        ))
+    ));
+}
 #[tokio::test]
 async fn send_fails_if_recipient_is_not_valid() {
     let (err, _, _) =
@@ -653,5 +944,15 @@ fn default_mock_send_params() -> TestDraftSendRequest {
         auto_save_contacts: Some(true),
         delay_seconds: Some(SEND_DELAY_SECONDS.into()),
         delivery_time: None,
+    }
+}
+
+fn default_mock_schedule_send_params(delivery_time: u64) -> TestDraftSendRequest {
+    TestDraftSendRequest {
+        expiration_time: None,
+        expires_in: None,
+        auto_save_contacts: Some(true),
+        delay_seconds: Some(SEND_DELAY_SECONDS.into()),
+        delivery_time: Some(delivery_time),
     }
 }

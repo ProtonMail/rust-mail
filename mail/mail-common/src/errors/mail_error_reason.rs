@@ -183,6 +183,8 @@ pub enum DraftSendErrorReason {
     MessageIsNotADraft,
     /// Message is missing attachment uploads
     MissingAttachmentUploads,
+    /// Time at which the message was scheduled to send has already expired
+    ScheduleSendExpired,
 }
 
 /// Specific Reason when attempting to cancel sending of an already sent draft.
