@@ -1,6 +1,6 @@
-use proton_api_core::services::proton::{AddressId, LabelId};
-use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
+use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_core_common::models::{Address, Label, ModelIdExtension};
+use proton_mail_api::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use proton_mail_common::models::{Conversation, Message};
 use proton_mail_test_utils::test_context::MailTestContext;
 

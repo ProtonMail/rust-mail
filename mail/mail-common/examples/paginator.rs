@@ -1,7 +1,7 @@
 use clap::Parser;
-use proton_api_core::services::proton::LabelId;
-use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
-use proton_api_core::session::Config;
+use proton_core_api::services::proton::LabelId;
+use proton_core_api::services::proton::muon::client::flow::LoginExtraInfo;
+use proton_core_api::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::models::Label;
 use proton_core_common::models::ModelIdExtension;
@@ -34,8 +34,8 @@ async fn main() {
         .parse_lossy(
             "info,proton_sqlite3=trace,\
                     proton_core_common=trace,proton_mail_common=trace,\
-                    proton_event_loop=trace,proton_api_core=trace,\
-                    proton_action_queue=trace,proton_api_mail=trace,\
+                    proton_event_loop=trace,proton_core_api=trace,\
+                    proton_action_queue=trace,proton_mail_api=trace,\
                     stash=error",
         );
     tracing_subscriber::FmtSubscriber::builder()

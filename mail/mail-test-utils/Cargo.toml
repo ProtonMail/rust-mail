@@ -6,8 +6,8 @@ publish = false
 
 [dependencies]
 futures = { workspace = true }
-proton-api-core = { workspace = true, features = ["sql"] }
-proton-api-mail = { workspace = true, features = ["sql"] }
+proton-core-api = { workspace = true, features = ["sql"] }
+proton-mail-api = { workspace = true, features = ["sql"] }
 proton-crypto-account = { workspace = true, features = ["sql"] }
 proton-core-common = { workspace = true, features = ["sql"] }
 proton-mail-common = { workspace = true, features = ["sql"] }

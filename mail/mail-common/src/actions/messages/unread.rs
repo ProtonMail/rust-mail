@@ -6,9 +6,9 @@ use itertools::Itertools;
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler as ActionHandler, Type, WriterGuard,
 };
-use proton_api_core::consts::General;
-use proton_api_mail::services::proton::ProtonMail;
+use proton_core_api::consts::General;
 use proton_core_common::models::ModelIdExtension;
+use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use tracing::error;

@@ -1,24 +1,24 @@
 use chrono::Utc;
 use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
-use proton_api_core::consts::{CoreBundle, Mail};
-use proton_api_core::services::proton::GetKeysAllResponse;
-use proton_api_core::services::proton::common::ApiErrorInfo;
-use proton_api_core::services::proton::{
+use proton_core_api::consts::{CoreBundle, Mail};
+use proton_core_api::services::proton::GetKeysAllResponse;
+use proton_core_api::services::proton::common::ApiErrorInfo;
+use proton_core_api::services::proton::{
     Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
     AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
 };
-use proton_api_core::services::proton::{AddressId, LabelId, UserId};
-use proton_api_mail::services::proton::request_data::{
-    DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
-};
-use proton_api_mail::services::proton::response_data::{
-    Conversation as ApiConversation, ConversationLabel, MessageFlags, MessageRecipient,
-};
+use proton_core_api::services::proton::{AddressId, LabelId, UserId};
 use proton_core_common::models::ModelExtension;
 use proton_crypto_account::keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature};
 use proton_crypto_inbox::message::EncryptedDraft;
 use proton_crypto_inbox::proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, KeyFlag, KeyId, LockedKey,
+};
+use proton_mail_api::services::proton::request_data::{
+    DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
+};
+use proton_mail_api::services::proton::response_data::{
+    Conversation as ApiConversation, ConversationLabel, MessageFlags, MessageRecipient,
 };
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::draft::Draft;

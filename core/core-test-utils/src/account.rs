@@ -1,4 +1,4 @@
-use proton_api_core::auth::UserKeySecret;
+use proton_core_api::auth::UserKeySecret;
 use proton_crypto_account::keys::{
     AddressKeys, ArmoredPrivateKey, DecryptedUserKey, EncryptedKeyToken, KeyFlag, KeyId,
     KeyTokenSignature, LockedKey, UnlockedUserKey, UnlockedUserKeys, UserKeys,

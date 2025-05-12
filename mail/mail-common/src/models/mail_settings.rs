@@ -7,13 +7,13 @@ use crate::datatypes::{
     MobileSettings, NextMessageOnMove, PgpScheme, PmSignature, ShowImages, ShowMoved, SpamAction,
     SwipeAction, ViewLayout, ViewMode,
 };
-use proton_api_mail::services::proton::ProtonMail;
-use proton_api_mail::services::proton::response_data::MailSettings as ApiMailSettings;
 use proton_core_common::datatypes::InitializationKey;
 use proton_core_common::models::{
     InitializationError, InitializationWatcher, InitializedComponent,
 };
 use proton_crypto_inbox::keys::CryptoMailSettings;
+use proton_mail_api::services::proton::ProtonMail;
+use proton_mail_api::services::proton::response_data::MailSettings as ApiMailSettings;
 use smart_default::SmartDefault;
 use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;

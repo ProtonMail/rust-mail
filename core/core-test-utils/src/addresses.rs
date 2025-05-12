@@ -1,11 +1,11 @@
 use crate::test_context::TestContext;
 use lazy_static::lazy_static;
-use proton_api_core::services::proton::AddressId;
-use proton_api_core::services::proton::AddressSignedKeyList as ApiAddressSignedKeyList;
-use proton_api_core::services::proton::{
+use proton_core_api::services::proton::AddressId;
+use proton_core_api::services::proton::AddressSignedKeyList as ApiAddressSignedKeyList;
+use proton_core_api::services::proton::{
     Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
 };
-use proton_api_core::services::proton::{GetAddressResponse, GetAddressesResponse};
+use proton_core_api::services::proton::{GetAddressResponse, GetAddressesResponse};
 use proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, ArmoredPrivateKey, EncryptedKeyToken, KeyFlag, KeyId,
     KeyTokenSignature, LockedKey,

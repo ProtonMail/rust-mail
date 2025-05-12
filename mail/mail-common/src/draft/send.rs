@@ -4,9 +4,6 @@ use crate::draft::{PackageError, SaveOrSendError, compose::html_to_text};
 use crate::models::Attachment;
 use crate::{MailContextError, MailContextResult, MailUserContext};
 use proton_action_queue::action::WriterGuard;
-use proton_api_mail::services::proton::request_data::{
-    AddressSubPackage, Package, PackageSignaturesMode,
-};
 use proton_crypto_account::keys::{
     PrimaryUnlockedAddressKey, UnlockedAddressKey, UnlockedAddressKeys,
 };
@@ -19,6 +16,9 @@ use proton_crypto_inbox::message::packages::{
     EncryptedPackageBody, PackageMimeType, package_body_encrypt,
 };
 use proton_crypto_inbox::proton_crypto_inbox_mime::write::InboxMimeBuilder;
+use proton_mail_api::services::proton::request_data::{
+    AddressSubPackage, Package, PackageSignaturesMode,
+};
 use stash::stash::RunTransaction;
 use std::collections::{HashMap, HashSet};
 use tracing::{Instrument, debug, debug_span, error};

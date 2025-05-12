@@ -124,14 +124,14 @@ changes made in this repository.
 #### proton-vcard updates
 
 * proton-vcard
-* proton-api-core
+* proton-core-api
 * proton-event-loop
 * proton-action-queue
 * proton-core-common
 
-#### proton-api-core updates
+#### proton-core-api updates
 
-* proton-api-core
+* proton-core-api
 * proton-event-loop
 * proton-action-queue
 * proton-core-common

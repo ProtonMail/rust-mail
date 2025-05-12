@@ -130,7 +130,7 @@ version = "0.7"
 path = "core/action-queue"
 registry = "proton"
 
-[workspace.dependencies.proton-api-core]
+[workspace.dependencies.proton-core-api]
 version = "0.8"
 path = "core/core-api"
 registry = "proton"
@@ -171,7 +171,7 @@ version = "0.2"
 path = "core/stash-macros"
 registry = "proton"
 
-[workspace.dependencies.proton-api-mail]
+[workspace.dependencies.proton-mail-api]
 version = "0.5"
 path = "mail/mail-api"
 registry = "proton"
@@ -241,8 +241,6 @@ registry = "proton"
 version = "0.1"
 path = "core/task-service"
 registry = "proton"
-
-
 
 [workspace.lints.rust]
 trivial_numeric_casts = "warn"

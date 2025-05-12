@@ -3,8 +3,8 @@ use crate::store::Store;
 use crate::subscriber::Subscriber;
 use crate::{Event, EventLoopError};
 use anyhow::anyhow;
-use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::EventId;
+use proton_core_api::service::ApiServiceError;
+use proton_core_api::services::proton::EventId;
 use tracing::{self, Level, debug, error};
 
 /// Collect events from the Proton Servers in a loop and publish the events to the subscribers.

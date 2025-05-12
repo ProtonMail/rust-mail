@@ -19,13 +19,13 @@ use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
     WriterGuardError,
 };
-use proton_api_core::services::proton::{AddressId, LabelId};
-use proton_api_mail::services::proton::prelude::{
-    DraftParams, DraftReplyOrForwardParams, ExternalId,
-};
-use proton_api_mail::services::proton::request_data::DraftSender;
+use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::message::EncryptedDraft;
+use proton_mail_api::services::proton::prelude::{
+    DraftParams, DraftReplyOrForwardParams, ExternalId,
+};
+use proton_mail_api::services::proton::request_data::DraftSender;
 use proton_mail_ids::{LocalAttachmentId, LocalConversationId};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;

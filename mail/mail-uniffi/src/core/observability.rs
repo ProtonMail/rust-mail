@@ -1,4 +1,4 @@
-use proton_api_core::{
+use proton_core_api::{
     metric,
     services::observability::{ObservabilityMetric, ObservabilityRecorder},
 };

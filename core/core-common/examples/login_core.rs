@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use proton_api_core::services::proton::muon::client::flow::LoginExtraInfo;
-use proton_api_core::session::Config;
+use proton_core_api::services::proton::muon::client::flow::LoginExtraInfo;
+use proton_core_api::session::Config;
 use proton_core_common::Context;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::{InMemoryKeyChain, KeyChainExt};

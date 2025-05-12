@@ -12,7 +12,7 @@ mod contact_list {
         tests::common::new_core_test_connection,
     };
     use pretty_assertions::assert_eq;
-    use proton_api_core::services::proton::LabelId;
+    use proton_core_api::services::proton::LabelId;
     use stash::stash::StashError;
     use test_case::test_case;
 

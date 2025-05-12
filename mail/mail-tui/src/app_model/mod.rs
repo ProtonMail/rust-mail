@@ -437,7 +437,7 @@ fn app_tracing_env_filter() -> EnvFilter {
         muon=debug,
         muon_impl=debug,
         proton_mail_tui=debug,
-        proton_api_core=debug,
+        proton_core_api=debug,
         proton_mail_db=trace,
         proton_sqlite3=trace,
         proton_core_db=trace,

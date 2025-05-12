@@ -4,7 +4,7 @@ use crate::models::ModelExtension;
 use anyhow::anyhow;
 use derive_more::derive::TryFrom;
 use futures::executor::block_on;
-use proton_api_core::services::proton::GetImagesLogoOptions;
+use proton_core_api::services::proton::GetImagesLogoOptions;
 use proton_sqlite3::rusqlite::types::{
     FromSql, FromSqlError, FromSqlResult, ToSqlOutput, ValueRef,
 };

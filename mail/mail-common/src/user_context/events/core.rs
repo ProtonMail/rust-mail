@@ -1,6 +1,6 @@
 use crate::MailUserContext;
 use async_trait::async_trait;
-use proton_api_core::services::proton::UserId;
+use proton_core_api::services::proton::UserId;
 use proton_core_common::CoreEventSubscriberConnectionProvider;
 use stash::stash::Stash;
 

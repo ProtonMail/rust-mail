@@ -3,8 +3,8 @@ use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_resp
 use crate::datatypes::{ContextualConversation, RollbackItemType};
 use crate::models::Conversation;
 use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
-use proton_api_core::consts::General;
-use proton_api_core::services::proton::Proton;
+use proton_core_api::consts::General;
+use proton_core_api::services::proton::Proton;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_ids::LocalConversationId;

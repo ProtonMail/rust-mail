@@ -1,20 +1,20 @@
 #![allow(dead_code)]
-use proton_api_core::services::proton::{
+use proton_core_api::services::proton::{
     Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
     AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
 };
-use proton_api_core::services::proton::{AddressId, LabelId};
-use proton_api_mail::services::proton::prelude::MailSettings;
-use proton_api_mail::services::proton::request_data::{DraftParams, DraftRecipient, DraftSender};
-use proton_api_mail::services::proton::response_data::AttachmentMetadata;
-use proton_api_mail::services::proton::response_data::{
-    Disposition, Message as ApiMessage, MessageAttachment, MessageAttachmentHeaders,
-};
+use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_crypto_account::keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature};
 use proton_crypto_inbox::attachment::KeyPackets;
 use proton_crypto_inbox::message::EncryptedDraft;
 use proton_crypto_inbox::proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, KeyFlag, KeyId, LockedKey,
+};
+use proton_mail_api::services::proton::prelude::MailSettings;
+use proton_mail_api::services::proton::request_data::{DraftParams, DraftRecipient, DraftSender};
+use proton_mail_api::services::proton::response_data::AttachmentMetadata;
+use proton_mail_api::services::proton::response_data::{
+    Disposition, Message as ApiMessage, MessageAttachment, MessageAttachmentHeaders,
 };
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::draft::ReplyMode;

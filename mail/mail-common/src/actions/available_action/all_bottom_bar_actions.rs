@@ -4,7 +4,7 @@ mod tests;
 
 use crate::actions::MovableSystemFolderAction;
 use crate::datatypes::{MobileActions, SystemLabelId};
-use proton_api_core::services::proton::LabelId;
+use proton_core_api::services::proton::LabelId;
 use tracing::warn;
 
 /// All actions available from bottom bar for messages

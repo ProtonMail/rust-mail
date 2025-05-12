@@ -40,22 +40,22 @@ use crate::mailbox::decrypted_message::DecryptedMessageBody;
 use crate::{AppError, MailUserContext};
 use anyhow::{Context, anyhow};
 use itertools::Itertools;
-use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::{AddressId, LabelId};
-use proton_api_core::services::proton::{Proton, ProtonCore};
-use proton_api_core::session::{CoreSession, Session};
-use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
-use proton_api_mail::services::proton::ProtonMail;
-use proton_api_mail::services::proton::common::{ConversationId, ExternalId, MessageId};
-use proton_api_mail::services::proton::requests::GetMessagesOptions;
-use proton_api_mail::services::proton::response_data::{
-    Message as ApiMessage, MessageBody as ApiMessageBody, MessageMetadata as ApiMessageMetadata,
-    MessageMetadata, OperationResult,
-};
-use proton_api_mail::services::proton::responses::GetMessagesResponse;
+use proton_core_api::service::ApiServiceError;
+use proton_core_api::services::proton::{AddressId, LabelId};
+use proton_core_api::services::proton::{Proton, ProtonCore};
+use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::datatypes::{LabelType, LocalAddressId, LocalLabelId, SystemLabel};
 use proton_core_common::models::{Address, Label, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::proton_crypto;
+use proton_mail_api::MAX_PAGE_ELEMENT_COUNT;
+use proton_mail_api::services::proton::ProtonMail;
+use proton_mail_api::services::proton::common::{ConversationId, ExternalId, MessageId};
+use proton_mail_api::services::proton::requests::GetMessagesOptions;
+use proton_mail_api::services::proton::response_data::{
+    Message as ApiMessage, MessageBody as ApiMessageBody, MessageMetadata as ApiMessageMetadata,
+    MessageMetadata, OperationResult,
+};
+use proton_mail_api::services::proton::responses::GetMessagesResponse;
 use proton_mail_ids::LocalConversationId;
 use stash::exports::ToSql;
 use stash::macros::Model;

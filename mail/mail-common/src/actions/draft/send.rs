@@ -14,12 +14,12 @@ use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
     WriterGuardError,
 };
-use proton_api_core::consts::Mail;
-use proton_api_core::services::proton::prelude::AddressId;
-use proton_api_mail::services::proton::ProtonMail;
-use proton_api_mail::services::proton::common::MessageId;
+use proton_core_api::consts::Mail;
+use proton_core_api::services::proton::prelude::AddressId;
 use proton_core_common::models::ModelExtension;
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
+use proton_mail_api::services::proton::ProtonMail;
+use proton_mail_api::services::proton::common::MessageId;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::Bond;

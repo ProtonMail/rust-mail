@@ -92,9 +92,9 @@ pub fn app_tracing_env_filter_default() -> EnvFilter {
             proton_core_common=debug,\
             proton_mail_common=debug,\
             proton_event_loop=debug,\
-            proton_api_core=debug,\
+            proton_core_api=debug,\
             proton_action_queue=trace,\
-            proton_api_mail=debug,\
+            proton_mail_api=debug,\
             stash={}",
             if std::env::var("STASH_SQL_DEBUG").is_ok() {
                 "trace"
@@ -117,9 +117,9 @@ pub fn app_tracing_env_filter_trace() -> EnvFilter {
             proton_core_common=trace,\
             proton_mail_common=trace,\
             proton_event_loop=trace,\
-            proton_api_core=trace,\
+            proton_core_api=trace,\
             proton_action_queue=trace,\
-            proton_api_mail=trace,\
+            proton_mail_api=trace,\
             stash={}",
             if std::env::var("STASH_SQL_DEBUG").is_ok() {
                 "trace"

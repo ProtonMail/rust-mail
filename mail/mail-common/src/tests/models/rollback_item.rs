@@ -1,14 +1,14 @@
 use crate as proton_mail_common;
-use proton_api_core::services::proton::GetLabelsByIdsOptions;
-use proton_api_core::services::proton::GetLabelsResponse;
-use proton_api_core::session::{Config, EnvId, Session};
-use proton_api_core::status_observer::StatusObserver;
-use proton_api_core::status_watcher::StatusWatcher;
-use proton_api_mail::services::proton::common::ConversationId;
-use proton_api_mail::services::proton::responses::{GetConversationsResponse, GetMessagesResponse};
+use proton_core_api::services::proton::GetLabelsByIdsOptions;
+use proton_core_api::services::proton::GetLabelsResponse;
+use proton_core_api::session::{Config, EnvId, Session};
+use proton_core_api::status_observer::StatusObserver;
+use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_common::models::ModelExtension;
 use proton_core_common::models::ModelIdExtension;
 use proton_core_test_utils::test_context::MockApiEnv;
+use proton_mail_api::services::proton::common::ConversationId;
+use proton_mail_api::services::proton::responses::{GetConversationsResponse, GetMessagesResponse};
 use proton_mail_ids::LocalConversationId;
 use proton_mail_test_utils::db::new_test_connection_file;
 use proton_mail_test_utils::{

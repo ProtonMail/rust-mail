@@ -5,9 +5,9 @@ use crate::datatypes::{
 };
 use crate::{CoreContextError, CoreContextResult};
 use derive_more::TryFrom;
-use proton_api_core::services::proton::User as ApiUser;
-use proton_api_core::services::proton::UserId;
-use proton_api_core::services::proton::{DelinquentState as ApiDelinquentState, ProtonCore};
+use proton_core_api::services::proton::User as ApiUser;
+use proton_core_api::services::proton::UserId;
+use proton_core_api::services::proton::{DelinquentState as ApiDelinquentState, ProtonCore};
 use serde::{Deserialize, Serialize};
 use stash::exports::{FromSql, FromSqlError, SqliteError, ToSql, ToSqlOutput, Value};
 use stash::macros::Model;

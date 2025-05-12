@@ -1,5 +1,5 @@
 use futures::future::try_join_all;
-use proton_api_core::services::proton::LabelId;
+use proton_core_api::services::proton::LabelId;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{Attachment, Conversation};
 use proton_mail_common::{DecryptedAttachment, Mailbox};

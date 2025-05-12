@@ -1,11 +1,11 @@
 use itertools::Itertools;
-use proton_api_mail::services::proton::{
-    common::MessageId, prelude::GetMessagesResponse,
-    response_data::MessageMetadata as ApiMessageMetadata,
-};
 use proton_core_common::{
     datatypes::SystemLabel,
     models::{Address, Label, ModelExtension, ModelIdExtension},
+};
+use proton_mail_api::services::proton::{
+    common::MessageId, prelude::GetMessagesResponse,
+    response_data::MessageMetadata as ApiMessageMetadata,
 };
 use proton_mail_common::{
     datatypes::SearchOptions,

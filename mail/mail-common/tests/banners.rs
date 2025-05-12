@@ -1,10 +1,10 @@
-use proton_api_core::services::proton::LabelId;
-use proton_api_mail::services::proton::common::MessageId;
-use proton_api_mail::services::proton::response_data::IncomingDefault;
-use proton_api_mail::services::proton::response_data::IncomingDefaultLocation as ApiIncomingDefaultLocation;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::models::Address;
 use proton_core_common::models::Label;
 use proton_core_common::models::ModelIdExtension as _;
+use proton_mail_api::services::proton::common::MessageId;
+use proton_mail_api::services::proton::response_data::IncomingDefault;
+use proton_mail_api::services::proton::response_data::IncomingDefaultLocation as ApiIncomingDefaultLocation;
 use proton_mail_common::datatypes::MessageFlags;
 use proton_mail_common::datatypes::SystemLabelId as _;
 use proton_mail_common::datatypes::message_banner::MessageBanner;

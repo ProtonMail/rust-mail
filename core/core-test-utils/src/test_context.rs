@@ -1,17 +1,17 @@
 use crate::account::{TEST_USER_ID, TEST_USER_MAIL, testdata_user_secret};
 use crate::utils::catch_all;
 use async_trait::async_trait;
-use proton_api_core::auth::{Tokens, UserKeySecret};
-use proton_api_core::services::proton::GetEventResponse;
-use proton_api_core::services::proton::{
+use proton_core_api::auth::{Tokens, UserKeySecret};
+use proton_core_api::services::proton::GetEventResponse;
+use proton_core_api::services::proton::{
     Action as ApiAction, AddressEvent as ApiAddressEvent,
     ContactEmailEvent as ApiContactEmailEvent, ContactEvent as ApiContactEvent, User as ApiUser,
     UserSettings as ApiUserSettings,
 };
-use proton_api_core::services::proton::{EventId, SessionId, UserId};
-use proton_api_core::session::{Config, Endpoint, EnvId};
-use proton_api_core::status_observer::StatusObserver;
-use proton_api_core::status_watcher::StatusWatcher;
+use proton_core_api::services::proton::{EventId, SessionId, UserId};
+use proton_core_api::session::{Config, Endpoint, EnvId};
+use proton_core_api::status_observer::StatusObserver;
+use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_common::datatypes::ProductUsedSpace;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::events::{Action, AddressEvent, ContactEmailEvent, ContactEvent};
@@ -473,7 +473,7 @@ impl MockApiEnv {
 }
 
 const _: () = {
-    use proton_api_core::session::{AppVersion, Env, Server, TlsPinSet};
+    use proton_core_api::session::{AppVersion, Env, Server, TlsPinSet};
 
     impl Env for MockApiEnv {
         fn servers(&self, _: &AppVersion) -> Vec<Server> {

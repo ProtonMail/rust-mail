@@ -1,14 +1,14 @@
 use itertools::Itertools;
 use maplit::hashmap;
-use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::LabelId;
-use proton_api_mail::services::proton::{
-    common::ConversationId, prelude::GetConversationsResponse,
-    response_data::Conversation as ApiConversation,
-};
+use proton_core_api::service::ApiServiceError;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::{
     datatypes::SystemLabel,
     models::{Label, ModelExtension, ModelIdExtension},
+};
+use proton_mail_api::services::proton::{
+    common::ConversationId, prelude::GetConversationsResponse,
+    response_data::Conversation as ApiConversation,
 };
 use proton_mail_common::{
     MailContextError,

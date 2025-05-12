@@ -1,4 +1,4 @@
-use proton_api_core::services::proton::{LabelId, UserId};
+use proton_core_api::services::proton::{LabelId, UserId};
 use std::str::FromStr;
 
 use indoc::formatdoc;

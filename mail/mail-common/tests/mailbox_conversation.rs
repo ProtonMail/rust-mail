@@ -1,7 +1,7 @@
-use proton_api_core::services::proton::Label as ApiLabel;
-use proton_api_core::services::proton::{LabelId, LabelType as ApiLabelType};
-use proton_api_mail::services::proton::common::MessageId;
-use proton_api_mail::services::proton::response_data::{
+use proton_core_api::services::proton::Label as ApiLabel;
+use proton_core_api::services::proton::{LabelId, LabelType as ApiLabelType};
+use proton_mail_api::services::proton::common::MessageId;
+use proton_mail_api::services::proton::response_data::{
     MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
 };
 use proton_mail_common::Mailbox;

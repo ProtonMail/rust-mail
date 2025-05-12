@@ -1,16 +1,16 @@
 mod drafts_common;
 use drafts_common::*;
 use itertools::Itertools;
-use proton_api_core::consts::{CoreBundle, Mail};
-use proton_api_core::services::proton::common::ApiErrorInfo;
-use proton_api_core::services::proton::{LabelId, UserId};
-use proton_api_mail::services::proton::prelude::AttachmentId;
-use proton_api_mail::services::proton::request_data::{
+use proton_core_api::consts::{CoreBundle, Mail};
+use proton_core_api::services::proton::common::ApiErrorInfo;
+use proton_core_api::services::proton::{LabelId, UserId};
+use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
+use proton_mail_api::services::proton::prelude::AttachmentId;
+use proton_mail_api::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftRecipient,
 };
-use proton_api_mail::services::proton::response_data::MessageFlags;
-use proton_api_mail::services::proton::response_data::{Disposition, MessageAttachment};
-use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
+use proton_mail_api::services::proton::response_data::MessageFlags;
+use proton_mail_api::services::proton::response_data::{Disposition, MessageAttachment};
 use proton_mail_common::MailContextError;
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};

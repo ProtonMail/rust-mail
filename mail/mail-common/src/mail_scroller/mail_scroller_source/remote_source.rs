@@ -1,6 +1,6 @@
 use std::future::Future;
 
-use proton_api_core::services::proton::LabelId;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::LocalLabelId;
 
 use crate::{MailContextError, MailUserContext, datatypes::ReadFilter, models::ScrollData};

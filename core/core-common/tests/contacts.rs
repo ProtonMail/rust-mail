@@ -1,12 +1,12 @@
 #![allow(clippy::needless_pass_by_value)]
 use pretty_assertions::assert_eq;
-use proton_api_core::services::proton::{
+use proton_core_api::services::proton::{
     ContactBasic as ApiContactBasic, ContactCard as ApiContactCard,
     ContactEmail as ApiContactEmail, ContactFull as ApiContactFull,
     ContactSendingPreferences as ApiContactSendingPreferences,
 };
-use proton_api_core::services::proton::{ContactEmailId, ContactId, ContactUID, LabelId};
-use proton_api_core::session::CoreSession;
+use proton_core_api::services::proton::{ContactEmailId, ContactId, ContactUID, LabelId};
+use proton_core_api::session::CoreSession;
 use proton_core_common::datatypes::{ContactSendingPreferences, ContactTypes, Labels};
 use proton_core_common::events::{Action, ContactEmailEvent, ContactEvent};
 use proton_core_common::models::{Contact, ContactCard, ContactEmail, ModelIdExtension};

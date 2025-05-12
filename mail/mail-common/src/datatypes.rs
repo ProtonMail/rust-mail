@@ -69,23 +69,7 @@ use crate::models::{Attachment, AttachmentType, MailSettings, MessageBodyMetadat
 use crate::{AppError, MailContextError, MailUserContext};
 use attachment::ContentId;
 use core::fmt;
-use proton_api_core::services::proton::LabelId;
-use proton_api_mail::services::proton::common::AttachmentId;
-use proton_api_mail::services::proton::response_data::{
-    AlmostAllMail as ApiAlmostAllMail, AttachmentMetadata as ApiAttachmentMetadata,
-    ComposerDirection as ApiComposerDirection, ComposerMode as ApiComposerMode,
-    ConversationCount as ApiConversationCount, Disposition as ApiDisposition,
-    MessageAttachment as ApiMessageAttachment,
-    MessageAttachmentHeaders as ApiMessageAttachmentHeaders,
-    MessageAttachmentInfo as ApiMessageAttachmentInfo, MessageButtons as ApiMessageButtons,
-    MessageCount as ApiMessageCount, MessageFlags as ApiMessageFlags,
-    MessageRecipient as ApiMessageRecipient, MessageReplyTo as ApiMessageReplyTo,
-    MessageSender as ApiMessageSender, MimeType as ApiMimeType, MobileSetting as ApiMobileSetting,
-    MobileSettings as ApiMobileSettings, NextMessageOnMove as ApiNextMessageOnMove,
-    PgpScheme as ApiPgpScheme, PmSignature as ApiPmSignature, ShowImages as ApiShowImages,
-    ShowMoved as ApiShowMoved, SpamAction as ApiSpamAction, SwipeAction as ApiSwipeAction,
-    ViewLayout as ApiViewLayout, ViewMode as ApiViewMode,
-};
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::{
     AvatarInformation, LabelColor, LabelType, LocalLabelId, SystemLabel,
 };
@@ -100,6 +84,22 @@ use proton_crypto_inbox::message::{DecryptableMessage, DecryptedBody, GettablePG
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_inbox_mime::{
     Disposition as CryptoDisposition, ProcessedMessage,
+};
+use proton_mail_api::services::proton::common::AttachmentId;
+use proton_mail_api::services::proton::response_data::{
+    AlmostAllMail as ApiAlmostAllMail, AttachmentMetadata as ApiAttachmentMetadata,
+    ComposerDirection as ApiComposerDirection, ComposerMode as ApiComposerMode,
+    ConversationCount as ApiConversationCount, Disposition as ApiDisposition,
+    MessageAttachment as ApiMessageAttachment,
+    MessageAttachmentHeaders as ApiMessageAttachmentHeaders,
+    MessageAttachmentInfo as ApiMessageAttachmentInfo, MessageButtons as ApiMessageButtons,
+    MessageCount as ApiMessageCount, MessageFlags as ApiMessageFlags,
+    MessageRecipient as ApiMessageRecipient, MessageReplyTo as ApiMessageReplyTo,
+    MessageSender as ApiMessageSender, MimeType as ApiMimeType, MobileSetting as ApiMobileSetting,
+    MobileSettings as ApiMobileSettings, NextMessageOnMove as ApiNextMessageOnMove,
+    PgpScheme as ApiPgpScheme, PmSignature as ApiPmSignature, ShowImages as ApiShowImages,
+    ShowMoved as ApiShowMoved, SpamAction as ApiSpamAction, SwipeAction as ApiSwipeAction,
+    ViewLayout as ApiViewLayout, ViewMode as ApiViewMode,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use stash::exports::{
