@@ -23,7 +23,7 @@ wiremock = { workspace = true }
 wiremock-multipart = { workspace = true }
 proton-crypto-inbox = { workspace = true }
 lazy_static = { workspace = true }
-velcro = "0.5.4"
+velcro = { workspace = true }
 serde_with = { workspace = true }
 proton-core-test-utils = { workspace = true }
 proton-action-queue = { workspace = true }

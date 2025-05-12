@@ -4,7 +4,6 @@ use crate as proton_mail_common;
 use crate::datatypes::{ContextualConversation, ReadFilter};
 use crate::models::{CachedScrollData, ConversationScrollData, ScrollData};
 use crate::models::{Conversation, ScrollCursor};
-use maplit::btreemap;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
@@ -14,6 +13,7 @@ use proton_mail_test_utils::db::new_test_connection;
 use proton_mail_test_utils::{conv_id, conv_label, conversation, label, lbl_id};
 use stash::orm::Model;
 use stash::stash::{Bond, StashError, Tether};
+use velcro::btree_map;
 
 fn test_conversations(n: usize, order_shift: u64) -> Vec<Conversation> {
     (0..n)
@@ -85,9 +85,9 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
 
     let stash = new_test_connection().await;
     let mut tether = stash.connection();
-    let mut data: BTreeMap<&str, Vec<Conversation>> = btreemap! {
-        REMOTE_LABEL_ID => test_conversations(100, 100),
-        "rid2" => test_conversations(50, 0),
+    let mut data = btree_map! {
+        REMOTE_LABEL_ID: test_conversations(100, 100),
+        "rid2": test_conversations(50, 0),
     };
 
     save_to_database(&mut data, &mut tether).await;
@@ -205,9 +205,9 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
 
     let stash = new_test_connection().await;
     let mut tether = stash.connection();
-    let mut data: BTreeMap<&str, Vec<Conversation>> = btreemap! {
-        REMOTE_LABEL_ID => test_conversations(100, 100),
-        "rid2" => test_conversations(50, 0),
+    let mut data = btree_map! {
+        REMOTE_LABEL_ID: test_conversations(100, 100),
+        "rid2": test_conversations(50, 0),
     };
 
     save_to_database(&mut data, &mut tether).await;
@@ -461,9 +461,9 @@ async fn test_cashed_scroller_reads_last_two_pages_together_when_last_page_is_no
 
     let stash = new_test_connection().await;
     let mut tether = stash.connection();
-    let mut data: BTreeMap<&str, Vec<Conversation>> = btreemap! {
-        REMOTE_LABEL_ID => test_conversations(5, 100),
-        "rid2" => test_conversations(50, 0),
+    let mut data = btree_map! {
+        REMOTE_LABEL_ID: test_conversations(5, 100),
+        "rid2": test_conversations(50, 0),
     };
 
     save_to_database(&mut data, &mut tether).await;
