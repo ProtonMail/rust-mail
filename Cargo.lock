@@ -5092,6 +5092,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "proton-payment-crux"
+version = "0.1.0"
+
+[[package]]
+name = "proton-payment-sdk"
+version = "0.1.0"
+
+[[package]]
+name = "proton-payment-uniffi"
+version = "0.1.0"
+dependencies = [
+ "proton-payment-sdk",
+]
+
+[[package]]
 name = "proton-sqlite3"
 version = "0.7.15"
 dependencies = [
