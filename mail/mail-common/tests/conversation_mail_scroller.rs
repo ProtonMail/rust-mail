@@ -825,6 +825,156 @@ async fn test_conversation_mail_scroller_reads_cached_data_and_return_error_on_o
     );
 }
 
+#[tokio::test]
+async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_first_page() {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
+    let page_size = 5;
+    let unread = ReadFilter::All;
+    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+    let remote_label_id = SystemLabel::Inbox.remote_id();
+    let mut data = hash_map! {
+        remote_label_id.as_str(): test_conversations(3, 100),
+    };
+    save_to_database(&mut data, &mut tether).await;
+
+    setup_api_sync_previous_page(&ctx, "myconv_102", 1).await;
+    let params = setup_api_conversation_pages(&ctx, page_size, 0, 2).await;
+    ctx.setup_user(params.clone()).await;
+    ctx.initialize_uninitialized_ctx(&user_ctx).await;
+
+    // Update the inbox label to have all conversations
+    let mut counters = ConversationCounters::new(local_label_id);
+    counters.total = page_size as u64 * 2 + 3;
+    // And simulate we have a cursor pointing correctly to the last
+    // conversation which we expect to have 3 though 5 is the page_size
+    let last_conversation =
+        Conversation::find_by_remote_id(ConversationId::from("myconv_100"), &tether)
+            .await
+            .unwrap()
+            .unwrap();
+    let last_label = last_conversation.label(local_label_id).unwrap();
+    let mut scroller_cursor = ConversationScrollData::builder()
+        .local_label_id(local_label_id)
+        .unread(unread)
+        .remote_conversation_id(last_conversation.remote_id.clone().unwrap())
+        .conversation_time(last_label.context_time)
+        .display_order(last_conversation.display_order)
+        .build();
+
+    tether
+        .tx(async |bond| {
+            scroller_cursor.save(bond).await?;
+            counters.save(bond).await
+        })
+        .await
+        .unwrap();
+
+    // The scroller needs to fetch next page from the api due to insufficient amount
+    // of items to be displayed as the first page.
+    let mut scroller =
+        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
+            .await
+            .unwrap();
+
+    // Fetch more will load 8 items, 3 + 5 as in total it is less than
+    // 2 separate pages so it will merge them together.
+    let fetched_page = scroller.fetch_more().await.unwrap();
+    assert_eq!(fetched_page.len(), 8);
+
+    assert_scroller_content(
+        &mut scroller,
+        8,
+        &[
+            "myconv_102",
+            "myconv_101",
+            "myconv_100",
+            "myconv_9",
+            "myconv_8",
+            "myconv_7",
+            "myconv_6",
+            "myconv_5",
+        ],
+    )
+    .await;
+    assert!(scroller.has_more().await.unwrap());
+
+    // Get next page - it will progress cursor to the next page
+    // Since we started moving by whole pages it will fetch 5 items now
+    let actual_page = scroller.fetch_more().await.unwrap();
+    assert_eq!(actual_page.len(), 5);
+    assert_scroller_content(
+        &mut scroller,
+        13,
+        &[
+            "myconv_102",
+            "myconv_101",
+            "myconv_100",
+            "myconv_9",
+            "myconv_8",
+            "myconv_7",
+            "myconv_6",
+            "myconv_5",
+            "myconv_4",
+            "myconv_3",
+            "myconv_2",
+            "myconv_1",
+            "myconv_0",
+        ],
+    )
+    .await;
+    assert!(!scroller.has_more().await.unwrap());
+
+    // Lets try read it again from cache
+    let mut scroller =
+        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
+            .await
+            .unwrap();
+
+    let actual_page = scroller.fetch_more().await.unwrap();
+    assert_eq!(actual_page.len(), 5);
+    assert_scroller_content(
+        &mut scroller,
+        5,
+        &[
+            "myconv_102",
+            "myconv_101",
+            "myconv_100",
+            "myconv_9",
+            "myconv_8",
+        ],
+    )
+    .await;
+    assert!(scroller.has_more().await.unwrap());
+
+    // This `fetch_more` will join two last pages together as the last page is incomplete
+    let actual_page = scroller.fetch_more().await.unwrap();
+    assert_eq!(actual_page.len(), 8);
+
+    assert_scroller_content(
+        &mut scroller,
+        13,
+        &[
+            "myconv_102",
+            "myconv_101",
+            "myconv_100",
+            "myconv_9",
+            "myconv_8",
+            "myconv_7",
+            "myconv_6",
+            "myconv_5",
+            "myconv_4",
+            "myconv_3",
+            "myconv_2",
+            "myconv_1",
+            "myconv_0",
+        ],
+    )
+    .await;
+    assert!(!scroller.has_more().await.unwrap());
+}
+
 async fn assert_scroller_content(
     scroller: &mut MailScroller<DataScrollerSource<ConversationScrollData>>,
     len: usize,
