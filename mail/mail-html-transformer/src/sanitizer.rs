@@ -8,7 +8,6 @@ use velcro::hash_set;
 
 static TAG_SET: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
     hash_set! {
-        "proton-src",
         "a",
         "abbr",
         "acronym",
@@ -89,6 +88,7 @@ static TAG_SET: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
         "picture",
         "pre",
         "progress",
+        "proton-src",
         "q",
         "rp",
         "rt",
@@ -110,6 +110,7 @@ static TAG_SET: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
         "sup",
         "table",
         "tbody",
+        "title",
         "td",
         "template",
         "textarea",
@@ -265,7 +266,6 @@ pub fn strip_whitelist(doc: NodeRef) -> u64 {
         .filter_map(|node_ref| match node_ref.data() {
             NodeData::Element(e) => {
                 let tag_name: &str = &e.name.local;
-
                 if !TAG_SET.contains(tag_name) {
                     return Some(node_ref);
                 }
@@ -278,8 +278,12 @@ pub fn strip_whitelist(doc: NodeRef) -> u64 {
         })
         .collect::<Vec<_>>();
 
-    for node in &rem {
+    let total = rem.len();
+    for node in rem {
+        for child in node.children() {
+            node.insert_before(child);
+        }
         node.detach();
     }
-    rem.len() as u64
+    total as u64
 }

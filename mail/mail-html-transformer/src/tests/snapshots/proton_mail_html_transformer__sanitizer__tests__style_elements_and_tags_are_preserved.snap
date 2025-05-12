@@ -1,6 +1,7 @@
 ---
-source: proton-mail-html-transformer/src/tests/sanitizer.rs
+source: mail/mail-html-transformer/src/tests/sanitizer.rs
 expression: html
+snapshot_kind: text
 ---
 <!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml"><head>
     <!--[if gte mso 9]>
@@ -10,7 +11,7 @@ expression: html
             <o:PixelsPerInch>96</o:PixelsPerInch>
         </o:OfficeDocumentSettings>
     </xml><![endif]-->
-    
+    <title>DHL</title>
     
     
     

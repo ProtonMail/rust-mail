@@ -1,6 +1,7 @@
 ---
-source: proton-mail-html-transformer/src/tests/sanitizer.rs
+source: mail/mail-html-transformer/src/tests/sanitizer.rs
 expression: html
+snapshot_kind: text
 ---
 <html><head>
    </head>
@@ -10,6 +11,8 @@ expression: html
          <base target="_blank">bar
       </div>
 
+      
+         <div>baz</div>
       
    
 
