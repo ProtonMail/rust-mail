@@ -1,9 +1,9 @@
-use proton_api_core::services::proton::LabelId;
+use proton_core_api::services::proton::LabelId;
 use stash::stash::Tether;
 
 use crate::models::{MailSettings, Message, default_location::IncomingDefaultLocation};
 
-use super::{MessageFlags, SystemLabelId as _};
+use super::{MessageFlags, SystemLabelId};
 
 /// Represents different types of banners that can be displayed for a given message.
 /// These banners indicate various security warnings, expiration notices,

@@ -3,7 +3,7 @@
 use crate::models::{
     DraftSendFailure, DraftSendFailureAttachment, DraftSendFailureSave, DraftSendFailureSend,
 };
-use proton_api_core::services::proton::AddressId;
+use proton_core_api::services::proton::AddressId;
 use proton_sqlite3::Migration;
 use stash::macros::DbRecord;
 use stash::stash::{Bond, StashError};
