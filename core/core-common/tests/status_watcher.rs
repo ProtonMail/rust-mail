@@ -1,8 +1,8 @@
 use futures::FutureExt;
-use proton_api_core::connection_status::ConnectionStatus;
-use proton_api_core::session::{Config, Session};
-use proton_api_core::status_observer::StatusObserver;
-use proton_api_core::status_watcher::StatusWatcher;
+use proton_core_api::connection_status::ConnectionStatus;
+use proton_core_api::session::{Config, Session};
+use proton_core_api::status_observer::StatusObserver;
+use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_test_utils::test_context::MockApiEnv;
 use proton_core_test_utils::utils::catch_all;
 use std::time::Duration;

@@ -1,4 +1,4 @@
-use proton_api_core::services::proton::{SessionId, UserId};
+use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_common::OnSessionDeletedResponse;
 use proton_core_common::db::account::CoreSession;
 use proton_core_common::models::ModelExtension;

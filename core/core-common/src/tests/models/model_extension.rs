@@ -3,7 +3,7 @@ use crate::{
     models::Address,
     tests::common::new_core_test_connection,
 };
-use proton_api_core::services::proton::AddressId;
+use proton_core_api::services::proton::AddressId;
 use proton_crypto_account::keys::AddressKeys as RealAddressKeys;
 use stash::stash::StashError;
 use stash::{orm::Model, params};

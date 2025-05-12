@@ -4,10 +4,10 @@
 //! It's using shared base from [`proton_core_common`] but with the context of mail application
 //!
 
-use proton_api_mail::services::proton::common::MessageId;
-use proton_api_mail::services::push_notifications::DecryptedEmailPushNotificationAction as ApiDecryptedEmailPushNotificationAction;
-use proton_api_mail::services::push_notifications::DecryptedInboxPushNotification as ApiDecryptedInboxPushNotification;
-use proton_api_mail::services::push_notifications::NotificationSender as ApiNotificationSender;
+use proton_mail_api::services::proton::common::MessageId;
+use proton_mail_api::services::push_notifications::DecryptedEmailPushNotificationAction as ApiDecryptedEmailPushNotificationAction;
+use proton_mail_api::services::push_notifications::DecryptedInboxPushNotification as ApiDecryptedInboxPushNotification;
+use proton_mail_api::services::push_notifications::NotificationSender as ApiNotificationSender;
 
 use proton_core_common::datatypes::EncryptedPushNotification;
 use proton_core_common::datatypes::StoredDevicePrivateKey;

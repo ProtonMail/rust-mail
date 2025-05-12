@@ -3,7 +3,7 @@ use crate::datatypes::{LabelType, LocalContactEmailId, LocalContactId, LocalLabe
 use crate::models::{Contact, ContactEmail, Label};
 use crate::utils::MapVec as _;
 use itertools::Itertools;
-use proton_api_core::services::proton::LabelId;
+use proton_core_api::services::proton::LabelId;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::mem;

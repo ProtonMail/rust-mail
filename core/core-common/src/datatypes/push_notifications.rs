@@ -1,5 +1,5 @@
 use base64::{Engine, prelude::BASE64_STANDARD};
-use proton_api_core::services::proton::SessionId;
+use proton_core_api::services::proton::SessionId;
 use proton_crypto_account::{
     errors::KeySerializationError, keys::PGPDeviceKey, proton_crypto::crypto::PGPProviderSync,
 };

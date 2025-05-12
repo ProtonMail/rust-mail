@@ -6,13 +6,13 @@
 //! self-contradictory.
 
 /*
-use proton_api_core::services::proton::{AddressId, LabelId, LabelType as ApiLabelType};
-use proton_api_core::services::proton::{
+use proton_core_api::services::proton::{AddressId, LabelId, LabelType as ApiLabelType};
+use proton_core_api::services::proton::{
     Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
     Label as ApiLabel,
 };
-use proton_api_mail::services::proton::common::ConversationId;
-use proton_api_mail::services::proton::response_data::{
+use proton_mail_api::services::proton::common::ConversationId;
+use proton_mail_api::services::proton::response_data::{
     Conversation as ApiConversation, ConversationCount as ApiConversationCount,
     ConversationLabel as ApiConversationLabel, MessageCount as ApiMessageCount,
 };

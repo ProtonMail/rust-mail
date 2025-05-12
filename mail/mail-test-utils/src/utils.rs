@@ -1,11 +1,11 @@
 use crate::search::MY_ADDRESS_ID;
 use futures::{FutureExt as _, StreamExt};
-use proton_api_core::services::proton::LabelId;
-use proton_api_mail::services::proton::common::{ConversationId, MessageId};
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::{
     AddressKeys, AddressSignedKeyList, AddressStatus, AddressType, LocalLabelId,
 };
 use proton_core_common::models::{Address, Label, ModelExtension, ModelIdExtension};
+use proton_mail_api::services::proton::common::{ConversationId, MessageId};
 use proton_mail_common::datatypes::{
     ConversationLabelsCount, LocalConversationId, LocalMessageId, MessageLabelsCount,
     MessageRecipient, MessageRecipients, MessageSender, MessageSenders,

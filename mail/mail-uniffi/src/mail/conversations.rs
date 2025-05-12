@@ -18,7 +18,7 @@ use crate::mail::datatypes::{
 use crate::mail::{MailUserSession, Mailbox};
 use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
 use itertools::Itertools;
-use proton_api_core::session::Session;
+use proton_core_api::session::Session;
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
 use proton_mail_common::datatypes::folder_banner::AutoDeleteBanner;

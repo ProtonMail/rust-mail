@@ -8,7 +8,7 @@ use crate::decrypted_message::DecryptedMessageBody;
 use crate::draft::recipients::{MaybeEmptyString, NullContactGroupResolver};
 use crate::draft::{Draft, MetadataId};
 use crate::models::{Attachment, MessageBodyMetadata};
-use crate::proton_api_mail::services::proton::prelude::ConversationId;
+use crate::proton_mail_api::services::proton::prelude::ConversationId;
 use insta::assert_snapshot;
 use proton_core_common::datatypes::{AddressStatus, AddressType, LocalAddressId};
 use std::str::FromStr;

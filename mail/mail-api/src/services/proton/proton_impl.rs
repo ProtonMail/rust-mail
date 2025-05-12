@@ -1,9 +1,9 @@
 use bytes::Bytes;
 use muon::DELETE;
-use proton_api_core::service::ApiServiceResult;
-use proton_api_core::services::proton::muon::util::ProtonRequestExt;
-use proton_api_core::services::proton::muon::{GET, POST, PUT, serde_to_query};
-use proton_api_core::services::proton::{CORE_V4, IncomingDefaultId, LabelId, Proton};
+use proton_core_api::service::ApiServiceResult;
+use proton_core_api::services::proton::muon::util::ProtonRequestExt;
+use proton_core_api::services::proton::muon::{GET, POST, PUT, serde_to_query};
+use proton_core_api::services::proton::{CORE_V4, IncomingDefaultId, LabelId, Proton};
 use serde_json::json;
 use std::io::Cursor;
 use std::time::Duration;

@@ -11,12 +11,12 @@ use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Error, Priority, Type, WriterGuard,
     WriterGuardError,
 };
-use proton_api_core::consts::Mail;
-use proton_api_core::services::proton::AddressId;
-use proton_api_mail::services::proton::ProtonMail;
-use proton_api_mail::services::proton::common::MessageId;
-use proton_api_mail::services::proton::prelude::{NewAttachmentDisposition, NewAttachmentParams};
+use proton_core_api::consts::Mail;
+use proton_core_api::services::proton::AddressId;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
+use proton_mail_api::services::proton::ProtonMail;
+use proton_mail_api::services::proton::common::MessageId;
+use proton_mail_api::services::proton::prelude::{NewAttachmentDisposition, NewAttachmentParams};
 use proton_mail_ids::{LocalAttachmentId, LocalMessageId};
 use serde::{Deserialize, Serialize};
 use stash::params;

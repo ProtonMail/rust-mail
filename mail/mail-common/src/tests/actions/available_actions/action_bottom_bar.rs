@@ -1,7 +1,7 @@
 use crate::actions::BottomBarActions;
 use crate::datatypes::{MobileSetting, MobileSettings, MovableSystemFolder, SystemLabelId};
 use crate::models::{Conversation, MailSettings, Message};
-use proton_api_core::services::proton::LabelId;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::models::{Label, ModelIdExtension};
 use proton_mail_test_utils::db::new_test_connection;
 use proton_mail_test_utils::utils::create_address;

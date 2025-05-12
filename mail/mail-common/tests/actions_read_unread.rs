@@ -1,9 +1,9 @@
 use itertools::Itertools;
-use proton_api_core::services::proton::LabelId;
-use proton_api_mail::services::proton::common::ConversationId;
-use proton_api_mail::services::proton::response_data::Conversation as ApiConversation;
-use proton_api_mail::services::proton::response_data::ConversationLabel as ApiConversationLabel;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
+use proton_mail_api::services::proton::common::ConversationId;
+use proton_mail_api::services::proton::response_data::Conversation as ApiConversation;
+use proton_mail_api::services::proton::response_data::ConversationLabel as ApiConversationLabel;
 use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Conversation;

@@ -2,15 +2,15 @@ use crate::MailContextError;
 use crate::datatypes::RollbackItemType;
 use crate::models::{Conversation, Message};
 use futures::stream::{FuturesUnordered, StreamExt};
-use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::ProtonCore;
-use proton_api_core::services::proton::{LabelId, ProtonIdMarker};
-use proton_api_core::session::{CoreSession, Session};
-use proton_api_mail::services::proton::ProtonMail;
-use proton_api_mail::services::proton::common::{ConversationId, MessageId};
-use proton_api_mail::services::proton::prelude::MessageMetadata;
-use proton_api_mail::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
+use proton_core_api::service::ApiServiceError;
+use proton_core_api::services::proton::ProtonCore;
+use proton_core_api::services::proton::{LabelId, ProtonIdMarker};
+use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::models::Label;
+use proton_mail_api::services::proton::ProtonMail;
+use proton_mail_api::services::proton::common::{ConversationId, MessageId};
+use proton_mail_api::services::proton::prelude::MessageMetadata;
+use proton_mail_api::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
@@ -357,7 +357,7 @@ impl RollbackHandler for MessageRollbackHandler {
 struct ConversationRollbackHandler {}
 
 impl RollbackHandler for ConversationRollbackHandler {
-    type Item = proton_api_mail::services::proton::response_data::Conversation;
+    type Item = proton_mail_api::services::proton::response_data::Conversation;
     type RemoteId = ConversationId;
     fn item_type() -> RollbackItemType {
         RollbackItemType::Conversation
@@ -392,7 +392,7 @@ impl RollbackHandler for ConversationRollbackHandler {
 struct LabelRollbackHandler {}
 
 impl RollbackHandler for LabelRollbackHandler {
-    type Item = proton_api_core::services::proton::Label;
+    type Item = proton_core_api::services::proton::Label;
     type RemoteId = LabelId;
     fn item_type() -> RollbackItemType {
         RollbackItemType::Label

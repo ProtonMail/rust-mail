@@ -17,8 +17,8 @@ use aes_gcm::{
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
 use derive_more::{AsRef, Deref};
-use proton_api_core::auth::{Tokens, UserKeySecret};
-use proton_api_core::services::proton::{SessionId, UserId};
+use proton_core_api::auth::{Tokens, UserKeySecret};
+use proton_core_api::services::proton::{SessionId, UserId};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
 use sqlite_watcher::watcher::TableObserver;

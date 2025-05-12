@@ -1,5 +1,5 @@
 use crate::datatypes::LabelType;
-use proton_api_core::services::proton::LabelId;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::models::Label;
 use serde::{Deserialize, Serialize};
 

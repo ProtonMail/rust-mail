@@ -54,11 +54,11 @@ pub use self::system_label::*;
 use derive_more::derive::TryFrom;
 use itertools::Itertools;
 use num_enum::IntoPrimitive;
-use proton_api_core::services::proton::{
+use proton_core_api::services::proton::{
     AddressId, ContactEmailId, ContactId, DeviceEnvironment as ApiDeviceEnvironment, LabelId,
     LabelType as ApiLabelType, LightOrDarkMode as ApiLightOrDarkMode,
 };
-use proton_api_core::services::proton::{
+use proton_core_api::services::proton::{
     AddressSignedKeyList as ApiAddressSignedKeyList, AddressStatus as ApiAddressStatus,
     AddressType as ApiAddressType, ContactSendingPreferences as ApiContactSendingPreferences,
     DateFormat as ApiDateFormat, Density as ApiDensity, EarlyAccess as ApiEarlyAccess,
@@ -69,7 +69,7 @@ use proton_api_core::services::proton::{
     TwoFa as ApiTwoFa, UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
     WeekStart as ApiWeekStart,
 };
-use proton_api_core::store::{MbpMode, TfaMode};
+use proton_core_api::store::{MbpMode, TfaMode};
 use proton_crypto_account::keys::{AddressKeys as RealAddressKeys, UserKeys as RealUserKeys};
 use proton_sqlite3::rusqlite::Error as SqlError;
 use serde::de::DeserializeOwned;
@@ -1078,7 +1078,7 @@ pub trait LocalIdMarker: Sized {
 /// # Example
 ///
 /// ```
-/// use proton_api_core::declare_proton_id;
+/// use proton_core_api::declare_proton_id;
 /// use proton_core_common::declare_local_id;
 ///
 /// declare_proton_id!(pub MyProtonId);

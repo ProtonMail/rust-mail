@@ -8,8 +8,8 @@ use crate::{MailContextError, MailUserContext};
 use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
 };
-use proton_api_mail::services::proton::ProtonMail;
 use proton_core_common::models::ModelExtension;
+use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_ids::{LocalAttachmentId, LocalMessageId};
 use serde::Deserialize;
 use serde_with::serde_derive::Serialize;

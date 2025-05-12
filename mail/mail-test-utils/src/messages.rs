@@ -1,25 +1,25 @@
 use crate::test_context::MailTestContext;
 use itertools::Itertools;
-use proton_api_core::services::proton::LabelId;
-use proton_api_core::services::proton::common::ApiErrorInfo;
-use proton_api_mail::services::proton::common::MessageId;
-use proton_api_mail::services::proton::prelude::{
+use proton_core_api::services::proton::LabelId;
+use proton_core_api::services::proton::common::ApiErrorInfo;
+use proton_mail_api::services::proton::common::MessageId;
+use proton_mail_api::services::proton::prelude::{
     IncomingDefault, PostCancelSendResponse, PostIncomingDefaultResponse, PostSendRequest,
     PutMessageHamResponse,
 };
-use proton_api_mail::services::proton::request_data::{
+use proton_mail_api::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
 };
-use proton_api_mail::services::proton::requests::{
+use proton_mail_api::services::proton::requests::{
     PostCreateDraftRequest, PutMessagesDeleteRequest, PutMessagesLabelRequest,
     PutMessagesReadRequest, PutMessagesUnlabelRequest, PutMessagesUnreadRequest,
     PutUpdateDraftRequest,
 };
-use proton_api_mail::services::proton::response_data::{
+use proton_mail_api::services::proton::response_data::{
     Conversation as ApiConversation, Message as ApiMessage, MessageMetadata, MimeType,
     OperationResult,
 };
-use proton_api_mail::services::proton::responses::{
+use proton_mail_api::services::proton::responses::{
     GetMessageResponse, GetMessagesResponse, PostCreateDraftResponse, PostMessagesRelabelResponse,
     PostSendMessageResponse, PutMessagesDeleteResponse, PutMessagesLabelResponse,
     PutMessagesReadResponse, PutMessagesUnlabelResponse, PutMessagesUnreadResponse,

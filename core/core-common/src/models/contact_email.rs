@@ -2,8 +2,8 @@ use crate::datatypes::{
     ContactSendingPreferences, ContactTypes, Labels, LocalContactEmailId, LocalContactId,
 };
 use crate::models::{Contact, Label, ModelIdExtension};
-use proton_api_core::services::proton::ContactEmail as ApiContactEmail;
-use proton_api_core::services::proton::{ContactEmailId, ContactId, LabelId};
+use proton_core_api::services::proton::ContactEmail as ApiContactEmail;
+use proton_core_api::services::proton::{ContactEmailId, ContactId, LabelId};
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;

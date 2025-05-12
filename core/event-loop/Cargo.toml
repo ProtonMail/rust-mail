@@ -11,7 +11,7 @@ flume = { workspace = true }
 futures = { workspace = true }
 parking_lot = { workspace = true }
 paste = { workspace = true }
-proton-api-core = { workspace = true }
+proton-core-api = { workspace = true }
 serde = { workspace = true }
 stash = { workspace = true }
 thiserror = { workspace = true }

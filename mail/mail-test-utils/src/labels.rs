@@ -1,8 +1,8 @@
 use crate::test_context::MailTestContext;
-use proton_api_core::services::proton::Label as ApiLabel;
-use proton_api_core::services::proton::LabelId;
-use proton_api_core::services::proton::PatchLabelRequest;
-use proton_api_core::services::proton::{GetLabelsResponse, PatchLabelResponse};
+use proton_core_api::services::proton::Label as ApiLabel;
+use proton_core_api::services::proton::LabelId;
+use proton_core_api::services::proton::PatchLabelRequest;
+use proton_core_api::services::proton::{GetLabelsResponse, PatchLabelResponse};
 use proton_core_common::datatypes::LabelType;
 use proton_mail_common::datatypes::SystemLabelId;
 use wiremock::matchers::{body_json, method, path};

@@ -3,7 +3,7 @@ use crate::mail::MailUserSession;
 use crate::mail::datatypes::labels::custom_folder::SidebarCustomFolder;
 use crate::mail::datatypes::labels::custom_labels::SidebarCustomLabel;
 use crate::uniffi_async;
-use proton_api_core::services::proton::LabelId as RealLabelId;
+use proton_core_api::services::proton::LabelId as RealLabelId;
 use proton_core_common::datatypes::LabelType as RealLabelType;
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec as _;

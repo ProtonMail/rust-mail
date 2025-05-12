@@ -1,8 +1,8 @@
 #![allow(non_snake_case)]
 
 use super::*;
-use proton_api_core::services::proton::EventId;
-use proton_api_core::services::proton::GetEventResponse;
+use proton_core_api::services::proton::EventId;
+use proton_core_api::services::proton::GetEventResponse;
 use serde::Deserialize;
 
 const DUMMY_EVENT_ID: &str = "EVT_FOO";

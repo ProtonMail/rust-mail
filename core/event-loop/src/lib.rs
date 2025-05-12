@@ -11,7 +11,7 @@
 //! ## Example
 //!
 //! ```ignore
-//! use proton_api_core::domain::Event;
+//! use proton_core_api::domain::Event;
 //! use proton_event_loop::{EventLoop, Provider, Store};
 //!
 //! async fn create_loop_and_poll<T: Event>(store: &dyn Store, provider: &dyn Provider<T>) {
@@ -36,7 +36,7 @@
 //!
 //! ```ignore
 //! use std::time::Duration;
-//! use proton_api_core::domain::Event;
+//! use proton_core_api::domain::Event;
 //! use proton_event_loop::{BackgroundEventLoop, EventLoop, EventLoopErrorHandler, Provider, Store};
 //!
 //! async fn create_background_loop<Ev: Event + 'static>(
@@ -70,9 +70,9 @@ mod tests;
 
 use crate::subscriber::SubscriberError;
 use anyhow::Error as AnyhowError;
-use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::EventId;
-use proton_api_core::services::proton::GetEventResponse;
+use proton_core_api::service::ApiServiceError;
+use proton_core_api::services::proton::EventId;
+use proton_core_api::services::proton::GetEventResponse;
 use serde::Deserialize;
 use std::fmt::Debug;
 use thiserror::Error;

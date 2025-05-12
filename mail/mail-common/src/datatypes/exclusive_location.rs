@@ -4,7 +4,7 @@ mod tests;
 
 use crate::datatypes::{LabelColor, LabelType};
 use itertools::Itertools;
-use proton_api_core::services::proton::LabelId;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::ModelIdExtension;
 use proton_core_common::{datatypes::LocalLabelId, models::Label};

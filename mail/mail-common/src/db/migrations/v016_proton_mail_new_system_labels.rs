@@ -1,6 +1,6 @@
 //! Modifies `v001_proton_mail_default_labels`
 
-use proton_api_core::services::proton::LabelId;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::LocalLabelId;
 use stash::params;
 use stash::stash::{Bond, StashError};

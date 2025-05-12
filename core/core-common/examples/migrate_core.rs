@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
-use proton_api_core::auth::UserKeySecret;
-use proton_api_core::services::proton::muon::client::flow::{LoginExtraInfo, LoginFlowData};
-use proton_api_core::session::{Config, CoreSession as _};
-use proton_api_core::store::UserData;
+use proton_core_api::auth::UserKeySecret;
+use proton_core_api::services::proton::muon::client::flow::{LoginExtraInfo, LoginFlowData};
+use proton_core_api::session::{Config, CoreSession as _};
+use proton_core_api::store::UserData;
 use proton_core_common::Context;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::models::Label;
@@ -42,13 +42,13 @@ async fn prepare_context(dir: &TempDir) -> (Arc<Context>, Arc<dyn KeyChain>) {
 
 fn into_api_password_mode(
     mode: proton_core_common::datatypes::PasswordMode,
-) -> proton_api_core::auth::PasswordMode {
+) -> proton_core_api::auth::PasswordMode {
     match mode {
         proton_core_common::datatypes::PasswordMode::One => {
-            proton_api_core::auth::PasswordMode::One
+            proton_core_api::auth::PasswordMode::One
         }
         proton_core_common::datatypes::PasswordMode::Two => {
-            proton_api_core::auth::PasswordMode::Two
+            proton_core_api::auth::PasswordMode::Two
         }
     }
 }

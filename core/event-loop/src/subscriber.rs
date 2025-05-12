@@ -9,7 +9,7 @@ use flume::{Receiver, Sender};
 // avoid namespace conflicts
 use crate::Event;
 use anyhow::Error as AnyhowError;
-use proton_api_core::service::ApiServiceError;
+use proton_core_api::service::ApiServiceError;
 use stash::stash::StashError;
 use thiserror::Error;
 

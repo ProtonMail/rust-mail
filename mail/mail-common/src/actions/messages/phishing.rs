@@ -5,10 +5,10 @@ use crate::{AppError, MailUserContext};
 use anyhow::Context as _;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
 use proton_action_queue::action::{ActionId, Handler as ActionHandler};
-use proton_api_core::services::proton::LabelId;
-use proton_api_mail::services::proton::ProtonMail;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, LabelError, ModelIdExtension};
+use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 

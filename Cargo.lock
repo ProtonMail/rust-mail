@@ -4625,7 +4625,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "proton-api-core"
+name = "proton-canonical-email"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "velcro",
+]
+
+[[package]]
+name = "proton-core-api"
 version = "0.8.1"
 dependencies = [
  "anyhow",
@@ -4658,43 +4666,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "proton-api-mail"
-version = "0.5.0"
-dependencies = [
- "bitflags 2.9.0",
- "bytes",
- "common-multipart-rfc7578",
- "futures-util",
- "indexmap 2.9.0",
- "insta",
- "muon",
- "pretty_assertions",
- "proton-api-core",
- "proton-core-test-utils",
- "proton-crypto-inbox",
- "reqwest",
- "serde",
- "serde_json",
- "serde_repr",
- "serde_with",
- "smart-default",
- "stash",
- "test-case",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "wiremock",
-]
-
-[[package]]
-name = "proton-canonical-email"
-version = "0.1.0"
-dependencies = [
- "serde",
- "velcro",
-]
-
-[[package]]
 name = "proton-core-common"
 version = "0.9.0"
 dependencies = [
@@ -4720,7 +4691,7 @@ dependencies = [
  "parking_lot",
  "pretty_assertions",
  "proton-action-queue",
- "proton-api-core",
+ "proton-core-api",
  "proton-core-test-utils",
  "proton-crypto",
  "proton-crypto-account",
@@ -4756,7 +4727,7 @@ dependencies = [
  "async-trait",
  "function_name",
  "lazy_static",
- "proton-api-core",
+ "proton-core-api",
  "proton-core-common",
  "proton-crypto-account",
  "proton-event-loop",
@@ -4863,7 +4834,7 @@ dependencies = [
  "mockall",
  "parking_lot",
  "paste",
- "proton-api-core",
+ "proton-core-api",
  "serde",
  "stash",
  "thiserror 1.0.69",
@@ -4888,6 +4859,35 @@ dependencies = [
  "thiserror 1.0.69",
  "tynm",
  "utf8-width",
+]
+
+[[package]]
+name = "proton-mail-api"
+version = "0.5.0"
+dependencies = [
+ "bitflags 2.9.0",
+ "bytes",
+ "common-multipart-rfc7578",
+ "futures-util",
+ "indexmap 2.9.0",
+ "insta",
+ "muon",
+ "pretty_assertions",
+ "proton-core-api",
+ "proton-core-test-utils",
+ "proton-crypto-inbox",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "serde_with",
+ "smart-default",
+ "stash",
+ "test-case",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "wiremock",
 ]
 
 [[package]]
@@ -4919,13 +4919,13 @@ dependencies = [
  "parking_lot",
  "pretty_assertions",
  "proton-action-queue",
- "proton-api-core",
- "proton-api-mail",
+ "proton-core-api",
  "proton-core-common",
  "proton-core-test-utils",
  "proton-crypto-account",
  "proton-crypto-inbox",
  "proton-event-loop",
+ "proton-mail-api",
  "proton-mail-html-transformer",
  "proton-mail-ids",
  "proton-mail-test-utils",
@@ -4976,8 +4976,8 @@ dependencies = [
 name = "proton-mail-ids"
 version = "0.1.0"
 dependencies = [
- "proton-api-mail",
  "proton-core-common",
+ "proton-mail-api",
  "serde",
  "stash",
 ]
@@ -4991,12 +4991,12 @@ dependencies = [
  "itertools 0.13.0",
  "lazy_static",
  "proton-action-queue",
- "proton-api-core",
- "proton-api-mail",
+ "proton-core-api",
  "proton-core-common",
  "proton-core-test-utils",
  "proton-crypto-account",
  "proton-crypto-inbox",
+ "proton-mail-api",
  "proton-mail-common",
  "secrecy",
  "serde",
@@ -5065,11 +5065,11 @@ dependencies = [
  "parking_lot",
  "pretty_assertions",
  "proton-action-queue",
- "proton-api-core",
- "proton-api-mail",
+ "proton-core-api",
  "proton-core-common",
  "proton-crypto-account",
  "proton-event-loop",
+ "proton-mail-api",
  "proton-mail-common",
  "proton-mail-test-utils",
  "proton-task-service",

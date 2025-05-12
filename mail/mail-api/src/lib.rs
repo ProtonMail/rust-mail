@@ -11,7 +11,7 @@ pub const MAX_LIMIT_VALUE_U64: u64 = 150;
 
 pub const INCOMING_DEFAULTS_PAGE_SIZE: u64 = 100;
 
-pub use proton_api_core;
+pub use proton_core_api;
 pub use session::*;
 
 #[cfg(test)]

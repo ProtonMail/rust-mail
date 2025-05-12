@@ -27,16 +27,16 @@ pub use user_context::MailUserContext;
 
 // re-exports
 use crate::datatypes::{LocalAttachmentId, LocalMessageId};
-use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::LabelId;
-pub use proton_api_mail;
+use proton_core_api::service::ApiServiceError;
+use proton_core_api::services::proton::LabelId;
 pub use proton_core_common;
 use proton_core_common::datatypes::{LocalAddressId, LocalLabelId};
+pub use proton_mail_api;
 use stash::stash::StashError;
 
 use datatypes::attachment::ContentId;
 use proton_action_queue::action::ActionId;
-use proton_api_mail::services::proton::common::{AttachmentId, MessageId};
+use proton_mail_api::services::proton::common::{AttachmentId, MessageId};
 use proton_mail_ids::LocalConversationId;
 use thiserror::Error;
 

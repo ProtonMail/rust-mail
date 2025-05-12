@@ -3,7 +3,7 @@
 use crate::datatypes::{ContactSendingPreferences, ContactTypes, Labels};
 use crate::models::{Contact, ContactCard, ContactEmail};
 use crate::tests::common::new_core_test_connection;
-use proton_api_core::services::proton::{ContactEmailId, ContactId, ContactUID, LabelId};
+use proton_core_api::services::proton::{ContactEmailId, ContactId, ContactUID, LabelId};
 use proton_crypto_account::contacts::ContactCardType;
 use stash::orm::Model;
 use stash::params;

@@ -14,19 +14,19 @@ use crate::models::{Attachment, Conversation, MailSettings, Message, MessageBody
 use futures::future::BoxFuture;
 use futures::{FutureExt, StreamExt as _};
 use lazy_static::lazy_static;
-use proton_api_core::services::proton::LabelId;
-use proton_api_mail::services::proton::common::AttachmentId;
-use proton_api_mail::services::proton::response_data::MessageMetadata as ApiMessageMetadata;
-use proton_api_mail::services::proton::response_data::{
+use proton_core_api::services::proton::LabelId;
+use proton_core_common::datatypes::{LabelColor, LabelType};
+use proton_core_common::models::Label;
+use proton_crypto_inbox::attachment::KeyPackets;
+use proton_mail_api::services::proton::common::AttachmentId;
+use proton_mail_api::services::proton::response_data::MessageMetadata as ApiMessageMetadata;
+use proton_mail_api::services::proton::response_data::{
     AttachmentMetadata as ApiAttachmentMetadata, ConversationLabel as ApiConversationLabel,
     Disposition as ApiDisposition, Message as ApiMessage,
     MessageAttachment as ApiMessageAttachment,
     MessageAttachmentHeaders as ApiMessageAttachmentHeaders, MessageFlags as ApiMessageFlags,
     MessageSender as ApiMessageSender, MimeType as ApiMimeType,
 };
-use proton_core_common::datatypes::{LabelColor, LabelType};
-use proton_core_common::models::Label;
-use proton_crypto_inbox::attachment::KeyPackets;
 use proton_mail_test_utils::db::new_test_connection_file;
 use proton_mail_test_utils::db_states::{
     new_test_delete_db_state, new_test_label_db_state, new_test_unread_db_state,

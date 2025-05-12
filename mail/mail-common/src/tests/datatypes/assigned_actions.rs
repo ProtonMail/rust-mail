@@ -2,7 +2,7 @@ use crate::datatypes::SwipeActionMoveToTarget;
 use crate::datatypes::SystemLabelId;
 use crate::datatypes::{AssignedSwipeAction, SwipeAction};
 use pretty_assertions::assert_eq;
-use proton_api_core::services::proton::LabelId;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::Label;
 use proton_mail_test_utils::test_context::MailTestContext;

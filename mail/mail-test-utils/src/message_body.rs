@@ -1,19 +1,13 @@
 //! Message body related state and test data
 use crate::init::Params as TestParams;
-use proton_api_core::auth::UserKeySecret;
-use proton_api_core::services::proton::{
+use proton_core_api::auth::UserKeySecret;
+use proton_core_api::services::proton::{
     Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
     AddressStatus as ApiAddressStatus, AddressType as ApiAddressType, DelinquentState,
     Flags as ApiFlags, ProductUsedSpace as ApiProductUsedSpace, User as ApiUser,
     UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
 };
-use proton_api_core::services::proton::{AddressId, LabelId, UserId};
-use proton_api_mail::services::proton::common::{ConversationId, MessageId};
-use proton_api_mail::services::proton::response_data::{
-    MailSettings as ApiMailSettings, Message as ApiMessage, MessageBody as ApiMessageBody,
-    MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
-    MessageSender as ApiMessageSender, MimeType as ApiMimeType, ViewMode as ApiViewMode,
-};
+use proton_core_api::services::proton::{AddressId, LabelId, UserId};
 use proton_crypto_account::keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature};
 use proton_crypto_account::salts::KeySalt;
 use proton_crypto_inbox::proton_crypto::new_srp_provider;
@@ -21,6 +15,12 @@ use proton_crypto_inbox::proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, KeyFlag, KeyId, LockedKey, UserKeys as ApiUserKeys,
 };
 use proton_crypto_inbox::proton_crypto_account::salts::{Salt, Salts};
+use proton_mail_api::services::proton::common::{ConversationId, MessageId};
+use proton_mail_api::services::proton::response_data::{
+    MailSettings as ApiMailSettings, Message as ApiMessage, MessageBody as ApiMessageBody,
+    MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
+    MessageSender as ApiMessageSender, MimeType as ApiMimeType, ViewMode as ApiViewMode,
+};
 use proton_mail_common::datatypes::SystemLabelId;
 use std::collections::HashMap;
 use std::iter;

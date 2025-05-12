@@ -11,8 +11,8 @@ use crate::{
 };
 use proton_action_queue::action::Action;
 use proton_action_queue::queue::ActionError as InternalActionError;
-use proton_api_core::login::LoginError;
-use proton_api_core::service::ApiServiceError;
+use proton_core_api::login::LoginError;
+use proton_core_api::service::ApiServiceError;
 use proton_core_common::ContactError;
 use proton_core_common::device_registration::RegisteredDeviceTaskError;
 use proton_core_common::models::LabelError;

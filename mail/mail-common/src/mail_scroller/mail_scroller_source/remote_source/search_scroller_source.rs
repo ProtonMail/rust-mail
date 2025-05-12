@@ -1,13 +1,13 @@
 use std::{cmp, sync::Arc};
 
-use proton_api_core::{
+use proton_core_api::{
     services::proton::LabelId,
     session::{CoreSession, Session},
 };
-use proton_api_mail::services::proton::{
+use proton_core_common::{datatypes::SystemLabel, models::ModelExtension};
+use proton_mail_api::services::proton::{
     ProtonMail, common::MessageId, prelude::GetMessagesOptions,
 };
-use proton_core_common::{datatypes::SystemLabel, models::ModelExtension};
 use stash::{
     orm::Model,
     stash::{StashError, Tether},

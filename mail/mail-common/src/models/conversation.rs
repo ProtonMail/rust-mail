@@ -23,24 +23,24 @@ use futures::future;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
-use proton_api_core::service::ApiServiceError;
-use proton_api_core::services::proton::Proton;
-use proton_api_core::services::proton::{LabelId, ProtonIdMarker};
-use proton_api_core::session::{CoreSession, Session};
-use proton_api_mail::MAX_PAGE_ELEMENT_COUNT;
-use proton_api_mail::services::proton::ProtonMail;
-use proton_api_mail::services::proton::common::ConversationId;
-use proton_api_mail::services::proton::requests::GetConversationsOptions;
-use proton_api_mail::services::proton::response_data::{
-    Conversation as ApiConversation, ConversationLabel as ApiConversationLabel,
-    MessageMetadata as ApiMessageMetadata, OperationResult,
-};
+use proton_core_api::service::ApiServiceError;
+use proton_core_api::services::proton::Proton;
+use proton_core_api::services::proton::{LabelId, ProtonIdMarker};
+use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::datatypes::{InitializationKey, LabelType, LocalLabelId, SystemLabel};
 use proton_core_common::models::{
     InitializationError, InitializationWatcher, InitializedComponent, Label, ModelExtension,
     ModelIdExtension,
 };
 use proton_core_common::utils::MapVec as _;
+use proton_mail_api::MAX_PAGE_ELEMENT_COUNT;
+use proton_mail_api::services::proton::ProtonMail;
+use proton_mail_api::services::proton::common::ConversationId;
+use proton_mail_api::services::proton::requests::GetConversationsOptions;
+use proton_mail_api::services::proton::response_data::{
+    Conversation as ApiConversation, ConversationLabel as ApiConversationLabel,
+    MessageMetadata as ApiMessageMetadata, OperationResult,
+};
 use proton_mail_ids::LocalConversationId;
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;

@@ -1,5 +1,5 @@
 use crate::UniffiEnum;
-use proton_api_core::connection_status::ConnectionStatus as RealConnectionStatus;
+use proton_core_api::connection_status::ConnectionStatus as RealConnectionStatus;
 
 #[derive(Debug, Clone, Copy, UniffiEnum, PartialEq, Eq)]
 pub enum ConnectionStatus {

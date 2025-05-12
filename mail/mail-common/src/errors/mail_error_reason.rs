@@ -1,4 +1,4 @@
-use proton_api_core::services::proton::AddressId;
+use proton_core_api::services::proton::AddressId;
 
 /// Specific Reason for error occurrence
 ///

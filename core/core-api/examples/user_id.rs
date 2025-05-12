@@ -1,9 +1,9 @@
 #![allow(clippy::print_stdout)]
 
 use muon::client::flow::LoginExtraInfo;
-use proton_api_core::login::Flow;
-use proton_api_core::services::proton::ProtonCore;
-use proton_api_core::session::{CoreSession, Session};
+use proton_core_api::login::Flow;
+use proton_core_api::services::proton::ProtonCore;
+use proton_core_api::session::{CoreSession, Session};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
@@ -21,7 +21,7 @@ async fn main() {
         .with_filter(
             EnvFilter::builder()
                 .with_default_directive(LevelFilter::TRACE.into())
-                .parse_lossy("info,proton_api_core=debug"),
+                .parse_lossy("info,proton_core_api=debug"),
         );
     tracing_subscriber::registry().with(file_subscriber).init();
     let user_email = std::env::var("PAPI_USER_EMAIL").unwrap();

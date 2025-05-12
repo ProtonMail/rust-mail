@@ -11,7 +11,7 @@ pub use attachment_remove::*;
 pub use attachment_upload::*;
 pub use discard::*;
 use proton_action_queue::action::ActionGroup;
-use proton_api_core::services::proton::LabelId;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelIdExtension};
 pub use save::*;

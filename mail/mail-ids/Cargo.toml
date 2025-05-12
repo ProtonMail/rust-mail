@@ -4,7 +4,7 @@ version = "0.1.0"
 edition.workspace = true
 
 [dependencies]
-proton-api-mail = { workspace = true }
+proton-mail-api = { workspace = true }
 proton-core-common = { workspace = true }
 serde = { workspace = true }
 stash = { workspace = true }
@@ -14,4 +14,4 @@ workspace = true
 
 [features]
 default = ["sql"]
-sql = ["proton-api-mail/sql"]
+sql = ["proton-mail-api/sql"]

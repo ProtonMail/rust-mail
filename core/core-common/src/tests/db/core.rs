@@ -6,7 +6,7 @@ use crate::datatypes::{
 };
 use crate::models::{DelinquentState, PaidSubscription, User, UserSettings};
 use crate::tests::common::new_core_test_connection;
-use proton_api_core::services::proton::UserId;
+use proton_core_api::services::proton::UserId;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as RealUserKeys};
 use stash::orm::Model;
 use stash::stash::StashError;

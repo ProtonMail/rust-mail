@@ -12,7 +12,7 @@ use crate::errors::{ActionError, ProtonError, UserSessionError, VoidSessionResul
 use crate::mail::state::MailUserContextPtr;
 use crate::{LiveQueryCallback, async_runtime, spawn_async, uniffi_async};
 use futures::TryFutureExt;
-use proton_api_core::services::proton::{ProtonAuth, ProtonPayments};
+use proton_core_api::services::proton::{ProtonAuth, ProtonPayments};
 use proton_mail_common::MailUserContext;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::Attachment;

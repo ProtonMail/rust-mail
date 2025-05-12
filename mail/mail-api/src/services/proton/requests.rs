@@ -27,7 +27,7 @@ use crate::services::proton::prelude::{Disposition, NewAttachmentParams};
 use crate::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, MessageMetadataSortMode,
 };
-use proton_api_core::services::proton::{AddressId, LabelId};
+use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_crypto_inbox::attachment::{
     BinaryAttachmentEncryptedSignature, BinaryAttachmentSignature,
 };
