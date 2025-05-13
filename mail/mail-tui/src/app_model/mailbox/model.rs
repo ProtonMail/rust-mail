@@ -14,6 +14,7 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use flume::Sender;
 use futures::FutureExt;
 
+use crate::widgets::utils::date_from_timestamp;
 use proton_action_queue::observers::{ActionFailureObserver, ActionFailureReason};
 use proton_action_queue::queue::{ActionError, AsActionError};
 use proton_core_common::datatypes::LocalLabelId;
@@ -704,7 +705,7 @@ async fn handle_draft_failure(
 ) {
     for result in results {
         if result.is_success() {
-            if result.is_send_undoable() {
+            if result.origin == DraftSendResultOrigin::Send && result.is_send_undoable() {
                 let ctx = Arc::clone(ctx);
                 let popup = YesNoPopup::new(
                     "Undo Send?",
@@ -737,6 +738,14 @@ async fn handle_draft_failure(
 
                 let _ = sender
                     .send_async(Command::message(Messages::raise_popup(popup)))
+                    .await;
+            } else if result.origin == DraftSendResultOrigin::ScheduleSend {
+                let dt = date_from_timestamp(result.undo_timestamp.unsigned_abs());
+                let _ = sender
+                    .send_async(Command::message(Messages::DisplayInfo(
+                        Some("Message Schedule Send Success".to_owned()),
+                        format!("Message will be delivered at {dt}"),
+                    )))
                     .await;
             }
 

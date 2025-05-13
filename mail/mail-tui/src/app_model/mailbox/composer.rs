@@ -1,8 +1,13 @@
+mod schedule_send;
+
 use crate::app::Command;
 use crate::app_model::YesNoPopup;
+use crate::app_model::mailbox::composer::schedule_send::ScheduleSendPopup;
 use crate::app_model::mailbox::{ComposerMessage, Message};
 use crate::messages::Messages;
 use crate::widgets::{ScrollableList, ScrollableListState, TextInput, TextInputState};
+use anyhow::anyhow;
+use chrono::{DateTime, Local};
 use crossterm::event::{KeyCode, KeyModifiers};
 use futures::FutureExt;
 use proton_mail_common::datatypes::{Disposition, LocalAttachmentId, LocalMessageId, MimeType};
@@ -177,14 +182,22 @@ impl Composer {
     }
 
     /// Send the draft.
-    fn send(&mut self, context: Arc<MailUserContext>) -> Command<Messages> {
+    fn send(
+        &mut self,
+        scheduled_time: Option<DateTime<Local>>,
+        context: Arc<MailUserContext>,
+    ) -> Command<Messages> {
         if let Err(err) = self.update_draft_from_state() {
             return Command::message(Messages::DisplayError(
                 Some("Invalid recipient".to_owned()),
                 err.into(),
             ));
         }
-        match self.draft.to_send_action() {
+        match if let Some(scheduled_time) = scheduled_time {
+            self.draft.to_schedule_send_action(scheduled_time)
+        } else {
+            self.draft.to_send_action()
+        } {
             Ok(send_action) => Command::batch([
                 Command::message(Messages::DisplayBackgroundProgress(
                     "Sending draft...".to_owned(),
@@ -607,7 +620,7 @@ impl Composer {
     #[allow(clippy::too_many_lines)]
     pub fn handle_event(
         &mut self,
-        _: &Arc<MailUserContext>,
+        ctx: &Arc<MailUserContext>,
         _: &Mailbox,
         event: Event,
     ) -> Command<Messages> {
@@ -655,6 +668,22 @@ impl Composer {
                 KeyCode::Char('t') => {
                     if key.modifiers.contains(KeyModifiers::CONTROL) {
                         return Command::message(ComposerMessage::Send.into());
+                    }
+                }
+                KeyCode::Char('j') => {
+                    if key.modifiers.contains(KeyModifiers::CONTROL) {
+                        let ctx = ctx.clone();
+                        return Command::task(async move {
+                            match Draft::schedule_send_options(&ctx).await {
+                                Ok(options) => Command::message(Messages::raise_popup(
+                                    ScheduleSendPopup::new(options),
+                                )),
+                                Err(e) => Command::message(Messages::DisplayError(
+                                    None,
+                                    anyhow!("Failed to retrieve schedule send options: {e:?}"),
+                                )),
+                            }
+                        });
                     }
                 }
                 KeyCode::Char('a') => {
@@ -726,7 +755,10 @@ impl Composer {
 
         match message {
             ComposerMessage::Save => self.save(user_ctx.to_owned()),
-            ComposerMessage::Send => self.send(user_ctx.to_owned()),
+            ComposerMessage::Send => self.send(None, user_ctx.to_owned()),
+            ComposerMessage::ScheduleSend(delivery_time) => {
+                self.send(Some(delivery_time), user_ctx.to_owned())
+            }
             ComposerMessage::Discard => self.discard(user_ctx.to_owned()),
             ComposerMessage::CreateAttachment(path) => {
                 self.create_attachment(user_ctx.to_owned(), path)
