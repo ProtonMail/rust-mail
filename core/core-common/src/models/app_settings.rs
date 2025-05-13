@@ -372,6 +372,7 @@ impl ToSql for SingleEntryId {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{db::migrations::migrate_account_db, tests::common::new_core_test_connection};
     use test_case::test_case;
 
     #[test_case(0, ProtectionAutoLock::Always)]
@@ -418,5 +419,34 @@ mod tests {
     #[test_case(ProtectionAutoLock::Minutes(60), ONE_HOUR + 1, 0 => true; "TEST 6 When 60 minutes passed")]
     fn should_autolock(autolock: ProtectionAutoLock, now: i64, last_lock: i64) -> bool {
         autolock.should_autolock(now, last_lock)
+    }
+
+    #[tokio::test]
+    async fn app_settings_autolock() {
+        let stash = new_core_test_connection().await;
+        migrate_account_db(&stash).await.unwrap();
+        let mut tether = stash.connection();
+        let mut app_settings = AppSettings::get_or_default(&tether).await;
+
+        app_settings.set_biometrics();
+        app_settings.auto_lock = ProtectionAutoLock::Minutes(10);
+
+        tether
+            .tx(async |tx| {
+                app_settings.save(tx).await?;
+                // Last lock defaults to 0, so it will return `true`
+                assert!(app_settings.should_auto_lock(tx).await?);
+                let last_lock_1 = app_settings.lock_accessed_unixepoch;
+                // Last lock was updated in last call, it will return `false`
+                assert!(!app_settings.should_auto_lock(tx).await?);
+                // and any subsequent call for next 10 minutes will also return `false`
+                assert!(!app_settings.should_auto_lock(tx).await?);
+                let last_lock_2 = app_settings.lock_accessed_unixepoch;
+
+                assert_eq!(last_lock_1, last_lock_2);
+                Result::<(), StashError>::Ok(())
+            })
+            .await
+            .unwrap();
     }
 }
