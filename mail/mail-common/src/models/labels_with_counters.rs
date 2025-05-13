@@ -5,6 +5,7 @@ mod labels_with_counters;
 use std::sync::Arc;
 
 use indoc::formatdoc;
+use itertools::Itertools as _;
 use proton_core_api::services::proton::{LabelId, ProtonCore};
 use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId};
 use proton_core_common::models::{
@@ -12,6 +13,7 @@ use proton_core_common::models::{
 };
 use sqlite_watcher::watcher::TableObserver;
 use stash::stash::{Stash, WatcherHandle};
+use stash::utils::placeholders;
 use stash::{
     exports::ToSql,
     macros::DbRecord,
@@ -237,6 +239,49 @@ impl LabelWithCounters {
                     convs = ConversationCounters::table_name(),
                 ),
                 params![kind],
+            )
+            .await?;
+
+        Ok(values)
+    }
+
+    /// Gets all system labels that are displayable
+    pub async fn from_ids(
+        tether: &Tether,
+        ids: impl IntoIterator<Item = LocalLabelId>,
+    ) -> anyhow::Result<Vec<Self>> {
+        // This is not suceptible to SQL injection since the labels are always numbers.
+        let label_ids = ids
+            .into_iter()
+            .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
+            .collect_vec();
+        let placeholders = placeholders(label_ids.len());
+
+        let values = tether
+            .query(
+                formatdoc!(
+                    "SELECT
+                {labels}.rowid AS row_id, 
+                {labels}.*,
+                {msgs}.total as total_msg,
+                {msgs}.unread as unread_msg,
+                {convs}.total as total_conv,
+                {convs}.unread as unread_conv
+            FROM {labels}
+            INNER JOIN {msgs}
+                ON {labels}.local_id = {msgs}.local_label_id
+            INNER JOIN {convs}
+                ON {labels}.local_id = {convs}.local_label_id
+            WHERE
+                {labels}.local_id IN ({placeholders})
+            ORDER BY
+                {labels}.display_order ASC
+            ",
+                    labels = Label::table_name(),
+                    msgs = MessageCounters::table_name(),
+                    convs = ConversationCounters::table_name(),
+                ),
+                label_ids,
             )
             .await?;
 
