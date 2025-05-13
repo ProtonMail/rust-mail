@@ -727,6 +727,27 @@ impl MailSession {
         .map_err(UserSessionError::from)
     }
 
+    /// Shoul invoke app lock according to app settings.
+    ///
+    /// Method will update itself to new access time when returning `true`,
+    /// It assumes client will invoke the app protection by themself
+    ///
+    pub async fn should_auto_lock(&self) -> Result<bool, UserSessionError> {
+        let ctx = self.mail_ctx.clone();
+
+        uniffi_async(async move {
+            let mut tether = ctx.core_context().account_stash().connection();
+            let mut app_settings = RealAppSettings::get_or_default(&tether).await;
+
+            tether
+                .tx(async move |tx| app_settings.should_auto_lock(tx).await)
+                .await
+                .map_err(RealProtonMailError::from)
+        })
+        .await
+        .map_err(UserSessionError::from)
+    }
+
     /// Create a PIN App protection.
     ///
     /// The same PIN will be required for authentication of the user

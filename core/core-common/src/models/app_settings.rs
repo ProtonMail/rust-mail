@@ -35,6 +35,10 @@ pub struct AppSettings {
     #[DbField]
     pub auto_lock: ProtectionAutoLock,
 
+    /// When auto-lock was lastly invoked,
+    #[DbField]
+    pub lock_accessed_unixepoch: i64,
+
     /// Do you want to share contacts between the accounts.
     #[DbField]
     pub use_combine_contacts: bool,
@@ -61,6 +65,29 @@ impl AppSettings {
     pub fn unset_biometrics(&mut self) {
         if let AppProtection::Biometrics = self.protection {
             self.protection = AppProtection::None;
+        }
+    }
+
+    /// Returns information if enough amount of time has passed from the autolock setting.
+    ///
+    /// Method automatically stores current time when returning `true`, allowing
+    /// for repetable calls checking if the time has passed since last autolock.
+    ///
+    pub async fn should_auto_lock(&mut self, bond: &Bond<'_>) -> Result<bool, StashError> {
+        if self.protection.is_unset() {
+            Ok(false)
+        } else {
+            let now = Utc::now().timestamp();
+            let should_lock = self
+                .auto_lock
+                .should_autolock(now, self.lock_accessed_unixepoch);
+
+            if should_lock {
+                self.lock_accessed_unixepoch = now;
+                self.save(bond).await?;
+            }
+
+            Ok(should_lock)
         }
     }
 
@@ -137,6 +164,18 @@ pub enum AppProtection {
     Pin = 2,
 }
 
+impl AppProtection {
+    #[must_use]
+    pub fn is_set(&self) -> bool {
+        !self.is_unset()
+    }
+
+    #[must_use]
+    pub fn is_unset(&self) -> bool {
+        matches!(self, AppProtection::None)
+    }
+}
+
 impl FromSql for AppProtection {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         let val = u8::column_result(value)?;
@@ -158,6 +197,20 @@ pub enum ProtectionAutoLock {
     #[default]
     Always,
     Minutes(u8),
+}
+
+impl ProtectionAutoLock {
+    #[must_use]
+    pub fn should_autolock(&self, now: i64, last_lock: i64) -> bool {
+        match self {
+            Self::Always => true,
+            Self::Minutes(minutes) => {
+                let seconds = i64::from(*minutes) * 60;
+
+                last_lock.saturating_add(seconds) < now
+            }
+        }
+    }
 }
 
 impl From<u8> for ProtectionAutoLock {
@@ -349,5 +402,21 @@ mod tests {
         };
 
         pinpro.remaining_attempts()
+    }
+
+    const ONE_HOUR: i64 = 3600;
+    const ONE_MINUTE: i64 = 60;
+    const TWO_MINUTES: i64 = 120;
+
+    #[test_case(ProtectionAutoLock::Always, 0, 0 => true; "TEST 0 AutoLock::Always returns true")]
+    #[test_case(ProtectionAutoLock::Always, ONE_HOUR, 0 => true; "TEST 1 AutoLock::Always returns true")]
+    #[test_case(ProtectionAutoLock::Always, 0, ONE_HOUR => true; "TEST 2 AutoLock::Always returns true")]
+    #[test_case(ProtectionAutoLock::Minutes(1), ONE_MINUTE, 0 => false; "TEST 3 When minutes passed are equal to allowed")]
+    #[test_case(ProtectionAutoLock::Minutes(1), ONE_MINUTE + 1, 0 => true; "TEST 4 When minutes passed from lock are more than allowed")]
+    #[test_case(ProtectionAutoLock::Minutes(1), TWO_MINUTES + 1, ONE_MINUTE => true; "TEST 5 When minutes passed from lock are more than allowed but last lock is not 0")]
+    #[test_case(ProtectionAutoLock::Minutes(60), ONE_HOUR, 0 => false; "TEST 6 When 60 minutes equal")]
+    #[test_case(ProtectionAutoLock::Minutes(60), ONE_HOUR + 1, 0 => true; "TEST 6 When 60 minutes passed")]
+    fn should_autolock(autolock: ProtectionAutoLock, now: i64, last_lock: i64) -> bool {
+        autolock.should_autolock(now, last_lock)
     }
 }
