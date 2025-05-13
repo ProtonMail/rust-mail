@@ -39,6 +39,7 @@ use stash::stash::{Tether, WatcherHandle};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::thread;
 use throbber_widgets_tui::ThrobberState;
 use tracing::debug;
 
@@ -732,16 +733,14 @@ impl DecryptedMessage {
             let after = temp_dir.join("after.html");
             safe_write(&after, &body_output.body).unwrap();
 
-            #[allow(
-                clippy::zombie_processes,
-                reason = "This is fine to run in the background"
-            )]
-            {
-                _ = std::process::Command::new(cmd_name)
+            thread::spawn(move || {
+                std::process::Command::new(cmd_name)
                     .args([&after])
                     .spawn()
+                    .unwrap()
+                    .wait()
                     .unwrap();
-            }
+            });
         }
 
         let content = html_to_text(&body_output.body)?;
