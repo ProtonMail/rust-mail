@@ -114,7 +114,7 @@ impl Visitor<'_> for DarkModeVisitor {
                     prop.property
                         .to_css_string(true, (self.printer_options)())
                         .inspect_err(|err| {
-                            tracing::error!("Could not print CSS: {err:?}. Skipping it")
+                            tracing::error!("Could not print CSS: {err:?}. Skipping it");
                         })
                         .ok()
                 })

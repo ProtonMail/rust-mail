@@ -243,7 +243,7 @@ fn inject_style(document: &NodeRef, style_text: &str) {
         .insert("style", "text/css".to_owned());
 
     let style_node = NodeRef::new(NodeData::Element(element_data));
-    let text_node = NodeRef::new(NodeData::Text(RefCell::new(style_text.to_owned())));
+    let text_node = NodeRef::new_text(style_text);
 
     style_node.append(text_node);
 
@@ -310,5 +310,32 @@ mod tests {
             ),
             stylesheet
         );
+    }
+
+    #[test]
+    fn injecting_style_does_not_escape_gt_lt() {
+        use html5ever::tendril::TendrilSink;
+
+        // https://www.w3.org/TR/mediaqueries-4/ EXAMPLE 26 - < sign is a valid syntax here
+        let style = "
+            @media (width < 800px) {
+                
+            }
+        ";
+
+        let empty = "
+            <html>
+            <head>
+            </head>
+            </html>
+        ";
+
+        let document = kuchikiki::parse_html().one(empty);
+
+        inject_style(&document, style);
+
+        let html = document.to_string();
+
+        insta::assert_snapshot!(html);
     }
 }

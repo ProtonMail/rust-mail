@@ -14,7 +14,10 @@ velcro = { workspace = true }
 tracing = { workspace = true }
 itertools = { workspace = true }
 regex = { workspace = true }
-lightningcss = { version = "1.0.0-alpha.65", features = ["visitor", "grid"], default-features = false }
+lightningcss = { version = "1.0.0-alpha.65", features = [
+  "visitor",
+  "grid",
+], default-features = false }
 smart-default = { workspace = true }
 
 [lints]

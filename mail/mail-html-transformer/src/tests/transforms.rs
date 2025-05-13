@@ -36,6 +36,9 @@ fn inject_style_no_head() {
     insta::assert_snapshot!(html.to_string());
 }
 
+// For more tests regarding dark mode look into the module:
+mod dark_mode;
+
 #[test]
 fn add_noreferrer() {
     let html = r#"

@@ -1,3 +1,9 @@
 /*
-TODO: Introduce styles for dark mode
+TODO: Introduce styles for combination of light and dark mode using @media queries
 */
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: #1C1B24;
+  }
+}
