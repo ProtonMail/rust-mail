@@ -1,9 +1,6 @@
-#![allow(clippy::module_name_repetitions)]
-
 use crate::app::Command;
 use crate::app_model::YesNoPopup;
 use crate::app_model::mailbox::messages::MessagesState;
-use crate::app_model::mailbox::model::StateHandler;
 use crate::app_model::mailbox::paginator::Paginator;
 use crate::app_model::mailbox::{ConversationMessage, ITEM_LIMIT, Item, Message};
 use crate::messages::Messages;
@@ -15,9 +12,9 @@ use proton_mail_common::datatypes::folder_banner::{AutoDeleteBanner, AutoDeleteS
 use proton_mail_common::datatypes::{ContextualConversation, LocalConversationId, ReadFilter};
 use proton_mail_common::mail_scroller::{DataScrollerSource, MailScroller};
 use proton_mail_common::models::{
-    Conversation, ConversationScrollData, LabelWithCounters, MailSettings, Message as MailMessage,
+    Conversation, ConversationScrollData, LabelWithCounters, Message as MailMessage,
 };
-use proton_mail_common::{MailContext, MailUserContext, Mailbox, MailboxResult};
+use proton_mail_common::{MailUserContext, Mailbox, MailboxResult};
 use ratatui::Frame;
 use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Rect;
@@ -128,12 +125,12 @@ impl ConversationsState {
     }
 }
 
-impl StateHandler for ConversationsState {
-    fn handle_event(
+impl ConversationsState {
+    pub fn handle_event(
         &mut self,
         ctx: &Arc<MailUserContext>,
         mbox: &Mailbox,
-        event: Event,
+        event: &Event,
     ) -> Command<Messages> {
         let Event::Key(key) = &event else {
             return Command::None;
@@ -213,13 +210,11 @@ impl StateHandler for ConversationsState {
         }
     }
 
-    fn update(
+    pub fn update(
         &mut self,
-        ctx: &MailContext,
         user_ctx: &Arc<MailUserContext>,
         message: Message,
         mbox: &Mailbox,
-        mail_settings: &Arc<MailSettings>,
     ) -> Command<Messages> {
         match &mut self.messages {
             MessagesStatus::None => {
@@ -295,12 +290,12 @@ impl StateHandler for ConversationsState {
                     self.close_conversation();
                     return Command::None;
                 }
-                state.update(ctx, user_ctx, message, mbox, mail_settings)
+                state.update(user_ctx, message, mbox)
             }
         }
     }
 
-    fn view(&mut self, frame: &mut Frame, mut area: Rect) {
+    pub fn view(&mut self, frame: &mut Frame, mut area: Rect) {
         if let Some(AutoDeleteBanner { state, folder }) = self.autodelete_banner {
             let text = match state {
                 AutoDeleteState::AutoDeleteUpsell => format!(
