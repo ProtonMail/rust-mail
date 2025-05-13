@@ -4733,6 +4733,7 @@ dependencies = [
  "rand 0.8.5",
  "secrecy",
  "serde",
+ "smart-default",
  "sqlite-watcher",
  "stash",
  "tempdir",

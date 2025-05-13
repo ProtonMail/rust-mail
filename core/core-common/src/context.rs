@@ -10,7 +10,7 @@ use crate::db::account::{
     SessionEncryptionKey,
 };
 use crate::db::migrations::migrate_account_db;
-use crate::models::ModelExtension;
+use crate::models::{AppSettings, ModelExtension};
 use crate::nuke_utils::{
     drop_all_tables_in_database, remove_or_clear_dir_safe, rename_database_files,
 };
@@ -46,7 +46,7 @@ use thiserror::Error;
 use tokio::sync::{Mutex, broadcast};
 use tokio::task::{JoinError, JoinHandle};
 use tokio_util::sync::CancellationToken;
-use tracing::{Level, error, info, warn};
+use tracing::{Level, debug, error, info, trace, warn};
 
 #[derive(Debug, Error)]
 pub enum CoreContextError {
@@ -914,10 +914,19 @@ impl Context {
         let account_stash = self.account_stash();
         let keychain = Arc::clone(&self.key_chain);
         let store = AuthStore::new(account_stash, keychain, user_id, session_id);
+        let tether = account_stash.connection();
+        let app_settings = AppSettings::get_or_default(&tether).await;
+        let mut builder = ApiSession::builder().with_store(store);
 
-        let mut builder = ApiSession::builder()
-            .with_config(&self.api_config)
-            .with_store(store);
+        if app_settings.use_alternative_routing {
+            trace!("Using alternative routing");
+            builder = builder.with_config(&self.api_config);
+        } else {
+            debug!("Alternative routing setting is disabled");
+            let api_config = self.api_config.clone().env_without_alternative_routing()?;
+
+            builder = builder.with_config(&api_config);
+        };
 
         if let Some(status) = status {
             builder = builder.with_status(status);
