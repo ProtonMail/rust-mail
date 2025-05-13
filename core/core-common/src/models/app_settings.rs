@@ -73,7 +73,7 @@ impl AppSettings {
     /// Method automatically stores current time when returning `true`, allowing
     /// for repetable calls checking if the time has passed since last autolock.
     ///
-    pub async fn should_auto_lock(&mut self, bond: &Bond<'_>) -> Result<bool, StashError> {
+    pub async fn should_auto_lock(&mut self, tether: &mut Tether) -> Result<bool, StashError> {
         if self.protection.is_unset() {
             Ok(false)
         } else {
@@ -84,7 +84,7 @@ impl AppSettings {
 
             if should_lock {
                 self.lock_accessed_unixepoch = now;
-                self.save(bond).await?;
+                tether.tx(async |bond| self.save(bond).await).await?;
             }
 
             Ok(should_lock)
@@ -434,19 +434,20 @@ mod tests {
         tether
             .tx(async |tx| {
                 app_settings.save(tx).await?;
-                // Last lock defaults to 0, so it will return `true`
-                assert!(app_settings.should_auto_lock(tx).await?);
-                let last_lock_1 = app_settings.lock_accessed_unixepoch;
-                // Last lock was updated in last call, it will return `false`
-                assert!(!app_settings.should_auto_lock(tx).await?);
-                // and any subsequent call for next 10 minutes will also return `false`
-                assert!(!app_settings.should_auto_lock(tx).await?);
-                let last_lock_2 = app_settings.lock_accessed_unixepoch;
-
-                assert_eq!(last_lock_1, last_lock_2);
                 Result::<(), StashError>::Ok(())
             })
             .await
             .unwrap();
+
+        // Last lock defaults to 0, so it will return `true`
+        assert!(app_settings.should_auto_lock(&mut tether).await.unwrap());
+        let last_lock_1 = app_settings.lock_accessed_unixepoch;
+        // Last lock was updated in last call, it will return `false`
+        assert!(!app_settings.should_auto_lock(&mut tether).await.unwrap());
+        // and any subsequent call for next 10 minutes will also return `false`
+        assert!(!app_settings.should_auto_lock(&mut tether).await.unwrap());
+        let last_lock_2 = app_settings.lock_accessed_unixepoch;
+
+        assert_eq!(last_lock_1, last_lock_2);
     }
 }

@@ -739,8 +739,8 @@ impl MailSession {
             let mut tether = ctx.core_context().account_stash().connection();
             let mut app_settings = RealAppSettings::get_or_default(&tether).await;
 
-            tether
-                .tx(async move |tx| app_settings.should_auto_lock(tx).await)
+            app_settings
+                .should_auto_lock(&mut tether)
                 .await
                 .map_err(RealProtonMailError::from)
         })
