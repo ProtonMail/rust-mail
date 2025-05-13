@@ -1,10 +1,7 @@
-#![allow(clippy::module_name_repetitions)]
-
 use crate::CLI_ARGS;
 use crate::app::Command;
 use crate::app_model::YesNoPopup;
 use crate::app_model::mailbox::composer::Composer;
-use crate::app_model::mailbox::model::StateHandler;
 use crate::app_model::mailbox::paginator::Paginator;
 use crate::app_model::mailbox::{ConversationMessage, ITEM_LIMIT, Item, Message, MessageMessage};
 use crate::app_model::watcher::WatchHandle;
@@ -30,9 +27,9 @@ use proton_mail_common::draft::ReplyMode;
 use proton_mail_common::mail_scroller::{DataScrollerSource, MailScroller, SearchScrollerSource};
 use proton_mail_common::models::default_location::IncomingDefaultLocation;
 use proton_mail_common::models::{
-    Attachment, LabelWithCounters, MailSettings, Message as MailMessage, MessageScrollData,
+    Attachment, LabelWithCounters, Message as MailMessage, MessageScrollData,
 };
-use proton_mail_common::{AppError, MailContext, MailUserContext, Mailbox, MailboxResult};
+use proton_mail_common::{AppError, MailUserContext, Mailbox, MailboxResult};
 use ratatui::Frame;
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::Rect;
@@ -330,13 +327,13 @@ impl MessagesState {
     }
 }
 
-impl StateHandler for MessagesState {
+impl MessagesState {
     #[allow(clippy::too_many_lines)]
-    fn handle_event(
+    pub fn handle_event(
         &mut self,
         user_ctx: &Arc<MailUserContext>,
         mbox: &Mailbox,
-        event: Event,
+        event: &Event,
     ) -> Command<Messages> {
         let Event::Key(key) = event else {
             return Command::None;
@@ -542,13 +539,11 @@ impl StateHandler for MessagesState {
         }
     }
 
-    fn update(
+    pub fn update(
         &mut self,
-        _: &MailContext,
         user_ctx: &Arc<MailUserContext>,
         message: Message,
         mbox: &Mailbox,
-        _: &Arc<MailSettings>,
     ) -> Command<Messages> {
         let Message::MessageState(message) = message else {
             return Command::None;
@@ -624,7 +619,7 @@ impl StateHandler for MessagesState {
         Command::None
     }
 
-    fn view(&mut self, frame: &mut Frame, area: Rect) {
+    pub fn view(&mut self, frame: &mut Frame, area: Rect) {
         let table_area = self.open_message.draw(frame, area);
 
         if let Some(table_area) = table_area {

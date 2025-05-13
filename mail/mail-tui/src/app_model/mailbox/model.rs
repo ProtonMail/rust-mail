@@ -23,7 +23,7 @@ use proton_mail_common::datatypes::{ReadFilter, SystemLabelId, ViewMode};
 use proton_mail_common::draft::Draft;
 use proton_mail_common::draft::observers::DraftSendResultWatcher;
 use proton_mail_common::models::{
-    DraftSendFailure, DraftSendResult, DraftSendResultOrigin, LabelWithCounters, MailSettings,
+    DraftSendFailure, DraftSendResult, DraftSendResultOrigin, LabelWithCounters,
 };
 use proton_mail_common::proton_mail_api::proton_core_api::services::proton::LabelId;
 use proton_mail_common::{
@@ -51,29 +51,9 @@ impl State {
     }
 }
 
-pub(super) trait StateHandler {
-    fn handle_event(
-        &mut self,
-        user_ctx: &Arc<MailUserContext>,
-        mbox: &Mailbox,
-        event: Event,
-    ) -> Command<Messages>;
-
-    fn update(
-        &mut self,
-        ctx: &MailContext,
-        user_ctx: &Arc<MailUserContext>,
-        message: Message,
-        mbox: &Mailbox,
-        mail_settings: &Arc<MailSettings>,
-    ) -> Command<Messages>;
-
-    fn view(&mut self, frame: &mut Frame, area: Rect);
-}
 pub struct Model {
     ctx: Arc<MailUserContext>,
     mailbox: Mailbox,
-    mail_settings: Arc<MailSettings>,
     label: LabelWithCounters,
     label_watcher: Option<WatchHandle>,
     state: State,
@@ -94,14 +74,14 @@ impl Model {
         ctx.prefetch().await?;
 
         let tether = ctx.user_stash().connection();
+
         let label = LabelWithCounters::load(mailbox.label_id(), &tether)
             .await?
             .ok_or(AppError::LabelNotFound(mailbox.label_id()))?;
-        let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
+
         Ok(Self {
             ctx,
             mailbox,
-            mail_settings: Arc::new(mail_settings),
             state: State::new_syncing(),
             label,
             cancel_token: CancellationToken::new(),
@@ -388,24 +368,23 @@ impl AppStateHandler for Model {
         }
 
         if let Some(search) = &mut self.search {
-            return search.handle_event(&self.ctx, &self.mailbox, event);
-        } else if let Event::Key(key) = &event {
+            return search.handle_event(&event);
+        }
+
+        if let Event::Key(key) = &event {
             if key.code == KeyCode::Char('/') {
                 return Command::Message(Message::SearchPopup(Search::new()).into());
             }
         }
 
         match &mut self.state {
-            State::Syncing(_) => {
-                // Do nothing
-                Command::None
-            }
-            State::Conversations(state) => state.handle_event(&self.ctx, &self.mailbox, event),
-            State::Messages(state) => state.handle_event(&self.ctx, &self.mailbox, event),
+            State::Syncing(_) => Command::None,
+            State::Conversations(state) => state.handle_event(&self.ctx, &self.mailbox, &event),
+            State::Messages(state) => state.handle_event(&self.ctx, &self.mailbox, &event),
         }
     }
 
-    fn update(&mut self, ctx: &Arc<MailContext>, message: Messages) -> Command<Messages> {
+    fn update(&mut self, _: &Arc<MailContext>, message: Messages) -> Command<Messages> {
         let Messages::Mailbox(message) = message else {
             return Command::None;
         };
@@ -416,12 +395,12 @@ impl AppStateHandler for Model {
         }
 
         if let Some(composer) = &mut self.composer {
-            return composer.update(ctx, &self.ctx, message, &self.mailbox, &self.mail_settings);
+            return composer.update(&self.ctx, message);
         }
 
-        if let Some(search) = &mut self.search {
+        if self.search.is_some() {
             let Message::CloseSearchPopup = message else {
-                return search.update(ctx, &self.ctx, message, &self.mailbox, &self.mail_settings);
+                return Search::update(&self.ctx, message, &self.mailbox);
             };
         }
 
@@ -439,8 +418,7 @@ impl AppStateHandler for Model {
             Message::OpenMoveItemPopup(item) => self.open_move_item_popup(item),
             Message::OpenLabelItemPopup(item) => self.open_label_popup(item),
             Message::ConversationState(_) | Message::MessageState(_) => {
-                self.state
-                    .update(ctx, &self.ctx, message, &self.mailbox, &self.mail_settings)
+                self.state.update(&self.ctx, message, &self.mailbox)
             }
             Message::LabelRefreshed(label) => {
                 self.label = label;
@@ -603,36 +581,17 @@ impl AppStateHandler for Model {
     }
 }
 
-impl StateHandler for State {
-    fn handle_event(
-        &mut self,
-        ctx: &Arc<MailUserContext>,
-        mbox: &Mailbox,
-        event: Event,
-    ) -> Command<Messages> {
-        match self {
-            State::Syncing(_) => Command::None,
-            State::Conversations(state) => state.handle_event(ctx, mbox, event),
-            State::Messages(state) => state.handle_event(ctx, mbox, event),
-        }
-    }
-
+impl State {
     fn update(
         &mut self,
-        ctx: &MailContext,
         user_ctx: &Arc<MailUserContext>,
         message: Message,
         mbox: &Mailbox,
-        mail_settings: &Arc<MailSettings>,
     ) -> Command<Messages> {
         match self {
             State::Syncing(_) => Command::None,
-
-            State::Conversations(state) => {
-                state.update(ctx, user_ctx, message, mbox, mail_settings)
-            }
-
-            State::Messages(state) => state.update(ctx, user_ctx, message, mbox, mail_settings),
+            State::Conversations(state) => state.update(user_ctx, message, mbox),
+            State::Messages(state) => state.update(user_ctx, message, mbox),
         }
     }
 

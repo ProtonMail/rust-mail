@@ -1,6 +1,5 @@
 use crate::app::Command;
 use crate::app_model::YesNoPopup;
-use crate::app_model::mailbox::model::StateHandler;
 use crate::app_model::mailbox::{ComposerMessage, Message};
 use crate::messages::Messages;
 use crate::widgets::{ScrollableList, ScrollableListState, TextInput, TextInputState};
@@ -13,8 +12,8 @@ use proton_mail_common::draft::recipients::MaybeEmptyString;
 use proton_mail_common::draft::{
     Draft, DraftSaveActionQueuer, DraftSyncStatus, ReplyMode, recipients,
 };
-use proton_mail_common::models::{Attachment, MailSettings, MetadataId};
-use proton_mail_common::{MailContext, MailContextError, MailUserContext, Mailbox};
+use proton_mail_common::models::{Attachment, MetadataId};
+use proton_mail_common::{MailContextError, MailUserContext, Mailbox};
 use ratatui::Frame;
 use ratatui::crossterm::event::Event;
 use ratatui::layout::Rect;
@@ -446,9 +445,9 @@ impl From<DraftAttachment> for AttachmentInfo {
         }
     }
 }
-impl StateHandler for Composer {
+impl Composer {
     #[allow(clippy::too_many_lines)]
-    fn view(&mut self, frame: &mut Frame, area: Rect) {
+    pub fn view(&mut self, frame: &mut Frame, area: Rect) {
         let area = area.inner(Margin {
             horizontal: 4,
             vertical: 2,
@@ -606,7 +605,7 @@ impl StateHandler for Composer {
     }
 
     #[allow(clippy::too_many_lines)]
-    fn handle_event(
+    pub fn handle_event(
         &mut self,
         _: &Arc<MailUserContext>,
         _: &Mailbox,
@@ -716,13 +715,10 @@ impl StateHandler for Composer {
         Command::none()
     }
 
-    fn update(
+    pub fn update(
         &mut self,
-        _ctx: &MailContext,
         user_ctx: &Arc<MailUserContext>,
         message: Message,
-        _: &Mailbox,
-        _mail_settings: &Arc<MailSettings>,
     ) -> Command<Messages> {
         let Message::Composer(message) = message else {
             return Command::none();
