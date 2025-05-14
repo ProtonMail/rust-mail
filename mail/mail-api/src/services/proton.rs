@@ -439,6 +439,7 @@ pub trait ProtonMail {
     ///  * `packages`           - The packages of the message containing the encrypted e-mail data for the recipients.
     ///  * `auto_save_contacts` - Whether the server should automatically create contacts for the recipients.
     ///  * `delay`              - Duration by which the message should be delayed before sending
+    ///  * `delivery_time`      - Timestamp when this message should be delivered.
     ///
     /// # Errors
     ///
@@ -449,6 +450,7 @@ pub trait ProtonMail {
         packages: Vec<Package>,
         auto_save_contacts: Option<bool>,
         delay: Option<Duration>,
+        delivery_time: Option<u64>,
     ) -> ApiServiceResult<PostSendMessageResponse>;
 
     /// Reports a message as phishing.

@@ -1,6 +1,3 @@
-use std::mem;
-use std::path::{Path, PathBuf};
-
 use crate::actions::draft;
 use crate::actions::draft::{
     AttachmentRemove, AttachmentUpload, AttachmentUploadMode, Discard, Save, UndoSend,
@@ -20,6 +17,8 @@ use crate::models::{
     MetadataId,
 };
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
+use anyhow::Context;
+use chrono::{DateTime, Local};
 use compose::maybe_sanitize;
 use derive_more::derive::TryFrom;
 use futures::future::join3;
@@ -45,6 +44,8 @@ use serde::{Deserialize, Serialize};
 use stash::exports::{FromSql, SqliteError, ToSql, ToSqlOutput};
 use stash::orm::Model;
 use stash::stash::{Stash, StashError, Tether};
+use std::mem;
+use std::path::{Path, PathBuf};
 use tracing::{debug, error};
 
 pub mod attachments;
@@ -52,6 +53,8 @@ pub mod compose;
 pub mod observers;
 pub mod recipients;
 pub(crate) mod send;
+
+pub use send::ScheduleSendOptions;
 
 /// Potential draft specific errors.
 #[derive(Debug, thiserror::Error)]
@@ -112,6 +115,8 @@ pub enum SendError {
     MissingAttachmentUploads,
     #[error("Message Body for {0} missing")]
     MessageBodyMissing(LocalMessageId),
+    #[error("Unable to schedule send before expected delivery time")]
+    SechduleSendExpired,
 }
 
 impl From<SendError> for MailContextError {
@@ -365,6 +370,14 @@ pub enum DraftSyncStatus {
 }
 
 impl Draft {
+    pub async fn schedule_send_options(
+        ctx: &MailUserContext,
+    ) -> MailContextResult<ScheduleSendOptions<Local>> {
+        let user = ctx.user().await?;
+        ScheduleSendOptions::new(user.subscribed)
+            .context("Failed to get schedule send options")
+            .map_err(MailContextError::Other)
+    }
     /// Open an existing draft with `message_id` and load all the relevant information.
     ///
     /// # Errors
@@ -943,6 +956,26 @@ impl Draft {
         self.to_send_action()?.queue(queue, tether).await
     }
 
+    /// Apply an action which will schedule a send this draft at the given `delivery_time`.
+    ///
+    /// Note that due to offline mode we will only send this message if at the time we are
+    /// executing the request, there is still enough time left to schedule the send.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the action failed to execute.
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip(self,queue))]
+    pub async fn schedule_send(
+        &mut self,
+        delivery_time: DateTime<Local>,
+        queue: &Queue,
+        tether: &Tether,
+    ) -> Result<QueuedActionOutput<draft::Send>, MailContextError> {
+        self.to_schedule_send_action(delivery_time)?
+            .queue(queue, tether)
+            .await
+    }
+
     /// Discard the current draft.
     ///
     /// # Errors
@@ -1012,11 +1045,39 @@ impl Draft {
     ///
     /// Returns error if the action failed to execute.
     pub fn to_send_action(&self) -> Result<DraftSendActionQueuer, Error> {
+        self.to_send_action_impl(None)
+    }
+
+    /// Create a save action for the current state of the draft.
+    ///
+    /// This method is here to provide greater flexibility of integration
+    /// when used in multithreaded contexts.
+    /// While we have our own instance variable for the `last_save_action_id`, it may
+    /// be beneficial for users of this method to pass in an alternate source.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the action failed to execute.
+    pub fn to_schedule_send_action(
+        &self,
+        delivery_time: DateTime<Local>,
+    ) -> Result<DraftSendActionQueuer, Error> {
+        self.to_send_action_impl(Some(delivery_time))
+    }
+
+    fn to_send_action_impl(
+        &self,
+        delivery_time: Option<DateTime<Local>>,
+    ) -> Result<DraftSendActionQueuer, Error> {
         if self.to_list.is_empty() && self.cc_list.is_empty() && self.bcc_list.is_empty() {
             return Err(SendError::NoRecipients.into());
         }
         let save_action = Save::new(self, DraftSendResultOrigin::SaveBeforeSend);
-        let send_action = draft::Send::new(self);
+        let send_action = if let Some(delivery_time) = delivery_time {
+            draft::Send::scheduled(self, delivery_time)
+        } else {
+            draft::Send::new(self)
+        };
         let metadata_id = self.metadata_id;
         Ok(DraftSendActionQueuer::new(
             metadata_id,

@@ -1569,7 +1569,7 @@ impl From<RealUser> for User {
             product_used_space: user.product_used_space.into(),
             role: user.role,
             services: user.services,
-            subscribed: user.subscribed.0,
+            subscribed: user.subscribed.bits(),
             to_migrate: user.to_migrate,
             used_space: user.used_space,
             user_type: user.user_type.into(),

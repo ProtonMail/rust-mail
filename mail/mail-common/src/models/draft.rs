@@ -325,8 +325,8 @@ pub struct DraftSendResult {
     /// Timestamp at which this entry was produced.
     #[DbField]
     pub timestamp: i64,
-    /// Timestamp by which we can cancel the sending of this message.
-    ///
+    /// Timestamp by which we can cancel the sending of this message, this corresponds to
+    /// the message delivery time.
     #[DbField]
     pub undo_timestamp: i64,
     /// Whether an error occurred while sending the message.
@@ -352,6 +352,7 @@ impl DraftSendResult {
         local_message_id: LocalMessageId,
         remote_message_id: MessageId,
         undo_timestamp: i64,
+        origin: DraftSendResultOrigin,
     ) -> Self {
         Self {
             local_message_id,
@@ -360,7 +361,7 @@ impl DraftSendResult {
             undo_timestamp,
             error: None,
             seen: false,
-            origin: DraftSendResultOrigin::Send,
+            origin,
             row_id: None,
         }
     }
@@ -539,6 +540,7 @@ pub enum DraftSendFailureSend {
     UnknownRecipientValidationError(String),
     PackageError(String),
     MessageDoesNotExist,
+    ScheduleSendExpired,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
@@ -566,6 +568,8 @@ pub enum DraftSendResultOrigin {
     Send = 2,
     /// We failed while uploading an attachment
     AttachmentUpload = 3,
+    /// We failed when scheduling a message send
+    ScheduleSend = 4,
 }
 
 impl ToSql for DraftSendResultOrigin {
@@ -608,6 +612,9 @@ impl DraftSendFailure {
                     Self::from_draft_package_error(package_error)
                 }
                 SendError::NoRecipients => Self::Send(DraftSendFailureSend::NoRecipients),
+                SendError::SechduleSendExpired => {
+                    Self::Send(DraftSendFailureSend::ScheduleSendExpired)
+                }
                 _ => Self::Internal,
             },
             Error::AttachmentUpload(e) => match e {
@@ -715,6 +722,9 @@ impl From<DraftSendFailure> for ProtonMailError {
                     DraftSendFailureSend::PackageError(v) => DraftSendErrorReason::PackageError(v),
                     DraftSendFailureSend::MessageDoesNotExist => {
                         DraftSendErrorReason::MessageDoesNotExist
+                    }
+                    DraftSendFailureSend::ScheduleSendExpired => {
+                        DraftSendErrorReason::ScheduleSendExpired
                     }
                 }))
             }

@@ -11,6 +11,7 @@ use crate::app_model::mailbox::conversations::ConversationsState;
 use crate::app_model::mailbox::messages::{DecryptedMessage, MessagesState};
 use crate::app_model::watcher::WatchHandle;
 use crate::messages::Messages;
+use chrono::{DateTime, Local};
 use messages::BlockOrUnblock;
 pub use model::Model;
 use proton_core_common::datatypes::{LocalIdMarker, LocalLabelId};
@@ -116,6 +117,7 @@ pub enum ComposerMessage {
     RemoveAttachment(LocalAttachmentId),
     RefreshAttachmentList,
     AttachmentListRefreshed(Vec<DraftAttachment>),
+    ScheduleSend(DateTime<Local>),
 }
 
 impl From<ComposerMessage> for Messages {

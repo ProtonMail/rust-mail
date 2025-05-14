@@ -413,13 +413,14 @@ impl ProtonMail for Proton {
         packages: Vec<Package>,
         auto_save_contacts: Option<bool>,
         delay: Option<Duration>,
+        delivery_time: Option<u64>,
     ) -> ApiServiceResult<PostSendMessageResponse> {
         let send_request = PostSendRequest {
             expiration_time: None,
             expires_in: None,
             auto_save_contacts,
             delay_seconds: delay.map(|v| v.as_secs()),
-            delivery_time: None,
+            delivery_time,
             packages,
         };
 

@@ -160,6 +160,8 @@ pub enum DraftSendErrorReason {
     MessageIsNotADraft,
     /// Message is missing attachment uploads
     MissingAttachmentUploads,
+    /// Time at which the message was scheduled to send has already expired
+    ScheduleSendExpired,
 }
 
 impl From<RealDraftSaveErrorReason> for DraftSaveErrorReason {
@@ -203,6 +205,7 @@ impl From<RealDraftSendErrorReason> for DraftSendErrorReason {
             RealDraftSendErrorReason::MessageDoesNotExist => Self::MessageDoesNotExist,
             RealDraftSendErrorReason::MessageIsNotADraft => Self::MessageIsNotADraft,
             RealDraftSendErrorReason::MissingAttachmentUploads => Self::MissingAttachmentUploads,
+            RealDraftSendErrorReason::ScheduleSendExpired => Self::ScheduleSendExpired,
         }
     }
 }
