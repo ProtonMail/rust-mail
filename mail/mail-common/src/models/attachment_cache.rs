@@ -1,10 +1,7 @@
 use crate::datatypes::exclusive_location::ExclusiveLocation;
 use crate::datatypes::{AttachmentMetadata, Disposition, LocalAttachmentId, SystemLabelId as _};
 use crate::models::Attachment;
-use crate::{
-    AppError, DecryptedAttachment, MailContextError, MailContextResult, MailUserContext,
-    MailboxError, MailboxResult,
-};
+use crate::{AppError, DecryptedAttachment, MailContextError, MailContextResult, MailUserContext};
 use anyhow::Context as _;
 use indoc::indoc;
 use proton_core_api::services::proton::LabelId;
@@ -194,7 +191,7 @@ impl Attachment {
     pub async fn get_attachment(
         ctx: &MailUserContext,
         attachment_id: LocalAttachmentId,
-    ) -> MailboxResult<DecryptedAttachment> {
+    ) -> MailContextResult<DecryptedAttachment> {
         let attachment = Self::sync(ctx, attachment_id).await?;
         let mut tether = ctx.user_stash().connection();
         let data_path = attachment.content_path(ctx, &mut tether).await?;
@@ -393,14 +390,14 @@ impl Attachment {
     pub async fn sync(
         ctx: &MailUserContext,
         attachment_id: LocalAttachmentId,
-    ) -> MailboxResult<Attachment> {
+    ) -> MailContextResult<Attachment> {
         let mut conn = ctx.user_stash().connection();
         let mut attachment = Attachment::load(attachment_id, &conn)
             .await
             .inspect_err(|e| {
                 error!("Failed to load attachment({attachment_id:?}) from DB: {e:?})")
             })?
-            .ok_or(MailboxError::AttachmentNotFound(attachment_id))?;
+            .ok_or(AppError::AttachmentMissing(attachment_id))?;
         // First check if the metadata is complete for decryption.
         if !attachment.has_complete_metadata() {
             attachment
@@ -413,7 +410,7 @@ impl Attachment {
             // Load the complete attachment metadata.
             attachment = Attachment::load(attachment_id, &conn)
                 .await?
-                .ok_or(MailboxError::AttachmentNotFound(attachment_id))?;
+                .ok_or(AppError::AttachmentMissing(attachment_id))?;
         }
         Ok(attachment)
     }
@@ -424,7 +421,7 @@ impl Attachment {
         ctx: &MailUserContext,
         pgp_provider: &Provider,
         data: impl Read,
-    ) -> MailboxResult<(Vec<u8>, VerificationResult)> {
+    ) -> MailContextResult<(Vec<u8>, VerificationResult)> {
         // Can't decrypt with the remote address id.
         let Some(remote_address_id) = &self.remote_address_id else {
             return Err(AppError::AttachmentHasNoAddressId(self.local_id.unwrap()).into());
@@ -448,14 +445,16 @@ impl Attachment {
         // TODO: Load the sender verification keys for correct signature verification.
         let verification_keys: Vec<<Provider as PGPProvider>::PublicKey> = Vec::new();
 
-        let mut decrypting_reader = self.decrypt_from_reader(
-            pgp_provider,
-            address_keys.as_ref(),
-            &verification_keys,
-            data,
-        )?;
+        let mut decrypting_reader = self
+            .decrypt_from_reader(
+                pgp_provider,
+                address_keys.as_ref(),
+                &verification_keys,
+                data,
+            )
+            .map_err(AppError::AttachmentDecryption)?;
         std::io::copy(&mut decrypting_reader, &mut result_buffer)
-            .map_err(|e| MailboxError::AttachmentDecryptionIO(e.to_string()))?;
+            .map_err(|e| AppError::AttachmentDecryptionIO(e.to_string()))?;
         let signature_verification = decrypting_reader.verification_result();
         Ok((result_buffer, signature_verification))
     }

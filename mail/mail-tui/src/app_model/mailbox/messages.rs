@@ -1,3 +1,5 @@
+use super::LabelAs;
+use super::search::SearchStatusBar;
 use crate::CLI_ARGS;
 use crate::app::Command;
 use crate::app_model::YesNoPopup;
@@ -29,7 +31,7 @@ use proton_mail_common::models::default_location::IncomingDefaultLocation;
 use proton_mail_common::models::{
     Attachment, LabelWithCounters, Message as MailMessage, MessageScrollData,
 };
-use proton_mail_common::{AppError, MailUserContext, Mailbox, MailboxResult};
+use proton_mail_common::{AppError, MailContextResult, MailUserContext, Mailbox};
 use ratatui::Frame;
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::Rect;
@@ -42,9 +44,6 @@ use std::sync::Arc;
 use std::thread;
 use throbber_widgets_tui::ThrobberState;
 use tracing::debug;
-
-use super::LabelAs;
-use super::search::SearchStatusBar;
 
 /// Displays a list of messages based of message metadata. If a conversation is opened the message
 /// body will be displayed.
@@ -89,7 +88,7 @@ impl MessagesState {
         label_id: LocalLabelId,
         filter: ReadFilter,
         recipient_display_mode: MessageRecipientDisplayMode,
-    ) -> MailboxResult<(Self, Command<Messages>)> {
+    ) -> MailContextResult<(Self, Command<Messages>)> {
         let context = ctx.clone();
         let (paginator, command) = Paginator::new(
             || {
@@ -142,7 +141,7 @@ impl MessagesState {
     async fn from_search_impl(
         ctx: Arc<MailUserContext>,
         search_phrase: String,
-    ) -> MailboxResult<(Self, Command<Messages>)> {
+    ) -> MailContextResult<(Self, Command<Messages>)> {
         let context = ctx.clone();
         let search_phrase_clone = search_phrase.clone();
         let (paginator, command) = Paginator::new(
@@ -218,7 +217,7 @@ impl MessagesState {
         ctx: Arc<MailUserContext>,
         label_id: LocalLabelId,
         conversation_id: LocalConversationId,
-    ) -> MailboxResult<(Self, Command<Messages>)> {
+    ) -> MailContextResult<(Self, Command<Messages>)> {
         let Some(conv_and_messages) = ContextualConversation::conversation_and_messages(
             conversation_id,
             label_id,
