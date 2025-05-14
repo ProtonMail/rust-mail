@@ -37,7 +37,7 @@ use proton_vcard::gender::GenderValue;
 use proton_vcard::parameters::type_generic::GenericType;
 use proton_vcard::parameters::type_tel::TelType;
 use proton_vcard::values::date_and_or_time::MaybeDateAndOrTime;
-use proton_vcard::vcard::VCard;
+use proton_vcard::vcard::{ToSorted, VCard};
 use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
 use stash::orm::Model;
@@ -751,16 +751,12 @@ impl SyncedContacts {
 impl ContactDetailCard {
     /// Transforms the data in the vCard struct to something suitable for human consumption
     fn from_vcard(vcard: VCard) -> Self {
-        let phones = vcard
-            .telephones
-            .into_values()
-            .map(|t| Telephone {
-                number: t.value.to_string(),
-                tel_types: t.tel_type.iter().cloned().map_vec(),
-            })
-            .collect_vec();
+        let phones = vcard.telephones.to_sorted(|tel| Telephone {
+            number: tel.value.to_string(),
+            tel_types: tel.tel_type.iter().cloned().map_vec(),
+        });
 
-        let address = vcard.addresses.into_values().map_vec();
+        let address = vcard.addresses.to_sorted(ContactDetailAddress::from);
 
         let extended_name = vcard.name.map(|name| ExtendedName {
             last: name.last.concat_to_string(" "),
@@ -770,47 +766,26 @@ impl ContactDetailCard {
             suffix: name.suffix.concat_to_string(" "),
         });
 
-        let urls = vcard
-            .urls
-            .into_values()
-            .map(|u| VCardUrl {
-                url_type: u.r#type.into_iter().map_vec(),
-                url: u.value,
-            })
-            .collect();
-
-        let logos = vcard
-            .logos
-            .into_values()
-            .map(|logo| logo.value.0.to_string())
-            .collect();
-
-        let photos = vcard
-            .photos
-            .into_values()
-            .map(|photo| photo.value.0.to_string())
-            .collect();
-
-        let timezones = vcard
-            .time_zones
-            .into_values()
-            .map(|x| x.value.to_string())
-            .collect();
+        let urls = vcard.urls.to_sorted(|u| VCardUrl {
+            url_type: u.r#type.into_iter().map_vec(),
+            url: u.value,
+        });
 
         let organizations = vcard
             .organizations
-            .into_values()
-            .map(|x| x.values.into_iter().join(", "))
-            .collect();
+            .to_sorted(|x| x.values.into_iter().join(", "));
 
-        let notes = vcard.notes.into_values().map(|x| x.value.value).collect();
+        let logos = vcard.logos.to_sorted(|logo| logo.value.0.to_string());
+        let photos = vcard.photos.to_sorted(|photo| photo.value.0.to_string());
+        let timezones = vcard.time_zones.to_sorted(|x| x.value.to_string());
+        let notes = vcard.notes.to_sorted(|x| x.value.value);
         let gender = vcard.gender.map(|g| g.value.into());
+        let titles = vcard.titles.to_sorted(|x| x.value.value);
+        let roles = vcard.roles.to_sorted(|x| x.value.value);
+        let languages = vcard.languages.to_sorted(|x| x.value);
+        let members = vcard.members.to_sorted(|x| x.value);
         let anniversary = vcard.anniversary.map(|a| a.value);
         let birthday = vcard.birthday.map(|a| a.value);
-        let titles = vcard.titles.into_values().map(|x| x.value.value).collect();
-        let roles = vcard.roles.into_values().map(|x| x.value.value).collect();
-        let languages = vcard.languages.into_values().map(|x| x.value).collect();
-        let members = vcard.members.into_values().map(|x| x.value).collect();
 
         ContactDetailCard {
             extended_name,
@@ -833,7 +808,6 @@ impl ContactDetailCard {
     }
 }
 
-#[derive(Clone, Debug)]
 pub struct ContactDetails {
     pub item: ContactItem,
     pub cards: Vec<ContactDetailCard>,
@@ -906,7 +880,7 @@ pub struct ExtendedName {
     pub suffix: Option<String>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub struct ContactDetailAddress {
     pub street: String,
     pub city: String,
@@ -929,13 +903,13 @@ impl From<VcardAddress> for ContactDetailAddress {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Telephone {
     pub number: String,
     pub tel_types: Vec<VcardPropType>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub struct VCardUrl {
     pub url: String,
     pub url_type: Vec<VcardPropType>,
@@ -947,7 +921,7 @@ pub struct ContactDetailsEmail {
     pub email: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub enum VcardPropType {
     Home,
     Work,

@@ -21,6 +21,7 @@ use std::fmt::{Debug, Display, Formatter};
 use std::hash::BuildHasher;
 
 use ical::generator::VcardContact;
+use itertools::Itertools;
 use tracing::{error, warn};
 
 use crate::properties::VcardProperty;
@@ -574,4 +575,39 @@ pub(crate) fn split_list(value: &str, separator: char) -> Vec<String> {
 /// Get the group part of a property name if any.
 pub(crate) fn group_from_name(name: &str) -> Option<String> {
     name.split_once('.').map(|(g, _)| g.to_owned())
+}
+
+pub trait ToSorted<P> {
+    fn to_sorted_iter<T: Ord>(self, f: impl FnMut(P) -> T) -> impl Iterator<Item = T>
+    where
+        Self: Sized;
+
+    fn to_sorted<T: Ord>(self, f: impl FnMut(P) -> T) -> Vec<T>
+    where
+        Self: Sized,
+    {
+        self.to_sorted_iter(f).collect()
+    }
+}
+
+impl<_K, P: VcardProperty, S: BuildHasher> ToSorted<P> for HashMap<_K, P, S> {
+    fn to_sorted_iter<T: Ord>(self, mut f: impl FnMut(P) -> T) -> impl Iterator<Item = T>
+    where
+        Self: Sized,
+    {
+        let mut vec = self
+            .into_values()
+            .map(|this| {
+                let pref = match this.get_preference() {
+                    Some(v) => v.value,
+                    None => u32::MAX,
+                };
+                (pref, f(this))
+            })
+            .collect_vec();
+
+        // We sort by preference, then by the key to make it consistent.
+        vec.sort_unstable();
+        vec.into_iter().map(|x| x.1)
+    }
 }
