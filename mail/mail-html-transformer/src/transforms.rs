@@ -31,7 +31,7 @@ pub fn inject_style(document: NodeRef) {
     let element = document.select_first("head").unwrap(); // kuckikiki always adds it
 
     let style_text = include_str!("default.css");
-    let qual_name = QualName::new(None, html5ever::ns!(), LocalName::from("style"));
+    let qual_name = QualName::new(None, html5ever::ns!(html), LocalName::from("style"));
 
     #[allow(clippy::default_trait_access)]
     let element_data = ElementData {

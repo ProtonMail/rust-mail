@@ -268,8 +268,8 @@ body {
 
 /* From Android V6 */
 
-/* Only override &lt;pre&gt; when it's the first direct child of the body (case when replying to HTML). */
-body &gt; pre:first-child {
+/* Only override <pre> when it's the first direct child of the body (case when replying to HTML). */
+body > pre:first-child {
     margin:0;
     font-size: 100%;
     inline-size: 100%;
@@ -279,8 +279,8 @@ body &gt; pre:first-child {
     color: var(--text-norm, CanvasText);
 }
 
-/* This should not be needed, but in some cases the resulting HTML contains a &lt;pre&gt; within a styled body. */
-body:not([class]) &gt; pre:first-child  {
+/* This should not be needed, but in some cases the resulting HTML contains a <pre> within a styled body. */
+body:not([class]) > pre:first-child  {
     margin:0;
     padding:unset;
     font-size: 100%;
