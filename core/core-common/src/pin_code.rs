@@ -62,7 +62,7 @@ impl PinCode {
     /// Method does not verify old PIN if existed it is up to client to make that
     /// verification.
     ///
-    pub async fn create_pin(ctx: Arc<Context>, pin: Vec<u32>) -> Result<(), PinError> {
+    pub async fn set_pin(ctx: Arc<Context>, pin: Vec<u32>) -> Result<(), PinError> {
         let pin_len = pin.len();
 
         if pin_len < Self::MIN_PASSWD_LEN {
