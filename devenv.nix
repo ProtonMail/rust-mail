@@ -36,7 +36,7 @@ in
     enable = true;
     channel = "stable";
     targets = [
-      
+      "wasm32-unknown-unknown"
     ] ++ lib.optionals pkgs.stdenv.isDarwin [
       # iOS cross compilation
       "aarch64-apple-ios"
