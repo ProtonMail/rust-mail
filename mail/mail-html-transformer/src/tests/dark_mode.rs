@@ -41,3 +41,16 @@ fn inject_style_if_media_size_is_used() {
     );
     insta::assert_snapshot!(html.to_string());
 }
+
+#[test]
+fn inject_style_check_contrast() {
+    let html = include_str!("../../tests/htmls/styles/contrast.html");
+    let mut html = Transformer::new(html);
+    html.inject_style(
+        ColorMode::DarkMode,
+        BrowserCapabilities {
+            supports_dark_mode_via_media_query: true,
+        },
+    );
+    insta::assert_snapshot!(html.to_string());
+}
