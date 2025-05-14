@@ -395,17 +395,9 @@ impl Contact {
 
     /// Updates the full contact with the given ID including its emails and
     /// cards.
-    ///
-    /// # Parameters
-    ///
-    /// * `id`    - The ID of the [`Contact`] to sync.
-    /// * `api`   - The API instance to use to download the addresses.
-    /// * `stash` - The database instance to store the addresses.
-    ///
-    /// # Errors
-    ///
-    /// Errors when the API request fails or when the database query fails.
-    ///
+    /// Doesn't make an API request if the cards have already been synced.
+    /// If you're using this from test code and you're modifying the mocks call
+    /// `force_sync_with_card` instead.
     pub async fn sync_with_card(
         local_id: LocalContactId,
         api: &Proton,
@@ -425,6 +417,14 @@ impl Contact {
             return Ok(());
         }
 
+        Self::force_sync_with_card(local_id, api, rt).await
+    }
+
+    pub async fn force_sync_with_card(
+        local_id: LocalContactId,
+        api: &Proton,
+        rt: &mut impl RunTransaction,
+    ) -> CoreContextResult<()> {
         debug!("Syncing full contact for contact id {local_id}");
         let remote_id = Contact::local_id_counterpart(local_id, rt.tether())
             .await?

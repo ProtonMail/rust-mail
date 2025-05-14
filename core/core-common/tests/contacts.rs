@@ -388,7 +388,7 @@ async fn test_contact_load_public_address_keys() {
         .unwrap()
         .key_fingerprint();
 
-    assert!(preferred_fingerprint_1 != preferred_fingerprint_2);
+    assert_ne!(preferred_fingerprint_1, preferred_fingerprint_2);
 }
 
 async fn prepare_sync_test_data_contacts(
@@ -424,7 +424,7 @@ async fn prepare_sync_test_data_contacts(
         .await
         .unwrap()
         .unwrap();
-    Contact::sync_with_card(local_id, user_ctx.session().api(), &mut tether)
+    Contact::force_sync_with_card(local_id, user_ctx.session().api(), &mut tether)
         .await
         .expect("failed to sync contacts");
 }

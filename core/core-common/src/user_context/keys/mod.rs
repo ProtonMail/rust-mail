@@ -196,7 +196,7 @@ impl UserContext {
                 ))?;
 
         // On success try to sync the most recent full contact including its v-cards from the BE.
-        Contact::sync_with_card(local_contact_id, self.session().api(), rt).await?;
+        Contact::force_sync_with_card(local_contact_id, self.session().api(), rt).await?;
 
         let mut contact = Contact::load(local_contact_id, rt.tether())
             .await?
