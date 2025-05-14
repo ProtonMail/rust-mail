@@ -13,7 +13,7 @@ use url::Url;
 use crate::utm::strip_from_url;
 
 fn node_ref_from_str(html: &str, tag: &str) -> NodeRef {
-    let qual_name = QualName::new(None, html5ever::ns!(), LocalName::from(tag));
+    let qual_name = QualName::new(None, html5ever::ns!(html), LocalName::from(tag));
     kuchikiki::parse_fragment(qual_name, vec![]).one(html)
 }
 
