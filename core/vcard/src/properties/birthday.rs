@@ -135,11 +135,7 @@ pub fn validate_bday(property: &IcalProperty) -> VcardValidationResult<()> {
         let value_type = if let Some(value_type) = get_value_type(property)? {
             let validated = match value_type {
                 ValueType::DateAndOrTime => is_date_and_or_time_value(value),
-                ValueType::Text => {
-                    let _: &str = value;
-                    // I don't think that it makes sense to reject invalid texts when parsing, as we can still display them.
-                    true
-                }
+                ValueType::Text => true,
                 _ => false,
             };
             if !validated {

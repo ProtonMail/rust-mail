@@ -164,11 +164,7 @@ pub fn validate_related(property: &IcalProperty) -> VcardValidationResult<()> {
     if let Some(value) = &property.value {
         let value_type = if let Some(value_type) = get_value_type(property)? {
             let validated = match value_type {
-                ValueType::Text => {
-                    let _: &str = value;
-                    // I don't think that it makes sense to reject invalid texts when parsing, as we can still display them.
-                    true
-                }
+                ValueType::Text => true,
                 ValueType::Uri => Url::parse(value).is_ok(),
                 _ => false,
             };

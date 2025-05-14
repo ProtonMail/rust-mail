@@ -1,0 +1,13 @@
+BEGIN:VCARD
+VERSION:4.0
+FN;PREF=1:Frodo Beutlin
+ITEM1.EMAIL;PREF=1:frodo@pm.me
+LANG:Common
+LANG:co-HO
+N:Beutlin;Frodo;;;
+ADR;PREF=1:;Bag End;;Hobbiton;The Shire;;Middle earth
+TZ:SMT
+PHOTO;PREF=1:https://static.wikia.nocookie.net/lotr/images/3/32/Frodo_%28FotR%29.png/revision/latest?cb=20221006065757
+LOGO;PREF=1:https://hipfonts.com/wp-content/uploads/2021/01/The-Lord-of-the-Rings-Logo.jpg
+LOGO;PREF=69:data:bad
+END:VCARD

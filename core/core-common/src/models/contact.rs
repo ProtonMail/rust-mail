@@ -1069,4 +1069,16 @@ mod test {
         let small = include_str!("../../tests/vcards/small.vcf");
         assert_debug_snapshot!(get_vcard(small));
     }
+
+    #[test]
+    fn vcard_v3() {
+        let v3 = include_str!("../../tests/vcards/v3.vcf");
+        assert_debug_snapshot!(get_vcard(v3));
+    }
+
+    #[test]
+    fn frodo() {
+        let frodo = include_str!("../../tests/vcards/frodo.vcf");
+        assert_debug_snapshot!(get_vcard(frodo));
+    }
 }
