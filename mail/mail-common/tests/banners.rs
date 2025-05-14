@@ -100,7 +100,7 @@ async fn banners() {
             ..msg_normal.clone()
         };
         let mut msg_spam = Message {
-            flags: MessageFlags::SPAM_AUTO,
+            flags: MessageFlags::SPAM_MANUAL,
             remote_id: Some("spam".into()),
             ..msg_normal.clone()
         };
@@ -212,15 +212,15 @@ async fn banners() {
             msg_normal.get_banners(tether).await
         );
         assert_eq!(
-            vec![MessageBanner::PhishingAttempt],
+            vec![MessageBanner::PhishingAttempt { auto: true }],
             msg_phishing.get_banners(tether).await
         );
         assert_eq!(
-            vec![MessageBanner::Spam],
+            vec![MessageBanner::Spam { auto: false }],
             msg_spam.get_banners(tether).await
         );
         assert_eq!(
-            Vec::<MessageBanner>::new(),
+            vec![MessageBanner::PhishingAttempt { auto: true }],
             msg_sus.get_banners(tether).await,
             "sus messages don't warrant a banner"
         );
@@ -249,7 +249,7 @@ async fn banners() {
         );
 
         assert_eq!(
-            vec![MessageBanner::PhishingAttempt],
+            vec![MessageBanner::PhishingAttempt { auto: false }],
             msg_normal.get_banners(tether).await
         );
 
