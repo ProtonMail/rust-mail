@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap};
+use std::{cell::RefCell, collections::BTreeMap};
 
 pub use capabilities::BrowserCapabilities;
 
@@ -117,7 +117,7 @@ type Selectors = Vec<Selector>;
 /// So in the `NewProperty` we keep `border: 1px solid black`;
 type NewProperty = String;
 
-type StyleOverrides = HashMap<Selectors, Vec<NewProperty>>;
+type StyleOverrides = BTreeMap<Selectors, Vec<NewProperty>>;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum ColorPurpose {
@@ -138,7 +138,7 @@ struct PropertyWithPurpose<'i> {
 /// If not, it removes `!important` flag and adds the rule to overrides map
 /// Returns None if t he supplement is empty
 fn sanitize_dark_mode_in_stylesheets(document: &NodeRef) -> Option<String> {
-    let mut overrides = HashMap::new();
+    let mut overrides = BTreeMap::new();
 
     let Ok(styles) = document.select("style") else {
         tracing::warn!("Could not select <style /> tags in the message body");
@@ -279,7 +279,7 @@ mod tests {
         let mut stylesheet = StyleSheet::parse(rule, ParserOptions::default()).unwrap();
         stylesheet.visit(&mut visitor).unwrap();
 
-        let expected = velcro::hash_map! {
+        let expected = velcro::btree_map! {
             vec![".main".to_string()]: vec![
                 "color: #fff !important".to_string()
             ],
