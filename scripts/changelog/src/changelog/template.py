@@ -29,10 +29,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 """
 
 
-def render(commits: Commits) -> str:
+def render(commits: Commits, only: re.Pattern | None) -> str:
     env = Environment()
     tmp = env.from_string(TEMPLATE)
-    ctx = build_context(commits)
+    ctx = build_context(commits, only)
 
     return tmp.render(asdict(ctx)).strip()
 
@@ -55,10 +55,13 @@ class Context:
     releases: list[Release]
 
 
-def build_context(cmts: Commits) -> Context:
+def build_context(cmts: Commits, only: re.Pattern | None) -> Context:
     releases = list()
 
     for tag, commits in cmts.items():
+        if tag and only and not only.match(tag.name):
+            continue
+
         if (release := build_release(tag, commits)) and release.sections:
             releases.append(release)
 

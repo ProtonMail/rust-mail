@@ -1,3 +1,4 @@
+import re
 from collections import OrderedDict
 from contextlib import contextmanager
 from functools import cache
@@ -12,22 +13,26 @@ from changelog.types import Commits, Tags
 
 
 @click.command()
-@click.option("--path", type=str)
-@click.option("--head", type=str)
-@click.option("--init", type=str)
-def main(path: str | None, head: str | None, init: str | None) -> None:
+@click.option("--path", type=str, help="Path to the git repository")
+@click.option("--only", type=str, help="Only include matching tags")
+@click.option("--head", type=str, help="The current commit")
+@click.option("--init", type=str, help="The initial commit")
+def main(
+    path: str | None,
+    only: str | None,
+    head: str | None,
+    init: str | None,
+) -> None:
     with open_repo(path) as repo:
-        tags = collect_tags(repo)
+        tags = {t.commit: t for t in repo.tags}
+
         head_rev = repo.commit(head)
         over_rev = repo.iter_commits(f"{init or ''}..{head_rev}")
 
         commits = collect_commits(tags, head_rev, set(over_rev))
         deduped = dedupe_commits(commits)
-        print(render(deduped))
 
-
-def collect_tags(repo: Repo) -> Tags:
-    return {t.commit: t for t in repo.tags}
+        print(render(deduped, re.compile(only) if only else None))
 
 
 def collect_commits(tags: Tags, head: Commit, over: set[Commit]) -> Commits:
