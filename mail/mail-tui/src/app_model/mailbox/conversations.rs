@@ -14,7 +14,7 @@ use proton_mail_common::mail_scroller::{DataScrollerSource, MailScroller};
 use proton_mail_common::models::{
     Conversation, ConversationScrollData, LabelWithCounters, Message as MailMessage,
 };
-use proton_mail_common::{MailUserContext, Mailbox, MailboxResult};
+use proton_mail_common::{MailContextResult, MailUserContext, Mailbox};
 use ratatui::Frame;
 use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Rect;
@@ -58,7 +58,7 @@ impl ConversationsState {
         ctx: Arc<MailUserContext>,
         label_id: LocalLabelId,
         filter: ReadFilter,
-    ) -> MailboxResult<(Self, Command<Messages>)> {
+    ) -> MailContextResult<(Self, Command<Messages>)> {
         let context = ctx.clone();
         let (paginator, command) = Paginator::new(
             || {

@@ -2,60 +2,20 @@ pub mod attachments;
 
 pub mod decrypted_message;
 
-use crate::datatypes::{LocalAttachmentId, MessageRecipientDisplayMode, ViewMode};
+use crate::datatypes::{MessageRecipientDisplayMode, ViewMode};
 use crate::models::{
     Conversation, ConversationCounters, MailLabel, MailboxLabels, Message, MessageCounters,
 };
-use crate::{AppError, MailContextError};
+use crate::{AppError, MailContextError, MailContextResult};
 pub use attachments::DecryptedAttachment;
 use futures::TryFutureExt;
-use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::LabelId;
 use proton_core_api::services::proton::Proton;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelExtension as _, ModelIdExtension as _};
-use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 use stash::orm::Model;
-use stash::stash::{Stash, StashError, Tether, WatcherHandle};
+use stash::stash::{Stash, Tether, WatcherHandle};
 use tracing::{debug, error};
-
-#[derive(Debug, thiserror::Error)]
-pub enum MailboxError {
-    #[error("Could not find label with local id '{0}'")]
-    LabelNotFound(LocalLabelId),
-    #[error("Label '{0}' does not have a remote id")]
-    LabelDoesNotHaveRemoteId(LocalLabelId),
-    #[error("Attachment '{0}' not found")]
-    AttachmentNotFound(LocalAttachmentId),
-    #[error("Attachment decryption failed: {0}")]
-    AttachmentDecryption(#[from] AttachmentDecryptionError),
-    #[error("Attachment decryption failed: {0}")]
-    AttachmentDecryptionIO(String),
-    #[error("Attachment '{0}' does not have a remote id")]
-    AttachmentDoesNotHaveRemoteId(LocalAttachmentId),
-    #[error("App error: {0}")]
-    AppError(#[from] AppError),
-    #[error("API request failed with error: '{0}'")]
-    APIError(#[from] ApiServiceError),
-    #[error("{0}")]
-    Context(
-        #[from]
-        #[source]
-        MailContextError,
-    ),
-    #[error("Action Queue: {0}")]
-    ActionQueue(#[from] proton_action_queue::queue::Error),
-    #[error("Action is not valid: {0}")]
-    InvalidAction(anyhow::Error),
-    #[error("Stash Error: {0}")]
-    Stash(#[from] StashError),
-    #[error("Message decryption error: {0}")]
-    MessageDecryption(#[from] proton_crypto_inbox::message::MessageError),
-    #[error("IO error: {0}")]
-    IO(#[from] std::io::Error),
-}
-
-pub type MailboxResult<T> = Result<T, MailboxError>;
 
 /// Represents an open label through which one can access the messages or conversations.
 ///
@@ -73,10 +33,10 @@ pub struct Mailbox {
 }
 
 impl Mailbox {
-    pub async fn new(tether: &Tether, label_id: LocalLabelId) -> MailboxResult<Self> {
+    pub async fn new(tether: &Tether, label_id: LocalLabelId) -> MailContextResult<Self> {
         let label = Label::load(label_id, tether)
             .await?
-            .ok_or(MailboxError::LabelNotFound(label_id))?;
+            .ok_or(AppError::LabelNotFound(label_id))?;
 
         let view_mode = label.view_mode(tether).await?;
         debug!("Creating Mailbox ({}, view_mode={:?})", label_id, view_mode);
@@ -88,7 +48,7 @@ impl Mailbox {
         })
     }
 
-    pub async fn with_remote_id(tether: &Tether, label_id: LabelId) -> MailboxResult<Self> {
+    pub async fn with_remote_id(tether: &Tether, label_id: LabelId) -> MailContextResult<Self> {
         let label = Label::find_by_remote_id(label_id, tether)
             .await?
             .expect("Label not found");
@@ -116,13 +76,18 @@ impl Mailbox {
     /// # Errors
     /// Returns error if API request or database changes failed.
     #[tracing::instrument(level=tracing::Level::DEBUG, skip_all)]
-    pub async fn sync(&self, tether: &mut Tether, api: &Proton, count: usize) -> MailboxResult<()> {
+    pub async fn sync(
+        &self,
+        tether: &mut Tether,
+        api: &Proton,
+        count: usize,
+    ) -> MailContextResult<()> {
         let Some(label) = Label::load(self.label_id, tether).await? else {
-            return Err(MailboxError::LabelNotFound(self.label_id));
+            return Err(AppError::LabelNotFound(self.label_id).into());
         };
 
         let Some(remote_id) = label.remote_id.clone() else {
-            return Err(MailboxError::LabelDoesNotHaveRemoteId(self.label_id));
+            return Err(AppError::LabelDoesNotHaveRemoteId(self.label_id).into());
         };
 
         debug!("Syncing {}({})", self.label_id, &remote_id);
@@ -181,7 +146,7 @@ impl Mailbox {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn unread_count(&self, tether: &Tether) -> Result<u64, MailboxError> {
+    pub async fn unread_count(&self, tether: &Tether) -> MailContextResult<u64> {
         Ok(match self.view_mode {
             ViewMode::Conversations => {
                 let counters = ConversationCounters::find_by_id(self.label_id, tether).await?;
@@ -201,7 +166,7 @@ impl Mailbox {
     ///
     /// Returns error if the query failed.
     ///
-    pub async fn watch_unread_count(&self, stash: &Stash) -> Result<WatcherHandle, MailboxError> {
+    pub async fn watch_unread_count(&self, stash: &Stash) -> MailContextResult<WatcherHandle> {
         let watcher = match self.view_mode {
             ViewMode::Conversations => ConversationCounters::watch(stash)?,
             ViewMode::Messages => MessageCounters::watch(stash)?,

@@ -4,10 +4,10 @@ use crate::draft::{AttachmentRemoveError, AttachmentUploadError, PackageError};
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
 use crate::{
-    AppError, MailContextError, MailboxError, SidebarError,
-    draft::DiscardError as DraftDiscardError, draft::Error as DraftError,
-    draft::OpenError as DraftOpenError, draft::SaveError as DraftSaveError,
-    draft::SendError as DraftSendError, draft::UndoError as DraftUndoError,
+    AppError, MailContextError, SidebarError, draft::DiscardError as DraftDiscardError,
+    draft::Error as DraftError, draft::OpenError as DraftOpenError,
+    draft::SaveError as DraftSaveError, draft::SendError as DraftSendError,
+    draft::UndoError as DraftUndoError,
 };
 use proton_action_queue::action::Action;
 use proton_action_queue::queue::ActionError as InternalActionError;
@@ -182,6 +182,8 @@ impl From<AppError> for ProtonMailError {
             AppError::AttachmentHasNoAddressId(_) => Self::Unexpected(Unexpected::Internal),
             AppError::AttachmentMissingKeyPackets(_) => Self::Unexpected(Unexpected::Internal),
             AppError::AttachmentIsNotInCache(_) => Self::Unexpected(Unexpected::Internal),
+            AppError::AttachmentDecryption(_) => Self::Unexpected(Unexpected::Crypto),
+            AppError::AttachmentDecryptionIO(_) => Self::Unexpected(Unexpected::Os),
         }
     }
 }
@@ -520,42 +522,6 @@ where
             #[allow(clippy::useless_conversion)] // It is not useless clippy
             InternalActionError::Action(error) => Self::from(error.into()),
             InternalActionError::Queue(error) => Self::from(error),
-        }
-    }
-}
-
-impl From<MailboxError> for ProtonMailError {
-    fn from(error: MailboxError) -> Self {
-        match error {
-            // Mailbox::new:     can't load Label from database
-            // Mailbox::refresh: can't load Label from database
-            // Mailbox::sync:    can't load Label from database
-            MailboxError::LabelNotFound(_local_label_id) => {
-                Self::reason(ActionErrorReason::UnknownLabel)
-            }
-            // Mailbox::refresh: remote_id is None
-            // Mailbox::sync:    remote_id is None
-            MailboxError::LabelDoesNotHaveRemoteId(_local_label_id) => Self::Network,
-            // Mailbox::sync_attachment: can't load Attachment from database
-            MailboxError::AttachmentNotFound(_attachment_id) => {
-                Self::Unexpected(Unexpected::Database)
-            }
-            // Mailbox::decrypt_attachment: IO from std::io::copy
-            MailboxError::AttachmentDecryptionIO(_string) => Self::Unexpected(Unexpected::Memory),
-            // Mailbox::get_attachment_content: remote_id is None
-            MailboxError::AttachmentDoesNotHaveRemoteId(_attachment_id) => Self::Network,
-
-            MailboxError::APIError(api_service_error) => Self::from(api_service_error),
-            MailboxError::AttachmentDecryption(attachment_decryption_error) => {
-                Self::from(attachment_decryption_error)
-            }
-            MailboxError::AppError(app_error) => Self::from(app_error),
-            MailboxError::Context(mail_context_error) => Self::from(mail_context_error),
-            MailboxError::ActionQueue(queue_error) => Self::from(queue_error),
-            MailboxError::InvalidAction(anyhow) => Self::from(anyhow),
-            MailboxError::Stash(stash_error) => Self::from(stash_error),
-            MailboxError::MessageDecryption(message_error) => Self::from(message_error),
-            MailboxError::IO(io_error) => Self::from(io_error),
         }
     }
 }

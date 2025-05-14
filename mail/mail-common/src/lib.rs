@@ -20,7 +20,7 @@ mod send_queries;
 mod tests;
 
 pub use context::{MailContext, MailContextError, MailContextResult};
-pub use mailbox::{DecryptedAttachment, Mailbox, MailboxError, MailboxResult, decrypted_message};
+pub use mailbox::{DecryptedAttachment, Mailbox, decrypted_message};
 use proton_core_common::models::LabelError;
 pub use sidebar::{Sidebar, SidebarError, SidebarResult};
 pub use user_context::MailUserContext;
@@ -36,6 +36,7 @@ use stash::stash::StashError;
 
 use datatypes::attachment::ContentId;
 use proton_action_queue::action::ActionId;
+use proton_crypto_inbox::attachment::AttachmentDecryptionError;
 use proton_mail_api::services::proton::common::{AttachmentId, MessageId};
 use proton_mail_ids::LocalConversationId;
 use thiserror::Error;
@@ -72,6 +73,10 @@ pub enum AppError {
     UnknownAttachment(AttachmentId),
     #[error("Attachment {0} does not have a remote id")]
     AttachmentDoesNotHaveRemoteId(LocalAttachmentId),
+    #[error("Attachment decryption failed: {0}")]
+    AttachmentDecryption(#[from] AttachmentDecryptionError),
+    #[error("Attachment decryption failed: {0}")]
+    AttachmentDecryptionIO(String),
     #[error("Conversation with ID {0} is not in given view {1}")]
     ConversationDoesNotHaveLabel(LocalConversationId, String),
     #[error("Conversation with ID {0} has no messages")]

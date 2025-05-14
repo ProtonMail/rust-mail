@@ -28,7 +28,7 @@ use proton_mail_common::models::{
 };
 use proton_mail_common::proton_mail_api::proton_core_api::services::proton::LabelId;
 use proton_mail_common::{
-    AppError, MailContext, MailUserContext, Mailbox, MailboxError, MailboxResult,
+    AppError, MailContext, MailContextError, MailContextResult, MailUserContext, Mailbox,
 };
 use ratatui::crossterm::event::Event;
 use ratatui::layout::{Flex, Rect};
@@ -67,7 +67,7 @@ pub struct Model {
 }
 
 impl Model {
-    pub async fn new(ctx: Arc<MailUserContext>) -> MailboxResult<Self> {
+    pub async fn new(ctx: Arc<MailUserContext>) -> MailContextResult<Self> {
         let stash = ctx.user_stash();
         let tether = stash.connection();
         let mailbox = Mailbox::with_remote_id(&tether, LabelId::inbox()).await?;
@@ -122,7 +122,7 @@ impl Model {
                     Ok(None) => {
                         let e = anyhow!(
                             "Failed to get label: {}",
-                            MailboxError::LabelNotFound(mbox.label_id())
+                            AppError::LabelNotFound(mbox.label_id())
                         );
                         error!("{e:?}");
                         return Command::message(Messages::DisplayError(None, e));
@@ -185,11 +185,11 @@ impl Model {
                         ])
                     } else {
                         Command::message(
-                            MailboxError::from(AppError::LabelNotFound(label_id)).into(),
+                            MailContextError::from(AppError::LabelNotFound(label_id)).into(),
                         )
                     }
                 }
-                Err(e) => Command::message(MailboxError::from(e).into()),
+                Err(e) => Command::message(MailContextError::from(e).into()),
             }
         })
     }

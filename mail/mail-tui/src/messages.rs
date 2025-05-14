@@ -2,7 +2,7 @@ use crate::app::Command;
 use crate::app_model::path_select_popup::PathSelectClosure;
 use crate::app_model::{AppState, Popup};
 use anyhow::anyhow;
-use proton_mail_common::{MailContextError, MailboxError};
+use proton_mail_common::MailContextError;
 use std::path::Path;
 
 /// Application messages.
@@ -49,12 +49,6 @@ impl Messages {
 
 impl From<MailContextError> for Messages {
     fn from(value: MailContextError) -> Self {
-        Self::DisplayError(None, anyhow!("{value}"))
-    }
-}
-
-impl From<MailboxError> for Messages {
-    fn from(value: MailboxError) -> Self {
         Self::DisplayError(None, anyhow!("{value}"))
     }
 }
