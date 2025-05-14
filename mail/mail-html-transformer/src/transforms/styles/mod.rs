@@ -96,7 +96,7 @@ type Selector = String;
 
 /// Represents `.class {}`, `@media () {}` blocks etc.
 /// Example: List of `['@media (max-width: 1250px)', '.foo']` represents a CSS structure of:
-/// ```
+/// ```ignore
 /// @media (max-width: 1250px) {
 ///     .foo {
 ///     }
@@ -106,11 +106,11 @@ type Selectors = Vec<Selector>;
 
 /// Property with new value. It not only contains the colors because of shorthands.
 /// For example if the shorthand defined:
-/// ```
+/// ```ignore
 /// border: 1px solid white;
 /// ```
 /// then we have to modify color component and later write:
-/// ```
+/// ```ignore
 /// border: 1px solid black;
 ///                   ^^^^^ - changed part
 /// ```
