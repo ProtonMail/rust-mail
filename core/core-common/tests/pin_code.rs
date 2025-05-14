@@ -3,7 +3,10 @@ use proton_core_common::{
     pin_code::{PinCode, PinError},
 };
 use proton_core_test_utils::test_context::TestContext;
-use stash::stash::{StashError, Tether};
+use stash::{
+    orm::Model,
+    stash::{StashError, Tether},
+};
 
 #[tokio::test]
 async fn create_and_delete_pin() {
@@ -11,7 +14,7 @@ async fn create_and_delete_pin() {
     let core_ctx = test_ctx.core_context();
     let pin = vec![1, 2, 3, 4];
 
-    PinCode::create_pin(core_ctx.clone(), pin.clone())
+    PinCode::set_pin(core_ctx.clone(), pin.clone())
         .await
         .unwrap();
 
@@ -48,13 +51,62 @@ async fn create_and_delete_pin() {
 }
 
 #[tokio::test]
+async fn modify_pin() {
+    let test_ctx = TestContext::new().await;
+    let core_ctx = test_ctx.core_context();
+    let pin = vec![1, 2, 3, 4];
+
+    PinCode::set_pin(core_ctx.clone(), pin.clone())
+        .await
+        .unwrap();
+
+    let mut tether = core_ctx.account_stash().connection();
+    let app_settings = AppSettings::get_or_default(&tether).await;
+
+    assert_eq!(app_settings.protection, AppProtection::Pin);
+    let mut pin_metadata = PinProtection::get(&tether).await.unwrap().unwrap();
+
+    assert_eq!(pin_metadata.attempts, 0);
+
+    pin_metadata.last_access_reset(&mut tether).await.unwrap();
+
+    PinCode::validate_pin(core_ctx.clone(), pin.clone())
+        .await
+        .unwrap();
+
+    let new_pin = vec![0, 0, 0, 0];
+    let old_pin = pin;
+
+    // Lets create new pin
+    PinCode::set_pin(core_ctx.clone(), new_pin.clone())
+        .await
+        .unwrap();
+
+    pin_metadata.last_access_reset(&mut tether).await.unwrap();
+
+    let error = PinCode::validate_pin(core_ctx.clone(), old_pin)
+        .await
+        .unwrap_err();
+    assert!(matches!(error, PinError::IncorrectPin));
+
+    pin_metadata.last_access_reset(&mut tether).await.unwrap();
+
+    PinCode::validate_pin(core_ctx.clone(), new_pin)
+        .await
+        .unwrap();
+
+    let count = PinProtection::count("", vec![], &tether).await.unwrap();
+    assert_eq!(count, 1);
+}
+
+#[tokio::test]
 async fn validation_max_attempts() {
     let test_ctx = TestContext::new().await;
     let core_ctx = test_ctx.core_context();
     let pin = vec![1, 2, 3, 4];
     let incorrect_pin = vec![0, 0, 0, 0];
 
-    PinCode::create_pin(core_ctx.clone(), pin).await.unwrap();
+    PinCode::set_pin(core_ctx.clone(), pin).await.unwrap();
 
     let mut tether = core_ctx.account_stash().connection();
     let app_settings = AppSettings::get_or_default(&tether).await;
