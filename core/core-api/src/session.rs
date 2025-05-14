@@ -1,5 +1,6 @@
 use derive_more::{Debug, Deref};
 use muon::client::flow::ForkFlowResult;
+use muon::env::DynEnv;
 use muon::error::ParseEndpointErr;
 use std::borrow::Borrow;
 use std::sync::Arc;
@@ -110,6 +111,40 @@ impl Config {
         }
 
         Ok(Self::for_env(CustomEnv::new(url)?))
+    }
+
+    pub fn without_alternative_routing(mut self) -> Result<Self, BuildError> {
+        struct CustomDirectEnv {
+            servers: Vec<Server>,
+            env: DynEnv,
+        }
+
+        impl CustomDirectEnv {
+            fn new(config: &Config) -> Result<Self, BuildError> {
+                let env = config.env_id.clone().build();
+                let version = config.app_version.parse()?;
+                let servers = env
+                    .servers(&version)
+                    .into_iter()
+                    .filter(|server| server.host().is_direct())
+                    .collect();
+
+                Ok(Self { servers, env })
+            }
+        }
+
+        impl Env for CustomDirectEnv {
+            fn servers(&self, _: &AppVersion) -> Vec<Server> {
+                self.servers.clone()
+            }
+
+            fn pins(&self, server: &Server) -> Option<TlsPinSet> {
+                self.env.pins(server)
+            }
+        }
+
+        self.env_id = EnvId::new_custom(CustomDirectEnv::new(&self)?);
+        Ok(self)
     }
 }
 

@@ -8,12 +8,13 @@ use stash::orm::Model;
 use stash::stash::{Bond, StashError, Tether};
 
 use crate::pin_code::PinCode;
+use smart_default::SmartDefault;
 
 /// Struct Representing `AppSettings` - cross accounts settings of the application.
 ///
 /// This model is stored in account (shared) database.
 ///
-#[derive(Debug, Clone, PartialEq, Model, Default)]
+#[derive(Debug, Clone, PartialEq, Model, SmartDefault)]
 #[TableName("app_settings")]
 pub struct AppSettings {
     /// There is only one entry of `AppSettings`
@@ -46,6 +47,7 @@ pub struct AppSettings {
     /// Use alternative routing, helpful for ppl leaving in
     /// area where Proton servers are blocked for any reason.
     #[DbField]
+    #[default = true]
     pub use_alternative_routing: bool,
 
     /// The internal row ID of the record in the database. This is assigned by
