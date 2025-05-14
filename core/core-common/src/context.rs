@@ -923,7 +923,7 @@ impl Context {
             builder = builder.with_config(&self.api_config);
         } else {
             debug!("Alternative routing setting is disabled");
-            let api_config = self.api_config.clone().env_without_alternative_routing()?;
+            let api_config = self.api_config.clone().without_alternative_routing()?;
 
             builder = builder.with_config(&api_config);
         };

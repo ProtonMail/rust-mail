@@ -113,7 +113,7 @@ impl Config {
         Ok(Self::for_env(CustomEnv::new(url)?))
     }
 
-    pub fn env_without_alternative_routing(mut self) -> Result<Self, BuildError> {
+    pub fn without_alternative_routing(mut self) -> Result<Self, BuildError> {
         struct CustomDirectEnv {
             servers: Vec<Server>,
             env: DynEnv,
