@@ -11,6 +11,7 @@ use super::capabilities::BrowserCapabilities;
 
 /// Defines strategy of what to do the CSS in the Dark Mode.
 ///
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub(crate) enum DarkStyleSupportLevel {
     /// User forced light mode or we are in the light color scheme
     NoDarkMode,
@@ -69,5 +70,39 @@ impl DarkStyleSupportLevel {
         }
 
         Self::Injected
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use html5ever::tendril::TendrilSink;
+    use test_case::test_case;
+
+    const SUPPORTS_MEDIA: BrowserCapabilities = BrowserCapabilities {
+        supports_dark_mode_via_media_query: true,
+    };
+    const DOESNT_SUPPORT_MEDIA: BrowserCapabilities = BrowserCapabilities {
+        supports_dark_mode_via_media_query: false,
+    };
+
+    #[test_case(r#"<html><head> <meta name="supported-color-schemes" content="[light? || dark? || <ident>?]* || only?"></head><body></body></html>"#, ColorMode::DarkMode, SUPPORTS_MEDIA => DarkStyleSupportLevel::Native ; "case 1")]
+    #[test_case(r#"<html><head> <meta name="color-scheme" content="[light? || dark? || <ident>?]* || only?"></head><body></body></html>"#, ColorMode::DarkMode, SUPPORTS_MEDIA => DarkStyleSupportLevel::Native ; "case 2")]
+    #[test_case("<html><head> <style>:root{color-scheme: light dark;}</style></head><body></body></html>", ColorMode::DarkMode, SUPPORTS_MEDIA => DarkStyleSupportLevel::Native ; "case 3")]
+    #[test_case("<html><head></head><body> <table> </table></body></html>", ColorMode::DarkMode, SUPPORTS_MEDIA => DarkStyleSupportLevel::Injected ; "case 4")]
+    #[test_case("<html><head></head><body> <div> <div> <div> <div> <div> <div> <div> <div> <div> <div> <div> <div> <div> <div> hi </div></div></div></div></div></div></div></div></div></div></div></div></div></div></body></html>", ColorMode::DarkMode, SUPPORTS_MEDIA => DarkStyleSupportLevel::Injected ; "case 5")]
+    #[test_case("<html><head></head><body> <span> a</span></body></html>", ColorMode::DarkMode, SUPPORTS_MEDIA => DarkStyleSupportLevel::Injected ; "case 6")]
+    #[test_case("", ColorMode::LightMode, DOESNT_SUPPORT_MEDIA => DarkStyleSupportLevel::NoDarkMode ; "case 7")]
+    #[test_case("", ColorMode::LightMode, SUPPORTS_MEDIA => DarkStyleSupportLevel::Injected ; "case 8")]
+    // TODO: Test this HTML with `test@pm.me` after we add support for exception-list
+    // #"<html><head> <meta name="supported-color-schemes" content="[light? || dark? || <ident>?]* || only?"></head><body></body></html>"#
+    fn test_support_level(
+        input: &str,
+        mode: ColorMode,
+        capabilities: BrowserCapabilities,
+    ) -> DarkStyleSupportLevel {
+        let html = kuchikiki::parse_html().one(input);
+
+        DarkStyleSupportLevel::new(mode, &html, capabilities)
     }
 }
