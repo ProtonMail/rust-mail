@@ -32,7 +32,7 @@ impl Prefetch {
 impl Action for Prefetch {
     const TYPE: Type = Type("prefetch_conversation");
     const VERSION: u32 = 1;
-    const PRIORITY: Priority = Priority::Low;
+    const PRIORITY: Priority = Priority::Lowest;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
