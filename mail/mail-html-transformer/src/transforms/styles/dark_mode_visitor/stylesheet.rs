@@ -11,7 +11,7 @@ use smart_default::SmartDefault;
 
 use crate::transforms::styles::{Selector, StylesheetOverrides, printer_options};
 
-use super::declaration_block::DeclarationBlockVisitor;
+use super::declaration_block::{DeclarationBlockVisitor, ShouldStoreOverridenProps};
 
 /// Walks through the CSS stylesheet, detects which
 /// color needs to be adjusted to dark theme.
@@ -55,11 +55,12 @@ impl Visitor<'_> for StylesheetVisitor {
         &mut self,
         decls: &mut lightningcss::declaration::DeclarationBlock<'_>,
     ) -> Result<(), Self::Error> {
-        let mut visitor = DeclarationBlockVisitor::new(self.printer_options);
+        let mut visitor =
+            DeclarationBlockVisitor::new(ShouldStoreOverridenProps::No, self.printer_options);
 
         decls.visit(&mut visitor)?;
 
-        let overrides = visitor.overrides();
+        let (_, overrides) = visitor.overrides();
         if !overrides.is_empty() {
             let selectors = self.selector_stack.clone();
             self.overrides

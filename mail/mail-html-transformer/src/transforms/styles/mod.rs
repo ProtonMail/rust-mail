@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::BTreeMap};
 
 pub use capabilities::BrowserCapabilities;
 
-use dark_mode_visitor::StylesheetVisitor;
+use dark_mode_visitor::{StyleAttributeVisitor, StylesheetVisitor};
 use html5ever::{LocalName, QualName, namespace_url};
 use itertools::Itertools;
 use kuchikiki::{Attributes, ElementData, NodeData, NodeDataRef, NodeRef};
@@ -289,18 +289,14 @@ fn sanitize_dark_mode_in_inline_attribute(
     overrides: &mut InlineStyleOverrides,
     printer_options: fn() -> PrinterOptions<'static>,
 ) {
-    let mut visitor = StylesheetVisitor::new(printer_options);
+    let mut visitor = StyleAttributeVisitor::new(printer_options);
 
     _ = style_attribute.visit(&mut visitor);
 
-    // In that case we expect to get `[]: ["property1", "property2"]` - an empty key.
-    let mut visitor_overrides = visitor.overrides();
-    if visitor_overrides.is_empty() {
+    let (overriden_properties, property_overrides) = visitor.overrides();
+    if property_overrides.is_empty() {
         return;
     }
-    let Some(properties) = visitor_overrides.remove(&vec![]) else {
-        return;
-    };
 
     let style = match style_attribute.to_css(printer_options()) {
         Ok(style) => style,
@@ -310,7 +306,11 @@ fn sanitize_dark_mode_in_inline_attribute(
         }
     };
 
-    // overrides.insert(tag, )
+    let tag = node.name.local.to_string();
+
+    let entry = overrides.entry(tag).or_default();
+    entry.0.extend(overriden_properties);
+    entry.1.extend(property_overrides);
 
     if let Some(style_attr) = node.attributes.borrow_mut().get_mut("style") {
         *style_attr = style.code;
@@ -491,15 +491,21 @@ mod tests {
         let rule = "color: black !important; background-color: white";
 
         let printer_options = || PrinterOptions::default();
-        let mut visitor = StylesheetVisitor::new(printer_options);
+        let mut visitor = StyleAttributeVisitor::new(printer_options);
         let mut attribute = StyleAttribute::parse(rule, ParserOptions::default()).unwrap();
         attribute.visit(&mut visitor).unwrap();
 
-        let expected = velcro::btree_map! {
-            vec![]: vec![
-                "background-color: #1c1b24 !important".to_string(),
-                "color: #fff !important".to_string()
-            ],
+        let expected = {
+            (
+                vec![
+                    "color: #000".to_string(),
+                    "background-color: #fff".to_string(),
+                ],
+                vec![
+                    "background-color: #1c1b24 !important".to_string(),
+                    "color: #fff !important".to_string(),
+                ],
+            )
         };
 
         assert_eq!(expected, visitor.overrides());

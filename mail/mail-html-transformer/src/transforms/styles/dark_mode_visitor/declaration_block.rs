@@ -10,10 +10,21 @@ use lightningcss::{
 use smart_default::SmartDefault;
 
 use crate::transforms::styles::{
-    ColorPurpose, NewProperty, PropertyWithPurpose, dark_mode_background_color, printer_options,
+    ColorPurpose, NewProperty, OldProperty, PropertyWithPurpose, dark_mode_background_color,
+    printer_options,
 };
 
 use super::{colors::HSLExt, properties::PropertiesVisitor};
+
+/// Whether to keep serialized overriden props (as in original props before the edit)
+/// in the visitor result.
+/// Useful while parsing style attributes but useless when parsing stylesheets
+#[derive(Default, Clone, Debug)]
+pub enum ShouldStoreOverridenProps {
+    Yes,
+    #[default]
+    No,
+}
 
 /// Walks through the CSS declaration block, detects which
 /// color needs to be adjusted to dark theme.
@@ -22,7 +33,11 @@ use super::{colors::HSLExt, properties::PropertiesVisitor};
 ///
 #[derive(SmartDefault, Clone, Debug)]
 pub(crate) struct DeclarationBlockVisitor {
+    overriden: Vec<OldProperty>,
+
     overrides: Vec<NewProperty>,
+
+    should_store_overriden_props: ShouldStoreOverridenProps,
 
     // Because PrinterOptions do not implement Clone
     #[default(printer_options)]
@@ -30,15 +45,19 @@ pub(crate) struct DeclarationBlockVisitor {
 }
 
 impl DeclarationBlockVisitor {
-    pub fn new(printer_options: fn() -> PrinterOptions<'static>) -> Self {
+    pub fn new(
+        should_store_overriden_props: ShouldStoreOverridenProps,
+        printer_options: fn() -> PrinterOptions<'static>,
+    ) -> Self {
         Self {
+            should_store_overriden_props,
             printer_options,
             ..Default::default()
         }
     }
 
-    pub fn overrides(self) -> Vec<NewProperty> {
-        self.overrides
+    pub fn overrides(self) -> (Vec<OldProperty>, Vec<NewProperty>) {
+        (self.overriden, self.overrides)
     }
 }
 
@@ -111,6 +130,21 @@ impl Visitor<'_> for DeclarationBlockVisitor {
             self.overrides.extend(overrides);
 
             for prop in visitor.modified {
+                // to_css_string is potentially expensive operation
+                if matches!(
+                    self.should_store_overriden_props,
+                    ShouldStoreOverridenProps::Yes
+                ) {
+                    match prop.to_css_string(false, (self.printer_options)()) {
+                        Ok(overriden_prop) => {
+                            self.overriden.push(overriden_prop);
+                        }
+                        _ => {
+                            tracing::error!("Could not print original CSS to string. Skipping it.");
+                        }
+                    };
+                }
+
                 if let Some(pos) = decls.important_declarations.iter().position(|p| p == &prop) {
                     decls.important_declarations.remove(pos);
                     decls.declarations.push(prop);
