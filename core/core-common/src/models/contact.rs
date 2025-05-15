@@ -748,7 +748,7 @@ impl SyncedContacts {
     }
 }
 
-impl ContactDetailCard {
+impl InspectableContactDetailCard {
     /// Transforms the data in the vCard struct to something suitable for human consumption
     fn from_vcard(vcard: VCard) -> Self {
         let phones = vcard.telephones.to_sorted(|tel| Telephone {
@@ -787,7 +787,7 @@ impl ContactDetailCard {
         let anniversary = vcard.anniversary.map(|a| a.value);
         let birthday = vcard.birthday.map(|a| a.value);
 
-        ContactDetailCard {
+        InspectableContactDetailCard {
             extended_name,
             address,
             phones,
@@ -810,12 +810,14 @@ impl ContactDetailCard {
 
 pub struct ContactDetails {
     pub item: ContactItem,
-    pub cards: Vec<ContactDetailCard>,
+    pub cards: Vec<InspectableContactDetailCard>,
 }
 
-/// Represents some data known from the vCard
+/// Represents some data known from the vCard in a form more suitable for human consumption than a
+/// raw vcard.
+/// These are meant to be used directly by the clients and it sort of represents data in a view.
 #[derive(Default, Clone, Debug)]
-pub struct ContactDetailCard {
+pub struct InspectableContactDetailCard {
     pub extended_name: Option<ExtendedName>,
     pub address: Vec<ContactDetailAddress>,
     pub phones: Vec<Telephone>,
@@ -862,7 +864,7 @@ impl ContactDetails {
             item: contact.into(),
             cards: cards
                 .into_iter()
-                .map(ContactDetailCard::from_vcard)
+                .map(InspectableContactDetailCard::from_vcard)
                 .collect(),
         })
     }
@@ -1033,7 +1035,7 @@ mod test {
     #[derive(Debug)]
     struct Snapshot {
         vcard: &'static str,
-        card: ContactDetailCard,
+        card: InspectableContactDetailCard,
     }
 
     fn get_vcard(raw_vcard: &'static str) -> Snapshot {
@@ -1043,7 +1045,7 @@ mod test {
         let vcard = VCard::from_ical_contact(c).unwrap();
         Snapshot {
             vcard: raw_vcard,
-            card: ContactDetailCard::from_vcard(vcard),
+            card: InspectableContactDetailCard::from_vcard(vcard),
         }
     }
 

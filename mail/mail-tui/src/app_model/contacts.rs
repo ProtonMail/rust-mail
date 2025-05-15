@@ -3,7 +3,7 @@ use futures::FutureExt;
 use itertools::Itertools;
 use proton_core_common::{
     datatypes::{ContactGroupItem, ContactItem, ContactItemType, GroupedContacts, LocalContactId},
-    models::{Contact, ContactDetailCard, ContactDetails, ContactListWatcher},
+    models::{Contact, ContactDetails, ContactListWatcher, InspectableContactDetailCard},
 };
 use proton_mail_common::MailUserContext;
 use ratatui::{
@@ -143,7 +143,7 @@ impl OpenedContactState {
             ),
         ]));
 
-        for ContactDetailCard {
+        for InspectableContactDetailCard {
             extended_name,
             address,
             phones,
