@@ -7,7 +7,6 @@ use muon::serde_to_query;
 use muon::util::ProtonRequestExt;
 use muon::{DELETE, GET, PATCH, POST, PUT};
 use proton_crypto_account::keys::APIPublicAddressKeys;
-use serde::Deserialize;
 
 use crate::service::ApiServiceResult;
 use crate::services::proton::Proton;
@@ -87,16 +86,17 @@ impl ProtonCore for Proton {
     // Event APIs
     // https://protonmail.gitlab-pages.protontech.ch/Slim-API/core/#tag/Events
 
-    async fn get_event<T>(&self, event_id: EventId, options: GetEventOptions) -> ApiServiceResult<T>
-    where
-        T: GetEventResponse + for<'de> Deserialize<'de>,
-    {
+    async fn get_event(
+        &self,
+        event_id: EventId,
+        options: GetEventOptions,
+    ) -> ApiServiceResult<String> {
         Ok(GET!("{CORE_V5}/events/{event_id}")
             .query(serde_to_query(options)?)
             .send_with(self)
             .await?
             .ok()?
-            .into_body_json()?)
+            .into_body_string()?)
     }
 
     async fn get_events_latest(&self) -> ApiServiceResult<GetEventsLatestResponse> {
@@ -190,7 +190,10 @@ impl ProtonCore for Proton {
             .into_body_json()?)
     }
 
-    async fn get_available_domains(&self, domain_type: Option<String>) -> ApiServiceResult<GetAvailableDomainsResponse> {
+    async fn get_available_domains(
+        &self,
+        domain_type: Option<String>,
+    ) -> ApiServiceResult<GetAvailableDomainsResponse> {
         Ok(GET!("{CORE_V4}/domains/available")
             .query(serde_to_query(GetAvailableDomainsRequest { domain_type })?)
             .send_with(self)
@@ -199,26 +202,27 @@ impl ProtonCore for Proton {
             .into_body_json()?)
     }
 
-    async fn check_username_availability(&self, name: String, parse_domain: ParseDomain, payment_info_token: Option<&str>) -> ApiServiceResult<ResponseCode> {
+    async fn check_username_availability(
+        &self,
+        name: String,
+        parse_domain: ParseDomain,
+        payment_info_token: Option<&str>,
+    ) -> ApiServiceResult<ResponseCode> {
         let mut request = GET!("{CORE_V4}/users/available")
             .query(serde_to_query(CheckUsernameRequest { name, parse_domain })?);
         request = add_payment_header(request, payment_info_token);
-        Ok(request
-            .send_with(self)
-            .await?
-            .ok()?
-            .into_body_json()?)
+        Ok(request.send_with(self).await?.ok()?.into_body_json()?)
     }
 
-    async fn check_external_username_availability(&self, name: String, payment_info_token: Option<&str>) -> ApiServiceResult<ResponseCode> {
+    async fn check_external_username_availability(
+        &self,
+        name: String,
+        payment_info_token: Option<&str>,
+    ) -> ApiServiceResult<ResponseCode> {
         let mut request = GET!("{CORE_V4}/users/availableExternal")
             .query(serde_to_query(CheckExternalUsernameRequest { name })?);
         request = add_payment_header(request, payment_info_token);
-        Ok(request
-            .send_with(self)
-            .await?
-            .ok()?
-            .into_body_json()?)
+        Ok(request.send_with(self).await?.ok()?.into_body_json()?)
     }
 
     async fn setup_new_nonsubuser_address(
@@ -233,7 +237,10 @@ impl ProtonCore for Proton {
             .into_body_json()?)
     }
 
-    async fn send_verification_code(&self, request: SendVerificationCodeRequest) -> ApiServiceResult<ResponseCode> {
+    async fn send_verification_code(
+        &self,
+        request: SendVerificationCodeRequest,
+    ) -> ApiServiceResult<ResponseCode> {
         Ok(POST!("{CORE_V4}/users/code")
             .body_json(request)?
             .send_with(self)
@@ -242,7 +249,11 @@ impl ProtonCore for Proton {
             .into_body_json()?)
     }
 
-    async fn setup_keys_for_new_account(&self, user_init_flag: AsyncUserInitialization, request: SetupKeysRequest) -> ApiServiceResult<SetupKeysResponse> {
+    async fn setup_keys_for_new_account(
+        &self,
+        user_init_flag: AsyncUserInitialization,
+        request: SetupKeysRequest,
+    ) -> ApiServiceResult<SetupKeysResponse> {
         let user_init_flag: i32 = user_init_flag.into();
         Ok(POST!("{CORE_V4}/keys/setup")
             .query(serde_to_query(("AsyncUserInitialization", user_init_flag))?)

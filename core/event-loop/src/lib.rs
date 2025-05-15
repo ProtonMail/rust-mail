@@ -72,8 +72,8 @@ use crate::subscriber::SubscriberError;
 use anyhow::Error as AnyhowError;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::EventId;
-use proton_core_api::services::proton::GetEventResponse;
 use serde::Deserialize;
+use serde_with::{BoolFromInt, serde_as};
 use std::fmt::Debug;
 use thiserror::Error;
 
@@ -94,14 +94,7 @@ pub enum EventLoopError {
 /// This represents an event returned by the API.
 pub trait Event: Clone + Debug + Eq + PartialEq + Send + Sync + 'static {
     /// The API response type of the event.
-    type Response: GetEventResponse
-        + Clone
-        + Debug
-        + for<'de> Deserialize<'de>
-        + Eq
-        + PartialEq
-        + Send
-        + Sync;
+    type Response: Clone + Debug + for<'de> Deserialize<'de> + Eq + PartialEq + Send + Sync;
 
     /// Get the event id of the event.
     fn event_id(&self) -> &EventId;
@@ -111,4 +104,53 @@ pub trait Event: Clone + Debug + Eq + PartialEq + Send + Sync + 'static {
 
     /// Whether this was a refresh event.
     fn is_refresh(&self) -> bool;
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct RawEvent {
+    meta: EventMetadata,
+    raw: String,
+}
+
+impl RawEvent {
+    pub fn from_json(raw: String) -> Result<Self, AnyhowError> {
+        Ok(Self {
+            meta: serde_json::from_str(&raw)?,
+            raw,
+        })
+    }
+
+    pub fn deserialize<T: Event + From<<T as Event>::Response>>(&self) -> Result<T, AnyhowError> {
+        let event = T::from(serde_json::from_str(&self.raw)?);
+
+        Ok(event)
+    }
+}
+
+impl Event for RawEvent {
+    type Response = String;
+
+    fn event_id(&self) -> &EventId {
+        &self.meta.event_id
+    }
+
+    fn has_more(&self) -> bool {
+        self.meta.has_more
+    }
+
+    fn is_refresh(&self) -> bool {
+        self.meta.refresh != 0
+    }
+}
+
+#[serde_as]
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "PascalCase")]
+struct EventMetadata {
+    #[serde(rename = "EventID")]
+    event_id: EventId,
+    #[serde(rename = "More")]
+    #[serde_as(as = "BoolFromInt")]
+    has_more: bool,
+    refresh: u8,
 }
