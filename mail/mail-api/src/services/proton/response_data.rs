@@ -24,7 +24,6 @@
 //!
 
 use crate::services::proton::common::{AttachmentId, ConversationId, ExternalId, MessageId};
-use proton_core_api::services::proton::GetEventResponse;
 use proton_core_api::services::proton::LabelEvent;
 use proton_core_api::services::proton::common::ApiErrorInfo;
 use proton_core_api::services::proton::{
@@ -518,8 +517,6 @@ pub struct ConversationEvent {
     pub conversation: Option<Conversation>,
 }
 
-impl GetEventResponse for ConversationEvent {}
-
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
@@ -596,8 +593,6 @@ pub struct MailEvent {
     #[serde_as(as = "BoolFromInt")]
     pub has_more: bool,
 }
-
-impl GetEventResponse for MailEvent {}
 
 /// TODO: Document this struct.
 #[serde_as]
@@ -911,8 +906,6 @@ pub struct MessageEvent {
     /// TODO: Document this field.
     pub message: Option<MessageMetadata>,
 }
-
-impl GetEventResponse for MessageEvent {}
 
 /// TODO: Document this struct.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]

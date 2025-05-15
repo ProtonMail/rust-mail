@@ -28,11 +28,12 @@
 
 use proton_crypto_account::keys::{
     APIPublicAddressKeyGroup as PublicAddressKeyGroup,
-    APIUnverifiedPublicAddressKeyGroup as UnverifiedPublicAddressKeyGroup, ArmoredPrivateKey, KeyId,
+    APIUnverifiedPublicAddressKeyGroup as UnverifiedPublicAddressKeyGroup, ArmoredPrivateKey,
+    KeyId,
 };
 use serde::Deserialize;
 use serde_repr::Deserialize_repr;
-use serde_with::{serde_as, BoolFromInt};
+use serde_with::{BoolFromInt, serde_as};
 
 #[cfg(any(test, debug_assertions))]
 use serde::Serialize;
@@ -364,12 +365,6 @@ pub enum HasKeysStatus {
     HasKeys = 1,
 }
 
-//  TRAITS
-//==============================================================================
-
-/// Marker trait for individual event responses.
-pub trait GetEventResponse: Send + Sync {}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -398,7 +393,8 @@ mod tests {
         }
         "#;
 
-        let response: PostSetupNewNonSubuserAddressResponse = serde_json::from_str(json).expect("Failed to deserialize JSON");
+        let response: PostSetupNewNonSubuserAddressResponse =
+            serde_json::from_str(json).expect("Failed to deserialize JSON");
 
         let expected = PostSetupNewNonSubuserAddressResponse {
             code: ResponseCode(1000),
@@ -420,7 +416,6 @@ mod tests {
 
         assert_eq!(response, expected);
     }
-
 
     #[test]
     fn test_get_available_domains_deserialization() {
@@ -468,7 +463,10 @@ mod tests {
                 private_key: "addr_private_key".to_string(),
                 token: Some("addr_token".to_string()),
                 signature: Some("addr_signature".to_string()),
-                signed_key_list: SignedKeyList { data: "data".to_string(), signature: "signature".to_string() },
+                signed_key_list: SignedKeyList {
+                    data: "data".to_string(),
+                    signature: "signature".to_string(),
+                },
                 revision: 0,
             }],
             auth: AuthInput {
@@ -484,7 +482,8 @@ mod tests {
             encrypted_secret: Some("base64_encrypted_secret".to_string()),
         };
 
-        let deserialized: SetupKeysRequest = serde_json::from_str(json).expect("Failed to deserialize");
+        let deserialized: SetupKeysRequest =
+            serde_json::from_str(json).expect("Failed to deserialize");
         assert_eq!(deserialized, expected);
     }
 
@@ -589,7 +588,6 @@ mod tests {
                     signature: Some(KeyTokenSignature::from("signature")),
                     activation: Some(String::from("activation")),
                     address_forwarding_id: Some(String::from("address_forwarding_id")),
-                    
                 }]),
                 flags: Flags {
                     protected: true,
@@ -604,7 +602,8 @@ mod tests {
             },
         };
 
-        let deserialized: SetupKeysResponse = serde_json::from_str(json).expect("Failed to deserialize");
+        let deserialized: SetupKeysResponse =
+            serde_json::from_str(json).expect("Failed to deserialize");
         assert_eq!(deserialized, expected);
     }
 }

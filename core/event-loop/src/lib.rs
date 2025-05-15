@@ -58,7 +58,6 @@
 //!
 //! ```
 //!
-pub mod background_loop;
 pub mod foreground_loop;
 pub mod provider;
 pub mod store;

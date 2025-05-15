@@ -2,7 +2,6 @@ use crate::account::{TEST_USER_ID, TEST_USER_MAIL, testdata_user_secret};
 use crate::utils::catch_all;
 use async_trait::async_trait;
 use proton_core_api::auth::{Tokens, UserKeySecret};
-use proton_core_api::services::proton::GetEventResponse;
 use proton_core_api::services::proton::{
     Action as ApiAction, AddressEvent as ApiAddressEvent,
     ContactEmailEvent as ApiContactEmailEvent, ContactEvent as ApiContactEvent, User as ApiUser,
@@ -339,8 +338,6 @@ pub struct TestApiCoreEvent {
     pub user: Option<ApiUser>,
     pub user_settings: Option<ApiUserSettings>,
 }
-
-impl GetEventResponse for TestApiCoreEvent {}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TestCoreEvent {

@@ -2,7 +2,6 @@
 
 use super::*;
 use proton_core_api::services::proton::EventId;
-use proton_core_api::services::proton::GetEventResponse;
 use serde::Deserialize;
 
 const DUMMY_EVENT_ID: &str = "EVT_FOO";
@@ -37,8 +36,6 @@ impl Event for TestEvent {
         false
     }
 }
-
-impl GetEventResponse for TestEvent {}
 
 #[tokio::test]
 async fn test_channeled_subscriber_handle_and_reply() {
