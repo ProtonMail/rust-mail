@@ -1693,6 +1693,11 @@ impl MessageFlags {
     pub fn is_draft(&self) -> bool {
         !self.intersects(MessageFlags::SENT | MessageFlags::RECEIVED)
     }
+
+    #[must_use]
+    pub fn is_schedule_send(&self) -> bool {
+        self.intersects(MessageFlags::SCHEDULED_SEND)
+    }
 }
 
 impl From<ApiMessageFlags> for MessageFlags {

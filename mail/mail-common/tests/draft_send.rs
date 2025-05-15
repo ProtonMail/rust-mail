@@ -1,4 +1,4 @@
-use chrono::{Days, Local, Months, Utc};
+use chrono::{Days, Local, Months, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
 use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
 use proton_core_api::consts::{CoreBundle, Mail};
 use proton_core_api::services::proton::GetKeysAllResponse;
@@ -14,6 +14,7 @@ use proton_crypto_inbox::message::EncryptedDraft;
 use proton_crypto_inbox::proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, KeyFlag, KeyId, LockedKey,
 };
+use proton_mail_api::services::proton::prelude::PostCancelSendResponse;
 use proton_mail_api::services::proton::request_data::{
     DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
 };
@@ -36,6 +37,7 @@ use proton_mail_test_utils::message_body::*;
 use proton_mail_test_utils::messages::TestDraftSendRequest;
 use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
+use stash::stash::Bond;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -768,6 +770,230 @@ async fn already_sent_error_does_not_produce_error() {
     assert!(!result[0].is_send_undoable());
 }
 
+#[tokio::test]
+async fn cancel_schedule_send_on_non_scheduled_message() {
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+    ctx.setup_user(params.clone()).await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+
+    let message = message_body_test_message_simple();
+    let mut tether = user_ctx.user_stash().connection();
+    let message = tether
+        .tx::<_, _, MailContextError>(async |tx: &Bond<'_>| {
+            let mut message = Message::from_api_metadata(message.metadata, tx).await?;
+            message.save(tx).await?;
+            Ok(message)
+        })
+        .await
+        .unwrap();
+
+    let err = Draft::cancel_schedule_send(&user_ctx, message.local_id.unwrap())
+        .await
+        .unwrap_err();
+    matches!(
+        err,
+        MailContextError::Draft(draft::Error::CancelScheduleSend(
+            draft::CancelScheduleSendError::MessageIsNotScheduled(_)
+        ))
+    );
+}
+#[tokio::test]
+async fn cancel_schedule_send_on_queued_send() {
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.to_list.push(MessageRecipient {
+        address: "foo@bar.com".to_string(),
+        is_proton: false,
+        name: "".to_string(),
+        group: None,
+    });
+    let mut sent_message = message.clone();
+    message.metadata.label_ids.push(LabelId::drafts());
+    sent_message
+        .metadata
+        .label_ids
+        .push(LabelId::all_scheduled());
+    sent_message
+        .metadata
+        .flags
+        .set(MessageFlags::SCHEDULED_SEND, true);
+    sent_message.body.header = "Fancy new header".to_owned();
+
+    let delivery_time = Local::now().checked_add_months(Months::new(1)).unwrap();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+    let tether = user_ctx.user_stash().connection();
+
+    // Create draft.
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    draft
+        .to_list
+        .add_single(RecipientEntry {
+            email: "foo@bar.com".into(),
+            display_name: MaybeEmptyString(None),
+        })
+        .unwrap();
+    draft
+        .schedule_send(
+            delivery_time,
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+        )
+        .await
+        .unwrap();
+
+    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+
+    // Cancels the queued action, no network requests are made.
+    Draft::cancel_schedule_send(&user_ctx, draft_message_id)
+        .await
+        .unwrap();
+
+    // Check draft is back in drafts folder.
+    let draft_message = Message::load(draft_message_id, &tether)
+        .await
+        .unwrap()
+        .expect("failed to load message");
+
+    assert!(!draft_message.label_ids.contains(&LabelId::all_scheduled()));
+    assert!(!draft_message.label_ids.contains(&LabelId::outbox()));
+    assert!(draft_message.label_ids.contains(&LabelId::drafts()));
+    assert!(draft_message.label_ids.contains(&LabelId::all_drafts()));
+    assert!(!draft_message.is_scheduled_for_send());
+    // Time of the message should be changed.
+    assert_ne!(draft_message.time, delivery_time.timestamp().unsigned_abs());
+}
+
+#[tokio::test]
+async fn cancel_schedule_send_after_api_request_succeeded() {
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let delivery_time = Local
+        .from_local_datetime(&NaiveDateTime::new(
+            NaiveDate::from_ymd_opt(2025, 5, 2).unwrap(),
+            NaiveTime::from_hms_opt(14, 10, 0).unwrap(),
+        ))
+        .unwrap();
+    let mut api_message = message_body_test_message_simple();
+    let mut undo_sent_response_message = api_message.clone();
+    api_message.metadata.time = delivery_time.timestamp().unsigned_abs();
+    undo_sent_response_message
+        .metadata
+        .label_ids
+        .push(LabelId::drafts());
+    undo_sent_response_message
+        .metadata
+        .label_ids
+        .push(LabelId::all_drafts());
+
+    let params = draft_test_params();
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_undo_send(
+        api_message.metadata.id.clone(),
+        Ok(PostCancelSendResponse {
+            message: undo_sent_response_message.metadata,
+        }),
+    )
+    .await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+
+    api_message
+        .metadata
+        .label_ids
+        .push(LabelId::all_scheduled());
+    api_message.metadata.flags |= MessageFlags::SCHEDULED_SEND;
+    let mut tether = user_ctx.user_stash().connection();
+    let message = tether
+        .tx::<_, _, MailContextError>(async |tx: &Bond<'_>| {
+            let mut message = Message::from_api_metadata(api_message.metadata, tx).await?;
+            message.save(tx).await?;
+            Ok(message)
+        })
+        .await
+        .unwrap();
+
+    let previous_send_time = Draft::cancel_schedule_send(&user_ctx, message.local_id.unwrap())
+        .await
+        .unwrap();
+    let message = Message::load(message.local_id.unwrap(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(message.label_ids.contains(&LabelId::drafts()));
+    assert!(message.label_ids.contains(&LabelId::all_drafts()));
+    assert!(!message.label_ids.contains(&LabelId::all_scheduled()));
+    assert!(!message.is_scheduled_for_send());
+    assert_eq!(delivery_time, previous_send_time);
+}
+
+#[tokio::test]
+async fn cancel_schedule_send_on_already_sent_message() {
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let mut api_message = message_body_test_message_simple();
+
+    let params = draft_test_params();
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_undo_send(
+        api_message.metadata.id.clone(),
+        Err(ApiErrorInfo {
+            code: Mail::MessageAlreadySent as u32,
+            error: None,
+            details: None,
+        }),
+    )
+    .await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+
+    api_message
+        .metadata
+        .label_ids
+        .push(LabelId::all_scheduled());
+    api_message.metadata.flags |= MessageFlags::SCHEDULED_SEND;
+    let mut tether = user_ctx.user_stash().connection();
+    let message = tether
+        .tx::<_, _, MailContextError>(async |tx: &Bond<'_>| {
+            let mut message = Message::from_api_metadata(api_message.metadata, tx).await?;
+            message.save(tx).await?;
+            Ok(message)
+        })
+        .await
+        .unwrap();
+
+    let err = Draft::cancel_schedule_send(&user_ctx, message.local_id.unwrap())
+        .await
+        .unwrap_err();
+    matches!(
+        err,
+        MailContextError::Draft(draft::Error::CancelScheduleSend(
+            draft::CancelScheduleSendError::AlreadySent(_)
+        ))
+    );
+}
+
 async fn send_fails_if_recipient_is_not_valid_impl(
     api_error_code: u32,
 ) -> (Arc<anyhow::Error>, LocalMessageId, Arc<MailUserContext>) {
@@ -776,11 +1002,6 @@ async fn send_fails_if_recipient_is_not_valid_impl(
         UserId::from(TEST_USER_ID),
     )
     .await;
-    // Check :
-    // * Draft is saved before sent
-    // * Send API endpoint is updated
-    // * Draft is moved to sent folder
-    // Set up a user and initialise the inbox
     let params = draft_test_params();
 
     let mut message = message_body_test_message_simple();

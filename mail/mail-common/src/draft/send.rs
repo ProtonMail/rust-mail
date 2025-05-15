@@ -1,11 +1,16 @@
 use crate::datatypes::{Disposition, MimeType};
 use crate::draft::recipients::ValidationState;
-use crate::draft::{PackageError, SendError, compose::html_to_text};
-use crate::models::Attachment;
-use crate::{MailContextError, MailContextResult, MailUserContext};
-use chrono::{DateTime, Datelike, Days, Local, LocalResult, NaiveTime};
+use crate::draft::{CancelScheduleSendError, PackageError, SendError, compose::html_to_text};
+use crate::models::{Attachment, DraftMetadata, Message};
+use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
+use anyhow::anyhow;
+use chrono::{DateTime, Datelike, Days, Local, LocalResult, MappedLocalTime, NaiveTime, TimeZone};
 use proton_action_queue::action::WriterGuard;
-use proton_core_common::models::PaidSubscription;
+use proton_action_queue::observers::ActionAwaiter;
+use proton_action_queue::queue::{BroadcastMessage, Queue, QueuedError};
+use proton_core_api::consts::Mail;
+use proton_core_api::session::{CoreSession, Session};
+use proton_core_common::models::{ModelExtension, PaidSubscription};
 use proton_crypto_account::keys::{
     PrimaryUnlockedAddressKey, UnlockedAddressKey, UnlockedAddressKeys,
 };
@@ -18,12 +23,15 @@ use proton_crypto_inbox::message::packages::{
     EncryptedPackageBody, PackageMimeType, package_body_encrypt,
 };
 use proton_crypto_inbox::proton_crypto_inbox_mime::write::InboxMimeBuilder;
+use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::request_data::{
     AddressSubPackage, Package, PackageSignaturesMode,
 };
-use stash::stash::RunTransaction;
+use proton_mail_ids::LocalMessageId;
+use stash::stash::{RunTransaction, Tether};
 use std::collections::{HashMap, HashSet};
-use tracing::{Instrument, debug, debug_span, error};
+use std::time::Duration;
+use tracing::{Instrument, debug, debug_span, error, info};
 
 /// Loads the send preferences for each recipient of the message.
 pub async fn load_send_preferences_for_recipients<Provider: PGPProviderSync>(
@@ -555,6 +563,139 @@ impl<Tz: chrono::TimeZone> ScheduleSendOptions<Tz> {
             }
         }
     }
+}
+
+/// Attempt to cancel a schedule send.
+///
+/// Contrary to all other methods that operate on the server, this method does not queue any actions
+/// as we need to guarantee that the cancel request reaches the servers at the time it is performed.
+///
+/// Failing to do so can lead to cancellation request running after the message has already been
+/// sent.
+///
+/// On completion returns the original scheduled time of the message.
+#[tracing::instrument(
+    level = "debug",
+    skip(tether, queue, session, wait_on_completion_duration)
+)]
+pub async fn cancel_schedule_send(
+    message_id: LocalMessageId,
+    tether: &mut Tether,
+    queue: &Queue,
+    session: &Session,
+    wait_on_completion_duration: Duration,
+) -> Result<DateTime<Local>, MailContextError> {
+    // Validate if the message is actually scheduled for sending
+    let message = Message::find_by_id(message_id, tether)
+        .await?
+        .ok_or(CancelScheduleSendError::MessageNotFound(message_id))?;
+
+    if !message.is_scheduled_for_send() {
+        return Err(CancelScheduleSendError::MessageIsNotScheduled(message_id).into());
+    }
+    #[allow(clippy::cast_possible_wrap)]
+    let original_dt: DateTime<Local> =
+        match Local.timestamp_opt(message.time.min(i64::MAX as u64) as i64, 0) {
+            MappedLocalTime::Single(v) => v,
+            MappedLocalTime::None | MappedLocalTime::Ambiguous(_, _) => {
+                error!("Invalid time offset");
+                return Err(MailContextError::Other(anyhow!("Invalid timestamp")));
+            }
+        };
+
+    // If we have metadata for this message it means we created the message and
+    // there may still be a queued send request. If we do not have any metadata, it either means
+    // the message was scheduled on the server already or by another session.
+    let message = if let Some(metadata) =
+        DraftMetadata::find_by_message_id(message_id, tether).await?
+    {
+        debug!("Found metadata, message was sent by us.");
+        if let Some(send_action_id) = metadata.send_action_id {
+            match queue.cancel(send_action_id).await {
+                Ok(_) => {
+                    // action was cancelled and state reverted.
+                    info!("Message {message_id} schedule send cancelled successfully");
+                    return Ok(original_dt);
+                }
+                Err(QueuedError::ActionNotFound(_)) => {
+                    // action already executed, proceed to next stage. Before that we need to
+                    // reload the message to check whether it actually succeeded or not.
+                    debug!("Action no longer exist, either it succeeded or failed");
+                }
+                Err(QueuedError::ActionInExecution(id)) => {
+                    debug!(
+                        "Action is being executed ({id}), waiting at most {wait_on_completion_duration:?} until finished"
+                    );
+                    // Action is currently being executed, wait for it to finish.
+                    let waiter = ActionAwaiter::new(queue, id);
+
+                    let Ok(message) =
+                        tokio::time::timeout(wait_on_completion_duration, waiter.wait())
+                            .await
+                            .map_err(|_| CancelScheduleSendError::TimedOut)?
+                    else {
+                        return Err(MailContextError::Other(anyhow!("Connection to queue lost")));
+                    };
+                    // If the action did not complete it means this message was not scheduled.
+                    if !matches!(message, BroadcastMessage::Success(_)) {
+                        debug!("Action did not complete successfully");
+                        return Err(
+                            CancelScheduleSendError::MessageIsNotScheduled(message_id).into()
+                        );
+                    }
+                }
+                Err(e) => return Err(e.into()),
+            }
+        }
+
+        // reload the message in case something changed
+        let message = Message::find_by_id(message_id, tether)
+            .await?
+            .ok_or(CancelScheduleSendError::MessageNotFound(message_id))?;
+        if !message.is_scheduled_for_send() {
+            return Err(CancelScheduleSendError::MessageIsNotScheduled(message_id).into());
+        }
+        message
+    } else {
+        message
+    };
+
+    #[allow(clippy::cast_possible_wrap)]
+    let original_dt: DateTime<Local> =
+        match Local.timestamp_opt(message.time.min(i64::MAX as u64) as i64, 0) {
+            MappedLocalTime::Single(v) => v,
+            MappedLocalTime::None | MappedLocalTime::Ambiguous(_, _) => {
+                error!("Invalid time offset");
+                return Err(MailContextError::Other(anyhow!("Invalid timestamp")));
+            }
+        };
+    debug!("Cancelling send on the server");
+    let remote_id = message
+        .remote_id
+        .clone()
+        .ok_or(AppError::MessageHasNoRemoteId(message_id))?;
+
+    // Invoke server call
+    let response = match session.api().cancel_send(remote_id).await.inspect_err(|e| {
+        error!("Failed to cancel send on server: {e:?}");
+    }) {
+        Ok(response) => response,
+        Err(err) => {
+            if let Some(api_error) = err.to_proton_error() {
+                if api_error.code == Mail::MessageAlreadySent as u32 {
+                    return Err(CancelScheduleSendError::AlreadySent(message_id).into());
+                }
+            }
+            return Err(err.into());
+        }
+    };
+
+    // Put message back into drafts
+    let mut updated_message = Message::from_api_metadata(response.message, tether).await?;
+
+    tether.tx(async |tx| updated_message.save(tx).await).await?;
+
+    Ok(original_dt)
 }
 
 #[cfg(test)]

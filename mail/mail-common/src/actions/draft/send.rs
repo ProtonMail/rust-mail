@@ -3,6 +3,7 @@ use crate::actions::draft::{
     local_draft_label_id, local_outbox_label_id, local_sent_label_id,
 };
 use crate::datatypes::{LocalMessageId, MessageFlags, MimeType, RollbackItemType};
+use crate::draft::compose::create_timestamp;
 use crate::draft::send::{build_packages, load_send_preferences_for_recipients};
 use crate::draft::{Draft, ReplyMode, SendError, draft_attachment_staging_path};
 use crate::models::{
@@ -234,6 +235,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         };
 
         action.update_sent_flag(&mut message, false);
+        message.time = create_timestamp();
         message.save(tx).await.inspect_err(|e| {
             error!("Failed to update message sent flag (revert): {e:?}");
         })?;

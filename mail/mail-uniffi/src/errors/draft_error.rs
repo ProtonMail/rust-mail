@@ -1,6 +1,7 @@
 use super::{
-    DraftAttachmentUploadErrorReason, DraftDiscardErrorReason, DraftOpenErrorReason,
-    DraftSaveErrorReason, DraftSendErrorReason, DraftUndoSendErrorReason, ProtonError,
+    DraftAttachmentUploadErrorReason, DraftCancelScheduleSendErrorReason, DraftDiscardErrorReason,
+    DraftOpenErrorReason, DraftSaveErrorReason, DraftSendErrorReason, DraftUndoSendErrorReason,
+    ProtonError,
 };
 use crate::UniffiEnum;
 use derive_more::From;
@@ -141,7 +142,7 @@ pub enum DraftAttachmentUploadError {
 
 impl From<RealProtonMailError> for DraftAttachmentUploadError {
     fn from(error: RealProtonMailError) -> Self {
-        error!("DraftDiscardError from {error:?}");
+        error!("DraftAttachmentUploadError from {error:?}");
         match error {
             RealProtonMailError::Reason(reason) => reason.into(),
             other_reason => Self::Other(ProtonError::from(other_reason)),
@@ -153,6 +154,32 @@ impl From<RealMailErrorReason> for DraftAttachmentUploadError {
     fn from(reason: RealMailErrorReason) -> Self {
         match reason {
             RealMailErrorReason::DraftAttachmentUploadReason(reason) => Self::Reason(reason.into()),
+            other_reason => Self::Other(ProtonError::from(other_reason)),
+        }
+    }
+}
+#[derive(Debug, From, UniffiEnum)]
+pub enum DraftCancelScheduleSendError {
+    Reason(DraftCancelScheduleSendErrorReason),
+    Other(ProtonError),
+}
+
+impl From<RealProtonMailError> for DraftCancelScheduleSendError {
+    fn from(error: RealProtonMailError) -> Self {
+        error!("DraftCancelScheduleSendError from {error:?}");
+        match error {
+            RealProtonMailError::Reason(reason) => reason.into(),
+            other_reason => Self::Other(ProtonError::from(other_reason)),
+        }
+    }
+}
+
+impl From<RealMailErrorReason> for DraftCancelScheduleSendError {
+    fn from(reason: RealMailErrorReason) -> Self {
+        match reason {
+            RealMailErrorReason::DraftCancelScheduleSendReason(reason) => {
+                Self::Reason(reason.into())
+            }
             other_reason => Self::Other(ProtonError::from(other_reason)),
         }
     }

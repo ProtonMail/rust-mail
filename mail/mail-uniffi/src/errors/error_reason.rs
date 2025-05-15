@@ -2,6 +2,7 @@ use crate::UniffiEnum;
 use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ContextErrorReason as RealContextErrorReason,
     DraftAttachmentUploadErrorReason as RealDraftAttachmentErrorReason,
+    DraftCancelScheduleSendErrorReason as RealDraftCancelScheduleSendErrorReason,
     DraftDiscardErrorReason as RealDraftDiscardErrorReason,
     DraftOpenErrorReason as RealDraftOpenErrorReason,
     DraftSaveErrorReason as RealDraftSaveErrorReason,
@@ -290,6 +291,27 @@ impl From<RealDraftAttachmentErrorReason> for DraftAttachmentUploadErrorReason {
             RealDraftAttachmentErrorReason::MessageAlreadySent => Self::MessageAlreadySent,
             RealDraftAttachmentErrorReason::AttachmentTooLarge => Self::AttachmentTooLarge,
             RealDraftAttachmentErrorReason::RetryInvalidState => Self::RetryInvalidState,
+        }
+    }
+}
+
+#[derive(Debug, UniffiEnum)]
+pub enum DraftCancelScheduleSendErrorReason {
+    MessageDoesNotExist,
+    MessageNotScheduled,
+    MessageAlreadySent,
+}
+
+impl From<RealDraftCancelScheduleSendErrorReason> for DraftCancelScheduleSendErrorReason {
+    fn from(value: RealDraftCancelScheduleSendErrorReason) -> Self {
+        match value {
+            RealDraftCancelScheduleSendErrorReason::MessageDoesNotExist => {
+                Self::MessageDoesNotExist
+            }
+            RealDraftCancelScheduleSendErrorReason::MessageNotScheduled => {
+                Self::MessageNotScheduled
+            }
+            RealDraftCancelScheduleSendErrorReason::MessageAlreadySent => Self::MessageAlreadySent,
         }
     }
 }

@@ -46,6 +46,7 @@ use stash::orm::Model;
 use stash::stash::{Stash, StashError, Tether};
 use std::mem;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 use tracing::{debug, error};
 
 pub mod attachments;
@@ -73,6 +74,8 @@ pub enum Error {
     AttachmentUpload(#[from] AttachmentUploadError),
     #[error(transparent)]
     AttachmentRemove(#[from] AttachmentRemoveError),
+    #[error(transparent)]
+    CancelScheduleSend(#[from] CancelScheduleSendError),
 }
 
 /// Errors that occur during draft creation or opening an existing draft.
@@ -243,6 +246,27 @@ pub enum DiscardError {
 
 impl From<DiscardError> for MailContextError {
     fn from(err: DiscardError) -> Self {
+        Self::Draft(err.into())
+    }
+}
+
+/// Errors that occur while discarding a draft.
+#[derive(Debug, thiserror::Error)]
+pub enum CancelScheduleSendError {
+    #[error("Metadata with Id {0} does not exist")]
+    MetadataNotFound(MetadataId),
+    #[error("Message with Id {0} does not exist")]
+    MessageNotFound(LocalMessageId),
+    #[error("Message {0} is not scheduled for sending")]
+    MessageIsNotScheduled(LocalMessageId),
+    #[error("Timed out while waiting on schedule send to complete")]
+    TimedOut,
+    #[error("Message {0} was already sent and can no longer be cancelled")]
+    AlreadySent(LocalMessageId),
+}
+
+impl From<CancelScheduleSendError> for MailContextError {
+    fn from(err: CancelScheduleSendError) -> Self {
         Self::Draft(err.into())
     }
 }
@@ -1366,6 +1390,17 @@ impl Draft {
 
     pub fn sanitize_body(&mut self) {
         self.body = maybe_sanitize(self.mime_type(), mem::take(&mut self.body));
+    }
+
+    pub async fn cancel_schedule_send(
+        ctx: &MailUserContext,
+        message_id: LocalMessageId,
+    ) -> MailContextResult<DateTime<Local>> {
+        let mut tether = ctx.user_stash().connection();
+        let queue = ctx.action_queue();
+        let timeout = Duration::from_secs(15);
+        let session = ctx.session();
+        send::cancel_schedule_send(message_id, &mut tether, queue, session, timeout).await
     }
 }
 
