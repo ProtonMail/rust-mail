@@ -57,8 +57,7 @@ pub fn transform_style(document: NodeRef, mode: ColorMode, capabilities: Browser
             // 1. If yes, we can keep existing color.
             // 2. If not, we shall generate a CSS override (by removing `!important` from original place and adding new rule afterwards)
             //     that would use transformed color (keeping the same hue and saturation but changed light component).
-            let maybe_supplement_css = sanitize_dark_mode_in_stylesheets(&document);
-            // TODO: Inline attributes!
+            let maybe_supplement_css = sanitize_dark_mode(&document);
 
             if supports_media_query {
                 inject_style(&document, include_str!("./light_and_dark.css"));
@@ -83,6 +82,25 @@ pub fn transform_style(document: NodeRef, mode: ColorMode, capabilities: Browser
             }
         }
     }
+}
+
+fn sanitize_dark_mode(document: &NodeRef) -> Option<String> {
+    let maybe_supplement_for_stylesheets = sanitize_dark_mode_in_stylesheets(document);
+    let maybe_supplement_for_inline_attributes = sanitize_dark_mode_in_inline_attributes(document);
+
+    if maybe_supplement_for_stylesheets.is_none()
+        && maybe_supplement_for_inline_attributes.is_none()
+    {
+        return None;
+    }
+
+    let supplement_for_stylesheets = maybe_supplement_for_stylesheets.unwrap_or_default();
+    let supplement_for_inline_attributes =
+        maybe_supplement_for_inline_attributes.unwrap_or_default();
+
+    Some(format!(
+        "{supplement_for_stylesheets}\n{supplement_for_inline_attributes}"
+    ))
 }
 
 // TODO: replace with proper constant after `RGBA` gets const constructor.
