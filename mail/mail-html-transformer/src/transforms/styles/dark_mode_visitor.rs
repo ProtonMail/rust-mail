@@ -1,4 +1,5 @@
 mod colors;
+mod declaration_block;
 mod properties;
 mod stylesheet;
 
