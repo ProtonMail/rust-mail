@@ -316,3 +316,7 @@ lto = true                 # "Fat" LTO
 # TODO https://github.com/hyperium/hyper/pull/3887
 # TODO https://protonmail.slack.com/archives/C07FCLA1RQW/p1746692300139499
 hyper = { git = "https://github.com/Patryk27/hyper", rev = "f1ee16c0e1ef72c5f467fdf142e6525ffa03059a" }
+
+# TODO https://github.com/rust-lang/rust-bindgen/issues/3199
+# TODO https://protonmail.slack.com/archives/C07FCLA1RQW/p1747302410720299
+bindgen = { git = "https://github.com/rust-lang/rust-bindgen", rev = "97ab9152b5edb1fda1ced9bc1604f5e4dc9cfaa9" }
