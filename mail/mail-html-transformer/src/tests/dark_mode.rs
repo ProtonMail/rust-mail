@@ -67,3 +67,16 @@ fn inject_style_inline_attributes() {
     );
     insta::assert_snapshot!(html.to_string());
 }
+
+#[test]
+fn inject_style_transparency_handling() {
+    let html = include_str!("../../tests/htmls/styles/transparent_colors.html");
+    let mut html = Transformer::new(html);
+    html.inject_style(
+        ColorMode::DarkMode,
+        BrowserCapabilities {
+            supports_dark_mode_via_media_query: true,
+        },
+    );
+    insta::assert_snapshot!(html.to_string());
+}

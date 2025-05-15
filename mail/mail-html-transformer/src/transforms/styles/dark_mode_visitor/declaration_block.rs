@@ -3,7 +3,7 @@ use std::convert::Infallible;
 use lightningcss::{
     printer::PrinterOptions,
     properties::Property,
-    values::color::{CssColor, HSL, RGBA},
+    values::color::{CssColor, HSL},
     visit_types,
     visitor::{Visit, Visitor},
 };
@@ -100,12 +100,6 @@ impl Visitor<'_> for DeclarationBlockVisitor {
             let fg_overrides = fg
                 .into_iter()
                 .filter_map(|(fg_override, original_fg)| {
-                    if let Some(color) = Self::extract_color_from_prop(&original_fg) {
-                        let rgba: RGBA = color.into();
-                        if rgba == RGBA::transparent() {
-                            return None;
-                        }
-                    }
                     if !Self::has_good_contrast_against_backgrounds(&bg_overrides, &original_fg) {
                         return Some(fg_override);
                     }
