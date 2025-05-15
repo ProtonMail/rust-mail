@@ -54,10 +54,10 @@ impl Visitor<'_> for StyleAttributeVisitor {
 
         decls.visit(&mut visitor)?;
 
-        let (overriden, overrides) = visitor.overrides();
-        if !overrides.is_empty() {
-            self.overrides.extend(overrides);
-            self.overriden.extend(overriden);
+        let (overriden_properties, properties_overrides) = visitor.overrides();
+        if !properties_overrides.is_empty() {
+            self.overrides.extend(properties_overrides);
+            self.overriden.extend(overriden_properties);
         }
 
         Ok(())

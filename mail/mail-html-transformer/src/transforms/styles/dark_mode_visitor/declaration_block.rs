@@ -142,7 +142,7 @@ impl Visitor<'_> for DeclarationBlockVisitor {
                         _ => {
                             tracing::error!("Could not print original CSS to string. Skipping it.");
                         }
-                    };
+                    }
                 }
 
                 if let Some(pos) = decls.important_declarations.iter().position(|p| p == &prop) {

@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use std::{cell::RefCell, collections::BTreeMap};
 
 pub use capabilities::BrowserCapabilities;
@@ -224,7 +225,7 @@ fn sanitize_dark_mode_in_inline_attributes(document: &NodeRef) -> Option<String>
             tag,
             &mut overrides,
             printer_options,
-        )
+        );
     }
 
     if overrides.is_empty() {
@@ -248,7 +249,8 @@ fn sanitize_dark_mode_in_inline_attributes(document: &NodeRef) -> Option<String>
             // It doesn't matter which style is first, nor if there is another property set in the CSS.
             .join("");
 
-        style += &format!("{tag}{properties_selector} {{\n {properties}\n }}");
+        write!(style, "{tag}{properties_selector} {{\n {properties}\n }}")
+            .expect("Written properties");
     }
     Some(style)
 }
@@ -371,7 +373,7 @@ type StyleContent = String;
 fn all_style_attributes(
     document: &NodeRef,
 ) -> Result<impl Iterator<Item = (NodeDataRef<ElementData>, StyleContent)>, ()> {
-    let res = document.select(r#"[style]"#).inspect_err(|_| {
+    let res = document.select("[style]").inspect_err(|()| {
         tracing::error!("Could not select nodes with style attribute");
     })?;
     Ok(res.map(|element| {
