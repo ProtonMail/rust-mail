@@ -68,7 +68,7 @@ impl<T: Event + From<<T as Event>::Response> + 'static> BackgroundEventLoop<T> {
         &self,
         interval: Duration,
         store: Box<dyn Store>,
-        provider: Box<dyn Provider<T>>,
+        provider: Box<dyn Provider>,
         error_handler: Box<dyn EventLoopErrorHandler>,
     ) -> Result<JoinHandle<()>, EventLoopError> {
         let event_loop = EventLoop::new();
@@ -152,7 +152,7 @@ struct BackgroundLoopState<T: Event> {
     event_loop: EventLoop,
     store: Box<dyn Store>,
     subscribers: Vec<Box<dyn Subscriber<T>>>,
-    provider: Box<dyn Provider<T>>,
+    provider: Box<dyn Provider>,
 }
 
 #[doc(hidden)]

@@ -4883,6 +4883,8 @@ dependencies = [
  "paste",
  "proton-core-api",
  "serde",
+ "serde_json",
+ "serde_with",
  "stash",
  "thiserror 1.0.69",
  "tokio",

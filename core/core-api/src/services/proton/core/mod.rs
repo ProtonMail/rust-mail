@@ -4,7 +4,6 @@ use std::time::Duration;
 use bytes::Bytes;
 use muon::common::RetryPolicy;
 use proton_crypto_account::keys::APIPublicAddressKeys;
-use serde::Deserialize;
 
 use crate::service::ApiServiceResult;
 
@@ -115,13 +114,11 @@ pub trait ProtonCore {
     ///
     /// This method will return an error if the request fails.
     ///
-    async fn get_event<T>(
+    async fn get_event(
         &self,
         event_id: EventId,
         options: GetEventOptions,
-    ) -> ApiServiceResult<T>
-    where
-        T: GetEventResponse + for<'de> Deserialize<'de>;
+    ) -> ApiServiceResult<Vec<u8>>;
 
     /// TODO: Document this method.
     ///
@@ -335,7 +332,10 @@ pub trait ProtonCore {
     /// An `ApiServiceResult` containing the response with the created address details or an error.
     ///
     /// [API doc](https://protonmail.gitlab-pages.protontech.ch/Slim-API/core/#tag/Address/operation/post_core-%7B_version%7D-addresses-setup)
-    async fn setup_new_nonsubuser_address(&self,request: PostSetupNewNonSubuserAddressRequest) -> ApiServiceResult<PostSetupNewNonSubuserAddressResponse>;
+    async fn setup_new_nonsubuser_address(
+        &self,
+        request: PostSetupNewNonSubuserAddressRequest,
+    ) -> ApiServiceResult<PostSetupNewNonSubuserAddressResponse>;
 
     /// Retrieves a list of available domains.
     ///
@@ -350,8 +350,10 @@ pub trait ProtonCore {
     /// An `ApiServiceResult` containing the list of available domains or an error.
     ///
     /// [API doc](https://protonmail.gitlab-pages.protontech.ch/Slim-API/account/#tag/Domains/operation/get_core-%7B_version%7D-domains-available)
-    async fn get_available_domains(&self, domain_type: Option<String>) -> ApiServiceResult<GetAvailableDomainsResponse>;
-
+    async fn get_available_domains(
+        &self,
+        domain_type: Option<String>,
+    ) -> ApiServiceResult<GetAvailableDomainsResponse>;
 
     /// Checks the availability of a username.
     ///
@@ -365,9 +367,14 @@ pub trait ProtonCore {
     ///
     /// # Returns
     /// An `ApiServiceResult` containing a response code indicating availability or an error
-    /// 
+    ///
     /// [API doc](https://protonmail.gitlab-pages.protontech.ch/Slim-API/core/#tag/Users/operation/get_core-%7B_version%7D-users-available)
-    async fn check_username_availability(&self, name: String, parse_domain: ParseDomain, payment_info_token: Option<&str>) -> ApiServiceResult<ResponseCode>;
+    async fn check_username_availability(
+        &self,
+        name: String,
+        parse_domain: ParseDomain,
+        payment_info_token: Option<&str>,
+    ) -> ApiServiceResult<ResponseCode>;
 
     /// Checks the availability of an external username.
     ///
@@ -381,7 +388,11 @@ pub trait ProtonCore {
     /// An `ApiServiceResult` containing a response code indicating availability or an error.
     ///
     /// [API doc](https://protonmail.gitlab-pages.protontech.ch/Slim-API/core/#tag/Users/operation/get_core-%7B_version%7D-users-availableExternal)
-    async fn check_external_username_availability(&self, name: String, payment_info_token: Option<&str>) -> ApiServiceResult<ResponseCode>;
+    async fn check_external_username_availability(
+        &self,
+        name: String,
+        payment_info_token: Option<&str>,
+    ) -> ApiServiceResult<ResponseCode>;
 
     /// Sends a verification code to a user.
     ///
@@ -395,7 +406,10 @@ pub trait ProtonCore {
     /// An `ApiServiceResult` containing a response code indicating success or an error.
     ///
     /// [API doc](https://protonmail.gitlab-pages.protontech.ch/Slim-API/core/#tag/Users/operation/post_core-%7B_version%7D-users-code)
-    async fn send_verification_code(&self, request: SendVerificationCodeRequest) -> ApiServiceResult<ResponseCode>;
+    async fn send_verification_code(
+        &self,
+        request: SendVerificationCodeRequest,
+    ) -> ApiServiceResult<ResponseCode>;
 
     /// Performs the initial key setup for new private users.
     ///
@@ -408,7 +422,11 @@ pub trait ProtonCore {
     ///
     /// # Returns
     /// An `ApiServiceResult` containing the setup response with user and key details or an error.
-    /// 
+    ///
     /// [API doc](https://protonmail.gitlab-pages.protontech.ch/Slim-API/core/#tag/Keys/operation/post_core-%7B_version%7D-keys-setup)
-    async fn setup_keys_for_new_account(&self, user_init_flag: AsyncUserInitialization, request: SetupKeysRequest) -> ApiServiceResult<SetupKeysResponse>;
+    async fn setup_keys_for_new_account(
+        &self,
+        user_init_flag: AsyncUserInitialization,
+        request: SetupKeysRequest,
+    ) -> ApiServiceResult<SetupKeysResponse>;
 }

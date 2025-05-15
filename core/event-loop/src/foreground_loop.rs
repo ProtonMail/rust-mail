@@ -24,10 +24,10 @@ impl EventLoop {
 
     /// Stores one event id if the [`Store`] does not contain an event.
     #[tracing::instrument(name="event_initialize",level=Level::DEBUG, skip(self, store, provider))]
-    pub async fn initialize<T: Event + From<<T as Event>::Response>>(
+    pub async fn initialize(
         &self,
         store: &dyn Store,
-        provider: &dyn Provider<T>,
+        provider: &dyn Provider,
     ) -> Result<(), EventLoopError> {
         if let Some(e) = store.load().await.map_err(EventLoopError::StoreRead)? {
             debug!("Last event id = {e}");
@@ -51,7 +51,7 @@ impl EventLoop {
     pub async fn poll<T: Event + From<<T as Event>::Response>>(
         &self,
         store: &dyn Store,
-        provider: &dyn Provider<T>,
+        provider: &dyn Provider,
         subscribers: &[Box<dyn Subscriber<T>>],
     ) -> Result<(), EventLoopError> {
         let Some(last_event_id) = store.load().await.map_err(EventLoopError::StoreRead)? else {
@@ -62,7 +62,7 @@ impl EventLoop {
 
         debug!("Last Event Id = {last_event_id}");
 
-        let events = self
+        let events: Vec<T> = self
             .collect_events(provider, &last_event_id)
             .await
             .map_err(|e| {
@@ -114,13 +114,16 @@ impl EventLoop {
     /// Requests all events. The resulting vec is non empty.
     async fn collect_events<T: Event + From<<T as Event>::Response>>(
         &self,
-        provider: &dyn Provider<T>,
+        provider: &dyn Provider,
         mut last_event_id: &EventId,
     ) -> Result<Vec<T>, ApiServiceError> {
         let mut events = Vec::with_capacity(4);
 
         for _ in 0..MAX_EVENTS_PER_POLL {
-            let event = provider.get_event(last_event_id).await?;
+            let event = provider
+                .get_event(last_event_id)
+                .await?
+                .deserialize::<T>()?;
             let has_more = event.has_more();
             events.push(event);
             if !has_more {

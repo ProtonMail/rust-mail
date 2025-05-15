@@ -13,11 +13,10 @@ use proton_core_api::services::proton::GetEventOptions;
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::session::CoreSession;
 use proton_core_common::CoreEventSubscriber;
-use proton_event_loop::EventLoopError;
 use proton_event_loop::provider::Provider;
 use proton_event_loop::store::Store;
 use proton_event_loop::subscriber::Subscriber;
-use proton_mail_api::services::proton::response_data::MailEvent as ApiMailEvent;
+use proton_event_loop::{EventLoopError, RawEvent};
 use stash::exports::SqliteError;
 use stash::params;
 use stash::stash::StashError;
@@ -75,18 +74,19 @@ impl Store for MailUserContext {
 }
 
 #[async_trait]
-impl Provider<MailEvent> for MailUserContext {
+impl Provider for MailUserContext {
     async fn get_latest_event_id(&self) -> Result<EventId, ApiServiceError> {
         Ok(self.api().get_events_latest().await?.event_id)
     }
 
-    async fn get_event(&self, event_id: &EventId) -> Result<MailEvent, ApiServiceError> {
-        Ok(self
+    async fn get_event(&self, event_id: &EventId) -> Result<RawEvent, ApiServiceError> {
+        let bytes = self
             .session()
             .api()
-            .get_event::<ApiMailEvent>(event_id.clone(), GetEventOptions::all())
-            .await?
-            .into())
+            .get_event(event_id.clone(), GetEventOptions::all())
+            .await?;
+
+        Ok(RawEvent::from_json_bytes(bytes)?)
     }
 }
 
