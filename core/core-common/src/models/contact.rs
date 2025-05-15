@@ -768,7 +768,7 @@ impl ContactDetailCard {
 
         let urls = vcard.urls.to_sorted(|u| VCardUrl {
             url_type: u.r#type.into_iter().map_vec(),
-            url: u.value,
+            url: u.value.to_string(),
         });
 
         let organizations = vcard
@@ -783,7 +783,7 @@ impl ContactDetailCard {
         let titles = vcard.titles.to_sorted(|x| x.value.value);
         let roles = vcard.roles.to_sorted(|x| x.value.value);
         let languages = vcard.languages.to_sorted(|x| x.value);
-        let members = vcard.members.to_sorted(|x| x.value);
+        let members = vcard.members.to_sorted(|x| x.value.to_string());
         let anniversary = vcard.anniversary.map(|a| a.value);
         let birthday = vcard.birthday.map(|a| a.value);
 

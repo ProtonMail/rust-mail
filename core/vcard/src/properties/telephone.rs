@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::{Display, Formatter};
 
 use ical::generator::Property as IcalProperty;
 use url::Url;
@@ -13,16 +13,14 @@ use crate::parameters::pid::Pid;
 use crate::parameters::preference::Preference;
 use crate::parameters::type_tel::TelType;
 use crate::parameters::value::ValueType;
-use crate::properties::{
-    VcardProperty, any_debug, get_value_type, loop_debug, optional_debug, validate_parameters,
-};
+use crate::properties::{VcardProperty, get_value_type, validate_parameters};
 use crate::validation::get_property_kind;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify the telephone number for telephony communication with the object the vCard
 /// represents.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Telephone {
     /// Value (ex: tel:+33-01-23-45-67)
     pub value: TelephoneValue,
@@ -60,21 +58,6 @@ impl Telephone {
             any: HashSet::new(),
             group: None,
         }
-    }
-}
-
-impl Debug for Telephone {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Telephone {{{:?}", self.value)?;
-        optional_debug!(self, f, VALUE, value_type);
-        optional_debug!(self, f, PID, pid);
-        optional_debug!(self, f, PREF, preference);
-        loop_debug!(self, f, TYPE, tel_type);
-        optional_debug!(self, f, MEDIATYPE, media_type);
-        optional_debug!(self, f, ALTID, alternative_id);
-        any_debug!(self, f, any);
-        optional_debug!(self, f, group, group);
-        write!(f, "}}")
     }
 }
 

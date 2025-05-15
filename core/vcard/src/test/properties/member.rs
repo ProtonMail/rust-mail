@@ -1,12 +1,13 @@
 use crate::ParameterType;
 use crate::properties::member::{Member, validate_member};
 use crate::test::{make_property, property_reject_parameters};
+use crate::values::uri::MaybeUri;
 use velcro::hash_set;
 
 #[test]
 fn member_struct() {
-    let member = Member::new("uri:uri".to_string());
-    assert_eq!(&member.value, "uri:uri");
+    let member = Member::new("uri:uri".into());
+    assert_eq!(member.value, MaybeUri::Text("uri:uri".into()));
 }
 
 #[test]

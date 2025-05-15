@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
 
 use ical::generator::Property as IcalProperty;
 use url::Url;
@@ -14,16 +13,14 @@ use crate::parameters::pid::Pid;
 use crate::parameters::preference::Preference;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
-use crate::properties::{
-    VcardProperty, any_debug, loop_debug, optional_debug, validate_parameters,
-};
+use crate::properties::{VcardProperty, validate_parameters};
 use crate::validation::get_property_kind;
 use crate::values::uri::Uri;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify a graphic image of a logo associated with the object the vCard represents.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Logo {
     /// value (ex: <http://www.example.com/pub/logos/abccorp.jpg> or <data:image/jpeg;base64,MIICajCCAdOgAwIBAgICBEUwDQ...>)
     pub value: Uri,
@@ -84,22 +81,6 @@ impl Logo {
             any: HashSet::new(),
             group: None,
         })
-    }
-}
-
-impl Debug for Logo {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Logo {{{:?}", self.value)?;
-        optional_debug!(self, f, VALUE, value_type);
-        optional_debug!(self, f, LANG, language);
-        optional_debug!(self, f, PID, pid);
-        optional_debug!(self, f, PREF, preference);
-        loop_debug!(self, f, TYPE, r#type);
-        optional_debug!(self, f, MEDIATYPE, media_type);
-        optional_debug!(self, f, ALTID, alternative_id);
-        any_debug!(self, f, any);
-        optional_debug!(self, f, group, group);
-        write!(f, "}}",)
     }
 }
 

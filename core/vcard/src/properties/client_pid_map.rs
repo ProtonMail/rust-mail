@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
 
 use ical::generator::Property as IcalProperty;
 use url::Url;
@@ -7,14 +6,14 @@ use url::Url;
 use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::any::{Any, is_any_param};
 use crate::parameters::preference::Preference;
-use crate::properties::{VcardProperty, any_debug, optional_debug};
+use crate::properties::VcardProperty;
 use crate::validation::get_property_kind;
 use crate::values::uri::Uri;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To give a global meaning to a local PID source identifier.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ClientPidMap {
     /// index corresponding to second number in PIDs parameters
     pub index: u32,
@@ -66,15 +65,6 @@ impl ClientPidMap {
                 value.to_owned(),
             ))
         }
-    }
-}
-
-impl Debug for ClientPidMap {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "ClientPidMap {{{:?} {:?}", self.index, self.uri)?;
-        any_debug!(self, f, any);
-        optional_debug!(self, f, group, group);
-        write!(f, "}}")
     }
 }
 

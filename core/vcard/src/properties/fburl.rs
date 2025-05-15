@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
 
 use ical::generator::Property as IcalProperty;
 use url::Url;
@@ -13,16 +12,14 @@ use crate::parameters::pid::Pid;
 use crate::parameters::preference::Preference;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
-use crate::properties::{
-    VcardProperty, any_debug, loop_debug, optional_debug, validate_parameters,
-};
+use crate::properties::{VcardProperty, validate_parameters};
 use crate::validation::get_property_kind;
 use crate::values::uri::Uri;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify the URI for the busy time associated with the object that the vCard represents.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct FbUrl {
     /// Value (ex: <http://www.example.com/busy/janedoe>, <ftp://example.com/busy/project-a.ifb>)
     pub value: Uri,
@@ -79,21 +76,6 @@ impl FbUrl {
             any: HashSet::new(),
             group: None,
         })
-    }
-}
-
-impl Debug for FbUrl {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "FbUrl {{{:?}", self.value)?;
-        optional_debug!(self, f, VALUE, value_type);
-        optional_debug!(self, f, PID, pid);
-        optional_debug!(self, f, PREF, preference);
-        loop_debug!(self, f, TYPE, r#type);
-        optional_debug!(self, f, MEDIATYPE, media_type);
-        optional_debug!(self, f, ALTID, alternative_id);
-        any_debug!(self, f, any);
-        optional_debug!(self, f, group, group);
-        write!(f, "}}")
     }
 }
 

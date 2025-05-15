@@ -5,24 +5,24 @@ use url::Url;
 use crate::errors::{VCardValueError, VCardValueResult};
 use crate::parameters::value::ValueType;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MaybeUri {
     Uri(Url),
     Text(String),
 }
 
-impl Default for MaybeUri {
-    fn default() -> Self {
-        Self::Text(String::new())
-    }
-}
-
-impl<T: AsRef<str>> From<T> for MaybeUri {
+impl<T: AsRef<str> + Into<String>> From<T> for MaybeUri {
     fn from(value: T) -> Self {
         match Url::parse(value.as_ref()) {
             Ok(uri) => Self::Uri(uri),
-            _ => Self::Text(value.as_ref().to_string()),
+            _ => Self::Text(value.into()),
         }
+    }
+}
+
+impl Default for MaybeUri {
+    fn default() -> Self {
+        Self::Text(String::new())
     }
 }
 

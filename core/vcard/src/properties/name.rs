@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
 
 use ical::generator::Property as IcalProperty;
 use velcro::hash_set;
@@ -10,7 +9,7 @@ use crate::parameters::any::Any;
 use crate::parameters::language::Language;
 use crate::parameters::sort_as::SortAs;
 use crate::parameters::value::ValueType;
-use crate::properties::{any_debug, list_debug, optional_debug, validate_parameters};
+use crate::properties::validate_parameters;
 use crate::validation::get_property_kind;
 use crate::values::check_list;
 use crate::values::list_component::{ListComponent, is_list_component_value};
@@ -18,6 +17,7 @@ use crate::vcard::{group_from_name, split_list};
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify the components of the name of the object the vCard represents.
+#[derive(Debug)]
 pub struct Name {
     pub last: ListComponent,
     pub first: ListComponent,
@@ -85,25 +85,6 @@ impl Name {
             ListComponent::try_from(suffix)
                 .map_err(VCardError::from_value_error(PropertyKind::N))?,
         ))
-    }
-}
-
-impl Debug for Name {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut comma = false;
-        write!(f, "Name {{")?;
-        list_debug!(self, f, last, last, comma);
-        list_debug!(self, f, first, first, comma);
-        list_debug!(self, f, additional, additional, comma);
-        list_debug!(self, f, prefix, prefix, comma);
-        list_debug!(self, f, suffix, suffix, comma);
-        optional_debug!(self, f, VALUE, value_type, comma);
-        optional_debug!(self, f, SORT_AS, sort_as, comma);
-        optional_debug!(self, f, LANG, language, comma);
-        optional_debug!(self, f, ALTID, alternative_id, comma);
-        any_debug!(self, f, any, comma);
-        optional_debug!(self, f, group, group, comma);
-        write!(f, "}}")
     }
 }
 

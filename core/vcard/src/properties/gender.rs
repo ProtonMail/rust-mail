@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
 
 use ical::generator::Property as IcalProperty;
 use velcro::hash_set;
@@ -8,13 +7,13 @@ use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::any::Any;
 use crate::parameters::preference::Preference;
 use crate::parameters::value::ValueType;
-use crate::properties::{VcardProperty, any_debug, optional_debug, validate_parameters};
+use crate::properties::{VcardProperty, validate_parameters};
 use crate::validation::get_property_kind;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify the components of the sex and gender identity of the object the vCard represents.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Gender {
     /// value (ex: O)
     pub value: GenderValue,
@@ -44,16 +43,6 @@ impl Gender {
     ///   * if given value is not valid (see RFC6350 6.2.7 for more information)
     pub fn new_validated(value: &str) -> VCardResult<Self> {
         Ok(Self::new(GenderValue::try_from(value)?))
-    }
-}
-
-impl Debug for Gender {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Gender {{{:?}", self.value)?;
-        optional_debug!(self, f, VALUE, value_type);
-        any_debug!(self, f, any);
-        optional_debug!(self, f, group, group);
-        write!(f, "}}",)
     }
 }
 

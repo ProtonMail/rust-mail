@@ -40,6 +40,7 @@ pub mod version;
 pub mod xml;
 pub mod xtended;
 
+use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::ParameterType;
 use crate::parameters::alternative_id::is_altid_param;
 use crate::parameters::any::is_any_param;
@@ -318,79 +319,3 @@ fn get_value_type(property: &Property) -> VcardValidationResult<Option<ValueType
     }
     Ok(None)
 }
-
-macro_rules! list_debug {
-    ($self:ident, $f:ident, $short:ident, $long:ident, $comma:ident) => {
-        if !$self.$long.is_empty() {
-            if $comma {
-                write!($f, ", ")?;
-            }
-            write!($f, "{}={:?}", stringify!($short), $self.$long)?;
-            $comma = true;
-        }
-    };
-    ($self:ident, $f:ident, $short:ident, $long:ident) => {
-        if !$self.$long.is_empty() {
-            write!($f, ", {}={:?}", stringify!($short), $self.$long)?;
-        }
-    };
-}
-pub(crate) use list_debug;
-
-macro_rules! loop_debug {
-    ($self:ident, $f:ident, $short:ident, $long:ident, $comma:ident) => {
-        #[allow(unused_assignments)]
-        for value in &$self.$long {
-            if $comma {
-                write!($f, ", ")?;
-            }
-            write!($f, "{}={:?}", stringify!($short), value)?;
-            $comma = true;
-        }
-    };
-    ($self:ident, $f:ident, $short:ident, $long:ident) => {
-        for value in &$self.$long {
-            write!($f, ", {}={:?}", stringify!($short), value)?;
-        }
-    };
-}
-pub(crate) use loop_debug;
-
-macro_rules! any_debug {
-    ($self:ident, $f:ident, $long:ident, $comma:ident) => {
-        #[allow(unused_assignments)]
-        for value in &$self.$long {
-            if $comma {
-                write!($f, ", ")?;
-            }
-            write!($f, "{:?}", value)?;
-            $comma = true;
-        }
-    };
-    ($self:ident, $f:ident, $long:ident) => {
-        for value in &$self.$long {
-            write!($f, ", {:?}", value)?;
-        }
-    };
-}
-pub(crate) use any_debug;
-
-macro_rules! optional_debug {
-    ($self:ident, $f:ident, $short:ident, $long:ident, $comma:ident) => {
-        #[allow(unused_assignments)]
-        if let Some(value) = &$self.$long {
-            if $comma {
-                write!($f, ", ")?;
-            }
-            write!($f, "{}={:?}", stringify!($short), value)?;
-            $comma = true;
-        }
-    };
-    ($self:ident, $f:ident, $short:ident, $long:ident) => {
-        if let Some(value) = &$self.$long {
-            write!($f, ", {}={:?}", stringify!($short), value)?;
-        }
-    };
-}
-use crate::errors::{VcardValidationError, VcardValidationResult};
-pub(crate) use optional_debug;

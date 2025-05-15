@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
 use std::mem;
 
 use ical::generator::Property as IcalProperty;
@@ -17,9 +16,7 @@ use crate::parameters::preference::Preference;
 use crate::parameters::time_zone::TimeZone;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
-use crate::properties::{
-    VcardProperty, any_debug, list_debug, loop_debug, optional_debug, validate_parameters,
-};
+use crate::properties::{VcardProperty, validate_parameters};
 use crate::validation::get_property_kind;
 use crate::values::check_list;
 use crate::values::list_component::is_list_component_value;
@@ -27,7 +24,7 @@ use crate::vcard::{group_from_name, split_list};
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify the components of the delivery address for the vCard object.
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Address {
     pub post_office_box: String,
     /// E.g apartment, suite, unit, building, floor, etc
@@ -78,38 +75,14 @@ impl Address {
     }
 }
 
-impl Debug for Address {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut comma = false;
-        write!(f, "Address {{")?;
-        list_debug!(self, f, pobox, post_office_box, comma);
-        list_debug!(self, f, ext, extended_address, comma);
-        list_debug!(self, f, street, street, comma);
-        list_debug!(self, f, locality, locality, comma);
-        list_debug!(self, f, region, region, comma);
-        list_debug!(self, f, code, postal_code, comma);
-        list_debug!(self, f, country, country, comma);
-        optional_debug!(self, f, VALUE, value_type, comma);
-        optional_debug!(self, f, LABEL, label, comma);
-        optional_debug!(self, f, LANG, language, comma);
-        optional_debug!(self, f, GEO, geo_localisation, comma);
-        optional_debug!(self, f, TZ, time_zone, comma);
-        optional_debug!(self, f, ALTID, alternative_id, comma);
-        optional_debug!(self, f, PID, pid, comma);
-        optional_debug!(self, f, PREF, preference, comma);
-        loop_debug!(self, f, TYPE, r#type, comma);
-        any_debug!(self, f, any, comma);
-        optional_debug!(self, f, group, group, comma);
-        write!(f, "}}")
-    }
-}
-
 impl TryFrom<IcalProperty> for Address {
     type Error = VCardError;
 
     #[allow(clippy::too_many_lines)]
     fn try_from(property: IcalProperty) -> VCardResult<Self> {
-        let value = property.value.expect("Missing value");
+        let Some(value) = property.value else {
+            return Err(VCardError::MissingValue(PropertyKind::Adr));
+        };
 
         // ADR-value = ADR-component-pobox ";" ADR-component-ext ";" ADR-component-street ";" ADR-component-locality ";" ADR-component-region ";" ADR-component-code ";" ADR-component-country
         // ADR-component-pobox    = list-component

@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
 
 use ical::generator::Property as IcalProperty;
 use velcro::hash_set;
@@ -7,14 +6,14 @@ use velcro::hash_set;
 use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::any::Any;
 use crate::parameters::value::ValueType;
-use crate::properties::{any_debug, optional_debug, validate_parameters};
+use crate::properties::validate_parameters;
 use crate::validation::get_property_kind;
 use crate::values::timestamp::{Timestamp, is_timestamp_value};
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify revision information about the current vCard.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Revision {
     /// Value (ex: 19951031T222710Z)
     pub value: Timestamp,
@@ -46,16 +45,6 @@ impl Revision {
         Ok(Self::new(Timestamp::try_from(value).map_err(
             VCardError::from_value_error(PropertyKind::Rev),
         )?))
-    }
-}
-
-impl Debug for Revision {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Revision {{{:?}", self.value)?;
-        optional_debug!(self, f, VALUE, value_type);
-        any_debug!(self, f, any);
-        optional_debug!(self, f, group, group);
-        write!(f, "}}")
     }
 }
 
