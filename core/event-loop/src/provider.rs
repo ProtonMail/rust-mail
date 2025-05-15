@@ -36,12 +36,12 @@ impl Provider for ProtonProvider {
     }
 
     async fn get_event(&self, event_id: &EventId) -> Result<RawEvent, ApiServiceError> {
-        let bytes = self
+        let json_string = self
             .session
             .api()
             .get_event(event_id.clone(), GetEventOptions::default())
             .await?;
 
-        Ok(RawEvent::from_json_bytes(bytes)?)
+        Ok(RawEvent::from_json(json_string)?)
     }
 }

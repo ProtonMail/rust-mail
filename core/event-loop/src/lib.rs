@@ -106,49 +106,51 @@ pub trait Event: Clone + Debug + Eq + PartialEq + Send + Sync + 'static {
     fn is_refresh(&self) -> bool;
 }
 
-#[serde_as]
-#[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct RawEvent {
-    #[serde(rename = "EventID")]
-    event_id: EventId,
-    #[serde(rename = "More")]
-    #[serde_as(as = "BoolFromInt")]
-    has_more: bool,
-    refresh: u8,
-    #[serde(skip)]
-    raw: Vec<u8>,
+    meta: EventMetadata,
+    raw: String,
 }
 
 impl RawEvent {
-    pub fn from_json_bytes(raw: Vec<u8>) -> Result<Self, AnyhowError> {
-        let json = std::str::from_utf8(&raw)?;
-        let mut this: Self = serde_json::from_str(json)?;
-        this.raw = raw;
-
-        Ok(this)
+    pub fn from_json(raw: String) -> Result<Self, AnyhowError> {
+        Ok(Self {
+            meta: serde_json::from_str(&raw)?,
+            raw,
+        })
     }
 
     pub fn deserialize<T: Event + From<<T as Event>::Response>>(&self) -> Result<T, AnyhowError> {
-        let json = std::str::from_utf8(&self.raw)?;
-        let event = T::from(serde_json::from_str(json)?);
+        let event = T::from(serde_json::from_str(&self.raw)?);
 
         Ok(event)
     }
 }
 
 impl Event for RawEvent {
-    type Response = Self;
+    type Response = String;
 
     fn event_id(&self) -> &EventId {
-        &self.event_id
+        &self.meta.event_id
     }
 
     fn has_more(&self) -> bool {
-        self.has_more
+        self.meta.has_more
     }
 
     fn is_refresh(&self) -> bool {
-        self.refresh != 0
+        self.meta.refresh != 0
     }
+}
+
+#[serde_as]
+#[derive(Debug, Clone, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "PascalCase")]
+struct EventMetadata {
+    #[serde(rename = "EventID")]
+    event_id: EventId,
+    #[serde(rename = "More")]
+    #[serde_as(as = "BoolFromInt")]
+    has_more: bool,
+    refresh: u8,
 }

@@ -118,7 +118,7 @@ pub trait ProtonCore {
         &self,
         event_id: EventId,
         options: GetEventOptions,
-    ) -> ApiServiceResult<Vec<u8>>;
+    ) -> ApiServiceResult<String>;
 
     /// TODO: Document this method.
     ///

@@ -90,13 +90,13 @@ impl ProtonCore for Proton {
         &self,
         event_id: EventId,
         options: GetEventOptions,
-    ) -> ApiServiceResult<Vec<u8>> {
+    ) -> ApiServiceResult<String> {
         Ok(GET!("{CORE_V5}/events/{event_id}")
             .query(serde_to_query(options)?)
             .send_with(self)
             .await?
             .ok()?
-            .into_body())
+            .into_body_string()?)
     }
 
     async fn get_events_latest(&self) -> ApiServiceResult<GetEventsLatestResponse> {
