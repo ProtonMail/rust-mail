@@ -14,7 +14,7 @@ use properties::PropertiesVisitor;
 use smart_default::SmartDefault;
 
 use super::{
-    ColorPurpose, PropertyWithPurpose, Selector, StyleOverrides, dark_mode_background_color,
+    ColorPurpose, PropertyWithPurpose, Selector, StylesheetOverrides, dark_mode_background_color,
 };
 
 mod colors;
@@ -25,9 +25,9 @@ mod properties;
 /// It modifies original stylesheet by removing `!important` flag if necessary.
 /// The result of the dark-mode theming is available under [`DarkModeVisitor::overrides`] method.
 ///
-#[derive(SmartDefault, Clone)]
+#[derive(SmartDefault, Clone, Debug)]
 pub(crate) struct DarkModeVisitor {
-    overrides: StyleOverrides,
+    overrides: StylesheetOverrides,
 
     selector_stack: Vec<Selector>,
 
@@ -44,7 +44,7 @@ impl DarkModeVisitor {
         }
     }
 
-    pub fn overrides(self) -> StyleOverrides {
+    pub fn overrides(self) -> StylesheetOverrides {
         self.overrides
             .into_iter()
             .filter(|(_key, values)| !values.is_empty())
