@@ -54,3 +54,16 @@ fn inject_style_check_contrast() {
     );
     insta::assert_snapshot!(html.to_string());
 }
+
+#[test]
+fn inject_style_inline_attributes() {
+    let html = include_str!("../../tests/htmls/styles/inline_attributes.html");
+    let mut html = Transformer::new(html);
+    html.inject_style(
+        ColorMode::DarkMode,
+        BrowserCapabilities {
+            supports_dark_mode_via_media_query: true,
+        },
+    );
+    insta::assert_snapshot!(html.to_string());
+}
