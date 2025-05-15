@@ -11,7 +11,6 @@ pub struct MessageAvailableActions {
     pub reply_actions: Vec<ReplyAction>, // TODO: check reply_all field
     pub message_actions: Vec<MessageAction>,
     pub move_actions: Vec<MoveItemAction>,
-    #[builder(default = GeneralActions::all())]
     pub general_actions: Vec<GeneralActions>,
 }
 

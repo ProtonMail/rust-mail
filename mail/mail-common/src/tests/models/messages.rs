@@ -60,6 +60,9 @@ lazy_static! {
 mod available_actions {
     use std::sync::LazyLock;
 
+    use crate::actions::GeneralActions;
+    use crate::datatypes::theme::MailTheme;
+
     use super::*;
     use pretty_assertions::assert_eq;
     use proton_mail_test_utils::db::new_test_connection;
@@ -68,7 +71,8 @@ mod available_actions {
 
     struct TestCase {
         view: Label,
-        messages: Vec<MessageWithLabels>,
+        message: MessageWithLabels,
+        theme: ThemeOpts,
         expected: Result<MessageAvailableActions, AppError>,
     }
 
@@ -78,18 +82,16 @@ mod available_actions {
         labels: Vec<Label>,
     }
 
-    static TEST0: LazyLock<TestCase> = LazyLock::new(|| TestCase {
-        view: INBOX.clone(),
-        messages: vec![],
-        expected: Err(AppError::EmptyListOfMessages),
-    });
-
     static TEST1: LazyLock<TestCase> = LazyLock::new(|| TestCase {
         view: INBOX.clone(),
-        messages: vec![MessageWithLabels {
+        message: MessageWithLabels {
             message: message!(unread: true, remote_id: msg_id!("test1")),
             labels: vec![STARRED.clone(), FOLDER.clone()],
-        }],
+        },
+        theme: ThemeOpts {
+            current_theme: MailTheme::LightMode,
+            theme_override: None,
+        },
         expected: Ok(MessageAvailableActions::builder()
             .move_actions(vec![
                 MovableSystemFolderAction {
@@ -114,15 +116,26 @@ mod available_actions {
                 MessageAction::Unstar,
                 MessageAction::LabelAs,
             ])
+            .general_actions(vec![
+                GeneralActions::Print,
+                GeneralActions::ReportPhishing,
+                GeneralActions::SaveAsPdf,
+                GeneralActions::ViewHeaders,
+                GeneralActions::ViewHtml,
+            ])
             .build()),
     });
 
     static TEST2: LazyLock<TestCase> = LazyLock::new(|| TestCase {
         view: FOLDER.clone(),
-        messages: vec![MessageWithLabels {
+        message: MessageWithLabels {
             message: message!(unread: false, remote_id: Some("test2".into())),
             labels: vec![FOLDER.clone()],
-        }],
+        },
+        theme: ThemeOpts {
+            current_theme: MailTheme::LightMode,
+            theme_override: None,
+        },
         expected: Ok(MessageAvailableActions::builder()
             .move_actions(vec![
                 MovableSystemFolderAction {
@@ -147,15 +160,26 @@ mod available_actions {
                 MessageAction::Star,
                 MessageAction::LabelAs,
             ])
+            .general_actions(vec![
+                GeneralActions::Print,
+                GeneralActions::ReportPhishing,
+                GeneralActions::SaveAsPdf,
+                GeneralActions::ViewHeaders,
+                GeneralActions::ViewHtml,
+            ])
             .build()),
     });
 
     static TEST3: LazyLock<TestCase> = LazyLock::new(|| TestCase {
         view: SPAM.clone(),
-        messages: vec![MessageWithLabels {
+        message: MessageWithLabels {
             message: message!(remote_id: Some("test3".into())),
             labels: vec![],
-        }],
+        },
+        theme: ThemeOpts {
+            current_theme: MailTheme::LightMode,
+            theme_override: None,
+        },
         expected: Ok(MessageAvailableActions::builder()
             .move_actions(vec![
                 MoveItemAction::PermanentDelete,
@@ -175,21 +199,26 @@ mod available_actions {
                 MessageAction::Star,
                 MessageAction::LabelAs,
             ])
+            .general_actions(vec![
+                GeneralActions::Print,
+                GeneralActions::ReportPhishing,
+                GeneralActions::SaveAsPdf,
+                GeneralActions::ViewHeaders,
+                GeneralActions::ViewHtml,
+            ])
             .build()),
     });
 
     static TEST4: LazyLock<TestCase> = LazyLock::new(|| TestCase {
         view: INBOX.clone(),
-        messages: vec![
-            MessageWithLabels {
-                message: message!( unread: false, remote_id: Some("test4_1".into())),
-                labels: vec![STARRED.clone()],
-            },
-            MessageWithLabels {
-                message: message!( unread: true, remote_id: Some("test4_2".into())),
-                labels: vec![],
-            },
-        ],
+        message: MessageWithLabels {
+            message: message!(unread: true, remote_id: msg_id!("test4")),
+            labels: vec![STARRED.clone(), FOLDER.clone()],
+        },
+        theme: ThemeOpts {
+            current_theme: MailTheme::DarkMode,
+            theme_override: None,
+        },
         expected: Ok(MessageAvailableActions::builder()
             .move_actions(vec![
                 MovableSystemFolderAction {
@@ -211,60 +240,109 @@ mod available_actions {
             ])
             .message_actions(vec![
                 MessageAction::MarkRead,
-                MessageAction::MarkUnread,
                 MessageAction::Unstar,
-                MessageAction::Star,
                 MessageAction::LabelAs,
+            ])
+            .general_actions(vec![
+                GeneralActions::Print,
+                GeneralActions::ReportPhishing,
+                GeneralActions::SaveAsPdf,
+                GeneralActions::ViewHeaders,
+                GeneralActions::ViewHtml,
+                GeneralActions::ViewMessageInLightMode,
             ])
             .build()),
     });
 
-    #[test_case(&TEST0; "TEST0: empty")]
+    static TEST5: LazyLock<TestCase> = LazyLock::new(|| TestCase {
+        view: INBOX.clone(),
+        message: MessageWithLabels {
+            message: message!(unread: true, remote_id: msg_id!("test5")),
+            labels: vec![STARRED.clone(), FOLDER.clone()],
+        },
+        theme: ThemeOpts {
+            current_theme: MailTheme::DarkMode,
+            theme_override: Some(MailTheme::LightMode),
+        },
+        expected: Ok(MessageAvailableActions::builder()
+            .move_actions(vec![
+                MovableSystemFolderAction {
+                    local_id: 0.into(),
+                    name: MovableSystemFolder::Trash,
+                }
+                .into(),
+                MovableSystemFolderAction {
+                    local_id: 0.into(),
+                    name: MovableSystemFolder::Archive,
+                }
+                .into(),
+                MovableSystemFolderAction {
+                    local_id: 0.into(),
+                    name: MovableSystemFolder::Spam,
+                }
+                .into(),
+                MoveItemAction::MoveTo,
+            ])
+            .message_actions(vec![
+                MessageAction::MarkRead,
+                MessageAction::Unstar,
+                MessageAction::LabelAs,
+            ])
+            .general_actions(vec![
+                GeneralActions::Print,
+                GeneralActions::ReportPhishing,
+                GeneralActions::SaveAsPdf,
+                GeneralActions::ViewHeaders,
+                GeneralActions::ViewHtml,
+                GeneralActions::ViewMessageInDarkMode,
+            ])
+            .build()),
+    });
+
     #[test_case(&TEST1; "TEST1: Unread, starred in custom folder viewed from Inbox")]
     #[test_case(&TEST2; "TEST2: Read, not starred and in custom folder viewed from Folder")]
     #[test_case(&TEST3; "TEST3: Default, viewed from Spam")]
-    #[test_case(&TEST4; "TEST4: Two conversations, one from TEST1 and other from TEST2")]
+    #[test_case(&TEST4; "TEST4: Dark mode, no override")]
+    #[test_case(&TEST5; "TEST5: Dark mode, with override")]
     #[tokio::test]
     async fn test_available_actions(test_case: &TestCase) {
         let stash = new_test_connection().await;
         let mut conn = stash.connection();
-        let mut message_ids = vec![];
+        let mut message_id = None;
         let address = create_address(&mut conn).await;
         let mut conversation = conversation!(remote_id: Some("test_conversation".into()));
 
         conn.tx::<_, _, StashError>(async |tx| {
             conversation.save(tx).await.unwrap();
-            for MessageWithLabels {
+            let MessageWithLabels {
                 mut message,
                 labels,
-            } in test_case.messages.clone()
-            {
-                message.local_address_id = address.local_id.unwrap();
-                message.remote_address_id = address.remote_id.clone().unwrap();
-                message.local_conversation_id = conversation.local_id;
-                message.remote_conversation_id = conversation.remote_id.clone();
+            } = test_case.message.clone();
+            message.local_address_id = address.local_id.unwrap();
+            message.remote_address_id = address.remote_id.clone().unwrap();
+            message.local_conversation_id = conversation.local_id;
+            message.remote_conversation_id = conversation.remote_id.clone();
 
-                message.save(tx).await.expect("failed to create message");
+            message.save(tx).await.expect("failed to create message");
 
-                message_ids.push(message.local_id.unwrap());
+            message_id = Some(message.local_id.unwrap());
 
-                for mut label in labels {
-                    label.save(tx).await.expect("failed to create label");
-                    let local_id = label.local_id.expect("Local ID");
-                    ConversationCounters::new(local_id)
-                        .save(tx)
-                        .await
-                        .expect("Failed to create counters");
-                    MessageCounters::new(local_id)
-                        .save(tx)
-                        .await
-                        .expect("Failed to create counters");
+            for mut label in labels {
+                label.save(tx).await.expect("failed to create label");
+                let local_id = label.local_id.expect("Local ID");
+                ConversationCounters::new(local_id)
+                    .save(tx)
+                    .await
+                    .expect("Failed to create counters");
+                MessageCounters::new(local_id)
+                    .save(tx)
+                    .await
+                    .expect("Failed to create counters");
 
-                    let label_id = label.local_id.unwrap();
-                    let ids = vec![message.local_id.unwrap()];
+                let label_id = label.local_id.unwrap();
+                let ids = vec![message.local_id.unwrap()];
 
-                    Message::apply_label(label_id, ids, tx).await.unwrap();
-                }
+                Message::apply_label(label_id, ids, tx).await.unwrap();
             }
             Ok(())
         })
@@ -276,7 +354,13 @@ mod available_actions {
             .unwrap()
             .unwrap();
 
-        let result = Message::available_actions(view, message_ids, &conn).await;
+        let result = Message::available_actions(
+            view,
+            message_id.expect("Message id"),
+            test_case.theme,
+            &conn,
+        )
+        .await;
 
         match result {
             Ok(mut actual) => {

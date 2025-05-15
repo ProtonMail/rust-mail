@@ -1,12 +1,20 @@
 #![allow(non_snake_case)]
 #![allow(clippy::needless_raw_string_hashes)]
 
-use crate::{InsertLinkToken, Transformer};
+use crate::{
+    InsertLinkToken, Transformer,
+    transforms::{ColorMode, styles::BrowserCapabilities},
+};
 #[test]
 fn inject_style() {
     let html = include_str!("../../tests/htmls/empty.html");
     let mut html = Transformer::new(html);
-    html.inject_style();
+    html.inject_style(
+        ColorMode::LightMode,
+        BrowserCapabilities {
+            supports_dark_mode_via_media_query: false,
+        },
+    );
     insta::assert_snapshot!(html.to_string());
 }
 
@@ -19,9 +27,17 @@ fn inject_style_no_head() {
         ";
 
     let mut html = Transformer::new(html);
-    html.inject_style();
+    html.inject_style(
+        ColorMode::LightMode,
+        BrowserCapabilities {
+            supports_dark_mode_via_media_query: false,
+        },
+    );
     insta::assert_snapshot!(html.to_string());
 }
+
+// For more tests regarding dark mode look into the module:
+mod dark_mode;
 
 #[test]
 fn add_noreferrer() {

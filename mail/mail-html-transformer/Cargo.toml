@@ -12,6 +12,13 @@ thiserror = { workspace = true }
 url = { workspace = true }
 velcro = { workspace = true }
 tracing = { workspace = true }
+itertools = { workspace = true }
+regex = { workspace = true }
+lightningcss = { version = "1.0.0-alpha.65", features = [
+  "visitor",
+  "grid",
+], default-features = false }
+smart-default = { workspace = true }
 
 [lints]
 workspace = true
@@ -21,6 +28,10 @@ cpuprofiler = "0.0.4"
 criterion = "0.5.1"
 insta = { workspace = true }
 pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }
+velcro = { workspace = true }
+pretty_assertions = { workspace = true }
+indoc = { workspace = true }
+test-case = { workspace = true }
 
 [[bench]]
 name = "parsing_html"

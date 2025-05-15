@@ -49,6 +49,7 @@ mod read_filter;
 mod rollback_item_type;
 mod search_options;
 mod system_folder;
+pub mod theme;
 
 use anyhow::Context;
 pub use assigned_actions::*;

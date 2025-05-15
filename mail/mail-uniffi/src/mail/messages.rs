@@ -25,12 +25,13 @@ use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
 use proton_mail_common::MailUserContext;
+use proton_mail_common::datatypes::theme::MailTheme;
 use proton_mail_common::errors::unexpected::Unexpected;
 
 use proton_mail_common::datatypes::LocalConversationId;
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::decrypted_message::{
-    self, BodyOutput, DecryptedMessageBody, TransformOpts,
+    self, BodyOutput, DecryptedMessageBody, ThemeOpts, TransformOpts,
 };
 use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ProtonMailError as RealProtonMailError,
@@ -60,12 +61,15 @@ impl DecryptedMessage {
 #[uniffi_export]
 impl DecryptedMessage {
     #[returns(BodyOutputResult)]
-    pub async fn body_with_defaults(self: Arc<Self>) -> Result<BodyOutput, ProtonError> {
+    pub async fn body_with_defaults(
+        self: Arc<Self>,
+        current_theme: MailTheme,
+    ) -> Result<BodyOutput, ProtonError> {
         uniffi_async(async move {
             let tether = self.ctx()?.user_stash().connection();
             Ok::<_, RealProtonMailError>(
                 self.body
-                    .transformed(TransformOpts::default(), &tether)
+                    .transformed(TransformOpts::default_with_theme(current_theme), &tether)
                     .await,
             )
         })
@@ -416,23 +420,24 @@ pub async fn search_for_messages(
     .map_err(ActionError::from)
 }
 
-/// Returns available actions for messages.
+/// Returns available actions for message.
 /// Any action returned here should reflect the display needs.
 ///
 /// # Parameters
 ///
-/// * `session` - The session to use for the request.
-/// * `view`    - The local ID of the label which messages are viewed in.
-/// * `ids`     - The local IDs of the messages to calcualte available actions for.
+/// * `mailbox` - A reference to the mailbox object,
+/// * `theme`   - Information about what is the current theme,
+/// * `id`      - The local ID of the message to calcualte available actions for.
 ///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
 ///
 #[uniffi_export]
-pub async fn available_actions_for_messages(
+pub async fn available_actions_for_message(
     mailbox: Arc<Mailbox>,
-    ids: Vec<Id>,
+    theme: ThemeOpts,
+    id: Id,
 ) -> Result<MessageAvailableActions, ActionError> {
     let stash = mailbox.stash()?;
     uniffi_async(async move {
@@ -441,7 +446,7 @@ pub async fn available_actions_for_messages(
         let view = RealLabel::load(view, &tether)
             .await?
             .ok_or_else(|| RealProtonMailError::reason(RealActionErrorReason::UnknownLabel))?;
-        let actions = RealMessage::available_actions(view, ids.map_vec(), &tether).await?;
+        let actions = RealMessage::available_actions(view, id.into(), theme, &tether).await?;
 
         Ok::<_, RealProtonMailError>(MessageAvailableActions::from(actions))
     })

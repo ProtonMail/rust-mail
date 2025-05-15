@@ -3,3 +3,6 @@ git-fetch-with-cli = true
 
 [registries.proton]
 index = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
+
+[target.wasm32-unknown-unknown]
+rustflags = ['--cfg', 'getrandom_backend="wasm_js"']

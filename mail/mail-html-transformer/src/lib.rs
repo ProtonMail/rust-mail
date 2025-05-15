@@ -44,7 +44,7 @@ use html5ever::tendril::TendrilSink;
 use kuchikiki::NodeRef;
 use message_detector::SplitDoc;
 use std::fmt::{Display, Formatter};
-use transforms::keep_spaces_and_escape_gt_and_lt;
+use transforms::{ColorMode, keep_spaces_and_escape_gt_and_lt, styles::BrowserCapabilities};
 
 // NOTE: each new transformation pass should be its own module.
 pub mod ios;
@@ -138,8 +138,8 @@ impl Transformer {
 
     /// This function adds dark mode support. This fails if the html doesn't have a head tag.
     #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
-    pub fn inject_style(&mut self) {
-        transforms::inject_style(self.document.clone());
+    pub fn inject_style(&mut self, mode: ColorMode, capabilities: BrowserCapabilities) {
+        transforms::styles::transform_style(self.document.clone(), mode, capabilities);
     }
 
     ///

@@ -13,8 +13,8 @@ use crate::actions::messages::read::Read;
 use crate::actions::messages::unlabel::Unlabel;
 use crate::actions::messages::unread::Unread;
 use crate::actions::{
-    AllBottomBarMessageActions, BottomBarActions, MailActionError, MovableSystemFolderAction,
-    filter_responses,
+    AllBottomBarMessageActions, BottomBarActions, GeneralActions, MailActionError,
+    MovableSystemFolderAction, filter_responses,
 };
 use crate::models::*;
 use crate::{MailContextError, find_in_query};
@@ -34,7 +34,9 @@ use crate::datatypes::{
     AttachmentMetadata, CustomLabel, Disposition, EncryptedMessageBody, ExclusiveLocation,
     LocalMessageId, MessageFlags, MessageLabelsCount, MessageRecipients, MessageReplyTos,
     MessageSender, MimeType, MobileActions, ParsedHeaders, ReadFilter, SystemLabelId,
+    theme::MailTheme,
 };
+use crate::decrypted_message::ThemeOpts;
 use crate::mailbox::decrypted_message::DecryptedMessageBody;
 use crate::{AppError, MailUserContext};
 use anyhow::{Context, anyhow};
@@ -1594,12 +1596,12 @@ impl Message {
         Ok(())
     }
 
-    /// Get the available actions for messages excluding move to the current view.
+    /// Get the available actions for message excluding move to the current view.
     ///
     /// # Parameters
     ///
     /// * `view` - The label from which conversation is viewed.
-    /// * `local_ids` - The IDs of the conversations to get the actions for.
+    /// * `local_id` - The ID of the message to get the actions for.
     /// * `interface` - The interface to use for the database connection.
     ///
     /// # Errors
@@ -1609,42 +1611,57 @@ impl Message {
     #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
     pub async fn available_actions(
         view: Label,
-        message_ids: Vec<LocalMessageId>,
+        message_id: LocalMessageId,
+        theme: ThemeOpts,
         tether: &Tether,
     ) -> Result<MessageAvailableActions, AppError> {
-        if message_ids.is_empty() {
-            return Err(AppError::EmptyListOfMessages);
-        }
+        let Some(message) = Message::find_by_id(message_id, tether).await? else {
+            return Err(AppError::MessageMissing(message_id));
+        };
 
-        let messages = Message::find_by_ids(message_ids, tether).await?;
-
-        let reply_actions = if messages.iter().any(|m| m.reply_tos.value.len() > 1) {
+        let reply_actions = if message.reply_tos.value.len() > 1 {
             ReplyAction::all()
         } else {
             ReplyAction::single_address()
         };
 
         let mut message_actions = Vec::new();
-        if messages.iter().any(|m| m.unread) {
+        if message.unread {
             message_actions.push(MessageAction::MarkRead);
-        }
-        if messages.iter().any(|m| !m.unread) {
+        } else {
             message_actions.push(MessageAction::MarkUnread);
         }
-        if messages.iter().any(|m| m.is_starred()) {
+        if message.is_starred() {
             message_actions.push(MessageAction::Unstar);
-        }
-        if messages.iter().any(|m| !m.is_starred()) {
+        } else {
             message_actions.push(MessageAction::Star);
         }
         message_actions.push(MessageAction::LabelAs);
 
         let move_actions = MoveItemAction::from_view(view, tether).await?;
 
+        let mut general_actions = vec![
+            // Those are geneal default actions available for every message
+            GeneralActions::Print,
+            GeneralActions::ReportPhishing,
+            GeneralActions::SaveAsPdf,
+            GeneralActions::ViewHeaders,
+            GeneralActions::ViewHtml,
+        ];
+
+        // In light theme we do not want to have any actions theme-related
+        if theme.current_theme == MailTheme::DarkMode {
+            match theme.theme() {
+                MailTheme::LightMode => general_actions.push(GeneralActions::ViewMessageInDarkMode),
+                MailTheme::DarkMode => general_actions.push(GeneralActions::ViewMessageInLightMode),
+            }
+        }
+
         let res = MessageAvailableActions::builder()
             .reply_actions(reply_actions)
             .message_actions(message_actions)
             .move_actions(move_actions)
+            .general_actions(general_actions)
             .build();
         debug!("available actions for messages: {res:?}");
         Ok(res)

@@ -3,57 +3,26 @@
 #[path = "tests/transforms.rs"]
 mod tests;
 
+pub mod styles;
+
 use html5ever::{LocalName, QualName, namespace_url, tendril::TendrilSink};
-use kuchikiki::{
-    Attribute, Attributes, ElementData, ExpandedName, NodeData, NodeRef, iter::NodeEdge,
-};
-use std::cell::RefCell;
+use kuchikiki::{Attribute, ExpandedName, NodeData, NodeRef, iter::NodeEdge};
+use std::fmt::Write;
 use url::Url;
 
 use crate::utm::strip_from_url;
 
 fn node_ref_from_str(html: &str, tag: &str) -> NodeRef {
-    let qual_name = QualName::new(None, html5ever::ns!(), LocalName::from(tag));
+    let qual_name = QualName::new(None, html5ever::ns!(html), LocalName::from(tag));
     kuchikiki::parse_fragment(qual_name, vec![]).one(html)
 }
 
-/// This function adds dark mode support. This fails if the html doesn't have a head tag.
+/// Determines which stylesheet hardcoded into the binary should be injected into HTML body of the message
 ///
-/// This function will inject the following HTML snippet into the `head` tag
-/// of the document:
-/// ```html
-/// <style>
-///   ...
-/// </style>
-/// ```
-#[allow(clippy::missing_panics_doc)]
-pub fn inject_style(document: NodeRef) {
-    let element = document.select_first("head").unwrap(); // kuckikiki always adds it
-
-    let style_text = include_str!("default.css");
-    let qual_name = QualName::new(None, html5ever::ns!(html), LocalName::from("style"));
-
-    #[allow(clippy::default_trait_access)]
-    let element_data = ElementData {
-        name: qual_name,
-        attributes: RefCell::new(Attributes {
-            map: Default::default(),
-        }),
-        template_contents: None,
-    };
-
-    element_data
-        .attributes
-        .borrow_mut()
-        .insert("style", "text/css".to_owned());
-
-    let style_node = NodeRef::new(NodeData::Element(element_data));
-
-    let text_node = NodeRef::new(NodeData::Text(RefCell::new(style_text.to_owned())));
-
-    style_node.append(text_node);
-
-    element.as_node().append(style_node);
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ColorMode {
+    LightMode,
+    DarkMode,
 }
 
 #[allow(clippy::missing_panics_doc)] // The select is well formed.
@@ -119,7 +88,8 @@ fn insert_link_str(text: &str) -> Option<NodeRef> {
         if word.starts_with("http") {
             if let Ok(url) = Url::parse(word) {
                 let url: String = strip_from_url(&url).0.into();
-                rep.push_str(&format!(r#"<a href="{url}" rel="noreferrer">{url}</a>"#));
+                write!(rep, r#"<a href="{url}" rel="noreferrer">{url}</a>"#)
+                    .expect("Write to complete");
                 rep.push(' ');
                 continue;
             }
