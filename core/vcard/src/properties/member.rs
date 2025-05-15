@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
 
 use ical::generator::Property as IcalProperty;
 use url::Url;
@@ -12,16 +11,16 @@ use crate::parameters::mediatype::MediaType;
 use crate::parameters::pid::Pid;
 use crate::parameters::preference::Preference;
 use crate::parameters::value::ValueType;
-use crate::properties::{VcardProperty, any_debug, optional_debug, validate_parameters};
+use crate::properties::{VcardProperty, validate_parameters};
 use crate::validation::get_property_kind;
+use crate::values::uri::MaybeUri;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 ///  To include a member in the group this vCard represents.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Member {
-    /// Normally a URI but in reality it can be anything.
-    pub value: String,
+    pub value: MaybeUri,
     pub value_type: Option<ValueType>,
     /// The PID parameter is used to identify a specific property among multiple instances.
     pub pid: Option<Pid>,
@@ -43,7 +42,7 @@ impl Member {
     #[must_use]
     pub fn new(value: String) -> Self {
         Self {
-            value,
+            value: value.into(),
             value_type: None,
             pid: None,
             preference: None,
@@ -52,20 +51,6 @@ impl Member {
             any: HashSet::new(),
             group: None,
         }
-    }
-}
-
-impl Debug for Member {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Member {{{:?}", self.value)?;
-        optional_debug!(self, f, VALUE, value_type);
-        optional_debug!(self, f, PID, pid);
-        optional_debug!(self, f, PREF, preference);
-        optional_debug!(self, f, MEDIATYPE, media_type);
-        optional_debug!(self, f, ALTID, alternative_id);
-        any_debug!(self, f, any);
-        optional_debug!(self, f, group, group);
-        write!(f, "}}",)
     }
 }
 
