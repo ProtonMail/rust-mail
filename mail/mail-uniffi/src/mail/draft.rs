@@ -319,22 +319,27 @@ impl Draft {
         let Some(ctx) = self.ctx.upgrade() else {
             return Err(ProtonError::Unexpected(UnexpectedError::Internal));
         };
-        uniffi_async(async move {
-            let draft = self.instance.read().await;
-            let att = draft
-                .get_embedded_attachment(&ctx, &ContentId::from(cid))
-                .await
-                .map_err(RealProtonMailError::from)?;
-            Ok::<_, RealProtonMailError>(EmbeddedAttachmentInfo {
-                data: att.data,
-                mime: att.mime,
-                height: att.height,
-                width: att.width,
-            })
-        })
-        .await
-        .map_err(ProtonError::from)
-        .into()
+        uniffi_async(async move { self.get_embedded_attachment_impl(&ctx, cid).await })
+            .await
+            .map_err(ProtonError::from)
+            .into()
+    }
+
+    /// Same as [`get_embedded_attachment()`], but synchronous.
+    //NOTE: iOS request we share the same result types between
+    // this function and the DecryptedMessageBody equivalent.
+    #[returns(EmbeddedAttachmentInfoResult)]
+    pub fn get_embedded_attachment_sync(
+        self: Arc<Self>,
+        cid: String,
+    ) -> Result<EmbeddedAttachmentInfo, ProtonError> {
+        let Some(ctx) = self.ctx.upgrade() else {
+            return Err(ProtonError::Unexpected(UnexpectedError::Internal));
+        };
+        async_runtime()
+            .block_on(self.get_embedded_attachment_impl(&ctx, cid))
+            .map_err(ProtonError::from)
+            .into()
     }
 
     /// Get the attachment list.
@@ -476,6 +481,26 @@ impl Draft {
         .await
         .map_err(DraftDiscardError::from)
         .into()
+    }
+}
+
+impl Draft {
+    async fn get_embedded_attachment_impl(
+        &self,
+        ctx: &MailUserContext,
+        cid: String,
+    ) -> Result<EmbeddedAttachmentInfo, RealProtonMailError> {
+        let draft = self.instance.read().await;
+        let att = draft
+            .get_embedded_attachment(ctx, &ContentId::from(cid))
+            .await
+            .map_err(RealProtonMailError::from)?;
+        Ok::<_, RealProtonMailError>(EmbeddedAttachmentInfo {
+            data: att.data,
+            mime: att.mime,
+            height: att.height,
+            width: att.width,
+        })
     }
 }
 
