@@ -5,7 +5,6 @@ pub use capabilities::BrowserCapabilities;
 
 use dark_mode_visitor::{StyleAttributeVisitor, StylesheetVisitor};
 use html5ever::{LocalName, QualName, namespace_url};
-use itertools::Itertools;
 use kuchikiki::{Attributes, ElementData, NodeData, NodeDataRef, NodeRef};
 use lightningcss::{
     printer::PrinterOptions,
@@ -141,7 +140,7 @@ type NewProperty = String;
 type OldProperty = String;
 
 type StylesheetOverrides = BTreeMap<Selectors, Vec<NewProperty>>;
-type InlineStyleOverrides = BTreeMap<TagName, (Vec<OldProperty>, Vec<NewProperty>)>;
+type InlineStyleOverrides = BTreeMap<InlineSelector, Vec<NewProperty>>;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum ColorPurpose {
@@ -233,24 +232,10 @@ fn sanitize_dark_mode_in_inline_attributes(document: &NodeRef) -> Option<String>
     }
 
     let mut style = String::new();
-    for (tag, (original_properties, properties)) in overrides {
+    for (tag_selector, properties) in overrides {
         let properties = properties.join(";\n");
 
-        // Comparing to the stylesheets there are no selectors or media queries,
-        // instead we search for tags that match original properties.
-        //
-        // [style *= "foo"] means "find every style that contains 'foo'".
-        let properties_selector = original_properties
-            .into_iter()
-            .map(|prop| format!(r#"[style*="{prop}"]"#))
-            // Joining is an equivalent of AND condition
-            // a[style*="color: black"][style*="background-color: red"]
-            // searches for tags <a /> tags that both have "color: black" AND "background-color: red".
-            // It doesn't matter which style is first, nor if there is another property set in the CSS.
-            .join("");
-
-        write!(style, "{tag}{properties_selector} {{\n {properties}\n }}")
-            .expect("Written properties");
+        write!(style, "{tag_selector} {{\n {properties}\n }}").expect("Written properties");
     }
     Some(style)
 }
@@ -326,11 +311,30 @@ fn sanitize_dark_mode_in_inline_attribute(
         }
     };
 
-    let tag = node.name.local.to_string();
+    let mut tag_selector = node.name.local.to_string();
 
-    let entry = overrides.entry(tag).or_default();
-    entry.0.extend(overriden_properties);
-    entry.1.extend(property_overrides);
+    if let Some(id) = node.attributes.borrow().get("id") {
+        write!(tag_selector, "#{id}").expect("Write to string");
+    }
+
+    if let Some(klass) = node.attributes.borrow().get("class") {
+        write!(tag_selector, ".{klass}").expect("Write to string");
+    }
+
+    // Joining is an equivalent of AND condition
+    // a[style*="color: black"][style*="background-color: red"]
+    // searches for tags <a /> tags that both have "color: black" AND "background-color: red".
+    // It doesn't matter which style is first, nor if there is another property set in the CSS.
+    //
+    // [style *= "foo"] means "find every style that contains 'foo'".
+    for prop in overriden_properties {
+        write!(tag_selector, r#"[style*="{prop}"]"#).expect("Write to string");
+    }
+
+    overrides
+        .entry(tag_selector)
+        .or_default()
+        .extend(property_overrides);
 
     if let Some(style_attr) = node.attributes.borrow_mut().get_mut("style") {
         *style_attr = style.code;
@@ -364,8 +368,15 @@ fn inject_style(document: &NodeRef, style_text: &str) {
     element.as_node().append(style_node);
 }
 
-/// Tag name as from HTML `<div></div>` is the `div`.
-type TagName = String;
+/// Tag name as from HTML `<div></div>` is the `div` combined with
+/// selectors used to identified specific node
+/// Usually:
+/// * Classname `.foo`
+/// * Id  `#foo`
+/// * style attributes `[style*="foo: bar"]`
+///
+/// Joined together without delimiter
+type InlineSelector = String;
 
 /// Content of the style attribute. From `style="color: #fff"` is the `color: #fff`
 type StyleContent = String;
