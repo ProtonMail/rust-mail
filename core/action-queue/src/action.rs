@@ -112,6 +112,7 @@ pub enum Priority {
     High = 1,
     Normal = 2,
     Low = 3,
+    Lowest = 4,
 }
 
 impl ToSql for Priority {
