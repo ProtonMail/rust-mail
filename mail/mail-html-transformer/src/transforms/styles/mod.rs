@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::BTreeMap};
 
 pub use capabilities::BrowserCapabilities;
 
-use dark_mode_visitor::DarkModeVisitor;
+use dark_mode_visitor::StylesheetVisitor;
 use html5ever::{LocalName, QualName, namespace_url};
 use itertools::Itertools;
 use kuchikiki::{Attributes, ElementData, NodeData, NodeDataRef, NodeRef};
@@ -250,7 +250,7 @@ fn sanitize_dark_mode_in_stylesheet(
     overrides: &mut StylesheetOverrides,
     printer_options: fn() -> PrinterOptions<'static>,
 ) {
-    let mut visitor = DarkModeVisitor::new(printer_options);
+    let mut visitor = StylesheetVisitor::new(printer_options);
     _ = stylesheet.visit(&mut visitor); // Error is infallible anyway
 
     let visitor_overrides = visitor.overrides();
@@ -289,7 +289,7 @@ fn sanitize_dark_mode_in_inline_attribute(
     overrides: &mut InlineStyleOverrides,
     printer_options: fn() -> PrinterOptions<'static>,
 ) {
-    let mut visitor = DarkModeVisitor::new(printer_options);
+    let mut visitor = StylesheetVisitor::new(printer_options);
 
     _ = style_attribute.visit(&mut visitor);
 
@@ -389,7 +389,7 @@ mod tests {
         );
 
         let printer_options = || PrinterOptions::default();
-        let mut visitor = DarkModeVisitor::new(printer_options);
+        let mut visitor = StylesheetVisitor::new(printer_options);
         let mut stylesheet = StyleSheet::parse(rule, ParserOptions::default()).unwrap();
         stylesheet.visit(&mut visitor).unwrap();
 
@@ -491,7 +491,7 @@ mod tests {
         let rule = "color: black !important; background-color: white";
 
         let printer_options = || PrinterOptions::default();
-        let mut visitor = DarkModeVisitor::new(printer_options);
+        let mut visitor = StylesheetVisitor::new(printer_options);
         let mut attribute = StyleAttribute::parse(rule, ParserOptions::default()).unwrap();
         attribute.visit(&mut visitor).unwrap();
 
