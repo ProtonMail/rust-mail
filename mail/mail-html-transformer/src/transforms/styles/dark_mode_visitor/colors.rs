@@ -11,6 +11,9 @@ use crate::transforms::styles::{ColorPurpose, dark_mode_background_color};
 pub trait HSLExt {
     /// We want to see if our color is equivalent to `#FF_FF_FF_FF`
     fn is_full_white(&self) -> bool;
+
+    fn is_transparent(&self) -> bool;
+
     fn is_achromatic(&self) -> IsColorAchromatic;
 
     /// How bright the color actually looks to a human eye
@@ -42,6 +45,10 @@ impl Visitor<'_> for ColorVisitor {
             tracing::error!("Could not transform {color:?} into HSL colorspace. Skipping it");
             return Ok(());
         };
+
+        if hsl.is_transparent() {
+            return Ok(());
+        }
 
         *color = CssColor::RGBA(hsla_for_dark_mode(self.color_purpose, hsl));
 
@@ -109,6 +116,10 @@ impl HSLExt for HSL {
         }
 
         eq_with_tolerance(alpha, 1.0)
+    }
+
+    fn is_transparent(&self) -> bool {
+        eq_with_tolerance(self.alpha, 0.0)
     }
 
     fn is_achromatic(&self) -> IsColorAchromatic {

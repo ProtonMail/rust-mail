@@ -1,14 +1,15 @@
+use std::fmt::Write;
 use std::{cell::RefCell, collections::BTreeMap};
 
 pub use capabilities::BrowserCapabilities;
 
-use dark_mode_visitor::DarkModeVisitor;
+use dark_mode_visitor::{StyleAttributeVisitor, StylesheetVisitor};
 use html5ever::{LocalName, QualName, namespace_url};
 use kuchikiki::{Attributes, ElementData, NodeData, NodeDataRef, NodeRef};
 use lightningcss::{
     printer::PrinterOptions,
     properties::Property,
-    stylesheet::{ParserOptions, StyleSheet},
+    stylesheet::{ParserOptions, StyleAttribute, StyleSheet},
     values::color::RGBA,
     visitor::Visit,
 };
@@ -56,8 +57,7 @@ pub fn transform_style(document: NodeRef, mode: ColorMode, capabilities: Browser
             // 1. If yes, we can keep existing color.
             // 2. If not, we shall generate a CSS override (by removing `!important` from original place and adding new rule afterwards)
             //     that would use transformed color (keeping the same hue and saturation but changed light component).
-            let maybe_supplement_css = sanitize_dark_mode_in_stylesheets(&document);
-            // TODO: Inline attributes!
+            let maybe_supplement_css = sanitize_dark_mode(&document);
 
             if supports_media_query {
                 inject_style(&document, include_str!("./light_and_dark.css"));
@@ -82,6 +82,25 @@ pub fn transform_style(document: NodeRef, mode: ColorMode, capabilities: Browser
             }
         }
     }
+}
+
+fn sanitize_dark_mode(document: &NodeRef) -> Option<String> {
+    let maybe_supplement_for_stylesheets = sanitize_dark_mode_in_stylesheets(document);
+    let maybe_supplement_for_inline_attributes = sanitize_dark_mode_in_inline_attributes(document);
+
+    if maybe_supplement_for_stylesheets.is_none()
+        && maybe_supplement_for_inline_attributes.is_none()
+    {
+        return None;
+    }
+
+    let supplement_for_stylesheets = maybe_supplement_for_stylesheets.unwrap_or_default();
+    let supplement_for_inline_attributes =
+        maybe_supplement_for_inline_attributes.unwrap_or_default();
+
+    Some(format!(
+        "{supplement_for_stylesheets}\n{supplement_for_inline_attributes}"
+    ))
 }
 
 // TODO: replace with proper constant after `RGBA` gets const constructor.
@@ -117,7 +136,11 @@ type Selectors = Vec<Selector>;
 /// So in the `NewProperty` we keep `border: 1px solid black`;
 type NewProperty = String;
 
-type StyleOverrides = BTreeMap<Selectors, Vec<NewProperty>>;
+/// Old value of the property. Used to select nodes with inline styles.
+type OldProperty = String;
+
+type StylesheetOverrides = BTreeMap<Selectors, Vec<NewProperty>>;
+type InlineStyleOverrides = BTreeMap<InlineSelector, Vec<NewProperty>>;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum ColorPurpose {
@@ -133,10 +156,11 @@ struct PropertyWithPurpose<'i> {
 }
 
 /// Parses all stylesheets embedded in `<style />` tags.
+///
 /// For each color it checks whether luminance provides good enough contrast in the dark mode.
 /// If yes, it keeps the color intact.
 /// If not, it removes `!important` flag and adds the rule to overrides map
-/// Returns None if t he supplement is empty
+/// Returns None if the supplement is empty
 fn sanitize_dark_mode_in_stylesheets(document: &NodeRef) -> Option<String> {
     let mut overrides = BTreeMap::new();
 
@@ -175,6 +199,47 @@ fn sanitize_dark_mode_in_stylesheets(document: &NodeRef) -> Option<String> {
     Some(style)
 }
 
+/// Parses all instances of `style="..."` attribute used in any node.
+///
+/// For each color it checks whether luminance provides good enough contrast in the dark mode.
+/// If yes, it keeps the color intact.
+/// If not, it removes `!important` flag and adds the rule to overrides map
+/// Returns None if the supplement is empty
+fn sanitize_dark_mode_in_inline_attributes(document: &NodeRef) -> Option<String> {
+    let Ok(styles) = all_style_attributes(document) else {
+        return None;
+    };
+
+    let mut overrides = BTreeMap::new();
+
+    for (tag, style) in styles {
+        let Ok(style_attribute) = StyleAttribute::parse(&style, ParserOptions::default()) else {
+            let tag = tag.name.local.to_string();
+            tracing::warn!("Could not parse style attribute of tag `{tag}`. Skipping...");
+            continue;
+        };
+
+        sanitize_dark_mode_in_inline_attribute(
+            style_attribute,
+            tag,
+            &mut overrides,
+            printer_options,
+        );
+    }
+
+    if overrides.is_empty() {
+        return None;
+    }
+
+    let mut style = String::new();
+    for (tag_selector, properties) in overrides {
+        let properties = properties.join(";\n");
+
+        write!(style, "{tag_selector} {{\n {properties}\n }}").expect("Written properties");
+    }
+    Some(style)
+}
+
 // Because PrinterOptions are not clonable
 // TODO: Make PR to lightningCSS
 fn printer_options() -> PrinterOptions<'static> {
@@ -187,10 +252,10 @@ fn printer_options() -> PrinterOptions<'static> {
 fn sanitize_dark_mode_in_stylesheet(
     mut stylesheet: StyleSheet<'_, '_>,
     node: NodeDataRef<ElementData>,
-    overrides: &mut StyleOverrides,
+    overrides: &mut StylesheetOverrides,
     printer_options: fn() -> PrinterOptions<'static>,
 ) {
-    let mut visitor = DarkModeVisitor::new(printer_options);
+    let mut visitor = StylesheetVisitor::new(printer_options);
     _ = stylesheet.visit(&mut visitor); // Error is infallible anyway
 
     let visitor_overrides = visitor.overrides();
@@ -223,6 +288,59 @@ fn sanitize_dark_mode_in_stylesheet(
     node.as_node().append(text_node);
 }
 
+fn sanitize_dark_mode_in_inline_attribute(
+    mut style_attribute: StyleAttribute<'_>,
+    node: NodeDataRef<ElementData>,
+    overrides: &mut InlineStyleOverrides,
+    printer_options: fn() -> PrinterOptions<'static>,
+) {
+    let mut visitor = StyleAttributeVisitor::new(printer_options);
+
+    _ = style_attribute.visit(&mut visitor);
+
+    let (overriden_properties, property_overrides) = visitor.overrides();
+    if property_overrides.is_empty() {
+        return;
+    }
+
+    let style = match style_attribute.to_css(printer_options()) {
+        Ok(style) => style,
+        Err(err) => {
+            tracing::error!("Could not write style attribute: {err:?}");
+            return;
+        }
+    };
+
+    let mut tag_selector = node.name.local.to_string();
+
+    if let Some(id) = node.attributes.borrow().get("id") {
+        write!(tag_selector, "#{id}").expect("Write to string");
+    }
+
+    if let Some(klass) = node.attributes.borrow().get("class") {
+        write!(tag_selector, ".{klass}").expect("Write to string");
+    }
+
+    // Joining is an equivalent of AND condition
+    // a[style*="color: black"][style*="background-color: red"]
+    // searches for tags <a /> tags that both have "color: black" AND "background-color: red".
+    // It doesn't matter which style is first, nor if there is another property set in the CSS.
+    //
+    // [style *= "foo"] means "find every style that contains 'foo'".
+    for prop in overriden_properties {
+        write!(tag_selector, r#"[style*="{prop}"]"#).expect("Write to string");
+    }
+
+    overrides
+        .entry(tag_selector)
+        .or_default()
+        .extend(property_overrides);
+
+    if let Some(style_attr) = node.attributes.borrow_mut().get_mut("style") {
+        *style_attr = style.code;
+    }
+}
+
 fn inject_style(document: &NodeRef, style_text: &str) {
     let element = document.select_first("head").unwrap(); // kuckikiki always adds it
 
@@ -250,14 +368,41 @@ fn inject_style(document: &NodeRef, style_text: &str) {
     element.as_node().append(style_node);
 }
 
+/// Tag name as from HTML `<div></div>` is the `div` combined with
+/// selectors used to identified specific node
+/// Usually:
+/// * Classname `.foo`
+/// * Id  `#foo`
+/// * style attributes `[style*="foo: bar"]`
+///
+/// Joined together without delimiter
+type InlineSelector = String;
+
+/// Content of the style attribute. From `style="color: #fff"` is the `color: #fff`
+type StyleContent = String;
+
+fn all_style_attributes(
+    document: &NodeRef,
+) -> Result<impl Iterator<Item = (NodeDataRef<ElementData>, StyleContent)>, ()> {
+    let res = document.select("[style]").inspect_err(|()| {
+        tracing::error!("Could not select nodes with style attribute");
+    })?;
+    Ok(res.map(|element| {
+        // SAFETY: unwrap is fine, the `.select()` ensures that the style exists
+        let style = element.attributes.borrow().get("style").unwrap().into();
+        (element, style)
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use html5ever::tendril::TendrilSink;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
 
     #[test]
-    fn visit_rule() {
+    fn visit_stylesheet() {
         let rule = indoc!(
             r"
             .main {
@@ -275,7 +420,7 @@ mod tests {
         );
 
         let printer_options = || PrinterOptions::default();
-        let mut visitor = DarkModeVisitor::new(printer_options);
+        let mut visitor = StylesheetVisitor::new(printer_options);
         let mut stylesheet = StyleSheet::parse(rule, ParserOptions::default()).unwrap();
         stylesheet.visit(&mut visitor).unwrap();
 
@@ -314,8 +459,6 @@ mod tests {
 
     #[test]
     fn injecting_style_does_not_escape_gt_lt() {
-        use html5ever::tendril::TendrilSink;
-
         // https://www.w3.org/TR/mediaqueries-4/ EXAMPLE 26 - < sign is a valid syntax here
         let style = "
             @media (width < 800px) {
@@ -337,5 +480,70 @@ mod tests {
         let html = document.to_string();
 
         insta::assert_snapshot!(html);
+    }
+
+    #[test]
+    fn fetching_all_style_attributes() {
+        let html = r#"
+            <html>
+            <head>
+            </head>
+            <body style="color: red">
+                <div>
+                    <span>
+                        <a href="http://wikipedia.com" style="background-color: yellow; color: black"> Wiki </a>
+                    </span>
+                </div>
+            </body>
+            </html>
+        "#;
+
+        let document = kuchikiki::parse_html().one(html);
+
+        let result = all_style_attributes(&document)
+            .unwrap()
+            .map(|(tag, style)| (tag.name.local.to_string(), style))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            vec![
+                ("body".to_string(), "color: red".to_string()),
+                (
+                    "a".to_string(),
+                    "background-color: yellow; color: black".to_string()
+                )
+            ],
+            result
+        );
+    }
+
+    #[test]
+    fn visit_style_attribute() {
+        let rule = "color: black !important; background-color: white";
+
+        let printer_options = || PrinterOptions::default();
+        let mut visitor = StyleAttributeVisitor::new(printer_options);
+        let mut attribute = StyleAttribute::parse(rule, ParserOptions::default()).unwrap();
+        attribute.visit(&mut visitor).unwrap();
+
+        let expected = {
+            (
+                vec![
+                    "color: #000".to_string(),
+                    "background-color: #fff".to_string(),
+                ],
+                vec![
+                    "background-color: #1c1b24 !important".to_string(),
+                    "color: #fff !important".to_string(),
+                ],
+            )
+        };
+
+        assert_eq!(expected, visitor.overrides());
+
+        let attribute = attribute.to_css(printer_options()).unwrap().code;
+
+        // We not only generate override CSS but also remove `!important` from the original one
+        assert_eq!("background-color: #fff; color: #000", attribute);
     }
 }

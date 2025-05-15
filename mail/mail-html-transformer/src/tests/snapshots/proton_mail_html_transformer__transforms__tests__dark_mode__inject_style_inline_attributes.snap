@@ -3,11 +3,10 @@ source: mail/mail-html-transformer/src/tests/dark_mode.rs
 expression: html.to_string()
 ---
 <html><head>
-    <style>.main{color:#000}</style>
+    <style>span{background-color:#97ca85}</style>
   <style style="text/css">/*
-TODO: Introduce styles for dark mode
+TODO: Introduce styles for combination of light and dark mode using @media queries
 */
-
 article,
 aside,
 details,
@@ -254,9 +253,7 @@ blockquote blockquote blockquote blockquote blockquote blockquote{
 	--text-norm: #262a33;
     */
 
-  --text-norm: #D1D1D4;
-  --background-norm: #1C1B24;
-  --primary: #7777F8;
+    --primary: #8A6EFF; 
 
 	padding: 1rem; /* to check if still useful */
 }
@@ -310,12 +307,30 @@ img {
     }
 }
 
-
-</style><style style="text/css">.main {
-color:#fff!important
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text-norm: #D1D1D4;
+    --background-norm: #1C1B24;
+    --primary: #7777F8;
+  }
+}
+</style><style style="text/css">
+                  @media ( prefers-color-scheme: dark ) {
+                      span {
+background-color:#3e6b2e!important
  }
-</style></head>
+div.a[style*="background-color:#fff"] {
+ background-color:#1c1b24!important
+ }div.a[style*="color:#000"] {
+ color:#fff!important
+ }
+                  }
+                </style></head>
   <body>
+    <div class="a" style="background-color:#fff"></div>
+    <div style="font-family:&quot;Google Sans&quot;,Arial,sans-serif;font-weight:400 color: red"></div>
+    <div class="a" style="color:#000">a</div>
+    <span>abc</span>
   
 
 </body></html>

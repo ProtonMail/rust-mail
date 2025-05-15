@@ -1,0 +1,65 @@
+use std::convert::Infallible;
+
+use lightningcss::{
+    printer::PrinterOptions,
+    visit_types,
+    visitor::{Visit, Visitor},
+};
+use smart_default::SmartDefault;
+
+use crate::transforms::styles::{NewProperty, OldProperty, printer_options};
+
+use super::declaration_block::{DeclarationBlockVisitor, ShouldStoreOverridenProps};
+
+/// Walks through the style attribute, detects which
+/// color needs to be adjusted to dark theme.
+/// It modifies original stylesheet by removing `!important` flag if necessary.
+/// The result of the dark-mode theming is available under [`StyleAttributeVisitor::overrides`] method.
+///
+#[derive(SmartDefault, Clone, Debug)]
+pub(crate) struct StyleAttributeVisitor {
+    overriden: Vec<OldProperty>,
+    overrides: Vec<NewProperty>,
+
+    // Because PrinterOptions do not implement Clone
+    #[default(printer_options)]
+    pub printer_options: fn() -> PrinterOptions<'static>,
+}
+impl StyleAttributeVisitor {
+    pub fn new(printer_options: fn() -> PrinterOptions<'static>) -> Self {
+        Self {
+            printer_options,
+            ..Default::default()
+        }
+    }
+
+    pub fn overrides(self) -> (Vec<OldProperty>, Vec<NewProperty>) {
+        (self.overriden, self.overrides)
+    }
+}
+
+impl Visitor<'_> for StyleAttributeVisitor {
+    type Error = Infallible;
+
+    fn visit_types(&self) -> lightningcss::visitor::VisitTypes {
+        visit_types!(RULES | PROPERTIES)
+    }
+
+    fn visit_declaration_block(
+        &mut self,
+        decls: &mut lightningcss::declaration::DeclarationBlock<'_>,
+    ) -> Result<(), Self::Error> {
+        let mut visitor =
+            DeclarationBlockVisitor::new(ShouldStoreOverridenProps::Yes, self.printer_options);
+
+        decls.visit(&mut visitor)?;
+
+        let (overriden_properties, properties_overrides) = visitor.overrides();
+        if !properties_overrides.is_empty() {
+            self.overrides.extend(properties_overrides);
+            self.overriden.extend(overriden_properties);
+        }
+
+        Ok(())
+    }
+}
