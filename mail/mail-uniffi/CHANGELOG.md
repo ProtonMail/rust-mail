@@ -5,31 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.78.0]
+
+### Changed
+
+- Add rawevent data structure to unbound event_loop::provider from generic
+
+### Features
+
+- [ET-2814] Support dark mode in messages
+- [ET-2814] Add default properties for transformopts
+- [ET-2814] Parse css in order to dynamically inject supplement
+- [ET-642] Mailsettings::should_auto_lock method for keeping track if autolock setting allows for app protection invokation
+- [ET-2814] Dark mode handles also inline styles
+- [ET-574] Allow to disable alternative routing in appsettings
+- Draft::get_embedded_attachment_sync
+
+### Fixes
+
+- [ET-2814] Use html namespace for inserting links
+- Lower priority of prefetch actions
+
 
 ## [mail-uniffi-v0.77.0] - 2025-05-14
 
 ### Changed
 
 - Tui: remove unused dependencies
-- [ET-2728] Split up draft errors
-- Adjust crate names
-- [ET-2728] Separate attachment upload and remove errors
 
 ### Features
 
-- [ET-2892] Mailbox::recipient_display_mode
-- [ET-619] Add support for schedule send
 - [ET-2632] Add sign out flow which removes all user & account data in controlled fashion
 - Ical: build for all backend variants
-
+- [ET-2892] Mailbox::recipient_display_mode
+- [ET-619] Add support for schedule send
 
 ### Fixes
 
-- Outbox should have message view mode.
-- Injecting style should not escape gt and lt signs
 - Prefetch is now integrated with event loop and will download any new cnv & msg
 - Ical/ci: sync rules of build and publish jobs
 - Ical/ci: fix the publish job
+- Outbox should have message view mode.
+- Injecting style should not escape gt and lt signs
+
 
 ## [mail-uniffi-v0.76.1] - 2025-05-08
 
