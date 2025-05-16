@@ -25,7 +25,6 @@ use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
 use proton_mail_common::MailUserContext;
-use proton_mail_common::datatypes::theme::MailTheme;
 use proton_mail_common::errors::unexpected::Unexpected;
 
 use proton_mail_common::datatypes::LocalConversationId;
