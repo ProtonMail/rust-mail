@@ -34,71 +34,26 @@ pub struct InspectableContactDetails {
     pub fields: Vec<ContactField>,
 }
 
-#[derive(Clone, Debug)]
+// These are ordered by display order! Please be careful before moving them around.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ContactField {
-    Anniversary(MaybeDateAndOrTime),
-    Birthday(MaybeDateAndOrTime),
-    Gender(Gender),
     ExtendedName(ExtendedName),
-    Address(Vec<ContactDetailAddress>),
     Emails(Vec<ContactDetailsEmail>),
-    Languages(Vec<String>),
-    Logos(Vec<String>),
-    Members(Vec<String>),
-    Notes(Vec<String>),
-    Organizations(Vec<String>),
     Phones(Vec<Telephone>),
-    Photos(Vec<String>),
-    Roles(Vec<String>),
+    Address(Vec<ContactDetailAddress>),
+    Birthday(MaybeDateAndOrTime),
+    Notes(Vec<String>),
+    Anniversary(MaybeDateAndOrTime),
+    Gender(Gender),
+    Languages(Vec<String>),
     TimeZones(Vec<String>),
     Titles(Vec<String>),
+    Roles(Vec<String>),
+    Logos(Vec<String>),
+    Photos(Vec<String>),
+    Organizations(Vec<String>),
+    Members(Vec<String>),
     Urls(Vec<VCardUrl>),
-}
-
-impl ContactField {
-    /// This determines the order of how fields are shown in the clients, if you want to modify
-    /// it, look here.
-    pub fn as_u32(&self) -> u32 {
-        match self {
-            ContactField::ExtendedName(_) => 0,
-            ContactField::Emails(_) => 1,
-            ContactField::Phones(_) => 2,
-            ContactField::Address(_) => 3,
-            ContactField::Birthday(_) => 4,
-            ContactField::Notes(_) => 5,
-            ContactField::Anniversary(_) => 6,
-            ContactField::Gender(_) => 7,
-            ContactField::Languages(_) => 8,
-            ContactField::TimeZones(_) => 9,
-            ContactField::Titles(_) => 10,
-            ContactField::Roles(_) => 11,
-            ContactField::Logos(_) => 12,
-            ContactField::Photos(_) => 13,
-            ContactField::Organizations(_) => 14,
-            ContactField::Members(_) => 15,
-            ContactField::Urls(_) => 16,
-        }
-    }
-}
-
-impl PartialEq for ContactField {
-    fn eq(&self, other: &Self) -> bool {
-        self.as_u32() == other.as_u32()
-    }
-}
-
-impl Eq for ContactField {}
-
-impl Ord for ContactField {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        self.as_u32().cmp(&other.as_u32())
-    }
-}
-
-impl PartialOrd for ContactField {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
 }
 
 impl InspectableContactDetails {
@@ -251,7 +206,7 @@ pub struct VCardUrl {
     pub url_type: Vec<VcardPropType>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ContactDetailsEmail {
     pub name: String,
     pub email: String,
