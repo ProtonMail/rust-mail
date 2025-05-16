@@ -124,12 +124,6 @@ pub struct ExtendedName {
     pub last: Option<String>,
     /// first name
     pub first: Option<String>,
-    /// additional names
-    pub additional: Option<String>,
-    /// honorific prefix
-    pub prefix: Option<String>,
-    /// honorific suffix
-    pub suffix: Option<String>,
 }
 
 impl From<RealExtendedName> for ExtendedName {
@@ -137,9 +131,6 @@ impl From<RealExtendedName> for ExtendedName {
         Self {
             last: value.last,
             first: value.first,
-            additional: value.additional,
-            prefix: value.prefix,
-            suffix: value.suffix,
         }
     }
 }
