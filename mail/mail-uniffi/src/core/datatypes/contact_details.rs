@@ -4,8 +4,9 @@ use crate::mail::MailUserSession;
 use crate::uniffi_async;
 use proton_core_common::datatypes::contact_details::ContactDetailAddress as RealAddress;
 use proton_core_common::datatypes::contact_details::ContactDetailsEmail as RealContactDetailsEmail;
+use proton_core_common::datatypes::contact_details::ContactField as RealContactField;
 use proton_core_common::datatypes::contact_details::ExtendedName as RealExtendedName;
-use proton_core_common::datatypes::contact_details::GenderType as RealGenderType;
+use proton_core_common::datatypes::contact_details::Gender as RealGender;
 use proton_core_common::datatypes::contact_details::InspectableContactDetails as RealContactDetails;
 use proton_core_common::datatypes::contact_details::Telephone as RealTelephone;
 use proton_core_common::datatypes::contact_details::VCardUrl as RealVCardUrl;
@@ -35,49 +36,60 @@ pub async fn get_contact_details(
 #[derive(uniffi::Record)]
 pub struct ContactDetailCard {
     pub id: Id,
-    pub extended_name: Option<ExtendedName>,
-    pub address: Vec<ContactDetailAddress>,
-    /// The first phone of the list is the primary phone to be used for the quick action.
-    pub phones: Vec<Telephone>,
-    pub birthday: Option<ContactDate>,
-    pub notes: Vec<String>,
-
-    pub anniversary: Option<ContactDate>,
-    pub urls: Vec<VCardUrl>,
-    pub gender: Option<GenderType>,
-    pub photos: Vec<String>,
-    /// Normally a valid link, but needs not be.
-    pub logos: Vec<String>,
-    pub titles: Vec<String>,
-    pub roles: Vec<String>,
-    /// This might be an RFC compliant string like es-ES or not, like Spanish or Español
-    pub languages: Vec<String>,
-    pub timezones: Vec<String>,
-    /// Normally a valid link, but needs not be.
-    pub member: Vec<String>,
-    pub organizations: Vec<String>,
+    /// These are sorted per display order
+    pub fields: Vec<ContactField>,
 }
 
 impl From<RealContactDetails> for ContactDetailCard {
     fn from(value: RealContactDetails) -> Self {
         Self {
             id: value.id.into(),
-            extended_name: value.extended_name.map(Into::into),
-            address: value.address.map_vec(),
-            phones: value.phones.map_vec(),
-            birthday: value.birthday.map(Into::into),
-            anniversary: value.anniversary.map(Into::into),
-            urls: value.urls.map_vec(),
-            gender: value.gender.map(Into::into),
-            notes: value.notes,
-            photos: value.photos,
-            logos: value.logos,
-            titles: value.titles,
-            roles: value.roles,
-            languages: value.languages,
-            timezones: value.timezones,
-            member: value.members,
-            organizations: value.organizations,
+            fields: value.fields.map_vec(),
+        }
+    }
+}
+
+#[derive(uniffi::Enum)]
+pub enum ContactField {
+    Anniversary(ContactDate),
+    ExtendedName(ExtendedName),
+    Address(ContactDetailAddress),
+    Birthday(ContactDate),
+    Email(ContactDetailsEmail),
+    Gender(Gender),
+    Language(String),
+    Logo(String),
+    Member(String),
+    Note(String),
+    Organization(String),
+    Phone(Telephone),
+    Photo(String),
+    Role(String),
+    TimeZone(String),
+    Title(String),
+    Url(VCardUrl),
+}
+
+impl From<RealContactField> for ContactField {
+    fn from(value: RealContactField) -> Self {
+        match value {
+            RealContactField::Anniversary(v) => ContactField::Anniversary(v.into()),
+            RealContactField::ExtendedName(v) => ContactField::ExtendedName(v.into()),
+            RealContactField::Address(v) => ContactField::Address(v.into()),
+            RealContactField::Birthday(v) => ContactField::Birthday(v.into()),
+            RealContactField::Email(v) => ContactField::Email(v.into()),
+            RealContactField::Gender(v) => ContactField::Gender(v.into()),
+            RealContactField::Language(v) => ContactField::Language(v.into()),
+            RealContactField::Logo(v) => ContactField::Logo(v.into()),
+            RealContactField::Member(v) => ContactField::Member(v.into()),
+            RealContactField::Note(v) => ContactField::Note(v.into()),
+            RealContactField::Organization(v) => ContactField::Organization(v.into()),
+            RealContactField::Phone(v) => ContactField::Phone(v.into()),
+            RealContactField::Photo(v) => ContactField::Photo(v.into()),
+            RealContactField::Role(v) => ContactField::Role(v.into()),
+            RealContactField::TimeZone(v) => ContactField::TimeZone(v.into()),
+            RealContactField::Title(v) => ContactField::Title(v.into()),
+            RealContactField::Url(v) => ContactField::Url(v.into()),
         }
     }
 }
@@ -242,7 +254,7 @@ impl From<RealVcardPropType> for VcardPropType {
 }
 
 #[derive(uniffi::Enum)]
-pub enum GenderType {
+pub enum Gender {
     Male,
     Female,
     Other,
@@ -252,16 +264,16 @@ pub enum GenderType {
     String(String),
 }
 
-impl From<RealGenderType> for GenderType {
-    fn from(value: RealGenderType) -> Self {
+impl From<RealGender> for Gender {
+    fn from(value: RealGender) -> Self {
         match value {
-            RealGenderType::Male => Self::Male,
-            RealGenderType::Female => Self::Female,
-            RealGenderType::Other => Self::Other,
-            RealGenderType::NotApplicable => Self::NotApplicable,
-            RealGenderType::Unknown => Self::Unknown,
-            RealGenderType::None => Self::None,
-            RealGenderType::String(value) => Self::String(value),
+            RealGender::Male => Self::Male,
+            RealGender::Female => Self::Female,
+            RealGender::Other => Self::Other,
+            RealGender::NotApplicable => Self::NotApplicable,
+            RealGender::Unknown => Self::Unknown,
+            RealGender::None => Self::None,
+            RealGender::String(value) => Self::String(value),
         }
     }
 }

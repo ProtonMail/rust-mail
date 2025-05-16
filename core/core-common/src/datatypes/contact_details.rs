@@ -30,26 +30,75 @@ use proton_vcard::values::date_and_or_time::MaybeDateAndOrTime;
 pub struct InspectableContactDetails {
     /// Clients want this for consistency
     pub id: LocalContactId,
-    pub extended_name: Option<ExtendedName>,
-    pub address: Vec<ContactDetailAddress>,
-    pub phones: Vec<Telephone>,
-    pub birthday: Option<MaybeDateAndOrTime>,
-    pub notes: Vec<String>,
+    /// These are sorted per display order
+    pub fields: Vec<ContactField>,
+}
 
-    pub anniversary: Option<MaybeDateAndOrTime>,
-    pub urls: Vec<VCardUrl>,
-    pub gender: Option<GenderType>,
-    pub photos: Vec<String>,
-    /// Normally a valid link, but needs not be.
-    pub logos: Vec<String>,
-    pub titles: Vec<String>,
-    pub roles: Vec<String>,
-    /// This might be an RFC compliant string like es-ES or not, like Spanish or Español
-    pub languages: Vec<String>,
-    pub timezones: Vec<String>,
-    /// Normally a valid link, but needs not be.
-    pub members: Vec<String>,
-    pub organizations: Vec<String>,
+#[derive(Clone, Debug)]
+pub enum ContactField {
+    Anniversary(MaybeDateAndOrTime),
+    ExtendedName(ExtendedName),
+    Address(ContactDetailAddress),
+    Birthday(MaybeDateAndOrTime),
+    Email(ContactDetailsEmail),
+    Gender(Gender),
+    Language(String),
+    Logo(String),
+    Member(String),
+    Note(String),
+    Organization(String),
+    Phone(Telephone),
+    Photo(String),
+    Role(String),
+    TimeZone(String),
+    Title(String),
+    Url(VCardUrl),
+}
+
+impl ContactField {
+    /// This determines the order of how fields are shown in the clients, if you want to modify
+    /// it, look here.
+    pub fn as_u32(&self) -> u32 {
+        match self {
+            ContactField::ExtendedName(_) => 0,
+            ContactField::Email(_) => 1,
+            ContactField::Phone(_) => 2,
+            ContactField::Address(_) => 3,
+            ContactField::Birthday(_) => 4,
+            ContactField::Note(_) => 5,
+            ContactField::Anniversary(_) => 6,
+            ContactField::Gender(_) => 7,
+            ContactField::Language(_) => 8,
+            ContactField::TimeZone(_) => 9,
+            ContactField::Title(_) => 10,
+            ContactField::Role(_) => 11,
+            ContactField::Logo(_) => 12,
+            ContactField::Photo(_) => 13,
+            ContactField::Organization(_) => 14,
+            ContactField::Member(_) => 15,
+            ContactField::Url(_) => 16,
+        }
+    }
+}
+
+impl PartialEq for ContactField {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_u32() == other.as_u32()
+    }
+}
+
+impl Eq for ContactField {}
+
+impl Ord for ContactField {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.as_u32().cmp(&other.as_u32())
+    }
+}
+
+impl PartialOrd for ContactField {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.as_u32().partial_cmp(&other.as_u32())
+    }
 }
 
 impl InspectableContactDetails {
@@ -78,65 +127,84 @@ impl InspectableContactDetails {
 
     /// Transforms the data in the vCard struct to something suitable for human consumption
     pub(crate) fn from_vcard(id: LocalContactId, vcard: VCard) -> Self {
-        let phones = vcard.telephones.to_sorted(|tel| Telephone {
-            number: tel.value.to_string(),
-            tel_types: tel.tel_type.iter().cloned().map_vec(),
-        });
+        let mut res = Self { id, fields: vec![] };
+        let v = &mut res.fields;
+        vcard
+            .telephones
+            .sorted_extend(v, ContactField::Phone, |tel| Telephone {
+                number: tel.value.to_string(),
+                tel_types: tel.tel_type.iter().cloned().map_vec(),
+            });
 
-        let address = vcard.addresses.to_sorted(ContactDetailAddress::from);
+        vcard
+            .addresses
+            .sorted_extend(v, ContactField::Address, |x| ContactDetailAddress::from(x));
 
-        let extended_name = vcard.name.map(|name| ExtendedName {
-            last: name.last.concat_to_string(" "),
-            first: name.first.concat_to_string(" "),
-            additional: name.additional.concat_to_string(" "),
-            prefix: name.prefix.concat_to_string(" "),
-            suffix: name.suffix.concat_to_string(" "),
-        });
+        vcard
+            .name
+            .sorted_extend(v, ContactField::ExtendedName, |name| ExtendedName {
+                last: name.last.concat_to_string(" "),
+                first: name.first.concat_to_string(" "),
+                additional: name.additional.concat_to_string(" "),
+                prefix: name.prefix.concat_to_string(" "),
+                suffix: name.suffix.concat_to_string(" "),
+            });
 
-        let urls = vcard.urls.to_sorted(|u| VCardUrl {
-            url_type: u.r#type.into_iter().map_vec(),
-            url: u.value.to_string(),
-        });
+        vcard
+            .gender
+            .sorted_extend(v, ContactField::Gender, |g| g.value.into());
+        vcard
+            .anniversary
+            .sorted_extend(v, ContactField::Anniversary, |g| g.value);
+        vcard
+            .birthday
+            .sorted_extend(v, ContactField::Birthday, |g| g.value);
 
-        let organizations = vcard
+        vcard
+            .urls
+            .sorted_extend(v, ContactField::Url, |u| VCardUrl {
+                url_type: u.r#type.into_iter().map_vec(),
+                url: u.value.to_string(),
+            });
+        vcard
             .organizations
-            .to_sorted(|x| x.values.into_iter().join(", "));
+            .sorted_extend(v, ContactField::Organization, |x| {
+                x.values.into_iter().join(", ")
+            });
 
-        let logos = vcard.logos.to_sorted(|logo| logo.value.0.to_string());
-        let photos = vcard.photos.to_sorted(|photo| photo.value.0.to_string());
-        let timezones = vcard.time_zones.to_sorted(|x| x.value.to_string());
-        let notes = vcard.notes.to_sorted(|x| x.value.value);
-        let gender = vcard.gender.map(|g| g.value.into());
-        let titles = vcard.titles.to_sorted(|x| x.value.value);
-        let roles = vcard.roles.to_sorted(|x| x.value.value);
-        let languages = vcard.languages.to_sorted(|x| x.value);
-        let members = vcard.members.to_sorted(|x| x.value.to_string());
-        let anniversary = vcard.anniversary.map(|a| a.value);
-        let birthday = vcard.birthday.map(|a| a.value);
+        vcard
+            .logos
+            .sorted_extend(v, ContactField::Logo, |logo| logo.value.0.to_string());
+        vcard
+            .photos
+            .sorted_extend(v, ContactField::Photo, |photo| photo.value.0.to_string());
+        vcard
+            .time_zones
+            .sorted_extend(v, ContactField::TimeZone, |x| x.value.to_string());
+        vcard
+            .notes
+            .sorted_extend(v, ContactField::Note, |x| x.value.value);
+        vcard
+            .titles
+            .sorted_extend(v, ContactField::Title, |x| x.value.value);
+        vcard
+            .roles
+            .sorted_extend(v, ContactField::Role, |x| x.value.value);
+        vcard
+            .languages
+            .sorted_extend(v, ContactField::Language, |x| x.value);
+        vcard
+            .members
+            .sorted_extend(v, ContactField::Member, |x| x.value.to_string());
 
-        Self {
-            id,
-            extended_name,
-            address,
-            phones,
-            birthday,
-            notes,
-            anniversary,
-            urls,
-            gender,
-            photos,
-            logos,
-            titles,
-            roles,
-            languages,
-            timezones,
-            members,
-            organizations,
-        }
+        // Very important that this is a stable sort!
+        v.sort();
+
+        res
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ExtendedName {
     pub last: Option<String>,
     pub first: Option<String>,
@@ -249,8 +317,8 @@ impl From<TelType> for VcardPropType {
     }
 }
 
-#[derive(Clone, Debug)]
-pub enum GenderType {
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Gender {
     Male,
     Female,
     Other,
@@ -262,30 +330,30 @@ pub enum GenderType {
     String(String),
 }
 
-impl Display for GenderType {
+impl Display for Gender {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            GenderType::Male => write!(f, "male"),
-            GenderType::Female => write!(f, "female"),
-            GenderType::Other => write!(f, "other"),
-            GenderType::NotApplicable => write!(f, "N/A"),
-            GenderType::Unknown => write!(f, "unknown"),
-            GenderType::None => write!(f, "none"),
-            GenderType::String(value) => write!(f, "{value}"),
+            Gender::Male => write!(f, "male"),
+            Gender::Female => write!(f, "female"),
+            Gender::Other => write!(f, "other"),
+            Gender::NotApplicable => write!(f, "N/A"),
+            Gender::Unknown => write!(f, "unknown"),
+            Gender::None => write!(f, "none"),
+            Gender::String(value) => write!(f, "{value}"),
         }
     }
 }
 
-impl From<GenderValue> for GenderType {
+impl From<GenderValue> for Gender {
     fn from(value: GenderValue) -> Self {
         match value {
-            GenderValue::Male(_) => GenderType::Male,
-            GenderValue::Female(_) => GenderType::Female,
-            GenderValue::Other(_) => GenderType::Other,
-            GenderValue::NotApplicable(_) => GenderType::NotApplicable,
-            GenderValue::Unknown(_) => GenderType::Unknown,
-            GenderValue::None(_) => GenderType::None,
-            GenderValue::Custom(value) => GenderType::String(value),
+            GenderValue::Male(_) => Gender::Male,
+            GenderValue::Female(_) => Gender::Female,
+            GenderValue::Other(_) => Gender::Other,
+            GenderValue::NotApplicable(_) => Gender::NotApplicable,
+            GenderValue::Unknown(_) => Gender::Unknown,
+            GenderValue::None(_) => Gender::None,
+            GenderValue::Custom(value) => Gender::String(value),
         }
     }
 }
@@ -294,7 +362,7 @@ impl From<GenderValue> for GenderType {
 pub(crate) mod test {
     use bytes::Buf as _;
     use ical::VcardParser;
-    use insta::assert_debug_snapshot;
+    use insta::assert_snapshot;
     use proton_vcard::vcard::VCard;
 
     use super::*;
@@ -303,7 +371,19 @@ pub(crate) mod test {
     #[derive(Debug)]
     struct Snapshot {
         vcard: &'static str,
-        card: InspectableContactDetails,
+        fields: Vec<ContactField>,
+    }
+    impl Display for Snapshot {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            writeln!(f, "VCARD:")?;
+            writeln!(f, "{}", self.vcard)?;
+            writeln!(f, "---------------------------\n")?;
+            writeln!(f, "Sorted fields:")?;
+            for field in &self.fields {
+                writeln!(f, "{field:?}")?;
+            }
+            Ok(())
+        }
     }
 
     fn get_vcard(raw_vcard: &'static str) -> Snapshot {
@@ -313,42 +393,43 @@ pub(crate) mod test {
         let vcard = VCard::from_ical_contact(c).unwrap();
         Snapshot {
             vcard: raw_vcard,
-            card: InspectableContactDetails::from_vcard(LocalContactId(42), vcard),
+            fields: InspectableContactDetails::from_vcard(LocalContactId(42), vcard).fields,
         }
     }
 
     #[test]
     fn real_contact() {
         let real = include_str!("../../tests/vcards/real.vcf");
-        assert_debug_snapshot!(get_vcard(real));
+        assert_snapshot!(get_vcard(real));
     }
     #[test]
     fn real_autosave() {
+        // This one contains data only used by the backend, shouldn't contain anything useful.
         let real_autosave = include_str!("../../tests/vcards/real-autosave.vcf");
-        assert_debug_snapshot!(get_vcard(real_autosave));
+        assert_snapshot!(get_vcard(real_autosave));
     }
 
     #[test]
     fn full() {
         let full = include_str!("../../tests/vcards/full.vcf");
-        assert_debug_snapshot!(get_vcard(full));
+        assert_snapshot!(get_vcard(full));
     }
 
     #[test]
     fn small() {
         let small = include_str!("../../tests/vcards/small.vcf");
-        assert_debug_snapshot!(get_vcard(small));
+        assert_snapshot!(get_vcard(small));
     }
 
     #[test]
     fn vcard_v3() {
         let v3 = include_str!("../../tests/vcards/v3.vcf");
-        assert_debug_snapshot!(get_vcard(v3));
+        assert_snapshot!(get_vcard(v3));
     }
 
     #[test]
     fn frodo() {
         let frodo = include_str!("../../tests/vcards/frodo.vcf");
-        assert_debug_snapshot!(get_vcard(frodo));
+        assert_snapshot!(get_vcard(frodo));
     }
 }

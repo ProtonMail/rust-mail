@@ -3,7 +3,7 @@ use crate::parameters::value::ValueType;
 use crate::values::time::{is_hour_value, is_minute_value};
 
 #[allow(clippy::module_name_repetitions)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ZoneValue {
     Utc,
     Offset(i8, Option<u8>),

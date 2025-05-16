@@ -577,16 +577,23 @@ pub(crate) fn group_from_name(name: &str) -> Option<String> {
     name.split_once('.').map(|(g, _)| g.to_owned())
 }
 
+/// This trait exists solely for convenience, to transform the fields in the vcard into others in an efficient manner.
 pub trait ToSorted<P> {
     fn to_sorted_iter<T: Ord>(self, f: impl FnMut(P) -> T) -> impl Iterator<Item = T>
     where
         Self: Sized;
 
-    fn to_sorted<T: Ord>(self, f: impl FnMut(P) -> T) -> Vec<T>
-    where
+    /// Convenience method that extends a vector.
+    /// f1 is typically an enum variant f2 is a map method
+    fn sorted_extend<T: Ord, U>(
+        self,
+        vec: &mut Vec<U>,
+        f1: impl FnMut(T) -> U,
+        f2: impl FnMut(P) -> T,
+    ) where
         Self: Sized,
     {
-        self.to_sorted_iter(f).collect()
+        vec.extend(self.to_sorted_iter(f2).map(f1))
     }
 }
 
@@ -595,8 +602,7 @@ impl<_K, P: VcardProperty, S: BuildHasher> ToSorted<P> for HashMap<_K, P, S> {
     where
         Self: Sized,
     {
-        let mut vec = self
-            .into_values()
+        self.into_values()
             .map(|this| {
                 let pref = match this.get_preference() {
                     Some(v) => v.value,
@@ -604,10 +610,16 @@ impl<_K, P: VcardProperty, S: BuildHasher> ToSorted<P> for HashMap<_K, P, S> {
                 };
                 (pref, f(this))
             })
-            .collect_vec();
+            .sorted_unstable()
+            .map(|x| x.1)
+    }
+}
 
-        // We sort by preference, then by the key to make it consistent.
-        vec.sort_unstable();
-        vec.into_iter().map(|x| x.1)
+impl<P> ToSorted<P> for Option<P> {
+    fn to_sorted_iter<T: Ord>(self, f: impl FnMut(P) -> T) -> impl Iterator<Item = T>
+    where
+        Self: Sized,
+    {
+        self.into_iter().map(f)
     }
 }

@@ -5,7 +5,7 @@ use crate::values::time::{TimeValue, is_time_notrunc_value};
 use crate::values::zone::ZoneValue;
 
 #[allow(clippy::module_name_repetitions)]
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DateTimeValue {
     pub year: Option<u16>,
     pub month: Option<u8>,
@@ -79,7 +79,7 @@ impl DateTimeValue {
             hour: time.hour,
             minute: time.minute,
             second: time.second,
-            zone: time.zone,
+            zone: time.zone.clone(),
         }
     }
 }

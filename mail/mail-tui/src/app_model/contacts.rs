@@ -4,7 +4,10 @@ use itertools::Itertools;
 use proton_core_common::{
     datatypes::{
         ContactGroupItem, ContactItem, ContactItemType, GroupedContacts, LocalContactId,
-        contact_details::{ExtendedName, InspectableContactDetails},
+        contact_details::{
+            ContactDetailAddress, ContactDetailsEmail, ContactField, ExtendedName,
+            InspectableContactDetails, Telephone, VCardUrl,
+        },
     },
     models::{Contact, ContactListWatcher},
 };
@@ -108,20 +111,28 @@ impl OpenedContactState {
     }
 
     fn draw_contact_item(frame: &mut Frame, area: Rect, item: &ContactItem) {
-        let rows = [
-            Row::new([Cell::from("Name:"), Cell::from(item.name.as_str())]).bold(),
-            Row::new([
-                Cell::from("Emails:"),
-                Cell::from(
-                    item.emails
-                        .iter()
-                        .map(|email| email.email.as_str())
-                        .join(", "),
-                ),
-            ]),
-        ];
+        let mut rows = vec![];
 
-        let widths = [Constraint::Length(20), Constraint::Fill(1)];
+        let mut title_cell_size = 0;
+        let mut add_row = |title: &str, body: &str| {
+            title_cell_size = title_cell_size.max(title.len());
+            if !body.is_empty() {
+                rows.push(Row::new([
+                    Cell::from(title.to_string()),
+                    Cell::from(body.to_string()),
+                ]));
+            }
+        };
+
+        add_row("Name:", &item.name);
+        for email in &item.emails {
+            add_row("Email:", &email.email);
+        }
+
+        let widths = [
+            Constraint::Length(TryInto::<u16>::try_into(title_cell_size).unwrap()),
+            Constraint::Fill(1),
+        ];
         let table = Table::new(rows, widths).column_spacing(1);
         frame.render_widget(table, area);
     }
@@ -137,182 +148,127 @@ impl OpenedContactState {
         item: &ContactItem,
     ) {
         let mut rows = vec![];
-        rows.push(Row::new([Cell::from("Name:"), Cell::from(&*item.name)]).bold());
-        rows.push(Row::new([
-            Cell::from("Emails:"),
-            Cell::from(item.emails.iter().map(|email| &*email.email).join(", ")),
-        ]));
 
-        let InspectableContactDetails {
-            extended_name,
-            address,
-            phones,
-            birthday,
-            anniversary,
-            urls,
-            gender,
-            notes,
-            photos,
-            logos,
-            titles,
-            roles,
-            languages,
-            timezones,
-            members: member,
-            organizations,
-            id: _,
-        } = &details;
-        if let Some(ExtendedName {
-            last,
-            first,
-            additional,
-            prefix,
-            suffix,
-        }) = extended_name
-        {
-            let mut extended_name_repr = String::new();
-            if let Some(prefix) = prefix {
-                write!(&mut extended_name_repr, "{prefix} ").unwrap();
-            }
-            if let Some(first) = first {
-                write!(&mut extended_name_repr, "{first} ").unwrap();
-            }
-            if let Some(last) = last {
-                write!(&mut extended_name_repr, "{last} ").unwrap();
-            }
-            if let Some(suffix) = suffix {
-                write!(&mut extended_name_repr, "{suffix}").unwrap();
-            }
-            if let Some(additional) = additional {
-                write!(&mut extended_name_repr, " {additional}").unwrap();
-            }
-
-            let extended_name = extended_name_repr.trim().to_string();
-            if !extended_name.is_empty() {
+        let mut title_cell_size = 0;
+        let mut add_row = |title: &str, body: &str| {
+            title_cell_size = title_cell_size.max(title.len());
+            if !body.is_empty() {
                 rows.push(Row::new([
-                    Cell::from("Extended Name: "),
-                    Cell::from(extended_name),
+                    Cell::from(title.to_string()),
+                    Cell::from(body.to_string()),
                 ]));
             }
+        };
+
+        add_row("Name:", &item.name);
+        for email in &item.emails {
+            add_row("Email:", &email.email);
         }
 
-        for address in address {
-            let addr_type = address.addr_type.iter().map(ToString::to_string).join(", ");
-            rows.push(Row::new([Cell::from(
-                format!("Address {addr_type}").bold(),
-            )]));
-            if !address.street.is_empty() {
-                rows.push(Row::new([
-                    Cell::from("Street:"),
-                    Cell::from(&*address.street),
-                ]));
+        for field in &details.fields {
+            match field {
+                ContactField::Anniversary(date) => {
+                    add_row("Anniversary:", &date.to_string());
+                }
+                ContactField::Birthday(date) => {
+                    add_row("Birthday:", &date.to_string());
+                }
+                ContactField::ExtendedName(ExtendedName {
+                    last,
+                    first,
+                    additional,
+                    prefix,
+                    suffix,
+                }) => {
+                    let mut extended_name_repr = String::new();
+                    if let Some(prefix) = prefix {
+                        write!(&mut extended_name_repr, "{prefix} ").unwrap();
+                    }
+                    if let Some(first) = first {
+                        write!(&mut extended_name_repr, "{first} ").unwrap();
+                    }
+                    if let Some(last) = last {
+                        write!(&mut extended_name_repr, "{last} ").unwrap();
+                    }
+                    if let Some(suffix) = suffix {
+                        write!(&mut extended_name_repr, "{suffix}").unwrap();
+                    }
+                    if let Some(additional) = additional {
+                        write!(&mut extended_name_repr, " {additional}").unwrap();
+                    }
+
+                    let extended_name = extended_name_repr.trim().to_string();
+                    if !extended_name.is_empty() {
+                        add_row("Extended Name:", &extended_name);
+                    }
+                }
+                ContactField::Address(ContactDetailAddress {
+                    street,
+                    city,
+                    region,
+                    postal_code,
+                    country,
+                    addr_type,
+                }) => {
+                    let addr_type = addr_type.iter().map(ToString::to_string).join(", ");
+                    add_row("Address:", &addr_type);
+                    add_row("Address:", &street);
+                    add_row("City:", &city);
+                    add_row("Region:", &region);
+                    add_row("Postal Code:", &postal_code);
+                    add_row("Country:", &country);
+                }
+                ContactField::Email(ContactDetailsEmail { name, email }) => {
+                    add_row(&name, &email);
+                }
+                ContactField::Phone(Telephone { number, tel_types }) => {
+                    let text = format!(
+                        "{} {number}",
+                        tel_types.iter().map(ToString::to_string).join(", ")
+                    );
+                    add_row("Telephone:", &text);
+                }
+                ContactField::Gender(gender) => {
+                    add_row("Gender:", &gender.to_string());
+                }
+                ContactField::Language(lang) => {
+                    add_row("Language:", &lang);
+                }
+                ContactField::Member(member) => {
+                    add_row("Member:", &member);
+                }
+                ContactField::Note(note) => {
+                    // FIXME: This might not fit!
+                    add_row("Note:", &note);
+                }
+                ContactField::Organization(org) => {
+                    add_row("Organization:", &org);
+                }
+                ContactField::Role(role) => {
+                    add_row("Role:", &role);
+                }
+                ContactField::TimeZone(tz) => {
+                    add_row("Timezone:", &tz);
+                }
+                ContactField::Title(title) => {
+                    add_row("Title:", &title);
+                }
+                ContactField::Url(VCardUrl { url, url_type }) => {
+                    let text = format!(
+                        "{} {url}",
+                        url_type.iter().map(ToString::to_string).join(", ")
+                    );
+                    add_row("Url:", &text);
+                }
+                // TODO: Do something with these, link, term image...
+                ContactField::Photo(_) | ContactField::Logo(_) => (),
             }
-            if !address.city.is_empty() {
-                rows.push(Row::new([Cell::from("City:"), Cell::from(&*address.city)]));
-            }
-            if !address.region.is_empty() {
-                rows.push(Row::new([
-                    Cell::from("Region:"),
-                    Cell::from(&*address.region),
-                ]));
-            }
-            if !address.postal_code.is_empty() {
-                rows.push(Row::new([
-                    Cell::from("Postal Code:"),
-                    Cell::from(&*address.postal_code),
-                ]));
-            }
-            if !address.country.is_empty() {
-                rows.push(Row::new([
-                    Cell::from("Country:"),
-                    Cell::from(&*address.country),
-                ]));
-            }
-        }
-        for phone in phones {
-            rows.push(Row::new([Cell::from("Phone:"), Cell::from(&*phone.number)]));
-        }
-        if let Some(birthday) = birthday {
-            rows.push(Row::new([
-                Cell::from("Birthday:"),
-                Cell::from(birthday.to_string()),
-            ]));
         }
 
-        if let Some(anniversary) = anniversary {
-            rows.push(Row::new([
-                Cell::from("Anniversary:"),
-                Cell::from(anniversary.to_string()),
-            ]));
-        }
-
-        for url in urls {
-            rows.push(Row::new([Cell::from("Url:"), Cell::from(&*url.url)]));
-        }
-
-        for note in notes {
-            // FIXME: This might not fit!
-            rows.push(Row::new([Cell::from("Note:"), Cell::from(&**note)]));
-        }
-
-        if let Some(gender) = gender {
-            rows.push(Row::new([
-                Cell::from("Gender: "),
-                Cell::from(gender.to_string()),
-            ]));
-        }
-
-        if !photos.is_empty() {
-            rows.push(Row::new([
-                Cell::from("Photos:"),
-                Cell::from(photos.len().to_string()),
-            ]));
-        }
-
-        if !logos.is_empty() {
-            rows.push(Row::new([
-                Cell::from("Logos:"),
-                Cell::from(logos.len().to_string()),
-            ]));
-        }
-
-        for title in titles {
-            rows.push(Row::new([Cell::from("Title:"), Cell::from(title.as_str())]));
-        }
-
-        for role in roles {
-            rows.push(Row::new([Cell::from("Role:"), Cell::from(role.as_str())]));
-        }
-
-        for language in languages {
-            rows.push(Row::new([
-                Cell::from("Language:"),
-                Cell::from(language.as_str()),
-            ]));
-        }
-
-        for timezone in timezones {
-            rows.push(Row::new([
-                Cell::from("Timezone:"),
-                Cell::from(timezone.as_str()),
-            ]));
-        }
-
-        for member_entry in member {
-            rows.push(Row::new([
-                Cell::from("Member:"),
-                Cell::from(member_entry.as_str()),
-            ]));
-        }
-
-        for org in organizations {
-            rows.push(Row::new([
-                Cell::from("Organization:"),
-                Cell::from(org.as_str()),
-            ]));
-        }
-
-        let widths = [Constraint::Length(10), Constraint::Fill(1)];
+        let widths = [
+            Constraint::Length(TryInto::<u16>::try_into(title_cell_size).unwrap()),
+            Constraint::Fill(1),
+        ];
         let table = Table::new(rows, widths).column_spacing(1);
         frame.render_widget(table, area);
     }

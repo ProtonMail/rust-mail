@@ -1,0 +1,78 @@
+---
+source: core/core-common/src/datatypes/contact_details.rs
+expression: get_vcard(v3)
+---
+VCARD:
+BEGIN:VCARD
+VERSION:3.0
+PRODID:-//Apple Inc.//macOS 11.0.1//EN
+N:Doe Winners;John Timothy;;Sir;
+FN:Sir John Timothy Doe Winners
+NICKNAME:JJ
+X-MAIDENNAME:Riesling
+X-PHONETIC-FIRST-NAME:Johny
+ORG:DoughCompany;
+TITLE:Consultant
+EMAIL;type=INTERNET;type=pref:John@doe.com
+EMAIL;type=INTERNET;type=HOME:home@home.com
+EMAIL;type=INTERNET;type=WORK:work@work.com
+EMAIL;type=INTERNET;type=HOME:home@home.com
+EMAIL;type=INTERNET;type=WORK:work@work.com
+TEL;type=pref:123456789
+TEL;type=CELL;type=VOICE:334346745
+TEL;type=IPHONE;type=CELL;type=VOICE:23234234234
+TEL;type=HOME;type=VOICE:234234
+TEL;type=WORK;type=VOICE:2342
+TEL;type=MAIN:25563
+TEL;type=CELL;type=VOICE:334346745
+TEL;type=IPHONE;type=CELL;type=VOICE:23234234234
+TEL;type=HOME;type=VOICE:234234
+TEL;type=WORK;type=VOICE:2342
+TEL;type=MAIN:25563
+ADR;type=HOME;type=pref:;;First st;Berlin;;44356;Germany
+ADR;type=WORK:;;Route de la Galaise;Geneva;;1111;Switzerland
+ADR;type=HOME:;;First st;Berlin;;44356;Germany
+ADR;type=WORK:;;Route de la Galaise;Geneva;;1111;Switzerland
+NOTE:Frog frog frog
+item1.URL;type=pref:frog.com
+item1.X-ABLabel:_$!<HomePage>!$_
+URL;type=HOME:test.com
+item2.URL:frog.com
+item2.X-ABLabel:_$!<HomePage>!$_
+URL;type=HOME:test.com
+BDAY:1970-05-05
+X-JABBER;type=WORK;type=pref:john98
+X-JABBER;type=WORK:john98
+IMPP;X-SERVICE-TYPE=Facebook;type=HOME;type=pref:xmpp:johnyyyy
+IMPP;X-SERVICE-TYPE=Jabber;type=WORK:xmpp:john98
+IMPP;X-SERVICE-TYPE=Facebook;type=HOME:xmpp:johnyyyy
+IMPP;X-SERVICE-TYPE=Jabber;type=WORK:xmpp:john98
+END:VCARD
+
+---------------------------
+
+Sorted fields:
+ExtendedName(ExtendedName { last: Some("Doe Winners"), first: Some("John Timothy"), additional: Some(""), prefix: Some("Sir"), suffix: Some("") })
+Phone(Telephone { number: "123456789", tel_types: [String("pref")] })
+Phone(Telephone { number: "23234234234", tel_types: [Voice] })
+Phone(Telephone { number: "23234234234", tel_types: [Voice] })
+Phone(Telephone { number: "2342", tel_types: [Voice] })
+Phone(Telephone { number: "2342", tel_types: [Voice] })
+Phone(Telephone { number: "234234", tel_types: [Voice] })
+Phone(Telephone { number: "234234", tel_types: [Voice] })
+Phone(Telephone { number: "25563", tel_types: [String("MAIN")] })
+Phone(Telephone { number: "25563", tel_types: [String("MAIN")] })
+Phone(Telephone { number: "334346745", tel_types: [Voice] })
+Phone(Telephone { number: "334346745", tel_types: [Voice] })
+Address(ContactDetailAddress { street: "First st", city: "Berlin", region: "", postal_code: "44356", country: "Germany", addr_type: [Home] })
+Address(ContactDetailAddress { street: "First st", city: "Berlin", region: "", postal_code: "44356", country: "Germany", addr_type: [String("pref")] })
+Address(ContactDetailAddress { street: "Route de la Galaise", city: "Geneva", region: "", postal_code: "1111", country: "Switzerland", addr_type: [Work] })
+Address(ContactDetailAddress { street: "Route de la Galaise", city: "Geneva", region: "", postal_code: "1111", country: "Switzerland", addr_type: [Work] })
+Birthday(Text("1970-05-05"))
+Note("Frog frog frog")
+Title("Consultant")
+Organization("DoughCompany, ")
+Url(VCardUrl { url: "frog.com", url_type: [] })
+Url(VCardUrl { url: "frog.com", url_type: [String("pref")] })
+Url(VCardUrl { url: "test.com", url_type: [Home] })
+Url(VCardUrl { url: "test.com", url_type: [Home] })
