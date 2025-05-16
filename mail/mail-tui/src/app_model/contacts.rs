@@ -152,10 +152,11 @@ impl OpenedContactState {
         let mut title_cell_size = 0;
         let mut add_row = |title: &str, body: &str| {
             title_cell_size = title_cell_size.max(title.len());
+            let body = body.trim();
             if !body.is_empty() {
                 rows.push(Row::new([
-                    Cell::from(title.to_string()),
-                    Cell::from(body.to_string()),
+                    Cell::from(title.trim().to_string()),
+                    Cell::from(body.trim().to_string()),
                 ]));
             }
         };
@@ -184,6 +185,9 @@ impl OpenedContactState {
                     if let Some(prefix) = prefix {
                         write!(&mut extended_name_repr, "{prefix} ").unwrap();
                     }
+                    if let Some(additional) = additional {
+                        write!(&mut extended_name_repr, " {additional}").unwrap();
+                    }
                     if let Some(first) = first {
                         write!(&mut extended_name_repr, "{first} ").unwrap();
                     }
@@ -193,14 +197,8 @@ impl OpenedContactState {
                     if let Some(suffix) = suffix {
                         write!(&mut extended_name_repr, "{suffix}").unwrap();
                     }
-                    if let Some(additional) = additional {
-                        write!(&mut extended_name_repr, " {additional}").unwrap();
-                    }
 
-                    let extended_name = extended_name_repr.trim().to_string();
-                    if !extended_name.is_empty() {
-                        add_row("Extended Name:", &extended_name);
-                    }
+                    add_row("Extended Name:", &extended_name_repr);
                 }
                 ContactField::Address(items) => {
                     for ContactDetailAddress {
