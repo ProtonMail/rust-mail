@@ -13,6 +13,7 @@ pub async fn handle_message_events(
 ) -> Result<Vec<LocalMessageId>, AppError> {
     let mut ids = Vec::with_capacity(message_events.len());
     for message_event in message_events {
+        message_event.action.log_entry(&message_event.remote_id);
         match message_event.action {
             Action::Delete => {
                 tx.execute(
