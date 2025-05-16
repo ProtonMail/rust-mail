@@ -21,10 +21,8 @@ END:VCARD
 
 Sorted fields:
 ExtendedName(ExtendedName { last: Some("Beutlin"), first: Some("Frodo"), additional: Some(""), prefix: Some(""), suffix: Some("") })
-Address(ContactDetailAddress { street: "", city: "Hobbiton", region: "The Shire", postal_code: "", country: "Middle earth", addr_type: [] })
-Language("Common")
-Language("co-HO")
-TimeZone("SMT")
-Logo("https://hipfonts.com/wp-content/uploads/2021/01/The-Lord-of-the-Rings-Logo.jpg")
-Logo("data:bad")
-Photo("https://static.wikia.nocookie.net/lotr/images/3/32/Frodo_%28FotR%29.png/revision/latest?cb=20221006065757")
+Address([ContactDetailAddress { street: "", city: "Hobbiton", region: "The Shire", postal_code: "", country: "Middle earth", addr_type: [] }])
+Languages(["Common", "co-HO"])
+TimeZones(["SMT"])
+Logos(["https://hipfonts.com/wp-content/uploads/2021/01/The-Lord-of-the-Rings-Logo.jpg", "data:bad"])
+Photos(["https://static.wikia.nocookie.net/lotr/images/3/32/Frodo_%28FotR%29.png/revision/latest?cb=20221006065757"])

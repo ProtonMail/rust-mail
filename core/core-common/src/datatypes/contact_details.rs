@@ -37,22 +37,22 @@ pub struct InspectableContactDetails {
 #[derive(Clone, Debug)]
 pub enum ContactField {
     Anniversary(MaybeDateAndOrTime),
-    ExtendedName(ExtendedName),
-    Address(ContactDetailAddress),
     Birthday(MaybeDateAndOrTime),
-    Email(ContactDetailsEmail),
     Gender(Gender),
-    Language(String),
-    Logo(String),
-    Member(String),
-    Note(String),
-    Organization(String),
-    Phone(Telephone),
-    Photo(String),
-    Role(String),
-    TimeZone(String),
-    Title(String),
-    Url(VCardUrl),
+    ExtendedName(ExtendedName),
+    Address(Vec<ContactDetailAddress>),
+    Emails(Vec<ContactDetailsEmail>),
+    Languages(Vec<String>),
+    Logos(Vec<String>),
+    Members(Vec<String>),
+    Notes(Vec<String>),
+    Organizations(Vec<String>),
+    Phones(Vec<Telephone>),
+    Photos(Vec<String>),
+    Roles(Vec<String>),
+    TimeZones(Vec<String>),
+    Titles(Vec<String>),
+    Urls(Vec<VCardUrl>),
 }
 
 impl ContactField {
@@ -61,22 +61,22 @@ impl ContactField {
     pub fn as_u32(&self) -> u32 {
         match self {
             ContactField::ExtendedName(_) => 0,
-            ContactField::Email(_) => 1,
-            ContactField::Phone(_) => 2,
+            ContactField::Emails(_) => 1,
+            ContactField::Phones(_) => 2,
             ContactField::Address(_) => 3,
             ContactField::Birthday(_) => 4,
-            ContactField::Note(_) => 5,
+            ContactField::Notes(_) => 5,
             ContactField::Anniversary(_) => 6,
             ContactField::Gender(_) => 7,
-            ContactField::Language(_) => 8,
-            ContactField::TimeZone(_) => 9,
-            ContactField::Title(_) => 10,
-            ContactField::Role(_) => 11,
-            ContactField::Logo(_) => 12,
-            ContactField::Photo(_) => 13,
-            ContactField::Organization(_) => 14,
-            ContactField::Member(_) => 15,
-            ContactField::Url(_) => 16,
+            ContactField::Languages(_) => 8,
+            ContactField::TimeZones(_) => 9,
+            ContactField::Titles(_) => 10,
+            ContactField::Roles(_) => 11,
+            ContactField::Logos(_) => 12,
+            ContactField::Photos(_) => 13,
+            ContactField::Organizations(_) => 14,
+            ContactField::Members(_) => 15,
+            ContactField::Urls(_) => 16,
         }
     }
 }
@@ -97,7 +97,7 @@ impl Ord for ContactField {
 
 impl PartialOrd for ContactField {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.as_u32().partial_cmp(&other.as_u32())
+        Some(self.cmp(other))
     }
 }
 
@@ -131,71 +131,71 @@ impl InspectableContactDetails {
         let v = &mut res.fields;
         vcard
             .telephones
-            .sorted_extend(v, ContactField::Phone, |tel| Telephone {
+            .sorted_extend(v, ContactField::Phones, |tel| Telephone {
                 number: tel.value.to_string(),
                 tel_types: tel.tel_type.iter().cloned().map_vec(),
             });
 
         vcard
             .addresses
-            .sorted_extend(v, ContactField::Address, |x| ContactDetailAddress::from(x));
+            .sorted_extend(v, ContactField::Address, ContactDetailAddress::from);
 
-        vcard
-            .name
-            .sorted_extend(v, ContactField::ExtendedName, |name| ExtendedName {
+        if let Some(name) = vcard.name {
+            v.push(ContactField::ExtendedName(ExtendedName {
                 last: name.last.concat_to_string(" "),
                 first: name.first.concat_to_string(" "),
                 additional: name.additional.concat_to_string(" "),
                 prefix: name.prefix.concat_to_string(" "),
                 suffix: name.suffix.concat_to_string(" "),
-            });
+            }));
+        }
 
-        vcard
-            .gender
-            .sorted_extend(v, ContactField::Gender, |g| g.value.into());
-        vcard
-            .anniversary
-            .sorted_extend(v, ContactField::Anniversary, |g| g.value);
-        vcard
-            .birthday
-            .sorted_extend(v, ContactField::Birthday, |g| g.value);
+        if let Some(g) = vcard.gender {
+            v.push(ContactField::Gender(g.value.into()));
+        }
+        if let Some(g) = vcard.anniversary {
+            v.push(ContactField::Anniversary(g.value));
+        }
+        if let Some(g) = vcard.birthday {
+            v.push(ContactField::Birthday(g.value));
+        }
 
         vcard
             .urls
-            .sorted_extend(v, ContactField::Url, |u| VCardUrl {
+            .sorted_extend(v, ContactField::Urls, |u| VCardUrl {
                 url_type: u.r#type.into_iter().map_vec(),
                 url: u.value.to_string(),
             });
         vcard
             .organizations
-            .sorted_extend(v, ContactField::Organization, |x| {
+            .sorted_extend(v, ContactField::Organizations, |x| {
                 x.values.into_iter().join(", ")
             });
 
         vcard
             .logos
-            .sorted_extend(v, ContactField::Logo, |logo| logo.value.0.to_string());
+            .sorted_extend(v, ContactField::Logos, |logo| logo.value.0.to_string());
         vcard
             .photos
-            .sorted_extend(v, ContactField::Photo, |photo| photo.value.0.to_string());
+            .sorted_extend(v, ContactField::Photos, |photo| photo.value.0.to_string());
         vcard
             .time_zones
-            .sorted_extend(v, ContactField::TimeZone, |x| x.value.to_string());
+            .sorted_extend(v, ContactField::TimeZones, |x| x.value.to_string());
         vcard
             .notes
-            .sorted_extend(v, ContactField::Note, |x| x.value.value);
+            .sorted_extend(v, ContactField::Notes, |x| x.value.value);
         vcard
             .titles
-            .sorted_extend(v, ContactField::Title, |x| x.value.value);
+            .sorted_extend(v, ContactField::Titles, |x| x.value.value);
         vcard
             .roles
-            .sorted_extend(v, ContactField::Role, |x| x.value.value);
+            .sorted_extend(v, ContactField::Roles, |x| x.value.value);
         vcard
             .languages
-            .sorted_extend(v, ContactField::Language, |x| x.value);
+            .sorted_extend(v, ContactField::Languages, |x| x.value);
         vcard
             .members
-            .sorted_extend(v, ContactField::Member, |x| x.value.to_string());
+            .sorted_extend(v, ContactField::Members, |x| x.value.to_string());
 
         // Very important that this is a stable sort!
         v.sort();

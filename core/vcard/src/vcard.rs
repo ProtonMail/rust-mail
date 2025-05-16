@@ -588,12 +588,15 @@ pub trait ToSorted<P> {
     fn sorted_extend<T: Ord, U>(
         self,
         vec: &mut Vec<U>,
-        f1: impl FnMut(T) -> U,
+        mut f1: impl FnMut(Vec<T>) -> U,
         f2: impl FnMut(P) -> T,
     ) where
         Self: Sized,
     {
-        vec.extend(self.to_sorted_iter(f2).map(f1))
+        let vals = self.to_sorted_iter(f2).collect_vec();
+        if !vals.is_empty() {
+            vec.push(f1(vals));
+        }
     }
 }
 
@@ -612,14 +615,5 @@ impl<_K, P: VcardProperty, S: BuildHasher> ToSorted<P> for HashMap<_K, P, S> {
             })
             .sorted_unstable()
             .map(|x| x.1)
-    }
-}
-
-impl<P> ToSorted<P> for Option<P> {
-    fn to_sorted_iter<T: Ord>(self, f: impl FnMut(P) -> T) -> impl Iterator<Item = T>
-    where
-        Self: Sized,
-    {
-        self.into_iter().map(f)
     }
 }

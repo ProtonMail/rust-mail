@@ -1,5 +1,3 @@
-use std::fmt::{Debug, Formatter};
-
 use crate::errors::{VCardValueError, VCardValueResult};
 use crate::values::check_list;
 use crate::values::component::{Component, is_component_value};
@@ -7,7 +5,7 @@ use crate::vcard::split_list;
 use itertools::Itertools as _;
 
 /// A list of component values
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct ListComponent(pub Vec<Component>);
 
 impl ListComponent {
@@ -44,12 +42,6 @@ impl ListComponent {
         }
 
         Some(self.0.iter().map(|x| &x.0).join(sep))
-    }
-}
-
-impl Debug for ListComponent {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "LC({:?})", self.0)
     }
 }
 

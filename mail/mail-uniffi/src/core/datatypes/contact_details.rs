@@ -52,22 +52,22 @@ impl From<RealContactDetails> for ContactDetailCard {
 #[derive(uniffi::Enum)]
 pub enum ContactField {
     Anniversary(ContactDate),
-    ExtendedName(ExtendedName),
-    Address(ContactDetailAddress),
     Birthday(ContactDate),
-    Email(ContactDetailsEmail),
     Gender(Gender),
-    Language(String),
-    Logo(String),
-    Member(String),
-    Note(String),
-    Organization(String),
-    Phone(Telephone),
-    Photo(String),
-    Role(String),
-    TimeZone(String),
-    Title(String),
-    Url(VCardUrl),
+    ExtendedName(ExtendedName),
+    Addresses(Vec<ContactDetailAddress>),
+    Emails(Vec<ContactDetailsEmail>),
+    Languages(Vec<String>),
+    Logos(Vec<String>),
+    Members(Vec<String>),
+    Notes(Vec<String>),
+    Organizations(Vec<String>),
+    Telephones(Vec<ContactDetailsTelephones>),
+    Photos(Vec<String>),
+    Roles(Vec<String>),
+    TimeZones(Vec<String>),
+    Titles(Vec<String>),
+    Urls(Vec<VCardUrl>),
 }
 
 impl From<RealContactField> for ContactField {
@@ -75,21 +75,21 @@ impl From<RealContactField> for ContactField {
         match value {
             RealContactField::Anniversary(v) => ContactField::Anniversary(v.into()),
             RealContactField::ExtendedName(v) => ContactField::ExtendedName(v.into()),
-            RealContactField::Address(v) => ContactField::Address(v.into()),
+            RealContactField::Address(v) => ContactField::Addresses(v.map_vec()),
             RealContactField::Birthday(v) => ContactField::Birthday(v.into()),
-            RealContactField::Email(v) => ContactField::Email(v.into()),
+            RealContactField::Emails(v) => ContactField::Emails(v.map_vec()),
             RealContactField::Gender(v) => ContactField::Gender(v.into()),
-            RealContactField::Language(v) => ContactField::Language(v.into()),
-            RealContactField::Logo(v) => ContactField::Logo(v.into()),
-            RealContactField::Member(v) => ContactField::Member(v.into()),
-            RealContactField::Note(v) => ContactField::Note(v.into()),
-            RealContactField::Organization(v) => ContactField::Organization(v.into()),
-            RealContactField::Phone(v) => ContactField::Phone(v.into()),
-            RealContactField::Photo(v) => ContactField::Photo(v.into()),
-            RealContactField::Role(v) => ContactField::Role(v.into()),
-            RealContactField::TimeZone(v) => ContactField::TimeZone(v.into()),
-            RealContactField::Title(v) => ContactField::Title(v.into()),
-            RealContactField::Url(v) => ContactField::Url(v.into()),
+            RealContactField::Languages(v) => ContactField::Languages(v),
+            RealContactField::Logos(v) => ContactField::Logos(v),
+            RealContactField::Members(v) => ContactField::Members(v),
+            RealContactField::Notes(v) => ContactField::Notes(v),
+            RealContactField::Organizations(v) => ContactField::Organizations(v),
+            RealContactField::Phones(v) => ContactField::Telephones(v.map_vec()),
+            RealContactField::Photos(v) => ContactField::Photos(v),
+            RealContactField::Roles(v) => ContactField::Roles(v),
+            RealContactField::TimeZones(v) => ContactField::TimeZones(v),
+            RealContactField::Titles(v) => ContactField::Titles(v),
+            RealContactField::Urls(v) => ContactField::Urls(v.map_vec()),
         }
     }
 }
@@ -145,12 +145,12 @@ impl From<RealExtendedName> for ExtendedName {
 }
 
 #[derive(uniffi::Record)]
-pub struct Telephone {
+pub struct ContactDetailsTelephones {
     pub number: String,
     pub tel_types: Vec<VcardPropType>,
 }
 
-impl From<RealTelephone> for Telephone {
+impl From<RealTelephone> for ContactDetailsTelephones {
     fn from(value: RealTelephone) -> Self {
         Self {
             number: value.number,

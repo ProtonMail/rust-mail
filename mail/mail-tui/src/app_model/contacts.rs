@@ -202,66 +202,89 @@ impl OpenedContactState {
                         add_row("Extended Name:", &extended_name);
                     }
                 }
-                ContactField::Address(ContactDetailAddress {
-                    street,
-                    city,
-                    region,
-                    postal_code,
-                    country,
-                    addr_type,
-                }) => {
-                    let addr_type = addr_type.iter().map(ToString::to_string).join(", ");
-                    add_row("Address:", &addr_type);
-                    add_row("Address:", &street);
-                    add_row("City:", &city);
-                    add_row("Region:", &region);
-                    add_row("Postal Code:", &postal_code);
-                    add_row("Country:", &country);
+                ContactField::Address(items) => {
+                    for ContactDetailAddress {
+                        street,
+                        city,
+                        region,
+                        postal_code,
+                        country,
+                        addr_type,
+                    } in items
+                    {
+                        let addr_type = addr_type.iter().map(ToString::to_string).join(", ");
+                        add_row("Address:", &addr_type);
+                        add_row("Address:", street);
+                        add_row("City:", city);
+                        add_row("Region:", region);
+                        add_row("Postal Code:", postal_code);
+                        add_row("Country:", country);
+                    }
                 }
-                ContactField::Email(ContactDetailsEmail { name, email }) => {
-                    add_row(&name, &email);
+                ContactField::Emails(items) => {
+                    for ContactDetailsEmail { name, email } in items {
+                        add_row(name, email);
+                    }
                 }
-                ContactField::Phone(Telephone { number, tel_types }) => {
-                    let text = format!(
-                        "{} {number}",
-                        tel_types.iter().map(ToString::to_string).join(", ")
-                    );
-                    add_row("Telephone:", &text);
+                ContactField::Phones(items) => {
+                    for Telephone { number, tel_types } in items {
+                        let text = format!(
+                            "{} {number}",
+                            tel_types.iter().map(ToString::to_string).join(", ")
+                        );
+                        add_row("Telephone:", &text);
+                    }
                 }
-                ContactField::Gender(gender) => {
-                    add_row("Gender:", &gender.to_string());
+                ContactField::Gender(item) => {
+                    add_row("Gender:", &item.to_string());
                 }
-                ContactField::Language(lang) => {
-                    add_row("Language:", &lang);
+                ContactField::Languages(items) => {
+                    for item in items {
+                        add_row("Language:", item);
+                    }
                 }
-                ContactField::Member(member) => {
-                    add_row("Member:", &member);
+                ContactField::Members(items) => {
+                    for item in items {
+                        add_row("Member:", item);
+                    }
                 }
-                ContactField::Note(note) => {
+                ContactField::Notes(items) => {
                     // FIXME: This might not fit!
-                    add_row("Note:", &note);
+                    for item in items {
+                        add_row("Note:", item);
+                    }
                 }
-                ContactField::Organization(org) => {
-                    add_row("Organization:", &org);
+                ContactField::Organizations(items) => {
+                    for item in items {
+                        add_row("Organizationn:", item);
+                    }
                 }
-                ContactField::Role(role) => {
-                    add_row("Role:", &role);
+                ContactField::Roles(items) => {
+                    for item in items {
+                        add_row("Role:", item);
+                    }
                 }
-                ContactField::TimeZone(tz) => {
-                    add_row("Timezone:", &tz);
+                ContactField::TimeZones(items) => {
+                    for item in items {
+                        add_row("Timezone:", item);
+                    }
                 }
-                ContactField::Title(title) => {
-                    add_row("Title:", &title);
+                ContactField::Titles(items) => {
+                    for item in items {
+                        add_row("Title:", item);
+                    }
                 }
-                ContactField::Url(VCardUrl { url, url_type }) => {
-                    let text = format!(
-                        "{} {url}",
-                        url_type.iter().map(ToString::to_string).join(", ")
-                    );
-                    add_row("Url:", &text);
+                ContactField::Urls(items) => {
+                    for VCardUrl { url, url_type } in items {
+                        let text = format!(
+                            "{} {url}",
+                            url_type.iter().map(ToString::to_string).join(", ")
+                        );
+                        add_row("Url:", &text);
+                    }
                 }
                 // TODO: Do something with these, link, term image...
-                ContactField::Photo(_) | ContactField::Logo(_) => (),
+                ContactField::Photos(_) | ContactField::Logos(_) => (),
             }
         }
 
