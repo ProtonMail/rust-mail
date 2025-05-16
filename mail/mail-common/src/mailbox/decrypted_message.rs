@@ -38,7 +38,13 @@ pub struct TransformOpts {
     pub hide_embedded_images: Option<bool>,
     /// Current settings related to the color scheme.
     /// It affects on which CSS style is used in the HTML body of the message
-    pub theme: ThemeOpts,
+    ///
+    /// Default: None
+    /// It assumes that the device supports `@media` queries. In that case
+    /// passing theme would be irrelevant.
+    ///
+    #[cfg_attr(feature = "uniffi", uniffi(default = None))]
+    pub theme: Option<ThemeOpts>,
 }
 
 /// Current settings related to the color scheme.
@@ -70,21 +76,26 @@ impl ThemeOpts {
     pub fn theme(&self) -> MailTheme {
         self.theme_override.unwrap_or(self.current_theme)
     }
+
+    /// Default values assuming that the device is modern enough
+    /// to support `@media (prefers-color-scheme: dark)` CSS rule.
+    pub fn for_modern_device() -> Self {
+        Self {
+            supports_dark_mode_via_media_query: true,
+            // That value is irrelevant at this point.
+            current_theme: MailTheme::DarkMode,
+            theme_override: None,
+        }
+    }
 }
 
-impl TransformOpts {
-    /// Like `Default` implementation, but requiring current theme to be provided
-    ///
-    pub fn default_with_theme(current_theme: MailTheme) -> Self {
+impl Default for TransformOpts {
+    fn default() -> Self {
         Self {
             show_block_quote: true,
             hide_remote_images: None,
             hide_embedded_images: None,
-            theme: ThemeOpts {
-                current_theme,
-                theme_override: None,
-                supports_dark_mode_via_media_query: true,
-            },
+            theme: None,
         }
     }
 }
@@ -112,7 +123,7 @@ impl TransformOpts {
                 show_block_quote,
                 hide_remote_images,
                 hide_embedded_images,
-                theme: self.theme,
+                theme: self.theme.unwrap_or_else(ThemeOpts::for_modern_device),
             };
         }
 
@@ -127,7 +138,7 @@ impl TransformOpts {
             show_block_quote,
             hide_remote_images: self.hide_remote_images.unwrap_or(hide_remote_images),
             hide_embedded_images: self.hide_embedded_images.unwrap_or(hide_embedded_images),
-            theme: self.theme,
+            theme: self.theme.unwrap_or_else(ThemeOpts::for_modern_device),
         }
     }
 }
@@ -138,7 +149,7 @@ impl From<TransformOptsResolved> for TransformOpts {
             show_block_quote: val.show_block_quote,
             hide_remote_images: Some(val.hide_remote_images),
             hide_embedded_images: Some(val.hide_embedded_images),
-            theme: val.theme,
+            theme: Some(val.theme),
         }
     }
 }

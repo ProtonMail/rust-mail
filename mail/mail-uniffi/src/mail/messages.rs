@@ -25,7 +25,6 @@ use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
 use proton_mail_common::MailUserContext;
-use proton_mail_common::datatypes::theme::MailTheme;
 use proton_mail_common::errors::unexpected::Unexpected;
 
 use proton_mail_common::datatypes::LocalConversationId;
@@ -60,24 +59,6 @@ impl DecryptedMessage {
 
 #[uniffi_export]
 impl DecryptedMessage {
-    #[returns(BodyOutputResult)]
-    pub async fn body_with_defaults(
-        self: Arc<Self>,
-        current_theme: MailTheme,
-    ) -> Result<BodyOutput, ProtonError> {
-        uniffi_async(async move {
-            let tether = self.ctx()?.user_stash().connection();
-            Ok::<_, RealProtonMailError>(
-                self.body
-                    .transformed(TransformOpts::default_with_theme(current_theme), &tether)
-                    .await,
-            )
-        })
-        .await
-        .map_err(ProtonError::from)
-        .into()
-    }
-
     /// Gets the message body as an HTML. This does all of the transformations that are
     /// required based on the options and the user settings.
     ///
