@@ -199,6 +199,7 @@ pub enum ProtectionAutoLock {
     #[default]
     Always,
     Minutes(u8),
+    Never,
 }
 
 impl ProtectionAutoLock {
@@ -211,14 +212,17 @@ impl ProtectionAutoLock {
 
                 last_lock.saturating_add(seconds) < now
             }
+            Self::Never => false,
         }
     }
 }
 
 impl From<u8> for ProtectionAutoLock {
     fn from(value: u8) -> Self {
-        if value > 0 {
+        if value > 0 && value < 255 {
             Self::Minutes(value)
+        } else if value == 255 {
+            Self::Never
         } else {
             Self::Always
         }
@@ -230,6 +234,7 @@ impl From<ProtectionAutoLock> for u8 {
         match value {
             ProtectionAutoLock::Always => 0,
             ProtectionAutoLock::Minutes(val) => val,
+            ProtectionAutoLock::Never => 255,
         }
     }
 }
@@ -380,6 +385,7 @@ mod tests {
     #[test_case(0, ProtectionAutoLock::Always)]
     #[test_case(1, ProtectionAutoLock::Minutes(1))]
     #[test_case(60, ProtectionAutoLock::Minutes(60))]
+    #[test_case(255, ProtectionAutoLock::Never)]
     fn test_from_u8_for_protection_auto_lock(val: u8, expected: ProtectionAutoLock) {
         assert_eq!(ProtectionAutoLock::from(val), expected);
     }
@@ -387,6 +393,8 @@ mod tests {
     #[test_case(ProtectionAutoLock::Always, 0)]
     #[test_case(ProtectionAutoLock::Minutes(1), 1)]
     #[test_case(ProtectionAutoLock::Minutes(60), 60)]
+    #[test_case(ProtectionAutoLock::Minutes(255), 255)]
+    #[test_case(ProtectionAutoLock::Never, 255)]
     fn test_from_protection_auto_lock_for_u8(val: ProtectionAutoLock, expected: u8) {
         assert_eq!(u8::from(val), expected);
     }
@@ -419,6 +427,9 @@ mod tests {
     #[test_case(ProtectionAutoLock::Minutes(1), TWO_MINUTES + 1, ONE_MINUTE => true; "TEST 5 When minutes passed from lock are more than allowed but last lock is not 0")]
     #[test_case(ProtectionAutoLock::Minutes(60), ONE_HOUR, 0 => false; "TEST 6 When 60 minutes equal")]
     #[test_case(ProtectionAutoLock::Minutes(60), ONE_HOUR + 1, 0 => true; "TEST 6 When 60 minutes passed")]
+    #[test_case(ProtectionAutoLock::Never, 0, 0 => false; "TEST 7 AutoLock::Never returns false")]
+    #[test_case(ProtectionAutoLock::Never, ONE_HOUR, 0 => false; "TEST 8 AutoLock::Never returns false")]
+    #[test_case(ProtectionAutoLock::Never, 0, ONE_HOUR => false; "TEST 9 AutoLock::Never returns false")]
     fn should_autolock(autolock: ProtectionAutoLock, now: i64, last_lock: i64) -> bool {
         autolock.should_autolock(now, last_lock)
     }

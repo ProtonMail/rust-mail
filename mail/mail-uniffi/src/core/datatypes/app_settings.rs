@@ -144,6 +144,7 @@ impl From<RealAppProtection> for AppProtection {
 pub enum AutoLock {
     Always,
     Minutes(u8),
+    Never,
 }
 
 impl From<AutoLock> for RealAutoLock {
@@ -151,6 +152,7 @@ impl From<AutoLock> for RealAutoLock {
         match value {
             AutoLock::Always => Self::Always,
             AutoLock::Minutes(minutes) => Self::Minutes(minutes),
+            AutoLock::Never => Self::Never,
         }
     }
 }
@@ -160,6 +162,7 @@ impl From<RealAutoLock> for AutoLock {
         match value {
             RealAutoLock::Always => Self::Always,
             RealAutoLock::Minutes(minutes) => Self::Minutes(minutes),
+            RealAutoLock::Never => Self::Never,
         }
     }
 }
