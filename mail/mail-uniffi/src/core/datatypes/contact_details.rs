@@ -97,11 +97,11 @@ impl From<RealContactField> for ContactField {
 #[derive(uniffi::Record)]
 /// Any of the fields here might be empty
 pub struct ContactDetailAddress {
-    pub street: String,
-    pub city: String,
-    pub region: String,
-    pub postal_code: String,
-    pub country: String,
+    pub street: Option<String>,
+    pub city: Option<String>,
+    pub region: Option<String>,
+    pub postal_code: Option<String>,
+    pub country: Option<String>,
     pub addr_type: Vec<VcardPropType>,
 }
 

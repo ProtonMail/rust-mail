@@ -48,13 +48,10 @@ impl TryFrom<&IcalProperty> for FormattedName {
         let Some(value) = &property.value else {
             return Err(VCardError::MissingValue(PropertyKind::Fn));
         };
-        let mut result = {
-            let value = value.as_str();
-            Ok(FormattedName {
-                value: value.into(),
-                ..Default::default()
-            })
-        }?;
+        let mut result = FormattedName {
+            value: value.into(),
+            ..Default::default()
+        };
         result.group = group_from_name(&property.name);
         if let Some(parameters) = &property.params {
             for (name, values) in parameters {

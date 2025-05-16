@@ -97,11 +97,11 @@ impl InspectableContactDetails {
 
         if let Some(name) = vcard.name {
             v.push(ContactField::ExtendedName(ExtendedName {
-                last: name.last.concat_to_string(" "),
-                first: name.first.concat_to_string(" "),
-                additional: name.additional.concat_to_string(" "),
-                prefix: name.prefix.concat_to_string(" "),
-                suffix: name.suffix.concat_to_string(" "),
+                last: name.last.as_option(),
+                first: name.first.as_option(),
+                additional: name.additional.as_option(),
+                prefix: name.prefix.as_option(),
+                suffix: name.suffix.as_option(),
             }));
         }
 
@@ -173,22 +173,22 @@ pub struct ExtendedName {
 
 #[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]
 pub struct ContactDetailAddress {
-    pub street: String,
-    pub city: String,
-    pub region: String,
-    pub postal_code: String,
-    pub country: String,
+    pub street: Option<String>,
+    pub city: Option<String>,
+    pub region: Option<String>,
+    pub postal_code: Option<String>,
+    pub country: Option<String>,
     pub addr_type: Vec<VcardPropType>,
 }
 
 impl From<VcardAddress> for ContactDetailAddress {
     fn from(value: VcardAddress) -> Self {
         Self {
-            street: value.street,
-            city: value.locality,
-            region: value.region,
-            postal_code: value.postal_code,
-            country: value.country,
+            street: value.street.as_option(),
+            city: value.locality.as_option(),
+            region: value.region.as_option(),
+            postal_code: value.postal_code.as_option(),
+            country: value.country.as_option(),
             addr_type: value.r#type.map_vec(),
         }
     }

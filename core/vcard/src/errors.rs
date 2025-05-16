@@ -2,7 +2,7 @@ use crate::validation::Cardinality;
 use crate::{ParameterType, PropertyKind, ValueType};
 use thiserror::Error;
 
-#[derive(Debug, Error, PartialEq)]
+#[derive(Debug, Error)]
 pub enum VCardError {
     #[error("In a property {0:?}, invalid parameter name: {1:?}")]
     InvalidParameterName(PropertyKind, String),
@@ -26,12 +26,10 @@ pub enum VCardError {
     ParameterExpectedExactlyOneValue(PropertyKind, ParameterType, Vec<String>),
     #[error("In a property {0:?}, parameter {1:?} expected at least one element")]
     ParameterExpectedAtLeastOneValue(PropertyKind, ParameterType),
-    #[error("vCard with more than u32::MAX properties are not handled")]
-    TooManyProperties,
     #[error("Unexpected parameter for {0:?}: {1:?}")]
     UnexpectedParameter(PropertyKind, ParameterType),
-    #[error("vCard version unsupported: {0:?}")]
-    UnsupportedVersion(String),
+    #[error("Unexpected error: {0:?}")]
+    Unexpected(#[from] anyhow::Error),
 }
 
 pub type VCardResult<T> = Result<T, VCardError>;

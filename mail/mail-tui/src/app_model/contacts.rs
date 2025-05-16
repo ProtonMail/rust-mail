@@ -214,11 +214,12 @@ impl OpenedContactState {
                     {
                         let addr_type = addr_type.iter().map(ToString::to_string).join(", ");
                         add_row("Address:", &addr_type);
-                        add_row("Address:", street);
-                        add_row("City:", city);
-                        add_row("Region:", region);
-                        add_row("Postal Code:", postal_code);
-                        add_row("Country:", country);
+
+                        add_row("Street:", street.as_deref().unwrap_or_default());
+                        add_row("City:", city.as_deref().unwrap_or_default());
+                        add_row("Region:", region.as_deref().unwrap_or_default());
+                        add_row("Postal Code:", postal_code.as_deref().unwrap_or_default());
+                        add_row("Country:", country.as_deref().unwrap_or_default());
                     }
                 }
                 ContactField::Emails(items) => {

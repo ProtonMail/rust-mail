@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use anyhow::Context;
 use ical::generator::Property as IcalProperty;
 use velcro::hash_set;
 
@@ -12,20 +13,20 @@ use crate::parameters::value::ValueType;
 use crate::properties::validate_parameters;
 use crate::validation::get_property_kind;
 use crate::values::check_list;
-use crate::values::list_component::{ListComponent, is_list_component_value};
+use crate::values::list_component::{IntoListComponent, is_list_component_value};
 use crate::vcard::{group_from_name, split_list};
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify the components of the name of the object the vCard represents.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Name {
-    pub last: ListComponent,
-    pub first: ListComponent,
-    pub additional: ListComponent,
+    pub last: IntoListComponent,
+    pub first: IntoListComponent,
+    pub additional: IntoListComponent,
     /// honorific prefix like Dr, Mr, Don
-    pub prefix: ListComponent,
+    pub prefix: IntoListComponent,
     /// honorific suffix like `PhD`
-    pub suffix: ListComponent,
+    pub suffix: IntoListComponent,
     pub value_type: Option<ValueType>,
     pub sort_as: Option<SortAs>,
     pub language: Option<Language>,
@@ -38,56 +39,6 @@ pub struct Name {
     pub group: Option<String>,
 }
 
-impl Name {
-    /// Create a new N property without any parameter or group
-    #[must_use]
-    pub fn new(
-        last: ListComponent,
-        first: ListComponent,
-        additional: ListComponent,
-        prefix: ListComponent,
-        suffix: ListComponent,
-    ) -> Self {
-        Self {
-            last,
-            first,
-            additional,
-            prefix,
-            suffix,
-            value_type: None,
-            sort_as: None,
-            language: None,
-            alternative_id: None,
-            any: HashSet::new(),
-            group: None,
-        }
-    }
-
-    /// Try to create a new N property without any parameter or group
-    ///
-    /// # Errors
-    ///   * if any of the argument is not a valid list-component
-    pub fn new_validated(
-        last: &str,
-        first: &str,
-        additional: &str,
-        prefix: &str,
-        suffix: &str,
-    ) -> VCardResult<Self> {
-        Ok(Self::new(
-            ListComponent::try_from(last).map_err(VCardError::from_value_error(PropertyKind::N))?,
-            ListComponent::try_from(first)
-                .map_err(VCardError::from_value_error(PropertyKind::N))?,
-            ListComponent::try_from(additional)
-                .map_err(VCardError::from_value_error(PropertyKind::N))?,
-            ListComponent::try_from(prefix)
-                .map_err(VCardError::from_value_error(PropertyKind::N))?,
-            ListComponent::try_from(suffix)
-                .map_err(VCardError::from_value_error(PropertyKind::N))?,
-        ))
-    }
-}
-
 impl TryFrom<&IcalProperty> for Name {
     type Error = VCardError;
 
@@ -96,24 +47,23 @@ impl TryFrom<&IcalProperty> for Name {
             return Err(VCardError::MissingValue(PropertyKind::N));
         };
 
-        let values: Result<Vec<_>, _> = split_list(value, ';')
-            .iter()
-            .map(|v| ListComponent::try_from(v.as_str()))
-            .collect();
-        // N-value = list-component 4(";" list-component)
-        // So ';;;;' is a valid value with 5 empty list-component
-        let values: [ListComponent; 5] = values
-            .map_err(VCardError::from_value_error(PropertyKind::N))?
-            .try_into()
-            .map_err(|_| VCardError::InvalidValue(PropertyKind::N, value.clone()))?;
+        let mut values = split_list(value, ';').into_iter();
+        let mut next = || {
+            values
+                .next()
+                .context("Too little args in Name")
+                .map(Into::into)
+        };
 
-        let mut result = Self::new(
-            values[0].clone(),
-            values[1].clone(),
-            values[2].clone(),
-            values[3].clone(),
-            values[4].clone(),
-        );
+        let mut result = Self {
+            last: next()?,
+            first: next()?,
+            additional: next()?,
+            prefix: next()?,
+            suffix: next()?,
+            ..Default::default()
+        };
+
         result.group = group_from_name(&property.name);
         if let Some(parameters) = &property.params {
             for (name, values) in parameters {

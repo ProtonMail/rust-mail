@@ -20,6 +20,7 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::BuildHasher;
 
+use anyhow::Context;
 use ical::generator::VcardContact;
 use itertools::Itertools;
 use tracing::{error, warn};
@@ -71,12 +72,11 @@ pub struct PropertyUid(u32);
 
 impl PropertyUid {
     fn increment(&mut self) -> VCardResult<()> {
-        if self.0 < u32::MAX {
-            self.0 += 1;
-            Ok(())
-        } else {
-            Err(VCardError::TooManyProperties)
-        }
+        self.0 = self
+            .0
+            .checked_add(1)
+            .context("vCard with more than u32::MAX properties are not handled")?;
+        Ok(())
     }
 }
 

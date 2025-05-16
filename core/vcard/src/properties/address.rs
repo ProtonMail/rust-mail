@@ -19,23 +19,23 @@ use crate::parameters::value::ValueType;
 use crate::properties::{VcardProperty, validate_parameters};
 use crate::validation::get_property_kind;
 use crate::values::check_list;
-use crate::values::list_component::is_list_component_value;
+use crate::values::list_component::{IntoListComponent, is_list_component_value};
 use crate::vcard::{group_from_name, split_list};
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify the components of the delivery address for the vCard object.
 #[derive(Clone, Debug, Default)]
 pub struct Address {
-    pub post_office_box: String,
+    pub post_office_box: IntoListComponent,
     /// E.g apartment, suite, unit, building, floor, etc
-    pub extended_address: String,
-    pub street: String,
+    pub extended_address: IntoListComponent,
+    pub street: IntoListComponent,
     /// AKA City
-    pub locality: String,
+    pub locality: IntoListComponent,
     /// State or Province
-    pub region: String,
-    pub postal_code: String,
-    pub country: String,
+    pub region: IntoListComponent,
+    pub postal_code: IntoListComponent,
+    pub country: IntoListComponent,
 
     pub value_type: Option<ValueType>,
     pub label: Option<Label>,
@@ -63,13 +63,13 @@ impl Address {
         country: String,
     ) -> Self {
         Self {
-            post_office_box,
-            extended_address,
-            street,
-            locality,
-            region,
-            postal_code,
-            country,
+            post_office_box: post_office_box.into(),
+            extended_address: extended_address.into(),
+            street: street.into(),
+            locality: locality.into(),
+            region: region.into(),
+            postal_code: postal_code.into(),
+            country: country.into(),
             ..Default::default()
         }
     }
