@@ -138,6 +138,7 @@ async fn handle_address_event(
     address_events: &mut [AddressEvent],
 ) -> Result<(), StashError> {
     for event in address_events {
+        event.action.log_entry(&event.remote_id);
         match event.action {
             Action::Delete => {
                 warn!("[ET-1461] Delete action not implemented for address event");
@@ -166,6 +167,7 @@ async fn handle_contact_event(
     contact_events: &mut [ContactEvent],
 ) -> Result<(), StashError> {
     for event in contact_events {
+        event.action.log_entry(&event.remote_id);
         match event.action {
             Action::Delete => tx
                 .execute(
@@ -197,6 +199,7 @@ async fn handle_contact_email_event(
     contact_email_events: &mut [ContactEmailEvent],
 ) -> Result<(), StashError> {
     for event in contact_email_events {
+        event.action.log_entry(&event.remote_id);
         match event.action {
             Action::Delete => tx
                 .execute(

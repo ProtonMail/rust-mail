@@ -10,6 +10,7 @@ pub async fn handle_label_events(
     label_events: &[LabelEvent],
 ) -> Result<(), StashError> {
     for label_event in label_events {
+        label_event.action.log_entry(&label_event.remote_id);
         match label_event.action {
             Action::Delete => {
                 tx.execute(

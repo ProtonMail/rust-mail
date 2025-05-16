@@ -33,7 +33,7 @@
 use crate::models::{Address, Contact, ContactEmail};
 use proton_core_api::services::proton::{
     Action as ApiAction, AddressEvent as ApiAddressEvent,
-    ContactEmailEvent as ApiContactEmailEvent, ContactEvent as ApiContactEvent,
+    ContactEmailEvent as ApiContactEmailEvent, ContactEvent as ApiContactEvent, ProtonIdMarker,
 };
 use proton_core_api::services::proton::{AddressId, ContactEmailId, ContactId};
 
@@ -52,6 +52,18 @@ pub enum Action {
 
     /// TODO: Document this field.
     UpdateFlags = 3,
+}
+
+impl Action {
+    pub fn log_entry(&self, id: &impl ProtonIdMarker) {
+        let action_str = match self {
+            Action::Delete => "Deleting",
+            Action::Create => "Creating",
+            Action::Update => "Updating",
+            Action::UpdateFlags => "Updating (flags)",
+        };
+        tracing::info!("{action_str} {id:?}");
+    }
 }
 
 impl From<ApiAction> for Action {
