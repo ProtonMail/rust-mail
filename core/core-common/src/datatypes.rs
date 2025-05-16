@@ -39,6 +39,7 @@
 
 mod account_details;
 mod avatar;
+pub mod contact_details;
 mod contact_list;
 mod issue_report;
 mod push_notifications;

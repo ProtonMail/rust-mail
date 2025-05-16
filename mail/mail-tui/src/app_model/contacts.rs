@@ -2,8 +2,11 @@ use crossterm::event::{Event, KeyCode};
 use futures::FutureExt;
 use itertools::Itertools;
 use proton_core_common::{
-    datatypes::{ContactGroupItem, ContactItem, ContactItemType, GroupedContacts, LocalContactId},
-    models::{Contact, ContactDetails, ContactListWatcher, InspectableContactDetailCard},
+    datatypes::{
+        ContactGroupItem, ContactItem, ContactItemType, GroupedContacts, LocalContactId,
+        contact_details::{ContactDetails, ExtendedName, InspectableContactDetailCard},
+    },
+    models::{Contact, ContactListWatcher},
 };
 use proton_mail_common::MailUserContext;
 use ratatui::{
@@ -162,7 +165,7 @@ impl OpenedContactState {
             organizations,
         } in &contacts.cards
         {
-            if let Some(proton_core_common::models::ExtendedName {
+            if let Some(ExtendedName {
                 last,
                 first,
                 additional,
