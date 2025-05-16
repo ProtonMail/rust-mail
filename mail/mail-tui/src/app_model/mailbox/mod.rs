@@ -99,6 +99,7 @@ pub enum MessageMessage {
     UnstarMessage(LocalMessageId),
     BlockSender(String, BlockOrUnblock),
     HasMore,
+    CancelScheduleSend(LocalMessageId),
 }
 
 impl From<MessageMessage> for Messages {

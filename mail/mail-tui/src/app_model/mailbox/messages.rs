@@ -26,7 +26,7 @@ use proton_mail_common::datatypes::{
     ReadFilter, SearchOptions,
 };
 use proton_mail_common::decrypted_message::{DecryptedMessageBody, TransformOpts};
-use proton_mail_common::draft::ReplyMode;
+use proton_mail_common::draft::{Draft, ReplyMode};
 use proton_mail_common::mail_scroller::{DataScrollerSource, MailScroller, SearchScrollerSource};
 use proton_mail_common::models::default_location::IncomingDefaultLocation;
 use proton_mail_common::models::{
@@ -536,6 +536,10 @@ impl MessagesState {
                 .selected_message_id()
                 .map(|_| Command::message(MessageMessage::OpenMessageBody.into()))
                 .unwrap_or_default(),
+            KeyCode::Char('z') => self
+                .selected_message_id()
+                .map(|id| Command::message(MessageMessage::CancelScheduleSend(id).into()))
+                .unwrap_or_default(),
             _ => Command::None,
         }
     }
@@ -615,6 +619,9 @@ impl MessagesState {
                         ))
                     });
                 }
+            }
+            MessageMessage::CancelScheduleSend(id) => {
+                return cancel_scheduled_send(user_ctx.to_owned(), id);
             }
         }
         Command::None
@@ -973,4 +980,23 @@ fn block_sender(
 pub enum BlockOrUnblock {
     Block,
     Unblock,
+}
+
+fn cancel_scheduled_send(ctx: Arc<MailUserContext>, id: LocalMessageId) -> Command<Messages> {
+    Command::batch([
+        Command::message(Messages::DisplayBackgroundProgress(
+            "Canceling scheduled send".to_owned(),
+        )),
+        Command::task(async move {
+            let cmd = match Draft::cancel_schedule_send(&ctx, id).await {
+                Ok(_) => Composer::open(ctx, id),
+                Err(e) => Command::message(Messages::DisplayError(
+                    Some("Failed to cancel schedule send".to_owned()),
+                    anyhow::Error::new(e),
+                )),
+            };
+
+            Command::batch([Command::message(Messages::DismissBackgroundProgress), cmd])
+        }),
+    ])
 }
