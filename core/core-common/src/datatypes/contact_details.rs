@@ -23,11 +23,61 @@ use crate::utils::MapVec as _;
 
 use proton_vcard::values::date_and_or_time::MaybeDateAndOrTime;
 
-use crate::datatypes::ContactItem;
+/// Represents some data known from the vCard in a form more suitable for human consumption than a
+/// raw vcard.
+/// These are meant to be used directly by the clients and it sort of represents data in a view.
+#[derive(Clone, Debug)]
+pub struct InspectableContactDetails {
+    /// Clients want this for consistency
+    pub id: LocalContactId,
+    pub extended_name: Option<ExtendedName>,
+    pub address: Vec<ContactDetailAddress>,
+    pub phones: Vec<Telephone>,
+    pub birthday: Option<MaybeDateAndOrTime>,
+    pub notes: Vec<String>,
 
-impl InspectableContactDetailCard {
+    pub anniversary: Option<MaybeDateAndOrTime>,
+    pub urls: Vec<VCardUrl>,
+    pub gender: Option<GenderType>,
+    pub photos: Vec<String>,
+    /// Normally a valid link, but needs not be.
+    pub logos: Vec<String>,
+    pub titles: Vec<String>,
+    pub roles: Vec<String>,
+    /// This might be an RFC compliant string like es-ES or not, like Spanish or Español
+    pub languages: Vec<String>,
+    pub timezones: Vec<String>,
+    /// Normally a valid link, but needs not be.
+    pub members: Vec<String>,
+    pub organizations: Vec<String>,
+}
+
+impl InspectableContactDetails {
+    pub async fn get_from_contact(
+        ctx: &UserContext,
+        contact_id: LocalContactId,
+    ) -> anyhow::Result<Option<Self>> {
+        let mut tether = ctx.stash().connection();
+        Contact::sync_with_card(contact_id, ctx.session(), &mut tether).await?;
+        let contact = Contact::load(contact_id, &tether)
+            .await?
+            .context("Contact does not exist")?;
+
+        let pgp_provider = new_pgp_provider();
+        let unlocked_user_keys = ctx
+            .unlocked_user_keys(&pgp_provider, &tether, ctx.session())
+            .await?;
+
+        let card = contact
+            .vcard_details(&tether, &pgp_provider, &unlocked_user_keys)
+            .await?
+            .map(|c| Self::from_vcard(contact_id, c));
+
+        Ok(card)
+    }
+
     /// Transforms the data in the vCard struct to something suitable for human consumption
-    pub(crate) fn from_vcard(vcard: VCard) -> Self {
+    pub(crate) fn from_vcard(id: LocalContactId, vcard: VCard) -> Self {
         let phones = vcard.telephones.to_sorted(|tel| Telephone {
             number: tel.value.to_string(),
             tel_types: tel.tel_type.iter().cloned().map_vec(),
@@ -64,7 +114,8 @@ impl InspectableContactDetailCard {
         let anniversary = vcard.anniversary.map(|a| a.value);
         let birthday = vcard.birthday.map(|a| a.value);
 
-        InspectableContactDetailCard {
+        Self {
+            id,
             extended_name,
             address,
             phones,
@@ -82,68 +133,6 @@ impl InspectableContactDetailCard {
             members,
             organizations,
         }
-    }
-}
-
-pub struct ContactDetails {
-    pub item: ContactItem,
-    pub cards: Vec<InspectableContactDetailCard>,
-}
-
-/// Represents some data known from the vCard in a form more suitable for human consumption than a
-/// raw vcard.
-/// These are meant to be used directly by the clients and it sort of represents data in a view.
-#[derive(Default, Clone, Debug)]
-pub struct InspectableContactDetailCard {
-    pub extended_name: Option<ExtendedName>,
-    pub address: Vec<ContactDetailAddress>,
-    pub phones: Vec<Telephone>,
-    pub birthday: Option<MaybeDateAndOrTime>,
-    pub notes: Vec<String>,
-
-    pub anniversary: Option<MaybeDateAndOrTime>,
-    pub urls: Vec<VCardUrl>,
-    pub gender: Option<GenderType>,
-    pub photos: Vec<String>,
-    /// Normally a valid link, but needs not be.
-    pub logos: Vec<String>,
-    pub titles: Vec<String>,
-    pub roles: Vec<String>,
-    /// This might be an RFC compliant string like es-ES or not, like Spanish or Español
-    pub languages: Vec<String>,
-    pub timezones: Vec<String>,
-    /// Normally a valid link, but needs not be.
-    pub members: Vec<String>,
-    pub organizations: Vec<String>,
-}
-
-impl ContactDetails {
-    pub async fn get_from_contact(
-        ctx: &UserContext,
-        contact_id: LocalContactId,
-    ) -> anyhow::Result<Self> {
-        let mut tether = ctx.stash().connection();
-        Contact::sync_with_card(contact_id, ctx.session(), &mut tether).await?;
-        let contact = Contact::load(contact_id, &tether)
-            .await?
-            .context("Contact does not exist")?;
-
-        let pgp_provider = new_pgp_provider();
-        let unlocked_user_keys = ctx
-            .unlocked_user_keys(&pgp_provider, &tether, ctx.session())
-            .await?;
-
-        let cards = contact
-            .vcards(&tether, &pgp_provider, &unlocked_user_keys)
-            .await?;
-
-        Ok(Self {
-            item: contact.into(),
-            cards: cards
-                .into_iter()
-                .map(InspectableContactDetailCard::from_vcard)
-                .collect(),
-        })
     }
 }
 
@@ -314,7 +303,7 @@ pub(crate) mod test {
     #[derive(Debug)]
     struct Snapshot {
         vcard: &'static str,
-        card: InspectableContactDetailCard,
+        card: InspectableContactDetails,
     }
 
     fn get_vcard(raw_vcard: &'static str) -> Snapshot {
@@ -324,7 +313,7 @@ pub(crate) mod test {
         let vcard = VCard::from_ical_contact(c).unwrap();
         Snapshot {
             vcard: raw_vcard,
-            card: InspectableContactDetailCard::from_vcard(vcard),
+            card: InspectableContactDetails::from_vcard(LocalContactId(42), vcard),
         }
     }
 

@@ -4,7 +4,7 @@ use itertools::Itertools;
 use proton_core_common::{
     datatypes::{
         ContactGroupItem, ContactItem, ContactItemType, GroupedContacts, LocalContactId,
-        contact_details::{ContactDetails, ExtendedName, InspectableContactDetailCard},
+        contact_details::{ExtendedName, InspectableContactDetails},
     },
     models::{Contact, ContactListWatcher},
 };
@@ -18,8 +18,8 @@ use ratatui::{
     widgets::{Block, Borders, Cell, List, ListItem, Row, Table},
 };
 use stash::stash::{Tether, WatcherHandle};
-use std::fmt::Write as _;
 use std::sync::Arc;
+use std::{fmt::Write as _, mem};
 use tracing::error;
 
 use crate::{
@@ -58,7 +58,7 @@ impl From<FlatContact> for ListItem<'_> {
 pub enum Message {
     Init,
     LoadContacts(Vec<FlatContact>),
-    LoadContactDetails(ContactDetails),
+    LoadContactDetails(InspectableContactDetails),
     OpenContactPopup,
 }
 
@@ -67,7 +67,7 @@ enum OpenedContactState {
     #[default]
     None,
     Loading(ContactItem),
-    Contact(ContactDetails),
+    Contact(InspectableContactDetails, ContactItem),
     Group(ContactGroupItem),
 }
 
@@ -93,11 +93,11 @@ impl OpenedContactState {
 
         match self {
             OpenedContactState::None => return Some(area),
-            OpenedContactState::Loading(contact_item) => {
-                Self::draw_contact_item(frame, contact_area, contact_item);
+            OpenedContactState::Loading(item) => {
+                Self::draw_contact_item(frame, contact_area, item);
             }
-            OpenedContactState::Contact(items) => {
-                Self::draw_contact_details(frame, contact_area, items);
+            OpenedContactState::Contact(details, item) => {
+                Self::draw_contact_details(frame, contact_area, details, item);
             }
             OpenedContactState::Group(group) => {
                 Self::draw_group(frame, contact_area, group);
@@ -107,14 +107,13 @@ impl OpenedContactState {
         list_area
     }
 
-    fn draw_contact_item(frame: &mut Frame, area: Rect, contact: &ContactItem) {
+    fn draw_contact_item(frame: &mut Frame, area: Rect, item: &ContactItem) {
         let rows = [
-            Row::new([Cell::from("Name:"), Cell::from(contact.name.as_str())]).bold(),
+            Row::new([Cell::from("Name:"), Cell::from(item.name.as_str())]).bold(),
             Row::new([
                 Cell::from("Emails:"),
                 Cell::from(
-                    contact
-                        .emails
+                    item.emails
                         .iter()
                         .map(|email| email.email.as_str())
                         .join(", "),
@@ -131,22 +130,20 @@ impl OpenedContactState {
         clippy::too_many_lines,
         reason = "It's a straightforward renedering function with no logic and no further fn calls"
     )]
-    fn draw_contact_details(frame: &mut Frame, area: Rect, contacts: &ContactDetails) {
+    fn draw_contact_details(
+        frame: &mut Frame,
+        area: Rect,
+        details: &InspectableContactDetails,
+        item: &ContactItem,
+    ) {
         let mut rows = vec![];
-        rows.push(Row::new([Cell::from("Name:"), Cell::from(&*contacts.item.name)]).bold());
+        rows.push(Row::new([Cell::from("Name:"), Cell::from(&*item.name)]).bold());
         rows.push(Row::new([
             Cell::from("Emails:"),
-            Cell::from(
-                contacts
-                    .item
-                    .emails
-                    .iter()
-                    .map(|email| &*email.email)
-                    .join(", "),
-            ),
+            Cell::from(item.emails.iter().map(|email| &*email.email).join(", ")),
         ]));
 
-        for InspectableContactDetailCard {
+        let InspectableContactDetails {
             extended_name,
             address,
             phones,
@@ -163,157 +160,156 @@ impl OpenedContactState {
             timezones,
             members: member,
             organizations,
-        } in &contacts.cards
+            id: _,
+        } = &details;
+        if let Some(ExtendedName {
+            last,
+            first,
+            additional,
+            prefix,
+            suffix,
+        }) = extended_name
         {
-            if let Some(ExtendedName {
-                last,
-                first,
-                additional,
-                prefix,
-                suffix,
-            }) = extended_name
-            {
-                let mut extended_name_repr = String::new();
-                if let Some(prefix) = prefix {
-                    write!(&mut extended_name_repr, "{prefix} ").unwrap();
-                }
-                if let Some(first) = first {
-                    write!(&mut extended_name_repr, "{first} ").unwrap();
-                }
-                if let Some(last) = last {
-                    write!(&mut extended_name_repr, "{last} ").unwrap();
-                }
-                if let Some(suffix) = suffix {
-                    write!(&mut extended_name_repr, "{suffix}").unwrap();
-                }
-                if let Some(additional) = additional {
-                    write!(&mut extended_name_repr, " {additional}").unwrap();
-                }
-
-                let extended_name = extended_name_repr.trim().to_string();
-                if !extended_name.is_empty() {
-                    rows.push(Row::new([
-                        Cell::from("Extended Name: "),
-                        Cell::from(extended_name),
-                    ]));
-                }
+            let mut extended_name_repr = String::new();
+            if let Some(prefix) = prefix {
+                write!(&mut extended_name_repr, "{prefix} ").unwrap();
+            }
+            if let Some(first) = first {
+                write!(&mut extended_name_repr, "{first} ").unwrap();
+            }
+            if let Some(last) = last {
+                write!(&mut extended_name_repr, "{last} ").unwrap();
+            }
+            if let Some(suffix) = suffix {
+                write!(&mut extended_name_repr, "{suffix}").unwrap();
+            }
+            if let Some(additional) = additional {
+                write!(&mut extended_name_repr, " {additional}").unwrap();
             }
 
-            for address in address {
-                let addr_type = address.addr_type.iter().map(ToString::to_string).join(", ");
-                rows.push(Row::new([Cell::from(
-                    format!("Address {addr_type}").bold(),
-                )]));
-                if !address.street.is_empty() {
-                    rows.push(Row::new([
-                        Cell::from("Street:"),
-                        Cell::from(&*address.street),
-                    ]));
-                }
-                if !address.city.is_empty() {
-                    rows.push(Row::new([Cell::from("City:"), Cell::from(&*address.city)]));
-                }
-                if !address.region.is_empty() {
-                    rows.push(Row::new([
-                        Cell::from("Region:"),
-                        Cell::from(&*address.region),
-                    ]));
-                }
-                if !address.postal_code.is_empty() {
-                    rows.push(Row::new([
-                        Cell::from("Postal Code:"),
-                        Cell::from(&*address.postal_code),
-                    ]));
-                }
-                if !address.country.is_empty() {
-                    rows.push(Row::new([
-                        Cell::from("Country:"),
-                        Cell::from(&*address.country),
-                    ]));
-                }
-            }
-            for phone in phones {
-                rows.push(Row::new([Cell::from("Phone:"), Cell::from(&*phone.number)]));
-            }
-            if let Some(birthday) = birthday {
+            let extended_name = extended_name_repr.trim().to_string();
+            if !extended_name.is_empty() {
                 rows.push(Row::new([
-                    Cell::from("Birthday:"),
-                    Cell::from(birthday.to_string()),
+                    Cell::from("Extended Name: "),
+                    Cell::from(extended_name),
                 ]));
             }
+        }
 
-            if let Some(anniversary) = anniversary {
+        for address in address {
+            let addr_type = address.addr_type.iter().map(ToString::to_string).join(", ");
+            rows.push(Row::new([Cell::from(
+                format!("Address {addr_type}").bold(),
+            )]));
+            if !address.street.is_empty() {
                 rows.push(Row::new([
-                    Cell::from("Anniversary:"),
-                    Cell::from(anniversary.to_string()),
+                    Cell::from("Street:"),
+                    Cell::from(&*address.street),
                 ]));
             }
-
-            for url in urls {
-                rows.push(Row::new([Cell::from("Url:"), Cell::from(&*url.url)]));
+            if !address.city.is_empty() {
+                rows.push(Row::new([Cell::from("City:"), Cell::from(&*address.city)]));
             }
-
-            for note in notes {
-                // FIXME: This might not fit!
-                rows.push(Row::new([Cell::from("Note:"), Cell::from(&**note)]));
-            }
-
-            if let Some(gender) = gender {
+            if !address.region.is_empty() {
                 rows.push(Row::new([
-                    Cell::from("Gender: "),
-                    Cell::from(gender.to_string()),
+                    Cell::from("Region:"),
+                    Cell::from(&*address.region),
                 ]));
             }
-
-            if !photos.is_empty() {
+            if !address.postal_code.is_empty() {
                 rows.push(Row::new([
-                    Cell::from("Photos:"),
-                    Cell::from(photos.len().to_string()),
+                    Cell::from("Postal Code:"),
+                    Cell::from(&*address.postal_code),
                 ]));
             }
-
-            if !logos.is_empty() {
+            if !address.country.is_empty() {
                 rows.push(Row::new([
-                    Cell::from("Logos:"),
-                    Cell::from(logos.len().to_string()),
+                    Cell::from("Country:"),
+                    Cell::from(&*address.country),
                 ]));
             }
+        }
+        for phone in phones {
+            rows.push(Row::new([Cell::from("Phone:"), Cell::from(&*phone.number)]));
+        }
+        if let Some(birthday) = birthday {
+            rows.push(Row::new([
+                Cell::from("Birthday:"),
+                Cell::from(birthday.to_string()),
+            ]));
+        }
 
-            for title in titles {
-                rows.push(Row::new([Cell::from("Title:"), Cell::from(title.as_str())]));
-            }
+        if let Some(anniversary) = anniversary {
+            rows.push(Row::new([
+                Cell::from("Anniversary:"),
+                Cell::from(anniversary.to_string()),
+            ]));
+        }
 
-            for role in roles {
-                rows.push(Row::new([Cell::from("Role:"), Cell::from(role.as_str())]));
-            }
+        for url in urls {
+            rows.push(Row::new([Cell::from("Url:"), Cell::from(&*url.url)]));
+        }
 
-            for language in languages {
-                rows.push(Row::new([
-                    Cell::from("Language:"),
-                    Cell::from(language.as_str()),
-                ]));
-            }
+        for note in notes {
+            // FIXME: This might not fit!
+            rows.push(Row::new([Cell::from("Note:"), Cell::from(&**note)]));
+        }
 
-            for timezone in timezones {
-                rows.push(Row::new([
-                    Cell::from("Timezone:"),
-                    Cell::from(timezone.as_str()),
-                ]));
-            }
+        if let Some(gender) = gender {
+            rows.push(Row::new([
+                Cell::from("Gender: "),
+                Cell::from(gender.to_string()),
+            ]));
+        }
 
-            for member_entry in member {
-                rows.push(Row::new([
-                    Cell::from("Member:"),
-                    Cell::from(member_entry.as_str()),
-                ]));
-            }
+        if !photos.is_empty() {
+            rows.push(Row::new([
+                Cell::from("Photos:"),
+                Cell::from(photos.len().to_string()),
+            ]));
+        }
 
-            for org in organizations {
-                rows.push(Row::new([
-                    Cell::from("Organization:"),
-                    Cell::from(org.as_str()),
-                ]));
-            }
+        if !logos.is_empty() {
+            rows.push(Row::new([
+                Cell::from("Logos:"),
+                Cell::from(logos.len().to_string()),
+            ]));
+        }
+
+        for title in titles {
+            rows.push(Row::new([Cell::from("Title:"), Cell::from(title.as_str())]));
+        }
+
+        for role in roles {
+            rows.push(Row::new([Cell::from("Role:"), Cell::from(role.as_str())]));
+        }
+
+        for language in languages {
+            rows.push(Row::new([
+                Cell::from("Language:"),
+                Cell::from(language.as_str()),
+            ]));
+        }
+
+        for timezone in timezones {
+            rows.push(Row::new([
+                Cell::from("Timezone:"),
+                Cell::from(timezone.as_str()),
+            ]));
+        }
+
+        for member_entry in member {
+            rows.push(Row::new([
+                Cell::from("Member:"),
+                Cell::from(member_entry.as_str()),
+            ]));
+        }
+
+        for org in organizations {
+            rows.push(Row::new([
+                Cell::from("Organization:"),
+                Cell::from(org.as_str()),
+            ]));
         }
 
         let widths = [Constraint::Length(10), Constraint::Fill(1)];
@@ -380,8 +376,12 @@ impl Model {
         let ctx = self.ctx.clone();
         Command::task(async move {
             let ctx = ctx.user_context();
-            match ContactDetails::get_from_contact(ctx, contact_id).await {
-                Ok(details) => Command::Message(Message::LoadContactDetails(details).into()),
+            match InspectableContactDetails::get_from_contact(ctx, contact_id).await {
+                Ok(Some(details)) => Command::Message(Message::LoadContactDetails(details).into()),
+                Ok(None) => {
+                    tracing::info!("Contact has no details");
+                    Command::None
+                }
                 Err(e) => {
                     tracing::error!("{e:?}");
                     Command::message(e.into())
@@ -561,7 +561,12 @@ impl AppStateHandler for Model {
                 }
             }
             Message::LoadContactDetails(contacts) => {
-                self.open_contact = OpenedContactState::Contact(contacts);
+                match mem::take(&mut self.open_contact) {
+                    OpenedContactState::Loading(contact_item) => {
+                        self.open_contact = OpenedContactState::Contact(contacts, contact_item);
+                    }
+                    _ => unreachable!(),
+                }
                 Command::none()
             }
         }

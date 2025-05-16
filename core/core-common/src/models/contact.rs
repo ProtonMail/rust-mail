@@ -197,6 +197,43 @@ impl Contact {
         Ok(decrypted_cards)
     }
 
+    pub async fn vcard_details<T: PGPProviderSync>(
+        &self,
+        tether: &Tether,
+        provider: &T,
+        keys: &UnlockedUserKeys<T>,
+    ) -> Result<Option<VCard>, anyhow::Error> {
+        let cards = ContactCard::find(
+            "WHERE remote_contact_id = ?",
+            params![self.remote_id.clone()],
+            tether,
+        )
+        .await?;
+
+        let Some(card) = cards.into_iter().find(|c| {
+            matches!(
+                c.card_type,
+                ContactCardType::Encrypted | ContactCardType::EncryptedAndSigned
+            )
+        }) else {
+            debug!("No card details");
+            return Ok(None);
+        };
+
+        let card = card
+            .decrypt_and_verify_sync(provider, keys, keys)
+            .context("Error decrypting vCard")?;
+        let mut cards = VcardParser::new(card.reader());
+        let card = cards
+            .next()
+            .context("Not vCard in card?")?
+            .context("Can't parse vCard with ical")?;
+        let card = card
+            .try_into()
+            .context("Error parsing vCard with proton-vcard")?;
+        Ok(Some(card))
+    }
+
     /// Returns the associated emails for a contact.
     ///
     /// This function retrieves the emails for a contact from the database,

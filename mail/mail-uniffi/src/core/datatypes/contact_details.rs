@@ -1,14 +1,12 @@
-use super::ContactItem;
 use super::Id;
 use crate::errors::UserSessionError;
 use crate::mail::MailUserSession;
 use crate::uniffi_async;
 use proton_core_common::datatypes::contact_details::ContactDetailAddress as RealAddress;
-use proton_core_common::datatypes::contact_details::ContactDetails as RealContactDetails;
 use proton_core_common::datatypes::contact_details::ContactDetailsEmail as RealContactDetailsEmail;
 use proton_core_common::datatypes::contact_details::ExtendedName as RealExtendedName;
 use proton_core_common::datatypes::contact_details::GenderType as RealGenderType;
-use proton_core_common::datatypes::contact_details::InspectableContactDetailCard as RealContactDetailCard;
+use proton_core_common::datatypes::contact_details::InspectableContactDetails as RealContactDetails;
 use proton_core_common::datatypes::contact_details::Telephone as RealTelephone;
 use proton_core_common::datatypes::contact_details::VCardUrl as RealVCardUrl;
 use proton_core_common::datatypes::contact_details::VcardPropType as RealVcardPropType;
@@ -21,13 +19,13 @@ use proton_vcard::values::date_and_or_time::MaybeDateAndOrTime;
 pub async fn get_contact_details(
     session: &MailUserSession,
     contact_id: Id,
-) -> Result<ContactDetails, UserSessionError> {
+) -> Result<Option<ContactDetailCard>, UserSessionError> {
     let ctx = session.ctx()?;
 
     uniffi_async(async move {
         let ctx = ctx.user_context();
         let details = RealContactDetails::get_from_contact(ctx, contact_id.into()).await?;
-        Ok::<_, RealProtonMailError>(details.into())
+        Ok::<_, RealProtonMailError>(details.map(Into::into))
     })
     .await
     .map_err(UserSessionError::from)
@@ -35,24 +33,11 @@ pub async fn get_contact_details(
 }
 
 #[derive(uniffi::Record)]
-pub struct ContactDetails {
-    pub item: ContactItem,
-    pub cards: Vec<ContactDetailCard>,
-}
-
-impl From<RealContactDetails> for ContactDetails {
-    fn from(value: RealContactDetails) -> Self {
-        Self {
-            item: value.item.into(),
-            cards: value.cards.map_vec(),
-        }
-    }
-}
-
-#[derive(uniffi::Record)]
 pub struct ContactDetailCard {
+    pub id: Id,
     pub extended_name: Option<ExtendedName>,
     pub address: Vec<ContactDetailAddress>,
+    /// The first phone of the list is the primary phone to be used for the quick action.
     pub phones: Vec<Telephone>,
     pub birthday: Option<ContactDate>,
     pub notes: Vec<String>,
@@ -73,9 +58,10 @@ pub struct ContactDetailCard {
     pub organizations: Vec<String>,
 }
 
-impl From<RealContactDetailCard> for ContactDetailCard {
-    fn from(value: RealContactDetailCard) -> Self {
+impl From<RealContactDetails> for ContactDetailCard {
+    fn from(value: RealContactDetails) -> Self {
         Self {
+            id: value.id.into(),
             extended_name: value.extended_name.map(Into::into),
             address: value.address.map_vec(),
             phones: value.phones.map_vec(),
