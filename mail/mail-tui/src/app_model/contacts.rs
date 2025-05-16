@@ -166,6 +166,34 @@ impl OpenedContactState {
             add_row("Email:", &email.email);
         }
 
+        if let Some(ExtendedName {
+            last,
+            first,
+            additional,
+            prefix,
+            suffix,
+        }) = &details.extended_name
+        {
+            let mut extended_name_repr = String::new();
+            if let Some(prefix) = prefix {
+                write!(&mut extended_name_repr, "{prefix} ").unwrap();
+            }
+            if let Some(additional) = additional {
+                write!(&mut extended_name_repr, " {additional}").unwrap();
+            }
+            if let Some(first) = first {
+                write!(&mut extended_name_repr, "{first} ").unwrap();
+            }
+            if let Some(last) = last {
+                write!(&mut extended_name_repr, "{last} ").unwrap();
+            }
+            if let Some(suffix) = suffix {
+                write!(&mut extended_name_repr, "{suffix}").unwrap();
+            }
+
+            add_row("Extended Name:", &extended_name_repr);
+        }
+
         for field in &details.fields {
             match field {
                 ContactField::Anniversary(date) => {
@@ -173,32 +201,6 @@ impl OpenedContactState {
                 }
                 ContactField::Birthday(date) => {
                     add_row("Birthday:", &date.to_string());
-                }
-                ContactField::ExtendedName(ExtendedName {
-                    last,
-                    first,
-                    additional,
-                    prefix,
-                    suffix,
-                }) => {
-                    let mut extended_name_repr = String::new();
-                    if let Some(prefix) = prefix {
-                        write!(&mut extended_name_repr, "{prefix} ").unwrap();
-                    }
-                    if let Some(additional) = additional {
-                        write!(&mut extended_name_repr, " {additional}").unwrap();
-                    }
-                    if let Some(first) = first {
-                        write!(&mut extended_name_repr, "{first} ").unwrap();
-                    }
-                    if let Some(last) = last {
-                        write!(&mut extended_name_repr, "{last} ").unwrap();
-                    }
-                    if let Some(suffix) = suffix {
-                        write!(&mut extended_name_repr, "{suffix}").unwrap();
-                    }
-
-                    add_row("Extended Name:", &extended_name_repr);
                 }
                 ContactField::Address(items) => {
                     for ContactDetailAddress {

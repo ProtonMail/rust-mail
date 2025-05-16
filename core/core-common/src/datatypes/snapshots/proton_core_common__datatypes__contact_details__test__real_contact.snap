@@ -20,9 +20,8 @@ END:VCARD
 ---------------------------
 
 Sorted fields:
-ExtendedName(ExtendedName { last: Some("González"), first: Some("Orión"), additional: Some(""), prefix: Some(""), suffix: Some("") })
 Phones([Telephone { number: "+34 652522142", tel_types: [] }])
-Address([ContactDetailAddress { street: "", city: "Palencia", region: "Castilla y León", postal_code: "", country: "Spain", addr_type: [] }])
+Address([ContactDetailAddress { street: None, city: Some("Palencia"), region: Some("Castilla y León"), postal_code: None, country: Some("Spain"), addr_type: [] }])
 Birthday(DateAndOrTime(DateAndOrTimeValue(DateTimeValue { year: Some(2000), month: Some(10), day: Some(4), hour: None, minute: None, second: None, zone: None })))
 Languages(["English", "Spanish"])
 TimeZones(["CET"])

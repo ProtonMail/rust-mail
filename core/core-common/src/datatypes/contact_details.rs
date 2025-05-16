@@ -30,6 +30,7 @@ use proton_vcard::values::date_and_or_time::MaybeDateAndOrTime;
 pub struct InspectableContactDetails {
     /// Clients want this for consistency
     pub id: LocalContactId,
+    pub extended_name: Option<ExtendedName>,
     /// These are sorted per display order
     pub fields: Vec<ContactField>,
 }
@@ -37,7 +38,6 @@ pub struct InspectableContactDetails {
 // These are ordered by display order! Please be careful before moving them around.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ContactField {
-    ExtendedName(ExtendedName),
     Emails(Vec<ContactDetailsEmail>),
     Phones(Vec<Telephone>),
     Address(Vec<ContactDetailAddress>),
@@ -82,7 +82,11 @@ impl InspectableContactDetails {
 
     /// Transforms the data in the vCard struct to something suitable for human consumption
     pub(crate) fn from_vcard(id: LocalContactId, vcard: VCard) -> Self {
-        let mut res = Self { id, fields: vec![] };
+        let mut res = Self {
+            id,
+            fields: vec![],
+            extended_name: None,
+        };
         let v = &mut res.fields;
         vcard
             .telephones
@@ -95,15 +99,13 @@ impl InspectableContactDetails {
             .addresses
             .sorted_extend(v, ContactField::Address, ContactDetailAddress::from);
 
-        if let Some(name) = vcard.name {
-            v.push(ContactField::ExtendedName(ExtendedName {
-                last: name.last.as_option(),
-                first: name.first.as_option(),
-                additional: name.additional.as_option(),
-                prefix: name.prefix.as_option(),
-                suffix: name.suffix.as_option(),
-            }));
-        }
+        res.extended_name = vcard.name.map(|name| ExtendedName {
+            last: name.last.as_option(),
+            first: name.first.as_option(),
+            additional: name.additional.as_option(),
+            prefix: name.prefix.as_option(),
+            suffix: name.suffix.as_option(),
+        });
 
         if let Some(g) = vcard.gender {
             v.push(ContactField::Gender(g.value.into()));

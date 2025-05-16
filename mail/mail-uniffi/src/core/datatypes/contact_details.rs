@@ -36,6 +36,7 @@ pub async fn get_contact_details(
 #[derive(uniffi::Record)]
 pub struct ContactDetailCard {
     pub id: Id,
+    pub extended_name: Option<ExtendedName>,
     /// These are sorted per display order
     pub fields: Vec<ContactField>,
 }
@@ -44,6 +45,7 @@ impl From<RealContactDetails> for ContactDetailCard {
     fn from(value: RealContactDetails) -> Self {
         Self {
             id: value.id.into(),
+            extended_name: value.extended_name.map(Into::into),
             fields: value.fields.map_vec(),
         }
     }
@@ -54,7 +56,6 @@ pub enum ContactField {
     Anniversary(ContactDate),
     Birthday(ContactDate),
     Gender(Gender),
-    ExtendedName(ExtendedName),
     Addresses(Vec<ContactDetailAddress>),
     Emails(Vec<ContactDetailsEmail>),
     Languages(Vec<String>),
@@ -74,7 +75,6 @@ impl From<RealContactField> for ContactField {
     fn from(value: RealContactField) -> Self {
         match value {
             RealContactField::Anniversary(v) => ContactField::Anniversary(v.into()),
-            RealContactField::ExtendedName(v) => ContactField::ExtendedName(v.into()),
             RealContactField::Address(v) => ContactField::Addresses(v.map_vec()),
             RealContactField::Birthday(v) => ContactField::Birthday(v.into()),
             RealContactField::Emails(v) => ContactField::Emails(v.map_vec()),

@@ -35,9 +35,8 @@ END:VCARD
 ---------------------------
 
 Sorted fields:
-ExtendedName(ExtendedName { last: Some("Last name"), first: Some("First name"), additional: Some(""), prefix: Some(""), suffix: Some("") })
 Phones([Telephone { number: "652522142", tel_types: [] }, Telephone { number: "blah", tel_types: [String("other")] }])
-Address([ContactDetailAddress { street: "street", city: "city", region: "region", postal_code: "postal", country: "country", addr_type: [] }, ContactDetailAddress { street: "aa", city: "mep", region: "", postal_code: "", country: "", addr_type: [] }, ContactDetailAddress { street: "", city: "", region: "AAAAAAAAAAAAA", postal_code: "", country: "", addr_type: [Work] }, ContactDetailAddress { street: " ", city: "", region: "", postal_code: "", country: "", addr_type: [Work] }, ContactDetailAddress { street: "", city: "", region: " ", postal_code: "", country: "", addr_type: [String("other")] }])
+Address([ContactDetailAddress { street: Some("street"), city: Some("city"), region: Some("region"), postal_code: Some("postal"), country: Some("country"), addr_type: [] }, ContactDetailAddress { street: Some("aa"), city: Some("mep"), region: None, postal_code: None, country: None, addr_type: [] }, ContactDetailAddress { street: None, city: None, region: Some("AAAAAAAAAAAAA"), postal_code: None, country: None, addr_type: [Work] }, ContactDetailAddress { street: Some(" "), city: None, region: None, postal_code: None, country: None, addr_type: [Work] }, ContactDetailAddress { street: None, city: None, region: Some(" "), postal_code: None, country: None, addr_type: [String("other")] }])
 Birthday(DateAndOrTime(DateAndOrTimeValue(DateTimeValue { year: Some(2025), month: Some(5), day: Some(27), hour: None, minute: None, second: None, zone: None })))
 Notes(["I\nAm\nAnother\nNote", "I am a note"])
 Anniversary(DateAndOrTime(DateAndOrTimeValue(DateTimeValue { year: Some(2025), month: Some(4), day: Some(29), hour: None, minute: None, second: None, zone: None })))

@@ -20,8 +20,7 @@ END:VCARD
 ---------------------------
 
 Sorted fields:
-ExtendedName(ExtendedName { last: Some("Beutlin"), first: Some("Frodo"), additional: Some(""), prefix: Some(""), suffix: Some("") })
-Address([ContactDetailAddress { street: "", city: "Hobbiton", region: "The Shire", postal_code: "", country: "Middle earth", addr_type: [] }])
+Address([ContactDetailAddress { street: None, city: Some("Hobbiton"), region: Some("The Shire"), postal_code: None, country: Some("Middle earth"), addr_type: [] }])
 Languages(["Common", "co-HO"])
 TimeZones(["SMT"])
 Logos(["https://hipfonts.com/wp-content/uploads/2021/01/The-Lord-of-the-Rings-Logo.jpg", "data:bad"])
