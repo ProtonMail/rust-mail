@@ -91,6 +91,7 @@ mod available_actions {
         theme: ThemeOpts {
             current_theme: MailTheme::LightMode,
             theme_override: None,
+            supports_dark_mode_via_media_query: false,
         },
         expected: Ok(MessageAvailableActions::builder()
             .move_actions(vec![
@@ -135,6 +136,7 @@ mod available_actions {
         theme: ThemeOpts {
             current_theme: MailTheme::LightMode,
             theme_override: None,
+            supports_dark_mode_via_media_query: false,
         },
         expected: Ok(MessageAvailableActions::builder()
             .move_actions(vec![
@@ -179,6 +181,7 @@ mod available_actions {
         theme: ThemeOpts {
             current_theme: MailTheme::LightMode,
             theme_override: None,
+            supports_dark_mode_via_media_query: false,
         },
         expected: Ok(MessageAvailableActions::builder()
             .move_actions(vec![
@@ -218,6 +221,7 @@ mod available_actions {
         theme: ThemeOpts {
             current_theme: MailTheme::DarkMode,
             theme_override: None,
+            supports_dark_mode_via_media_query: false,
         },
         expected: Ok(MessageAvailableActions::builder()
             .move_actions(vec![
@@ -263,6 +267,7 @@ mod available_actions {
         theme: ThemeOpts {
             current_theme: MailTheme::DarkMode,
             theme_override: Some(MailTheme::LightMode),
+            supports_dark_mode_via_media_query: false,
         },
         expected: Ok(MessageAvailableActions::builder()
             .move_actions(vec![

@@ -56,6 +56,13 @@ pub struct ThemeOpts {
     ///
     #[cfg_attr(feature = "uniffi", uniffi(default = None))]
     pub theme_override: Option<MailTheme>,
+
+    /// Whether the device supports `@media (prefers-color-scheme: dark) {}` or not.
+    ///
+    /// Default: True - only Android 9 does not support it (so far)
+    ///
+    #[cfg_attr(feature = "uniffi", uniffi(default = true))]
+    pub supports_dark_mode_via_media_query: bool,
 }
 
 impl ThemeOpts {
@@ -76,6 +83,7 @@ impl TransformOpts {
             theme: ThemeOpts {
                 current_theme,
                 theme_override: None,
+                supports_dark_mode_via_media_query: true,
             },
         }
     }
@@ -460,8 +468,7 @@ mime_type: {mime_type:?}"
     transformer.inject_style(
         resolve_style(theme),
         BrowserCapabilities {
-            // TODO: Pass it via ThemeOpts
-            supports_dark_mode_via_media_query: true,
+            supports_dark_mode_via_media_query: theme.supports_dark_mode_via_media_query,
         },
     );
 
