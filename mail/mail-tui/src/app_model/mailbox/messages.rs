@@ -17,6 +17,8 @@ use anyhow::{Context, Result, anyhow};
 use futures::FutureExt;
 use futures::future::try_join_all;
 use itertools::Itertools as _;
+use proton_calendar_api::CalendarAttendeeStatus;
+use proton_calendar_common::{RsvpEvent, RsvpOccurrence};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::os::safe_write;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
@@ -42,8 +44,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::{iter, thread};
 use throbber_widgets_tui::ThrobberState;
-use tracing::debug;
 use tokio::fs;
+use tracing::debug;
 
 /// Displays a list of messages based of message metadata. If a conversation is opened the message
 /// body will be displayed.
@@ -655,6 +657,7 @@ pub struct DecryptedMessage {
     bcc: String,
     labels: String,
     banners: Vec<MessageBanner>,
+    rsvp: Option<RsvpEvent>,
 }
 
 enum DecryptedMessageStatus {
@@ -706,6 +709,7 @@ impl DecryptedMessage {
     pub async fn new(
         metadata: MailMessage,
         body: DecryptedMessageBody,
+        ctx: &MailUserContext,
         tether: &mut Tether,
     ) -> Result<Self> {
         let body_output = body.transformed(TransformOpts::default(), tether).await;
@@ -759,6 +763,7 @@ impl DecryptedMessage {
         let cc = format_recipients(&metadata.cc_list);
         let bcc = format_recipients(&metadata.bcc_list);
         let labels = metadata.custom_labels.iter().map(|l| &l.name).join(", ");
+        let rsvp = metadata.fetch_rsvp(ctx, tether).await;
 
         Ok(Self {
             metadata,
@@ -772,19 +777,22 @@ impl DecryptedMessage {
             bcc,
             labels,
             banners: body_output.body_banners,
+            rsvp,
         })
     }
 
     pub fn draw(&mut self, frame: &mut Frame, area: Rect) {
-        let [headers_area, banners_area, content_area] = Layout::vertical([
+        let [headers_area, banners_area, rsvp_area, content_area] = Layout::vertical([
             Constraint::Length(Self::lay_headers()),
             Constraint::Length(self.lay_banners()),
+            Constraint::Length(self.lay_rsvp()),
             Constraint::Fill(1),
         ])
         .areas(area);
 
         self.draw_headers(frame, headers_area);
         self.draw_banners(frame, banners_area);
+        self.draw_rsvp(frame, rsvp_area);
         self.draw_content(frame, content_area);
     }
 
@@ -859,6 +867,53 @@ impl DecryptedMessage {
         });
 
         frame.render_widget(List::new(rows), area);
+    }
+
+    fn lay_rsvp(&self) -> u16 {
+        match &self.rsvp {
+            Some(rsvp) => (3 + rsvp.attendees.len()).try_into().unwrap(),
+            None => 0,
+        }
+    }
+
+    fn draw_rsvp(&self, frame: &mut Frame, area: Rect) {
+        let Some(rsvp) = &self.rsvp else {
+            return;
+        };
+
+        let [sep_area, body_area] =
+            Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(area);
+
+        frame.render_widget(Block::new().borders(Borders::TOP), sep_area);
+
+        // ---
+
+        let rsvp_occur = match rsvp.occurrence {
+            RsvpOccurrence::Date { starts_at, ends_at } => {
+                format!("{starts_at} - {ends_at}")
+            }
+            RsvpOccurrence::DateTime { starts_at, ends_at } => {
+                format!("{starts_at} - {ends_at}")
+            }
+        };
+
+        let rsvp_atts = rsvp.attendees.iter().map(|att| {
+            let status = match att.status {
+                CalendarAttendeeStatus::Unanswered => "unanswered",
+                CalendarAttendeeStatus::Maybe => "maybe",
+                CalendarAttendeeStatus::No => "no",
+                CalendarAttendeeStatus::Yes => "yes",
+            };
+
+            format!("- <{}> ({status})", att.email)
+        });
+
+        let rows = iter::once(rsvp.title.clone())
+            .chain(iter::once(rsvp_occur))
+            .chain(iter::once(String::default()))
+            .chain(rsvp_atts);
+
+        frame.render_widget(List::new(rows), body_area);
     }
 
     fn draw_content(&mut self, frame: &mut Frame, area: Rect) {

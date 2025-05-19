@@ -21,10 +21,12 @@ use crate::{MailContextError, find_in_query};
 use futures::try_join;
 use indoc::{formatdoc, indoc};
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
+use proton_calendar_common::{RsvpError, RsvpEvent, RsvpEventId};
 use proton_core_common::utils::MapVec as _;
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
 use std::collections::HashSet;
+use tokio::fs;
 
 use crate::MailContextResult;
 use crate::actions::{
@@ -2407,7 +2409,7 @@ impl Message {
             .query_values::<_, LocalMessageId>(
                 indoc!(
                     "
-                SELECT local_id as value 
+                SELECT local_id as value
                 FROM messages
                 JOIN message_labels
                     ON messages.local_id = message_labels.local_message_id
@@ -2794,6 +2796,88 @@ impl Message {
     #[must_use]
     pub fn is_scheduled_for_send(&self) -> bool {
         self.label_ids.contains(&LabelId::all_scheduled()) && self.flags.is_schedule_send()
+    }
+
+    /// Checks if this mail contains an RSVP invitation and, if so, fetches this
+    /// event from the calendar and returns it.
+    ///
+    /// Note that this function is non-fallible - since RSVP is a nice-addition
+    /// kinda widget, we don't want to show any errors etc. if it fails to load,
+    /// we just not render it, silently.
+    ///
+    /// TODO (NGC-57) this function works only in online mode for now (always
+    ///      returns `None` if the device is offline)
+    #[tracing::instrument(skip_all, fields(id = self.local_id.unwrap().as_u64()))]
+    pub async fn fetch_rsvp(
+        &self,
+        ctx: &MailUserContext,
+        tether: &mut Tether,
+    ) -> Option<RsvpEvent> {
+        let rsvp = self.attachments_metadata.iter().find_map(|att| {
+            if att.filename == "invite.ics" {
+                att.local_id
+            } else {
+                None
+            }
+        })?;
+
+        debug!("Found a RSVP attachment candidate, analyzing it");
+
+        let ics = match Attachment::get_attachment(ctx, rsvp).await {
+            Ok(ics) => ics.data_path,
+
+            Err(err) => {
+                warn!(?err, "Couldn't get the RSVP attachment");
+                return None;
+            }
+        };
+
+        let ics = match fs::read(&ics).await {
+            Ok(ics) => ics,
+
+            Err(err) => {
+                warn!(?err, "Couldn't read the RSVP attachment");
+                return None;
+            }
+        };
+
+        let event = match RsvpEventId::from_internal(&ics) {
+            Ok(event) => event,
+
+            Err(RsvpError::IcsIsNotRsvpRequest) => {
+                return None;
+            }
+
+            Err(err) => {
+                warn!(?err, "Couldn't parse the RSVP attachment");
+                return None;
+            }
+        };
+
+        info!(?event, "Got RSVP, fetching state from the server");
+
+        let pgp = proton_crypto::new_pgp_provider();
+
+        let keys = match ctx
+            .unlocked_address_keys(&pgp, tether, &self.remote_address_id)
+            .await
+        {
+            Ok(keys) => keys,
+
+            Err(err) => {
+                warn!(?err, "Couldn't unlock address keys");
+                return None;
+            }
+        };
+
+        match event.fetch(ctx.api(), &pgp, &keys).await {
+            Ok(event) => event,
+
+            Err(err) => {
+                warn!(?err, "Couldn't fetch event from the calendar");
+                None
+            }
+        }
     }
 }
 

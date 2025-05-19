@@ -1,5 +1,4 @@
 pub mod attachments;
-
 pub mod decrypted_message;
 
 use crate::datatypes::{MessageRecipientDisplayMode, ViewMode};
