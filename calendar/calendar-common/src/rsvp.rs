@@ -132,7 +132,6 @@ pub enum RsvpOccurrence {
 #[derive(Clone, Debug, PartialEq)]
 pub struct RsvpAttendee {
     pub email: String,
-    pub name: Option<String>,
     pub status: CalendarAttendeeStatus,
 }
 

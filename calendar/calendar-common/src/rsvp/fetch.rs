@@ -265,17 +265,11 @@ fn map_attendee(
         .ok_or(RsvpError::AttendeeHasNoXPmToken)?
         .into_string();
 
-    let name = attendee.cn.map(|cn| cn.value.into_string());
-
     let status = *statuses
         .get(&token.as_str())
         .ok_or(RsvpError::AttendeeHasUnknownStatus)?;
 
-    Ok(RsvpAttendee {
-        email,
-        name,
-        status,
-    })
+    Ok(RsvpAttendee { email, status })
 }
 
 fn extract_calendar(cal: CalendarBootstrap) -> RsvpCalendar {
