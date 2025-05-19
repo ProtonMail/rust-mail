@@ -842,6 +842,10 @@ impl DecryptedMessage {
             MessageBanner::EmbeddedImages => ListItem::from(
                 "This message contains embedded images, which can't be shown in the TUI.",
             ),
+            MessageBanner::ScheduledSend { timestamp } => ListItem::from(format!(
+                "This message will be sent at {}",
+                date_from_timestamp(*timestamp)
+            )),
             _ => ListItem::from("unimplemented"),
         });
         frame.render_widget(List::new(rows), rect);
