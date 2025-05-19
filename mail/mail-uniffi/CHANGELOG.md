@@ -5,7 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [mail-uniffi-v0.78.0]
+## [mail-uniffi-v0.79.0] - 2025-05-19
+
+### Changed
+
+- [ET-2814] Remove decryptedmessage::body_with_defaults
+- [ET-2814] Make themeopts optional
+
+### Features
+
+- Add `never` option for `autolock` app setting
+- [ET-2814] Dark mode in older devices that do not support media query
+- [ET-621] Cancel schedule send
+- [ET-619] Enable schedule send banner
+
+
+## [mail-uniffi-v0.78.0] - 2025-05-16
 
 ### Changed
 
