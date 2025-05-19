@@ -7,6 +7,7 @@ use crate::actions::draft::SEND_ACTION_GROUP;
 use crate::actions::register_mail_actions;
 use crate::context::EventPollMode;
 use crate::draft::attachments::DraftStagingAreaCleaner;
+use crate::events::MailEvent;
 use crate::models::{Conversation, Message};
 use crate::prefetch::{Prefetch, PrefetchJob, PrefetchNotify};
 use crate::user_context::initialization::InitializationMediator;
@@ -48,7 +49,7 @@ pub struct MailUserContext {
     this: Weak<Self>,
     mail_context: Arc<MailContext>,
     user_context: Arc<UserContext>,
-    event_loop: EventLoop,
+    event_loop: EventLoop<MailEvent>,
     default_queue_executor: QueueAutoExecutor,
     send_queue_executors: QueueAutoExecutorPool,
     prefetch: PrefetchNotify,

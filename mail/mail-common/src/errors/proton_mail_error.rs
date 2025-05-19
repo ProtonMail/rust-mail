@@ -492,6 +492,9 @@ impl From<EventLoopError> for ProtonMailError {
             EventLoopError::Refresh => {
                 Self::Reason(MailErrorReason::EventReason(EventErrorReason::Refresh))
             }
+            EventLoopError::AlreadyInitialized | EventLoopError::NotInitialized => {
+                Self::Unexpected(Unexpected::Internal)
+            }
         }
     }
 }

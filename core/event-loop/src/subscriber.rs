@@ -32,12 +32,13 @@ pub enum SubscriberError {
 }
 
 /// Subscriber traits allow anyone to access the events from the event loop.
-#[cfg_attr(test, mockall::automock)]
 #[async_trait]
-pub trait Subscriber<T: Event + Send + Sync>: Send + Sync {
+pub trait Subscriber<T: Event>: Send + Sync {
     /// Return the name/id of this subscriber.
-    fn name(&self) -> &str;
+    fn name(&self) -> &'static str;
 
     /// Handle incoming events.
     async fn on_events(&self, event: &mut [T]) -> Result<(), SubscriberError>;
+
+    // async fn on_refresh(&self) -> Result<(), SubscriberError>;
 }

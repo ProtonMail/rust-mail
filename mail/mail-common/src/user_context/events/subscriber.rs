@@ -23,7 +23,7 @@ impl MailEventSubscriber {
 
 #[async_trait]
 impl Subscriber<MailEvent> for MailEventSubscriber {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "proton-mail-event-subscriber"
     }
     async fn on_events(&self, events: &mut [MailEvent]) -> Result<(), SubscriberError> {
