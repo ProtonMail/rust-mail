@@ -55,7 +55,7 @@ impl From<RealContactDetails> for ContactDetailCard {
 pub enum ContactField {
     Anniversary(ContactDate),
     Birthday(ContactDate),
-    Gender(Gender),
+    Gender(GenderKind),
     Addresses(Vec<ContactDetailAddress>),
     Emails(Vec<ContactDetailsEmail>),
     Languages(Vec<String>),
@@ -245,7 +245,7 @@ impl From<RealVcardPropType> for VcardPropType {
 }
 
 #[derive(uniffi::Enum)]
-pub enum Gender {
+pub enum GenderKind {
     Male,
     Female,
     Other,
@@ -255,7 +255,7 @@ pub enum Gender {
     String(String),
 }
 
-impl From<RealGender> for Gender {
+impl From<RealGender> for GenderKind {
     fn from(value: RealGender) -> Self {
         match value {
             RealGender::Male => Self::Male,
