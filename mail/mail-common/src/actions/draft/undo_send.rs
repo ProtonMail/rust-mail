@@ -3,6 +3,7 @@ use crate::actions::draft::{
 };
 use crate::datatypes::{MessageFlags, SystemLabelId};
 use crate::draft::UndoError;
+use crate::draft::compose::create_timestamp;
 use crate::models::Message;
 use crate::{AppError, MailContextError, MailUserContext};
 use proton_action_queue::action::{
@@ -133,6 +134,7 @@ impl proton_action_queue::action::Handler for UndoSendHandler {
         let local_draft_label_id = local_draft_label_id(tx).await?;
         let local_sent_label_id = local_sent_label_id(tx).await?;
         message.flags.set(MessageFlags::SENT, true);
+        message.time = create_timestamp();
         message
             .save(tx)
             .await

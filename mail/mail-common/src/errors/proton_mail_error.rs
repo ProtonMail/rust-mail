@@ -1,6 +1,8 @@
 use super::mail_error_reason::*;
 use crate::actions::MailActionError;
-use crate::draft::{AttachmentRemoveError, AttachmentUploadError, PackageError};
+use crate::draft::{
+    AttachmentRemoveError, AttachmentUploadError, CancelScheduleSendError, PackageError,
+};
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
 use crate::{
@@ -255,6 +257,7 @@ impl From<DraftError> for ProtonMailError {
                     Self::Unexpected(Unexpected::Draft)
                 }
             },
+            DraftError::CancelScheduleSend(v) => v.into(),
         }
     }
 }
@@ -449,6 +452,31 @@ impl From<PackageError> for ProtonMailError {
         };
 
         Self::Reason(MailErrorReason::DraftSendReason(draft_reason))
+    }
+}
+
+impl From<CancelScheduleSendError> for ProtonMailError {
+    fn from(value: CancelScheduleSendError) -> Self {
+        match value {
+            CancelScheduleSendError::TimedOut | CancelScheduleSendError::MetadataNotFound(_) => {
+                Self::Unexpected(Unexpected::Internal)
+            }
+            CancelScheduleSendError::MessageNotFound(_) => {
+                Self::Reason(MailErrorReason::DraftCancelScheduleSendReason(
+                    DraftCancelScheduleSendErrorReason::MessageDoesNotExist,
+                ))
+            }
+            CancelScheduleSendError::MessageIsNotScheduled(_) => {
+                Self::Reason(MailErrorReason::DraftCancelScheduleSendReason(
+                    DraftCancelScheduleSendErrorReason::MessageNotScheduled,
+                ))
+            }
+            CancelScheduleSendError::AlreadySent(_) => {
+                Self::Reason(MailErrorReason::DraftCancelScheduleSendReason(
+                    DraftCancelScheduleSendErrorReason::MessageAlreadySent,
+                ))
+            }
+        }
     }
 }
 

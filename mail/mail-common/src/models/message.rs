@@ -2790,6 +2790,11 @@ impl Message {
         let action = DeleteAllMessagesInLabel::new(label_id);
         queue.queue_action(action).await
     }
+
+    #[must_use]
+    pub fn is_scheduled_for_send(&self) -> bool {
+        self.label_ids.contains(&LabelId::all_scheduled()) && self.flags.is_schedule_send()
+    }
 }
 
 pub struct MessageWatcher {

@@ -14,6 +14,7 @@ pub enum MailErrorReason {
     DraftUndoSendReason(DraftUndoSendErrorReason),
     DraftDiscardReason(DraftDiscardErrorReason),
     DraftAttachmentUploadReason(DraftAttachmentUploadErrorReason),
+    DraftCancelScheduleSendReason(DraftCancelScheduleSendErrorReason),
     EventReason(EventErrorReason),
     PinSetReson(PinSetErrorReason),
     PinAuthReson(PinAuthErrorReason),
@@ -234,6 +235,13 @@ pub enum DraftDiscardErrorReason {
     MessageDoesNotExist,
     /// Deleting the draft failed
     DeleteFailed,
+}
+
+#[derive(Debug)]
+pub enum DraftCancelScheduleSendErrorReason {
+    MessageDoesNotExist,
+    MessageNotScheduled,
+    MessageAlreadySent,
 }
 
 /// Specific Reason for error occurrence within Event Loop.

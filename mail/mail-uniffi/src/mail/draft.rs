@@ -5,9 +5,9 @@ mod recipients;
 use crate::core::datatypes::Id;
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{
-    DraftDiscardError, DraftOpenError, DraftSaveError, DraftSendError, DraftUndoSendError,
-    EmbeddedAttachmentInfoResult, ProtonError, VoidDraftDiscardResult, VoidDraftSaveResult,
-    VoidDraftSendResult, VoidDraftUndoSendResult,
+    DraftCancelScheduleSendError, DraftDiscardError, DraftOpenError, DraftSaveError,
+    DraftSendError, DraftUndoSendError, EmbeddedAttachmentInfoResult, ProtonError,
+    VoidDraftDiscardResult, VoidDraftSaveResult, VoidDraftSendResult, VoidDraftUndoSendResult,
 };
 use crate::mail::MailUserSession;
 use crate::mail::datatypes::MimeType;
@@ -542,6 +542,32 @@ pub async fn draft_discard(
     .await
     .map_err(DraftDiscardError::from)
     .into()
+}
+
+#[derive(uniffi::Record)]
+pub struct DraftCancelScheduledSendInfo {
+    pub last_scheduled_time: u64,
+}
+
+/// Cancel the scheduled send of message with `message_id`.
+///
+/// Note that will only work if the message has been scheduled for sending.
+#[uniffi_export]
+pub async fn draft_cancel_schedule_send(
+    session: &MailUserSession,
+    message_id: Id,
+) -> Result<DraftCancelScheduledSendInfo, DraftCancelScheduleSendError> {
+    let ctx = session.ctx()?;
+    let old_time = uniffi_async(async move {
+        let old_time = RealDraft::cancel_schedule_send(&ctx, message_id.into()).await?;
+        Ok::<_, RealProtonMailError>(old_time)
+    })
+    .await
+    .map_err(DraftCancelScheduleSendError::from)?;
+
+    Ok(DraftCancelScheduledSendInfo {
+        last_scheduled_time: old_time.timestamp().unsigned_abs(),
+    })
 }
 
 async fn save_draft(ctx: &MailUserContext, draft: &mut RealDraft) -> Result<(), MailContextError> {
