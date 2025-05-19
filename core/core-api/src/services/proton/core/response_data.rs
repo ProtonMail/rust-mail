@@ -393,8 +393,6 @@ pub struct AddressEvent {
     pub address: Option<Address>,
 }
 
-impl GetEventResponse for AddressEvent {}
-
 /// Represents partial contact information returned by the API.
 ///
 /// The partial contact information does not contain the contact emails and the
@@ -510,8 +508,6 @@ pub struct ContactEmailEvent {
     pub contact_email: Option<ContactEmail>,
 }
 
-impl GetEventResponse for ContactEmailEvent {}
-
 /// Data for an event related to a [`ContactBasic`] record.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
@@ -528,8 +524,6 @@ pub struct ContactEvent {
     /// TODO: Document this field.
     pub contact: Option<ContactBasic>,
 }
-
-impl GetEventResponse for ContactEvent {}
 
 /// A complete contact returned by the API.
 ///
@@ -1056,5 +1050,3 @@ pub struct LabelEvent {
     /// TODO: Document this field.
     pub label: Option<Label>,
 }
-
-impl GetEventResponse for LabelEvent {}
