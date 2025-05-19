@@ -1,6 +1,6 @@
 use std::collections::HashSet;
-use std::mem;
 
+use anyhow::Context as _;
 use ical::generator::Property as IcalProperty;
 use tracing::warn;
 use velcro::hash_set;
@@ -19,23 +19,23 @@ use crate::parameters::value::ValueType;
 use crate::properties::{VcardProperty, validate_parameters};
 use crate::validation::get_property_kind;
 use crate::values::check_list;
-use crate::values::list_component::{IntoListComponent, is_list_component_value};
+use crate::values::list_component::{ListComponent, is_list_component_value};
 use crate::vcard::{group_from_name, split_list};
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify the components of the delivery address for the vCard object.
 #[derive(Clone, Debug, Default)]
 pub struct Address {
-    pub post_office_box: IntoListComponent,
+    pub post_office_box: ListComponent,
     /// E.g apartment, suite, unit, building, floor, etc
-    pub extended_address: IntoListComponent,
-    pub street: IntoListComponent,
+    pub extended_address: ListComponent,
+    pub street: ListComponent,
     /// AKA City
-    pub locality: IntoListComponent,
+    pub locality: ListComponent,
     /// State or Province
-    pub region: IntoListComponent,
-    pub postal_code: IntoListComponent,
-    pub country: IntoListComponent,
+    pub region: ListComponent,
+    pub postal_code: ListComponent,
+    pub country: ListComponent,
 
     pub value_type: Option<ValueType>,
     pub label: Option<Label>,
@@ -48,31 +48,6 @@ pub struct Address {
     pub r#type: HashSet<GenericType>,
     pub any: HashSet<Any>,
     pub group: Option<String>,
-}
-
-impl Address {
-    /// Create a new ADR property without any parameter or group
-    #[must_use]
-    pub fn new(
-        post_office_box: String,
-        extended_address: String,
-        street: String,
-        locality: String,
-        region: String,
-        postal_code: String,
-        country: String,
-    ) -> Self {
-        Self {
-            post_office_box: post_office_box.into(),
-            extended_address: extended_address.into(),
-            street: street.into(),
-            locality: locality.into(),
-            region: region.into(),
-            postal_code: postal_code.into(),
-            country: country.into(),
-            ..Default::default()
-        }
-    }
 }
 
 impl TryFrom<IcalProperty> for Address {
@@ -93,21 +68,27 @@ impl TryFrom<IcalProperty> for Address {
         // ADR-component-code     = list-component
         // ADR-component-country  = list-component
         // So a valid ADR value can be ';;;;;;' => 7 empty list-component
-        let mut values: [String; 7] = split_list(&value, ';')
-            .try_into()
-            .map_err(|_| VCardError::InvalidValue(PropertyKind::Adr, value.clone()))?;
 
-        let mut result = Self::new(
-            mem::take(&mut values[0]),
-            mem::take(&mut values[1]),
-            mem::take(&mut values[2]),
-            mem::take(&mut values[3]),
-            mem::take(&mut values[4]),
-            mem::take(&mut values[5]),
-            mem::take(&mut values[6]),
-        );
+        let mut values = split_list(&value, ';').into_iter();
+        let mut next = || {
+            values
+                .next()
+                .context("Too little args in Adr")
+                .map(|x| ListComponent::try_from(&*x).unwrap_or_default())
+        };
 
-        result.group = group_from_name(property.name.as_str());
+        let mut result = Self {
+            post_office_box: next()?,
+            extended_address: next()?,
+            street: next()?,
+            locality: next()?,
+            region: next()?,
+            postal_code: next()?,
+            country: next()?,
+            group: group_from_name(property.name.as_str()),
+            ..Default::default()
+        };
+
         if let Some(parameters) = property.params {
             for (name, values) in parameters {
                 match ParameterType::from(name.as_str()) {

@@ -5,32 +5,8 @@ use crate::vcard::split_list;
 use itertools::Itertools as _;
 
 /// A list of component values
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Default, PartialEq, Debug)]
 pub struct ListComponent(pub Vec<Component>);
-
-/// This can be turned into a `ListComponent` on demand.
-/// We don't do it proactively because:
-/// 1. We don't need to as they're not used like that anywhere
-/// 2. Let's not slow performance down unnecessarily.
-#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub struct IntoListComponent(pub String);
-
-impl IntoListComponent {
-    #[must_use]
-    pub fn as_option(self) -> Option<String> {
-        if self.0.is_empty() {
-            None
-        } else {
-            Some(self.0)
-        }
-    }
-}
-
-impl<T: Into<String>> From<T> for IntoListComponent {
-    fn from(value: T) -> Self {
-        IntoListComponent(value.into())
-    }
-}
 
 impl ListComponent {
     /// Create a new `ListComponent`
@@ -78,14 +54,6 @@ impl TryFrom<&str> for ListComponent {
             .map(|v| TryInto::<Component>::try_into(v.as_str()))
             .collect();
         Ok(Self(values?))
-    }
-}
-
-impl TryFrom<&IntoListComponent> for ListComponent {
-    type Error = VCardValueError;
-
-    fn try_from(value: &IntoListComponent) -> VCardValueResult<Self> {
-        value.0.as_str().try_into()
     }
 }
 

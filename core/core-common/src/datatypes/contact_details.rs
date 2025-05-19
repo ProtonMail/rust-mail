@@ -100,11 +100,11 @@ impl InspectableContactDetails {
             .sorted_extend(v, ContactField::Address, ContactDetailAddress::from);
 
         res.extended_name = vcard.name.map(|name| ExtendedName {
-            last: name.last.as_option(),
-            first: name.first.as_option(),
-            additional: name.additional.as_option(),
-            prefix: name.prefix.as_option(),
-            suffix: name.suffix.as_option(),
+            last: name.last.concat_to_string(" "),
+            first: name.first.concat_to_string(" "),
+            additional: name.additional.concat_to_string(" "),
+            prefix: name.prefix.concat_to_string(" "),
+            suffix: name.suffix.concat_to_string(" "),
         });
 
         if let Some(g) = vcard.gender {
@@ -186,11 +186,11 @@ pub struct ContactDetailAddress {
 impl From<VcardAddress> for ContactDetailAddress {
     fn from(value: VcardAddress) -> Self {
         Self {
-            street: value.street.as_option(),
-            city: value.locality.as_option(),
-            region: value.region.as_option(),
-            postal_code: value.postal_code.as_option(),
-            country: value.country.as_option(),
+            street: value.street.concat_to_string(", "),
+            city: value.locality.concat_to_string(", "),
+            region: value.region.concat_to_string(", "),
+            postal_code: value.postal_code.concat_to_string(", "),
+            country: value.country.concat_to_string(", "),
             addr_type: value.r#type.map_vec(),
         }
     }

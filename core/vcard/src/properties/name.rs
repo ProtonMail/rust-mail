@@ -13,20 +13,20 @@ use crate::parameters::value::ValueType;
 use crate::properties::validate_parameters;
 use crate::validation::get_property_kind;
 use crate::values::check_list;
-use crate::values::list_component::{IntoListComponent, is_list_component_value};
+use crate::values::list_component::{ListComponent, is_list_component_value};
 use crate::vcard::{group_from_name, split_list};
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify the components of the name of the object the vCard represents.
 #[derive(Debug, Default)]
 pub struct Name {
-    pub last: IntoListComponent,
-    pub first: IntoListComponent,
-    pub additional: IntoListComponent,
+    pub last: ListComponent,
+    pub first: ListComponent,
+    pub additional: ListComponent,
     /// honorific prefix like Dr, Mr, Don
-    pub prefix: IntoListComponent,
+    pub prefix: ListComponent,
     /// honorific suffix like `PhD`
-    pub suffix: IntoListComponent,
+    pub suffix: ListComponent,
     pub value_type: Option<ValueType>,
     pub sort_as: Option<SortAs>,
     pub language: Option<Language>,
@@ -52,7 +52,7 @@ impl TryFrom<&IcalProperty> for Name {
             values
                 .next()
                 .context("Too little args in Name")
-                .map(Into::into)
+                .map(|x| ListComponent::try_from(&*x).unwrap_or_default())
         };
 
         let mut result = Self {
