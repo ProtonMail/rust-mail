@@ -763,7 +763,7 @@ impl DecryptedMessage {
         let cc = format_recipients(&metadata.cc_list);
         let bcc = format_recipients(&metadata.bcc_list);
         let labels = metadata.custom_labels.iter().map(|l| &l.name).join(", ");
-        let rsvp = metadata.fetch_rsvp(ctx, tether).await;
+        let rsvp = metadata.fetch_rsvp(ctx, tether).await.ok().flatten();
 
         Ok(Self {
             metadata,

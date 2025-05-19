@@ -3,6 +3,7 @@ use crate::{AppError, MailUserContext, draft};
 use futures::executor::block_on;
 use proton_action_queue::action::{Action, WriterGuardError};
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
+use proton_calendar_common::RsvpError;
 use proton_core_api::login::{Flow, LoginError};
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::BuildError;
@@ -116,6 +117,8 @@ pub enum MailContextError {
     IntoTransactionError(anyhow::Error),
     #[error("Communication error with init mediator")]
     InitMediatorError,
+    #[error(transparent)]
+    Rsvp(#[from] RsvpError),
     #[error("{0}")]
     Other(anyhow::Error),
 }

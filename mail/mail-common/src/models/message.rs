@@ -2805,52 +2805,47 @@ impl Message {
     /// kinda widget, we don't want to show any errors etc. if it fails to load,
     /// we just not render it, silently.
     ///
-    /// TODO (NGC-57) this function works only in online mode for now (always
-    ///      returns `None` if the device is offline)
+    /// TODO (NGC-57) this function works only in online mode for now
     #[tracing::instrument(skip_all, fields(id = self.local_id.unwrap().as_u64()))]
     pub async fn fetch_rsvp(
         &self,
         ctx: &MailUserContext,
         tether: &mut Tether,
-    ) -> Option<RsvpEvent> {
+    ) -> MailContextResult<Option<RsvpEvent>> {
         let rsvp = self.attachments_metadata.iter().find_map(|att| {
             if att.filename == "invite.ics" {
                 att.local_id
             } else {
                 None
             }
-        })?;
+        });
+
+        let Some(rsvp) = rsvp else {
+            return Ok(None);
+        };
 
         debug!("Found a RSVP attachment candidate, analyzing it");
 
-        let ics = match Attachment::get_attachment(ctx, rsvp).await {
-            Ok(ics) => ics.data_path,
+        let ics = Attachment::get_attachment(ctx, rsvp).await.map_err(|err| {
+            warn!(?err, "Couldn't get the RSVP attachment");
+            err
+        })?;
 
-            Err(err) => {
-                warn!(?err, "Couldn't get the RSVP attachment");
-                return None;
-            }
-        };
-
-        let ics = match fs::read(&ics).await {
-            Ok(ics) => ics,
-
-            Err(err) => {
-                warn!(?err, "Couldn't read the RSVP attachment");
-                return None;
-            }
-        };
+        let ics = fs::read(&ics.data_path).await.map_err(|err| {
+            warn!(?err, "Couldn't read the RSVP attachment");
+            err
+        })?;
 
         let event = match RsvpEventId::from_internal(&ics) {
             Ok(event) => event,
 
             Err(RsvpError::IcsIsNotRsvpRequest) => {
-                return None;
+                return Ok(None);
             }
 
             Err(err) => {
                 warn!(?err, "Couldn't parse the RSVP attachment");
-                return None;
+                return Err(err.into());
             }
         };
 
@@ -2858,24 +2853,20 @@ impl Message {
 
         let pgp = proton_crypto::new_pgp_provider();
 
-        let keys = match ctx
+        let keys = ctx
             .unlocked_address_keys(&pgp, tether, &self.remote_address_id)
             .await
-        {
-            Ok(keys) => keys,
-
-            Err(err) => {
+            .map_err(|err| {
                 warn!(?err, "Couldn't unlock address keys");
-                return None;
-            }
-        };
+                err
+            })?;
 
         match event.fetch(ctx.api(), &pgp, &keys).await {
-            Ok(event) => event,
+            Ok(event) => Ok(event),
 
             Err(err) => {
                 warn!(?err, "Couldn't fetch event from the calendar");
-                None
+                Err(err.into())
             }
         }
     }

@@ -238,6 +238,7 @@ impl From<MailContextError> for ProtonMailError {
             MailContextError::UserContextNotInitialized(user_id) => Self::reason(
                 ContextErrorReason::UserContextNotInitialized(user_id.into_inner()),
             ),
+            MailContextError::Rsvp(_) => Self::Unexpected(Unexpected::Unknown),
         }
     }
 }
