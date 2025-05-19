@@ -114,6 +114,12 @@ impl Message {
             banners.push(MessageBanner::BlockedSender);
         }
 
+        if self.label_ids.contains(&LabelId::all_scheduled()) {
+            banners.push(MessageBanner::ScheduledSend {
+                timestamp: self.time,
+            })
+        }
+
         banners.sort_unstable();
         banners
     }

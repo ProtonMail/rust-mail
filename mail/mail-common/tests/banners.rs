@@ -125,6 +125,13 @@ async fn banners() {
             ..msg_normal.clone()
         };
 
+        let scheduled_time = 123456_u64;
+        let msg_schedule_send = Message {
+            label_ids: vec![LabelId::all_scheduled()],
+            time: scheduled_time,
+            ..Default::default()
+        };
+
         assert_eq!(
             Vec::<MessageBanner>::new(),
             msg_normal.get_banners(tether).await
@@ -136,6 +143,12 @@ async fn banners() {
         assert_eq!(
             vec![MessageBanner::BlockedSender],
             msg_blocked.get_banners(tether).await
+        );
+        assert_eq!(
+            vec![MessageBanner::ScheduledSend {
+                timestamp: scheduled_time
+            }],
+            msg_schedule_send.get_banners(tether).await
         );
 
         let (msg_normal_id, msg_spam_id, msg_phishing_id, msg_sus_id) = tether
