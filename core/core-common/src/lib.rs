@@ -23,3 +23,6 @@ pub mod validation;
 pub use context::*;
 pub use event_subscriber::*;
 pub use user_context::*;
+
+#[cfg(feature = "uniffi")]
+uniffi::setup_scaffolding!();

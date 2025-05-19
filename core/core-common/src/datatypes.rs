@@ -43,6 +43,7 @@ mod contact_list;
 mod issue_report;
 mod push_notifications;
 mod system_label;
+mod timestamp;
 
 pub use self::account_details::AccountDetails;
 pub use self::avatar::AvatarInformation;
@@ -50,6 +51,7 @@ pub use self::contact_list::*;
 pub use self::issue_report::*;
 pub use self::push_notifications::*;
 pub use self::system_label::*;
+pub use self::timestamp::*;
 
 use derive_more::derive::TryFrom;
 use itertools::Itertools;
