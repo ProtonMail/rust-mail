@@ -2,6 +2,7 @@ use chrono::DateTime;
 use proton_mail_common::datatypes::{
     MessageRecipient, MessageRecipients, MessageSender, MessageSenders,
 };
+use std::iter;
 
 pub fn date_from_timestamp(timestamp: u64) -> String {
     let timestamp_i64 = i64::try_from(timestamp).unwrap_or(0);
@@ -10,6 +11,7 @@ pub fn date_from_timestamp(timestamp: u64) -> String {
     let date_str = date.format("%d/%m/%Y %H:%M");
     date_str.to_string()
 }
+
 pub fn sender_name(sender: &MessageSender) -> &str {
     if sender.name.is_empty() {
         sender.address.as_str()
@@ -50,4 +52,11 @@ pub fn format_recipients(senders: &MessageRecipients) -> String {
         .map(format_recipient)
         .collect::<Vec<_>>()
         .join(", ")
+}
+
+pub fn format_flags(starred: bool, rsvp: bool) -> String {
+    iter::once("")
+        .chain(starred.then_some("*"))
+        .chain(rsvp.then_some("R"))
+        .collect()
 }

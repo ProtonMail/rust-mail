@@ -657,7 +657,7 @@ pub struct DecryptedMessage {
     bcc: String,
     labels: String,
     banners: Vec<MessageBanner>,
-    rsvp: Option<RsvpEvent>,
+    rsvp: Option<Result<RsvpEvent, String>>,
 }
 
 enum DecryptedMessageStatus {
@@ -763,7 +763,16 @@ impl DecryptedMessage {
         let cc = format_recipients(&metadata.cc_list);
         let bcc = format_recipients(&metadata.bcc_list);
         let labels = metadata.custom_labels.iter().map(|l| &l.name).join(", ");
-        let rsvp = metadata.fetch_rsvp(ctx, tether).await.ok().flatten();
+
+        let rsvp = if let Some(rsvp) = metadata.rsvp_attachment_id() {
+            metadata
+                .fetch_rsvp(ctx, rsvp, tether)
+                .await
+                .map_err(|err| format!("Can't fetch RSVP: {err}"))
+                .transpose()
+        } else {
+            None
+        };
 
         Ok(Self {
             metadata,
@@ -871,7 +880,8 @@ impl DecryptedMessage {
 
     fn lay_rsvp(&self) -> u16 {
         match &self.rsvp {
-            Some(rsvp) => (3 + rsvp.attendees.len()).try_into().unwrap(),
+            Some(Ok(rsvp)) => (3 + rsvp.attendees.len()).try_into().unwrap(),
+            Some(Err(_)) => 2,
             None => 0,
         }
     }
@@ -885,6 +895,17 @@ impl DecryptedMessage {
             Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(area);
 
         frame.render_widget(Block::new().borders(Borders::TOP), sep_area);
+
+        // ---
+
+        let rsvp = match rsvp {
+            Ok(rsvp) => rsvp,
+
+            Err(err) => {
+                frame.render_widget(Paragraph::new(err.as_str()), body_area);
+                return;
+            }
+        };
 
         // ---
 

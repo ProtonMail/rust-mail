@@ -6,6 +6,8 @@ use ratatui::layout::Constraint;
 use ratatui::prelude::*;
 use ratatui::widgets::{Cell, Row, Table};
 
+use super::utils::format_flags;
+
 impl AsTable for Vec<Message> {
     fn as_table(&self) -> Table<'_> {
         message_as_table(self, MessageRecipientDisplayMode::Sender)
@@ -17,16 +19,17 @@ pub fn message_as_table(
     recipient_display_mode: MessageRecipientDisplayMode,
 ) -> Table<'_> {
     let rows = messages.iter().map(|msg| {
-        let starred = if msg.is_starred() { "★" } else { " " };
+        let flags = format_flags(msg.is_starred(), msg.is_rsvp());
         let date = date_from_timestamp(msg.time);
         let num_attachments = msg.num_attachments;
         let num_labels = msg.custom_labels.len();
+
         let sender = match recipient_display_mode {
             MessageRecipientDisplayMode::Sender => sender_name(&msg.sender).to_owned(),
             MessageRecipientDisplayMode::Recipients => format_recipients(&msg.to_list),
         };
 
-        let mut row = Row::new([
+        let row = Row::new([
             Cell::from(date),
             Cell::from(if num_labels != 0 {
                 format!("{num_labels:02}")
@@ -38,30 +41,28 @@ pub fn message_as_table(
             } else {
                 String::new()
             }),
-            Cell::from(starred).bold(),
+            Cell::from(flags),
             Cell::from(sender),
-            Cell::from(msg.subject.clone()),
+            Cell::from(msg.subject.as_str()),
         ]);
-        if msg.unread {
-            row = row.bold();
-        }
-        row
+
+        if msg.unread { row.bold() } else { row }
     });
 
     let widths = [
-        Constraint::Length(16),
-        Constraint::Length(2),
-        Constraint::Length(2),
-        Constraint::Length(1),
-        Constraint::Fill(2),
-        Constraint::Fill(4),
+        Constraint::Length(16), // Date
+        Constraint::Length(2),  // Labels
+        Constraint::Length(2),  // Attachments
+        Constraint::Length(5),  // Flags
+        Constraint::Fill(2),    // Sender
+        Constraint::Fill(4),    // Subject
     ];
 
     let headers = Row::new([
         Cell::from("Date"),
-        Cell::from("#L"), // Labels
-        Cell::from("#A"), // Attachments
-        Cell::from(""),   // Starred
+        Cell::from("#L"),
+        Cell::from("#A"),
+        Cell::from("Flags"),
         match recipient_display_mode {
             MessageRecipientDisplayMode::Sender => Cell::from("Sender"),
             MessageRecipientDisplayMode::Recipients => Cell::from("Recipients"),

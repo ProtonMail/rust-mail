@@ -59,7 +59,7 @@ use proton_mail_api::services::proton::response_data::{
     MessageMetadata, OperationResult,
 };
 use proton_mail_api::services::proton::responses::GetMessagesResponse;
-use proton_mail_ids::LocalConversationId;
+use proton_mail_ids::{LocalAttachmentId, LocalConversationId};
 use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::Model;
@@ -2798,33 +2798,51 @@ impl Message {
         self.label_ids.contains(&LabelId::all_scheduled()) && self.flags.is_schedule_send()
     }
 
-    /// Checks if this mail contains an RSVP invitation and, if so, fetches this
-    /// event from the calendar and returns it.
+    /// Returns id of the `invite.ics` attachment, if any.
     ///
-    /// Note that this function is non-fallible - since RSVP is a nice-addition
-    /// kinda widget, we don't want to show any errors etc. if it fails to load,
-    /// we just not render it, silently.
-    ///
-    /// TODO (NGC-57) this function works only in online mode for now
-    #[tracing::instrument(skip_all, fields(id = self.local_id.unwrap().as_u64()))]
-    pub async fn fetch_rsvp(
-        &self,
-        ctx: &MailUserContext,
-        tether: &mut Tether,
-    ) -> MailContextResult<Option<RsvpEvent>> {
-        let rsvp = self.attachments_metadata.iter().find_map(|att| {
+    /// See [`Self::is_rsvp()`], [`Self::fetch_rsvp()`].
+    pub fn rsvp_attachment_id(&self) -> Option<LocalAttachmentId> {
+        self.attachments_metadata.iter().find_map(|att| {
             if att.filename == "invite.ics" {
                 att.local_id
             } else {
                 None
             }
-        });
+        })
+    }
 
-        let Some(rsvp) = rsvp else {
-            return Ok(None);
-        };
+    /// Returns whether this message is an RSVP invitation.
+    ///
+    /// Since this function doesn't parse the invitation[1], it's possible it
+    /// returns a false-positive - notably, we'll return `true` for all mails
+    /// that contain an attachment called `invite.ics` even if this attachment
+    /// isn't really a valid invitation.
+    ///
+    /// This is good enough as showing potential "whoopsie, not really an rsvp"
+    /// message is an UI-problem.
+    ///
+    /// See: [`Self::rsvp_attachment_id()`], [`Self::fetch_rsvp()`].
+    ///
+    /// [1] loading attachments is asynchronous, while we need for this function
+    ///     to be synchronous, because we need to know rsvp-ness when displaying
+    ///     an email list (i.e. no time to actually load and parse all the
+    ///     attachments)
+    pub fn is_rsvp(&self) -> bool {
+        self.rsvp_attachment_id().is_some()
+    }
 
-        debug!("Found a RSVP attachment candidate, analyzing it");
+    /// Checks if given attachment is an RSVP invitation and, if so, fetches its
+    /// accompanying event from the calendar and returns it.
+    ///
+    /// TODO (NGC-57) this function works only in online mode for now
+    #[tracing::instrument(skip_all)]
+    pub async fn fetch_rsvp(
+        &self,
+        ctx: &MailUserContext,
+        rsvp: LocalAttachmentId,
+        tether: &mut Tether,
+    ) -> MailContextResult<Option<RsvpEvent>> {
+        debug!(?rsvp, "Fetching RSVP");
 
         let ics = Attachment::get_attachment(ctx, rsvp).await.map_err(|err| {
             warn!(?err, "Couldn't get the RSVP attachment");

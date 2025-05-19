@@ -1,5 +1,6 @@
+use super::utils::{date_from_timestamp, format_flags};
+use crate::widgets::AsTable;
 use crate::widgets::utils::format_senders;
-use crate::widgets::{AsTable, utils};
 use proton_mail_common::datatypes::ContextualConversation;
 use ratatui::layout::Constraint;
 use ratatui::prelude::*;
@@ -8,8 +9,8 @@ use ratatui::widgets::{Cell, Row, Table};
 impl AsTable for Vec<ContextualConversation> {
     fn as_table(&self) -> Table<'_> {
         let rows = self.iter().map(|conv| {
-            let starred = if conv.is_starred { "★" } else { " " };
-            let date = utils::date_from_timestamp(conv.time);
+            let flags = format_flags(conv.is_starred, false);
+            let date = date_from_timestamp(conv.time);
             let num_attachments = conv.num_attachments;
             let num_labels = conv.custom_labels.len();
             let senders = format_senders(&conv.senders);
@@ -22,7 +23,7 @@ impl AsTable for Vec<ContextualConversation> {
                 "[99+]".to_owned()
             };
 
-            let mut row = Row::new([
+            let row = Row::new([
                 Cell::from(date),
                 Cell::from(if num_labels != 0 {
                     format!("{num_labels:02}")
@@ -35,24 +36,26 @@ impl AsTable for Vec<ContextualConversation> {
                     String::new()
                 }),
                 Cell::from(num_messages),
-                Cell::from(starred).bold(),
+                Cell::from(flags),
                 Cell::from(senders),
                 Cell::from(conv.subject.clone()),
             ]);
+
             if conv.num_unread != 0 {
-                row = row.bold();
+                row.bold()
+            } else {
+                row
             }
-            row
         });
 
         let widths = [
-            Constraint::Length(16),
-            Constraint::Length(2),
-            Constraint::Length(2),
-            Constraint::Length(5),
-            Constraint::Length(1),
-            Constraint::Fill(2),
-            Constraint::Fill(4),
+            Constraint::Length(16), // Date
+            Constraint::Length(2),  // Labels
+            Constraint::Length(2),  // Attachments
+            Constraint::Length(5),  // Messages
+            Constraint::Length(5),  // Flags
+            Constraint::Fill(2),    // Sender
+            Constraint::Fill(4),    // Subject
         ];
 
         let headers = Row::new([
@@ -60,7 +63,7 @@ impl AsTable for Vec<ContextualConversation> {
             Cell::from("#L"),
             Cell::from("#A"),
             Cell::from("#M"),
-            Cell::from(""),
+            Cell::from("Flags"),
             Cell::from("Sender"),
             Cell::from("Subject"),
         ])
