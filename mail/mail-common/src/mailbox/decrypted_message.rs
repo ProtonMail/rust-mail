@@ -4,7 +4,7 @@
 use crate::datatypes::attachment::ContentId;
 use crate::datatypes::message_banner::MessageBanner;
 use crate::datatypes::theme::MailTheme;
-use crate::datatypes::{AttachmentMetadata, Disposition, LocalAttachmentId, MimeType};
+use crate::datatypes::{Disposition, LocalAttachmentId, MimeType};
 use crate::models::{
     AttachmentType, EmbeddedAttachmentInfo, MailSettings, Message, MessageBodyMetadata,
 };
@@ -367,19 +367,6 @@ impl DecryptedMessageBody {
         };
 
         transform_html_with_banners(&self.body, resolved, self.metadata.mime_type, banners)
-    }
-
-    /// Get Disposition::Attachment attachments.
-    pub fn get_real_attachments(&self) -> Vec<AttachmentMetadata> {
-        let atts: Vec<AttachmentMetadata> = self
-            .metadata
-            .attachments
-            .iter()
-            .filter(|att| att.disposition == Disposition::Attachment)
-            .map(|at| at.clone().into())
-            .collect();
-
-        atts
     }
 }
 
