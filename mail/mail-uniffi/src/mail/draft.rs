@@ -42,17 +42,17 @@ pub enum DraftCreateMode {
 }
 
 #[derive(Debug, uniffi::Record)]
-pub struct DraftScheduleSendOption {
-    pub tomorrow: u64,
-    pub next_monday: u64,
+pub struct DraftScheduleSendOptions {
+    pub tomorrow_time: u64,
+    pub monday_time: u64,
     pub is_custom_option_available: bool,
 }
 
-impl From<ScheduleSendOptions<Local>> for DraftScheduleSendOption {
+impl From<ScheduleSendOptions<Local>> for DraftScheduleSendOptions {
     fn from(value: ScheduleSendOptions<Local>) -> Self {
         Self {
-            tomorrow: value.time_tomorrow.timestamp().unsigned_abs(),
-            next_monday: value.time_next_monday.timestamp().unsigned_abs(),
+            tomorrow_time: value.time_tomorrow.timestamp().unsigned_abs(),
+            monday_time: value.time_next_monday.timestamp().unsigned_abs(),
             is_custom_option_available: value.is_custom_datetime_available,
         }
     }
@@ -441,18 +441,19 @@ impl Draft {
         .into()
     }
 
-    pub async fn schedule_send_options(&self) -> Result<DraftScheduleSendOption, ProtonError> {
+    // Mobile requested this to be sync.
+    pub fn schedule_send_options(&self) -> Result<DraftScheduleSendOptions, ProtonError> {
         let Some(ctx) = self.ctx.upgrade() else {
             return Err(ProtonError::Unexpected(UnexpectedError::Internal));
         };
-        uniffi_async(async move {
-            RealDraft::schedule_send_options(&ctx)
-                .await
-                .map_err(RealProtonMailError::from)
-        })
-        .await
-        .map_err(ProtonError::from)
-        .map(Into::into)
+        async_runtime()
+            .block_on(async {
+                RealDraft::schedule_send_options(&ctx)
+                    .await
+                    .map_err(RealProtonMailError::from)
+            })
+            .map_err(ProtonError::from)
+            .map(Into::into)
     }
 
     /// Discard the draft.
