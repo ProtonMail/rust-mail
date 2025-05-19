@@ -135,6 +135,20 @@ impl<This: ?Sized + Sender<ProtonRequest, ProtonResponse>> ProtonMail for This {
         Ok(())
     }
 
+    async fn put_attachment_disposition(
+        &self,
+        id: AttachmentId,
+        new_attachment_disposition: NewAttachmentDisposition,
+    ) -> ApiServiceResult<()> {
+        let req = PutAttachmentDispositionRequest::from(new_attachment_disposition);
+        PUT!("{MAIL_V4}/attachments/{id}/disposition")
+            .body_json(req)?
+            .send_with(self)
+            .await?
+            .ok()?;
+        Ok(())
+    }
+
     async fn get_conversation(
         &self,
         conversation_id: ConversationId,

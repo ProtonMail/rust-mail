@@ -142,6 +142,8 @@ pub enum ComposerMessage {
     CreateAttachment(PathBuf),
     AddAttachment(Box<Attachment>),
     RemoveAttachment(LocalAttachmentId),
+    RetryAttachmentOp(LocalAttachmentId),
+    SwapDisposition(LocalAttachmentId),
     RefreshAttachmentList,
     AttachmentListRefreshed(Vec<DraftAttachment>),
     ScheduleSend(DateTime<Local>),

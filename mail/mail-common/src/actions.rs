@@ -212,7 +212,11 @@ pub(crate) fn register_actions(
                 queue,
                 mail_settings::UpdateNextMessageOnMoveHandler { api: api.clone() },
             );
-            reg(queue, PushNotificationActionHandler { api: api.clone() })
+            reg(queue, PushNotificationActionHandler { api: api.clone() });
+            reg(
+                queue,
+                draft::AttachmentDispositionUpdateHandler { api: api.clone() },
+            );
         }
 
         Origin::ShareExt => {
@@ -221,6 +225,10 @@ pub(crate) fn register_actions(
             reg(queue, draft::DiscardHandler { api: api.clone() });
             replace(queue, draft::AttachmentUploadHandler { ctx: ctx.clone() });
             reg(queue, draft::AttachmentRemoveHandler { api: api.clone() });
+            reg(
+                queue,
+                draft::AttachmentDispositionUpdateHandler { api: api.clone() },
+            );
         }
     }
 }

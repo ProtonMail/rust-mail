@@ -1,7 +1,7 @@
 use crate::core::datatypes::{Id, UnixTimestamp};
 use crate::errors::{
-    DraftAttachmentUploadErrorReason, DraftSaveErrorReason, DraftSendErrorReason, ProtonError,
-    VoidProtonResult,
+    DraftAttachmentDispositionSwapErrorReason, DraftAttachmentUploadErrorReason,
+    DraftSaveErrorReason, DraftSendErrorReason, ProtonError, VoidProtonResult,
 };
 use crate::mail::MailUserSession;
 use crate::{async_runtime, uniffi_async};
@@ -33,6 +33,8 @@ pub enum DraftSendResultOrigin {
     AttachmentUpload,
     /// We failed when scheduling a message send
     ScheduleSend,
+    /// We failed when attempting to swap an attachment disposition
+    AttachmentDispositionSwap,
 }
 
 impl From<RealDraftSendResultOrigin> for DraftSendResultOrigin {
@@ -43,6 +45,7 @@ impl From<RealDraftSendResultOrigin> for DraftSendResultOrigin {
             RealDraftSendResultOrigin::Send => Self::Send,
             RealDraftSendResultOrigin::AttachmentUpload => Self::AttachmentUpload,
             RealDraftSendResultOrigin::ScheduleSend => Self::ScheduleSend,
+            RealDraftSendResultOrigin::AttachmentDispositionSwap => Self::AttachmentDispositionSwap,
         }
     }
 }
@@ -66,6 +69,7 @@ pub enum DraftSendFailure {
     Save(DraftSaveErrorReason),
     Send(DraftSendErrorReason),
     AttachmentUpload(DraftAttachmentUploadErrorReason),
+    AttachmentDispositionSwap(DraftAttachmentDispositionSwapErrorReason),
     Other(ProtonError),
 }
 
@@ -106,6 +110,11 @@ impl From<RealDraftSendResult> for DraftSendResult {
                         RealProtonMailError::Reason(
                             RealMailErrorReason::DraftAttachmentUploadReason(e),
                         ) => DraftSendStatus::Failure(DraftSendFailure::AttachmentUpload(e.into())),
+                        RealProtonMailError::Reason(
+                            RealMailErrorReason::DraftAttachmentDispositionSwapError(e),
+                        ) => DraftSendStatus::Failure(DraftSendFailure::AttachmentDispositionSwap(
+                            e.into(),
+                        )),
                         _ => DraftSendStatus::Failure(DraftSendFailure::Other(proton_error.into())),
                     }
                 },

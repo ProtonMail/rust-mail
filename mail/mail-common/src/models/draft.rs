@@ -8,14 +8,14 @@ use crate::datatypes::attachment::ContentId;
 use crate::datatypes::{LocalAttachmentId, LocalConversationId};
 use crate::draft::send::EoData;
 use crate::draft::{
-    AttachmentUploadError, DraftExpirationTime, Error, PackageError, PasswordError, ReplyMode,
-    SaveError, SendError,
+    AttachmentDispositionSwapError, AttachmentUploadError, DraftExpirationTime, Error,
+    PackageError, PasswordError, ReplyMode, SaveError, SendError,
 };
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
 use crate::errors::{
-    DraftAttachmentUploadErrorReason, DraftSaveErrorReason, DraftSendErrorReason, MailErrorReason,
-    ProtonMailError,
+    DraftAttachmentDispositionSwapErrorReason, DraftAttachmentUploadErrorReason,
+    DraftSaveErrorReason, DraftSendErrorReason, MailErrorReason, ProtonMailError,
 };
 use crate::models::{Attachment, Message, MessageBodyMetadata};
 use anyhow::anyhow;
@@ -639,6 +639,7 @@ pub enum DraftSendFailure {
     Attachment(DraftSendFailureAttachment),
     NoConnection,
     Server(String),
+    AttachmentDispositionSwap(DraftSendFailureDispositionSwap),
     Internal,
 }
 
@@ -678,6 +679,13 @@ pub enum DraftSendFailureAttachment {
     Other(String),
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
+pub enum DraftSendFailureDispositionSwap {
+    AttachmentDoesNotExist,
+    AttachmentMessagedDoesNotExist,
+    AttachmentMessageIsNotADraft,
+}
+
 sql_using_serde!(DraftSendFailure);
 
 /// Track the origin/context of this draft status
@@ -695,6 +703,8 @@ pub enum DraftSendResultOrigin {
     AttachmentUpload = 3,
     /// We failed when scheduling a message send
     ScheduleSend = 4,
+    /// We failed to swap the disposition on the message
+    AttachmentDispositionSwap = 5,
 }
 
 impl ToSql for DraftSendResultOrigin {
@@ -790,6 +800,34 @@ impl DraftSendFailure {
                 | AttachmentUploadError::MessageAlreadySent
                 | AttachmentUploadError::RetryInvalidState(_) => Self::Internal,
             },
+            Error::AttachmentDispositionSwap(e) => match e {
+                AttachmentDispositionSwapError::MetadataNotFound(_)
+                | AttachmentDispositionSwapError::AttachmentHasNoRemoteId(_)
+                | AttachmentDispositionSwapError::AttachmentMetadataNotFound(_)
+                | AttachmentDispositionSwapError::Noop
+                | AttachmentDispositionSwapError::NoMessageIdInDraftMetadata(_)
+                | AttachmentDispositionSwapError::InvalidState(_)
+                | AttachmentDispositionSwapError::AttachmentHasNoContentId(_) => Self::Internal,
+                AttachmentDispositionSwapError::AttachmentNotFound(_)
+                | AttachmentDispositionSwapError::AttachmentNotFoundCid(_)
+                | AttachmentDispositionSwapError::AttachmentDoesNotExistServer(_) => {
+                    Self::AttachmentDispositionSwap(
+                        DraftSendFailureDispositionSwap::AttachmentDoesNotExist,
+                    )
+                }
+                AttachmentDispositionSwapError::AttachmentMessageDoesNotExist(_) => {
+                    Self::AttachmentDispositionSwap(
+                        DraftSendFailureDispositionSwap::AttachmentMessagedDoesNotExist,
+                    )
+                }
+                AttachmentDispositionSwapError::AttachmentMessageIsNotADraft(_) => {
+                    Self::AttachmentDispositionSwap(
+                        DraftSendFailureDispositionSwap::AttachmentMessageIsNotADraft,
+                    )
+                }
+                AttachmentDispositionSwapError::AttachmentDoesNotHaveValidCid(_) => Self::Internal,
+            },
+
             _ => Self::Internal,
         }
     }
@@ -925,6 +963,23 @@ impl From<DraftSendFailure> for ProtonMailError {
                     ))
                 }
             },
+            DraftSendFailure::AttachmentDispositionSwap(e) => match e {
+                DraftSendFailureDispositionSwap::AttachmentDoesNotExist => {
+                    Self::Reason(MailErrorReason::DraftAttachmentDispositionSwapError(
+                        DraftAttachmentDispositionSwapErrorReason::AttachmentDoesNotExist,
+                    ))
+                }
+                DraftSendFailureDispositionSwap::AttachmentMessagedDoesNotExist => {
+                    Self::Reason(MailErrorReason::DraftAttachmentDispositionSwapError(
+                        DraftAttachmentDispositionSwapErrorReason::AttachmentMessageDoesNotExist,
+                    ))
+                }
+                DraftSendFailureDispositionSwap::AttachmentMessageIsNotADraft => {
+                    Self::Reason(MailErrorReason::DraftAttachmentDispositionSwapError(
+                        DraftAttachmentDispositionSwapErrorReason::AttachmentMessageIsNotADraft,
+                    ))
+                }
+            },
         }
     }
 }
@@ -972,7 +1027,7 @@ pub struct DraftAttachmentMetadata {
     pub ownership: DraftAttachmentOwnership,
 
     #[DbField]
-    pub error: Option<DraftAttachmentUploadError>,
+    pub error: Option<DraftAttachmentInternalError>,
 
     #[DbField]
     pub display_order: usize,
@@ -1084,7 +1139,7 @@ impl DraftAttachmentMetadata {
     }
 
     /// Update state to error with the given `error`.
-    pub fn set_error_state(&mut self, error: DraftAttachmentUploadError) {
+    pub fn set_error_state(&mut self, error: DraftAttachmentInternalError) {
         self.set_state(DraftAttachmentUploadState::Error);
         self.error = Some(error);
     }
@@ -1315,6 +1370,16 @@ impl DraftAttachmentMetadata {
             total_size: 0,
         }))
     }
+
+    pub fn is_upload_error(&self) -> bool {
+        self.error.as_ref().is_some_and(|e| e.is_upload_error())
+    }
+
+    pub fn is_disposition_swap_error(&self) -> bool {
+        self.error
+            .as_ref()
+            .is_some_and(|e| e.is_disposition_swap_error())
+    }
 }
 #[derive(DbRecord, Debug, Eq, PartialEq, Copy, Clone)]
 pub struct DraftAttachmentsTotalCountAndSize {
@@ -1391,7 +1456,32 @@ impl FromSql for DraftAttachmentOwnership {
 
 /// Possible attachment upload errors that are recorded.
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
-pub enum DraftAttachmentUploadError {
+pub enum DraftAttachmentInternalError {
+    Upload(DraftAttachmentInternalUploadError),
+    DispositionSwap(DraftAttachmentInternalDispositionError),
+}
+
+impl DraftAttachmentInternalError {
+    pub fn from_mail_context_error(
+        origin: DraftSendResultOrigin,
+        error: &MailContextError,
+    ) -> Self {
+        match origin {
+            DraftSendResultOrigin::AttachmentDispositionSwap => Self::DispositionSwap(
+                DraftAttachmentInternalDispositionError::from_mail_context_error(error),
+            ),
+            DraftSendResultOrigin::AttachmentUpload => Self::Upload(
+                DraftAttachmentInternalUploadError::from_mail_context_error(error),
+            ),
+            _ => {
+                unreachable!("Should not be triggered");
+            }
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
+pub enum DraftAttachmentInternalUploadError {
     /// Cryptography failure
     Crypto(String),
     /// Message has too many attachments.
@@ -1406,9 +1496,36 @@ pub enum DraftAttachmentUploadError {
     Unexpected,
 }
 
-sql_using_serde!(DraftAttachmentUploadError);
+sql_using_serde!(DraftAttachmentInternalUploadError);
 
-impl DraftAttachmentUploadError {
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Hash)]
+pub enum DraftAttachmentInternalDispositionError {
+    Server(String),
+    AttachmentNotFound,
+    MessageIsNotDraft,
+    MessageDoesNotExist,
+    Unexpected,
+}
+
+impl DraftAttachmentInternalError {
+    fn is_upload_error(&self) -> bool {
+        match self {
+            DraftAttachmentInternalError::Upload(_) => true,
+            DraftAttachmentInternalError::DispositionSwap(_) => false,
+        }
+    }
+
+    fn is_disposition_swap_error(&self) -> bool {
+        match self {
+            DraftAttachmentInternalError::Upload(_) => false,
+            DraftAttachmentInternalError::DispositionSwap(_) => true,
+        }
+    }
+}
+
+sql_using_serde!(DraftAttachmentInternalError);
+
+impl DraftAttachmentInternalUploadError {
     /// Create a new instance from a [`MailContextError`]
     pub fn from_mail_context_error(error: &MailContextError) -> Self {
         match error {
@@ -1429,6 +1546,38 @@ impl DraftAttachmentUploadError {
             MailContextError::Draft(Error::AttachmentUpload(
                 AttachmentUploadError::TotalAttachmentSizeTooLarge,
             )) => Self::TotalAttachmentsTooLarge,
+            _ => Self::Unexpected,
+        }
+    }
+}
+
+impl DraftAttachmentInternalDispositionError {
+    pub fn from_mail_context_error(error: &MailContextError) -> Self {
+        match error {
+            MailContextError::Api(e) => Self::Server(e.to_string()),
+            MailContextError::Draft(Error::AttachmentDispositionSwap(e)) => match e {
+                AttachmentDispositionSwapError::AttachmentNotFoundCid(_)
+                | AttachmentDispositionSwapError::AttachmentNotFound(_)
+                | AttachmentDispositionSwapError::AttachmentDoesNotExistServer(_) => {
+                    Self::AttachmentNotFound
+                }
+                AttachmentDispositionSwapError::AttachmentMessageIsNotADraft(_) => {
+                    Self::MessageIsNotDraft
+                }
+                AttachmentDispositionSwapError::AttachmentMessageDoesNotExist(_) => {
+                    Self::MessageDoesNotExist
+                }
+                AttachmentDispositionSwapError::MetadataNotFound(_)
+                | AttachmentDispositionSwapError::AttachmentHasNoRemoteId(_)
+                | AttachmentDispositionSwapError::AttachmentMetadataNotFound(_)
+                | AttachmentDispositionSwapError::Noop
+                | AttachmentDispositionSwapError::NoMessageIdInDraftMetadata(_)
+                | AttachmentDispositionSwapError::InvalidState(_)
+                | AttachmentDispositionSwapError::AttachmentHasNoContentId(_)
+                | AttachmentDispositionSwapError::AttachmentDoesNotHaveValidCid(_) => {
+                    Self::Unexpected
+                }
+            },
             _ => Self::Unexpected,
         }
     }

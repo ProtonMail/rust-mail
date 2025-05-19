@@ -100,6 +100,7 @@ export_void_result! {
     VoidDraftPasswordResult(DraftPasswordError),
     VoidDraftExpirationResult(DraftExpirationError),
     VoidAnswerRsvpResult(ProtonError),
+    VoidDraftAttachmentDispositionSwapResult(DraftAttachmentDispositionSwapError)
 }
 
 export_typed_result! {

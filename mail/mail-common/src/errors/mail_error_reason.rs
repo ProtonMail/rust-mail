@@ -17,6 +17,7 @@ pub enum MailErrorReason {
     DraftSenderAddressChangeReason(DraftSenderAddressChangeErrorReason),
     DraftPasswordReason(DraftPasswordErrorReason),
     DraftExpirationReason(DraftExpirationErrorReason),
+    DraftAttachmentDispositionSwapError(DraftAttachmentDispositionSwapErrorReason),
     EventReason(EventErrorReason),
     PinSetReason(PinSetErrorReason),
     PinAuthReason(PinAuthErrorReason),
@@ -253,6 +254,15 @@ pub enum DraftExpirationErrorReason {
     ExpirationTimeInThePast,
     ExpirationTimeLessThan15Min,
     ExpirationTimeExceeds28Days,
+}
+
+#[derive(Debug)]
+pub enum DraftAttachmentDispositionSwapErrorReason {
+    InvalidState,
+    Noop,
+    AttachmentDoesNotExist,
+    AttachmentMessageDoesNotExist,
+    AttachmentMessageIsNotADraft,
 }
 
 /// Specific Reason for error occurrence within Event Loop.

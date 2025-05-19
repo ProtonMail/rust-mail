@@ -7,6 +7,7 @@ mod v005_proton_mail_conversation_counters;
 mod v007_proton_mail_message_counters;
 mod v016_proton_mail_new_system_labels;
 mod v019_proton_mail_draft_send_result_refactor;
+mod v045_proton_mail_draft_send_result;
 
 pub async fn migrate_db(stash: &Stash) -> Result<usize, MigratorError> {
     const TABLE: &str = "proton_mail_db_version";
@@ -28,6 +29,9 @@ pub async fn migrate_db(stash: &Stash) -> Result<usize, MigratorError> {
     ));
     migrations.push(Box::new(
         v019_proton_mail_draft_send_result_refactor::DraftSendResultMigration,
+    ));
+    migrations.push(Box::new(
+        v045_proton_mail_draft_send_result::DraftSendResultAttachmentErrorsMigration,
     ));
 
     let mut tether = stash.connection().await?;

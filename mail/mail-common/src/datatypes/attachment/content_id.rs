@@ -18,7 +18,7 @@ impl ContentId {
     /// Create from an existing value.
     ///
     /// If the value is wrapped in `<>` this will be stripped.
-    fn with<T: AsRef<str>>(value: T) -> Self {
+    pub fn with<T: AsRef<str>>(value: T) -> Self {
         let value = value.as_ref();
         if value.starts_with('<') && value.ends_with('>') {
             return Self(value[1..value.len() - 1].to_owned());
