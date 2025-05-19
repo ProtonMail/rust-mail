@@ -13,7 +13,7 @@ use crate::widgets::{
     CenteredThrobber, ScrollableParagraph, ScrollableParagraphState, ScrollableTable,
     ScrollableTableState,
 };
-use anyhow::{Context, anyhow};
+use anyhow::{Context, Result, anyhow};
 use futures::FutureExt;
 use futures::future::try_join_all;
 use itertools::Itertools as _;
@@ -38,12 +38,12 @@ use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Cell, List, ListItem, Paragraph, Row, Table};
 use stash::stash::{Tether, WatcherHandle};
-use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::thread;
+use std::{iter, thread};
 use throbber_widgets_tui::ThrobberState;
 use tracing::debug;
+use tokio::fs;
 
 /// Displays a list of messages based of message metadata. If a conversation is opened the message
 /// body will be displayed.
@@ -278,8 +278,9 @@ impl MessagesState {
 
         Command::task(async {
             #[allow(clippy::redundant_closure_call)] // Poor's man try blocks
-            let c: anyhow::Result<_> = (|| async move {
+            let c: Result<_> = (|| async move {
                 let stash = ctx.user_stash();
+                let mut tether = stash.connection();
                 let local_id = metadata.local_id.unwrap();
 
                 let decrypted = MailMessage::message_body(&ctx, local_id)
@@ -287,7 +288,7 @@ impl MessagesState {
                     .context("Failed to get message body")?;
 
                 Ok(Box::new(
-                    DecryptedMessage::new(metadata, decrypted, &stash.connection()).await?,
+                    DecryptedMessage::new(metadata, decrypted, &ctx, &mut tether).await?,
                 ))
             })()
             .await;
@@ -296,7 +297,7 @@ impl MessagesState {
         })
     }
 
-    fn display_message(&mut self, message: anyhow::Result<Box<DecryptedMessage>>) {
+    fn display_message(&mut self, message: Result<Box<DecryptedMessage>>) {
         self.open_message = match message {
             Ok(message) => DecryptedMessageStatus::Success(message),
             Err(e) => DecryptedMessageStatus::Error(e),
@@ -362,13 +363,13 @@ impl MessagesState {
             match key.code {
                 KeyCode::Char('k') | KeyCode::Up => {
                     if key.modifiers.intersects(KeyModifiers::SHIFT) {
-                        state.scroll_state.scroll_up();
+                        state.content_scroll.scroll_up();
                         return Command::None;
                     }
                 }
                 KeyCode::Char('j') | KeyCode::Down => {
                     if key.modifiers.intersects(KeyModifiers::SHIFT) {
-                        state.scroll_state.scroll_down();
+                        state.content_scroll.scroll_down();
                         return Command::None;
                     }
                 }
@@ -645,14 +646,14 @@ impl MessagesState {
 pub struct DecryptedMessage {
     metadata: MailMessage,
     content: String,
-    scroll_state: ScrollableParagraphState,
-    num_lines: usize,
+    content_scroll: ScrollableParagraphState,
+    content_lines: usize,
     date: String,
-    sender: String,
-    to_list: String,
-    cc_list: String,
-    bcc_list: String,
-    label_list: String,
+    from: String,
+    to: String,
+    cc: String,
+    bcc: String,
+    labels: String,
     banners: Vec<MessageBanner>,
 }
 
@@ -677,6 +678,7 @@ impl DecryptedMessageStatus {
                 .areas(area);
                 (Some(list_area), box_area, message_area)
             };
+
         match self {
             DecryptedMessageStatus::None => return Some(area),
             DecryptedMessageStatus::Loading(state) => {
@@ -703,12 +705,10 @@ impl DecryptedMessageStatus {
 impl DecryptedMessage {
     pub async fn new(
         metadata: MailMessage,
-        decrypted_body: DecryptedMessageBody,
-        tether: &Tether,
-    ) -> anyhow::Result<Self> {
-        let body_output = decrypted_body
-            .transformed(TransformOpts::default(), tether)
-            .await;
+        body: DecryptedMessageBody,
+        tether: &mut Tether,
+    ) -> Result<Self> {
+        let body_output = body.transformed(TransformOpts::default(), tether).await;
 
         if let Some(cmd_name) = CLI_ARGS.browser.as_deref() {
             let cmd_name = if !cmd_name.is_empty() {
@@ -732,9 +732,9 @@ impl DecryptedMessage {
             );
             temp_dir.push(escaped_subject);
 
-            fs::create_dir_all(&temp_dir).unwrap();
+            fs::create_dir_all(&temp_dir).await.unwrap();
             let before = temp_dir.join("before.html");
-            fs::write(&before, &decrypted_body.body).unwrap();
+            fs::write(&before, &body.body).await.unwrap();
 
             let after = temp_dir.join("after.html");
             safe_write(&after, &body_output.body).unwrap();
@@ -750,109 +750,133 @@ impl DecryptedMessage {
         }
 
         let content = html_to_text(&body_output.body)?;
-        let num_lines = content.chars().filter(|c| *c == '\n').count();
+        let content_scroll = ScrollableParagraphState::new();
+        let content_lines = content.chars().filter(|c| *c == '\n').count();
 
         let date = date_from_timestamp(metadata.time);
-        let sender = format_sender(&metadata.sender);
-        let to_list = format_recipients(&metadata.to_list);
-        let cc_list = format_recipients(&metadata.cc_list);
-        let bcc_list = format_recipients(&metadata.bcc_list);
-        let label_list = metadata
-            .custom_labels
-            .iter()
-            .map(|l| l.name.clone())
-            .join(", ");
+        let from = format_sender(&metadata.sender);
+        let to = format_recipients(&metadata.to_list);
+        let cc = format_recipients(&metadata.cc_list);
+        let bcc = format_recipients(&metadata.bcc_list);
+        let labels = metadata.custom_labels.iter().map(|l| &l.name).join(", ");
 
         Ok(Self {
             metadata,
             content,
-            scroll_state: ScrollableParagraphState::new(),
-            num_lines,
+            content_scroll,
+            content_lines,
             date,
-            sender,
-            to_list,
-            cc_list,
-            bcc_list,
-            label_list,
+            from,
+            to,
+            cc,
+            bcc,
+            labels,
             banners: body_output.body_banners,
         })
     }
 
     pub fn draw(&mut self, frame: &mut Frame, area: Rect) {
-        let rows = vec![
+        let [headers_area, banners_area, content_area] = Layout::vertical([
+            Constraint::Length(Self::lay_headers()),
+            Constraint::Length(self.lay_banners()),
+            Constraint::Fill(1),
+        ])
+        .areas(area);
+
+        self.draw_headers(frame, headers_area);
+        self.draw_banners(frame, banners_area);
+        self.draw_content(frame, content_area);
+    }
+
+    fn lay_headers() -> u16 {
+        7
+    }
+
+    fn draw_headers(&self, frame: &mut Frame, area: Rect) {
+        let headers = vec![
             Row::new([
                 Cell::from("Subject:"),
                 Cell::from(self.metadata.subject.as_str()),
             ])
             .bold(),
             Row::new([Cell::from("Date:").bold(), Cell::from(self.date.as_str())]),
-            Row::new([Cell::from("From:").bold(), Cell::from(self.sender.as_str())]),
-            Row::new([Cell::from("To:").bold(), Cell::from(self.to_list.as_str())]),
-            Row::new([Cell::from("CC:").bold(), Cell::from(self.cc_list.as_str())]),
-            Row::new([
-                Cell::from("BCC:").bold(),
-                Cell::from(self.bcc_list.as_str()),
-            ]),
+            Row::new([Cell::from("From:").bold(), Cell::from(self.from.as_str())]),
+            Row::new([Cell::from("To:").bold(), Cell::from(self.to.as_str())]),
+            Row::new([Cell::from("CC:").bold(), Cell::from(self.cc.as_str())]),
+            Row::new([Cell::from("BCC:").bold(), Cell::from(self.bcc.as_str())]),
             Row::new([
                 Cell::from("Labels:").bold(),
-                Cell::from(self.label_list.as_str()),
+                Cell::from(self.labels.as_str()),
             ]),
         ];
 
-        let [header_area, banners_area, box_area, message_area] = Layout::vertical([
-            Constraint::Length(u16::try_from(rows.len()).unwrap_or(7)),
-            Constraint::Length(
-                u16::try_from(self.banners.len()).expect("More tan u16::MAX banners??"),
-            ),
-            Constraint::Length(1),
-            Constraint::Percentage(100),
-        ])
-        .areas(area);
-
         let widths = [Constraint::Length(10), Constraint::Fill(1)];
-        let table = Table::new(rows, widths).column_spacing(1);
+        let table = Table::new(headers, widths).column_spacing(1);
 
-        frame.render_widget(table, header_area);
-        self.draw_banners(frame, banners_area);
-
-        frame.render_widget(Block::new().borders(Borders::TOP), box_area);
-        let paragraph = ScrollableParagraph::new(Paragraph::new(&*self.content), self.num_lines);
-        frame.render_stateful_widget(paragraph, message_area, &mut self.scroll_state);
+        frame.render_widget(table, area);
     }
 
-    #[allow(clippy::cast_possible_wrap)]
-    pub fn draw_banners(&self, frame: &mut Frame, rect: Rect) {
+    fn lay_banners(&self) -> u16 {
+        self.banners.len().try_into().unwrap()
+    }
+
+    fn draw_banners(&self, frame: &mut Frame, area: Rect) {
         let rows = self.banners.iter().map(|banner| match banner {
             MessageBanner::BlockedSender => ListItem::from("You blocked this sender."),
+
             MessageBanner::PhishingAttempt => {
                 ListItem::from("The system thinks that this is a phishing attempt")
             }
+
             MessageBanner::Spam => ListItem::from("This message was automatically marked as spam"),
+
+            #[allow(clippy::cast_possible_wrap)]
             MessageBanner::Expiry { timestamp } => ListItem::from(format!(
                 "This message will expire at {}",
                 chrono::DateTime::from_timestamp(*timestamp as i64, 0).unwrap()
             )),
+
+            #[allow(clippy::cast_possible_wrap)]
             MessageBanner::AutoDelete { timestamp } => ListItem::from(format!(
                 "This message will auto-delete at {}",
                 chrono::DateTime::from_timestamp(*timestamp as i64, 0).unwrap()
             )),
+
             MessageBanner::RemoteContent => ListItem::from(
                 "This message contains remote images. Use the --browser flag to see them.",
             ),
+
             MessageBanner::EmbeddedImages => ListItem::from(
                 "This message contains embedded images, which can't be shown in the TUI.",
             ),
+
             MessageBanner::ScheduledSend { timestamp } => ListItem::from(format!(
                 "This message will be sent at {}",
                 date_from_timestamp(*timestamp)
             )),
+
             _ => ListItem::from("unimplemented"),
         });
-        frame.render_widget(List::new(rows), rect);
+
+        frame.render_widget(List::new(rows), area);
+    }
+
+    fn draw_content(&mut self, frame: &mut Frame, area: Rect) {
+        let [sep_area, body_area] =
+            Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(area);
+
+        frame.render_widget(Block::new().borders(Borders::TOP), sep_area);
+
+        // ---
+
+        let para = Paragraph::new(&*self.content);
+        let para = ScrollableParagraph::new(para, self.content_lines);
+
+        frame.render_stateful_widget(para, body_area, &mut self.content_scroll);
     }
 }
 
-fn html_to_text(message: &str) -> anyhow::Result<String> {
+fn html_to_text(message: &str) -> Result<String> {
     // TODO: Best effort terminal image rendering. See https://docs.rs/termimage/latest/termimage/
     let cursor = std::io::Cursor::new(message);
     let config = html2text::config::plain();
@@ -860,6 +884,7 @@ fn html_to_text(message: &str) -> anyhow::Result<String> {
         .string_from_read(cursor, 80)
         .map_err(|e| anyhow!("Failed to parse HTML: {e}"))
 }
+
 fn mark_message_read(ctx: Arc<MailUserContext>, id: LocalMessageId) -> Command<Messages> {
     Command::from_future(async move {
         MailMessage::action_mark_read(ctx.action_queue(), vec![id])
