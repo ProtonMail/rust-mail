@@ -5,7 +5,6 @@ use crate::uniffi_async;
 use proton_core_common::datatypes::contact_details::ContactDetailAddress as RealAddress;
 use proton_core_common::datatypes::contact_details::ContactDetailsEmail as RealContactDetailsEmail;
 use proton_core_common::datatypes::contact_details::ContactField as RealContactField;
-use proton_core_common::datatypes::contact_details::ExtendedName as RealExtendedName;
 use proton_core_common::datatypes::contact_details::Gender as RealGender;
 use proton_core_common::datatypes::contact_details::InspectableContactDetails as RealContactDetails;
 use proton_core_common::datatypes::contact_details::Telephone as RealTelephone;
@@ -36,7 +35,6 @@ pub async fn get_contact_details(
 #[derive(uniffi::Record)]
 pub struct ContactDetailCard {
     pub id: Id,
-    pub extended_name: Option<ExtendedName>,
     /// These are sorted per display order
     pub fields: Vec<ContactField>,
 }
@@ -45,7 +43,6 @@ impl From<RealContactDetails> for ContactDetailCard {
     fn from(value: RealContactDetails) -> Self {
         Self {
             id: value.id.into(),
-            extended_name: value.extended_name.map(Into::into),
             fields: value.fields.map_vec(),
         }
     }
@@ -114,23 +111,6 @@ impl From<RealAddress> for ContactDetailAddress {
             postal_code: value.postal_code,
             country: value.country,
             addr_type: value.addr_type.map_vec(),
-        }
-    }
-}
-
-#[derive(uniffi::Record)]
-pub struct ExtendedName {
-    /// last name
-    pub last: Option<String>,
-    /// first name
-    pub first: Option<String>,
-}
-
-impl From<RealExtendedName> for ExtendedName {
-    fn from(value: RealExtendedName) -> Self {
-        Self {
-            last: value.last,
-            first: value.first,
         }
     }
 }

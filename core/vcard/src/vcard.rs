@@ -63,7 +63,6 @@ use crate::properties::url::VcardUrl;
 use crate::properties::xml::Xml;
 use crate::properties::xtended::Xtended;
 use crate::validation::get_property_kind;
-use crate::values::list_component::ListComponent;
 use crate::{PropertyKind, VCardError, VCardResult};
 
 /// Unique identifier for properties inside a vCard
