@@ -929,11 +929,11 @@ impl MailSession {
         .into()
     }
 
-    /// Logs out all sessions of an account without deleting the account's data.
+    /// Logs out all sessions of an account and deletes the account's data.
     ///
     /// # Errors
     ///
-    /// Returns an error if the database operation fails.
+    /// Returns an error if the operation fails.
     #[returns(VoidSessionResult)]
     pub async fn logout_account(&self, user_id: String) -> Result<(), UserSessionError> {
         let user_ctx = self.user_ctx.clone();
@@ -943,7 +943,7 @@ impl MailSession {
             user_ctx
                 .remove(&user_id)
                 .ok_or(Unexpected::Internal)?
-                .logout()
+                .sign_out()
                 .map_err(RealProtonMailError::from)
                 .await
         })
