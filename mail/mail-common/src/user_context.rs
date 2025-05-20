@@ -111,7 +111,7 @@ impl MailUserContext {
             .queue()
             .register_execution_context(Weak::clone(&this.this));
         this.init_expiration_loop();
-        this.register_subscribers().await;
+        this.register_subscribers().await?;
 
         if let EventPollMode::Automatic(interval) = this.mail_context.event_poll_mode {
             this.init_event_loop_poll(interval)

@@ -41,23 +41,20 @@ impl<T: Event + From<<T as Event>::Response>> EventLoop<T> {
         Ok(self)
     }
 
-    pub async fn register(&self, subscriber: Box<dyn Subscriber<T>>) -> &Self {
+    pub async fn register(
+        &self,
+        subscriber: Box<dyn Subscriber<T>>,
+    ) -> Result<&Self, EventLoopError> {
         let mut subscribers = self.subscribers.lock().await;
         match self.uniqe_sub.lock().await.entry(subscriber.name()) {
-            Entry::Occupied(entry) => {
-                if let Some(old) = subscribers.get_mut(*entry.get()) {
-                    *old = subscriber;
-                } else {
-                    entry.remove();
-                }
-            }
+            Entry::Occupied(_) => return Err(EventLoopError::Register(subscriber.name())),
             Entry::Vacant(entry) => {
                 entry.insert(subscribers.len());
                 subscribers.push(subscriber);
             }
         }
 
-        self
+        Ok(self)
     }
 
     pub async fn poll(&self) -> Result<(), EventLoopError> {

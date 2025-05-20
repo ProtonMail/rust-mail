@@ -88,6 +88,8 @@ pub enum EventLoopError {
     Provider(#[from] ApiServiceError),
     #[error("Subscriber ({0}) failed to apply event: {1}")]
     Subscriber(String, SubscriberError),
+    #[error("Subscriber with `{0}` name already exists")]
+    Register(&'static str),
 }
 
 /// This represents an event returned by the API.

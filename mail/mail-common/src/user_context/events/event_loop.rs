@@ -245,15 +245,17 @@ impl MailUserContext {
     /// It can be done now at any point, but since they were already in one place,
     /// it does not hurt to leave them here as for now.
     ///
-    pub(crate) async fn register_subscribers(&self) {
+    pub(crate) async fn register_subscribers(&self) -> Result<(), EventLoopError> {
         let core_subscriber = CoreEventSubscriber::new(Weak::clone(&self.this));
         let mail_subscriber = MailEventSubscriber::new(Weak::clone(&self.this));
 
         self.event_loop
             .register(Box::new(core_subscriber))
-            .await
+            .await?
             .register(Box::new(mail_subscriber))
-            .await;
+            .await?;
+
+        Ok(())
     }
 
     /// Perform one iteration of the event loop, which consists of retrieving the latest events,
