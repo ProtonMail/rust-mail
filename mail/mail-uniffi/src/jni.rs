@@ -1,9 +1,26 @@
 use muon::tls::errors::Error;
 use muon::tls::objects::{GlobalRef, JClass, JObject};
-use muon::tls::{JNIEnv, JavaVM};
-use std::sync::Once;
+use muon::tls::{JNIEnv, JavaVM, sys};
+use std::os::raw::c_void;
+use std::sync::{Once, OnceLock};
 
 static INIT_ONCE: Once = Once::new();
+static VM: OnceLock<JavaVM> = OnceLock::new();
+
+// This function is called when Java calls `System.loadLibrary()`. This is guaranteed
+// by the uniffi kotlin bindings.
+#[unsafe(export_name = "JNI_OnLoad")]
+pub extern "C" fn jni_on_load(vm: JavaVM, _: *mut c_void) -> sys::jint {
+    // Quick check to validate everything is working.
+    let Ok(_env) = vm.get_env() else {
+        return sys::JNI_ERR;
+    };
+
+    VM.get_or_init(move || vm);
+
+    // From https://developer.android.com/training/articles/perf-jni#native-libraries
+    sys::JNI_VERSION_1_6
+}
 
 #[unsafe(export_name = "Java_uniffi_proton_1mail_1uniffi_RustInit_init_1tls")]
 pub extern "C" fn init_tls(env: JNIEnv<'_>, cls: JClass<'_>) {
@@ -12,6 +29,13 @@ pub extern "C" fn init_tls(env: JNIEnv<'_>, cls: JClass<'_>) {
             panic!("failed to initialize TLS: {e}");
         }
     });
+}
+
+pub(crate) fn register_thread_with_vm() {
+    VM.get()
+        .expect("VM should have handle")
+        .attach_current_thread_permanently()
+        .expect("VM attach should succeed");
 }
 
 fn try_init_tls(env: JNIEnv<'_>, cls: JClass<'_>) -> Result<(), Error> {
