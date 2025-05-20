@@ -160,6 +160,68 @@ async fn load_attachment_from_cache() {
 
     filename_is_correct(&decryption_result);
     assert_eq!(
+        fs::read(&decryption_result.data_path).unwrap(),
+        testdata_expected_attachment_decrypted(),
+        "attachments should be equal"
+    );
+}
+
+#[tokio::test]
+async fn deleting_attachment_file_from_cache_retriggers_download() {
+    let ctx = MailTestContext::new().await;
+    let params = TestParams::default_basic();
+
+    // Api mock.
+    let conversations = params.conversations.clone();
+    let test_attachment = params.attachments.first().unwrap();
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_get_conversations(conversations, 1).await;
+    ctx.mock_get_attachment_metadata(test_attachment.clone(), 1)
+        .await;
+    ctx.mock_get_attachment_data(test_attachment.id.clone(), testdata_attachment_data(), 1)
+        .await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+    // Create a mailbox
+    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
+        .await
+        .unwrap();
+
+    // Sync mails.
+    mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 1)
+        .await
+        .expect("mailbox sync failed");
+    let tether = user_ctx.user_stash().connection();
+    // Get default conversation with the default attachment.
+    let local_conversation = Conversation::find_first("", vec![], &tether)
+        .await
+        .expect("failed to load conversation")
+        .unwrap();
+
+    let attachment_local_id = local_conversation.attachments_metadata[0].local_id.unwrap();
+
+    // Load and decrypt attachment.
+    let decryption_result = Attachment::get_attachment(&user_ctx, attachment_local_id)
+        .await
+        .expect("decryption should not fail");
+
+    filename_is_correct(&decryption_result);
+    assert_eq!(
+        fs::read(&decryption_result.data_path).unwrap(),
+        testdata_expected_attachment_decrypted(),
+        "attachments should be equal"
+    );
+
+    // if the attachment is no longer in disk we re-download it
+    fs::remove_file(&decryption_result.data_path).unwrap();
+
+    let decryption_result = Attachment::get_attachment(&user_ctx, attachment_local_id)
+        .await
+        .expect("decryption should not fail");
+
+    filename_is_correct(&decryption_result);
+    assert_eq!(
         fs::read(decryption_result.data_path).unwrap(),
         testdata_expected_attachment_decrypted(),
         "attachments should be equal"
