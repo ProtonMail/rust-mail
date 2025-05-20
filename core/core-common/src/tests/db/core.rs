@@ -138,7 +138,7 @@ fn new_test_user() -> User {
         max_space: 4096,
         max_upload: 512,
         user_type: UserType::Proton,
-        create_time: 111_111,
+        create_time: 111_111.into(),
         credit: 222_222,
         currency: "euro".to_owned(),
         keys: UserKeys(RealUserKeys(vec![

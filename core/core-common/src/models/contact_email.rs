@@ -1,5 +1,6 @@
 use crate::datatypes::{
     ContactSendingPreferences, ContactTypes, Labels, LocalContactEmailId, LocalContactId,
+    UnixTimestamp,
 };
 use crate::models::{Contact, Label, ModelIdExtension};
 use proton_core_api::services::proton::ContactEmail as ApiContactEmail;
@@ -68,7 +69,7 @@ pub struct ContactEmail {
 
     /// Last used time of the email.
     #[DbField]
-    pub last_used_time: u64,
+    pub last_used_time: UnixTimestamp,
 
     /// Name of the email.
     #[DbField]
@@ -104,7 +105,7 @@ impl From<ApiContactEmail> for ContactEmail {
             email: value.email,
             is_proton: value.is_proton,
             label_ids: Labels::new(value.label_ids),
-            last_used_time: value.last_used_time,
+            last_used_time: value.last_used_time.into(),
             name: value.name,
             row_id: None,
         }
@@ -127,7 +128,7 @@ impl Default for ContactEmail {
             email: Default::default(),
             is_proton: Default::default(),
             label_ids: Default::default(),
-            last_used_time: Default::default(),
+            last_used_time: UnixTimestamp::new(0),
             name: Default::default(),
             row_id: Default::default(),
         }

@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use crate::datatypes::{
-    Flags, InitializationKey, ProductUsedSpace, UserKeys, UserMnemonicStatus, UserType,
+    Flags, InitializationKey, ProductUsedSpace, UnixTimestamp, UserKeys, UserMnemonicStatus,
+    UserType,
 };
 use crate::{CoreContextError, CoreContextResult};
 use derive_more::TryFrom;
@@ -32,7 +33,7 @@ pub struct User {
 
     /// TODO: Document this field.
     #[DbField]
-    pub create_time: u64,
+    pub create_time: UnixTimestamp,
 
     /// TODO: Document this field.
     #[DbField]
@@ -123,7 +124,7 @@ impl From<ApiUser> for User {
     fn from(value: ApiUser) -> Self {
         Self {
             remote_id: Some(value.id),
-            create_time: value.create_time,
+            create_time: value.create_time.into(),
             credit: value.credit,
             currency: value.currency,
             delinquent: value.delinquent.into(),
