@@ -44,6 +44,7 @@ use proton_mail_api::services::proton::response_data::{
     MessageMetadata as ApiMessageMetadata, OperationResult,
 };
 use proton_mail_ids::LocalConversationId;
+use smart_default::SmartDefault;
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
 use stash::exports::ToSql;
@@ -58,7 +59,7 @@ use std::ops::AddAssign;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
-#[derive(Clone, Debug, Default, Eq, Model, PartialEq)]
+#[derive(Clone, Debug, Eq, Model, PartialEq, SmartDefault)]
 #[TableName("conversations")]
 #[ModelActions(on_load, on_save)]
 pub struct Conversation {
@@ -102,6 +103,7 @@ pub struct Conversation {
 
     /// TODO: Document this field.
     #[DbField]
+    #[default(_code = "UnixTimestamp::new(0)")]
     pub expiration_time: UnixTimestamp,
 
     /// TODO: Document this field.
@@ -3039,7 +3041,7 @@ impl TableObserver for ConversationActionWatcher {
 /// [`ConversationLabel`] information is superimposed over the [`Conversation`]
 /// for that context.
 ///
-#[derive(Clone, Debug, Default, Eq, Model, PartialEq)]
+#[derive(Clone, Debug, Eq, Model, PartialEq, SmartDefault)]
 #[TableName("conversation_labels")]
 pub struct ConversationLabel {
     /// The local ID of the record, i.e. the ID assigned by the client
@@ -3067,6 +3069,7 @@ pub struct ConversationLabel {
 
     /// TODO: Document this field.
     #[DbField]
+    #[default(_code = "UnixTimestamp::new(0)")]
     pub context_expiration_time: UnixTimestamp,
 
     /// TODO: Document this field.
@@ -3087,10 +3090,12 @@ pub struct ConversationLabel {
 
     /// TODO: Document this field.
     #[DbField]
+    #[default(_code = "UnixTimestamp::new(0)")]
     pub context_snooze_time: UnixTimestamp,
 
     /// TODO: Document this field.
     #[DbField]
+    #[default(_code = "UnixTimestamp::new(0)")]
     pub context_time: UnixTimestamp,
 
     #[DbField]
