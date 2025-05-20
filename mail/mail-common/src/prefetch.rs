@@ -34,9 +34,7 @@ const PREVIOUS_PAGE_AWAIT_DURATION: Duration = Duration::from_secs(10);
 pub type PrefetchNotify = OnceLock<flume::Sender<Vec<PrefetchJob>>>;
 
 /// Prefetch component for downloading messages and conversations in the background.
-pub struct Prefetch {
-    default_locations: Vec<PrefetchJob>,
-}
+pub struct Prefetch;
 
 pub enum PrefetchJob {
     LocationCnvView(LocalLabelId),
@@ -79,9 +77,6 @@ impl Prefetch {
     ///
     /// If MailUserContext is dropped the background task will die.
     pub async fn initialize(ctx: Arc<MailUserContext>, reciever: Receiver<Vec<PrefetchJob>>) {
-        let tether = ctx.user_stash().connection();
-        let default_locations = PrefetchJob::default_locations(&tether).await;
-        let this = Self { default_locations };
         let ctx_weak = Arc::downgrade(&ctx);
 
         ctx.spawn(async move {
@@ -99,7 +94,7 @@ impl Prefetch {
                 };
 
                 if locations.is_empty() {
-                    let _ = Self::prefetch(ctx, &this.default_locations).await;
+                    tracing::debug!("Got an empty prefetch job list, skipping");
                 } else {
                     let _ = Self::prefetch(ctx, &locations).await;
                 }
@@ -133,12 +128,14 @@ impl Prefetch {
                     }
                 }
                 PrefetchJob::Conversation(cnv_id, label_id) => {
+                    tracing::debug!("Prefetch conversation {cnv_id}");
                     let action = conversations::Prefetch::new(*cnv_id, *label_id);
                     if let Err(error) = queue.queue_action(action).await {
                         tracing::error!("Failed to prefetch conversation {cnv_id}, {error}",);
                     }
                 }
                 PrefetchJob::Message(msg_id) => {
+                    tracing::debug!("Prefetch message {msg_id}");
                     let action = messages::Prefetch::new(*msg_id);
                     if let Err(error) = queue.queue_action(action).await {
                         tracing::error!("Failed to prefetch message {msg_id}, {error}",);
