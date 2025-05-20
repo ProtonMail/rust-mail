@@ -445,12 +445,10 @@ fn expected_event() -> RsvpEvent {
         attendees: vec![
             RsvpAttendee {
                 email: "foo@localhost".into(),
-                name: Some("foo@localhost".into()),
                 status: CalendarAttendeeStatus::Maybe,
             },
             RsvpAttendee {
                 email: "bar@localhost".into(),
-                name: Some("bar@localhost".into()),
                 status: CalendarAttendeeStatus::Unanswered,
             },
         ],
