@@ -1,7 +1,8 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 use ical::generator::Property as IcalProperty;
+use tracing::warn;
 use velcro::hash_set;
 
 use crate::errors::{VcardValidationError, VcardValidationResult};
@@ -11,16 +12,14 @@ use crate::parameters::pid::Pid;
 use crate::parameters::preference::Preference;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
-use crate::properties::{
-    VcardProperty, any_debug, loop_debug, optional_debug, validate_parameters,
-};
+use crate::properties::{VcardProperty, validate_parameters};
 use crate::validation::get_property_kind;
-use crate::values::text::{Text, is_text_value};
+use crate::values::text::Text;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify the electronic mail address for communication with the object the vCard represents.
-#[derive(Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct Email {
     /// Value
     pub value: Text,
@@ -41,55 +40,6 @@ pub struct Email {
     pub group: Option<String>,
 }
 
-impl Email {
-    /// Create a new EMAIL property without parameter or group (no check done)
-    #[must_use]
-    pub fn new_unchecked(value: &str) -> Self {
-        Self {
-            value: Text::new_unchecked(value),
-            value_type: None,
-            pid: None,
-            preference: None,
-            r#type: HashSet::new(),
-            alternative_id: None,
-            any: HashSet::new(),
-            group: None,
-        }
-    }
-
-    /// Try to create a new EMAIL property
-    ///
-    /// # Errors
-    ///   * if given value is not a valid text
-    pub fn new_validated(value: &str) -> VCardResult<Self> {
-        Ok(Self {
-            value: Text::new_validated(value)
-                .map_err(VCardError::from_value_error(PropertyKind::Email))?,
-            value_type: None,
-            pid: None,
-            preference: None,
-            r#type: HashSet::new(),
-            alternative_id: None,
-            any: HashSet::new(),
-            group: None,
-        })
-    }
-}
-
-impl Debug for Email {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Email {{{:?}", self.value)?;
-        optional_debug!(self, f, VALUE, value_type);
-        optional_debug!(self, f, PID, pid);
-        optional_debug!(self, f, PREF, preference);
-        loop_debug!(self, f, TYPE, r#type);
-        optional_debug!(self, f, ALTID, alternative_id);
-        any_debug!(self, f, any);
-        optional_debug!(self, f, group, group);
-        write!(f, "}}",)
-    }
-}
-
 impl TryFrom<&IcalProperty> for Email {
     type Error = VCardError;
 
@@ -97,7 +47,10 @@ impl TryFrom<&IcalProperty> for Email {
         let Some(value) = &property.value else {
             return Err(VCardError::MissingValue(PropertyKind::Email));
         };
-        let mut result = Self::new_validated(value.as_str())?;
+        let mut result = Email {
+            value: value.into(),
+            ..Default::default()
+        };
         result.group = group_from_name(&property.name);
         if let Some(parameters) = &property.params {
             for (name, values) in parameters {
@@ -137,10 +90,7 @@ impl TryFrom<&IcalProperty> for Email {
                         );
                     }
                     parameter_type => {
-                        return Err(VCardError::UnexpectedParameter(
-                            PropertyKind::Email,
-                            parameter_type,
-                        ));
+                        warn!("Unexpected parameter: {parameter_type:?}");
                     }
                 }
             }
@@ -163,25 +113,19 @@ impl VcardProperty for Email {
 pub fn validate_email(property: &IcalProperty) -> VcardValidationResult<()> {
     // EMAIL-param = "VALUE=text" / pid-param / pref-param / type-param / altid-param / any-param
     // EMAIL-value = text
-    if let Some(value) = &property.value {
-        if is_text_value(value) {
-            validate_parameters(
-                property,
-                ValueType::Text,
-                &hash_set!(
-                    ParameterType::Value,
-                    ParameterType::Pid,
-                    ParameterType::Pref,
-                    ParameterType::Type,
-                    ParameterType::AltId,
-                    ParameterType::Any
-                ),
-            )?;
-        } else {
-            return Err(VcardValidationError::InvalidPropertyValue(
-                get_property_kind(&property.name)?,
-            ));
-        }
+    if property.value.is_some() {
+        validate_parameters(
+            property,
+            ValueType::Text,
+            &hash_set!(
+                ParameterType::Value,
+                ParameterType::Pid,
+                ParameterType::Pref,
+                ParameterType::Type,
+                ParameterType::AltId,
+                ParameterType::Any
+            ),
+        )?;
     } else {
         return Err(VcardValidationError::InvalidPropertyValue(
             get_property_kind(&property.name)?,

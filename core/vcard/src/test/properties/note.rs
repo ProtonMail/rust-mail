@@ -1,15 +1,8 @@
 use velcro::hash_set;
 
 use crate::ParameterType;
-use crate::properties::note::{Note, validate_note};
+use crate::properties::note::validate_note;
 use crate::test::{make_property, property_reject_parameters};
-use crate::values::text::Text;
-
-#[test]
-fn note_struct() {
-    let note = Note::new_validated("text").unwrap();
-    assert_eq!(note.value, Text::new_unchecked("text"));
-}
 
 #[test]
 fn note_property() {

@@ -32,7 +32,6 @@ fn gender_struct() {
         gender.value,
         GenderValue::None("it's complicated".to_owned())
     );
-    assert!(Gender::new_validated("X").is_err());
 }
 
 #[test]

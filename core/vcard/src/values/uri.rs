@@ -1,12 +1,42 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display};
 
 use url::Url;
 
 use crate::errors::{VCardValueError, VCardValueResult};
 use crate::parameters::value::ValueType;
 
-/// A Uri as defined in (RFC3986)
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum MaybeUri {
+    Uri(Url),
+    Text(String),
+}
+
+impl<T: AsRef<str> + Into<String>> From<T> for MaybeUri {
+    fn from(value: T) -> Self {
+        match Url::parse(value.as_ref()) {
+            Ok(uri) => Self::Uri(uri),
+            _ => Self::Text(value.into()),
+        }
+    }
+}
+
+impl Default for MaybeUri {
+    fn default() -> Self {
+        Self::Text(String::new())
+    }
+}
+
+impl Display for MaybeUri {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MaybeUri::Uri(url) => write!(f, "{url}"),
+            MaybeUri::Text(t) => write!(f, "{t}"),
+        }
+    }
+}
+
+/// A Uri as defined in RFC3986
+#[derive(Debug, Clone, PartialEq)]
 pub struct Uri(pub Url);
 
 impl Uri {
@@ -25,12 +55,6 @@ impl Uri {
     }
 }
 
-impl Debug for Uri {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Uri({})", self.0)
-    }
-}
-
 impl TryFrom<&str> for Uri {
     type Error = VCardValueError;
 
@@ -39,11 +63,4 @@ impl TryFrom<&str> for Uri {
             VCardValueError::Invalid(ValueType::Uri, value.to_owned())
         })?))
     }
-}
-
-/// Validate that given `value` respect format for `URI` values
-#[must_use]
-pub fn is_uri_value(value: &str) -> bool {
-    // URI               ; from Section 3 of [RFC3986]
-    Url::parse(value).is_ok()
 }

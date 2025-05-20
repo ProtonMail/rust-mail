@@ -1,6 +1,6 @@
 use base64::{DecodeError, Engine as _, prelude::BASE64_STANDARD as BASE_64};
 use itertools::Itertools as _;
-use proton_vcard::{parameters::preference::Preference, properties::key::KeyValue, vcard::VCard};
+use proton_vcard::{parameters::preference::Preference, vcard::VCard};
 
 use proton_crypto_account::{
     keys::{PGPScheme, PinnedPublicKeys},
@@ -67,10 +67,7 @@ fn pinned_keys_for_group<Provider: PGPProviderSync>(
         .filter_map(|(_, key)| {
             let group_name = key.group?;
             if group_name == selected_group {
-                let key_data = match key.value {
-                    KeyValue::Text(data) => data.value,
-                    KeyValue::Uri(uri) => uri.0.to_string(),
-                };
+                let key_data = key.value.to_string();
 
                 let pref = unwrap_preference(key.preference);
                 let public_key_res = parse_and_import_pgp_key(pgp_provider, &key_data);

@@ -1074,7 +1074,7 @@ impl Context {
                             return;
                         }
                     }
-                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(broadcast::error::RecvError::Lagged(_)) => (),
                     Err(_) => {
                         return;
                     }

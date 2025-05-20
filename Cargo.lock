@@ -4011,15 +4011,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b15813163c1d831bf4a13c3610c05c0d03b39feb07f7e09fa234dac9b15aaf39"
 
 [[package]]
-name = "oxilangtag"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23f3f87617a86af77fa3691e6350483e7154c2ead9f1261b75130e21ca0f8acb"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "p256"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4849,6 +4840,7 @@ dependencies = [
  "ical",
  "include_dir",
  "indoc",
+ "insta",
  "itertools 0.13.0",
  "num_enum",
  "parking_lot",
@@ -5264,6 +5256,7 @@ dependencies = [
  "proton-mail-test-utils",
  "proton-task-service",
  "proton-uniffi-macros",
+ "proton-vcard",
  "secrecy",
  "serde",
  "serde_json",
@@ -5389,10 +5382,11 @@ dependencies = [
 name = "proton-vcard"
 version = "0.2.1"
 dependencies = [
+ "anyhow",
  "base64",
  "chrono",
  "ical",
- "oxilangtag",
+ "itertools 0.13.0",
  "paste",
  "regex",
  "thiserror 1.0.69",

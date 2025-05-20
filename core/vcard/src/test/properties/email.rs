@@ -1,15 +1,8 @@
 use velcro::hash_set;
 
 use crate::ParameterType;
-use crate::properties::email::{Email, validate_email};
+use crate::properties::email::validate_email;
 use crate::test::{make_property, property_reject_parameters};
-use crate::values::text::Text;
-
-#[test]
-fn email_strut() {
-    let email = Email::new_validated("text").unwrap();
-    assert_eq!(email.value, Text::new_unchecked("text"));
-}
 
 #[test]
 fn email_property() {

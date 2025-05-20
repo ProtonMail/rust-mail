@@ -19,9 +19,9 @@ impl<T: MailScrollerSource> Paginator<T> {
     /// Create a new paginator instance.
     ///
     /// * `create_paginator` is a closure
-    ///     that should create a paginator with the given `sender`.
+    ///   that should create a paginator with the given `sender`.
     /// * `to_message` should convert the output of [`PaginatorCompat::reload`]
-    ///     into a message.
+    ///   into a message.
     ///
     /// Creates a paginator and watcher.
     pub async fn new(

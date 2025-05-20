@@ -58,7 +58,6 @@ async fn main() {
                     }
                     Err(e) => {
                         eprintln!("Failed to submit totp: {e}");
-                        continue;
                     }
                 }
             }

@@ -1,7 +1,8 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
 
+use anyhow::Context as _;
 use ical::generator::Property as IcalProperty;
+use tracing::warn;
 use velcro::hash_set;
 
 use crate::errors::{VcardValidationError, VcardValidationResult};
@@ -15,9 +16,7 @@ use crate::parameters::preference::Preference;
 use crate::parameters::time_zone::TimeZone;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
-use crate::properties::{
-    VcardProperty, any_debug, list_debug, loop_debug, optional_debug, validate_parameters,
-};
+use crate::properties::{VcardProperty, validate_parameters};
 use crate::validation::get_property_kind;
 use crate::values::check_list;
 use crate::values::list_component::{ListComponent, is_list_component_value};
@@ -25,15 +24,19 @@ use crate::vcard::{group_from_name, split_list};
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify the components of the delivery address for the vCard object.
-#[derive(Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct Address {
     pub post_office_box: ListComponent,
-    pub extension: ListComponent,
+    /// E.g apartment, suite, unit, building, floor, etc
+    pub extended_address: ListComponent,
     pub street: ListComponent,
+    /// AKA City
     pub locality: ListComponent,
+    /// State or Province
     pub region: ListComponent,
-    pub code: ListComponent,
+    pub postal_code: ListComponent,
     pub country: ListComponent,
+
     pub value_type: Option<ValueType>,
     pub label: Option<Label>,
     pub language: Option<Language>,
@@ -47,104 +50,12 @@ pub struct Address {
     pub group: Option<String>,
 }
 
-impl Address {
-    /// Create a new ADR property without any parameter or group
-    #[must_use]
-    pub fn new(
-        post_office_box: ListComponent,
-        extension: ListComponent,
-        street: ListComponent,
-        locality: ListComponent,
-        region: ListComponent,
-        code: ListComponent,
-        country: ListComponent,
-    ) -> Self {
-        Self {
-            post_office_box,
-            extension,
-            street,
-            locality,
-            region,
-            code,
-            country,
-            value_type: None,
-            label: None,
-            language: None,
-            geo_localisation: None,
-            time_zone: None,
-            alternative_id: None,
-            pid: None,
-            preference: None,
-            r#type: HashSet::new(),
-            any: HashSet::new(),
-            group: None,
-        }
-    }
-
-    /// Try to create a new ADR property from strs without any parameters or group
-    ///
-    /// # Errors
-    ///   * if any of the arguments is not a valid list-component value
-    pub fn new_validated(
-        post_office_box: &str,
-        extension: &str,
-        street: &str,
-        locality: &str,
-        region: &str,
-        code: &str,
-        country: &str,
-    ) -> VCardResult<Self> {
-        Ok(Self::new(
-            ListComponent::try_from(post_office_box)
-                .map_err(VCardError::from_value_error(PropertyKind::Adr))?,
-            ListComponent::try_from(extension)
-                .map_err(VCardError::from_value_error(PropertyKind::Adr))?,
-            ListComponent::try_from(street)
-                .map_err(VCardError::from_value_error(PropertyKind::Adr))?,
-            ListComponent::try_from(locality)
-                .map_err(VCardError::from_value_error(PropertyKind::Adr))?,
-            ListComponent::try_from(region)
-                .map_err(VCardError::from_value_error(PropertyKind::Adr))?,
-            ListComponent::try_from(code)
-                .map_err(VCardError::from_value_error(PropertyKind::Adr))?,
-            ListComponent::try_from(country)
-                .map_err(VCardError::from_value_error(PropertyKind::Adr))?,
-        ))
-    }
-}
-
-impl Debug for Address {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut comma = false;
-        write!(f, "Address {{")?;
-        list_debug!(self, f, pobox, post_office_box, comma);
-        list_debug!(self, f, ext, extension, comma);
-        list_debug!(self, f, street, street, comma);
-        list_debug!(self, f, locality, locality, comma);
-        list_debug!(self, f, region, region, comma);
-        list_debug!(self, f, code, code, comma);
-        list_debug!(self, f, country, country, comma);
-        optional_debug!(self, f, VALUE, value_type, comma);
-        optional_debug!(self, f, LABEL, label, comma);
-        optional_debug!(self, f, LANG, language, comma);
-        optional_debug!(self, f, GEO, geo_localisation, comma);
-        optional_debug!(self, f, TZ, time_zone, comma);
-        optional_debug!(self, f, ALTID, alternative_id, comma);
-        optional_debug!(self, f, PID, pid, comma);
-        optional_debug!(self, f, PREF, preference, comma);
-        loop_debug!(self, f, TYPE, r#type, comma);
-        any_debug!(self, f, any, comma);
-        optional_debug!(self, f, group, group, comma);
-        write!(f, "}}")
-    }
-}
-
-impl TryFrom<&IcalProperty> for Address {
+impl TryFrom<IcalProperty> for Address {
     type Error = VCardError;
 
     #[allow(clippy::too_many_lines)]
-    fn try_from(property: &IcalProperty) -> VCardResult<Self> {
-        let Some(value) = &property.value else {
+    fn try_from(property: IcalProperty) -> VCardResult<Self> {
+        let Some(value) = property.value else {
             return Err(VCardError::MissingValue(PropertyKind::Adr));
         };
 
@@ -157,20 +68,28 @@ impl TryFrom<&IcalProperty> for Address {
         // ADR-component-code     = list-component
         // ADR-component-country  = list-component
         // So a valid ADR value can be ';;;;;;' => 7 empty list-component
-        let values: [String; 7] = split_list(value, ';')
-            .try_into()
-            .map_err(|_| VCardError::InvalidValue(PropertyKind::Adr, value.clone()))?;
-        let mut result = Self::new_validated(
-            values[0].as_str(),
-            values[1].as_str(),
-            values[2].as_str(),
-            values[3].as_str(),
-            values[4].as_str(),
-            values[5].as_str(),
-            values[6].as_str(),
-        )?;
-        result.group = group_from_name(property.name.as_str());
-        if let Some(parameters) = &property.params {
+
+        let mut values = split_list(&value, ';').into_iter();
+        let mut next = || {
+            values
+                .next()
+                .context("Too little args in Adr")
+                .map(|x| ListComponent::try_from(&*x).unwrap_or_default())
+        };
+
+        let mut result = Self {
+            post_office_box: next()?,
+            extended_address: next()?,
+            street: next()?,
+            locality: next()?,
+            region: next()?,
+            postal_code: next()?,
+            country: next()?,
+            group: group_from_name(property.name.as_str()),
+            ..Default::default()
+        };
+
+        if let Some(parameters) = property.params {
             for (name, values) in parameters {
                 match ParameterType::from(name.as_str()) {
                     ParameterType::Value => {
@@ -187,7 +106,7 @@ impl TryFrom<&IcalProperty> for Address {
                     }
                     ParameterType::Language => {
                         result.language = Some(
-                            Language::try_from(values.as_slice())
+                            Language::try_from(values.clone())
                                 .map_err(VCardError::from_parameter_error(PropertyKind::Adr))?,
                         );
                     }
@@ -232,10 +151,7 @@ impl TryFrom<&IcalProperty> for Address {
                         );
                     }
                     parameter_type => {
-                        return Err(VCardError::UnexpectedParameter(
-                            PropertyKind::Adr,
-                            parameter_type,
-                        ));
+                        warn!("Unexpected parameter: {parameter_type:?}");
                     }
                 }
             }

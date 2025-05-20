@@ -1,22 +1,8 @@
 use velcro::hash_set;
 
 use crate::ParameterType;
-use crate::properties::uid::VcardUid;
-use crate::properties::uid::{UidValue, validate_uid};
+use crate::properties::uid::validate_uid;
 use crate::test::{make_property, property_reject_parameters};
-use crate::values::text::Text;
-use crate::values::uri::Uri;
-
-#[test]
-fn uid_struct() {
-    let uid = VcardUid::new_validated("text").unwrap();
-    assert_eq!(uid.value, UidValue::Text(Text::new_unchecked("text")));
-    let uid = VcardUid::new_validated("uri:uri").unwrap();
-    assert_eq!(
-        uid.value,
-        UidValue::Uri(Uri::new_validated("uri:uri").unwrap())
-    );
-}
 
 #[test]
 fn uid_property() {

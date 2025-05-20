@@ -191,7 +191,7 @@ impl TryFrom<&IcalProperty> for Parameters {
                     result.label = Some(Label::try_from(values.as_slice())?);
                 }
                 ParameterType::Language => {
-                    result.language = Some(Language::try_from(values.as_slice())?);
+                    result.language = Some(Language::try_from(values.clone())?);
                 }
                 ParameterType::MediaType => {
                     result.media_type = Some(MediaType::try_from(values.as_slice())?);

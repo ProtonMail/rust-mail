@@ -1,15 +1,8 @@
 use velcro::hash_set;
 
 use crate::ParameterType;
-use crate::properties::title::{Title, validate_title};
+use crate::properties::title::validate_title;
 use crate::test::{make_property, property_reject_parameters};
-use crate::values::text::Text;
-
-#[test]
-fn title_struct() {
-    let title = Title::new_validated("text").unwrap();
-    assert_eq!(title.value, Text::new_unchecked("text"));
-}
 
 #[test]
 fn title_property() {

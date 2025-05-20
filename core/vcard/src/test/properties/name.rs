@@ -1,21 +1,7 @@
 use crate::ParameterType;
-use crate::properties::name::{Name, validate_n};
+use crate::properties::name::validate_n;
 use crate::test::{make_property, property_reject_parameters};
-use crate::values::list_component::ListComponent;
 use velcro::hash_set;
-
-#[test]
-fn name_struct() {
-    let name = Name::new_validated("a,b", "c,d", "e,f", "g,h", "i,j").unwrap();
-    assert_eq!(name.last, ListComponent::new_validated("a,b").unwrap());
-    assert_eq!(name.first, ListComponent::new_validated("c,d").unwrap());
-    assert_eq!(
-        name.additional,
-        ListComponent::new_validated("e,f").unwrap()
-    );
-    assert_eq!(name.prefix, ListComponent::new_validated("g,h").unwrap());
-    assert_eq!(name.suffix, ListComponent::new_validated("i,j").unwrap());
-}
 
 #[test]
 fn n_property() {

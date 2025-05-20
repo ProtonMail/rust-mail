@@ -5,7 +5,6 @@ pub mod date;
 pub mod date_and_or_time;
 pub mod date_time;
 pub mod iana_token;
-pub mod language_tag;
 pub mod list_component;
 pub mod param_value;
 pub mod text;

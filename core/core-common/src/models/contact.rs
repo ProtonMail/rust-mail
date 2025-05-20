@@ -11,8 +11,11 @@ use crate::datatypes::{
 };
 use crate::models::{ContactCard, ContactEmail, ModelExtension, ModelIdExtension};
 use crate::{ContactError, CoreContextError, CoreContextResult};
+use anyhow::Context;
+use bytes::Buf as _;
 use futures::future::try_join;
 use futures::try_join;
+use ical::VcardParser;
 use itertools::Itertools;
 use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput};
 use proton_core_api::SYNC_CONTACT_PAGE_SIZE;
@@ -24,6 +27,10 @@ use proton_core_api::services::proton::{
 };
 use proton_core_api::services::proton::{GetContactsEmailsOptions, GetContactsOptions};
 use proton_core_api::services::proton::{Proton, ProtonCore};
+use proton_crypto::crypto::PGPProviderSync;
+use proton_crypto_account::contacts::{ContactCardType, DecryptableVerifiableCard as _};
+use proton_crypto_account::keys::UnlockedUserKeys;
+use proton_vcard::vcard::VCard;
 use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
 use stash::orm::Model;
@@ -145,7 +152,7 @@ impl Contact {
     ///
     /// Returns a [`StashError`] if the cards cannot be retrieved.
     ///
-    pub async fn cards(&mut self, tether: &Tether) -> Result<&Vec<ContactCard>, StashError> {
+    pub async fn cards(&mut self, tether: &Tether) -> Result<&[ContactCard], StashError> {
         self.cards = ContactCard::find(
             "WHERE remote_contact_id = ?",
             params![self.remote_id.clone()],
@@ -154,6 +161,77 @@ impl Contact {
         .await?;
 
         Ok(&self.cards)
+    }
+
+    /// Fetches and decrypts all of the vcards for this contact.
+    pub async fn vcards<T: PGPProviderSync>(
+        &self,
+        tether: &Tether,
+        provider: &T,
+        keys: &UnlockedUserKeys<T>,
+    ) -> Result<Vec<VCard>, anyhow::Error> {
+        let cards = ContactCard::find(
+            "WHERE remote_contact_id = ?",
+            params![self.remote_id.clone()],
+            tether,
+        )
+        .await?;
+
+        let mut decrypted_cards = vec![];
+
+        for card in cards {
+            let card = match card.decrypt_and_verify_sync(provider, keys, keys) {
+                Ok(card) => card,
+                Err(e) => {
+                    error!("{e:?}");
+                    continue;
+                }
+            };
+
+            for vcard in VcardParser::new(card.reader()) {
+                let vcard = vcard?.try_into()?;
+                decrypted_cards.push(vcard);
+            }
+        }
+
+        Ok(decrypted_cards)
+    }
+
+    pub async fn vcard_details<T: PGPProviderSync>(
+        &self,
+        tether: &Tether,
+        provider: &T,
+        keys: &UnlockedUserKeys<T>,
+    ) -> Result<Option<VCard>, anyhow::Error> {
+        let cards = ContactCard::find(
+            "WHERE remote_contact_id = ?",
+            params![self.remote_id.clone()],
+            tether,
+        )
+        .await?;
+
+        let Some(card) = cards.into_iter().find(|c| {
+            matches!(
+                c.card_type,
+                ContactCardType::Encrypted | ContactCardType::EncryptedAndSigned
+            )
+        }) else {
+            debug!("No card details");
+            return Ok(None);
+        };
+
+        let card = card
+            .decrypt_and_verify_sync(provider, keys, keys)
+            .context("Error decrypting vCard")?;
+        let mut cards = VcardParser::new(card.reader());
+        let card = cards
+            .next()
+            .context("Not vCard in card?")?
+            .context("Can't parse vCard with ical")?;
+        let card = card
+            .try_into()
+            .context("Error parsing vCard with proton-vcard")?;
+        Ok(Some(card))
     }
 
     /// Returns the associated emails for a contact.
@@ -347,18 +425,32 @@ impl Contact {
 
     /// Updates the full contact with the given ID including its emails and
     /// cards.
-    ///
-    /// # Parameters
-    ///
-    /// * `id`    - The ID of the [`Contact`] to sync.
-    /// * `api`   - The API instance to use to download the addresses.
-    /// * `stash` - The database instance to store the addresses.
-    ///
-    /// # Errors
-    ///
-    /// Errors when the API request fails or when the database query fails.
-    ///
+    /// Doesn't make an API request if the cards have already been synced.
+    /// If you're using this from test code and you're modifying the mocks call
+    /// `force_sync_with_card` instead.
     pub async fn sync_with_card(
+        local_id: LocalContactId,
+        api: &Proton,
+        rt: &mut impl RunTransaction,
+    ) -> CoreContextResult<()> {
+        // First let's check if the sync has already happened.
+        let c: u32 = rt
+            .tether()
+            .query_value(
+                "SELECT COUNT(*) AS value FROM contact_cards WHERE local_contact_id = ?",
+                params![local_id],
+            )
+            .await?;
+
+        if c != 0 {
+            debug!("Contact {local_id} is already synced, skipping fetch");
+            return Ok(());
+        }
+
+        Self::force_sync_with_card(local_id, api, rt).await
+    }
+
+    pub async fn force_sync_with_card(
         local_id: LocalContactId,
         api: &Proton,
         rt: &mut impl RunTransaction,
@@ -514,16 +606,6 @@ impl Contact {
 
         Ok((contacts, handle))
     }
-
-    // pub async fn vcard<Provider: PGPProviderSync>(
-    //     &mut self,
-    //     pgp_provider: &Provider,
-    //     unlocked_user_keys: &UnlockedUserKeys<Provider>,
-    // ) -> CoreContextResult<VCard> {
-    //     self.cards().await?;
-
-    //     VCard::new(pgp_provider, unlocked_user_keys, self)
-    // }
 }
 
 impl From<ApiContactBasic> for Contact {
@@ -692,6 +774,6 @@ impl SyncedContacts {
 
         debug!("Stored all to the db in {:?}", t1.elapsed());
         debug!("Synced all contacts in {:?}", t0.elapsed());
-        Ok::<(), CoreContextError>(())
+        Ok(())
     }
 }

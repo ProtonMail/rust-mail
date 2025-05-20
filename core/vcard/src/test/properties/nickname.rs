@@ -7,8 +7,11 @@ use crate::values::text_list::TextList;
 
 #[test]
 fn nickname_struct() {
-    let nickname = Nickname::new_validated("a,b,c").unwrap();
-    assert_eq!(nickname.value, TextList::try_from("a,b,c").unwrap());
+    let nickname = Nickname {
+        value: "a,b,c".into(),
+        ..Default::default()
+    };
+    assert_eq!(nickname.value, TextList::from("a,b,c"));
 }
 
 #[test]

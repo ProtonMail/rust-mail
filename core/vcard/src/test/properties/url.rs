@@ -1,15 +1,8 @@
 use velcro::hash_set;
 
 use crate::ParameterType;
-use crate::properties::url::{VcardUrl, validate_url};
+use crate::properties::url::validate_url;
 use crate::test::{make_property, property_reject_parameters};
-use crate::values::uri::Uri;
-
-#[test]
-fn url_struct() {
-    let url = VcardUrl::new_validated("uri:uri").unwrap();
-    assert_eq!(url.value, Uri::new_validated("uri:uri").unwrap());
-}
 
 #[test]
 fn url_property() {

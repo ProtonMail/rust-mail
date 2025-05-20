@@ -47,6 +47,7 @@ mod account_details;
 mod app_settings;
 mod avatar;
 mod connection_status;
+pub mod contact_details;
 mod contact_list;
 mod issue_report;
 

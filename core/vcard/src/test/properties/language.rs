@@ -1,18 +1,8 @@
 use velcro::hash_set;
 
 use crate::ParameterType;
-use crate::properties::language::{Language, validate_lang};
+use crate::properties::language::validate_lang;
 use crate::test::{make_property, property_reject_parameters};
-use crate::values::language_tag::LanguageTag;
-
-#[test]
-fn language_struct() {
-    let language = Language::new_validated("zh-cmn-Hans-CN").unwrap();
-    assert_eq!(
-        language.value,
-        LanguageTag::new_validated("zh-cmn-Hans-CN").unwrap()
-    );
-}
 
 #[test]
 fn lang_property() {

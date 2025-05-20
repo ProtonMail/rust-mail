@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
 
 use ical::generator::Property as IcalProperty;
 use url::Url;
@@ -14,18 +13,16 @@ use crate::parameters::pid::Pid;
 use crate::parameters::preference::Preference;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
-use crate::properties::{
-    VcardProperty, any_debug, loop_debug, optional_debug, validate_parameters,
-};
+use crate::properties::{VcardProperty, validate_parameters};
 use crate::validation::get_property_kind;
-use crate::values::uri::{Uri, is_uri_value};
+use crate::values::uri::Uri;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify a digital sound content information that annotates some aspect of the vCard.  This
 /// property is often used to specify the proper pronunciation of the name property value of the
 /// vCard.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Sound {
     /// Value (ex: CID:JOHNQPUBLIC.part8.19960229T080000.xyzMail@example.com or data:audio/basic;base64,MIICajCCAdOgAwIBAgICBEUw...
     pub value: Uri,
@@ -89,21 +86,6 @@ impl Sound {
     }
 }
 
-impl Debug for Sound {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Sound {{{:?}", self.value)?;
-        optional_debug!(self, f, LANG, language);
-        optional_debug!(self, f, PID, pid);
-        optional_debug!(self, f, PREF, preference);
-        loop_debug!(self, f, TYPE, r#type);
-        optional_debug!(self, f, MEDIATYPE, media_type);
-        optional_debug!(self, f, ALTID, alternative_id);
-        any_debug!(self, f, any);
-        optional_debug!(self, f, group, group);
-        write!(f, "}}")
-    }
-}
-
 impl TryFrom<&IcalProperty> for Sound {
     type Error = VCardError;
 
@@ -124,7 +106,7 @@ impl TryFrom<&IcalProperty> for Sound {
                     }
                     ParameterType::Language => {
                         result.language = Some(
-                            Language::try_from(values.as_slice())
+                            Language::try_from(values.clone())
                                 .map_err(VCardError::from_parameter_error(PropertyKind::Sound))?,
                         );
                     }
@@ -190,7 +172,7 @@ pub fn validate_sound(property: &IcalProperty) -> VcardValidationResult<()> {
     // SOUND-param = "VALUE=uri" / language-param / pid-param / pref-param / type-param / mediatype-param / altid-param / any-param
     // SOUND-value = URI
     if let Some(value) = &property.value {
-        if is_uri_value(value) {
+        if Url::parse(value).is_ok() {
             validate_parameters(
                 property,
                 ValueType::Uri,

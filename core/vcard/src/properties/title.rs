@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
 
 use ical::generator::Property as IcalProperty;
 use velcro::hash_set;
@@ -12,16 +11,14 @@ use crate::parameters::pid::Pid;
 use crate::parameters::preference::Preference;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
-use crate::properties::{
-    VcardProperty, any_debug, loop_debug, optional_debug, validate_parameters,
-};
+use crate::properties::{VcardProperty, validate_parameters};
 use crate::validation::get_property_kind;
-use crate::values::text::{Text, is_text_value};
+use crate::values::text::Text;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify the position or job of the object the vCard represents.
-#[derive(Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct Title {
     /// Value (ex: Research Scientist)
     pub value: Text,
@@ -44,58 +41,6 @@ pub struct Title {
     pub group: Option<String>,
 }
 
-impl Title {
-    /// Create a new TITLE property without any parameter or group (no check is done)
-    #[must_use]
-    pub fn new_unchecked(value: &str) -> Self {
-        Self {
-            value: Text::new_unchecked(value),
-            value_type: None,
-            language: None,
-            pid: None,
-            preference: None,
-            r#type: HashSet::new(),
-            alternative_id: None,
-            any: HashSet::new(),
-            group: None,
-        }
-    }
-
-    /// Try to create a new TITLE property without any parameter or group
-    ///
-    /// # Errors
-    ///   * if given value is not a valid text value
-    pub fn new_validated(value: &str) -> VCardResult<Self> {
-        Ok(Self {
-            value: Text::new_validated(value)
-                .map_err(VCardError::from_value_error(PropertyKind::Title))?,
-            value_type: None,
-            language: None,
-            pid: None,
-            preference: None,
-            r#type: HashSet::new(),
-            alternative_id: None,
-            any: HashSet::new(),
-            group: None,
-        })
-    }
-}
-
-impl Debug for Title {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Title {{{:?}", self.value)?;
-        optional_debug!(self, f, VALUE, value_type);
-        optional_debug!(self, f, PID, pid);
-        optional_debug!(self, f, PREF, preference);
-        loop_debug!(self, f, TYPE, r#type);
-        optional_debug!(self, f, LANG, language);
-        optional_debug!(self, f, ALTID, alternative_id);
-        any_debug!(self, f, any);
-        optional_debug!(self, f, group, group);
-        write!(f, "}}",)
-    }
-}
-
 impl TryFrom<&IcalProperty> for Title {
     type Error = VCardError;
 
@@ -103,7 +48,10 @@ impl TryFrom<&IcalProperty> for Title {
         let Some(value) = &property.value else {
             return Err(VCardError::MissingValue(PropertyKind::Title));
         };
-        let mut result = Self::new_validated(value.as_str())?;
+        let mut result = Title {
+            value: value.into(),
+            ..Default::default()
+        };
         result.group = group_from_name(&property.name);
         if let Some(parameters) = &property.params {
             for (name, values) in parameters {
@@ -132,7 +80,7 @@ impl TryFrom<&IcalProperty> for Title {
                     }
                     ParameterType::Language => {
                         result.language = Some(
-                            Language::try_from(values.as_slice())
+                            Language::try_from(values.clone())
                                 .map_err(VCardError::from_parameter_error(PropertyKind::Title))?,
                         );
                     }
@@ -175,26 +123,21 @@ impl VcardProperty for Title {
 pub fn validate_title(property: &IcalProperty) -> VcardValidationResult<()> {
     // TITLE-param = "VALUE=text" / language-param / pid-param / pref-param / altid-param / type-param / any-param
     // TITLE-value = text
-    if let Some(value) = &property.value {
-        if is_text_value(value) {
-            validate_parameters(
-                property,
-                ValueType::Text,
-                &hash_set!(
-                    ParameterType::Value,
-                    ParameterType::Language,
-                    ParameterType::Pid,
-                    ParameterType::Pref,
-                    ParameterType::AltId,
-                    ParameterType::Type,
-                    ParameterType::Any,
-                ),
-            )?;
-        } else {
-            return Err(VcardValidationError::InvalidPropertyValue(
-                get_property_kind(&property.name)?,
-            ));
-        }
+
+    if property.value.is_some() {
+        validate_parameters(
+            property,
+            ValueType::Text,
+            &hash_set!(
+                ParameterType::Value,
+                ParameterType::Language,
+                ParameterType::Pid,
+                ParameterType::Pref,
+                ParameterType::AltId,
+                ParameterType::Type,
+                ParameterType::Any,
+            ),
+        )?;
     } else {
         return Err(VcardValidationError::InvalidPropertyValue(
             get_property_kind(&property.name)?,

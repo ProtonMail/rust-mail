@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 use ical::generator::Property as IcalProperty;
 use velcro::hash_set;
@@ -13,9 +13,7 @@ use crate::parameters::preference::Preference;
 use crate::parameters::sort_as::SortAs;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
-use crate::properties::{
-    VcardProperty, any_debug, loop_debug, optional_debug, validate_parameters,
-};
+use crate::properties::{VcardProperty, validate_parameters};
 use crate::validation::get_property_kind;
 use crate::values::component::Component;
 use crate::values::list_component::is_list_component_value;
@@ -23,7 +21,7 @@ use crate::vcard::{group_from_name, split_list};
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify the organizational name and units associated with the vCard.
-#[derive(Clone)]
+#[derive(Clone, Debug, Default)]
 pub struct Organization {
     /// Hierarchic list of components
     pub values: Vec<Component>,
@@ -83,22 +81,6 @@ impl Organization {
     }
 }
 
-impl Debug for Organization {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Organization {{{:?}", self.values)?;
-        optional_debug!(self, f, VALUE, value_type);
-        optional_debug!(self, f, PID, pid);
-        optional_debug!(self, f, PREF, preference);
-        loop_debug!(self, f, TYPE, r#type);
-        optional_debug!(self, f, SORT_AS, sort_as);
-        optional_debug!(self, f, LANG, language);
-        optional_debug!(self, f, ALTID, alternative_id);
-        any_debug!(self, f, any);
-        optional_debug!(self, f, group, group);
-        write!(f, "}}",)
-    }
-}
-
 impl TryFrom<&IcalProperty> for Organization {
     type Error = VCardError;
 
@@ -146,7 +128,7 @@ impl TryFrom<&IcalProperty> for Organization {
                     }
                     ParameterType::Language => {
                         result.language = Some(
-                            Language::try_from(values.as_slice())
+                            Language::try_from(values.clone())
                                 .map_err(VCardError::from_parameter_error(PropertyKind::Org))?,
                         );
                     }

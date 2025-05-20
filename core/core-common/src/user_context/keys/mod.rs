@@ -2,8 +2,6 @@
 mod cache;
 mod vcard_crypto;
 
-use std::future::Future;
-
 use bytes::Buf;
 use cache::{CachedAddressKey, CachedUserKey};
 mod manager;
@@ -14,8 +12,8 @@ use crate::{
 use crate::{CoreContextResult, UserContext};
 use ical::{VcardParser, parser::ParserError};
 pub use manager::*;
-use proton_core_api::services::proton::AddressId;
 use proton_core_api::{auth::UserKeySecret, session::CoreSession};
+use proton_core_api::{services::proton::AddressId, session::Session};
 use proton_crypto_account::{
     contacts::{ContactCardType, DecryptableVerifiableCard},
     errors::CardCryptoError,
@@ -69,9 +67,16 @@ pub enum KeyHandlingError {
 }
 
 /// A trait that loads the user secret to unlock the user keys.
+#[allow(async_fn_in_trait)]
 pub trait LoadKeySecret {
     /// Loads the user secret to unlock the user keys.
-    fn key_secret(&self) -> impl Future<Output = Option<UserKeySecret>>;
+    async fn key_secret(&self) -> Option<UserKeySecret>;
+}
+
+impl LoadKeySecret for Session {
+    async fn key_secret(&self) -> Option<UserKeySecret> {
+        self.expose_key_secret().await
+    }
 }
 
 impl UserContext {
@@ -191,7 +196,7 @@ impl UserContext {
                 ))?;
 
         // On success try to sync the most recent full contact including its v-cards from the BE.
-        Contact::sync_with_card(local_contact_id, self.session().api(), rt).await?;
+        Contact::force_sync_with_card(local_contact_id, self.session().api(), rt).await?;
 
         let mut contact = Contact::load(local_contact_id, rt.tether())
             .await?

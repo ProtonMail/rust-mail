@@ -303,13 +303,9 @@ async fn test_sync_and_modify_event_contact() {
         modified_contact.contact_emails.len()
     );
     let expected_cards: Vec<ContactCard> = modified_contact.cards.clone();
-    let mut cards = contact
-        .cards(&conn)
-        .await
-        .expect("Failed to query cards")
-        .clone();
-    prune_cards!(cards);
-    assert_eq!(cards, expected_cards);
+    contact.cards(&conn).await.expect("Failed to query cards");
+    prune_cards!(contact.cards);
+    assert_eq!(contact.cards, expected_cards);
 }
 
 #[tokio::test]
@@ -392,7 +388,7 @@ async fn test_contact_load_public_address_keys() {
         .unwrap()
         .key_fingerprint();
 
-    assert!(preferred_fingerprint_1 != preferred_fingerprint_2);
+    assert_ne!(preferred_fingerprint_1, preferred_fingerprint_2);
 }
 
 async fn prepare_sync_test_data_contacts(
@@ -428,7 +424,7 @@ async fn prepare_sync_test_data_contacts(
         .await
         .unwrap()
         .unwrap();
-    Contact::sync_with_card(local_id, user_ctx.session().api(), &mut tether)
+    Contact::force_sync_with_card(local_id, user_ctx.session().api(), &mut tether)
         .await
         .expect("failed to sync contacts");
 }

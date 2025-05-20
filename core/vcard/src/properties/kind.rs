@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
 
 use ical::generator::Property as IcalProperty;
 use velcro::hash_set;
@@ -7,7 +6,7 @@ use velcro::hash_set;
 use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::any::Any;
 use crate::parameters::value::ValueType;
-use crate::properties::{any_debug, optional_debug, validate_parameters};
+use crate::properties::validate_parameters;
 use crate::validation::get_property_kind;
 use crate::values::iana_token::{IanaToken, is_iana_token_value};
 use crate::values::x_name::{XName, is_x_name_value};
@@ -15,7 +14,7 @@ use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify the kind of object the vCard represents.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Kind {
     /// Value
     pub value: KindValue,
@@ -45,16 +44,6 @@ impl Kind {
     ///   * if given value is not one of: "individual" / "group" / "org" / "location" / iana-token / x-name
     pub fn new_validated(value: &str) -> VCardResult<Self> {
         Ok(Self::new(KindValue::try_from(value)?))
-    }
-}
-
-impl Debug for Kind {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Kind {{{:?}", self.value)?;
-        optional_debug!(self, f, VALUE, value_type);
-        any_debug!(self, f, any);
-        optional_debug!(self, f, group, group);
-        write!(f, "}}")
     }
 }
 
@@ -100,7 +89,7 @@ impl TryFrom<&IcalProperty> for Kind {
 }
 
 /// Possible values for Kind property
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum KindValue {
     /// Individual
     Individual,
@@ -114,19 +103,6 @@ pub enum KindValue {
     IanaToken(IanaToken),
     /// X name
     XName(XName),
-}
-
-impl Debug for KindValue {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            KindValue::Individual => write!(f, "Individual"),
-            KindValue::Group => write!(f, "Group"),
-            KindValue::Organization => write!(f, "Organization"),
-            KindValue::Location => write!(f, "Location"),
-            KindValue::IanaToken(v) => write!(f, "IT({v:?})"),
-            KindValue::XName(v) => write!(f, "XN({v:?})"),
-        }
-    }
 }
 
 impl TryFrom<&str> for KindValue {

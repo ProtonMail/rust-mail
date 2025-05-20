@@ -1,7 +1,8 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display};
 
 use ical::generator::Property as IcalProperty;
+use url::Url;
 use velcro::hash_set;
 
 use crate::errors::{VcardValidationError, VcardValidationResult};
@@ -12,18 +13,16 @@ use crate::parameters::pid::Pid;
 use crate::parameters::preference::Preference;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
-use crate::properties::{
-    VcardProperty, any_debug, get_value_type, loop_debug, optional_debug, validate_parameters,
-};
+use crate::properties::{VcardProperty, get_value_type, validate_parameters};
 use crate::validation::get_property_kind;
-use crate::values::text::{Text, is_text_value};
-use crate::values::uri::{Uri, is_uri_value};
-use crate::values::utc_offset::{UTCOffset, is_utc_offset_value};
+use crate::values::text::Text;
+use crate::values::uri::Uri;
+use crate::values::utc_offset::UTCOffset;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify information related to the time zone of the object the vCard represents.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TimeZone {
     /// Value (ex: -0500 or Raleigh/North America)
     pub value: TimeZoneValue,
@@ -44,47 +43,6 @@ pub struct TimeZone {
     pub any: HashSet<Any>,
     /// Group this `CalendarUserAddress` belong to
     pub group: Option<String>,
-}
-
-impl TimeZone {
-    /// Create a new TZ property without any parameter or group
-    #[must_use]
-    pub fn new(value: TimeZoneValue) -> Self {
-        Self {
-            value,
-            value_type: None,
-            alternative_id: None,
-            pid: None,
-            preference: None,
-            r#type: HashSet::new(),
-            media_type: None,
-            any: HashSet::new(),
-            group: None,
-        }
-    }
-
-    /// Try to create a new TZ property without any parameter or group
-    ///
-    /// # Errors
-    ///   * if the given value not a valid text, uri or utc-offset
-    pub fn new_validated(value: &str) -> VCardResult<Self> {
-        Ok(Self::new(TimeZoneValue::try_from(value)?))
-    }
-}
-
-impl Debug for TimeZone {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "TimeZone {{{:?}", self.value)?;
-        optional_debug!(self, f, VALUE, value_type);
-        optional_debug!(self, f, PID, pid);
-        optional_debug!(self, f, PREF, preference);
-        loop_debug!(self, f, TYPE, r#type);
-        optional_debug!(self, f, MEDIATYPE, media_type);
-        optional_debug!(self, f, ALTID, alternative_id);
-        any_debug!(self, f, any);
-        optional_debug!(self, f, group, group);
-        write!(f, "}}",)
-    }
 }
 
 impl TryFrom<&IcalProperty> for TimeZone {
@@ -154,34 +112,9 @@ impl TryFrom<&IcalProperty> for TimeZone {
                 }
             }
         }
-        let real_value_type = if let Some(value_type) = value_type {
-            value_type
-        } else if is_uri_value(value) {
-            ValueType::Uri
-        } else if is_utc_offset_value(value) {
-            ValueType::UTCOffset
-        } else if is_text_value(value) {
-            ValueType::Text
-        } else {
-            return Err(VCardError::InvalidValue(PropertyKind::Tz, value.to_owned()));
-        };
-        let value = match real_value_type {
-            ValueType::Text => TimeZoneValue::Text(
-                Text::try_from(value.as_str())
-                    .map_err(VCardError::from_value_error(PropertyKind::Tz))?,
-            ),
-            ValueType::Uri => TimeZoneValue::Uri(
-                Uri::try_from(value.as_str())
-                    .map_err(VCardError::from_value_error(PropertyKind::Tz))?,
-            ),
-            ValueType::UTCOffset => TimeZoneValue::UtcOffset(
-                UTCOffset::try_from(value.as_str())
-                    .map_err(VCardError::from_value_error(PropertyKind::Tz))?,
-            ),
-            _ => return Err(VCardError::InvalidValue(PropertyKind::Tz, value.to_owned())),
-        };
+
         Ok(Self {
-            value,
+            value: value.as_str().into(),
             value_type,
             pid,
             preference,
@@ -200,39 +133,31 @@ impl VcardProperty for TimeZone {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum TimeZoneValue {
     Text(Text),
     Uri(Uri),
     UtcOffset(UTCOffset),
 }
 
-impl TryFrom<&str> for TimeZoneValue {
-    type Error = VCardError;
-
-    fn try_from(value: &str) -> VCardResult<Self> {
-        if let Ok(value) = value.parse() {
-            Ok(Self::Uri(Uri::new(value)))
-        } else if is_utc_offset_value(value) {
-            Ok(Self::UtcOffset(
-                value
-                    .try_into()
-                    .map_err(VCardError::from_value_error(PropertyKind::Tz))?,
-            ))
-        } else if is_text_value(value) {
-            Ok(Self::Text(Text::new_unchecked(value)))
+impl From<&str> for TimeZoneValue {
+    fn from(value: &str) -> Self {
+        if let Ok(url) = Url::parse(value) {
+            TimeZoneValue::Uri(Uri(url))
+        } else if let Ok(offset) = UTCOffset::try_from(value) {
+            TimeZoneValue::UtcOffset(offset)
         } else {
-            Err(VCardError::InvalidValue(PropertyKind::Tz, value.to_owned()))
+            TimeZoneValue::Text(value.into())
         }
     }
 }
 
-impl Debug for TimeZoneValue {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+impl Display for TimeZoneValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Text(v) => write!(f, "{v:?}"),
-            Self::Uri(v) => write!(f, "{v:?}"),
-            Self::UtcOffset(v) => write!(f, "{v:?}"),
+            TimeZoneValue::Text(text) => write!(f, "{}", text.value),
+            TimeZoneValue::Uri(uri) => write!(f, "{}", uri.0),
+            TimeZoneValue::UtcOffset(offset) => write!(f, "{offset}"),
         }
     }
 }
@@ -248,7 +173,7 @@ pub fn validate_tz(property: &IcalProperty) -> VcardValidationResult<()> {
     //   ; Value and parameter MUST match.
     //
     // TZ-param =/ altid-param / pid-param / pref-param / type-param / mediatype-param / any-param
-    if let Some(value) = &property.value {
+    if property.value.is_some() {
         let value_type = if let Some(value_type) = get_value_type(property)? {
             if matches!(
                 value_type,
@@ -260,16 +185,8 @@ pub fn validate_tz(property: &IcalProperty) -> VcardValidationResult<()> {
                     get_property_kind(&property.name)?,
                 ));
             }
-        } else if is_text_value(value) {
-            ValueType::Text
-        } else if is_uri_value(value) {
-            ValueType::Uri
-        } else if is_utc_offset_value(value) {
-            ValueType::UTCOffset
         } else {
-            return Err(VcardValidationError::InvalidPropertyValue(
-                get_property_kind(&property.name)?,
-            ));
+            ValueType::Text
         };
         validate_parameters(
             property,

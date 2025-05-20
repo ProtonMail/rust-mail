@@ -1,14 +1,7 @@
 use crate::ParameterType;
-use crate::properties::xml::{Xml, validate_xml};
+use crate::properties::xml::validate_xml;
 use crate::test::{make_property, property_reject_parameters};
-use crate::values::text::Text;
 use velcro::hash_set;
-
-#[test]
-fn xml_struct() {
-    let xml = Xml::new_validated("text").unwrap();
-    assert_eq!(xml.value, Text::new_unchecked("text"));
-}
 
 #[test]
 fn xml_property() {

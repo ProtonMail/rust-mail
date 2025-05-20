@@ -1,7 +1,8 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 use ical::generator::Property as IcalProperty;
+use url::Url;
 use velcro::hash_set;
 
 use crate::errors::{VcardValidationError, VcardValidationResult};
@@ -13,20 +14,17 @@ use crate::parameters::pid::Pid;
 use crate::parameters::preference::Preference;
 use crate::parameters::type_related::RelatedType;
 use crate::parameters::value::ValueType;
-use crate::properties::{
-    VcardProperty, any_debug, get_value_type, loop_debug, optional_debug, validate_parameters,
-};
+use crate::properties::{VcardProperty, get_value_type, validate_parameters};
 use crate::validation::get_property_kind;
-use crate::values::text::{Text, is_text_value};
-use crate::values::uri::{Uri, is_uri_value};
+use crate::values::uri::MaybeUri;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify a relationship between another entity and the entity represented by this vCard.
-#[derive(Clone)]
+#[derive(Clone, Default, Debug)]
 pub struct Related {
     /// Value (ex: urn:uuid:f81d4fae-7dec-11d0-a765-00a0c91e6bf6 or Please contact my assistant Jane Doe for any inquiries.)
-    pub value: RelatedValue,
+    pub value: MaybeUri,
     /// type of the value (here nothing or "uri" or "text")
     pub value_type: Option<ValueType>,
     /// Media type linked by the value (only in case of Uri)
@@ -46,49 +44,6 @@ pub struct Related {
     pub any: HashSet<Any>,
     /// Group this `CalendarUserAddress` belong to
     pub group: Option<String>,
-}
-
-impl Related {
-    /// Create a new RELATED property without any parameter or group
-    #[must_use]
-    pub fn new(value: RelatedValue) -> Self {
-        Self {
-            value,
-            value_type: None,
-            media_type: None,
-            language: None,
-            pid: None,
-            preference: None,
-            alternative_id: None,
-            r#type: HashSet::new(),
-            any: HashSet::new(),
-            group: None,
-        }
-    }
-
-    /// Try to create a new RELATED property without any parameter or group
-    ///
-    /// # Errors
-    ///    * if given value is not a valid text or uri
-    pub fn new_validated(value: &str) -> VCardResult<Self> {
-        Ok(Self::new(RelatedValue::try_from(value)?))
-    }
-}
-
-impl Debug for Related {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Related {{{:?}", self.value)?;
-        optional_debug!(self, f, VALUE, value_type);
-        optional_debug!(self, f, PID, pid);
-        optional_debug!(self, f, PREF, preference);
-        loop_debug!(self, f, TYPE, r#type);
-        optional_debug!(self, f, MEDIATYPE, media_type);
-        optional_debug!(self, f, LANG, language);
-        optional_debug!(self, f, ALTID, alternative_id);
-        any_debug!(self, f, any);
-        optional_debug!(self, f, group, group);
-        write!(f, "}}")
-    }
 }
 
 impl TryFrom<&IcalProperty> for Related {
@@ -140,7 +95,7 @@ impl TryFrom<&IcalProperty> for Related {
                     }
                     ParameterType::Language => {
                         language = Some(
-                            Language::try_from(values.as_slice())
+                            Language::try_from(values.clone())
                                 .map_err(VCardError::from_parameter_error(PropertyKind::Related))?,
                         );
                     }
@@ -165,36 +120,8 @@ impl TryFrom<&IcalProperty> for Related {
                 }
             }
         }
-        let real_value_type = if let Some(value_type) = value_type {
-            value_type
-        } else if is_uri_value(value) {
-            ValueType::Uri
-        } else if is_text_value(value) {
-            ValueType::Text
-        } else {
-            return Err(VCardError::InvalidValue(
-                PropertyKind::Related,
-                value.to_owned(),
-            ));
-        };
-        let value = match real_value_type {
-            ValueType::Uri => RelatedValue::Uri(
-                Uri::try_from(value.as_str())
-                    .map_err(VCardError::from_value_error(PropertyKind::Related))?,
-            ),
-            ValueType::Text => RelatedValue::Text(
-                Text::try_from(value.as_str())
-                    .map_err(VCardError::from_value_error(PropertyKind::Related))?,
-            ),
-            _ => {
-                return Err(VCardError::InvalidValue(
-                    PropertyKind::Related,
-                    value.to_owned(),
-                ));
-            }
-        };
         Ok(Self {
-            value,
+            value: value.into(),
             value_type,
             pid,
             preference,
@@ -211,41 +138,6 @@ impl TryFrom<&IcalProperty> for Related {
 impl VcardProperty for Related {
     fn get_preference(&self) -> Option<Preference> {
         self.preference
-    }
-}
-
-/// Possible values for Related property
-#[derive(Clone, PartialEq)]
-pub enum RelatedValue {
-    /// Uri
-    Uri(Uri),
-    /// Text
-    Text(Text),
-}
-
-impl Debug for RelatedValue {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RelatedValue::Uri(v) => write!(f, "{v:?}"),
-            RelatedValue::Text(v) => write!(f, "{v:?}"),
-        }
-    }
-}
-
-impl TryFrom<&str> for RelatedValue {
-    type Error = VCardError;
-
-    fn try_from(value: &str) -> VCardResult<Self> {
-        if let Ok(value) = value.parse() {
-            Ok(Self::Uri(Uri::new(value)))
-        } else if is_text_value(value) {
-            Ok(Self::Text(Text::new_unchecked(value)))
-        } else {
-            Err(VCardError::InvalidValue(
-                PropertyKind::Related,
-                value.to_owned(),
-            ))
-        }
     }
 }
 
@@ -272,8 +164,8 @@ pub fn validate_related(property: &IcalProperty) -> VcardValidationResult<()> {
     if let Some(value) = &property.value {
         let value_type = if let Some(value_type) = get_value_type(property)? {
             let validated = match value_type {
-                ValueType::Text => is_text_value(value),
-                ValueType::Uri => is_uri_value(value),
+                ValueType::Text => true,
+                ValueType::Uri => Url::parse(value).is_ok(),
                 _ => false,
             };
             if !validated {
@@ -282,14 +174,10 @@ pub fn validate_related(property: &IcalProperty) -> VcardValidationResult<()> {
                 ));
             }
             value_type
-        } else if is_uri_value(value) {
+        } else if Url::parse(value).is_ok() {
             ValueType::Uri
-        } else if is_text_value(value) {
-            ValueType::Text
         } else {
-            return Err(VcardValidationError::InvalidPropertyValue(
-                get_property_kind(&property.name)?,
-            ));
+            ValueType::Text
         };
         validate_parameters(
             property,

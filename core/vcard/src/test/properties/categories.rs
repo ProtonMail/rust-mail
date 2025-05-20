@@ -1,18 +1,8 @@
 use velcro::hash_set;
 
 use crate::ParameterType;
-use crate::properties::categories::{Category, validate_categories};
+use crate::properties::categories::validate_categories;
 use crate::test::{make_property, property_reject_parameters};
-use crate::values::text_list::TextList;
-
-#[test]
-fn categories_struct() {
-    let categories = Category::new_validated(&["A".to_owned(), "b".to_owned()]).unwrap();
-    assert_eq!(
-        categories.value,
-        TextList::new_validated(&["A".to_owned(), "b".to_owned()]).unwrap()
-    );
-}
 
 #[test]
 fn categories_property() {

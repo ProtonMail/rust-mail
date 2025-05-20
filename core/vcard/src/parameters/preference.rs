@@ -11,7 +11,6 @@ const LOWEST_PREF: u32 = 101;
 /// property is preferred by the vCard author.
 #[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Preference {
-    /// Value
     pub value: u32,
 }
 

@@ -1,5 +1,4 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
 
 use ical::generator::Property as IcalProperty;
 use url::Url;
@@ -13,17 +12,15 @@ use crate::parameters::pid::Pid;
 use crate::parameters::preference::Preference;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
-use crate::properties::{
-    VcardProperty, any_debug, loop_debug, optional_debug, validate_parameters,
-};
+use crate::properties::{VcardProperty, validate_parameters};
 use crate::validation::get_property_kind;
-use crate::values::uri::{Uri, is_uri_value};
+use crate::values::uri::Uri;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// To specify an image or photograph information that annotates some aspect of the object the vCard
 /// represents.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Photo {
     /// uri (ex: <http://www.example.com/pub/photos/jqpublic.gif> or <data:image/jpeg;base64,MIICajCCAdOgAwIBAg...>)
     pub value: Uri,
@@ -80,21 +77,6 @@ impl Photo {
             any: HashSet::new(),
             group: None,
         })
-    }
-}
-
-impl Debug for Photo {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Photo {{{:?}", self.value)?;
-        optional_debug!(self, f, VALUE, value_type);
-        optional_debug!(self, f, PID, pid);
-        optional_debug!(self, f, PREF, preference);
-        loop_debug!(self, f, TYPE, r#type);
-        optional_debug!(self, f, MEDIATYPE, media_type);
-        optional_debug!(self, f, ALTID, alternative_id);
-        any_debug!(self, f, any);
-        optional_debug!(self, f, group, group);
-        write!(f, "}}")
     }
 }
 
@@ -179,7 +161,7 @@ pub fn validate_photo(property: &IcalProperty) -> VcardValidationResult<()> {
     // PHOTO-param = "VALUE=uri" / altid-param / type-param / mediatype-param / pref-param / pid-param / any-param
     // PHOTO-value = URI
     if let Some(value) = &property.value {
-        if is_uri_value(value) {
+        if Url::parse(value).is_ok() {
             validate_parameters(
                 property,
                 ValueType::Uri,

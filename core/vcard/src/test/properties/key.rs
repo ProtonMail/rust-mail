@@ -1,20 +1,7 @@
 use crate::ParameterType;
-use crate::properties::key::{Key, KeyValue, validate_key};
+use crate::properties::key::validate_key;
 use crate::test::{make_property, property_reject_parameters};
-use crate::values::text::Text;
-use crate::values::uri::Uri;
 use velcro::hash_set;
-
-#[test]
-fn key_struct() {
-    let key = Key::new_validated("uri:uri").unwrap();
-    assert_eq!(
-        key.value,
-        KeyValue::Uri(Uri::new_validated("uri:uri").unwrap())
-    );
-    let key = Key::new_validated("text").unwrap();
-    assert_eq!(key.value, KeyValue::Text(Text::new_unchecked("text")));
-}
 
 #[test]
 fn key_property() {

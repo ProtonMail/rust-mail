@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::Display;
 
 use regex::Regex;
 
@@ -6,8 +6,14 @@ use crate::errors::{VCardValueError, VCardValueResult};
 use crate::parameters::value::ValueType;
 
 /// Representation of a `component` value from vCard
-#[derive(Clone, PartialEq)]
-pub struct Component(String);
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Component(pub String);
+
+impl Display for Component {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 impl Component {
     /// Create a new `Component` from a str (no check are done)
@@ -22,12 +28,6 @@ impl Component {
     ///   * if given value does not respect format (see RFC6350 4 for details)
     pub fn new_from_vcard(value: &str) -> VCardValueResult<Self> {
         Self::try_from(value)
-    }
-}
-
-impl Debug for Component {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "C({:?})", self.0)
     }
 }
 

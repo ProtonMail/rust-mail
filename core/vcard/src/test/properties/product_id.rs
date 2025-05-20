@@ -1,15 +1,8 @@
 use velcro::hash_set;
 
 use crate::ParameterType;
-use crate::properties::product_id::{ProductId, validate_prodid};
+use crate::properties::product_id::validate_prodid;
 use crate::test::{make_property, property_reject_parameters};
-use crate::values::text::Text;
-
-#[test]
-fn product_id_struct() {
-    let product_id = ProductId::new_validated("text").unwrap();
-    assert_eq!(product_id.value, Text::new_unchecked("text"));
-}
 
 #[test]
 fn prodid_property() {

@@ -1,35 +1,19 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
-use crate::properties::optional_debug;
 use crate::values::date::{DateValue, is_date_noreduc_value};
 use crate::values::time::{TimeValue, is_time_notrunc_value};
 use crate::values::zone::ZoneValue;
 
 #[allow(clippy::module_name_repetitions)]
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DateTimeValue {
-    pub(crate) year: Option<u16>,
-    pub(crate) month: Option<u8>,
-    pub(crate) day: Option<u8>,
-    pub(crate) hour: Option<u8>,
-    pub(crate) minute: Option<u8>,
-    pub(crate) second: Option<u8>,
-    pub(crate) zone: Option<ZoneValue>,
-}
-
-impl Debug for DateTimeValue {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut comma = false;
-        write!(f, "DateTimeValue {{")?;
-        optional_debug!(self, f, year, year, comma);
-        optional_debug!(self, f, month, month, comma);
-        optional_debug!(self, f, day, day, comma);
-        optional_debug!(self, f, hour, hour, comma);
-        optional_debug!(self, f, minute, minute, comma);
-        optional_debug!(self, f, second, second, comma);
-        optional_debug!(self, f, zone, zone, comma);
-        write!(f, "}}")
-    }
+    pub year: Option<u16>,
+    pub month: Option<u8>,
+    pub day: Option<u8>,
+    pub hour: Option<u8>,
+    pub minute: Option<u8>,
+    pub second: Option<u8>,
+    pub zone: Option<ZoneValue>,
 }
 
 // TODO? split in many many enum for all possible used combination
@@ -95,7 +79,7 @@ impl DateTimeValue {
             hour: time.hour,
             minute: time.minute,
             second: time.second,
-            zone: time.zone,
+            zone: time.zone.clone(),
         }
     }
 }

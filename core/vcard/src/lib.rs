@@ -100,6 +100,9 @@ mod validation;
 pub mod values;
 pub mod vcard;
 
+use ::url::Url;
+pub use properties::*;
+
 pub use crate::errors::VCardError;
 pub use crate::errors::VCardResult;
 pub use crate::errors::VcardValidationError;
@@ -117,14 +120,10 @@ use crate::values::date::is_date_value;
 use crate::values::date_and_or_time::is_date_and_or_time_value;
 use crate::values::date_time::is_date_time_value;
 use crate::values::iana_token::is_iana_token_value;
-use crate::values::language_tag::is_language_tag_value;
 use crate::values::list_component::is_list_component_value;
 use crate::values::param_value::is_param_value;
-use crate::values::text::is_text_value;
-use crate::values::text_list::is_text_list_value;
 use crate::values::time::is_time_value;
 use crate::values::timestamp::is_timestamp_value;
-use crate::values::uri::is_uri_value;
 use crate::values::utc_offset::is_utc_offset_value;
 use crate::values::x_name::is_x_name_value;
 use crate::values::zone::is_zone_value;
@@ -133,19 +132,17 @@ use crate::values::zone::is_zone_value;
 #[must_use]
 pub fn is_value_type(kind: ValueType, value: &str) -> bool {
     match kind {
+        ValueType::Text | ValueType::LanguageTag | ValueType::TextList => true,
         ValueType::Component => is_component_value(value),
         ValueType::Date => is_date_value(value),
         ValueType::DateAndOrTime => is_date_and_or_time_value(value),
         ValueType::DateTime => is_date_time_value(value),
         ValueType::IanaToken => is_iana_token_value(value),
-        ValueType::LanguageTag => is_language_tag_value(value),
         ValueType::ListComponent => is_list_component_value(value),
         ValueType::ParamValue => is_param_value(value),
-        ValueType::Text => is_text_value(value),
-        ValueType::TextList => is_text_list_value(value),
         ValueType::Time => is_time_value(value),
         ValueType::Timestamp => is_timestamp_value(value),
-        ValueType::Uri => is_uri_value(value),
+        ValueType::Uri => Url::parse(value).is_ok(),
         ValueType::UTCOffset => is_utc_offset_value(value),
         ValueType::XName => is_x_name_value(value),
         ValueType::TimeZone => is_zone_value(value),

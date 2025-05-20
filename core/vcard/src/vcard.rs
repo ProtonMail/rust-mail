@@ -20,8 +20,10 @@ use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::BuildHasher;
 
+use anyhow::Context;
 use ical::generator::VcardContact;
-use tracing::warn;
+use itertools::Itertools;
+use tracing::{error, warn};
 
 use crate::properties::VcardProperty;
 use crate::properties::address::Address;
@@ -70,12 +72,11 @@ pub struct PropertyUid(u32);
 
 impl PropertyUid {
     fn increment(&mut self) -> VCardResult<()> {
-        if self.0 < u32::MAX {
-            self.0 += 1;
-            Ok(())
-        } else {
-            Err(VCardError::TooManyProperties)
-        }
+        self.0 = self
+            .0
+            .checked_add(1)
+            .context("vCard with more than u32::MAX properties are not handled")?;
+        Ok(())
     }
 }
 
@@ -139,6 +140,151 @@ pub struct VCard {
     unique_id_counter: PropertyUid,
     /// associate group from property name (key) with corresponding category value
     groups: HashMap<String, String>,
+}
+
+impl VCard {
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    pub fn from_ical_contact(value: VcardContact) -> VCardResult<Self> {
+        let mut result = VCard::new();
+
+        match value.properties.first() {
+            Some(v) if v.value.as_deref() == Some("VERSION") => (),
+            _ => {
+                warn!("Vcard error: Missing version");
+            }
+        }
+
+        for property in value.properties {
+            if let Err(err) = (|| {
+                let Some(value) = &property.value else {
+                    match get_property_kind(&property.name)
+                        .map_err(|_| VCardError::InvalidPropertyName(property.name.clone()))?
+                    {
+                        // Only property where no value is possible (with Ical crate)
+                        PropertyKind::Gender => result.set_gender(Gender::try_from(&property)?),
+                        PropertyKind::Extended(_) => {
+                            result.add_xtended(Xtended::try_from(&property)?)?;
+                        }
+                        property_kind => return Err(VCardError::MissingValue(property_kind)),
+                    }
+                    return Ok(());
+                };
+
+                match get_property_kind(&property.name)
+                    .map_err(|_| VCardError::InvalidPropertyName(property.name.clone()))?
+                {
+                    PropertyKind::Begin | PropertyKind::End => (),
+                    PropertyKind::Adr => {
+                        result.add_address(Address::try_from(property)?)?;
+                    }
+                    PropertyKind::Anniversary => {
+                        result.set_anniversary(Anniversary::try_from(&property)?);
+                    }
+                    PropertyKind::BDay => result.set_birthday(Birthday::try_from(&property)?),
+                    PropertyKind::CalAdrURI => {
+                        result
+                            .add_calendar_user_address(CalendarUserAddress::try_from(&property)?)?;
+                    }
+                    PropertyKind::CalURI => {
+                        result.add_calendar_address(CalendarAddress::try_from(&property)?)?;
+                    }
+                    PropertyKind::Categories => {
+                        result.add_category(Category::try_from(&property)?)?;
+                        if let Some((id, _)) = property.name.split_once('.') {
+                            if result.add_group(id.to_owned(), value.to_owned()).is_some() {
+                                warn!("Two CATEGORIES property are in the same group ({id})");
+                            }
+                        }
+                    }
+                    PropertyKind::ClientPIDMap => {
+                        result.add_client_pid_map(ClientPidMap::try_from(&property)?)?;
+                    }
+                    PropertyKind::Email => {
+                        result.add_email(Email::try_from(&property)?)?;
+                    }
+                    PropertyKind::FbUrl => {
+                        result.add_fburl(FbUrl::try_from(&property)?)?;
+                    }
+                    PropertyKind::Fn => {
+                        result.add_formatted_name(FormattedName::try_from(&property)?)?;
+                    }
+                    PropertyKind::Gender => result.set_gender(Gender::try_from(&property)?),
+                    PropertyKind::Geo => {
+                        result.add_geo(Geo::try_from(&property)?)?;
+                    }
+                    PropertyKind::Impp => {
+                        result.add_impp(Impp::try_from(&property)?)?;
+                    }
+                    PropertyKind::Key => {
+                        result.add_key(Key::try_from(&property)?)?;
+                    }
+                    PropertyKind::Kind => result.set_kind(Kind::try_from(&property)?),
+                    PropertyKind::Lang => {
+                        result.add_language(Language::try_from(&property)?)?;
+                    }
+                    PropertyKind::Logo => {
+                        result.add_logo(Logo::try_from(&property)?)?;
+                    }
+                    PropertyKind::Member => {
+                        result.add_member(Member::try_from(property)?)?;
+                    }
+                    PropertyKind::N => result.set_name(Name::try_from(&property)?),
+                    PropertyKind::Nickname => {
+                        result.add_nickname(Nickname::try_from(&property)?)?;
+                    }
+                    PropertyKind::Note => {
+                        result.add_note(Note::try_from(&property)?)?;
+                    }
+                    PropertyKind::Org => {
+                        result.add_organization(Organization::try_from(&property)?)?;
+                    }
+                    PropertyKind::Photo => {
+                        result.add_photo(Photo::try_from(&property)?)?;
+                    }
+                    PropertyKind::ProdId => result.set_product_id(ProductId::try_from(property)?),
+                    PropertyKind::Related => {
+                        result.add_related(Related::try_from(&property)?)?;
+                    }
+                    PropertyKind::Rev => result.set_revision(Revision::try_from(&property)?),
+                    PropertyKind::Role => {
+                        result.add_role(Role::try_from(&property)?)?;
+                    }
+                    PropertyKind::Sound => {
+                        result.add_sound(Sound::try_from(&property)?)?;
+                    }
+                    PropertyKind::Source => {
+                        result.add_source(Source::try_from(&property)?)?;
+                    }
+                    PropertyKind::Tel => {
+                        result.add_telephone(Telephone::try_from(&property)?)?;
+                    }
+                    PropertyKind::Title => {
+                        result.add_title(Title::try_from(&property)?)?;
+                    }
+                    PropertyKind::Tz => {
+                        result.add_time_zone(TimeZone::try_from(&property)?)?;
+                    }
+                    PropertyKind::UId => result.set_uid(VcardUid::try_from(&property)?),
+                    PropertyKind::Url => {
+                        result.add_url(VcardUrl::try_from(property)?)?;
+                    }
+                    PropertyKind::Xml => {
+                        result.add_xml(Xml::try_from(&property)?)?;
+                    }
+                    PropertyKind::Extended(_) => {
+                        result.add_xtended(Xtended::try_from(&property)?)?;
+                    }
+                    PropertyKind::Version => {
+                        warn!("Unsupported version, will try to keep parsing anyways");
+                    }
+                }
+                Ok(())
+            })() {
+                error!("Vcard error parsing property: {err:?}");
+            }
+        }
+        Ok(result)
+    }
 }
 
 /// Macro to display an optional property if present
@@ -217,146 +363,7 @@ impl TryFrom<VcardContact> for VCard {
 
     #[allow(clippy::too_many_lines)]
     fn try_from(value: VcardContact) -> VCardResult<Self> {
-        let mut result = VCard::new();
-        if let Some(first) = value.properties.first() {
-            if first.name != "VERSION" {
-                return Err(VCardError::MissingVersion);
-            }
-        } else {
-            return Err(VCardError::MissingVersion);
-        }
-        for property in value.properties {
-            if property.value.is_some() {
-                match get_property_kind(&property.name)
-                    .map_err(|_| VCardError::InvalidPropertyName(property.name.clone()))?
-                {
-                    PropertyKind::Begin | PropertyKind::End => (),
-                    PropertyKind::Adr => {
-                        result.add_address(Address::try_from(&property)?)?;
-                    }
-                    PropertyKind::Anniversary => {
-                        result.set_anniversary(Anniversary::try_from(&property)?);
-                    }
-                    PropertyKind::BDay => result.set_birthday(Birthday::try_from(&property)?),
-                    PropertyKind::CalAdrURI => {
-                        result
-                            .add_calendar_user_address(CalendarUserAddress::try_from(&property)?)?;
-                    }
-                    PropertyKind::CalURI => {
-                        result.add_calendar_address(CalendarAddress::try_from(&property)?)?;
-                    }
-                    PropertyKind::Categories => {
-                        result.add_category(Category::try_from(&property)?)?;
-                        if let Some((id, _)) = property.name.split_once('.') {
-                            if let Some(value) = property.value {
-                                if result.add_group(id, &value).is_some() {
-                                    warn!("Two CATEGORIES property are in the same group ({id})");
-                                }
-                            }
-                        }
-                    }
-                    PropertyKind::ClientPIDMap => {
-                        result.add_client_pid_map(ClientPidMap::try_from(&property)?)?;
-                    }
-                    PropertyKind::Email => {
-                        result.add_email(Email::try_from(&property)?)?;
-                    }
-                    PropertyKind::FbUrl => {
-                        result.add_fburl(FbUrl::try_from(&property)?)?;
-                    }
-                    PropertyKind::Fn => {
-                        result.add_formatted_name(FormattedName::try_from(&property)?)?;
-                    }
-                    PropertyKind::Gender => result.set_gender(Gender::try_from(&property)?),
-                    PropertyKind::Geo => {
-                        result.add_geo(Geo::try_from(&property)?)?;
-                    }
-                    PropertyKind::Impp => {
-                        result.add_impp(Impp::try_from(&property)?)?;
-                    }
-                    PropertyKind::Key => {
-                        result.add_key(Key::try_from(&property)?)?;
-                    }
-                    PropertyKind::Kind => result.set_kind(Kind::try_from(&property)?),
-                    PropertyKind::Lang => {
-                        result.add_language(Language::try_from(&property)?)?;
-                    }
-                    PropertyKind::Logo => {
-                        result.add_logo(Logo::try_from(&property)?)?;
-                    }
-                    PropertyKind::Member => {
-                        result.add_member(Member::try_from(&property)?)?;
-                    }
-                    PropertyKind::N => result.set_name(Name::try_from(&property)?),
-                    PropertyKind::Nickname => {
-                        result.add_nickname(Nickname::try_from(&property)?)?;
-                    }
-                    PropertyKind::Note => {
-                        result.add_note(Note::try_from(&property)?)?;
-                    }
-                    PropertyKind::Org => {
-                        result.add_organization(Organization::try_from(&property)?)?;
-                    }
-                    PropertyKind::Photo => {
-                        result.add_photo(Photo::try_from(&property)?)?;
-                    }
-                    PropertyKind::ProdId => result.set_product_id(ProductId::try_from(&property)?),
-                    PropertyKind::Related => {
-                        result.add_related(Related::try_from(&property)?)?;
-                    }
-                    PropertyKind::Rev => result.set_revision(Revision::try_from(&property)?),
-                    PropertyKind::Role => {
-                        result.add_role(Role::try_from(&property)?)?;
-                    }
-                    PropertyKind::Sound => {
-                        result.add_sound(Sound::try_from(&property)?)?;
-                    }
-                    PropertyKind::Source => {
-                        result.add_source(Source::try_from(&property)?)?;
-                    }
-                    PropertyKind::Tel => {
-                        result.add_telephone(Telephone::try_from(&property)?)?;
-                    }
-                    PropertyKind::Title => {
-                        result.add_title(Title::try_from(&property)?)?;
-                    }
-                    PropertyKind::Tz => {
-                        result.add_time_zone(TimeZone::try_from(&property)?)?;
-                    }
-                    PropertyKind::UId => result.set_uid(VcardUid::try_from(&property)?),
-                    PropertyKind::Url => {
-                        result.add_url(VcardUrl::try_from(&property)?)?;
-                    }
-                    PropertyKind::Version => {
-                        if property.value != Some("4.0".to_owned()) {
-                            return Err(VCardError::UnsupportedVersion(property.value));
-                        }
-                    }
-                    PropertyKind::Xml => {
-                        result.add_xml(Xml::try_from(&property)?)?;
-                    }
-                    PropertyKind::Extended(_) => {
-                        result.add_xtended(Xtended::try_from(&property)?)?;
-                    }
-                }
-            } else {
-                match get_property_kind(&property.name)
-                    .map_err(|_| VCardError::InvalidPropertyName(property.name.clone()))?
-                {
-                    // Only property where no value is possible (with Ical crate)
-                    PropertyKind::Gender => result.set_gender(Gender::try_from(&property)?),
-                    PropertyKind::Extended(_) => {
-                        result.add_xtended(Xtended::try_from(&property)?)?;
-                    }
-                    property_kind => return Err(VCardError::MissingValue(property_kind)),
-                }
-            }
-        }
-        if result.formatted_names.is_empty() {
-            Err(VCardError::MissingFormattedName)
-        } else {
-            Ok(result)
-        }
+        Self::from_ical_contact(value)
     }
 }
 
@@ -408,18 +415,28 @@ macro_rules! set_handler {
 
             #[doc = "Get the preferred "]
             #[doc = stringify!($name)]
-            #[doc = " if any with it's uid"]
+            #[doc = " if any with its uid"]
             #[must_use] pub fn [<get_preferred_ $name>](&self) -> Option<(PropertyUid, $type)> {
                 get_preferred(&self.$plural)
             }
 
             #[doc = "Get all "]
             #[doc = stringify!($name)]
-            #[doc = " properties with there uid"]
+            #[doc = " properties with their uid"]
             #[must_use] pub fn [<get_all_ $name>](&self) -> Vec<(PropertyUid, $type)> {
                 self.$plural
                     .iter()
                     .map(|(&k, v)| (k, v.clone()))
+                    .collect()
+            }
+
+            #[doc = "Get all "]
+            #[doc = stringify!($name)]
+            #[doc = " properties without their uid"]
+            #[must_use] pub fn [<get_all_ $name _plain>](&self) -> Vec<$type> {
+                self.$plural
+                    .iter()
+                    .map(|(_, v)| v.clone())
                     .collect()
             }
 
@@ -440,8 +457,8 @@ impl VCard {
     }
 
     /// Add a group into the vCard
-    pub fn add_group(&mut self, id: &str, label: &str) -> Option<String> {
-        self.groups.insert(id.to_owned(), label.to_owned())
+    pub fn add_group(&mut self, id: String, label: String) -> Option<String> {
+        self.groups.insert(id, label)
     }
 
     /// Get all groups from vCard
@@ -558,4 +575,45 @@ pub(crate) fn split_list(value: &str, separator: char) -> Vec<String> {
 /// Get the group part of a property name if any.
 pub(crate) fn group_from_name(name: &str) -> Option<String> {
     name.split_once('.').map(|(g, _)| g.to_owned())
+}
+
+/// This trait exists solely for convenience, to transform the fields in the vcard into others in an efficient manner.
+pub trait ToSorted<P> {
+    fn to_sorted_iter<T: Ord>(self, f: impl FnMut(P) -> T) -> impl Iterator<Item = T>
+    where
+        Self: Sized;
+
+    /// Convenience method that extends a vector.
+    /// f1 is typically an enum variant f2 is a map method
+    fn sorted_extend<T: Ord, U>(
+        self,
+        vec: &mut Vec<U>,
+        mut f1: impl FnMut(Vec<T>) -> U,
+        f2: impl FnMut(P) -> T,
+    ) where
+        Self: Sized,
+    {
+        let vals = self.to_sorted_iter(f2).collect_vec();
+        if !vals.is_empty() {
+            vec.push(f1(vals));
+        }
+    }
+}
+
+impl<_K, P: VcardProperty, S: BuildHasher> ToSorted<P> for HashMap<_K, P, S> {
+    fn to_sorted_iter<T: Ord>(self, mut f: impl FnMut(P) -> T) -> impl Iterator<Item = T>
+    where
+        Self: Sized,
+    {
+        self.into_values()
+            .map(|this| {
+                let pref = match this.get_preference() {
+                    Some(v) => v.value,
+                    None => u32::MAX,
+                };
+                (pref, f(this))
+            })
+            .sorted_unstable()
+            .map(|x| x.1)
+    }
 }

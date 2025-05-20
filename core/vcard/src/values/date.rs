@@ -1,12 +1,10 @@
 use chrono::NaiveDate;
-use std::fmt::{Debug, Formatter};
 
 use crate::errors::{VCardValueError, VCardValueResult};
 use crate::parameters::value::ValueType;
-use crate::properties::optional_debug;
 
 // TODO: transform into an enum with all 6 cases
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct DateValue {
     pub(crate) year: Option<u16>,
     pub(crate) month: Option<u8>,
@@ -25,16 +23,6 @@ impl DateValue {
     ///   * if given value is not valid
     pub fn new_validated(value: &str) -> VCardValueResult<Self> {
         Self::try_from(value)
-    }
-}
-
-impl Debug for DateValue {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "DateValue {{")?;
-        optional_debug!(self, f, year, year);
-        optional_debug!(self, f, month, month);
-        optional_debug!(self, f, day, day);
-        write!(f, "}}")
     }
 }
 

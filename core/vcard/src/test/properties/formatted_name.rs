@@ -1,14 +1,7 @@
 use crate::ParameterType;
-use crate::properties::formatted_name::{FormattedName, validate_fn};
+use crate::properties::formatted_name::validate_fn;
 use crate::test::{make_property, property_reject_parameters};
-use crate::values::text::Text;
 use velcro::hash_set;
-
-#[test]
-fn formatted_name_struct() {
-    let formatted_name = FormattedName::new_validated("text").unwrap();
-    assert_eq!(formatted_name.value, Text::new_unchecked("text"));
-}
 
 #[test]
 fn fn_property() {

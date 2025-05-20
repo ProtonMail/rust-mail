@@ -1,6 +1,5 @@
 use ical::generator::Property as IcalProperty;
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
 use url::Url;
 use velcro::hash_set;
 
@@ -12,14 +11,14 @@ use crate::parameters::mediatype::MediaType;
 use crate::parameters::pid::Pid;
 use crate::parameters::preference::Preference;
 use crate::parameters::value::ValueType;
-use crate::properties::{VcardProperty, any_debug, optional_debug, validate_parameters};
+use crate::properties::{VcardProperty, validate_parameters};
 use crate::validation::get_property_kind;
-use crate::values::uri::{Uri, is_uri_value};
+use crate::values::uri::Uri;
 use crate::vcard::group_from_name;
 use crate::{PropertyKind, VCardError, VCardResult};
 
 /// To identify the source of directory information contained in the content type.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Source {
     /// Value (ex: <ldap://ldap.example.com/cn=Babs%20Jensen,%20o=Babsco,%20c=US>)
     pub value: Uri,
@@ -72,20 +71,6 @@ impl Source {
             any: HashSet::new(),
             group: None,
         })
-    }
-}
-
-impl Debug for Source {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Source {{{:?}", self.value)?;
-        optional_debug!(self, f, VALUE, value_type);
-        optional_debug!(self, f, PID, pid);
-        optional_debug!(self, f, PREF, preference);
-        optional_debug!(self, f, MEDIATYPE, media_type);
-        optional_debug!(self, f, ALTID, alternative_id);
-        any_debug!(self, f, any);
-        optional_debug!(self, f, group, group);
-        write!(f, "}}")
     }
 }
 
@@ -165,7 +150,7 @@ pub fn validate_source(property: &IcalProperty) -> VcardValidationResult<()> {
     // SOURCE-param = "VALUE=uri" / pid-param / pref-param / altid-param / mediatype-param / any-param
     // SOURCE-value = URI
     if let Some(value) = &property.value {
-        if is_uri_value(value) {
+        if Url::parse(value).is_ok() {
             validate_parameters(
                 property,
                 ValueType::Uri,

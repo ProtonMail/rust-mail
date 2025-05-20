@@ -3,7 +3,6 @@ mod any;
 mod calendar_scale;
 mod geo_localisation;
 mod label;
-mod language;
 mod mediatype;
 mod pid;
 mod preference;
