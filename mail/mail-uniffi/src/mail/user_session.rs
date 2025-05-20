@@ -84,12 +84,12 @@ impl MailUserSession {
         Ok(self.ctx()?.session_id().to_owned().into_inner())
     }
 
-    /// Log out a session.
+    /// Log out a session and delete all user data.
     #[returns(VoidSessionResult)]
     pub async fn logout(&self) -> Result<(), UserSessionError> {
         let ctx = self.take_ctx()?;
 
-        uniffi_async(async move { ctx.logout().map_err(RealProtonMailError::from).await })
+        uniffi_async(async move { ctx.sign_out().map_err(RealProtonMailError::from).await })
             .await
             .map_err(UserSessionError::from)
             .into()
