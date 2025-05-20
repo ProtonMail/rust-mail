@@ -1,9 +1,8 @@
 use crate::actions::rollback::RollbackAction;
 use crate::context::EventPollMode;
-use crate::events::MailEvent;
 use crate::user_context::events::subscriber::MailEventSubscriber;
 use crate::{MailContextError, MailUserContext};
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use async_trait::async_trait;
 use proton_action_queue::action::ActionId;
 use proton_action_queue::queue::ActionError;
@@ -15,21 +14,43 @@ use proton_core_api::session::CoreSession;
 use proton_core_common::CoreEventSubscriber;
 use proton_event_loop::provider::Provider;
 use proton_event_loop::store::Store;
-use proton_event_loop::subscriber::Subscriber;
 use proton_event_loop::{EventLoopError, RawEvent};
 use stash::exports::SqliteError;
 use stash::params;
 use stash::stash::StashError;
-use std::sync::Weak;
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tracing::{Instrument, error, warn};
 
 const MAIL_EVENT_TYPE_ID: &str = "proton-mail-event";
 
+#[derive(Clone)]
+pub struct MailEventLoopContext(Weak<MailUserContext>);
+
+impl MailEventLoopContext {
+    pub fn inner(&self) -> Result<Arc<MailUserContext>, anyhow::Error> {
+        match self.0.upgrade() {
+            Some(ctx) => Ok(ctx),
+            None => bail!("This context no longer exists"),
+        }
+    }
+
+    pub fn boxed(&self) -> Box<Self> {
+        Box::new(self.clone())
+    }
+}
+
+impl From<Weak<MailUserContext>> for MailEventLoopContext {
+    fn from(value: Weak<MailUserContext>) -> Self {
+        Self(value)
+    }
+}
+
 #[async_trait]
-impl Store for MailUserContext {
+impl Store for MailEventLoopContext {
     async fn load(&self) -> anyhow::Result<Option<EventId>> {
-        let tether = self.user_context.stash().connection();
+        let ctx = self.inner()?;
+        let tether = ctx.user_context.stash().connection();
         match tether
             .query_value::<_, EventId>(
                 "SELECT value FROM event_id_store WHERE id = ?1",
@@ -53,7 +74,8 @@ impl Store for MailUserContext {
     }
 
     async fn store(&self, id: EventId) -> anyhow::Result<()> {
-        self.user_context
+        let ctx = self.inner()?;
+        ctx.user_context
             .stash()
             .connection()
             .tx(async |tx| {
@@ -74,13 +96,15 @@ impl Store for MailUserContext {
 }
 
 #[async_trait]
-impl Provider for MailUserContext {
+impl Provider for MailEventLoopContext {
     async fn get_latest_event_id(&self) -> Result<EventId, ApiServiceError> {
-        Ok(self.api().get_events_latest().await?.event_id)
+        let ctx = self.inner()?;
+        Ok(ctx.api().get_events_latest().await?.event_id)
     }
 
     async fn get_event(&self, event_id: &EventId) -> Result<RawEvent, ApiServiceError> {
-        let json_string = self
+        let ctx = self.inner()?;
+        let json_string = ctx
             .session()
             .api()
             .get_event(event_id.clone(), GetEventOptions::all())
@@ -215,6 +239,25 @@ impl MailUserContext {
         }
         Ok(())
     }
+
+    /// Register subscribers
+    ///
+    /// It can be done now at any point, but since they were already in one place,
+    /// it does not hurt to leave them here as for now.
+    ///
+    pub(crate) async fn register_subscribers(&self) -> Result<(), EventLoopError> {
+        let core_subscriber = CoreEventSubscriber::new(Weak::clone(&self.this));
+        let mail_subscriber = MailEventSubscriber::new(Weak::clone(&self.this));
+
+        self.event_loop
+            .register(Box::new(core_subscriber))
+            .await?
+            .register(Box::new(mail_subscriber))
+            .await?;
+
+        Ok(())
+    }
+
     /// Perform one iteration of the event loop, which consists of retrieving the latest events,
     /// publishing it on all the registered subscribers and storing the event id for the next
     /// iteration.
@@ -225,11 +268,6 @@ impl MailUserContext {
     ///
     /// Returns error if the event loop failed to poll.
     pub(crate) async fn poll_event_loop_impl(&self) -> Result<(), EventLoopError> {
-        let core_subscriber = CoreEventSubscriber::new(Weak::clone(&self.this));
-        let mail_subscriber = MailEventSubscriber::new(Weak::clone(&self.this));
-        let subscribers: [Box<dyn Subscriber<MailEvent>>; 2] =
-            [Box::new(core_subscriber), Box::new(mail_subscriber)];
-
-        self.event_loop.poll(self, self, &subscribers).await
+        self.event_loop.poll().await
     }
 }

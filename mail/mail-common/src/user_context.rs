@@ -3,10 +3,12 @@ mod events;
 mod images;
 mod initialization;
 
+use self::events::MailEventLoopContext;
 use crate::actions::draft::SEND_ACTION_GROUP;
 use crate::actions::register_mail_actions;
 use crate::context::EventPollMode;
 use crate::draft::attachments::DraftStagingAreaCleaner;
+use crate::events::MailEvent;
 use crate::models::{Conversation, Message};
 use crate::prefetch::{Prefetch, PrefetchJob, PrefetchNotify};
 use crate::user_context::initialization::InitializationMediator;
@@ -47,7 +49,7 @@ pub struct MailUserContext {
     this: Weak<Self>,
     mail_context: Arc<MailContext>,
     user_context: Arc<UserContext>,
-    event_loop: EventLoop,
+    event_loop: EventLoop<MailEvent>,
     default_queue_executor: QueueAutoExecutor,
     send_queue_executors: QueueAutoExecutorPool,
     prefetch: PrefetchNotify,
@@ -84,17 +86,21 @@ impl MailUserContext {
 
         let initialization_mediator = InitializationMediator::new(task_service);
 
-        let this = Arc::new_cyclic(|this| Self {
-            this: Weak::clone(this),
-            mail_context,
-            user_context,
-            event_loop: EventLoop::new(),
-            prefetch: OnceLock::new(),
-            default_queue_executor,
-            send_queue_executors,
-            last_event_loop_action_ids: Mutex::new(Default::default()),
-            initialization_mediator,
-            is_cleanup_cache_running: Default::default(),
+        let this = Arc::new_cyclic(|this| {
+            let event_ctx = MailEventLoopContext::from(Weak::clone(this));
+
+            Self {
+                this: Weak::clone(this),
+                mail_context,
+                user_context,
+                event_loop: EventLoop::new(event_ctx.boxed(), event_ctx.boxed()),
+                prefetch: OnceLock::new(),
+                default_queue_executor,
+                send_queue_executors,
+                last_event_loop_action_ids: Mutex::new(Default::default()),
+                initialization_mediator,
+                is_cleanup_cache_running: Default::default(),
+            }
         });
 
         // Start draft staging area cleaner.
@@ -103,8 +109,8 @@ impl MailUserContext {
         this.user_context
             .queue()
             .register_execution_context(Weak::clone(&this.this));
-
         this.init_expiration_loop();
+        this.register_subscribers().await?;
 
         if let EventPollMode::Automatic(interval) = this.mail_context.event_poll_mode {
             this.init_event_loop_poll(interval)

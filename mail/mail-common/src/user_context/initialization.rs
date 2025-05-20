@@ -157,10 +157,7 @@ async fn initialize_event_loop(
             // there is no way of initializing it with already having transaction.
             // We want to avoid the deadlock, and we do not depend on any dependencies.
             // So initializing it here is not really harmful, just weird.
-            ctx_clone
-                .event_loop
-                .initialize(ctx_clone, ctx_clone)
-                .await?;
+            ctx_clone.event_loop.initialize().await?;
             Ok(())
         },
         async |_tx, ()| Ok(()),

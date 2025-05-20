@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use std::collections::hash_map::Entry;
+
 use crate::provider::Provider;
 use crate::store::Store;
 use crate::subscriber::Subscriber;
@@ -5,18 +8,75 @@ use crate::{Event, EventLoopError};
 use anyhow::anyhow;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::EventId;
+use tokio::sync::Mutex;
 use tracing::{self, Level, debug, error};
+
+pub struct EventLoop<T: Send + Sync> {
+    eloop: EventLoopInternal,
+    store: Box<dyn Store>,
+    provider: Box<dyn Provider>,
+    uniqe_sub: Mutex<HashMap<&'static str, usize>>,
+    subscribers: Mutex<Vec<Box<dyn Subscriber<T>>>>,
+}
+
+impl<T: Event + From<<T as Event>::Response>> EventLoop<T> {
+    #[must_use]
+    pub fn new(store: Box<dyn Store>, provider: Box<dyn Provider>) -> Self {
+        let eloop = EventLoopInternal::new();
+
+        Self {
+            eloop,
+            store,
+            provider,
+            uniqe_sub: Mutex::new(HashMap::new()),
+            subscribers: Mutex::new(Vec::new()),
+        }
+    }
+
+    pub async fn initialize(&self) -> Result<&Self, EventLoopError> {
+        self.eloop
+            .initialize(self.store.as_ref(), self.provider.as_ref())
+            .await?;
+
+        Ok(self)
+    }
+
+    pub async fn register(
+        &self,
+        subscriber: Box<dyn Subscriber<T>>,
+    ) -> Result<&Self, EventLoopError> {
+        let mut subscribers = self.subscribers.lock().await;
+        match self.uniqe_sub.lock().await.entry(subscriber.name()) {
+            Entry::Occupied(_) => return Err(EventLoopError::Register(subscriber.name())),
+            Entry::Vacant(entry) => {
+                entry.insert(subscribers.len());
+                subscribers.push(subscriber);
+            }
+        }
+
+        Ok(self)
+    }
+
+    pub async fn poll(&self) -> Result<(), EventLoopError> {
+        self.eloop
+            .poll::<T>(
+                self.store.as_ref(),
+                self.provider.as_ref(),
+                self.subscribers.lock().await.as_slice(),
+            )
+            .await
+    }
+}
 
 /// Collect events from the Proton Servers in a loop and publish the events to the subscribers.
 ///
 /// This version requires the user to call the [`EventLoop::poll`] function each time they wish to
-/// iterate the loop. For a continuous loop which operates in the background see
-/// [`BackgroundEventLoop`].
+/// iterate the loop.
 #[derive(Debug, Default)]
-pub struct EventLoop;
+pub struct EventLoopInternal;
 
 const MAX_EVENTS_PER_POLL: usize = 50;
-impl EventLoop {
+impl EventLoopInternal {
     #[must_use]
     pub fn new() -> Self {
         Self
