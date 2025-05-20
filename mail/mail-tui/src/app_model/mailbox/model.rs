@@ -22,7 +22,7 @@ use proton_core_common::models::{Label, ModelExtension};
 use proton_mail_common::actions::event_poll::EventPoll;
 use proton_mail_common::datatypes::{ReadFilter, SystemLabelId, ViewMode};
 use proton_mail_common::draft::Draft;
-use proton_mail_common::draft::observers::DraftSendResultWatcher;
+use proton_mail_common::draft::observers::{DraftSendResultWatcher, DraftSendResultWatcherMode};
 use proton_mail_common::models::{
     DraftSendFailure, DraftSendResult, DraftSendResultOrigin, LabelWithCounters,
 };
@@ -652,7 +652,12 @@ async fn observe_draft_action_errors(
     cancellation_token: CancellationToken,
     sender: Sender<Command<Messages>>,
 ) {
-    let mut observer = match DraftSendResultWatcher::new(ctx.user_stash().clone()).await {
+    let mut observer = match DraftSendResultWatcher::new(
+        ctx.user_stash().clone(),
+        DraftSendResultWatcherMode::SentOnly,
+    )
+    .await
+    {
         Ok(observer) => observer,
         Err(e) => {
             error!("Failed to create draft send result observer:{e:?}");

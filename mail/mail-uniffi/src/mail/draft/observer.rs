@@ -9,7 +9,9 @@ use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::utils::MapVec;
 use proton_mail_common::MailContextError;
 use proton_mail_common::datatypes::LocalMessageId;
-use proton_mail_common::draft::observers::DraftSendResultWatcher as RealDraftSendResultWatcher;
+use proton_mail_common::draft::observers::{
+    DraftSendResultWatcher as RealDraftSendResultWatcher, DraftSendResultWatcherMode,
+};
 use proton_mail_common::errors::MailErrorReason as RealMailErrorReason;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::{
@@ -130,7 +132,11 @@ pub async fn new_draft_send_watcher(
 ) -> Result<Arc<DraftSendResultWatcher>, ProtonError> {
     let ctx = session.ctx()?;
     uniffi_async(async move {
-        let mut observer = RealDraftSendResultWatcher::new(ctx.user_stash().clone()).await?;
+        let mut observer = RealDraftSendResultWatcher::new(
+            ctx.user_stash().clone(),
+            DraftSendResultWatcherMode::SentOnly,
+        )
+        .await?;
         let handle = async_runtime()
             .spawn(async move {
                 loop {

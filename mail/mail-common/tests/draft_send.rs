@@ -24,7 +24,7 @@ use proton_mail_api::services::proton::response_data::{
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::draft::Draft;
 use proton_mail_common::draft::compose::DEFAULT_SUBJECT;
-use proton_mail_common::draft::observers::DraftSendResultWatcher;
+use proton_mail_common::draft::observers::{DraftSendResultWatcher, DraftSendResultWatcherMode};
 use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry};
 use proton_mail_common::models::{
     DraftSendFailure, DraftSendFailureSend, DraftSendResult, DraftSendResultOrigin, MailSettings,
@@ -753,9 +753,12 @@ async fn already_sent_error_does_not_produce_error() {
         .await
         .unwrap();
 
-    let mut observer = DraftSendResultWatcher::new(user_ctx.user_stash().clone())
-        .await
-        .unwrap();
+    let mut observer = DraftSendResultWatcher::new(
+        user_ctx.user_stash().clone(),
+        DraftSendResultWatcherMode::All,
+    )
+    .await
+    .unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();

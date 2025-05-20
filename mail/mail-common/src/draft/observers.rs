@@ -2,9 +2,8 @@ use crate::models::{
     DraftAttachmentMetadata, DraftAttachmentUploadState, DraftSendResult, MetadataId,
 };
 use proton_mail_ids::LocalAttachmentId;
-use stash::stash::{Stash, StashError, WatcherHandle};
+use stash::stash::{Stash, StashError, Tether, WatcherHandle};
 use std::collections::HashSet;
-use tracing::error;
 
 #[cfg(test)]
 #[path = "../tests/draft/observer.rs"]
@@ -18,6 +17,15 @@ pub struct DraftSendResultWatcher {
     watcher_handle: WatcherHandle,
     stash: Stash,
     unseen: HashSet<DraftSendResult>,
+    mode: DraftSendResultWatcherMode,
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum DraftSendResultWatcherMode {
+    /// Receive all unseen notifications
+    All,
+    /// Receive only notifications
+    SentOnly,
 }
 
 impl DraftSendResultWatcher {
@@ -26,10 +34,10 @@ impl DraftSendResultWatcher {
     /// # Errors
     ///
     /// Returns error if the registration or initial db query failed.
-    pub async fn new(stash: Stash) -> Result<Self, StashError> {
+    pub async fn new(stash: Stash, mode: DraftSendResultWatcherMode) -> Result<Self, StashError> {
         let conn = stash.connection();
 
-        let all_unseen = DraftSendResult::unseen(&conn).await?;
+        let all_unseen = Self::load_send_results(mode, &conn).await?;
 
         let handle = DraftSendResult::watch(&stash)?;
 
@@ -37,6 +45,7 @@ impl DraftSendResultWatcher {
             watcher_handle: handle,
             stash,
             unseen: HashSet::from_iter(all_unseen),
+            mode,
         })
     }
 
@@ -54,9 +63,8 @@ impl DraftSendResultWatcher {
                 .await
                 .map_err(|_| StashError::WatcherError("Connection Lost".to_owned()))?;
 
-            let mut all_unseen = DraftSendResult::unseen(&self.stash.connection())
-                .await
-                .inspect_err(|e| error!("Failed to load draft send results: {e:?}"))?;
+            let mut all_unseen =
+                Self::load_send_results(self.mode, &self.stash.connection()).await?;
 
             if all_unseen.is_empty() {
                 // Nothing to do.
@@ -82,6 +90,18 @@ impl DraftSendResultWatcher {
 
             // return result.
             return Ok(all_unseen);
+        }
+    }
+
+    async fn load_send_results(
+        mode: DraftSendResultWatcherMode,
+        tether: &Tether,
+    ) -> Result<Vec<DraftSendResult>, StashError> {
+        match mode {
+            DraftSendResultWatcherMode::All => DraftSendResult::unseen(tether).await,
+            DraftSendResultWatcherMode::SentOnly => {
+                DraftSendResult::unseen_with_send_action(tether).await
+            }
         }
     }
 }

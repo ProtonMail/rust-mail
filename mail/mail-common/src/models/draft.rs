@@ -339,6 +339,8 @@ pub struct DraftSendResult {
     #[DbField]
     /// Where this error originated from
     pub origin: DraftSendResultOrigin,
+    #[DbField]
+    pub has_send_action: bool,
     /// The internal row ID of the record in the database. This is assigned by
     /// SQLite, and is used as a consistent identifier for records when
     /// listening for change notifications.
@@ -363,6 +365,7 @@ impl DraftSendResult {
             error: None,
             seen: false,
             origin,
+            has_send_action: false,
             row_id: None,
         }
     }
@@ -382,6 +385,7 @@ impl DraftSendResult {
             seen: false,
             error: Some(error),
             row_id: None,
+            has_send_action: false,
             origin,
         }
     }
@@ -390,6 +394,14 @@ impl DraftSendResult {
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(existing) = Self::find_by_id(self.local_message_id, bond).await? {
             self.row_id = existing.row_id;
+        }
+
+        if let Some(metadata_id) =
+            DraftMetadata::find_by_message_id(self.local_message_id, bond).await?
+        {
+            self.has_send_action = metadata_id.send_action_id.is_some();
+        } else {
+            self.has_send_action = false;
         }
 
         <Self as Model>::save(self, bond).await
@@ -402,6 +414,15 @@ impl DraftSendResult {
     /// Returns error if the query failed.
     pub async fn unseen(tether: &Tether) -> Result<Vec<Self>, StashError> {
         Self::find("WHERE seen=0 ORDER BY timestamp DESC", vec![], tether).await
+    }
+
+    pub async fn unseen_with_send_action(tether: &Tether) -> Result<Vec<Self>, StashError> {
+        Self::find(
+            "WHERE seen=0 AND has_send_action= 1 ORDER BY timestamp DESC",
+            vec![],
+            tether,
+        )
+        .await
     }
 
     /// Returns all unseen send results message ids.
