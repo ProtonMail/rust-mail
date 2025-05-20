@@ -19,10 +19,16 @@ pub enum MessageBanner {
     BlockedSender,
 
     /// The message might be a phishing attempt.
-    PhishingAttempt,
+    PhishingAttempt {
+        /// Whether the system or the user marked it as phishing.
+        auto: bool,
+    },
 
-    /// The system marked the message as spam.
-    Spam,
+    /// The message has been marked as spam
+    Spam {
+        /// Whether the system or the user marked it as phishing.
+        auto: bool,
+    },
 
     /// The message has an expiration date.
     Expiry {
@@ -88,13 +94,19 @@ impl Message {
                     autodelete = true;
                 }
             }
-
-            if flags.intersects(MessageFlags::PHISHING_AUTO | MessageFlags::PHISHING_MANUAL) {
-                banners.push(MessageBanner::PhishingAttempt);
-            } else if flags.intersects(MessageFlags::SPAM_AUTO) {
-                banners.push(MessageBanner::Spam);
+        }
+        if self.label_ids.contains(&LabelId::spam()) {
+            if flags.intersects(
+                MessageFlags::PHISHING_AUTO
+                    | MessageFlags::PHISHING_MANUAL
+                    | MessageFlags::FLAG_SUSPICIOUS,
+            ) && !flags.intersects(MessageFlags::SPAM_MANUAL)
+            {
+                let auto = !flags.intersects(MessageFlags::PHISHING_MANUAL);
+                banners.push(MessageBanner::PhishingAttempt { auto });
             } else {
-                // manual spam don't get a banner
+                let auto = !flags.intersects(MessageFlags::SPAM_MANUAL);
+                banners.push(MessageBanner::Spam { auto });
             }
         }
 

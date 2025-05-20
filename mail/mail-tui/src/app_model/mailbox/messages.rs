@@ -839,15 +839,20 @@ impl DecryptedMessage {
 
     fn draw_banners(&self, frame: &mut Frame, area: Rect) {
         let rows = self.banners.iter().map(|banner| match banner {
+            // TODO: add mark ham to tui and hints here
             MessageBanner::BlockedSender => ListItem::from("You blocked this sender."),
-
-            MessageBanner::PhishingAttempt => {
+            MessageBanner::PhishingAttempt { auto: true } => {
                 ListItem::from("The system thinks that this is a phishing attempt")
             }
-
-            MessageBanner::Spam => ListItem::from("This message was automatically marked as spam"),
-
-            #[allow(clippy::cast_possible_wrap)]
+            MessageBanner::PhishingAttempt { auto: false } => {
+                ListItem::from("You marked this as a phishing attempt")
+            }
+            MessageBanner::Spam { auto: true } => {
+                ListItem::from("This message was automatically marked as spam")
+            }
+            MessageBanner::Spam { auto: false } => {
+                ListItem::from("You marked this message as spam")
+            }
             MessageBanner::Expiry { timestamp } => ListItem::from(format!(
                 "This message will expire at {}",
                 date_from_timestamp(*timestamp)

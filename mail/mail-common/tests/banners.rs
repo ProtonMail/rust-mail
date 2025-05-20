@@ -9,9 +9,12 @@ use proton_mail_common::datatypes::MessageFlags;
 use proton_mail_common::datatypes::SystemLabelId as _;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
 use proton_mail_common::models::Conversation;
+use proton_mail_common::models::MailSettings;
 use proton_mail_common::models::MessageBodyMetadata;
 use proton_mail_common::models::default_location::IncomingDefaultLocation;
 use proton_mail_test_utils::init::Params;
+use stash::stash::Tether;
+use test_case::test_case;
 
 use proton_mail_common::models::Message;
 
@@ -100,7 +103,7 @@ async fn banners() {
             ..msg_normal.clone()
         };
         let mut msg_spam = Message {
-            flags: MessageFlags::SPAM_AUTO,
+            flags: MessageFlags::SPAM_MANUAL,
             remote_id: Some("spam".into()),
             ..msg_normal.clone()
         };
@@ -212,15 +215,15 @@ async fn banners() {
             msg_normal.get_banners(tether).await
         );
         assert_eq!(
-            vec![MessageBanner::PhishingAttempt],
+            vec![MessageBanner::PhishingAttempt { auto: true }],
             msg_phishing.get_banners(tether).await
         );
         assert_eq!(
-            vec![MessageBanner::Spam],
+            vec![MessageBanner::Spam { auto: false }],
             msg_spam.get_banners(tether).await
         );
         assert_eq!(
-            Vec::<MessageBanner>::new(),
+            vec![MessageBanner::PhishingAttempt { auto: true }],
             msg_sus.get_banners(tether).await,
             "sus messages don't warrant a banner"
         );
@@ -249,7 +252,7 @@ async fn banners() {
         );
 
         assert_eq!(
-            vec![MessageBanner::PhishingAttempt],
+            vec![MessageBanner::PhishingAttempt { auto: false }],
             msg_normal.get_banners(tether).await
         );
 
@@ -281,4 +284,169 @@ async fn banners() {
     })()
     .await
     .unwrap();
+}
+
+#[tokio::test]
+#[test_case(
+    LabelId::inbox(),
+    MessageFlags::PHISHING_AUTO,
+    None,
+    "Messages outside of spam don't have the flags"
+)]
+#[test_case(
+    LabelId::spam(),
+    MessageFlags::SPAM_AUTO | MessageFlags::PHISHING_MANUAL,
+    Some(MessageBanner::PhishingAttempt {auto:false}),
+    "Phishing has precedence over spam auto"
+)]
+#[test_case(
+    LabelId::spam(),
+    MessageFlags::SPAM_MANUAL | MessageFlags::PHISHING_AUTO,
+    Some(MessageBanner::Spam {auto:false}),
+    "Phishing doesn't take precedence over spam if the user has moved manually to spam"
+)]
+#[test_case(
+    LabelId::spam(),
+    MessageFlags::SPAM_AUTO,
+    Some(MessageBanner::Spam {auto:true}),
+    "Spam auto gets shown"
+)]
+#[test_case(
+    LabelId::spam(),
+    MessageFlags::empty(),
+    Some(MessageBanner::Spam {auto:true}),
+    "No flags in spam still are auto spam"
+)]
+async fn spam_banners(label: LabelId, flags: MessageFlags, res: Option<MessageBanner>, text: &str) {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
+    let tether = user_ctx.user_stash().connection();
+
+    let message = Message {
+        label_ids: vec![label],
+        flags,
+        ..Default::default()
+    };
+
+    let banners = message.get_banners(&tether).await;
+    let banner = banners.first();
+    assert_eq!(banner, res.as_ref(), "{text}");
+}
+
+#[tokio::test]
+async fn autodelete_and_expiry() {
+    async fn update_setting(days: Option<u32>, tether: &mut Tether) {
+        tether
+            .tx(async |tx| {
+                let mut settings = MailSettings {
+                    auto_delete_spam_and_trash_days: days,
+                    ..Default::default()
+                };
+                settings.save(tx).await
+            })
+            .await
+            .unwrap();
+    }
+
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
+
+    // TRASH
+
+    let mut message = Message {
+        label_ids: vec![LabelId::trash()],
+        expiration_time: 2000000000.into(),
+        ..Default::default()
+    };
+    update_setting(Some(30), &mut tether).await;
+
+    let banner = message.get_banners(&tether).await[0];
+    if !matches!(banner, MessageBanner::AutoDelete { timestamp: _ }) {
+        panic!("Expected autodelete")
+    }
+
+    update_setting(None, &mut tether).await;
+    let banner = message.get_banners(&tether).await[0];
+    assert_eq!(
+        banner,
+        MessageBanner::Expiry {
+            timestamp: message.expiration_time
+        },
+        "If setting is disabled, we show expiry"
+    );
+
+    update_setting(Some(0), &mut tether).await;
+    let banner = message.get_banners(&tether).await[0];
+    assert_eq!(
+        banner,
+        MessageBanner::Expiry {
+            timestamp: message.expiration_time
+        },
+        "If setting is disabled, we show expiry"
+    );
+
+    message.expiration_time = 0.into();
+    update_setting(Some(30), &mut tether).await;
+    assert_eq!(
+        Vec::<MessageBanner>::new(),
+        message.get_banners(&tether).await,
+        "No expiration time = no flags"
+    );
+
+    update_setting(None, &mut tether).await;
+    assert_eq!(
+        Vec::<MessageBanner>::new(),
+        message.get_banners(&tether).await,
+        "No expiration time = no flags"
+    );
+
+    // INBOX
+
+    message.label_ids = vec![LabelId::inbox()];
+    assert_eq!(
+        Vec::<MessageBanner>::new(),
+        message.get_banners(&tether).await,
+        "no expiration time = no flags"
+    );
+
+    message.expiration_time = 2000000000.into();
+    let banner = message.get_banners(&tether).await[0];
+    assert_eq!(
+        banner,
+        MessageBanner::Expiry {
+            timestamp: message.expiration_time
+        }
+    );
+
+    // SPAM
+
+    message.label_ids = vec![LabelId::spam()];
+
+    let banners = message.get_banners(&tether).await;
+    assert_eq!(
+        (
+            MessageBanner::Spam { auto: true },
+            MessageBanner::Expiry {
+                timestamp: message.expiration_time
+            },
+        ),
+        (banners[0], banners[1]),
+    );
+    update_setting(Some(30), &mut tether).await;
+
+    let banners = message.get_banners(&tether).await;
+    assert_eq!(
+        vec![
+            MessageBanner::Spam { auto: true },
+            MessageBanner::AutoDelete {
+                timestamp: message.expiration_time
+            },
+        ],
+        banners
+    );
+
+    message.expiration_time = 0.into();
+    let banners = message.get_banners(&tether).await;
+    assert_eq!(banners, vec![MessageBanner::Spam { auto: true }]);
 }
