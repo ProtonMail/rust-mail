@@ -1022,7 +1022,7 @@ pub struct ConversationSearchOptions {
     pub auto_wildcard: Option<bool>,
 
     /// UNIX timestamp to filter conversations earlier than timestamp.
-    pub begin: Option<u64>,
+    pub begin: Option<UnixTimestamp>,
 
     /// Return only conversations newer, in creation time (NOT timestamp), than
     /// the specified conversation ID if timestamp = `begin`.
@@ -1033,7 +1033,7 @@ pub struct ConversationSearchOptions {
     pub desc: Option<bool>,
 
     /// UNIX timestamp to filter conversations later than timestamp.
-    pub end: Option<u64>,
+    pub end: Option<UnixTimestamp>,
 
     /// Return only conversations older, in creation time (NOT timestamp), than
     /// the specified conversation ID if timestamp = `end`.
@@ -1125,7 +1125,7 @@ impl ConversationSearchOptions {
             },
             attachments: self.attachments,
             auto_wildcard: self.auto_wildcard,
-            begin: self.begin,
+            begin: self.begin.map(|v| v.as_u64()),
             begin_id: match self.begin_id {
                 Some(id) => {
                     RealConversation::local_id_counterpart(LocalConversationId::from(id), tether)
@@ -1134,7 +1134,7 @@ impl ConversationSearchOptions {
                 None => None,
             },
             desc: self.desc,
-            end: self.end,
+            end: self.end.map(|v| v.as_u64()),
             end_id: match self.end_id {
                 Some(id) => {
                     RealConversation::local_id_counterpart(LocalConversationId::from(id), tether)
@@ -1764,7 +1764,7 @@ pub struct MessageSearchOptions {
     pub bcc: Option<String>,
 
     /// UNIX timestamp to filter messages at or later than timestamp.
-    pub begin: Option<u64>,
+    pub begin: Option<UnixTimestamp>,
 
     /// Return only messages newer, in creation time (NOT timestamp), than
     /// the specified message ID.
@@ -1780,7 +1780,7 @@ pub struct MessageSearchOptions {
     pub desc: Option<bool>,
 
     /// UNIX timestamp to filter messages at or earlier than timestamp.
-    pub end: Option<u64>,
+    pub end: Option<UnixTimestamp>,
 
     /// Return only messages older, in creation time (NOT timestamp), than the
     /// specified message ID.
@@ -1883,7 +1883,7 @@ impl MessageSearchOptions {
             attachments: self.attachments,
             auto_wildcard: self.auto_wildcard,
             bcc: self.bcc,
-            begin: self.begin,
+            begin: self.begin.map(|v| v.as_u64()),
             begin_id: match self.begin_id {
                 Some(id) => {
                     RealMessage::local_id_counterpart(LocalMessageId::from(id), tether).await?
@@ -1899,7 +1899,7 @@ impl MessageSearchOptions {
                 None => None,
             },
             desc: self.desc,
-            end: self.end,
+            end: self.end.map(|v| v.as_u64()),
             end_id: match self.end_id {
                 Some(id) => {
                     RealMessage::local_id_counterpart(LocalMessageId::from(id), tether).await?

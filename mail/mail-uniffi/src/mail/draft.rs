@@ -16,7 +16,8 @@ use crate::mail::draft::observer::DraftSendResult;
 use crate::mail::messages::EmbeddedAttachmentInfo;
 use crate::mail::state::MailUserContextPtr;
 use crate::{async_runtime, uniffi_async};
-use chrono::{Local, MappedLocalTime, TimeZone};
+use chrono::Local;
+use proton_core_common::datatypes::UnixTimestamp;
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::draft::{
     Draft as RealDraft, DraftSyncStatus as RealDraftSyncStatus, ReplyMode, ScheduleSendOptions,
@@ -43,16 +44,16 @@ pub enum DraftCreateMode {
 
 #[derive(Debug, uniffi::Record)]
 pub struct DraftScheduleSendOptions {
-    pub tomorrow_time: u64,
-    pub monday_time: u64,
+    pub tomorrow_time: UnixTimestamp,
+    pub monday_time: UnixTimestamp,
     pub is_custom_option_available: bool,
 }
 
 impl From<ScheduleSendOptions<Local>> for DraftScheduleSendOptions {
     fn from(value: ScheduleSendOptions<Local>) -> Self {
         Self {
-            tomorrow_time: value.time_tomorrow.timestamp().unsigned_abs(),
-            monday_time: value.time_next_monday.timestamp().unsigned_abs(),
+            tomorrow_time: value.time_tomorrow.into(),
+            monday_time: value.time_next_monday.into(),
             is_custom_option_available: value.is_custom_datetime_available,
         }
     }
@@ -407,22 +408,18 @@ impl Draft {
 
     /// Schedule the sending of the given draft at the `timestamp`.
     #[returns(VoidDraftSendResult)]
-    pub async fn schedule(self: Arc<Self>, timestamp: u64) -> Result<(), DraftSendError> {
+    pub async fn schedule(self: Arc<Self>, timestamp: UnixTimestamp) -> Result<(), DraftSendError> {
         let Some(ctx) = self.ctx.upgrade() else {
             return Err(DraftSendError::Other(ProtonError::Unexpected(
                 UnexpectedError::Internal,
             )));
         };
-        #[allow(clippy::cast_possible_wrap)] // we manually limit this.
-        let timestamp = match Local.timestamp_opt(timestamp.min(i64::MAX as u64) as i64, 0) {
-            MappedLocalTime::Single(v) => v,
-            MappedLocalTime::None | MappedLocalTime::Ambiguous(_, _) => {
-                tracing::error!("Invalid time offset");
-                return Err(DraftSendError::Other(ProtonError::Unexpected(
+        let timestamp =
+            timestamp
+                .to_date_time()
+                .ok_or(DraftSendError::Other(ProtonError::Unexpected(
                     UnexpectedError::Internal,
-                )));
-            }
-        };
+                )))?;
         uniffi_async(async move {
             let mut instance = self.instance.write().await;
             instance
@@ -547,7 +544,7 @@ pub async fn draft_discard(
 
 #[derive(uniffi::Record)]
 pub struct DraftCancelScheduledSendInfo {
-    pub last_scheduled_time: u64,
+    pub last_scheduled_time: UnixTimestamp,
 }
 
 /// Cancel the scheduled send of message with `message_id`.
@@ -567,7 +564,7 @@ pub async fn draft_cancel_schedule_send(
     .map_err(DraftCancelScheduleSendError::from)?;
 
     Ok(DraftCancelScheduledSendInfo {
-        last_scheduled_time: old_time.timestamp().unsigned_abs(),
+        last_scheduled_time: old_time.into(),
     })
 }
 
