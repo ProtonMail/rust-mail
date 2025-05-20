@@ -15,8 +15,6 @@ use proton_task_service::{AsyncTaskResult, TaskService};
 use tokio::task::JoinHandle;
 use tracing::{Level, debug, error, warn};
 
-use super::events::MailEventLoopContext;
-
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum MailUserContextLoadingStage {
     UserSettings,
@@ -159,12 +157,7 @@ async fn initialize_event_loop(
             // there is no way of initializing it with already having transaction.
             // We want to avoid the deadlock, and we do not depend on any dependencies.
             // So initializing it here is not really harmful, just weird.
-            let event_ctx = MailEventLoopContext::from(ctx_clone);
-            ctx_clone
-                .event_loop
-                .initialize(Box::new(event_ctx.clone()), Box::new(event_ctx))
-                .await?;
-            ctx_clone.register_subscribers().await;
+            ctx_clone.event_loop.initialize().await?;
             Ok(())
         },
         async |_tx, ()| Ok(()),

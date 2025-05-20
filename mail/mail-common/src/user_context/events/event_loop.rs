@@ -34,11 +34,15 @@ impl MailEventLoopContext {
             None => bail!("This context no longer exists"),
         }
     }
+
+    pub fn boxed(&self) -> Box<Self> {
+        Box::new(self.clone())
+    }
 }
 
-impl From<&MailUserContext> for MailEventLoopContext {
-    fn from(value: &MailUserContext) -> Self {
-        Self(value.as_weak())
+impl From<Weak<MailUserContext>> for MailEventLoopContext {
+    fn from(value: Weak<MailUserContext>) -> Self {
+        Self(value)
     }
 }
 
@@ -130,7 +134,6 @@ impl MailUserContext {
         let mut interval = tokio::time::interval(duration);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let watcher = self.user_context.initialization_watcher.clone();
-        self.register_subscribers().await;
         self.spawn(
             async move {
                 // Wait until `MailUserContext` is initialized.
@@ -263,16 +266,6 @@ impl MailUserContext {
     ///
     /// Returns error if the event loop failed to poll.
     pub(crate) async fn poll_event_loop_impl(&self) -> Result<(), EventLoopError> {
-        match self.event_loop.poll().await {
-            Err(EventLoopError::NotInitialized) => {
-                let event_ctx = MailEventLoopContext::from(self);
-                self.event_loop
-                    .initialize(Box::new(event_ctx.clone()), Box::new(event_ctx.clone()))
-                    .await?;
-
-                self.event_loop.poll().await
-            }
-            result => result,
-        }
+        self.event_loop.poll().await
     }
 }

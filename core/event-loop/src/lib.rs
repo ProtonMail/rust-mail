@@ -88,10 +88,6 @@ pub enum EventLoopError {
     Provider(#[from] ApiServiceError),
     #[error("Subscriber ({0}) failed to apply event: {1}")]
     Subscriber(String, SubscriberError),
-    #[error("Event loop was already initialized")]
-    AlreadyInitialized,
-    #[error("Event loop was not initialized")]
-    NotInitialized,
 }
 
 /// This represents an event returned by the API.

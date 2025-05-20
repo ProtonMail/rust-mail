@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
-use std::sync::OnceLock;
 
 use crate::provider::Provider;
 use crate::store::Store;
@@ -14,41 +13,30 @@ use tracing::{self, Level, debug, error};
 
 pub struct EventLoop<T: Send + Sync> {
     eloop: EventLoopInternal,
-    store: OnceLock<Box<dyn Store>>,
-    provider: OnceLock<Box<dyn Provider>>,
+    store: Box<dyn Store>,
+    provider: Box<dyn Provider>,
     uniqe_sub: Mutex<HashMap<&'static str, usize>>,
     subscribers: Mutex<Vec<Box<dyn Subscriber<T>>>>,
 }
 
 impl<T: Event + From<<T as Event>::Response>> EventLoop<T> {
     #[must_use]
-    #[allow(clippy::new_without_default)]
-    pub fn new() -> Self {
+    pub fn new(store: Box<dyn Store>, provider: Box<dyn Provider>) -> Self {
         let eloop = EventLoopInternal::new();
 
         Self {
             eloop,
-            store: OnceLock::new(),
-            provider: OnceLock::new(),
+            store,
+            provider,
             uniqe_sub: Mutex::new(HashMap::new()),
             subscribers: Mutex::new(Vec::new()),
         }
     }
 
-    pub async fn initialize(
-        &self,
-        store: Box<dyn Store>,
-        provider: Box<dyn Provider>,
-    ) -> Result<&Self, EventLoopError> {
+    pub async fn initialize(&self) -> Result<&Self, EventLoopError> {
         self.eloop
-            .initialize(store.as_ref(), provider.as_ref())
+            .initialize(self.store.as_ref(), self.provider.as_ref())
             .await?;
-        self.store
-            .set(store)
-            .map_err(|_| EventLoopError::AlreadyInitialized)?;
-        self.provider
-            .set(provider)
-            .map_err(|_| EventLoopError::AlreadyInitialized)?;
 
         Ok(self)
     }
@@ -73,14 +61,10 @@ impl<T: Event + From<<T as Event>::Response>> EventLoop<T> {
     }
 
     pub async fn poll(&self) -> Result<(), EventLoopError> {
-        let Some((store, provider)) = self.store.get().zip(self.provider.get()) else {
-            return Err(EventLoopError::NotInitialized);
-        };
-
         self.eloop
             .poll::<T>(
-                store.as_ref(),
-                provider.as_ref(),
+                self.store.as_ref(),
+                self.provider.as_ref(),
                 self.subscribers.lock().await.as_slice(),
             )
             .await
