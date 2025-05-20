@@ -1140,11 +1140,11 @@ async fn test_conversation_create_starred() {
             remote_label_id: LabelId::starred().into(),
             context_num_unread: 0,
             context_num_messages: 0,
-            context_time: 0,
+            context_time: 0.into(),
             context_size: 0,
             context_num_attachments: 0,
-            context_expiration_time: 0,
-            context_snooze_time: 0,
+            context_expiration_time: 0.into(),
+            context_snooze_time: 0.into(),
             deleted: false,
             row_id: None,
         }];
@@ -1231,11 +1231,11 @@ async fn test_conversation_create_with_labels() {
         remote_label_id: LabelId::starred().into(),
         context_num_unread: 0,
         context_num_messages: 0,
-        context_time: 0,
+        context_time: 0.into(),
         context_size: 0,
         context_num_attachments: 0,
-        context_expiration_time: 0,
-        context_snooze_time: 0,
+        context_expiration_time: 0.into(),
+        context_snooze_time: 0.into(),
         deleted: false,
         row_id: None,
     }];
@@ -1429,11 +1429,11 @@ async fn test_conversation_update() {
             remote_label_id: LabelId::starred().into(),
             context_num_unread: 0,
             context_num_messages: 0,
-            context_time: 0,
+            context_time: 0.into(),
             context_size: 0,
             context_num_attachments: 0,
-            context_expiration_time: 0,
-            context_snooze_time: 0,
+            context_expiration_time: 0.into(),
+            context_snooze_time: 0.into(),
             deleted: false,
             row_id: None,
         },
@@ -1444,11 +1444,11 @@ async fn test_conversation_update() {
             remote_label_id: LabelId::starred().into(),
             context_num_unread: 0,
             context_num_messages: 0,
-            context_time: 0,
+            context_time: 0.into(),
             context_size: 0,
             context_num_attachments: 0,
-            context_expiration_time: 0,
-            context_snooze_time: 0,
+            context_expiration_time: 0.into(),
+            context_snooze_time: 0.into(),
             deleted: false,
             row_id: None,
         },
@@ -2282,7 +2282,7 @@ async fn test_conversation_mark_unread() {
     assert_eq!(messages.len(), 1);
     let message = &messages[0];
     // newest message has time at 400.
-    assert_eq!(message.time, 400);
+    assert_eq!(message.time, 400.into());
 
     assert_eq!(message.label_ids[0], *MY_LABEL_ID1);
 
@@ -2371,7 +2371,7 @@ async fn test_conversation_label_with_message_metadata() {
         state
             .messages
             .iter()
-            .fold(0, |x, m| x.max(m.expiration_time))
+            .fold(UnixTimestamp::new(0), |x, m| x.max(m.expiration_time))
     );
 
     // Check conversation counts have the new conversation.
@@ -2436,7 +2436,7 @@ async fn test_conversation_double_label_with_message_metadata() {
         state
             .messages
             .iter()
-            .fold(0, |x, m| x.max(m.expiration_time))
+            .fold(UnixTimestamp::new(0), |x, m| x.max(m.expiration_time))
     );
 
     // Check conversation counts have the new conversation.
@@ -2513,7 +2513,7 @@ async fn test_conversation_label_partially() {
         state
             .messages
             .iter()
-            .fold(0, |x, m| x.max(m.expiration_time))
+            .fold(UnixTimestamp::new(0), |x, m| x.max(m.expiration_time))
     );
 
     // Check conversation counts have the new conversation.
@@ -2568,9 +2568,9 @@ async fn test_conversation_label_without_message_metadata() {
     assert_eq!(db_conversation.num_messages, 0);
     assert_eq!(db_conversation.num_attachments, 0);
     assert_eq!(db_conversation.size, 0);
-    assert_eq!(db_conversation.time, 0);
-    assert_eq!(db_conversation.expiration_time, 0);
-    assert_eq!(db_conversation.snooze_time, 0);
+    assert_eq!(db_conversation.time, 0.into());
+    assert_eq!(db_conversation.expiration_time, 0.into());
+    assert_eq!(db_conversation.snooze_time, 0.into());
 
     // Check conversation counts have the new conversation.
     {
@@ -2622,9 +2622,9 @@ async fn test_conversation_double_label_without_message_metadata() {
     assert_eq!(db_conversation.num_messages, 0);
     assert_eq!(db_conversation.num_attachments, 0);
     assert_eq!(db_conversation.size, 0);
-    assert_eq!(db_conversation.time, 0);
-    assert_eq!(db_conversation.expiration_time, 0);
-    assert_eq!(db_conversation.snooze_time, 0);
+    assert_eq!(db_conversation.time, 0.into());
+    assert_eq!(db_conversation.expiration_time, 0.into());
+    assert_eq!(db_conversation.snooze_time, 0.into());
 
     // Check conversation counts have the new conversation.
     {
@@ -2816,7 +2816,7 @@ async fn test_conversation_expiration() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(cv.expiration_time, 0);
+    assert_eq!(cv.expiration_time, 0.into());
     assert_eq!(cv.deleted, false);
 
     // Load a conversation

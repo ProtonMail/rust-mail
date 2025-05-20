@@ -19,6 +19,7 @@ use indoc::formatdoc;
 use proton_action_queue::action::ActionId;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::AddressId;
+use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_ids::{LocalAttachmentId, LocalConversationId};
@@ -324,11 +325,11 @@ pub struct DraftSendResult {
     pub remote_message_id: Option<MessageId>,
     /// Timestamp at which this entry was produced.
     #[DbField]
-    pub timestamp: i64,
+    pub timestamp: UnixTimestamp,
     /// Timestamp by which we can cancel the sending of this message, this corresponds to
     /// the message delivery time.
     #[DbField]
-    pub undo_timestamp: i64,
+    pub undo_timestamp: UnixTimestamp,
     /// Whether an error occurred while sending the message.
     #[DbField]
     pub error: Option<DraftSendFailure>,
@@ -351,13 +352,13 @@ impl DraftSendResult {
     pub fn success(
         local_message_id: LocalMessageId,
         remote_message_id: MessageId,
-        undo_timestamp: i64,
+        undo_timestamp: UnixTimestamp,
         origin: DraftSendResultOrigin,
     ) -> Self {
         Self {
             local_message_id,
             remote_message_id: Some(remote_message_id),
-            timestamp: Utc::now().timestamp(),
+            timestamp: UnixTimestamp::now(),
             undo_timestamp,
             error: None,
             seen: false,
@@ -376,8 +377,8 @@ impl DraftSendResult {
         Self {
             local_message_id,
             remote_message_id: None,
-            timestamp: Utc::now().timestamp(),
-            undo_timestamp: 0,
+            timestamp: UnixTimestamp::now(),
+            undo_timestamp: 0.into(),
             seen: false,
             error: Some(error),
             row_id: None,
@@ -497,15 +498,15 @@ impl DraftSendResult {
     /// Returns true whether the current send can be undone as of now.
     #[must_use]
     pub fn is_send_undoable(&self) -> bool {
-        let now = Utc::now().timestamp();
+        let now = UnixTimestamp::now();
         now < self.undo_timestamp
     }
 
     /// Returns the time left until this message's sending can be cancelled.
     #[must_use]
     pub fn time_left_for_undo(&self) -> Duration {
-        let now = Utc::now().timestamp();
-        Duration::from_secs(self.undo_timestamp.saturating_sub(now).unsigned_abs())
+        let now = UnixTimestamp::now();
+        Duration::from_secs(self.undo_timestamp.as_u64().saturating_sub(now.as_u64()))
     }
 }
 

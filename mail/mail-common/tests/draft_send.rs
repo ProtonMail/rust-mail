@@ -348,7 +348,7 @@ async fn basic_schedule_send_check() {
     assert!(!draft_message.label_ids.contains(&LabelId::drafts()));
     assert!(!draft_message.label_ids.contains(&LabelId::all_drafts()));
     // Time of the message should match the delivery time.
-    assert_eq!(draft_message.time, delivery_time.timestamp().unsigned_abs());
+    assert_eq!(draft_message.time, delivery_time.into());
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
@@ -876,7 +876,7 @@ async fn cancel_schedule_send_on_queued_send() {
     assert!(draft_message.label_ids.contains(&LabelId::all_drafts()));
     assert!(!draft_message.is_scheduled_for_send());
     // Time of the message should be changed.
-    assert_ne!(draft_message.time, delivery_time.timestamp().unsigned_abs());
+    assert_ne!(draft_message.time, delivery_time.into());
 }
 
 #[tokio::test]

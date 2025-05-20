@@ -3,7 +3,7 @@ use proton_core_api::{
     services::proton::LabelId,
     session::{CoreSession, Session},
 };
-use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_mail_api::services::proton::{
     ProtonMail, common::MessageId, prelude::GetMessagesOptions,
 };
@@ -194,7 +194,7 @@ impl RemoteMessageScrollerSource {
         local_label_id: LocalLabelId,
         remote_label_id: LabelId,
         last_element_id: MessageId,
-        last_element_time: u64,
+        last_element_time: UnixTimestamp,
         unread: ReadFilter,
         page_size: usize,
     ) -> Result<Vec<Message>, MailContextError> {
@@ -204,7 +204,7 @@ impl RemoteMessageScrollerSource {
             .get_messages(GetMessagesOptions {
                 desc: Some(true),
                 // time == 0 breaks the api query.
-                end: Some(last_element_time),
+                end: Some(last_element_time.as_u64()),
                 end_id: Some(last_element_id.clone()),
                 label_id: Some(vec![remote_label_id]),
                 page_size: page_size as u64 + 1_u64,
@@ -250,7 +250,7 @@ impl RemoteMessageScrollerSource {
         local_label_id: LocalLabelId,
         remote_label_id: LabelId,
         first_element_id: MessageId,
-        first_element_time: u64,
+        first_element_time: UnixTimestamp,
         unread: ReadFilter,
         page_size: usize,
     ) -> Result<Vec<Message>, MailContextError> {
@@ -260,7 +260,7 @@ impl RemoteMessageScrollerSource {
             .get_messages(GetMessagesOptions {
                 desc: Some(true),
                 // time == 0 breaks the api query.
-                begin: Some(first_element_time),
+                begin: Some(first_element_time.as_u64()),
                 begin_id: Some(first_element_id.clone()),
                 label_id: Some(vec![remote_label_id]),
                 page_size: page_size as u64 + 1_u64,
@@ -338,7 +338,7 @@ impl RemoteMessageScrollerSource {
         local_label_id: LocalLabelId,
         remote_msg_id: MessageId,
         unread: ReadFilter,
-        time: u64,
+        time: UnixTimestamp,
         display_order: u64,
         bond: &Bond<'_>,
     ) -> Result<MessageScrollData, MailContextError> {

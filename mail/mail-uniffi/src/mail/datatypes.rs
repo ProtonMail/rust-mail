@@ -63,7 +63,7 @@ use core::fmt;
 pub use mail_scroller::*;
 use proton_core_common::datatypes::{
     AvatarInformation as RealAvatarInformation, LabelColor as RealLabelColor,
-    LabelType as RealLabelType, LocalAddressId, LocalLabelId,
+    LabelType as RealLabelType, LocalAddressId, LocalLabelId, UnixTimestamp,
 };
 use proton_core_common::models::{Address as RealAddress, Label as RealLabel, ModelIdExtension};
 use proton_core_common::utils::MapVec as _;
@@ -883,7 +883,7 @@ pub struct Conversation {
     pub exclusive_location: Option<ExclusiveLocation>,
 
     /// When this conversation expires.
-    pub expiration_time: u64,
+    pub expiration_time: UnixTimestamp,
 
     /// Whether the conversation is starred.
     pub is_starred: bool,
@@ -919,7 +919,7 @@ pub struct Conversation {
     pub subject: String,
 
     /// Time of the last received message in this conversation.
-    pub time: u64,
+    pub time: UnixTimestamp,
 
     /// Avatar to be displayed for the sender.
     pub avatar: AvatarInformation,
@@ -1487,7 +1487,7 @@ pub struct Message {
     pub exclusive_location: Option<ExclusiveLocation>,
 
     /// TODO: Document this field.
-    pub expiration_time: u64,
+    pub expiration_time: UnixTimestamp,
 
     /// TODO: Document this field.
     pub flags: MessageFlags,
@@ -1517,13 +1517,13 @@ pub struct Message {
     pub size: u64,
 
     /// TODO: Document this field.
-    pub snooze_time: u64,
+    pub snooze_time: UnixTimestamp,
 
     /// TODO: Document this field.
     pub subject: String,
 
     /// TODO: Document this field.
-    pub time: u64,
+    pub time: UnixTimestamp,
 
     /// TODO: Document this field.
     pub to_list: Vec<MessageRecipient>,

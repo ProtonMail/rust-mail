@@ -100,3 +100,4 @@ wrong_self_convention = "warn"
 [features]
 default = ["sql"]
 sql = ["proton-core-api/sql", "proton-mail-api/sql"]
+uniffi = ["proton-core-common/uniffi", "dep:uniffi"]

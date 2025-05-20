@@ -740,7 +740,7 @@ async fn handle_draft_failure(
                     .send_async(Command::message(Messages::raise_popup(popup)))
                     .await;
             } else if result.origin == DraftSendResultOrigin::ScheduleSend {
-                let dt = date_from_timestamp(result.undo_timestamp.unsigned_abs());
+                let dt = date_from_timestamp(result.undo_timestamp);
                 let _ = sender
                     .send_async(Command::message(Messages::DisplayInfo(
                         Some("Message Schedule Send Success".to_owned()),

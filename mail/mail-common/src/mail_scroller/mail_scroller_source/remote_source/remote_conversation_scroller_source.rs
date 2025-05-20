@@ -3,7 +3,7 @@ use proton_core_api::{
     services::proton::LabelId,
     session::{CoreSession, Session},
 };
-use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_mail_api::services::proton::{
     ProtonMail,
     common::ConversationId,
@@ -207,7 +207,7 @@ impl RemoteConversationScrollerSource {
         local_label_id: LocalLabelId,
         remote_label_id: LabelId,
         first_element_id: ConversationId,
-        first_element_time: u64,
+        first_element_time: UnixTimestamp,
         unread: ReadFilter,
         page_size: usize,
     ) -> Result<Vec<ContextualConversation>, MailContextError> {
@@ -217,7 +217,7 @@ impl RemoteConversationScrollerSource {
             .get_conversations(GetConversationsOptions {
                 desc: Some(true),
                 // time == 0 breaks the api query.
-                begin: Some(first_element_time),
+                begin: Some(first_element_time.as_u64()),
                 begin_id: Some(first_element_id.clone()),
                 label_id: Some(remote_label_id),
                 page_size: page_size as u64 + 1_u64,
@@ -265,7 +265,7 @@ impl RemoteConversationScrollerSource {
         local_label_id: LocalLabelId,
         remote_label_id: LabelId,
         last_element_id: ConversationId,
-        last_element_time: u64,
+        last_element_time: UnixTimestamp,
         unread: ReadFilter,
         page_size: usize,
     ) -> Result<Vec<ContextualConversation>, MailContextError> {
@@ -275,7 +275,7 @@ impl RemoteConversationScrollerSource {
             .get_conversations(GetConversationsOptions {
                 desc: Some(true),
                 // time == 0 breaks the api query.
-                end: Some(last_element_time),
+                end: Some(last_element_time.as_u64()),
                 end_id: Some(last_element_id.clone()),
                 label_id: Some(remote_label_id),
                 page_size: page_size as u64 + 1_u64,
@@ -326,7 +326,10 @@ impl RemoteConversationScrollerSource {
         ))
     }
 
-    fn context_time(response: &GetConversationsResponse, unread: ReadFilter) -> Option<u64> {
+    fn context_time(
+        response: &GetConversationsResponse,
+        unread: ReadFilter,
+    ) -> Option<UnixTimestamp> {
         if unread != ReadFilter::All {
             // When filtering conversations, we need to use the contextual time
             // perform the next page query or the data will not be displayed
@@ -334,7 +337,7 @@ impl RemoteConversationScrollerSource {
             // This contextual time also does not match the ConversationLabel.context_time
             // we use to display the query results. This means that the data
             // will change after it is written to the database.
-            response.conversations.last()?.context_time
+            response.conversations.last()?.context_time.map(Into::into)
         } else {
             None
         }
@@ -354,7 +357,7 @@ impl RemoteConversationScrollerSource {
         local_label_id: LocalLabelId,
         conversations: &mut [Conversation],
         unread: ReadFilter,
-        context_time: Option<u64>,
+        context_time: Option<UnixTimestamp>,
         update_scroller: bool,
         tether: &mut Tether,
     ) -> Result<(), MailContextError> {
@@ -413,7 +416,7 @@ impl RemoteConversationScrollerSource {
         local_label_id: LocalLabelId,
         remote_conv_id: ConversationId,
         unread: ReadFilter,
-        context_time: u64,
+        context_time: UnixTimestamp,
         display_order: u64,
         bond: &Bond<'_>,
     ) -> Result<ConversationScrollData, MailContextError> {

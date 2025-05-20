@@ -4,7 +4,7 @@ use crate::draft::{CancelScheduleSendError, PackageError, SendError, compose::ht
 use crate::models::{Attachment, DraftMetadata, Message};
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use anyhow::anyhow;
-use chrono::{DateTime, Datelike, Days, Local, LocalResult, MappedLocalTime, NaiveTime, TimeZone};
+use chrono::{DateTime, Datelike, Days, Local, LocalResult, NaiveTime};
 use proton_action_queue::action::WriterGuard;
 use proton_action_queue::observers::ActionAwaiter;
 use proton_action_queue::queue::{BroadcastMessage, Queue, QueuedError};
@@ -593,15 +593,10 @@ pub async fn cancel_schedule_send(
     if !message.is_scheduled_for_send() {
         return Err(CancelScheduleSendError::MessageIsNotScheduled(message_id).into());
     }
-    #[allow(clippy::cast_possible_wrap)]
-    let original_dt: DateTime<Local> =
-        match Local.timestamp_opt(message.time.min(i64::MAX as u64) as i64, 0) {
-            MappedLocalTime::Single(v) => v,
-            MappedLocalTime::None | MappedLocalTime::Ambiguous(_, _) => {
-                error!("Invalid time offset");
-                return Err(MailContextError::Other(anyhow!("Invalid timestamp")));
-            }
-        };
+    let original_dt: DateTime<Local> = message
+        .time
+        .to_date_time()
+        .ok_or(MailContextError::Other(anyhow!("Invalid timestamp")))?;
 
     // If we have metadata for this message it means we created the message and
     // there may still be a queued send request. If we do not have any metadata, it either means
@@ -660,15 +655,10 @@ pub async fn cancel_schedule_send(
         message
     };
 
-    #[allow(clippy::cast_possible_wrap)]
-    let original_dt: DateTime<Local> =
-        match Local.timestamp_opt(message.time.min(i64::MAX as u64) as i64, 0) {
-            MappedLocalTime::Single(v) => v,
-            MappedLocalTime::None | MappedLocalTime::Ambiguous(_, _) => {
-                error!("Invalid time offset");
-                return Err(MailContextError::Other(anyhow!("Invalid timestamp")));
-            }
-        };
+    let original_dt: DateTime<Local> = message
+        .time
+        .to_date_time()
+        .ok_or(MailContextError::Other(anyhow!("Invalid timestamp")))?;
     debug!("Cancelling send on the server");
     let remote_id = message
         .remote_id

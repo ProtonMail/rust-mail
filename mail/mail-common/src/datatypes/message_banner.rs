@@ -1,4 +1,5 @@
 use proton_core_api::services::proton::LabelId;
+use proton_core_common::datatypes::UnixTimestamp;
 use stash::stash::Tether;
 
 use crate::models::{MailSettings, Message, default_location::IncomingDefaultLocation};
@@ -26,13 +27,13 @@ pub enum MessageBanner {
     /// The message has an expiration date.
     Expiry {
         /// The Unix timestamp indicating when the message expires.
-        timestamp: u64,
+        timestamp: UnixTimestamp,
     },
 
     /// The message is scheduled for automatic deletion at a specific time because it is in spam or trash.
     AutoDelete {
         /// The Unix timestamp indicating when the message will be deleted.
-        timestamp: u64,
+        timestamp: UnixTimestamp,
     },
 
     /// The message provides an option to unsubscribe from a newsletter.
@@ -41,13 +42,13 @@ pub enum MessageBanner {
     /// The message is scheduled to be sent at a future time.
     ScheduledSend {
         /// The Unix timestamp indicating when the message is scheduled to be sent.
-        timestamp: u64,
+        timestamp: UnixTimestamp,
     },
 
     /// The message has been snoozed and will reappear later.
     Snoozed {
         /// The Unix timestamp indicating when the message will reappear.
-        timestamp: u64,
+        timestamp: UnixTimestamp,
     },
 
     /// The message contains embedded images.
@@ -80,7 +81,7 @@ impl Message {
         {
             if let Some(days) = settings.auto_delete_spam_and_trash_days {
                 // TODO: let chains
-                if days != 0 && self.expiration_time != 0 {
+                if days != 0 && self.expiration_time != 0.into() {
                     banners.push(MessageBanner::AutoDelete {
                         timestamp: self.expiration_time,
                     });
@@ -98,7 +99,7 @@ impl Message {
         }
 
         // This check is here because we can't clear this on the local action
-        if self.expiration_time != 0
+        if self.expiration_time != 0.into()
             // Since the backend sends the expiration time for autodelete we have to do this to
             // disambiguate between autodelete and expiry and not show 2 banners.
             && !autodelete

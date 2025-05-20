@@ -112,7 +112,7 @@ async fn banners() {
         };
 
         let msg_expiry = Message {
-            expiration_time: 42,
+            expiration_time: 42.into(),
             remote_id: Some("expiry".into()),
             ..msg_normal.clone()
         };
@@ -125,7 +125,7 @@ async fn banners() {
             ..msg_normal.clone()
         };
 
-        let scheduled_time = 123456_u64;
+        let scheduled_time = 123456_u64.into();
         let msg_schedule_send = Message {
             label_ids: vec![LabelId::all_scheduled()],
             time: scheduled_time,
@@ -137,7 +137,9 @@ async fn banners() {
             msg_normal.get_banners(tether).await
         );
         assert_eq!(
-            vec![MessageBanner::Expiry { timestamp: 42 }],
+            vec![MessageBanner::Expiry {
+                timestamp: 42.into()
+            }],
             msg_expiry.get_banners(tether).await
         );
         assert_eq!(

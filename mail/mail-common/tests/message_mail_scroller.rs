@@ -33,7 +33,7 @@ fn test_message(n: usize, order_shift: u64) -> Vec<Message> {
     (0..n)
         .map(|i| {
             let order = i as u64 + order_shift;
-            message!(remote_id: msg_id!(order),  display_order: order, time: order)
+            message!(remote_id: msg_id!(order),  display_order: order, time: order.into())
         })
         .collect()
 }
@@ -417,7 +417,7 @@ async fn test_message_mail_scroller_notificate_about_changes() {
         remote_address_id: address.remote_id.unwrap(),
         label_ids: vec![SystemLabel::Inbox.remote_id()],
         display_order: 100,
-        time: 100
+        time: 100.into()
     );
 
     tether

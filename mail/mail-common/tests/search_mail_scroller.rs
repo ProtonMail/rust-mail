@@ -298,7 +298,7 @@ async fn test_search_mail_scroller_notificate_about_changes() {
         remote_address_id: address.remote_id.unwrap(),
         label_ids: vec![SystemLabel::Inbox.remote_id()],
         display_order: 100,
-        time: 100
+        time: 100.into()
     );
 
     tether

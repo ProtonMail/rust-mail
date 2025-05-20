@@ -1,9 +1,16 @@
 use std::{cmp, sync::Arc};
 
+use crate::{
+    MailContextError, MailUserContext,
+    datatypes::SearchOptions,
+    mail_scroller::MailScrollerSource,
+    models::{Message, MessageCounters, MessageLabel, SearchScrollData},
+};
 use proton_core_api::{
     services::proton::LabelId,
     session::{CoreSession, Session},
 };
+use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::{datatypes::SystemLabel, models::ModelExtension};
 use proton_mail_api::services::proton::{
     ProtonMail, common::MessageId, prelude::GetMessagesOptions,
@@ -14,13 +21,6 @@ use stash::{
 };
 use tokio::sync::Mutex;
 use tracing::debug;
-
-use crate::{
-    MailContextError, MailUserContext,
-    datatypes::SearchOptions,
-    mail_scroller::MailScrollerSource,
-    models::{Message, MessageCounters, MessageLabel, SearchScrollData},
-};
 
 use super::MailPaginatorJoinHandle;
 
@@ -175,7 +175,7 @@ impl SearchScrollerSource {
         mut tether: Tether,
         remote_label_id: LabelId,
         last_element_id: MessageId,
-        last_time: u64,
+        last_time: UnixTimestamp,
         search: SearchOptions,
         page_size: usize,
     ) -> Result<Vec<Message>, MailContextError> {
@@ -184,7 +184,7 @@ impl SearchScrollerSource {
             .api()
             .get_messages(GetMessagesOptions {
                 desc: Some(true),
-                end: Some(last_time),
+                end: Some(last_time.as_u64()),
                 end_id: Some(last_element_id.clone()),
                 label_id: Some(vec![remote_label_id]),
                 page_size: page_size as u64 + 1_u64,

@@ -2428,18 +2428,24 @@ async fn label_messages() {
             );
             assert_eq!(
                 db_conversation.time,
-                state.messages.iter().fold(0, |x, m| x.max(m.time))
+                state
+                    .messages
+                    .iter()
+                    .fold(UnixTimestamp::new(0), |x, m| x.max(m.time))
             );
             assert_eq!(
                 db_conversation.expiration_time,
                 state
                     .messages
                     .iter()
-                    .fold(0, |x, m| x.max(m.expiration_time))
+                    .fold(UnixTimestamp::new(0), |x, m| x.max(m.expiration_time))
             );
             assert_eq!(
                 db_conversation.snooze_time,
-                state.messages.iter().fold(0, |x, m| x.max(m.snooze_time))
+                state
+                    .messages
+                    .iter()
+                    .fold(UnixTimestamp::new(0), |x, m| x.max(m.snooze_time))
             );
 
             // Check conversation counts.
@@ -2559,7 +2565,7 @@ async fn unlabel_messages() {
             .messages
             .iter()
             .filter(|m| m.remote_id.as_ref() != Some(&remote_msg_id1))
-            .fold(0, |x, m| x.max(m.time))
+            .fold(UnixTimestamp::new(0), |x, m| x.max(m.time))
     );
     assert_eq!(
         db_conversation.expiration_time,
@@ -2567,7 +2573,7 @@ async fn unlabel_messages() {
             .messages
             .iter()
             .filter(|m| m.remote_id.as_ref() != Some(&remote_msg_id1))
-            .fold(0, |x, m| x.max(m.expiration_time))
+            .fold(UnixTimestamp::new(0), |x, m| x.max(m.expiration_time))
     );
     assert_eq!(
         db_conversation.snooze_time,
@@ -2575,7 +2581,7 @@ async fn unlabel_messages() {
             .messages
             .iter()
             .filter(|m| m.remote_id.as_ref() != Some(&remote_msg_id1))
-            .fold(0, |x, m| x.max(m.snooze_time))
+            .fold(UnixTimestamp::new(0), |x, m| x.max(m.snooze_time))
     );
 
     // Check conversation counts have the new conversation.
