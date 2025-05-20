@@ -18,6 +18,7 @@ use proton_action_queue::action::{
 };
 use proton_core_api::consts::Mail;
 use proton_core_api::services::proton::prelude::AddressId;
+use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::ModelExtension;
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_api::services::proton::ProtonMail;
@@ -37,7 +38,7 @@ pub struct Send {
     recipients: Vec<String>,
     mime_type: MimeType,
     #[serde(default)]
-    delivery_time: Option<u64>,
+    delivery_time: Option<UnixTimestamp>,
 }
 
 impl Send {
@@ -59,7 +60,7 @@ impl Send {
             address_id: draft.address_id.clone(),
             recipients: Self::combine_recipients(draft),
             mime_type: draft.mime_type(),
-            delivery_time: Some(delivery_time.timestamp().unsigned_abs()),
+            delivery_time: Some(delivery_time.into()),
         }
     }
 
@@ -91,7 +92,7 @@ impl Send {
     }
 }
 
-pub type UndoTimestamp = u64;
+pub type UndoTimestamp = UnixTimestamp;
 
 const SEND_ACTION_VERSION: u32 = 2;
 impl Action for Send {
@@ -285,8 +286,9 @@ impl Send {
         let local_message_id = action.local_message_id.expect("Should be set");
 
         if let Some(delivery_time) = action.delivery_time {
-            let current_time_stamp =
-                Local::now().timestamp().unsigned_abs() + SEND_DELIVERY_DELTA_INTERVAL.as_secs();
+            let current_time_stamp: UnixTimestamp =
+                (UnixTimestamp::now().as_u64() + SEND_DELIVERY_DELTA_INTERVAL.as_secs()).into();
+
             if current_time_stamp > delivery_time {
                 error!(
                     "Unable to schedule sending of message {local_message_id}: schedule date is past"
@@ -397,7 +399,7 @@ impl Send {
                 packages,
                 auto_save_contacts,
                 Some(Duration::from_secs(mail_settings.delay_send_seconds as u64)),
-                action.delivery_time,
+                action.delivery_time.map(|v| v.as_u64()),
             )
             .await
         {
@@ -523,7 +525,7 @@ impl Send {
             }
         }
 
-        Ok((remote_message_id, delivery_time))
+        Ok((remote_message_id, delivery_time.into()))
     }
 }
 
@@ -542,7 +544,7 @@ async fn save_send_status(
         Ok((remote_id, delivery_time)) => DraftSendResult::success(
             action.local_message_id.expect("Should be set"),
             remote_id.clone(),
-            (*delivery_time).try_into().unwrap_or(0),
+            *delivery_time,
             origin,
         ),
         Err(error) => {

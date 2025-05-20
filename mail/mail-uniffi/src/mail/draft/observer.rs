@@ -5,6 +5,7 @@ use crate::errors::{
 };
 use crate::mail::MailUserSession;
 use crate::{async_runtime, uniffi_async};
+use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::utils::MapVec;
 use proton_mail_common::MailContextError;
 use proton_mail_common::datatypes::LocalMessageId;
@@ -71,7 +72,7 @@ pub struct DraftSendResult {
     /// The id of draft message
     pub message_id: Id,
     /// Timestamp at which the operation recorded
-    pub timestamp: i64,
+    pub timestamp: UnixTimestamp,
     /// Success or failure status.
     pub error: DraftSendStatus,
     /// Where this report originated from.

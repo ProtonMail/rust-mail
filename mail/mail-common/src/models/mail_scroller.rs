@@ -3,7 +3,7 @@ use crate::datatypes::{ContextualConversation, ReadFilter};
 use crate::models::{Conversation, ConversationLabel, Message, MessageLabel};
 use anyhow::anyhow;
 use indoc::formatdoc;
-use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::prelude::{ConversationId, MessageId};
 use proton_mail_ids::LocalMessageId;
@@ -75,7 +75,7 @@ pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
     fn convert(local_id: LocalLabelId, items: Vec<Self::Model>) -> Vec<Self::Item>;
 
     /// Get the time of the item.
-    fn time(item: &Self::Item) -> u64;
+    fn time(item: &Self::Item) -> UnixTimestamp;
 
     /// Get the display order of the item.
     fn display_order(item: &Self::Item) -> u64;
@@ -105,7 +105,7 @@ pub struct MessageScrollData {
     pub remote_message_id: MessageId,
     /// Last synced message time.
     #[DbField]
-    pub message_time: u64,
+    pub message_time: UnixTimestamp,
     /// Last synced message display order.
     #[DbField]
     pub display_order: u64,
@@ -224,7 +224,7 @@ impl ScrollData for MessageScrollData {
         items
     }
 
-    fn time(item: &Self::Item) -> u64 {
+    fn time(item: &Self::Item) -> UnixTimestamp {
         item.time
     }
 
@@ -281,7 +281,7 @@ pub struct ConversationScrollData {
     /// need to store the `Conversation.context_time` rather than
     /// `Conversation.Labels[active_label].context_time`
     #[DbField]
-    pub conversation_time: u64,
+    pub conversation_time: UnixTimestamp,
     /// Display order of the last conversation.
     #[DbField]
     pub display_order: u64,
@@ -403,7 +403,7 @@ impl ScrollData for ConversationScrollData {
             .collect()
     }
 
-    fn time(item: &Self::Item) -> u64 {
+    fn time(item: &Self::Item) -> UnixTimestamp {
         item.time
     }
 
@@ -451,7 +451,7 @@ pub struct ScrollCursor<T: ScrollData> {
     pub unread: ReadFilter,
 
     /// Last synced item time.
-    pub time: u64,
+    pub time: UnixTimestamp,
 
     /// Last synced display order.
     pub display_order: u64,
@@ -471,7 +471,7 @@ impl<T: ScrollData> ScrollCursor<T> {
         ScrollCursor {
             local_label_id,
             unread,
-            time: i64::MAX as u64,
+            time: (i64::MAX as u64).into(),
             display_order: i64::MAX as u64,
             _phantom: std::marker::PhantomData,
         }
@@ -487,7 +487,7 @@ impl<T: ScrollData> ScrollCursor<T> {
         ScrollCursor {
             local_label_id,
             unread,
-            time: 0,
+            time: 0.into(),
             display_order: 0,
             _phantom: std::marker::PhantomData,
         }
@@ -795,7 +795,7 @@ impl SearchScrollData {
 
     pub async fn last_remote_message_id_and_time(
         tether: &Tether,
-    ) -> Result<Option<(MessageId, u64)>, StashError> {
+    ) -> Result<Option<(MessageId, UnixTimestamp)>, StashError> {
         let Some(last) = Self::last(tether).await? else {
             return Ok(None);
         };

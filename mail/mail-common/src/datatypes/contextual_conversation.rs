@@ -14,7 +14,7 @@ use futures::try_join;
 use itertools::Itertools;
 use proton_core_api::services::proton::LabelId;
 use proton_core_api::session::Session;
-use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_core_common::models::{
     Label, LabelError, ModelExtension, ModelIdExtension as _, PaidSubscription, User,
 };
@@ -65,7 +65,7 @@ pub struct ContextualConversation {
     pub exclusive_location: Option<ExclusiveLocation>,
 
     /// Time at which this conversation expires.
-    pub expiration_time: u64,
+    pub expiration_time: UnixTimestamp,
 
     /// Whether this conversation is starred.
     pub is_starred: bool,
@@ -98,10 +98,10 @@ pub struct ContextualConversation {
     pub subject: String,
 
     /// Time of reception of the last message in this conversation.
-    pub time: u64,
+    pub time: UnixTimestamp,
 
     /// TODO: Document this field
-    pub snooze_time: u64,
+    pub snooze_time: UnixTimestamp,
 }
 
 impl ContextualConversation {

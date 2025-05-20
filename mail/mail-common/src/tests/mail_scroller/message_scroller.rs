@@ -20,7 +20,7 @@ fn test_message(n: usize, order_shift: u64) -> Vec<Message> {
     (0..n)
         .map(|i| {
             let order = i as u64 + order_shift;
-            message!(remote_id: msg_id!(order),  display_order: order, time: order)
+            message!(remote_id: msg_id!(order),  display_order: order, time: order.into())
         })
         .collect()
 }
@@ -139,7 +139,7 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
             message.row_id = None;
             message.remote_id = msg_id!(51);
             message.display_order = 0;
-            message.time = 0;
+            message.time = 0.into();
             save_single_message(&local_label, &mut message, bond).await;
             Ok(())
         })
@@ -161,7 +161,7 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
             message.row_id = None;
             message.remote_id = msg_id!(300);
             message.display_order = 300;
-            message.time = 300;
+            message.time = 300.into();
             save_single_message(&local_label, &mut message, bond).await;
             Ok(())
         })
@@ -262,7 +262,7 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
             message.row_id = None;
             message.remote_id = msg_id!(51);
             message.display_order = 0;
-            message.time = 0;
+            message.time = 0.into();
             save_single_message(&local_label, &mut message, bond).await;
             Ok(())
         })
@@ -284,7 +284,7 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
             message.row_id = None;
             message.remote_id = msg_id!(300);
             message.display_order = 300;
-            message.time = 300;
+            message.time = 300.into();
             save_single_message(&local_label, &mut message, bond).await;
             Ok(())
         })
@@ -520,7 +520,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .local_label_id(local_label_id)
         .unread(ReadFilter::All)
         .remote_message_id(MessageId::from("150"))
-        .message_time(0)
+        .message_time(0.into())
         .display_order(0)
         .build();
 
@@ -528,7 +528,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .local_label_id(local_label_id)
         .unread(ReadFilter::Read)
         .remote_message_id(MessageId::from("150"))
-        .message_time(0)
+        .message_time(0.into())
         .display_order(0)
         .build();
 
@@ -536,7 +536,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .local_label_id(local_label_id)
         .unread(ReadFilter::Unread)
         .remote_message_id(MessageId::from("150"))
-        .message_time(0)
+        .message_time(0.into())
         .display_order(0)
         .build();
 
@@ -564,7 +564,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .local_label_id(local_label_id)
         .unread(ReadFilter::All)
         .remote_message_id(MessageId::from("150"))
-        .message_time(0)
+        .message_time(0.into())
         .display_order(0)
         .build();
 
@@ -572,7 +572,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .local_label_id(local_label_id)
         .unread(ReadFilter::Read)
         .remote_message_id(MessageId::from("150"))
-        .message_time(0)
+        .message_time(0.into())
         .display_order(0)
         .build();
 
@@ -580,7 +580,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .local_label_id(local_label_id)
         .unread(ReadFilter::Unread)
         .remote_message_id(MessageId::from("150"))
-        .message_time(0)
+        .message_time(0.into())
         .display_order(0)
         .build();
 
@@ -598,7 +598,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .local_label_id(local_label_id)
         .unread(ReadFilter::All)
         .remote_message_id(MessageId::from("150"))
-        .message_time(1)
+        .message_time(1.into())
         .display_order(2)
         .build();
 
@@ -606,7 +606,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .local_label_id(local_label_id)
         .unread(ReadFilter::Read)
         .remote_message_id(MessageId::from("150"))
-        .message_time(1)
+        .message_time(1.into())
         .display_order(2)
         .build();
 
@@ -614,7 +614,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .local_label_id(local_label_id)
         .unread(ReadFilter::Unread)
         .remote_message_id(MessageId::from("150"))
-        .message_time(1)
+        .message_time(1.into())
         .display_order(2)
         .build();
 
@@ -632,10 +632,10 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
     scroller_read.reload(&tether).await.unwrap();
     scroller_unread.reload(&tether).await.unwrap();
 
-    assert_eq!(scroller_all.message_time, 1);
+    assert_eq!(scroller_all.message_time, 1.into());
     assert_eq!(scroller_all.display_order, 2);
-    assert_eq!(scroller_read.message_time, 1);
+    assert_eq!(scroller_read.message_time, 1.into());
     assert_eq!(scroller_read.display_order, 2);
-    assert_eq!(scroller_unread.message_time, 1);
+    assert_eq!(scroller_unread.message_time, 1.into());
     assert_eq!(scroller_unread.display_order, 2);
 }

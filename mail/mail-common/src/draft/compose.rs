@@ -5,6 +5,7 @@ use crate::models::{MailSettings, Message};
 use crate::{MailContextError, MailUserContext};
 use chrono::DateTime;
 use proton_core_api::services::proton::AddressId;
+use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::Address;
 use proton_crypto_inbox::message::{EncryptableDraft, EncryptedDraft};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
@@ -13,7 +14,6 @@ use proton_mail_html_transformer::Transformer;
 use std::borrow::Cow;
 use std::fmt::Display;
 use std::io;
-use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::error;
 
 #[cfg(test)]
@@ -150,11 +150,8 @@ pub(super) async fn encrypt_draft_body(
 }
 
 /// Create a new timestamp.
-pub(crate) fn create_timestamp() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system time before Unix epoch")
-        .as_secs()
+pub(crate) fn create_timestamp() -> UnixTimestamp {
+    UnixTimestamp::now()
 }
 
 /// Generate HTML reply body for a message.
@@ -270,22 +267,12 @@ fn generate_sender_reply(sender: &MessageSender, formatted_date: String, is_text
     }
 }
 
-fn format_date_from_timestamp(timestamp: u64, use_utc: bool) -> String {
+fn format_date_from_timestamp(timestamp: UnixTimestamp, use_utc: bool) -> String {
     if use_utc {
-        format_date(date_from_timestamp::<chrono::Utc>(timestamp))
+        format_date(timestamp.to_date_time_utc().unwrap_or_default())
     } else {
-        format_date(date_from_timestamp::<chrono::Local>(timestamp))
+        format_date(timestamp.to_date_time().unwrap_or_default())
     }
-}
-
-fn date_from_timestamp<Tz: chrono::TimeZone>(timestamp: u64) -> DateTime<Tz>
-where
-    DateTime<Tz>: From<DateTime<chrono::Utc>>,
-{
-    let timestamp_i64 = i64::try_from(timestamp).unwrap_or(0);
-    DateTime::<chrono::Utc>::from_timestamp(timestamp_i64, 0)
-        .unwrap_or_default()
-        .into()
 }
 
 fn format_date<Tz: chrono::TimeZone>(date: DateTime<Tz>) -> String

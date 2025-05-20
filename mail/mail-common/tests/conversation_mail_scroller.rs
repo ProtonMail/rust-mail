@@ -48,7 +48,7 @@ async fn save_single_conversation(label: &Label, conversation: &mut Conversation
         local_conversation_id: conversation.local_id,
         remote_label_id: label.remote_id.clone(),
         local_label_id: label.local_id,
-        context_time: 0
+        context_time: 0.into()
     );
 
     conv_label.save(bond).await.unwrap();

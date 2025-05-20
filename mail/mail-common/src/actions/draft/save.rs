@@ -20,6 +20,7 @@ use proton_action_queue::action::{
     WriterGuardError,
 };
 use proton_core_api::services::proton::{AddressId, LabelId};
+use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::message::EncryptedDraft;
 use proton_mail_api::services::proton::prelude::{
@@ -645,7 +646,7 @@ impl Save {
         total_attachment_count: u64,
         attachments: Vec<AttachmentMetadata>,
         body_len: u64,
-        time: u64,
+        time: UnixTimestamp,
         display_order: u64,
     ) -> Message {
         debug_assert!(
@@ -665,7 +666,7 @@ impl Save {
             bcc_list: self.bcc_list.to_message_recipients().into(),
             deleted: false,
             exclusive_location: None,
-            expiration_time: 0,
+            expiration_time: 0.into(),
             external_id: None,
             flags: Default::default(),
             is_forwarded: false,
@@ -684,7 +685,7 @@ impl Save {
                 name: address.display_name.clone(),
             },
             size: body_len,
-            snooze_time: 0,
+            snooze_time: 0.into(),
             subject: self.subject.clone(),
             time,
             to_list: self.to_list.to_message_recipients().into(),
@@ -701,7 +702,7 @@ impl Save {
         total_attachment_count: u64,
         attachments: Vec<AttachmentMetadata>,
         body_len: u64,
-        time: u64,
+        time: UnixTimestamp,
     ) {
         message.local_address_id = address.local_id.unwrap();
         message.remote_address_id = address.remote_id.clone().unwrap();
@@ -745,7 +746,7 @@ impl Save {
             deleted: false,
             display_snooze_reminder: false,
             exclusive_location: None,
-            expiration_time: 0,
+            expiration_time: 0.into(),
             labels: vec![],
             num_attachments: total_attachment_count,
             num_messages: 0,

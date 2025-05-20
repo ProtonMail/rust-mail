@@ -850,13 +850,13 @@ impl DecryptedMessage {
             #[allow(clippy::cast_possible_wrap)]
             MessageBanner::Expiry { timestamp } => ListItem::from(format!(
                 "This message will expire at {}",
-                chrono::DateTime::from_timestamp(*timestamp as i64, 0).unwrap()
+                date_from_timestamp(*timestamp)
             )),
 
             #[allow(clippy::cast_possible_wrap)]
             MessageBanner::AutoDelete { timestamp } => ListItem::from(format!(
                 "This message will auto-delete at {}",
-                chrono::DateTime::from_timestamp(*timestamp as i64, 0).unwrap()
+                date_from_timestamp(*timestamp)
             )),
 
             MessageBanner::RemoteContent => ListItem::from(

@@ -30,7 +30,7 @@ async fn save_single_conversation(label: &Label, conversation: &mut Conversation
         local_conversation_id: conversation.local_id,
         remote_label_id: label.remote_id.clone(),
         local_label_id: label.local_id,
-        context_time: conversation.display_order
+        context_time: conversation.display_order.into()
     );
 
     conv_label.save(bond).await.unwrap();
@@ -531,7 +531,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .local_label_id(local_label_id)
         .unread(ReadFilter::All)
         .remote_conversation_id(ConversationId::from("150"))
-        .conversation_time(0)
+        .conversation_time(0.into())
         .display_order(0)
         .build();
 
@@ -539,7 +539,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .local_label_id(local_label_id)
         .unread(ReadFilter::Read)
         .remote_conversation_id(ConversationId::from("150"))
-        .conversation_time(0)
+        .conversation_time(0.into())
         .display_order(0)
         .build();
 
@@ -547,7 +547,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .local_label_id(local_label_id)
         .unread(ReadFilter::Unread)
         .remote_conversation_id(ConversationId::from("150"))
-        .conversation_time(0)
+        .conversation_time(0.into())
         .display_order(0)
         .build();
 
@@ -575,7 +575,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .local_label_id(local_label_id)
         .unread(ReadFilter::All)
         .remote_conversation_id(ConversationId::from("150"))
-        .conversation_time(0)
+        .conversation_time(0.into())
         .display_order(0)
         .build();
 
@@ -583,7 +583,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .local_label_id(local_label_id)
         .unread(ReadFilter::Read)
         .remote_conversation_id(ConversationId::from("150"))
-        .conversation_time(0)
+        .conversation_time(0.into())
         .display_order(0)
         .build();
 
@@ -591,7 +591,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .local_label_id(local_label_id)
         .unread(ReadFilter::Unread)
         .remote_conversation_id(ConversationId::from("150"))
-        .conversation_time(0)
+        .conversation_time(0.into())
         .display_order(0)
         .build();
 
@@ -609,7 +609,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .local_label_id(local_label_id)
         .unread(ReadFilter::All)
         .remote_conversation_id(ConversationId::from("150"))
-        .conversation_time(1)
+        .conversation_time(1.into())
         .display_order(2)
         .build();
 
@@ -617,7 +617,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .local_label_id(local_label_id)
         .unread(ReadFilter::Read)
         .remote_conversation_id(ConversationId::from("150"))
-        .conversation_time(1)
+        .conversation_time(1.into())
         .display_order(2)
         .build();
 
@@ -625,7 +625,7 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .local_label_id(local_label_id)
         .unread(ReadFilter::Unread)
         .remote_conversation_id(ConversationId::from("150"))
-        .conversation_time(1)
+        .conversation_time(1.into())
         .display_order(2)
         .build();
 
@@ -643,11 +643,11 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
     scroller_read.reload(&tether).await.unwrap();
     scroller_unread.reload(&tether).await.unwrap();
 
-    assert_eq!(scroller_all.conversation_time, 1);
+    assert_eq!(scroller_all.conversation_time, 1.into());
     assert_eq!(scroller_all.display_order, 2);
-    assert_eq!(scroller_read.conversation_time, 1);
+    assert_eq!(scroller_read.conversation_time, 1.into());
     assert_eq!(scroller_read.display_order, 2);
-    assert_eq!(scroller_unread.conversation_time, 1);
+    assert_eq!(scroller_unread.conversation_time, 1.into());
     assert_eq!(scroller_unread.display_order, 2);
 }
 
@@ -686,7 +686,7 @@ async fn test_cashed_scroller_correctly_reads_empty_conversations_from_the_trash
         .local_label_id(trash.local_id.unwrap())
         .unread(unread)
         .remote_conversation_id("conv_1".into())
-        .conversation_time(1)
+        .conversation_time(1.into())
         .display_order(1)
         .build();
 

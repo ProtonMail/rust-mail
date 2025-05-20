@@ -1,9 +1,11 @@
+use std::convert::Into;
 use std::sync::LazyLock;
 
 use crate::search::{MY_ADDRESS_ID, MY_LABEL_ID1, MY_LABEL_ID2, test_label1, test_label2};
 use crate::utils::{TestDBState, test_address};
 use lazy_static::lazy_static;
 use proton_core_api::services::proton::LabelId;
+use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::Label;
 use proton_mail_api::services::proton::common::{AttachmentId, ConversationId, MessageId};
 use proton_mail_common::datatypes::{
@@ -41,9 +43,9 @@ static CONV1_MSG1: LazyLock<Message> = LazyLock::new(|| Message {
     to_list: MessageRecipients {
         value: vec!["foo@bar.com".into()],
     },
-    time: 100,
+    time: 100.into(),
     size: 512,
-    snooze_time: 1000,
+    snooze_time: 1000.into(),
     ..BASE_CONV1_MESSAGE.to_owned()
 });
 
@@ -57,10 +59,10 @@ static CONV1_MSG2: LazyLock<Message> = LazyLock::new(|| Message {
     to_list: MessageRecipients {
         value: vec!["omega@bar.com".into()],
     },
-    time: 200,
+    time: 200.into(),
     size: 100,
     is_forwarded: true,
-    snooze_time: 2000,
+    snooze_time: 2000.into(),
     ..BASE_CONV1_MESSAGE.to_owned()
 });
 
@@ -72,10 +74,10 @@ static CONV1_MSG3: LazyLock<Message> = LazyLock::new(|| Message {
     to_list: MessageRecipients {
         value: vec!["foo@bar.com".into()],
     },
-    time: 400,
+    time: 400.into(),
     size: 300,
     unread: true,
-    snooze_time: 1500,
+    snooze_time: 1500.into(),
     ..BASE_CONV1_MESSAGE.to_owned()
 });
 
@@ -86,7 +88,7 @@ static CONV1_MSG4: LazyLock<Message> = LazyLock::new(|| Message {
     to_list: MessageRecipients {
         value: vec!["foo@bar.com".into()],
     },
-    time: 450,
+    time: 450.into(),
     size: 100,
     unread: true,
     ..BASE_CONV1_MESSAGE.to_owned()
@@ -109,7 +111,7 @@ static CONV2_MSG1: LazyLock<Message> = LazyLock::new(|| Message {
     cc_list: MessageRecipients {
         value: vec!["venture@bros.com".into()],
     },
-    time: 300,
+    time: 300.into(),
     size: 300,
     ..BASE_CONV2_MESSAGE.to_owned()
 });
@@ -123,7 +125,7 @@ static CONV2_MSG2: LazyLock<Message> = LazyLock::new(|| Message {
     to_list: MessageRecipients {
         value: vec!["sponge.bob@square.pants".into()],
     },
-    time: 800,
+    time: 800.into(),
     size: 300,
     unread: true,
     ..BASE_CONV2_MESSAGE.to_owned()
@@ -148,6 +150,7 @@ pub fn new_test_label_db_state() -> TestDBState {
         conversations: vec![Conversation {
             remote_id: Some(DELETE_DB_CONV1.clone()),
             labels: vec![],
+            expiration_time: UnixTimestamp::new(0),
             ..Default::default()
         }],
         messages: vec![
@@ -263,25 +266,25 @@ pub fn new_test_unread_db_state() -> TestDBState {
             Message {
                 label_ids: vec![MY_LABEL_ID1.clone()],
                 unread: true,
-                time: 100,
+                time: 100.into(),
                 ..CONV1_MSG1.to_owned()
             },
             Message {
                 label_ids: vec![MY_LABEL_ID2.clone()],
                 unread: true,
-                time: 200,
+                time: 200.into(),
                 ..CONV1_MSG2.to_owned()
             },
             Message {
                 label_ids: vec![MY_LABEL_ID1.clone()],
                 unread: true,
-                time: 300,
+                time: 300.into(),
                 ..CONV1_MSG3.to_owned()
             },
             Message {
                 label_ids: vec![MY_LABEL_ID1.clone()],
                 unread: true,
-                time: 400,
+                time: 400.into(),
                 ..CONV1_MSG4.to_owned()
             },
         ],

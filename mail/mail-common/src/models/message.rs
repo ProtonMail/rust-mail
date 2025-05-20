@@ -47,7 +47,9 @@ use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_core_api::services::proton::{Proton, ProtonCore};
 use proton_core_api::session::{CoreSession, Session};
-use proton_core_common::datatypes::{LabelType, LocalAddressId, LocalLabelId, SystemLabel};
+use proton_core_common::datatypes::{
+    LabelType, LocalAddressId, LocalLabelId, SystemLabel, UnixTimestamp,
+};
 use proton_core_common::models::{Address, Label, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::proton_crypto;
 use proton_mail_api::MAX_PAGE_ELEMENT_COUNT;
@@ -133,7 +135,7 @@ pub struct Message {
     /// The unix timestamp at which this message is set to expire at.
     /// 0 means that it will not expire.
     #[DbField]
-    pub expiration_time: u64,
+    pub expiration_time: UnixTimestamp,
 
     /// TODO: Document this field.
     #[DbField]
@@ -180,7 +182,7 @@ pub struct Message {
 
     /// TODO: Document this field.
     #[DbField]
-    pub snooze_time: u64,
+    pub snooze_time: UnixTimestamp,
 
     /// TODO: Document this field.
     #[DbField]
@@ -188,7 +190,7 @@ pub struct Message {
 
     /// TODO: Document this field.
     #[DbField]
-    pub time: u64,
+    pub time: UnixTimestamp,
 
     /// TODO: Document this field.
     #[DbField]
@@ -2143,7 +2145,7 @@ impl Message {
             },
             deleted: false,
             display_order: value.order,
-            expiration_time: value.expiration_time,
+            expiration_time: value.expiration_time.into(),
             external_id: value.external_id,
             flags: value.flags.into(),
             is_forwarded: value.is_forwarded,
@@ -2157,9 +2159,9 @@ impl Message {
             },
             sender: value.sender.into(),
             size: value.size,
-            snooze_time: value.snooze_time,
+            snooze_time: value.snooze_time.into(),
             subject: value.subject,
-            time: value.time,
+            time: value.time.into(),
             to_list: MessageRecipients {
                 value: value.to_list.map_vec(),
             },
@@ -2954,7 +2956,7 @@ impl Default for Message {
             bcc_list: Default::default(),
             cc_list: Default::default(),
             deleted: Default::default(),
-            expiration_time: Default::default(),
+            expiration_time: UnixTimestamp::new(0),
             external_id: Default::default(),
             is_forwarded: Default::default(),
             is_replied: Default::default(),
@@ -2966,9 +2968,9 @@ impl Default for Message {
             reply_tos: Default::default(),
             sender: Default::default(),
             size: Default::default(),
-            snooze_time: Default::default(),
+            snooze_time: UnixTimestamp::new(0),
             subject: Default::default(),
-            time: Default::default(),
+            time: UnixTimestamp::new(0),
             to_list: Default::default(),
             unread: Default::default(),
             custom_labels: Default::default(),

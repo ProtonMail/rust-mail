@@ -27,7 +27,9 @@ use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::Proton;
 use proton_core_api::services::proton::{LabelId, ProtonIdMarker};
 use proton_core_api::session::{CoreSession, Session};
-use proton_core_common::datatypes::{InitializationKey, LabelType, LocalLabelId, SystemLabel};
+use proton_core_common::datatypes::{
+    InitializationKey, LabelType, LocalLabelId, SystemLabel, UnixTimestamp,
+};
 use proton_core_common::models::{
     InitializationError, InitializationWatcher, InitializedComponent, Label, ModelExtension,
     ModelIdExtension,
@@ -100,7 +102,7 @@ pub struct Conversation {
 
     /// TODO: Document this field.
     #[DbField]
-    pub expiration_time: u64,
+    pub expiration_time: UnixTimestamp,
 
     /// TODO: Document this field.
     pub labels: Vec<ConversationLabel>,
@@ -598,7 +600,7 @@ impl Conversation {
             deleted: false,
             display_snooze_reminder: false,
             exclusive_location: None,
-            expiration_time: 0,
+            expiration_time: 0.into(),
             labels: vec![],
             num_attachments: 0,
             num_messages: 0,
@@ -730,13 +732,13 @@ impl Conversation {
                         local_conversation_id: Some(id),
                         local_label_id: Some(label_id),
                         remote_label_id: label.remote_id.clone(),
-                        context_expiration_time: 0,
+                        context_expiration_time: 0.into(),
                         context_num_attachments: 0,
                         context_num_messages: 0,
                         context_num_unread: 0,
                         context_size: 0,
-                        context_snooze_time: 0,
-                        context_time: 0,
+                        context_snooze_time: 0.into(),
+                        context_time: 0.into(),
                         deleted: false,
                         row_id: None,
                     };
@@ -2983,7 +2985,7 @@ impl From<ApiConversation> for Conversation {
                 .collect(),
             deleted: false,
             display_snooze_reminder: value.display_snooze_reminder,
-            expiration_time: value.expiration_time,
+            expiration_time: value.expiration_time.into(),
             exclusive_location: None,
             labels: value.labels.map_vec(),
             num_attachments: value.num_attachments,
@@ -3065,7 +3067,7 @@ pub struct ConversationLabel {
 
     /// TODO: Document this field.
     #[DbField]
-    pub context_expiration_time: u64,
+    pub context_expiration_time: UnixTimestamp,
 
     /// TODO: Document this field.
     #[DbField]
@@ -3085,11 +3087,11 @@ pub struct ConversationLabel {
 
     /// TODO: Document this field.
     #[DbField]
-    pub context_snooze_time: u64,
+    pub context_snooze_time: UnixTimestamp,
 
     /// TODO: Document this field.
     #[DbField]
-    pub context_time: u64,
+    pub context_time: UnixTimestamp,
 
     #[DbField]
     pub deleted: bool,
@@ -3303,13 +3305,13 @@ impl From<ApiConversationLabel> for ConversationLabel {
             local_conversation_id: None,
             local_label_id: None,
             remote_label_id: Some(value.id),
-            context_expiration_time: value.context_expiration_time,
+            context_expiration_time: value.context_expiration_time.into(),
             context_num_attachments: value.context_num_attachments,
             context_num_messages: value.context_num_messages,
             context_num_unread: value.context_num_unread,
             context_size: value.context_size,
-            context_snooze_time: value.context_snooze_time,
-            context_time: value.context_time,
+            context_snooze_time: value.context_snooze_time.into(),
+            context_time: value.context_time.into(),
             deleted: false,
             row_id: None,
         }
@@ -3321,12 +3323,12 @@ impl From<ApiConversationLabel> for ConversationLabel {
 #[derive(Clone)]
 pub struct ConversationMessageLabelStats {
     pub size: u64,
-    pub time: u64,
-    pub expiration_time: u64,
+    pub time: UnixTimestamp,
+    pub expiration_time: UnixTimestamp,
     pub count: u64,
     pub unread: u64,
     pub num_attachments: u32,
-    pub snooze_time: u64,
+    pub snooze_time: UnixTimestamp,
 }
 
 impl ConversationMessageLabelStats {
@@ -3392,12 +3394,12 @@ impl ConversationMessageLabelStats {
     fn from_messages(messages: &[Message]) -> Self {
         let mut stats = Self {
             size: 0,
-            time: 0,
-            expiration_time: 0,
+            time: 0.into(),
+            expiration_time: 0.into(),
             count: 0,
             unread: 0,
             num_attachments: 0,
-            snooze_time: 0,
+            snooze_time: 0.into(),
         };
 
         for message in messages {
@@ -3420,12 +3422,12 @@ impl From<&ApiMessageMetadata> for ConversationMessageLabelStats {
     fn from(metadata: &ApiMessageMetadata) -> Self {
         Self {
             size: metadata.size,
-            time: metadata.time,
-            expiration_time: metadata.expiration_time,
+            time: metadata.time.into(),
+            expiration_time: metadata.expiration_time.into(),
             count: 1,
             unread: if metadata.unread { 1 } else { 0 },
             num_attachments: metadata.num_attachments,
-            snooze_time: metadata.snooze_time,
+            snooze_time: metadata.snooze_time.into(),
         }
     }
 }
@@ -3433,14 +3435,14 @@ impl From<&ApiMessageMetadata> for ConversationMessageLabelStats {
 impl AddAssign<&ApiMessageMetadata> for ConversationMessageLabelStats {
     fn add_assign(&mut self, metadata: &ApiMessageMetadata) {
         self.size += metadata.size;
-        self.time = self.time.max(metadata.time);
-        self.expiration_time = self.expiration_time.max(metadata.expiration_time);
+        self.time = self.time.max(metadata.time.into());
+        self.expiration_time = self.expiration_time.max(metadata.expiration_time.into());
         self.count += 1;
         if metadata.unread {
             self.unread += 1;
         }
         self.num_attachments += metadata.num_attachments;
-        self.snooze_time = self.snooze_time.max(metadata.snooze_time);
+        self.snooze_time = self.snooze_time.max(metadata.snooze_time.into());
     }
 }
 
