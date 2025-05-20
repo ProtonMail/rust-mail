@@ -78,8 +78,9 @@ use proton_core_common::datatypes::{
     LocalContactEmailId, LocalContactId, LocalLabelId, LogAuth as RealLogAuth,
     Password as RealPassword, Phone as RealPhone, ProductUsedSpace as RealProductUsedSpace,
     Referral as RealReferral, SettingsFlags as RealSettingsFlags, TfaStatus as RealTfaStatus,
-    TimeFormat as RealTimeFormat, TwoFa as RealTwoFa, UserMnemonicStatus as RealUserMnemonicStatus,
-    UserType as RealUserType, WeekStart as RealWeekStart,
+    TimeFormat as RealTimeFormat, TwoFa as RealTwoFa, UnixTimestamp,
+    UserMnemonicStatus as RealUserMnemonicStatus, UserType as RealUserType,
+    WeekStart as RealWeekStart,
 };
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::models::{
@@ -990,7 +991,7 @@ pub struct ContactEmail {
     pub label_ids: Vec<Id>,
 
     /// TODO: Document this field.
-    pub last_used_time: u64,
+    pub last_used_time: UnixTimestamp,
 
     /// TODO: Document this field.
     pub name: String,
@@ -1494,7 +1495,7 @@ impl From<RealTwoFa> for TwoFa {
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct User {
     /// TODO: Document this field.
-    pub create_time: u64,
+    pub create_time: UnixTimestamp,
 
     /// TODO: Document this field.
     pub credit: i64,

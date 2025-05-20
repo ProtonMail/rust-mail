@@ -63,7 +63,7 @@ async fn contact_list() {
                     local_id: 1.into(),
                     email: "banksy@proton.me".to_string(),
                     is_proton: true,
-                    last_used_time: 0
+                    last_used_time: 0.into()
                 }]
             })]
         }]

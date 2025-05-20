@@ -7,6 +7,7 @@ use proton_core_common::datatypes::{
     ContactSuggestion as RealContactSuggestion, ContactSuggestionKind as RealContactSuggestionKind,
     ContactSuggestions as RealContactSuggestions, DeviceContact as RealDeviceContact,
     DeviceContactSuggestion as RealDeviceContactSuggestion, GroupedContacts as RealGroupedContacts,
+    UnixTimestamp,
 };
 use proton_core_common::utils::MapVec as _;
 
@@ -113,7 +114,7 @@ pub struct ContactEmailItem {
     pub is_proton: bool,
 
     /// The field represent the last used time of the email
-    pub last_used_time: u64,
+    pub last_used_time: UnixTimestamp,
 }
 
 impl From<RealContactEmailItem> for ContactEmailItem {
