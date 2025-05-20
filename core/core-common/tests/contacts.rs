@@ -509,7 +509,7 @@ fn create_test_local_contact_emails() -> Vec<ContactEmail> {
             label_ids: Labels::new(vec![LabelId::from(
                 "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==".to_owned(),
             )]),
-            last_used_time: 0,
+            last_used_time: 0.into(),
             name: "contact_email_name_1".to_owned(),
             row_id: None,
         },
@@ -525,7 +525,7 @@ fn create_test_local_contact_emails() -> Vec<ContactEmail> {
             email: "contact_email_2@contact.test".to_owned(),
             is_proton: true,
             label_ids: Labels::new(vec![LabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
-            last_used_time: 0,
+            last_used_time: 0.into(),
             name: "contact_email_name_2".to_owned(),
             row_id: None,
         },
@@ -541,7 +541,7 @@ fn create_test_local_contact_emails() -> Vec<ContactEmail> {
             email: "contact_email_3@contact.test".to_owned(),
             is_proton: true,
             label_ids: Labels::new(vec![LabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
-            last_used_time: 0,
+            last_used_time: 0.into(),
             name: "contact_email_name_3".to_owned(),
             row_id: None,
         },
@@ -734,7 +734,7 @@ fn create_test_local_full_modified_contact() -> (Contact, ContactEmail, ContactE
         label_ids: Labels::new(vec![LabelId::from(
             "I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==".to_owned(),
         )]),
-        last_used_time: 0,
+        last_used_time: 0.into(),
         name: "contact_email_name_mod".to_owned(),
         row_id: None,
     };

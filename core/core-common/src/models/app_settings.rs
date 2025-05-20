@@ -7,6 +7,7 @@ use stash::macros::Model;
 use stash::orm::Model;
 use stash::stash::{Bond, StashError, Tether};
 
+use crate::datatypes::UnixTimestamp;
 use crate::pin_code::PinCode;
 use smart_default::SmartDefault;
 
@@ -38,7 +39,8 @@ pub struct AppSettings {
 
     /// When auto-lock was lastly invoked,
     #[DbField]
-    pub lock_accessed_unixepoch: i64,
+    #[default(_code = "UnixTimestamp::new(0)")]
+    pub lock_accessed_unixepoch: UnixTimestamp,
 
     /// Do you want to share contacts between the accounts.
     #[DbField]
@@ -79,7 +81,7 @@ impl AppSettings {
         if self.protection.is_unset() {
             Ok(false)
         } else {
-            let now = Utc::now().timestamp();
+            let now = UnixTimestamp::now();
             let should_lock = self
                 .auto_lock
                 .should_autolock(now, self.lock_accessed_unixepoch);
@@ -204,13 +206,13 @@ pub enum ProtectionAutoLock {
 
 impl ProtectionAutoLock {
     #[must_use]
-    pub fn should_autolock(&self, now: i64, last_lock: i64) -> bool {
+    pub fn should_autolock(&self, now: UnixTimestamp, last_lock: UnixTimestamp) -> bool {
         match self {
             Self::Always => true,
             Self::Minutes(minutes) => {
-                let seconds = i64::from(*minutes) * 60;
+                let seconds = u64::from(*minutes) * 60;
 
-                last_lock.saturating_add(seconds) < now
+                last_lock.as_u64().saturating_add(seconds) < now.as_u64()
             }
             Self::Never => false,
         }
@@ -415,9 +417,9 @@ mod tests {
         pinpro.remaining_attempts()
     }
 
-    const ONE_HOUR: i64 = 3600;
-    const ONE_MINUTE: i64 = 60;
-    const TWO_MINUTES: i64 = 120;
+    const ONE_HOUR: u64 = 3600;
+    const ONE_MINUTE: u64 = 60;
+    const TWO_MINUTES: u64 = 120;
 
     #[test_case(ProtectionAutoLock::Always, 0, 0 => true; "TEST 0 AutoLock::Always returns true")]
     #[test_case(ProtectionAutoLock::Always, ONE_HOUR, 0 => true; "TEST 1 AutoLock::Always returns true")]
@@ -430,8 +432,8 @@ mod tests {
     #[test_case(ProtectionAutoLock::Never, 0, 0 => false; "TEST 7 AutoLock::Never returns false")]
     #[test_case(ProtectionAutoLock::Never, ONE_HOUR, 0 => false; "TEST 8 AutoLock::Never returns false")]
     #[test_case(ProtectionAutoLock::Never, 0, ONE_HOUR => false; "TEST 9 AutoLock::Never returns false")]
-    fn should_autolock(autolock: ProtectionAutoLock, now: i64, last_lock: i64) -> bool {
-        autolock.should_autolock(now, last_lock)
+    fn should_autolock(autolock: ProtectionAutoLock, now: u64, last_lock: u64) -> bool {
+        autolock.should_autolock(UnixTimestamp::new(now), UnixTimestamp::new(last_lock))
     }
 
     #[tokio::test]

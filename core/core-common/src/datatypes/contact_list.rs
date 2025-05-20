@@ -1,5 +1,7 @@
 use super::avatar::AvatarInformation;
-use crate::datatypes::{LabelType, LocalContactEmailId, LocalContactId, LocalLabelId};
+use crate::datatypes::{
+    LabelType, LocalContactEmailId, LocalContactId, LocalLabelId, UnixTimestamp,
+};
 use crate::models::{Contact, ContactEmail, Label};
 use crate::utils::MapVec as _;
 use itertools::Itertools;
@@ -201,7 +203,7 @@ pub struct ContactEmailItem {
     pub is_proton: bool,
 
     /// The field represent the last used time of the email
-    pub last_used_time: u64,
+    pub last_used_time: UnixTimestamp,
 }
 
 impl From<ContactEmail> for ContactEmailItem {
@@ -319,7 +321,7 @@ impl ContactSuggestions {
                 // `last_used_time` is u64, to ensure that
                 (
                     !email.is_proton,
-                    u64::MAX - email.last_used_time,
+                    u64::MAX - email.last_used_time.as_u64(),
                     email.email.unicode_words().collect::<String>(),
                     contact.name.clone(),
                 )
