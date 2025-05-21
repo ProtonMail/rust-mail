@@ -1,7 +1,7 @@
 use crate::MailUserContext;
 use crate::datatypes::MessageLabelsCount;
 use crate::models::default_location::IncomingDefaultLocation;
-use crate::models::{Conversation, MailSettings, Message, StoreLabelCounters};
+use crate::models::{Conversation, MailSettings, Message, RollbackItem, StoreLabelCounters};
 use crate::prefetch::PrefetchJob;
 use crate::user_context::events::conversations::handle_conversation_events;
 use crate::user_context::events::labels::handle_label_events;
@@ -9,6 +9,7 @@ use crate::user_context::events::messages::handle_message_events;
 use crate::{datatypes::ConversationLabelsCount, events::MailEvent};
 use anyhow::{anyhow, bail};
 use async_trait::async_trait;
+use proton_action_queue::db::StoredAction;
 use proton_core_common::datatypes::{InitializedComponentState, SystemLabel};
 use proton_core_common::models::{
     Address, Contact, InitializedComponent, Label, ModelExtension, User, UserSettings,
@@ -154,6 +155,9 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
                 Conversation::delete_all(tx).await?;
                 Message::delete_all(tx).await?;
                 MailSettings::delete_all(tx).await?;
+                RollbackItem::delete_all(tx).await?;
+                StoredAction::delete_all(tx).await?;
+
                 // Core
                 User::delete_all(tx).await?;
                 UserSettings::delete_all(tx).await?;
@@ -180,6 +184,12 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
         // to run an initialization again
         //
         // Mail
+        InitializedComponent::set_state(
+            MailUserContext::CONTEXT_INIT_KEY,
+            InitializedComponentState::NotInitialized,
+            &mut tether,
+        )
+        .await?;
         InitializedComponent::set_state(
             Label::INIT_KEY,
             InitializedComponentState::NotInitialized,
