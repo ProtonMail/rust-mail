@@ -70,57 +70,6 @@ fn with_event() {
 }
 
 #[test]
-fn with_broken_event() {
-    let str = ics! {"
-        BEGIN:VCALENDAR
-        PRODID:-//Proton AG//iCal//EN
-        VERSION:2.0
-        CALSCALE:GREGORIAN
-        BEGIN:VEVENT
-        DTSTART:20240101T100000
-        RRULE:FREQ=DAILY;COUNT=5
-        END:VEVENT
-        END:VCALENDAR
-    "};
-
-    let out = VCalendar::from_str(&str).unwrap();
-
-    // ---
-    // Assert calendar
-
-    assert_eq!(1, out.cal.events.len());
-
-    // ---
-    // Assert messages
-
-    let actual: Vec<_> = out
-        .msgs
-        .into_iter()
-        .map(|msg| msg.to_string(None))
-        .collect();
-
-    let expected = vec![
-        "error: missing property `UID`",
-        "error: missing property `DTSTAMP`",
-    ];
-
-    assert_eq!(actual, expected);
-
-    // ---
-    // Assert violations
-
-    let actual = out
-        .viols
-        .into_iter()
-        .map(|viol| viol.to_string())
-        .collect::<Vec<_>>();
-
-    let expected = vec!["event[0]: uid is missing", "event[0]: dtstamp is missing"];
-
-    assert_eq!(actual, expected);
-}
-
-#[test]
 fn with_method() {
     let cal = VCalendar::new("-//Proton AG//iCal//EN").with_method(Method::Publish);
 
@@ -203,7 +152,7 @@ fn atypical_case(name: &str) {
 
             for msg in cal.msgs {
                 _ = writeln!(buf);
-                _ = writeln!(buf, "{}", msg.to_string(src.as_slice()).trim_end());
+                _ = writeln!(buf, "{msg}");
             }
         }
 

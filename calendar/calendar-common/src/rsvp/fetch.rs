@@ -141,10 +141,10 @@ where
     // were able to successfully recover some useful information from the *.ics,
     // so there's no point in bailing out with an error.
     for msg in out.msgs {
-        debug!("ics-parser said: {}", msg.to_string(None));
+        debug!("ics-parser said: {msg}");
     }
     for viol in out.viols {
-        debug!("ics-validator said: {}", viol);
+        debug!("ics-validator said: {viol}");
     }
 
     let cal = out.cal;

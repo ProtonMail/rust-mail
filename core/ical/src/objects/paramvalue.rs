@@ -103,19 +103,22 @@ impl IcsRead<Value> for ParamValue {
         if r.try_eat('"').is_some() {
             quote = true;
 
-            while let Some(ch) = r.char() {
-                if ch == '"' || ch.is_control() {
+            while let Some(ch) = r.peek() {
+                if ch == '"' {
+                    _ = r.char();
                     break;
                 }
 
-                value.push(ch);
+                if ch.is_control() {
+                    break;
+                }
+
+                value.push(r.char()?);
             }
         } else {
             quote = false;
 
-            while let Some(ch) = r.spanned(IcsReader::peek) {
-                let (ch, span) = (*ch, ch.span);
-
+            while let Some(ch) = r.peek() {
                 match ch {
                     ';' | ':' | ',' | '"' => {
                         break;
@@ -127,6 +130,8 @@ impl IcsRead<Value> for ParamValue {
 
                     '\\' => {
                         _ = r.char();
+
+                        let span = Span::new(r.pos().prev(), r.pos());
 
                         match r.char()? {
                             ch @ (';' | ':' | ',') => {
@@ -302,7 +307,7 @@ mod tests {
 
         assert_eq!(
             vec![ReadMsg {
-                at: Some(Span::new(10, 10)),
+                at: Some(Span::new((1, 11), (1, 12))),
                 msg: "non-conformant: param-values shouldn't contain escapes".into(),
                 kind: ReadMsgKind::Warning,
                 context: Vec::new(),
@@ -325,7 +330,7 @@ mod tests {
 
         assert_eq!(
             vec![ReadMsg {
-                at: Some(Span::new(10, 10)),
+                at: Some(Span::new((1, 11), (1, 12))),
                 msg: "unrecognized escape sequence".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),

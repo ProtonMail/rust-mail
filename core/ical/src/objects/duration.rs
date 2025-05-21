@@ -451,7 +451,7 @@ mod tests {
                     kind: ReadMsgKind::Error,
                     context: vec![
                         Spanned {
-                            span: Span::new(0, 1),
+                            span: Span::new((1, 1), (1, 1)),
                             value: "`DurationAmount`".into(),
                         },
                     ],

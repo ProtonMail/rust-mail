@@ -2,51 +2,46 @@ use super::*;
 use std::fmt;
 use std::ops::Deref;
 
+// 1-indexed, with character offset in *bytes* (not graphemes, not unicode-char-widths)
+pub type LineAndChar = (u32, u32);
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Span {
-    pub start: usize,
-    pub end: usize,
+    pub start: LineAndChar,
+    pub end: LineAndChar,
 }
 
 impl Span {
     #[must_use]
-    pub fn new(start: usize, end: usize) -> Self {
-        Self { start, end }
+    pub fn new(start: impl Into<LineAndChar>, end: impl Into<LineAndChar>) -> Self {
+        Self {
+            start: start.into(),
+            end: end.into(),
+        }
     }
 
     #[must_use]
-    pub fn resolve(&self, src: &[u8]) -> String {
-        let (start_line, start_char) = Self::resolve_ex(src, self.start, true);
-        let (end_line, end_char) = Self::resolve_ex(src, self.end, false);
+    pub fn one(char: impl Into<LineAndChar>) -> Self {
+        let char = char.into();
+
+        Self::new(char, char)
+    }
+}
+
+impl fmt::Display for Span {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (start_line, start_char) = self.start;
+        let (end_line, end_char) = self.end;
 
         if start_line == end_line {
             if start_char == end_char {
-                format!("{start_line}:{start_char}")
+                write!(f, "{start_line}:{start_char}")
             } else {
-                format!("{start_line}:{start_char}..{end_char}")
+                write!(f, "{start_line}:{start_char}..{end_char}")
             }
         } else {
-            format!("{start_line}:{start_char}..{end_line}:{end_char}")
+            write!(f, "{start_line}:{start_char}..{end_line}:{end_char}")
         }
-    }
-
-    #[must_use]
-    pub fn resolve_ex(src: &[u8], pos: usize, inclusive: bool) -> (usize, usize) {
-        let mut line = 1;
-        let mut char = 1;
-
-        let pos = if inclusive { pos } else { pos - 1 };
-
-        for &ch in src.iter().take(pos) {
-            if ch == b'\r' || ch == b'\n' {
-                line += 1;
-                char = 1;
-            } else {
-                char += 1;
-            }
-        }
-
-        (line, char)
     }
 }
 
