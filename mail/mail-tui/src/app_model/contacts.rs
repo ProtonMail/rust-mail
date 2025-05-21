@@ -337,6 +337,10 @@ impl Model {
         }
     }
 
+    pub fn ctx(&self) -> Arc<MailUserContext> {
+        Arc::clone(&self.ctx)
+    }
+
     fn selected_contact_item(&self) -> Option<&ContactItemType> {
         let index = self.list_state.selected()?;
         let contact = self.contacts.get(index)?;

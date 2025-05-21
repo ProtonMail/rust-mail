@@ -14,6 +14,8 @@ use crate::app_model::path_select_popup::PathSelectPopup;
 use crate::keychain::AppKeyChain;
 use crate::messages::Messages;
 use anyhow::anyhow;
+use futures::FutureExt;
+use proton_core_common::OnSessionDeletedResponse;
 use proton_mail_common::MailContext;
 use proton_mail_common::context::EventPollMode;
 use ratatui::crossterm::event::{Event, KeyCode, KeyEventKind};
@@ -193,7 +195,25 @@ impl AppModel {
 
 impl Model<Messages> for AppModel {
     fn on_ready(&mut self) -> Command<Messages> {
-        self.state.on_state_enter()
+        let ready_cmd = self.state.on_state_enter();
+
+        let ctx = self.context.clone();
+        let session_observer_cmd = Command::background_task(move |sender| {
+            async move {
+                ctx.core_context().on_session_deleted(move |_, user_id| {
+                    let sender = sender.clone();
+                    async move {
+                        let _ = sender
+                            .send_async(Command::message(Messages::SessionExpired(user_id)))
+                            .await;
+                        OnSessionDeletedResponse::Continue
+                    }
+                });
+            }
+            .boxed()
+        });
+
+        Command::batch([session_observer_cmd, ready_cmd])
     }
 
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
@@ -268,6 +288,31 @@ impl Model<Messages> for AppModel {
             Messages::SwitchAppState(new_state) => {
                 self.state = new_state;
                 return self.state.on_state_enter();
+            }
+            Messages::SessionExpired(ref user_id) => {
+                if let Some(ctx) = match &self.state {
+                    AppState::ContextInit(state) => Some(state.ctx()),
+                    AppState::Mailbox(state) => Some(state.ctx()),
+                    AppState::Contacts(state) => Some(state.ctx()),
+                    AppState::Background(state) => Some(state.ctx()),
+                    _ => None,
+                } {
+                    if *ctx.user_id() == *user_id {
+                        let ctx = self.context.clone();
+                        return Command::task(async move {
+                            match session_select::Model::new(&ctx).await {
+                                Ok(m) => Command::message(Messages::SwitchAppState(
+                                    AppState::SessionSelect(m),
+                                )),
+                                Err(e) => Command::message(Messages::DisplayError(
+                                    Some("Irrecoverable Error".to_string()),
+                                    anyhow!("Failed to load session select state: {e:?}"),
+                                )),
+                            }
+                        });
+                    }
+                }
+                message
             }
             _ => message,
         };

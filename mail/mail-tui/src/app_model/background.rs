@@ -40,6 +40,10 @@ impl Model {
         }
     }
 
+    pub fn ctx(&self) -> Arc<MailUserContext> {
+        Arc::clone(&self.user_context)
+    }
+
     fn start_background_execution(&mut self, ctx: Arc<MailContext>) -> Command<Messages> {
         if matches!(
             self.background_execution_state,
