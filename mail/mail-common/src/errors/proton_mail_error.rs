@@ -11,10 +11,10 @@ use crate::{
     draft::SaveError as DraftSaveError, draft::SendError as DraftSendError,
     draft::UndoError as DraftUndoError,
 };
+use proton_account_api::login::LoginError;
 use proton_account_api::signup::SignupError;
 use proton_action_queue::action::Action;
 use proton_action_queue::queue::ActionError as InternalActionError;
-use proton_core_api::login::LoginError;
 use proton_core_api::service::ApiServiceError;
 use proton_core_common::ContactError;
 use proton_core_common::device_registration::RegisteredDeviceTaskError;

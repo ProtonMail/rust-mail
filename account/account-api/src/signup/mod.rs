@@ -1,15 +1,13 @@
 use crate::countries::{COUNTRIES, Country};
 use crate::prelude::{Address, User};
 use crate::signup::state::{Recovery, StateKind, Username};
-use crate::store::{BoxStore, DynStore};
 use crate::{AccountApi, ApiError};
+use proton_core_api::store::{DynStore, StoreError};
 use proton_crypto_account::errors::{AccountCryptoError, SKLError};
 use proton_crypto_account::{proton_crypto::CryptoError, salts::SaltError};
 use state::State;
 use std::fmt::Debug;
-use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::RwLock;
 
 pub mod state;
 
@@ -45,11 +43,11 @@ pub enum SignupError {
 
     /// The auth info could not be set in the store.
     #[error("SetAuthInfo failed: {0}")]
-    SetAuthInfoFailed(String),
+    SetAuthInfoFailed(StoreError),
 
     /// The user data could not be set in the store.
     #[error("SetUserData failed: {0}")]
-    SetUserDataFailed(String),
+    SetUserDataFailed(StoreError),
 
     /// The requested operation is not valid in the current state of the flow.
     #[error("Operation is not valid in the current state")]
@@ -97,8 +95,7 @@ pub struct SignupFlow {
 
 impl SignupFlow {
     /// Create a new signup flow, implicitly fetching available domains.
-    pub async fn new(client: muon::Client, store: BoxStore) -> Result<Self, SignupError> {
-        let store = Arc::new(RwLock::new(store));
+    pub async fn new(client: muon::Client, store: DynStore) -> Result<Self, SignupError> {
         let domains = client.get_available_domains(None).await?.domains;
         let countries = COUNTRIES.to_owned();
         let state = vec![State::new(client)];

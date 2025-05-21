@@ -24,6 +24,9 @@ sql = ["proton-core-api/sql", "proton-mail-api/sql"]
 name = "demo"
 required-features = ["demo"]
 
+[[example]]
+name = "context_reuse"
+
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }

@@ -10,6 +10,7 @@ bitflags = { workspace = true, features = ["serde"] }
 bytes = { workspace = true }
 indexmap = { workspace = true }
 muon = { workspace = true }
+proton-account-api = { workspace = true }
 proton-core-api = { workspace = true }
 proton-crypto-inbox = { workspace = true }
 serde = { workspace = true }

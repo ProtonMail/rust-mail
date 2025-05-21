@@ -9,14 +9,18 @@ use crate::signup::state::Recovery;
 use crate::signup::state::StateResult;
 use crate::signup::state::Username;
 use crate::signup::state::complete::Complete;
-use crate::store::AuthInfo;
-use crate::store::DynStore;
-use crate::store::UserData;
 use derive_more::Display;
 use futures::TryFutureExt;
 use muon::Client;
 use muon::client::flow::LoginExtraInfo;
 use muon::client::flow::LoginFlow;
+use proton_core_api::auth::UserKeySecret;
+use proton_core_api::services::proton::SessionId;
+use proton_core_api::services::proton::UserId;
+use proton_core_api::store::AuthInfo;
+use proton_core_api::store::DynStore;
+use proton_core_api::store::TfaMode;
+use proton_core_api::store::UserData;
 use proton_crypto_account::keys::KeyFlag;
 use proton_crypto_account::keys::KeyId;
 use proton_crypto_account::keys::LocalAddressKey;
@@ -68,7 +72,7 @@ impl WantCreate {
             .map_err(|_| SignupError::AccountCreationFailed)
             .await?;
 
-        store.write().await.set_name_or_addr(&user.email).await;
+        store.write().await.set_name_or_addr(&user.email);
 
         let flow = (self.client.clone().auth())
             .login_with_extra(&user.email, &self.password, LoginExtraInfo::default())
@@ -79,17 +83,21 @@ impl WantCreate {
                 info!("Login successful after signup");
 
                 let info = AuthInfo {
-                    user_id: user.id.clone(),
-                    session_id: data.session_id,
-                    password_mode: data.password_mode,
+                    user_id: UserId::from(user.id.clone()),
+                    session_id: SessionId::from(data.session_id),
+                    tfa_mode: TfaMode {
+                        totp: false,
+                        fido: false,
+                    },
+                    mbp_mode: data.password_mode.into(),
                 };
 
                 store
                     .write()
                     .await
                     .set_auth_info(info)
-                    .await
-                    .map_err(SignupError::SetAuthInfoFailed)?;
+                    .map_err(SignupError::SetAuthInfoFailed)
+                    .await?;
 
                 client
             }
@@ -124,7 +132,7 @@ impl WantCreate {
             username: user.name.clone().unwrap_or_default(),
             display_name: user.display_name.clone().unwrap_or_default(),
             primary_addr: addr.email.clone(),
-            key_secret,
+            key_secret: UserKeySecret(key_secret),
         };
 
         store

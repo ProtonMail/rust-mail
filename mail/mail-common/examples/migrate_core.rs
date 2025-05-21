@@ -4,40 +4,53 @@ use proton_core_api::auth::UserKeySecret;
 use proton_core_api::services::proton::muon::client::flow::{LoginExtraInfo, LoginFlowData};
 use proton_core_api::session::{Config, CoreSession as _};
 use proton_core_api::store::UserData;
-use proton_core_common::Context;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::models::Label;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain, KeyChainExt};
+use proton_mail_common::MailContext;
+use proton_mail_common::context::{EventPollMode, ShouldInitializeMailUserContext};
 use secrecy::SecretString;
 use tempdir::TempDir;
-use tracing::Level;
+use tracing::level_filters::LevelFilter;
+use tracing::{Level, info};
+use tracing_subscriber::EnvFilter;
 
-async fn prepare_context(dir: &TempDir) -> (Arc<Context>, Arc<dyn KeyChain>) {
-    let session_db_dir = dir.path().join("sessions");
-    let user_db_dir = dir.path().join("users");
-    let cache_dir = dir.path().join("cache");
+async fn prepare_context(tmp_dir: &TempDir) -> (Arc<MailContext>, Arc<dyn KeyChain>) {
+    let env_filter = EnvFilter::builder()
+        .with_default_directive(LevelFilter::TRACE.into())
+        .parse_lossy(
+            "info,proton_sqlite3=trace,\
+                    proton_core_common=trace,proton_mail_common=trace,\
+                    proton_event_loop=trace,proton_core_api=trace,\
+                    proton_action_queue=trace,proton_mail_api=trace,\
+                    stash=error",
+        );
+    tracing_subscriber::FmtSubscriber::builder()
+        .with_env_filter(env_filter)
+        .init();
+    info!("TEMP_DIR = {tmp_dir:?}");
 
+    let keychain = InMemoryKeyChain::default();
     let key = SessionEncryptionKey::random();
-    let key_chain = InMemoryKeyChain::default();
-    key_chain.store(key).unwrap();
+    keychain.store(key).unwrap();
+    let keychain: Arc<dyn KeyChain> = Arc::new(keychain);
 
-    let key_chain: Arc<dyn KeyChain> = Arc::new(key_chain);
-    let config = Config::default();
-    let context = Context::new(
-        session_db_dir,
-        user_db_dir,
-        Arc::clone(&key_chain),
-        [],
-        config,
+    let context = MailContext::new(
+        tmp_dir.path().join("session"),
+        tmp_dir.path().join("user"),
+        tmp_dir.path().join("core_cache"),
+        tmp_dir.path().join("mail_cache"),
+        50 * 1204 * 1024,
         None,
-        cache_dir,
+        Arc::clone(&keychain),
+        Config::atlas(),
         None,
         None,
+        EventPollMode::Manual,
     )
     .await
     .unwrap();
-
-    (context, key_chain)
+    (context, keychain)
 }
 
 fn into_api_password_mode(
@@ -92,7 +105,7 @@ async fn main() {
         "Step 2. We simulate our ET app retrieving data from keychain + blob plist and decrypting it"
     );
     let user_id = ctx.user_id();
-    let account = ctx.core_account().await.unwrap();
+    let account = ctx.user_context().core_account().await.unwrap();
 
     let legacy_encryption_key = legacy_key_chain
         .load::<SessionEncryptionKey>()
@@ -143,7 +156,7 @@ async fn main() {
     let session = et_context.get_session(session_id).await.unwrap().unwrap();
 
     let ctx = et_context
-        .user_context_from_session(&session, None)
+        .user_context_from_session(&session, None, ShouldInitializeMailUserContext::Yes)
         .await
         .unwrap();
 

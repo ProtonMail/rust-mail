@@ -1,20 +1,18 @@
-use crate::auth::UserKeySecret;
 use crate::login::LoginError;
 use crate::login::state::complete::Complete;
 use crate::login::state::want_login::WantLogin;
 use crate::login::state::want_mbp::WantMbp;
 use crate::login::state::want_tfa::{TfaFlow, WantTfa};
-use crate::services::observability::{
-    ApiServiceObservabilityResponse, ObservabilityRecorder, metrics,
-};
-use crate::services::proton::Proton;
-use crate::services::proton::ProtonCore;
-use crate::services::proton::{SessionId, UserId};
-use crate::session::{Session, SessionParts};
-use crate::store::UserData;
 use derive_more::{Debug, From};
 use futures::TryFutureExt;
 use muon::client::flow::{AuthFlow, LoginExtraInfo, LoginFlowData};
+use proton_core_api::auth::UserKeySecret;
+use proton_core_api::services::observability::{
+    ApiServiceObservabilityResponse, ObservabilityRecorder, metrics,
+};
+use proton_core_api::services::proton::{ProtonCore, SessionId, UserId};
+use proton_core_api::session::{Session, SessionParts};
+use proton_core_api::store::UserData;
 use proton_crypto_account::keys::{LockedKey, UserKeys};
 use proton_crypto_account::proton_crypto;
 use proton_crypto_account::salts::{Salt, Salts};
@@ -86,7 +84,7 @@ impl State {
     /// the Legacy version of the application.
     pub async fn migrate(
         self,
-        client: Proton,
+        client: muon::Client,
         user: UserData,
         data: LoginFlowData,
         refresh_token: SecretString,
@@ -165,13 +163,13 @@ impl State {
 /// Public entrypoints for creating new states.
 impl State {
     /// Create a `WantLogin` state.
-    pub fn new(client: Proton, parts: SessionParts) -> Self {
+    pub fn new(client: muon::Client, parts: SessionParts) -> Self {
         Self::want_login(client.auth(), parts)
     }
 
     /// Create a `WantTfa` state from a resumed login flow.
     pub fn new_from_tfa(
-        client: Proton,
+        client: muon::Client,
         parts: SessionParts,
         user_id: UserId,
         session_id: SessionId,
@@ -189,7 +187,7 @@ impl State {
 
     /// Create a `WantMbp` state from a resumed login flow.
     pub fn new_from_mbp(
-        client: Proton,
+        client: muon::Client,
         parts: SessionParts,
         user_id: UserId,
         session_id: SessionId,
@@ -218,13 +216,13 @@ impl State {
     }
 
     /// Create a `WantMbp` state.
-    fn want_mbp(client: Proton, data: StateData) -> Self {
+    fn want_mbp(client: muon::Client, data: StateData) -> Self {
         WantMbp::new(client, data).into()
     }
 
     /// Finalize login flow for the migration.
     async fn finalize_migration(
-        client: Proton,
+        client: muon::Client,
         data: StateData,
         user_data: UserData,
     ) -> Result<Self, LoginError> {
@@ -239,7 +237,11 @@ impl State {
     }
 
     /// Attempt to finalize the login flow, transitioning to the `Complete` state if successful.
-    async fn finalize(client: Proton, data: StateData, pass: String) -> Result<Self, LoginError> {
+    async fn finalize(
+        client: muon::Client,
+        data: StateData,
+        pass: String,
+    ) -> Result<Self, LoginError> {
         // Initialize the crypto providers.
         let srp = proton_crypto::new_srp_provider();
         let pgp = proton_crypto::new_pgp_provider();

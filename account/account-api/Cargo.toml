@@ -7,12 +7,15 @@ categories = ["api-bindings"]
 [dependencies]
 # proton deps
 proton-crypto-account = { workspace = true }
+proton-core-api = { workspace = true }
+proton-core-common = { workspace = true } 
 muon = { workspace = true }
 
 # crates.io dependencies
 async-trait = { workspace = true }
 derive_more = { workspace = true }
 futures = { workspace = true }
+secrecy = { workspace = true }
 serde = { workspace = true }
 serde-aux = { workspace = true }
 serde_json = { workspace = true }
@@ -25,3 +28,10 @@ tracing = { workspace = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+[[example]]
+name = "user_id"

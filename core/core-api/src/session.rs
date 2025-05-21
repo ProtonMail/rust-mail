@@ -414,18 +414,20 @@ impl Session {
 }
 
 /// The parts of a session.
-pub(crate) struct SessionParts {
-    pub(crate) config: Arc<Config>,
-    pub(crate) store: DynStore,
-    pub(crate) status: StatusWatcher,
+pub struct SessionParts {
+    pub config: Arc<Config>,
+    pub store: DynStore,
+    pub status: StatusWatcher,
 }
 
 impl Session {
-    pub(crate) fn to_parts(&self) -> (Proton, SessionParts) {
+    #[must_use]
+    pub fn to_parts(&self) -> (Proton, SessionParts) {
         self.clone().into_parts()
     }
 
-    pub(crate) fn into_parts(self) -> (Proton, SessionParts) {
+    #[must_use]
+    pub fn into_parts(self) -> (Proton, SessionParts) {
         let parts = SessionParts {
             config: self.config,
             store: self.store,
@@ -435,7 +437,8 @@ impl Session {
         (self.client, parts)
     }
 
-    pub(crate) fn from_parts(client: Proton, parts: SessionParts) -> Self {
+    #[must_use]
+    pub fn from_parts(client: Proton, parts: SessionParts) -> Self {
         Self {
             client,
             config: parts.config,

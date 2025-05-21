@@ -1,16 +1,18 @@
+use proton_core_api::{
+    services::proton::{SessionId, UserId},
+    session::Session,
+};
+
 use crate::login::state::{HasSessionId, HasUserId, StateData};
-use crate::services::proton::Proton;
-use crate::services::proton::{SessionId, UserId};
-use crate::session::Session;
 
 /// Represents a completed login flow.
 pub struct Complete {
-    client: Proton,
+    client: muon::Client,
     data: StateData,
 }
 
 impl Complete {
-    pub fn new(client: Proton, data: StateData) -> Self {
+    pub fn new(client: muon::Client, data: StateData) -> Self {
         Self { client, data }
     }
 

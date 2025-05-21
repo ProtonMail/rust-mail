@@ -3,11 +3,11 @@ use crate::signup::state::want_create::WantCreate;
 use crate::signup::state::want_password::WantPassword;
 use crate::signup::state::want_recovery::WantRecovery;
 use crate::signup::state::want_username::WantUsername;
-use crate::store::DynStore;
 use crate::{prelude::User, signup::SignupError};
 use complete::Complete;
 use derive_more::{Display, From, TryInto};
 use muon::Client;
+use proton_core_api::store::DynStore;
 
 mod complete;
 mod want_create;

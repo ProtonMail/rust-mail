@@ -11,7 +11,6 @@ pub mod auth;
 pub mod connection_status;
 pub mod consts;
 pub mod crypto_clock;
-pub mod login;
 pub mod service;
 pub mod services;
 pub mod session;
