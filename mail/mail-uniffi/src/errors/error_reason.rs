@@ -323,6 +323,7 @@ impl From<RealDraftCancelScheduleSendErrorReason> for DraftCancelScheduleSendErr
 /// information to the user.
 #[derive(Debug, UniffiEnum)]
 pub enum EventErrorReason {
+    Refresh,
     Subscriber,
 }
 
@@ -330,6 +331,7 @@ impl From<RealEventErrorReason> for EventErrorReason {
     fn from(reason: RealEventErrorReason) -> Self {
         match reason {
             RealEventErrorReason::Subscriber => EventErrorReason::Subscriber,
+            RealEventErrorReason::Refresh => EventErrorReason::Refresh,
         }
     }
 }
