@@ -90,7 +90,7 @@ mod tests {
 
     #[test]
     fn unknown() {
-        let (obj, errs) = CuType::from_str_ex("foobar", Value);
+        let (obj, msgs) = CuType::from_str_ex("foobar", Value);
 
         assert_eq!(Some(CuType::Unknown), obj);
 
@@ -101,7 +101,7 @@ mod tests {
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             }],
-            errs,
+            msgs,
         );
     }
 }
