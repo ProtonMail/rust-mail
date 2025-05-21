@@ -11,7 +11,6 @@ use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::Config;
 use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_api::verification::DynChallengeNotifier;
-use proton_core_common::UserDatabaseInitializer;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::models::LabelError;
 use proton_core_common::os::{KeyChain, KeyChainError};
@@ -19,6 +18,7 @@ use proton_core_common::{
     ContactError, Context, CoreAccountState, CoreContextError, CoreSessionState, KeyHandlingError,
     UserContext,
 };
+use proton_core_common::{OnSessionDeletedResponse, UserDatabaseInitializer};
 use proton_crypto_inbox::attachment::AttachmentEncryptionError;
 use proton_crypto_inbox::keys::EncryptionPreferencesError;
 use proton_event_loop::EventLoopError;
@@ -32,6 +32,7 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio::task::{JoinError, JoinHandle};
+use tracing::error;
 
 /// Whether we should initialize MailUserContext on creation
 #[derive(Debug, Clone, Copy)]
@@ -257,13 +258,31 @@ impl MailContext {
         )
         .await?;
 
-        Ok(Arc::new(Self {
+        let ctx = Arc::new(Self {
             core_context,
             mail_cache_path: mail_cache_path.into(),
             attachment_cache_size: cache_size,
             active_user_contexts: Mutex::new(HashMap::new()),
             event_poll_mode,
-        }))
+        });
+
+        let ctx_weak = Arc::downgrade(&ctx);
+
+        ctx.core_context.on_session_deleted(move |_, user_id| {
+            let ctx_weak = ctx_weak.clone();
+            async move {
+                let Some(ctx) = ctx_weak.upgrade() else {
+                    return OnSessionDeletedResponse::Terminate;
+                };
+
+                tracing::info!("Removing `{user_id}`, from active contexts");
+                ctx.active_user_contexts.lock().await.remove(&user_id);
+
+                OnSessionDeletedResponse::Continue
+            }
+        });
+
+        Ok(ctx)
     }
 
     /// Creates MailContext instance based on provided core Context.
@@ -612,6 +631,8 @@ impl MailContext {
     ///
     /// Returns an error if the database operation fails.
     pub async fn logout_account(&self, user_id: UserId) -> MailContextResult<()> {
+        tracing::info!("Logout account `{user_id}`");
+        self.active_user_contexts.lock().await.remove(&user_id);
         Ok(self.core_context.logout_account(user_id).await?)
     }
 
@@ -623,7 +644,7 @@ impl MailContext {
     /// first, which is non failing operations.
     ///
     pub async fn delete_account(&self, user_id: UserId) -> MailContextResult<()> {
-        tracing::warn!("Delete account `{user_id}`");
+        tracing::info!("Delete account `{user_id}`");
         self.active_user_contexts.lock().await.remove(&user_id);
         let mail_cache_path = self.mail_cache_path(&user_id);
 

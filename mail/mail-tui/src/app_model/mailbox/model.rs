@@ -95,6 +95,10 @@ impl Model {
         })
     }
 
+    pub fn ctx(&self) -> Arc<MailUserContext> {
+        Arc::clone(&self.ctx)
+    }
+
     fn create_background_worker(&mut self) -> Command<Messages> {
         let ctx = self.ctx.clone();
         if self.background_worker_initialized {

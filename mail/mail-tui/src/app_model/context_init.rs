@@ -26,6 +26,10 @@ impl Model {
             throbber_state: ThrobberState::default(),
         }
     }
+
+    pub fn ctx(&self) -> Arc<MailUserContext> {
+        Arc::clone(&self.ctx)
+    }
 }
 
 impl AppStateHandler for Model {

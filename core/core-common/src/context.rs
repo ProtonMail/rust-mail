@@ -316,7 +316,7 @@ impl Context {
             on_session_deletion(session_observer, sender).await;
         });
 
-        Ok(Arc::new_cyclic(|this| Self {
+        let ctx = Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             user_db_path,
             account_db_path,
@@ -331,7 +331,21 @@ impl Context {
             cancellation_token: CancellationToken::new(),
             task_service: BackgroundAwareTaskService::new(task_service),
             on_session_deleted_broadcast: broadcast_sender,
-        }))
+        });
+
+        let ctx_weak = ctx.this.clone();
+        ctx.on_session_deleted(move |_, user_id| {
+            let ctx_weak = ctx_weak.clone();
+            async move {
+                let Some(ctx) = ctx_weak.upgrade() else {
+                    return OnSessionDeletedResponse::Terminate;
+                };
+                ctx.active_user_contexts.lock().await.remove(&user_id);
+                OnSessionDeletedResponse::Continue
+            }
+        });
+
+        Ok(ctx)
     }
 
     /// Get all available accounts.
