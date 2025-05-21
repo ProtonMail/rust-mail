@@ -3,12 +3,10 @@ source: core/ical/tests/acceptance.rs
 ---
 ```
 VCalendar {
-    method: Some(
-        Publish,
-    ),
+    method: None,
     prodid: ProdId {
         value: Text(
-            "-//Google Inc//Google Calendar 70.9054//EN",
+            "-//Proton AG//ProtonCalendar 1.0.0//EN",
         ),
     },
     version: Two,
@@ -18,7 +16,7 @@ VCalendar {
             uid: Some(
                 Uid {
                     value: Text(
-                        "144B00A6-8BAD-4224-AB45-B4AC33891EFA",
+                        "e4466d34",
                     ),
                 },
             ),
@@ -27,24 +25,24 @@ VCalendar {
                     value: DateTime {
                         date: Date {
                             year: Year(
-                                2021,
+                                2025,
                             ),
                             month: Month(
-                                9,
+                                5,
                             ),
                             day: Day(
-                                3,
+                                20,
                             ),
                         },
                         time: Time {
                             hour: Hour(
-                                14,
+                                13,
                             ),
                             minute: Minute(
-                                47,
+                                42,
                             ),
                             second: Second(
-                                2,
+                                0,
                             ),
                         },
                         form: Utc,
@@ -57,13 +55,13 @@ VCalendar {
                         DateTime {
                             date: Date {
                                 year: Year(
-                                    2021,
+                                    2025,
                                 ),
                                 month: Month(
-                                    6,
+                                    5,
                                 ),
                                 day: Day(
-                                    22,
+                                    29,
                                 ),
                             },
                             time: Time {
@@ -71,7 +69,7 @@ VCalendar {
                                     14,
                                 ),
                                 minute: Minute(
-                                    45,
+                                    30,
                                 ),
                                 second: Second(
                                     0,
@@ -88,13 +86,13 @@ VCalendar {
                         DateTime {
                             date: Date {
                                 year: Year(
-                                    2021,
+                                    2025,
                                 ),
                                 month: Month(
-                                    6,
+                                    5,
                                 ),
                                 day: Day(
-                                    22,
+                                    29,
                                 ),
                             },
                             time: Time {
@@ -118,13 +116,7 @@ VCalendar {
             transp: Opaque,
             status: None,
             priority: None,
-            summary: Some(
-                Summary {
-                    value: Text(
-                        "Busy",
-                    ),
-                },
-            ),
+            summary: None,
             location: None,
             description: None,
             organizer: Some(
@@ -132,44 +124,29 @@ VCalendar {
                     address: Email(
                         EmailAddress {
                             value: Text(
-                                "aaaa@group.calendar.google.com",
-                            ),
-                        },
-                    ),
-                    cn: None,
-                },
-            ),
-            attendees: [
-                Attendee {
-                    address: Email(
-                        EmailAddress {
-                            value: Text(
-                                "adrien@gmail.com",
+                                "john@smith.com",
                             ),
                         },
                     ),
                     cn: Some(
                         Cn {
                             value: ParamValue {
-                                value: "Adrien Blanc",
-                                quote: false,
+                                value: "John Smith, MD",
+                                quote: true,
                             },
                         },
                     ),
-                    cutype: Some(
-                        Individual,
-                    ),
-                    role: Some(
-                        ReqParticipant,
-                    ),
-                    rsvp: None,
-                    x_pm_token: None,
                 },
-            ],
+            ),
+            attendees: [],
             rrule: None,
             exdate: None,
             duration: None,
-            sequence: None,
+            sequence: Some(
+                Sequence {
+                    value: 0,
+                },
+            ),
             recurrence_id: None,
             alarms: [],
         },
@@ -180,22 +157,10 @@ VCalendar {
 
 # messages
 
-warn: unknown property `X-WR-CALNAME`
- --> at 6:1..12
-  | when parsing `VCalendar` at 2:1
-
-warn: unknown property `X-WR-TIMEZONE`
- --> at 7:1..13
-  | when parsing `VCalendar` at 2:1
-
-error: unknown parameter `PARTSTAT`
- --> at 14:49..56
-  | when parsing `Attendee` at 14:9
-  | when parsing `VEvent` at 9:1
-  | when parsing `VCalendar` at 2:1
-
-warn: unknown parameter `X-NUM-GUESTS`
- --> at 15:9..20
-  | when parsing `Attendee` at 14:9
-  | when parsing `VEvent` at 9:1
+warn: non-conformant: param-values shouldn't contain escapes
+ --> at 8:24..23
+  | when parsing `ParamValue` at 8:14
+  | when parsing `Cn` at 8:14
+  | when parsing `Organizer` at 8:10
+  | when parsing `VEvent` at 5:1
   | when parsing `VCalendar` at 2:1

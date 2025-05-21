@@ -154,9 +154,9 @@ fn without_calscale() {
 
 /// Make sure we can parse various atypical and funny cases.
 ///
-/// Fixtures here were taken from the surgery dataset, but since we don't have
-/// the surgery logic here yet, what we do is that we simply parse the files and
-/// make sure the output looks reasonable enough.
+/// Fixtures here were taken (mostly) from the surgery dataset, but since we
+/// don't have the surgery logic here yet, what we do is that we simply parse
+/// the files and make sure the output looks reasonable enough.
 #[test_case("broken-attendee-1")]
 #[test_case("broken-attendee-1-email")]
 #[test_case("broken-organizer-broken-cn-non-strict")]
@@ -180,6 +180,7 @@ fn without_calscale() {
 #[test_case("missing-sequence")]
 #[test_case("multiple-exdates")]
 #[test_case("multiple-exdates-tz")]
+#[test_case("non-conformant-cn")]
 #[test_case("nuku-alofa-tz")]
 #[test_case("outside-uid")]
 #[test_case("tentative-status")]
