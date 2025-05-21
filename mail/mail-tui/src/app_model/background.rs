@@ -21,7 +21,7 @@ use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 
 pub type OnClose = Box<dyn Fn(Arc<MailUserContext>) -> Command<Messages> + Send + 'static>;
-pub struct Model {
+pub struct BackgroundModel {
     user_context: Arc<MailUserContext>,
     on_close: OnClose,
     background_execution_state: BackgroundExecutionState,
@@ -29,7 +29,7 @@ pub struct Model {
     stats: Option<BackgroundExecutionStats>,
 }
 
-impl Model {
+impl BackgroundModel {
     pub fn new(ctx: Arc<MailUserContext>, on_close: OnClose) -> Self {
         Self {
             user_context: ctx,
@@ -258,7 +258,7 @@ enum BackgroundExecutionState {
     Running(CancellationToken),
 }
 
-impl AppStateHandler for Model {
+impl AppStateHandler for BackgroundModel {
     fn on_state_enter(&mut self) -> Command<Messages> {
         Message::Init.into()
     }
@@ -371,5 +371,13 @@ impl AppStateHandler for Model {
                 frame.render_widget(Line::from("Background Execution: Running"), area);
             }
         }
+    }
+
+    fn help_options(&self) -> Vec<(&'static str, &'static str)> {
+        vec![
+            ("s", "Start Background Worker"),
+            ("t", "Stop Background Worker"),
+            ("q", "Exit"),
+        ]
     }
 }

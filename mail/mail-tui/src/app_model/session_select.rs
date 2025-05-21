@@ -23,12 +23,12 @@ pub enum Message {
     DeleteSuccess(String),
 }
 
-pub struct Model {
+pub struct SessionSelectModel {
     accounts: Vec<CoreAccount>,
     session_list_state: ScrollableListState,
 }
 
-impl Model {
+impl SessionSelectModel {
     pub async fn new(ctx: &MailContext) -> Result<Self, MailContextError> {
         let accounts = ctx.get_accounts().await?;
         let index = accounts
@@ -43,7 +43,7 @@ impl Model {
     }
 }
 
-impl AppStateHandler for Model {
+impl AppStateHandler for SessionSelectModel {
     fn on_state_enter(&mut self) -> Command<Messages> {
         Command::message(Message::Init.into())
     }
@@ -136,7 +136,8 @@ impl AppStateHandler for Model {
                                     account.remote_id
                                 );
                                 Command::message(Messages::SwitchAppState(
-                                    login::Model::with_email(account.name_or_addr.clone()).into(),
+                                    login::LoginModel::with_email(account.name_or_addr.clone())
+                                        .into(),
                                 ))
                             }
                             Some(sess) => {
@@ -148,7 +149,7 @@ impl AppStateHandler for Model {
                                     )
                                     .await
                                     .context("Error creating MailUserContext")?;
-                                let message = mailbox::Model::new(context).await?;
+                                let message = mailbox::MailboxModel::new(context).await?;
 
                                 let tok = &sess.account_id;
                                 debug!(
@@ -175,11 +176,11 @@ impl AppStateHandler for Model {
                 })
             }
             Message::NewAccount => {
-                Command::message(Messages::SwitchAppState(login::Model::new().into()))
+                Command::message(Messages::SwitchAppState(login::LoginModel::new().into()))
             }
             Message::Init => {
                 if self.accounts.is_empty() {
-                    Command::message(Messages::SwitchAppState(login::Model::new().into()))
+                    Command::message(Messages::SwitchAppState(login::LoginModel::new().into()))
                 } else {
                     Command::None
                 }
@@ -223,6 +224,16 @@ impl AppStateHandler for Model {
         );
     }
 
+    fn help_options(&self) -> Vec<(&'static str, &'static str)> {
+        vec![
+            ("k, ▲", "Go up"),
+            ("j, ▼", "Go down"),
+            ("enter", "Log in"),
+            ("N", "Log in with a new account"),
+            ("D", "Delete an accound and all of its info"),
+        ]
+    }
+
     fn view_help_bar(&mut self, frame: &mut Frame, area: Rect) {
         frame.render_widget(
             Line::from(vec![
@@ -246,8 +257,8 @@ impl AppStateHandler for Model {
     }
 }
 
-impl From<Model> for AppState {
-    fn from(value: Model) -> Self {
+impl From<SessionSelectModel> for AppState {
+    fn from(value: SessionSelectModel) -> Self {
         Self::SessionSelect(value)
     }
 }

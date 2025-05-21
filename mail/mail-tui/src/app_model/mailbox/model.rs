@@ -38,7 +38,7 @@ use std::sync::Arc;
 use throbber_widgets_tui::ThrobberState;
 use tokio::select;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 enum State {
     Syncing(ThrobberState),
@@ -52,7 +52,7 @@ impl State {
     }
 }
 
-pub struct Model {
+pub struct MailboxModel {
     ctx: Arc<MailUserContext>,
     mailbox: Mailbox,
     label: LabelWithCounters,
@@ -66,7 +66,7 @@ pub struct Model {
     background_worker_initialized: bool,
 }
 
-impl Model {
+impl MailboxModel {
     pub async fn new(ctx: Arc<MailUserContext>) -> MailContextResult<Self> {
         let stash = ctx.user_stash();
         let tether = stash.connection();
@@ -219,6 +219,7 @@ impl Model {
         self.mailbox = mbox;
         self.label = label;
         self.state = State::Messages(state);
+        tracing::info!("message viewopen");
         self.build_item_count_query()
     }
 
@@ -282,7 +283,7 @@ impl Model {
 
     fn open_contacts(&mut self) -> Command<Messages> {
         Command::message(Messages::SwitchAppState(AppState::Contacts(
-            crate::app_model::contacts::Model::new(self.ctx.clone()),
+            crate::app_model::contacts::ContactsModel::new(self.ctx.clone()),
         )))
     }
 
@@ -303,7 +304,7 @@ impl Model {
     }
 }
 
-impl AppStateHandler for Model {
+impl AppStateHandler for MailboxModel {
     fn on_state_enter(&mut self) -> Command<Messages> {
         Command::batch([
             self.create_background_worker(),
@@ -345,7 +346,7 @@ impl AppStateHandler for Model {
                 }
                 KeyCode::F(8) => {
                     return Command::Message(Messages::SwitchAppState(AppState::Background(
-                        crate::app_model::background::Model::new(
+                        crate::app_model::background::BackgroundModel::new(
                             self.ctx.clone(),
                             Box::new(|ctx| {
                                 Command::batch([
@@ -353,7 +354,7 @@ impl AppStateHandler for Model {
                                         "Loading mailbox ...".to_owned(),
                                     )),
                                     Command::task(async move {
-                                        let model = Model::new(ctx).await;
+                                        let model = MailboxModel::new(ctx).await;
                                         let message = match model {
                                             Ok(model) => Messages::SwitchAppState(model.into()),
                                             Err(e) => e.into(),
@@ -472,66 +473,45 @@ impl AppStateHandler for Model {
         }
     }
 
-    fn view_help_bar(&mut self, frame: &mut Frame, area: Rect) {
-        let line_1 = vec![
-            Span::from(" ▲: ").bold(),
-            Span::from("Up"),
-            Span::from(" ▼: ").bold(),
-            Span::from("Down"),
-            Span::from(" Enter: ").bold(),
-            Span::from("Open"),
-            Span::from(" Esc: ").bold(),
-            Span::from("Close"),
-            Span::from(" Tab: ").bold(),
-            Span::from("Toggle"),
-            Span::from(" S: ").bold(),
-            Span::from("Switch"),
-            Span::from(" M: ").bold(),
-            Span::from("Move"),
-            Span::from(" R: ").bold(),
-            Span::from("Read"),
-            Span::from(" U: ").bold(),
-            Span::from("Unread"),
-            Span::from(" l: ").bold(),
-            Span::from("Label"),
-            Span::from(" D: ").bold(),
-            Span::from("Delete"),
-            Span::from(" Crtl+N: ").bold(),
-            Span::from("New Msg."),
-            Span::from(" Crtl+A: ").bold(),
-            Span::from("Filter All"),
-            Span::from(" Crtl+R: ").bold(),
-            Span::from("Filter Read"),
-            Span::from(" Crtl+U: ").bold(),
-            Span::from("Filter Unread"),
-            Span::from(" /: ").bold(),
-            Span::from("Search"),
-        ];
-        let line_2 = vec![
-            Span::from(" Shift+▲: ").bold(),
-            Span::from("Msg. Up"),
-            Span::from(" Shift+▼: ").bold(),
-            Span::from("Msg. Down"),
-            Span::from(" Crtl+R: ").bold(),
-            Span::from("Reply Msg."),
-            Span::from(" Crtl+T: ").bold(),
-            Span::from("Reply All Msg."),
-            Span::from(" Crtl+F: ").bold(),
-            Span::from("Forward Msg."),
-            Span::from(" a ").bold(),
-            Span::from("Fetch all atts."),
-            Span::from(" C: ").bold(),
-            Span::from("Contacts"),
+    fn help_options(&self) -> Vec<(&'static str, &'static str)> {
+        let mut items = vec![
+            ("k, ▲", "Go up"),
+            ("j, ▼", "Go down"),
+            ("Tab", "Toggle"),
+            ("s", "Select a label or a folder"),
+            ("m", "Move the selected item"),
+            ("r", "Mark a message as read"),
+            ("u", "Mark a message as unread"),
+            ("l", "Label a message"),
+            ("d", "Delete a message permanently"),
+            ("Ctrl + N", "Create a new message"),
+            ("Ctrl + U", "Show only unread messages"),
+            ("Ctrl + R", "Show only read messages"),
+            ("Ctrl + A", "Show all messages"),
+            ("/", "Open the search bar"),
+            ("C", "Show the contact list"),
+            ("f/F", "Star/Unstar the selected item"),
+            ("h", "[DEBUG]: has more?"),
         ];
 
-        let [one, two] =
-            Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).areas(area);
-        frame.render_widget(Line::from(line_1), one);
-        frame.render_widget(Line::from(line_2), two);
+        self.state.help_options(&mut items);
+        if self.composer.is_some() {
+            Composer::help_options(&mut items);
+        }
+        if self.search.is_some() {
+            Search::help_options(&mut items);
+        }
+
+        info!(?items);
+
+        items
     }
 
     fn help_bar_lines(&self) -> u16 {
-        2
+        1
+    }
+    fn view_help_bar(&mut self, frame: &mut Frame, area: Rect) {
+        frame.render_widget(Line::from("Press F1 to display the help popup"), area);
     }
 
     fn view_status_bar(&mut self, frame: &mut Frame, area: Rect) {
@@ -617,10 +597,18 @@ impl State {
             }
         }
     }
+
+    pub fn help_options(&self, vec: &mut Vec<(&'static str, &'static str)>) {
+        match self {
+            State::Syncing(_) => (),
+            State::Conversations(s) => s.help_options(vec),
+            State::Messages(s) => s.help_options(vec),
+        }
+    }
 }
 
-impl From<Model> for AppState {
-    fn from(value: Model) -> Self {
+impl From<MailboxModel> for AppState {
+    fn from(value: MailboxModel) -> Self {
         Self::Mailbox(value)
     }
 }

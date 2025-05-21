@@ -21,6 +21,7 @@ use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use std::sync::Arc;
 use throbber_widgets_tui::ThrobberState;
+use tracing::info;
 
 use super::LabelAs;
 
@@ -333,6 +334,15 @@ impl ConversationsState {
             MessagesStatus::Ready(state) => {
                 state.view(frame, area);
             }
+        }
+    }
+
+    pub fn help_options(&self, vec: &mut Vec<(&'static str, &'static str)>) {
+        info!("This was called!");
+        if let MessagesStatus::Ready(message_state) = &self.messages {
+            message_state.help_options(vec);
+        } else {
+            vec.push(("E", "Permanently delete all messages here"));
         }
     }
 }

@@ -643,6 +643,25 @@ impl MessagesState {
             frame.render_stateful_widget(scrollable_table, table_area, &mut self.table_state);
         }
     }
+
+    pub fn help_options(&self, vec: &mut Vec<(&'static str, &'static str)>) {
+        if matches!(self.open_message, DecryptedMessageStatus::Success(_)) {
+            vec.extend_from_slice(&[
+                ("Shift + ▲ ", "Scroll up in a message"),
+                ("Shift + ▼ ", "Scroll down in a message"),
+            ]);
+        }
+        vec.extend_from_slice(&[
+            ("esc", "Close message"),
+            ("a", "Download all attachments"),
+            ("e", "Open composer"),
+            ("Ctrl + r", "Reply"),
+            ("Ctrl + R", "Reply to all"),
+            ("Ctrl + t", "Reply to all"),
+            ("Ctrl + f", "Forward this message"),
+            ("b/B", "block/unblock the sender of this message"),
+        ]);
+    }
 }
 
 pub struct DecryptedMessage {
