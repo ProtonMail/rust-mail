@@ -166,7 +166,7 @@ mod log;
 pub mod mail;
 
 #[cfg(target_os = "android")]
-pub mod tls;
+pub mod jni;
 pub mod version;
 
 uniffi::setup_scaffolding!("proton_mail_uniffi");
@@ -264,6 +264,10 @@ pub fn async_runtime() -> &'static Runtime {
         tokio::runtime::Builder::new_multi_thread()
             .enable_io()
             .enable_time()
+            .on_thread_start(|| {
+                #[cfg(target_os = "android")]
+                jni::register_thread_with_vm();
+            })
             .build()
             .expect("Failed to init runtime")
     })
@@ -310,6 +314,10 @@ pub fn async_runtime_slim() -> &'static Runtime {
             .max_blocking_threads(4)
             .enable_io()
             .enable_time()
+            .on_thread_start(|| {
+                #[cfg(target_os = "android")]
+                jni::register_thread_with_vm();
+            })
             .build()
             .expect("Failed to init runtime")
     })
