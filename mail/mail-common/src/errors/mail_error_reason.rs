@@ -251,7 +251,6 @@ pub enum DraftCancelScheduleSendErrorReason {
 /// information to the user.
 #[derive(Debug)]
 pub enum EventErrorReason {
-    Refresh,
     Subscriber,
 }
 

@@ -131,6 +131,11 @@ impl<T: CoreEventSubscriberConnectionProvider, E: CoreEvent> Subscriber<E>
         }
         .map_err(|e: StashError| SubscriberError::Other(anyhow!("Failed apply changes: {e}")))
     }
+
+    async fn on_refresh(&self, _: &E) -> Result<(), SubscriberError> {
+        // For now whole refresh is implemented on MailUserContext
+        Ok(())
+    }
 }
 
 async fn handle_address_event(

@@ -1,19 +1,33 @@
 use crate::MailUserContext;
 use crate::datatypes::MessageLabelsCount;
 use crate::models::default_location::IncomingDefaultLocation;
+use crate::models::{Conversation, MailSettings, Message, StoreLabelCounters};
 use crate::prefetch::PrefetchJob;
 use crate::user_context::events::conversations::handle_conversation_events;
 use crate::user_context::events::labels::handle_label_events;
 use crate::user_context::events::messages::handle_message_events;
 use crate::{datatypes::ConversationLabelsCount, events::MailEvent};
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use async_trait::async_trait;
-use proton_core_common::datatypes::SystemLabel;
+use proton_core_common::datatypes::{InitializedComponentState, SystemLabel};
+use proton_core_common::models::{
+    Address, Contact, InitializedComponent, Label, ModelExtension, User, UserSettings,
+};
+use proton_core_common::nuke_utils::clear_dir_safe;
 use proton_event_loop::subscriber::{Subscriber, SubscriberError};
-use std::sync::Weak;
+use std::sync::{Arc, Weak};
 use tracing::{debug, error};
 
 pub struct MailEventSubscriber(Weak<MailUserContext>);
+
+impl MailEventSubscriber {
+    pub fn inner(&self) -> Result<Arc<MailUserContext>, anyhow::Error> {
+        match self.0.upgrade() {
+            Some(ctx) => Ok(ctx),
+            None => bail!("MailUserContext no longer alive"),
+        }
+    }
+}
 
 impl MailEventSubscriber {
     pub fn new(ctx: Weak<MailUserContext>) -> Self {
@@ -26,12 +40,9 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
     fn name(&self) -> &'static str {
         "proton-mail-event-subscriber"
     }
+
     async fn on_events(&self, events: &mut [MailEvent]) -> Result<(), SubscriberError> {
-        let ctx = self.0.upgrade().ok_or_else(|| {
-            let e = anyhow!("MailUserContext no longer alive");
-            error!("{e:?}");
-            SubscriberError::Other(e)
-        })?;
+        let ctx = self.inner()?;
         debug!("Handling {} mail events", events.len());
 
         // This needs to happen outside of the transaction because queuing an action creates a
@@ -128,6 +139,101 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
         if queue_incoming_default {
             IncomingDefaultLocation::action_resync(ctx.action_queue()).await;
         }
+
+        Ok(())
+    }
+
+    async fn on_refresh(&self, _event: &MailEvent) -> Result<(), SubscriberError> {
+        let ctx = self.inner()?;
+        debug!("Handling refresh event");
+        let mut tether = ctx.user_context.stash().connection();
+        tether
+            .tx::<_, _, SubscriberError>(async |tx| {
+                // Mail
+                Label::delete_all(tx).await?;
+                Conversation::delete_all(tx).await?;
+                Message::delete_all(tx).await?;
+                MailSettings::delete_all(tx).await?;
+                // Core
+                User::delete_all(tx).await?;
+                UserSettings::delete_all(tx).await?;
+                Contact::delete_all(tx).await?;
+                Address::delete_all(tx).await?;
+
+                Ok(())
+            })
+            .await
+            .map_err(|e| {
+                let e = anyhow!("Failed to clear database entries: {e}");
+                error!("{e:?}");
+                SubscriberError::Other(e)
+            })?;
+
+        let user_id = ctx.user_id();
+        let mail_cache = ctx.mail_context().mail_cache_path(user_id);
+        // Clear all cached data as it no longer is
+        // assigned to the correct items in database.
+        // The folder structure will remain in place.
+        clear_dir_safe(mail_cache).await;
+
+        // Reset initialization state so we are able
+        // to run an initialization again
+        //
+        // Mail
+        InitializedComponent::set_state(
+            Label::INIT_KEY,
+            InitializedComponentState::NotInitialized,
+            &mut tether,
+        )
+        .await?;
+        InitializedComponent::set_state(
+            StoreLabelCounters::INIT_KEY,
+            InitializedComponentState::NotInitialized,
+            &mut tether,
+        )
+        .await?;
+        InitializedComponent::set_state(
+            MailSettings::INIT_KEY,
+            InitializedComponentState::NotInitialized,
+            &mut tether,
+        )
+        .await?;
+        InitializedComponent::set_state(
+            IncomingDefaultLocation::INIT_KEY,
+            InitializedComponentState::NotInitialized,
+            &mut tether,
+        )
+        .await?;
+        // Core
+        //
+        // User and UserSettings have common initialization path
+        InitializedComponent::set_state(
+            User::INIT_KEY,
+            InitializedComponentState::NotInitialized,
+            &mut tether,
+        )
+        .await?;
+        InitializedComponent::set_state(
+            Contact::INIT_KEY,
+            InitializedComponentState::NotInitialized,
+            &mut tether,
+        )
+        .await?;
+        InitializedComponent::set_state(
+            Address::INIT_KEY,
+            InitializedComponentState::NotInitialized,
+            &mut tether,
+        )
+        .await?;
+
+        // And run the initialization again
+        MailUserContext::initialize_async(ctx.as_arc())
+            .await
+            .map_err(|e| {
+                let e = anyhow!("Failed to re-initialize MailUserContext: {e}");
+                error!("{e:?}");
+                SubscriberError::Other(e)
+            })?;
 
         Ok(())
     }

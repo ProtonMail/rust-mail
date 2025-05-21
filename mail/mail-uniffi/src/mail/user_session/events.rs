@@ -78,9 +78,6 @@ impl MailUserSession {
                     let err = if let Some(details) = err.as_action_error::<EventPoll>() {
                         match details {
                             ActionError::Action(e) => match e {
-                                ActionEventLoopError::EventLoop(EventLoopError::Refresh) => {
-                                    EventError::Reason(EventErrorReason::Refresh)
-                                }
                                 ActionEventLoopError::EventLoop(EventLoopError::Subscriber(
                                     _,
                                     _,

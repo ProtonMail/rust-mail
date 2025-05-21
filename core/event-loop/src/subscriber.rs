@@ -31,6 +31,12 @@ pub enum SubscriberError {
     StashError(#[from] StashError),
 }
 
+impl From<AnyhowError> for SubscriberError {
+    fn from(value: AnyhowError) -> Self {
+        Self::Other(value)
+    }
+}
+
 /// Subscriber traits allow anyone to access the events from the event loop.
 #[async_trait]
 pub trait Subscriber<T: Event>: Send + Sync {
@@ -40,5 +46,6 @@ pub trait Subscriber<T: Event>: Send + Sync {
     /// Handle incoming events.
     async fn on_events(&self, event: &mut [T]) -> Result<(), SubscriberError>;
 
-    // async fn on_refresh(&self) -> Result<(), SubscriberError>;
+    /// Handle refresh event
+    async fn on_refresh(&self, event: &T) -> Result<(), SubscriberError>;
 }
