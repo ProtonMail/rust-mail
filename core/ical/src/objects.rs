@@ -113,3 +113,9 @@ pub struct Property;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Value;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Kind {
+    Component,
+    Property,
+}

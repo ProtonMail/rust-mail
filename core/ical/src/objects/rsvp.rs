@@ -90,7 +90,7 @@ mod tests {
     #[test]
     fn unknown() {
         let expected = vec![ReadMsg {
-            at: Some(Span::new(0, 6)),
+            at: Some(Span::new((1, 1), (1, 6))),
             msg: "unknown rsvp `foobar`".into(),
             kind: ReadMsgKind::Error,
             context: Vec::new(),

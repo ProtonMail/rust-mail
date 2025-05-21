@@ -227,7 +227,7 @@ impl IcsRead<Value> for Recur {
         }
 
         let Some(freq) = freq else {
-            r.error(Span::new(pos, pos + 1), "missing freq");
+            r.error(Span::one(pos), "missing freq");
             return None;
         };
 

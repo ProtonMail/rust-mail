@@ -89,12 +89,27 @@ impl VCalendar {
             };
 
             if !e.try_comp(&mut r, "VCALENDAR", &mut cal) {
-                e.burn(&mut r);
+                _ = e.burn(&mut r, Kind::Component);
             }
         }
 
-        let cal = cal.ok_or_else(|| Error::viol([Violation::MissingCalendar]))?;
         let msgs = r.finish();
+
+        let Some(cal) = cal else {
+            let msgs = if msgs.is_empty() {
+                vec![ReadMsg {
+                    at: None,
+                    msg: "missing calendar".into(),
+                    kind: ReadMsgKind::Error,
+                    context: Vec::new(),
+                }]
+            } else {
+                msgs
+            };
+
+            return Err(Error::InvalidIcs(msgs));
+        };
+
         let viols = cal.validate().into_viols();
 
         Ok(ParsedVCalendar { cal, msgs, viols })
@@ -177,7 +192,7 @@ impl IcsRead<Component> for VCalendar {
                 break;
             }
 
-            e.burn(r);
+            e.burn(r, Kind::Component)?;
         }
 
         let prodid = r.unwrap_prop("PRODID", prodid);
@@ -400,7 +415,7 @@ mod php {
                 ReadMsgKind::Warning => "Warning".into(),
                 ReadMsgKind::Error => "Error".into(),
             },
-            text: msg.to_string(&**src),
+            text: msg.to_string(),
         });
 
         let viols = viols.into_iter().map(|msg| PhpParseMessage {

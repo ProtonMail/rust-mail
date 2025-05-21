@@ -12,22 +12,16 @@ fn main() {
     });
 
     let out = VCalendar::from_bytes(&src).unwrap_or_else(|err| {
-        panic!("couldn't parse `{src_path}`: {err:?}");
+        panic!("couldn't parse `{src_path}`: {err}");
     });
 
-    if !out.msgs.is_empty() {
-        for msg in out.msgs {
-            println!("{}", msg.to_string(&*src));
-        }
-
+    for msg in out.msgs {
+        println!("{msg}");
         println!();
     }
 
-    if !out.viols.is_empty() {
-        for viol in out.viols {
-            println!("{viol}");
-        }
-
+    for viol in out.viols {
+        println!("{viol}");
         println!();
     }
 

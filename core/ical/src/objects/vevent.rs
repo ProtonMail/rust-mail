@@ -403,7 +403,7 @@ impl IcsRead<Component> for VEvent {
                 break;
             }
 
-            e.burn(r);
+            e.burn(r, Kind::Component)?;
         }
 
         let uid = r.unwrap_prop("UID", uid);
