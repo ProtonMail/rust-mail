@@ -152,7 +152,7 @@ VCalendar {
                         Cn {
                             value: ParamValue {
                                 value: "Adrien Blanc",
-                                quoted: false,
+                                quote: false,
                             },
                         },
                     ),

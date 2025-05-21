@@ -150,7 +150,7 @@ VCalendar {
                         Cn {
                             value: ParamValue {
                                 value: "Also_not_email",
-                                quoted: false,
+                                quote: false,
                             },
                         },
                     ),
@@ -169,7 +169,7 @@ VCalendar {
                         Cn {
                             value: ParamValue {
                                 value: "calendar-user-pentest1@protonmail.com",
-                                quoted: false,
+                                quote: false,
                             },
                         },
                     ),

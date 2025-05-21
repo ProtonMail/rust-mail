@@ -184,7 +184,7 @@ VCalendar {
                         Cn {
                             value: ParamValue {
                                 value: "Email Notifications",
-                                quoted: false,
+                                quote: false,
                             },
                         },
                     ),
@@ -203,7 +203,7 @@ VCalendar {
                         Cn {
                             value: ParamValue {
                                 value: "calendaruser@pm.me",
-                                quoted: false,
+                                quote: false,
                             },
                         },
                     ),
@@ -232,7 +232,7 @@ VCalendar {
                         Cn {
                             value: ParamValue {
                                 value: "calendar-user-pentest1@protonmail.com",
-                                quoted: false,
+                                quote: false,
                             },
                         },
                     ),
