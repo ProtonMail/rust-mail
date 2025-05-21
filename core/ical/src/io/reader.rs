@@ -723,6 +723,11 @@ impl ReadEntry {
     }
 
     /// Throws the "unknown property / component / ..." error and recovers.
+    ///
+    /// Returns `Some` if caller can continue and `None` if caller should jump
+    /// back to _its_ caller; this happens when we detect that the caller cannot
+    /// possibly recover from this case on its own (e.g. some crucial
+    /// information is missing from the input data).
     #[must_use]
     pub fn burn(self, r: &mut IcsReader, kind: Kind) -> Option<()> {
         match self {
