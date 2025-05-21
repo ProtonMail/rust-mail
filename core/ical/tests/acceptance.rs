@@ -133,6 +133,8 @@ fn without_calscale() {
 #[test_case("nuku-alofa-tz")]
 #[test_case("outside-uid")]
 #[test_case("tentative-status")]
+#[test_case("unexpected-newline-1")]
+#[test_case("unexpected-newline-2")]
 #[test_case("upper-case-status")]
 fn atypical_case(name: &str) {
     let dir = Path::new("acceptance").join("atypical-cases").join(name);

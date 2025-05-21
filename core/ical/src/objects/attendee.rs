@@ -88,7 +88,7 @@ impl IcsRead<Property> for Attendee {
                 break;
             }
 
-            e.burn(r);
+            e.burn(r, Kind::Property)?;
         }
 
         Some(Self {

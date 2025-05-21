@@ -89,7 +89,7 @@ impl VCalendar {
             };
 
             if !e.try_comp(&mut r, "VCALENDAR", &mut cal) {
-                e.burn(&mut r);
+                _ = e.burn(&mut r, Kind::Component);
             }
         }
 
@@ -192,7 +192,7 @@ impl IcsRead<Component> for VCalendar {
                 break;
             }
 
-            e.burn(r);
+            e.burn(r, Kind::Component)?;
         }
 
         let prodid = r.unwrap_prop("PRODID", prodid);

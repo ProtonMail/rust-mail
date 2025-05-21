@@ -15,19 +15,13 @@ fn main() {
         panic!("couldn't parse `{src_path}`: {err}");
     });
 
-    if !out.msgs.is_empty() {
-        for msg in out.msgs {
-            println!("{msg}");
-        }
-
+    for msg in out.msgs {
+        println!("{msg}");
         println!();
     }
 
-    if !out.viols.is_empty() {
-        for viol in out.viols {
-            println!("{viol}");
-        }
-
+    for viol in out.viols {
+        println!("{viol}");
         println!();
     }
 

@@ -395,9 +395,13 @@ impl<'a> IcsReader<'a> {
     }
 
     /// Infers what kind of thing is in front of us (a component, a property,
-    /// etc.), eats it, and returns it.
+    /// etc.) and returns it.
     #[must_use]
     pub fn entry(&mut self) -> Option<ReadEntry> {
+        if self.peek() == Some('\n') {
+            return Some(ReadEntry::Newline);
+        }
+
         if self.try_eat(':').is_some() {
             return Some(ReadEntry::Value);
         }
@@ -471,7 +475,7 @@ impl<'a> IcsReader<'a> {
             });
 
             if let Some(entry) = entry {
-                entry.burn(self);
+                entry.burn(self, Kind::Property)?;
             } else {
                 break;
             }
@@ -574,6 +578,9 @@ pub enum ReadEntry {
 
     /// Parameter's value, as in `:something`.
     Value,
+
+    /// Newline character (`\n`), used for error recovery.
+    Newline,
 }
 
 impl ReadEntry {
@@ -716,7 +723,8 @@ impl ReadEntry {
     }
 
     /// Throws the "unknown property / component / ..." error and recovers.
-    pub fn burn(self, r: &mut IcsReader) {
+    #[must_use]
+    pub fn burn(self, r: &mut IcsReader, kind: Kind) -> Option<()> {
         match self {
             ReadEntry::Comp { name } => {
                 r.error(name.span, format!("unknown component `{}`", name.value));
@@ -729,12 +737,14 @@ impl ReadEntry {
                                 return Some(());
                             }
 
-                            e.burn(r);
+                            e.burn(r, kind)?;
                         }
 
                         None::<()>
                     })
                 });
+
+                Some(())
             }
 
             ReadEntry::CompEnd { name } => {
@@ -742,6 +752,8 @@ impl ReadEntry {
 
                 // No need to recover, the entire `END:SOMETHING` part has been
                 // already read
+
+                Some(())
             }
 
             ReadEntry::Prop { name } => {
@@ -759,6 +771,8 @@ impl ReadEntry {
 
                 // Recover by skipping rest of the line
                 r.silently(IcsReader::rest);
+
+                Some(())
             }
 
             ReadEntry::Param { name } => {
@@ -783,6 +797,8 @@ impl ReadEntry {
                         _ = r.char();
                     }
                 });
+
+                Some(())
             }
 
             ReadEntry::Value => {
@@ -790,6 +806,47 @@ impl ReadEntry {
 
                 // Recover by skipping rest of the line
                 r.silently(IcsReader::rest);
+
+                Some(())
+            }
+
+            ReadEntry::Newline => {
+                // Newline is always kinda unexpected in the sense that both of
+                // those are technically illegal cases:
+                //
+                // ```
+                // BEGIN:VEVENT
+                //
+                // DTSTART:20180101T120000
+                // ```
+                //
+                // ```
+                // ORGANIZER;CN=
+                // ```
+                //
+                // ... but the main difference between those is the first one
+                // is properly-recoverable (just ignore the empty line), while
+                // the other one is actually _missing_ a piece of information,
+                // forcing us to skip that entire parse branch.
+                //
+                // That's why in the first case we return `Some(())`, meaning
+                // "dear caller, feel free to continue", and the other one ends
+                // up on `None`, meaning "dear caller, give up".
+                match kind {
+                    Kind::Component => {
+                        r.warn(Span::one(r.pos().prev()), "unexpected newline");
+                        _ = r.eat('\n');
+                        Some(())
+                    }
+
+                    Kind::Property => {
+                        r.error(
+                            Span::one(r.pos().prev()),
+                            "unexpected newline, expecting property's value",
+                        );
+                        None
+                    }
+                }
             }
         }
     }
@@ -876,7 +933,7 @@ mod tests {
             END:VEVENT
         "});
 
-        r.entry().unwrap().burn(&mut r);
+        r.entry().unwrap().burn(&mut r, Kind::Component).unwrap();
 
         assert!(r.entry().is_none());
 
@@ -909,10 +966,10 @@ mod tests {
             X-TEST:six
         "});
 
-        r.entry().unwrap().burn(&mut r);
-        r.entry().unwrap().burn(&mut r);
-        r.entry().unwrap().burn(&mut r);
-        r.entry().unwrap().burn(&mut r);
+        r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
+        r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
+        r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
+        r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
 
         assert!(r.entry().is_none());
 
@@ -960,9 +1017,9 @@ mod tests {
             ;FOO=one;BAR=two-tree/four;ZAR=five
         "});
 
-        r.entry().unwrap().burn(&mut r);
-        r.entry().unwrap().burn(&mut r);
-        r.entry().unwrap().burn(&mut r);
+        r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
+        r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
+        r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
 
         assert!(r.entry().is_none());
 
