@@ -391,6 +391,7 @@ impl<'a> IcsReader<'a> {
     /// See [`Self::char()`] for the definition of line.
     #[must_use]
     pub fn rest(&mut self) -> String {
+        let pos = self.pos;
         let mut value = String::new();
 
         while let Some(ch) = self.char() {
@@ -417,7 +418,18 @@ impl<'a> IcsReader<'a> {
         // ```
         self.pos.prev_char = self.pos.prev_char.saturating_sub(1).max(1);
 
-        value
+        // Some providers include random whitespaces, e.g. `TRANSP: OPAQUE` -
+        // let's get rid of them to make downstream parsers simpler
+        if value.starts_with(' ') || value.ends_with(' ') {
+            self.warn(
+                Span::new(pos, self.pos.prev()),
+                "non-conformant: value has extra whitespaces around it",
+            );
+
+            value.trim().to_owned()
+        } else {
+            value
+        }
     }
 
     /// Infers what kind of thing is in front of us (a component, a property,

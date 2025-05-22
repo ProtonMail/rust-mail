@@ -136,6 +136,7 @@ fn without_calscale() {
 #[test_case("unexpected-newline-1")]
 #[test_case("unexpected-newline-2")]
 #[test_case("upper-case-status")]
+#[test_case("whitespaces")]
 fn atypical_case(name: &str) {
     let dir = Path::new("acceptance").join("atypical-cases").join(name);
     let src = fs::read(Path::new("tests").join(&dir).join("input.ics")).unwrap();
