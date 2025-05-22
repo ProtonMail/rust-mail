@@ -959,7 +959,7 @@ impl MailSession {
             user_ctx
                 .remove(&user_id)
                 .ok_or(Unexpected::Internal)?
-                .sign_out()
+                .logout_and_delete_data()
                 .map_err(RealProtonMailError::from)
                 .await
         })

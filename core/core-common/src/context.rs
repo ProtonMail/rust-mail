@@ -775,26 +775,23 @@ impl Context {
         Ok(())
     }
 
-    /// Logs out and removes an account, dropping associated data from user
-    /// database and renaming empty database file to include `.nuked` extension,
-    /// after which try to remove any remaining files from the hard drive
-    /// including archived databases and supplied caches.
+    /// Log out and delete all associated user data.
     ///
-    /// ### Errors
-    ///
-    /// Returns an error if db operation failed on removing account.
+    /// Unlike [`delete_account()`] it preserve the account metadata so that it still available
+    /// from the session picker.
     ///
     /// ### Notes
     ///
-    ///  Function assumes seperatnes between database files as in
+    ///  Function assumes separate database files for
     /// `Account` and `User` databases
     ///
-    pub async fn delete_account(
+    #[tracing::instrument(level=Level::DEBUG, skip(self,caches))]
+    pub async fn logout_and_delete_user_data(
         &self,
         user_id: UserId,
         caches: Vec<PathBuf>,
     ) -> CoreContextResult<()> {
-        tracing::warn!("Kill all background tasks for this user");
+        tracing::info!("Kill all background tasks for this user");
         self.cancel_user_tasks(&user_id).await;
 
         let session = self
@@ -804,7 +801,7 @@ impl Context {
             .find(|session| CoreSessionState::Authenticated == CoreSessionState::of(session));
 
         if let Some(session) = session {
-            tracing::warn!("Clear all user data from database");
+            tracing::info!("Clear all user data from database");
             if let Ok(user_ctx) = self.user_context_from_session(&session, None).await {
                 let tether = user_ctx.stash().connection();
 
@@ -814,25 +811,49 @@ impl Context {
             }
         }
 
-        tracing::warn!("Logout user");
+        tracing::info!("Logout user");
         if let Err(e) = self.logout_account(user_id.clone()).await {
             tracing::error!("Could not logout account, details: `{e}`");
         }
 
-        tracing::warn!("Remove user from active_contexts");
+        tracing::info!("Remove user from active_contexts");
         self.active_user_contexts.lock().await.remove(&user_id);
 
-        tracing::warn!("Archive & try to remove user database");
+        tracing::info!("Archive & try to remove user database");
         let user_db_location = self.user_db_path(&user_id);
         rename_database_files(&user_db_location).await;
         remove_or_clear_dir_safe(&user_db_location).await;
 
-        tracing::warn!("Clear user associated caches");
+        tracing::info!("Clear user associated caches");
         for cache_path in caches {
             remove_or_clear_dir_safe(cache_path).await;
         }
+        Ok(())
+    }
 
-        tracing::warn!("Remove account");
+    /// Logs out and removes an account, dropping associated data from user
+    /// database and renaming empty database file to include `.nuked` extension,
+    /// after which try to remove any remaining files from the hard drive
+    /// including archived databases and supplied caches.
+    ///
+    /// ### Notes
+    ///
+    /// Unlike [`logout_and_delete_user_data()`] it does not preserve the account metadata, and it
+    /// will no longer be available in the session picker.
+    ///
+    ///  Function assumes separate database files for
+    /// `Account` and `User` databases
+    ///
+    #[tracing::instrument(level=Level::DEBUG, skip(self,caches))]
+    pub async fn delete_account(
+        &self,
+        user_id: UserId,
+        caches: Vec<PathBuf>,
+    ) -> CoreContextResult<()> {
+        self.logout_and_delete_user_data(user_id.clone(), caches)
+            .await?;
+
+        tracing::info!("Remove account");
         let mut tether = self.account_stash().connection();
         tether
             .tx(async |tx| {
