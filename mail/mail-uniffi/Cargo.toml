@@ -5,8 +5,7 @@ edition.workspace = true
 publish = false
 
 [lib]
-crate-type = ["staticlib", "cdylib"]
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+crate-type = ["lib", "cdylib", "staticlib"]
 
 [dependencies]
 anyhow = { workspace = true }
@@ -19,14 +18,15 @@ itertools = { workspace = true }
 muon = { workspace = true }
 parking_lot = { workspace = true }
 proton-action-queue = { workspace = true }
+proton-account-api = { workspace = true }
 proton-core-api = { workspace = true }
 proton-mail-api = { workspace = true }
+proton-account-uniffi = { workspace = true }
 proton-core-common = { workspace = true }
 proton-crypto-account = { workspace = true }
 proton-event-loop = { workspace = true }
 proton-mail-common = { workspace = true, features = ["uniffi"] }
 proton-task-service = { workspace = true }
-proton-uniffi-macros = { workspace = true }
 proton-vcard = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -39,6 +39,8 @@ tracing = { workspace = true }
 tracing-appender = { workspace = true }
 tracing-subscriber = { workspace = true }
 uniffi = { workspace = true }
+uniffi-macros = { workspace = true }
+uniffi-runtime = { workspace = true }
 sqlite-watcher = { workspace = true }
 non-empty-string = { workspace = true }
 

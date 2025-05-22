@@ -4,7 +4,7 @@ use crate::mail::MailUserSession;
 use crate::mail::state::MailUserContextMap;
 use crate::{async_runtime, uniffi_async};
 use futures::TryFutureExt;
-use proton_core_api::login::Flow as CoreLoginFlow;
+use proton_core_api::login::LoginFlow as CoreLoginFlow;
 use proton_core_api::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_mail_common::MailContext;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;

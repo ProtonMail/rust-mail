@@ -190,80 +190,6 @@ impl ProtonCore for Proton {
             .into_body_json()?)
     }
 
-    async fn get_available_domains(
-        &self,
-        domain_type: Option<String>,
-    ) -> ApiServiceResult<GetAvailableDomainsResponse> {
-        Ok(GET!("{CORE_V4}/domains/available")
-            .query(serde_to_query(GetAvailableDomainsRequest { domain_type })?)
-            .send_with(self)
-            .await?
-            .ok()?
-            .into_body_json()?)
-    }
-
-    async fn check_username_availability(
-        &self,
-        name: String,
-        parse_domain: ParseDomain,
-        payment_info_token: Option<&str>,
-    ) -> ApiServiceResult<ResponseCode> {
-        let mut request = GET!("{CORE_V4}/users/available")
-            .query(serde_to_query(CheckUsernameRequest { name, parse_domain })?);
-        request = add_payment_header(request, payment_info_token);
-        Ok(request.send_with(self).await?.ok()?.into_body_json()?)
-    }
-
-    async fn check_external_username_availability(
-        &self,
-        name: String,
-        payment_info_token: Option<&str>,
-    ) -> ApiServiceResult<ResponseCode> {
-        let mut request = GET!("{CORE_V4}/users/availableExternal")
-            .query(serde_to_query(CheckExternalUsernameRequest { name })?);
-        request = add_payment_header(request, payment_info_token);
-        Ok(request.send_with(self).await?.ok()?.into_body_json()?)
-    }
-
-    async fn setup_new_nonsubuser_address(
-        &self,
-        request: PostSetupNewNonSubuserAddressRequest,
-    ) -> ApiServiceResult<PostSetupNewNonSubuserAddressResponse> {
-        Ok(POST!("{CORE_V4}/addresses/setup")
-            .body_json(request)?
-            .send_with(self)
-            .await?
-            .ok()?
-            .into_body_json()?)
-    }
-
-    async fn send_verification_code(
-        &self,
-        request: SendVerificationCodeRequest,
-    ) -> ApiServiceResult<ResponseCode> {
-        Ok(POST!("{CORE_V4}/users/code")
-            .body_json(request)?
-            .send_with(self)
-            .await?
-            .ok()?
-            .into_body_json()?)
-    }
-
-    async fn setup_keys_for_new_account(
-        &self,
-        user_init_flag: AsyncUserInitialization,
-        request: SetupKeysRequest,
-    ) -> ApiServiceResult<SetupKeysResponse> {
-        let user_init_flag: i32 = user_init_flag.into();
-        Ok(POST!("{CORE_V4}/keys/setup")
-            .query(serde_to_query(("AsyncUserInitialization", user_init_flag))?)
-            .body_json(request)?
-            .send_with(self)
-            .await?
-            .ok()?
-            .into_body_json()?)
-    }
-
     async fn get_labels_by_ids(
         &self,
         label_ids: Vec<LabelId>,
@@ -351,13 +277,5 @@ impl ProtonCore for Proton {
             .ok()?;
 
         Ok(())
-    }
-}
-
-fn add_payment_header(request: muon::ProtonRequest, token: Option<&str>) -> muon::ProtonRequest {
-    if let Some(token) = token {
-        request.header(("X-PM-Payment-Info-Token", token))
-    } else {
-        request
     }
 }

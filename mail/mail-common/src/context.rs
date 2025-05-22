@@ -1,10 +1,11 @@
 use crate::actions::MailActionError;
 use crate::{AppError, MailUserContext, draft};
 use futures::executor::block_on;
+use proton_account_api::signup::{SignupError, SignupFlow};
 use proton_action_queue::action::{Action, WriterGuardError};
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
 use proton_calendar_common::RsvpError;
-use proton_core_api::login::{Flow, LoginError};
+use proton_core_api::login::{LoginError, LoginFlow};
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::BuildError;
 use proton_core_api::services::proton::{SessionId, UserId};
@@ -90,6 +91,8 @@ pub enum MailContextError {
     Stash(#[from] StashError),
     #[error("Login Error: {0}")]
     Login(#[from] LoginError),
+    #[error("Signup Error: {0}")]
+    Signup(#[from] SignupError),
     #[error("API Error: {0}")]
     Api(#[from] ApiServiceError),
     #[error("Problem with loading contact: {0}")]
@@ -165,6 +168,7 @@ impl From<CoreContextError> for MailContextError {
             CoreContextError::SettingsMissing(id) => MailContextError::SettingsMissing(id),
             CoreContextError::Build(err) => MailContextError::Build(err),
             CoreContextError::Login(err) => MailContextError::Login(err),
+            CoreContextError::Signup(err) => MailContextError::Signup(err),
             CoreContextError::Api(err) => MailContextError::Api(err),
             CoreContextError::Crypto => MailContextError::Crypto,
             CoreContextError::KeyChain(err) => MailContextError::KeyChain(err),
@@ -310,7 +314,7 @@ impl MailContext {
     /// # Errors
     ///
     /// See [`Context::new_login_flow`].
-    pub async fn new_login_flow(&self) -> MailContextResult<Flow> {
+    pub async fn new_login_flow(&self) -> MailContextResult<LoginFlow> {
         Ok(self.core_context.new_login_flow().await?)
     }
 
@@ -334,13 +338,22 @@ impl MailContext {
         &self,
         user_id: UserId,
         session_id: SessionId,
-    ) -> MailContextResult<Flow> {
+    ) -> MailContextResult<LoginFlow> {
         let flow = self
             .core_context
             .resume_login_flow(user_id, session_id)
             .await?;
 
         Ok(flow)
+    }
+
+    /// Begin a signup flow.
+    ///
+    /// # Errors
+    ///
+    /// See [`Context::new_signup_flow`].
+    pub async fn new_signup_flow(&self) -> MailContextResult<SignupFlow> {
+        Ok(self.core_context.new_signup_flow().await?)
     }
 
     /// Create a new context from a login flow.
@@ -350,7 +363,7 @@ impl MailContext {
     /// the user database.
     pub async fn user_context_from_login_flow(
         self: &Arc<Self>,
-        login_flow: &mut Flow,
+        login_flow: &mut LoginFlow,
     ) -> MailContextResult<Arc<MailUserContext>> {
         let ctx = self
             .core_context

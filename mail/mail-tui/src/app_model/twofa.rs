@@ -5,7 +5,7 @@ use crate::messages::Messages::DismissBackgroundProgress;
 use crate::widgets::{TextInput, TextInputState};
 use anyhow::anyhow;
 use proton_mail_common::MailContext;
-use proton_mail_common::proton_mail_api::proton_core_api::login::{Flow, LoginError};
+use proton_mail_common::proton_mail_api::proton_core_api::login::{LoginError, LoginFlow};
 use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Flex;
 use ratatui::prelude::*;
@@ -14,17 +14,17 @@ use std::sync::Arc;
 pub enum Message {
     Abort,
     Submit,
-    TwoFASuccess(Flow),
-    TwoFAFailed(Flow, LoginError),
+    TwoFASuccess(LoginFlow),
+    TwoFAFailed(LoginFlow, LoginError),
 }
 
 pub struct TwoFaModel {
-    flow: Option<Flow>,
+    flow: Option<LoginFlow>,
     input_state: TextInputState,
 }
 
 impl TwoFaModel {
-    pub fn new(flow: Flow) -> Self {
+    pub fn new(flow: LoginFlow) -> Self {
         Self {
             flow: Some(flow),
             input_state: TextInputState::new().selected(true),

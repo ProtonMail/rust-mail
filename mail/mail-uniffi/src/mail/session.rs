@@ -11,6 +11,7 @@ use crate::{
     LiveQueryCallback, WatchHandle, async_runtime, async_runtime_slim, uniffi_async, watch_channel,
 };
 use futures::TryFutureExt;
+use proton_account_uniffi::signup::SignupFlow;
 use proton_core_common::OnSessionDeletedResponse;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::models::{AppSettings as RealAppSettings, PinProtection};
@@ -270,6 +271,21 @@ impl MailSession {
         })
         .await
         .map_err(LoginError::from)
+    }
+
+    /// Start new signup flow.
+    pub async fn new_signup_flow(&self) -> Result<Arc<SignupFlow>, UserSessionError> {
+        let mail_ctx = self.mail_ctx.clone();
+
+        uniffi_async::<_, RealProtonMailError, _>(async move {
+            mail_ctx
+                .new_signup_flow()
+                .await
+                .map(|flow| SignupFlow::new(flow))
+                .map_err(RealProtonMailError::from)
+        })
+        .await
+        .map_err(UserSessionError::from)
     }
 
     /// Get initialized user context from stored session.

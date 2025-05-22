@@ -1,7 +1,7 @@
 //! Core context contains all the necessary information to retrieve or create new accounts and sessions.
 
 use crate::action_queue::CoreActionError;
-use crate::auth_store::{AuthStore, DecryptExt};
+use crate::auth_store::{AuthStore, DecryptExt, new_account_store};
 use crate::datatypes::{
     LocalContactId, PasswordMode, StoredDevicePrivateKey, StoredDevicePublicKey, TfaStatus,
 };
@@ -20,14 +20,15 @@ use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{Error as AnyhowError, anyhow};
 use futures::TryFutureExt;
 use itertools::Itertools;
+use proton_account_api::signup::{SignupError, SignupFlow};
 use proton_action_queue::action::{Action, WriterGuardError};
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
-use proton_core_api::login::{Flow, LoginError};
+use proton_core_api::login::{LoginError, LoginFlow};
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::BuildError;
 use proton_core_api::services::proton::{SessionId, UserId};
-use proton_core_api::session::Config as ApiConfig;
 use proton_core_api::session::Session as ApiSession;
+use proton_core_api::session::{Config as ApiConfig, CoreSession as _};
 use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_api::verification::DynChallengeNotifier;
 use proton_crypto_account::keys::PGPDeviceKey;
@@ -58,6 +59,8 @@ pub enum CoreContextError {
     Build(#[from] BuildError),
     #[error("Login error: {0}")]
     Login(#[from] LoginError),
+    #[error("Signup error: {0}")]
+    Signup(#[from] SignupError),
     #[error("API error: {0}")]
     Api(#[from] ApiServiceError),
     #[error("A Cryptography error occurred")]
@@ -590,7 +593,7 @@ impl Context {
     /// # Errors
     ///
     /// Returns an error if there is no encryption key in the keychain.
-    pub async fn new_login_flow(&self) -> CoreContextResult<Flow> {
+    pub async fn new_login_flow(&self) -> CoreContextResult<LoginFlow> {
         // Ensure we have an encryption key
         let _ = self.get_encryption_key()?;
 
@@ -598,7 +601,7 @@ impl Context {
         let session = self.new_api_session(None, None).await?;
 
         // Create a new login flow
-        Ok(Flow::new(session))
+        Ok(LoginFlow::new(session))
     }
 
     /// Create a new login flow for an existing user.
@@ -616,7 +619,7 @@ impl Context {
         &self,
         user_id: UserId,
         session_id: SessionId,
-    ) -> CoreContextResult<Flow> {
+    ) -> CoreContextResult<LoginFlow> {
         let key = self.get_encryption_key()?;
         let tether = self.account_stash().connection();
 
@@ -635,14 +638,14 @@ impl Context {
             .map(|p| p.expose_secret().to_owned());
 
         match CoreSessionState::of(&session) {
-            CoreSessionState::NeedTfa => Ok(Flow::new_from_tfa(
+            CoreSessionState::NeedTfa => Ok(LoginFlow::new_from_tfa(
                 self.new_api_session(Some(&session), None).await?,
                 user_id,
                 session_id,
                 password,
             )),
 
-            CoreSessionState::NeedKey => Ok(Flow::new_from_mbp(
+            CoreSessionState::NeedKey => Ok(LoginFlow::new_from_mbp(
                 self.new_api_session(Some(&session), None).await?,
                 user_id,
                 session_id,
@@ -654,6 +657,27 @@ impl Context {
         }
     }
 
+    /// Begin a signup flow.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the flow could not be created.
+    pub async fn new_signup_flow(&self) -> CoreContextResult<SignupFlow> {
+        // Ensure we have an encryption key
+        let _ = self.get_encryption_key()?;
+
+        // Create a new API session
+        let session = self.new_api_session(None, None).await?;
+        let client = session.api().to_owned();
+        let store = session.store().to_owned();
+
+        // Wrap the store for compatibility.
+        let store = new_account_store(store);
+
+        // Create a new signup flow
+        Ok(SignupFlow::new(client, store).await?)
+    }
+
     /// Create a user context from a login flow.
     ///
     /// # Errors
@@ -663,7 +687,7 @@ impl Context {
     #[tracing::instrument(level=Level::DEBUG, skip_all)]
     pub async fn user_context_from_login_flow(
         &self,
-        flow: &mut Flow,
+        flow: &mut LoginFlow,
     ) -> CoreContextResult<Arc<UserContext>> {
         if !flow.is_logged_in() {
             return Err(CoreContextError::Other(anyhow!("invalid login state")));
@@ -925,11 +949,10 @@ impl Context {
     ) -> CoreContextResult<ApiSession> {
         let user_id = session.map(|s| &s.account_id).cloned();
         let session_id = session.map(|s| &s.remote_id).cloned();
-        let account_stash = self.account_stash();
+        let account_stash = self.account_stash().to_owned();
         let keychain = Arc::clone(&self.key_chain);
         let store = AuthStore::new(account_stash, keychain, user_id, session_id);
-        let tether = account_stash.connection();
-        let app_settings = AppSettings::get_or_default(&tether).await;
+        let app_settings = AppSettings::get_or_default(&self.account_stash().connection()).await;
         let mut builder = ApiSession::builder().with_store(store);
 
         if app_settings.use_alternative_routing {
@@ -937,10 +960,8 @@ impl Context {
             builder = builder.with_config(&self.api_config);
         } else {
             debug!("Alternative routing setting is disabled");
-            let api_config = self.api_config.clone().without_alternative_routing()?;
-
-            builder = builder.with_config(&api_config);
-        };
+            builder = builder.with_config(self.api_config.clone().without_alternative_routing()?);
+        }
 
         if let Some(status) = status {
             builder = builder.with_status(status);
