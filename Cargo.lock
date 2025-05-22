@@ -5038,6 +5038,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "proton-ical-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "proton-ical",
+]
+
+[[package]]
 name = "proton-mail-api"
 version = "0.5.0"
 dependencies = [
