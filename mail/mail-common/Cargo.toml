@@ -12,6 +12,7 @@ bytes = { workspace = true }
 non-empty-string = { workspace = true }
 chrono = { workspace = true }
 derive_more = { workspace = true, features = ["try_from"] }
+either = { workspace = true }
 file-format = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }

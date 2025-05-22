@@ -247,4 +247,9 @@ impl SyncedAddresses {
         }
         Ok(())
     }
+
+    #[must_use]
+    pub fn inner(self) -> Vec<Address> {
+        self.addresses
+    }
 }

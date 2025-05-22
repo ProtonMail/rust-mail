@@ -74,6 +74,12 @@ impl From<WriterGuardError> for MailActionError {
     }
 }
 
+impl From<anyhow::Error> for MailActionError {
+    fn from(value: anyhow::Error) -> Self {
+        Self::Other(value)
+    }
+}
+
 impl From<CoreActionError> for MailActionError {
     fn from(value: CoreActionError) -> Self {
         match value {

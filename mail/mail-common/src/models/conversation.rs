@@ -2194,6 +2194,36 @@ impl Conversation {
         Ok(conversations)
     }
 
+    /// Sync only messages metadata
+    ///
+    pub async fn sync_metadata<PM: ProtonMail>(
+        ids: Vec<ConversationId>,
+        api: &PM,
+        mut run_tx: impl RunTransaction,
+    ) -> Result<Vec<Self>, AppError> {
+        let remote_convs = api
+            .get_conversations(GetConversationsOptions {
+                ids: ids.into_iter().map_into().collect(),
+                ..Default::default()
+            })
+            .await?
+            .conversations;
+        let mut local_convs = Vec::with_capacity(remote_convs.len());
+
+        run_tx
+            .run_tx(async |tx| {
+                for conv in remote_convs {
+                    let mut conv = Self::from(conv);
+                    conv.save(tx).await?;
+                    local_convs.push(conv);
+                }
+                Ok(())
+            })
+            .await?;
+
+        Ok(local_convs)
+    }
+
     /// Synchronize the first `count` conversations of the label with `label_id`.
     ///
     /// # Parameters
@@ -2566,6 +2596,19 @@ impl Conversation {
         let res = MoveAction::finalize(all_move_to_actions, tether).await?;
         debug!("available move_to actions: {res:?}");
         Ok(res)
+    }
+
+    /// Count all local messages from this conversation
+    pub async fn count_local_messages(
+        local_id: LocalConversationId,
+        tether: &Tether,
+    ) -> Result<u64, StashError> {
+        Message::count(
+            "WHERE local_conversation_id == ? ORDER BY time ASC, display_order ASC",
+            params![local_id],
+            tether,
+        )
+        .await
     }
 
     /// Finds all the messages from this conversation

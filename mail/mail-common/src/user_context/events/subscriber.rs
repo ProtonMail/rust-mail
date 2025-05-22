@@ -1,21 +1,25 @@
-use crate::MailUserContext;
-use crate::datatypes::MessageLabelsCount;
+use crate::datatypes::{MessageLabelsCount, ReadFilter, ViewMode};
 use crate::models::default_location::IncomingDefaultLocation;
-use crate::models::{Conversation, MailSettings, Message, RollbackItem, StoreLabelCounters};
+use crate::models::{
+    ConversationScrollData, MailLabel, MailSettings, MessageScrollData, RollbackItem, ScrollCursor,
+    StoreLabelCounters,
+};
 use crate::prefetch::PrefetchJob;
 use crate::user_context::events::conversations::handle_conversation_events;
 use crate::user_context::events::labels::handle_label_events;
 use crate::user_context::events::messages::handle_message_events;
+use crate::{MailContextError, MailUserContext};
 use crate::{datatypes::ConversationLabelsCount, events::MailEvent};
 use anyhow::{anyhow, bail};
 use async_trait::async_trait;
-use proton_action_queue::db::StoredAction;
+use either::Either;
 use proton_core_common::datatypes::{InitializedComponentState, SystemLabel};
 use proton_core_common::models::{
-    Address, Contact, InitializedComponent, Label, ModelExtension, User, UserSettings,
+    Address, Contact, InitializedComponent, Label, ModelExtension, User,
 };
-use proton_core_common::nuke_utils::clear_dir_safe;
 use proton_event_loop::subscriber::{Subscriber, SubscriberError};
+use proton_task_service::AsyncTaskResult;
+use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use tracing::{debug, error};
 
@@ -144,93 +148,29 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
         Ok(())
     }
 
-    async fn on_refresh(&self, _event: &MailEvent) -> Result<(), SubscriberError> {
-        let ctx = self.inner()?;
+    async fn on_refresh(&self, event: &MailEvent) -> Result<(), SubscriberError> {
         debug!("Handling refresh event");
+        let ctx = self.inner()?;
+
+        match event.refresh {
+            0 => return Ok(()),
+            1 => refresh_mail(ctx.clone()).await?,
+            2 => refresh_core(ctx.clone()).await?,
+            255 => {
+                refresh_core(ctx.clone()).await?;
+                refresh_mail(ctx.clone()).await?;
+            }
+            e => {
+                error!("Unhandled refresh event: `{e}`");
+                return Err(SubscriberError::Other(anyhow!(
+                    "Unhandled refresh event: `{e}`"
+                )));
+            }
+        }
+
         let mut tether = ctx.user_context.stash().connection();
-        tether
-            .tx::<_, _, SubscriberError>(async |tx| {
-                // Mail
-                Label::delete_all(tx).await?;
-                Conversation::delete_all(tx).await?;
-                Message::delete_all(tx).await?;
-                MailSettings::delete_all(tx).await?;
-                RollbackItem::delete_all(tx).await?;
-                StoredAction::delete_all(tx).await?;
-
-                // Core
-                User::delete_all(tx).await?;
-                UserSettings::delete_all(tx).await?;
-                Contact::delete_all(tx).await?;
-                Address::delete_all(tx).await?;
-
-                Ok(())
-            })
-            .await
-            .map_err(|e| {
-                let e = anyhow!("Failed to clear database entries: {e}");
-                error!("{e:?}");
-                SubscriberError::Other(e)
-            })?;
-
-        let user_id = ctx.user_id();
-        let mail_cache = ctx.mail_context().mail_cache_path(user_id);
-        // Clear all cached data as it no longer is
-        // assigned to the correct items in database.
-        // The folder structure will remain in place.
-        clear_dir_safe(mail_cache).await;
-
-        // Reset initialization state so we are able
-        // to run an initialization again
-        //
-        // Mail
         InitializedComponent::set_state(
             MailUserContext::CONTEXT_INIT_KEY,
-            InitializedComponentState::NotInitialized,
-            &mut tether,
-        )
-        .await?;
-        InitializedComponent::set_state(
-            Label::INIT_KEY,
-            InitializedComponentState::NotInitialized,
-            &mut tether,
-        )
-        .await?;
-        InitializedComponent::set_state(
-            StoreLabelCounters::INIT_KEY,
-            InitializedComponentState::NotInitialized,
-            &mut tether,
-        )
-        .await?;
-        InitializedComponent::set_state(
-            MailSettings::INIT_KEY,
-            InitializedComponentState::NotInitialized,
-            &mut tether,
-        )
-        .await?;
-        InitializedComponent::set_state(
-            IncomingDefaultLocation::INIT_KEY,
-            InitializedComponentState::NotInitialized,
-            &mut tether,
-        )
-        .await?;
-        // Core
-        //
-        // User and UserSettings have common initialization path
-        InitializedComponent::set_state(
-            User::INIT_KEY,
-            InitializedComponentState::NotInitialized,
-            &mut tether,
-        )
-        .await?;
-        InitializedComponent::set_state(
-            Contact::INIT_KEY,
-            InitializedComponentState::NotInitialized,
-            &mut tether,
-        )
-        .await?;
-        InitializedComponent::set_state(
-            Address::INIT_KEY,
             InitializedComponentState::NotInitialized,
             &mut tether,
         )
@@ -247,4 +187,172 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
 
         Ok(())
     }
+}
+
+async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> {
+    debug!("Handling refresh event");
+    let api = ctx.api().clone();
+    let all_remote_labels = ctx.spawn(async move { Label::all_labels(&api).await });
+    let mut tether = ctx.user_context.stash().connection();
+    let mut all_local_labels: HashMap<_, _> = Label::all(&tether)
+        .await?
+        .into_iter()
+        .map(|label| (label.remote_id.clone(), label))
+        .collect();
+    let all_mail = SystemLabel::AllMail
+        .load(&tether)
+        .await?
+        .ok_or_else(|| anyhow!("All mail label is missing!"))?;
+    let scroll_cursor = match all_mail.view_mode(&tether).await? {
+        ViewMode::Conversations => {
+            Either::Left(ScrollCursor::<ConversationScrollData>::absolute_end(
+                all_mail.local_id.unwrap(),
+                ReadFilter::All,
+            ))
+        }
+        ViewMode::Messages => Either::Right(ScrollCursor::<MessageScrollData>::absolute_end(
+            all_mail.local_id.unwrap(),
+            ReadFilter::All,
+        )),
+    };
+    let AsyncTaskResult::Completed(Ok(all_remote_labels)) = all_remote_labels
+        .await
+        .map_err(|e| anyhow!("Failed to download remote labels: `{e}`"))?
+    else {
+        return Err(SubscriberError::Other(anyhow!(
+            "The task was cancelled, we need to run refresh again"
+        )));
+    };
+
+    for remote_label in all_remote_labels.iter() {
+        all_local_labels.remove(&remote_label.remote_id);
+    }
+
+    tether
+        .tx::<_, _, MailContextError>(async |tx| {
+            RollbackItem::delete_all(tx).await?;
+            ConversationScrollData::delete_all(tx).await?;
+            MessageScrollData::delete_all(tx).await?;
+
+            Label::sync_labels(tx, all_remote_labels).await?;
+
+            for removed_local_label in all_local_labels.into_values() {
+                removed_local_label.delete(tx).await?;
+            }
+
+            Ok(())
+        })
+        .await
+        .map_err(|e| {
+            let e = anyhow!("Failed to clear database entries: {e}");
+            error!("{e:?}");
+            SubscriberError::Other(e)
+        })?;
+
+    let jobs = match scroll_cursor {
+        // TODO: Maybe limit prefetch jobs to some reasonable number
+        Either::Left(conv_scroll_cursor) => conv_scroll_cursor
+            .visible_elements(&tether)
+            .await?
+            .into_iter()
+            .map(|conv| PrefetchJob::ConversationMeta(conv.local_id))
+            .collect(),
+        Either::Right(msg_scroll_cursor) => msg_scroll_cursor
+            .visible_elements(&tether)
+            .await?
+            .into_iter()
+            .filter_map(|msg| msg.local_id)
+            .map(PrefetchJob::MessageMeta)
+            .collect(),
+    };
+
+    // TODO: what on failure?
+    // We already commited transaction
+    ctx.queue_prefetch_jobs(jobs)
+        .await
+        .map_err(|e| anyhow!("Could not prefetch conversations: `{e}`"))?;
+
+    InitializedComponent::set_state(
+        StoreLabelCounters::INIT_KEY,
+        InitializedComponentState::NotInitialized,
+        &mut tether,
+    )
+    .await?;
+    InitializedComponent::set_state(
+        MailSettings::INIT_KEY,
+        InitializedComponentState::NotInitialized,
+        &mut tether,
+    )
+    .await?;
+    InitializedComponent::set_state(
+        IncomingDefaultLocation::INIT_KEY,
+        InitializedComponentState::NotInitialized,
+        &mut tether,
+    )
+    .await?;
+
+    Ok(())
+}
+
+async fn refresh_core(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> {
+    let api = ctx.api().clone();
+    let all_remote_addresses = ctx.spawn(async move { Address::sync(&api).await });
+    let mut tether = ctx.user_context.stash().connection();
+    let mut all_local_addresses: HashMap<_, _> = Address::all(&tether)
+        .await?
+        .into_iter()
+        .map(|addr| (addr.remote_id.clone(), addr))
+        .collect();
+    let AsyncTaskResult::Completed(Ok(all_remote_addresses)) = all_remote_addresses
+        .await
+        .map_err(|e| anyhow!("Failed to download remote addresses: `{e}`"))?
+    else {
+        return Err(SubscriberError::Other(anyhow!(
+            "The task was cancelled, we need to run refresh again"
+        )));
+    };
+    let all_remote_addresses = all_remote_addresses.inner();
+
+    for remote_label in all_remote_addresses.iter() {
+        all_local_addresses.remove(&remote_label.remote_id);
+    }
+
+    tether
+        .tx::<_, _, SubscriberError>(async |tx| {
+            // Core
+            Contact::delete_all(tx).await?;
+
+            for removed_local_address in all_local_addresses.into_values() {
+                removed_local_address.delete(tx).await?;
+            }
+            for mut remote_address in all_remote_addresses {
+                remote_address.save(tx).await?;
+            }
+
+            Ok(())
+        })
+        .await
+        .map_err(|e| {
+            let e = anyhow!("Failed to clear database entries: {e}");
+            error!("{e:?}");
+            SubscriberError::Other(e)
+        })?;
+
+    // Core
+    //
+    // User and UserSettings have common initialization path
+    InitializedComponent::set_state(
+        User::INIT_KEY,
+        InitializedComponentState::NotInitialized,
+        &mut tether,
+    )
+    .await?;
+    InitializedComponent::set_state(
+        Contact::INIT_KEY,
+        InitializedComponentState::NotInitialized,
+        &mut tether,
+    )
+    .await?;
+
+    Ok(())
 }

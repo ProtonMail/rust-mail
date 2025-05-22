@@ -2529,6 +2529,38 @@ impl Message {
             .collect()
     }
 
+    /// Sync only messages metadata
+    ///
+    pub async fn sync_metadata<PM: ProtonMail>(
+        ids: Vec<MessageId>,
+        api: &PM,
+        mut run_tx: impl RunTransaction,
+    ) -> Result<Vec<Self>, AppError> {
+        let remote_msgs = Self::fetch_metadata(
+            GetMessagesOptions {
+                ids: ids.into_iter().map_into().collect(),
+                ..Default::default()
+            },
+            api,
+        )
+        .await?
+        .messages;
+        let mut local_msgs = Vec::with_capacity(remote_msgs.len());
+
+        run_tx
+            .run_tx(async |tx| {
+                for msg in remote_msgs {
+                    let mut msg = Message::from_api_metadata(msg, tx).await?;
+                    msg.save(tx).await?;
+                    local_msgs.push(msg);
+                }
+                Ok(())
+            })
+            .await?;
+
+        Ok(local_msgs)
+    }
+
     /// Sync the contents of the message and the body from the server for the given `message_id`.
     ///
     /// Note that this function always overrides the data that was previously available.
