@@ -8,6 +8,7 @@ use std::{fmt, mem};
 pub struct IcsReader<'a> {
     src: &'a [u8],
     pos: IcsReaderPosition,
+    hints: IcsReaderHints,
     msgs: Vec<ReadMsg>,
     context: Vec<Spanned<String>>,
 }
@@ -18,6 +19,7 @@ impl<'a> IcsReader<'a> {
         Self {
             src,
             pos: IcsReaderPosition::default(),
+            hints: IcsReaderHints::default(),
             msgs: Vec::new(),
             context: Vec::new(),
         }
@@ -36,6 +38,11 @@ impl<'a> IcsReader<'a> {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.pos().byte >= self.len()
+    }
+
+    #[must_use]
+    pub fn hints(&self) -> &IcsReaderHints {
+        &self.hints
     }
 
     #[must_use]
@@ -71,6 +78,24 @@ impl<'a> IcsReader<'a> {
         self.msg(at, msg, ReadMsgKind::Error);
     }
 
+    /// Runs `f` under a parser with modified hints.
+    ///
+    /// It's a somewhat hacky way of passing information between parsers so that
+    /// e.g. [`ParamValue`] can know how to understand `,` (if we're currently
+    /// parsing an array, it can't consume `,` and must yield back when it sees
+    /// a comma; but in other cases it can eat the comma).
+    ///
+    /// This mechanism is used to parse technically-illegal *.ics files that we
+    /// can nonetheless reasonably recover.
+    pub fn hint(&mut self, h: impl FnOnce(&mut IcsReaderHints), f: impl FnOnce(&mut Self)) {
+        let prev_hints = self.hints;
+
+        h(&mut self.hints);
+        f(self);
+
+        self.hints = prev_hints;
+    }
+
     /// Runs `f` under a parser that contains an extra context such as "parsing
     /// `foo`".
     pub fn context<T>(&mut self, span: Span, tag: String, f: impl FnOnce(&mut Self) -> T) -> T {
@@ -88,6 +113,7 @@ impl<'a> IcsReader<'a> {
         let mut this = IcsReader {
             src: self.src,
             pos: self.pos,
+            hints: self.hints,
             msgs: Vec::new(),
             context: Vec::new(),
         };
@@ -888,6 +914,11 @@ impl From<IcsReaderPosition> for LineAndChar {
     fn from(value: IcsReaderPosition) -> Self {
         (value.line, value.char)
     }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct IcsReaderHints {
+    pub inside_array: bool,
 }
 
 #[cfg(test)]

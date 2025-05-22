@@ -120,8 +120,26 @@ impl IcsRead<Value> for ParamValue {
 
             while let Some(ch) = r.peek() {
                 match ch {
-                    ';' | ':' | ',' | '"' => {
+                    ';' | ':' | '"' => {
                         break;
+                    }
+
+                    ',' => {
+                        if r.hints().inside_array {
+                            break;
+                        }
+
+                        r.warn(
+                            Span::one(r.pos()),
+                            "non-conformant: param-values shouldn't contain commas",
+                        );
+
+                        value.push(r.char()?);
+
+                        // Even though we can read this comma, it's not supposed
+                        // to be here - so when printing back, enquote the
+                        // string for better compatibility
+                        quote = true;
                     }
 
                     ch if ch.is_control() => {
@@ -347,5 +365,45 @@ mod tests {
             .to_string(Value);
 
         assert_eq!("\"John Smith, MD\"", actual);
+    }
+
+    #[test]
+    fn comma() {
+        let (obj, msgs) = ParamValue::from_str_ex("Gregory House, MD", Value);
+
+        assert_eq!(
+            Some(ParamValue {
+                value: "Gregory House, MD".into(),
+                quote: true,
+            }),
+            obj,
+        );
+
+        assert_eq!(
+            vec![ReadMsg {
+                at: Some(Span::new((1, 14), (1, 14))),
+                msg: "non-conformant: param-values shouldn't contain commas".into(),
+                kind: ReadMsgKind::Warning,
+                context: Vec::new(),
+            }],
+            msgs,
+        );
+
+        // ---
+
+        let actual = Vec::<ParamValue>::from_str("Gregory House, MD", Value).unwrap();
+
+        let expected = vec![
+            ParamValue {
+                value: "Gregory House".into(),
+                quote: false,
+            },
+            ParamValue {
+                value: " MD".into(),
+                quote: false,
+            },
+        ];
+
+        assert_eq!(expected, actual);
     }
 }

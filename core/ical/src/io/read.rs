@@ -100,15 +100,22 @@ where
     fn read(r: &mut IcsReader) -> Option<Self> {
         let mut values = Vec::new();
 
-        loop {
-            if let Some(value) = r.value() {
-                values.push(value);
-            }
+        r.hint(
+            |h| {
+                h.inside_array = true;
+            },
+            |r| {
+                loop {
+                    if let Some(value) = r.value() {
+                        values.push(value);
+                    }
 
-            if r.try_eat(',').is_none() {
-                break;
-            }
-        }
+                    if r.try_eat(',').is_none() {
+                        break;
+                    }
+                }
+            },
+        );
 
         Some(values)
     }
