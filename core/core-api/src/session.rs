@@ -360,6 +360,13 @@ impl Session {
         self.status.status(self.client.clone()).await
     }
 
+    /// Returns a reference to the store.
+    ///
+    #[must_use]
+    pub fn store(&self) -> &DynStore {
+        &self.store
+    }
+
     /// Returns status watcher
     ///
     #[must_use]

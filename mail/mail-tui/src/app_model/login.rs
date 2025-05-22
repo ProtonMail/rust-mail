@@ -5,7 +5,7 @@ use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
 use anyhow::anyhow;
 use proton_mail_common::MailContext;
-use proton_mail_common::proton_mail_api::proton_core_api::login::{Flow, LoginError};
+use proton_mail_common::proton_mail_api::proton_core_api::login::{LoginError, LoginFlow};
 use proton_mail_common::proton_mail_api::proton_core_api::services::proton::muon::client::flow::LoginExtraInfo;
 use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Flex;
@@ -16,7 +16,7 @@ use std::sync::Arc;
 pub enum Message {
     Submit,
     ToggleInput,
-    LoginSuccess(Flow),
+    LoginSuccess(LoginFlow),
     LoginFailed(LoginError),
 }
 

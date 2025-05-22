@@ -1,0 +1,16 @@
+[package]
+name = "uniffi-runtime"
+version = "0.1.0"
+
+[package.edition]
+workspace = true
+
+[dependencies]
+tokio.workspace = true
+tracing.workspace = true
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "*"
+
+[lints]
+workspace = true

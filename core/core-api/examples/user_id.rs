@@ -1,7 +1,7 @@
 #![allow(clippy::print_stdout)]
 
 use muon::client::flow::LoginExtraInfo;
-use proton_core_api::login::Flow;
+use proton_core_api::login::LoginFlow;
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::session::{CoreSession, Session};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
@@ -34,7 +34,7 @@ async fn main() {
         .await
         .unwrap();
 
-    let mut login_flow = Flow::new(session.clone());
+    let mut login_flow = LoginFlow::new(session.clone());
     login_flow
         .login(user_email, user_password, LoginExtraInfo::default())
         .await

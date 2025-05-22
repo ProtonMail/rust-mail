@@ -4,11 +4,23 @@ version = "0.8.0"
 edition.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = ["sql"]
+
+demo = ["dep:tao", "dep:wry"]
+sql = ["proton-core-api/sql", "proton-mail-api/sql"]
+uniffi = ["proton-core-common/uniffi", "dep:uniffi"]
+
+[[example]]
+name = "demo"
+required-features = ["demo"]
+
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 bitflags = { workspace = true }
 bytes = { workspace = true }
+cfg-if = { workspace = true }
 non-empty-string = { workspace = true }
 chrono = { workspace = true }
 derive_more = { workspace = true, features = ["try_from"] }
@@ -23,6 +35,7 @@ lazy_static = { workspace = true }
 mime = { workspace = true }
 parking_lot = { workspace = true }
 proton-action-queue = { workspace = true }
+proton-account-api = { workspace = true }
 proton-calendar-common = { workspace = true }
 proton-core-api = { workspace = true, features = ["sql"] }
 proton-mail-api = { workspace = true, features = ["sql"] }
@@ -50,6 +63,10 @@ uuid = { workspace = true }
 sqlite-watcher = { workspace = true }
 proton-mail-ids = { workspace = true }
 uniffi = { workspace = true, optional = true }
+
+# Optional dependencies for the `demo` example
+wry = { version = "0.51", optional = true }
+tao = { version = "0.33", optional = true }
 
 [dev-dependencies]
 clap = { workspace = true }
@@ -95,9 +112,3 @@ module_name_repetitions = "allow"
 print_stdout = "warn"
 unseparated_literal_suffix = "warn"
 wrong_self_convention = "warn"
-
-
-[features]
-default = ["sql"]
-sql = ["proton-core-api/sql", "proton-mail-api/sql"]
-uniffi = ["proton-core-common/uniffi", "dep:uniffi"]

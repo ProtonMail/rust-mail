@@ -85,12 +85,12 @@ impl ServiceError for LoginError {}
 /// The flow is used to guide the user through the login process,
 /// ensuring that all necessary steps are completed in the correct order.
 #[derive(Debug)]
-pub struct Flow {
+pub struct LoginFlow {
     session: Session,
     state: State,
 }
 
-impl Flow {
+impl LoginFlow {
     /// Create a new login flow from the beginning.
     #[must_use]
     pub fn new(session: Session) -> Self {

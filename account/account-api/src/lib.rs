@@ -1,0 +1,318 @@
+#![allow(clippy::large_enum_variant)]
+
+use crate::prelude::*;
+use muon::{http::HttpReqExt, serde_to_query};
+
+#[macro_use]
+extern crate tracing;
+
+#[macro_use]
+extern crate muon;
+
+pub mod countries;
+pub mod prelude;
+pub mod requests;
+pub mod responses;
+pub mod signup;
+pub mod store;
+
+/// The Proton Core API base path (v4).
+pub const CORE_V4: &str = "/core/v4";
+pub const AUTH_V4: &str = "/auth/v4";
+
+#[derive(Debug, thiserror::Error)]
+pub enum ApiError {
+    #[error(transparent)]
+    Serialization(#[from] serde_qs::Error),
+
+    #[error(transparent)]
+    Muon(#[from] muon::Error),
+
+    #[error(transparent)]
+    Status(#[from] muon::StatusErr),
+
+    #[error("Internal error: {0}")]
+    InternalError(String),
+}
+
+impl ApiError {
+    #[must_use]
+    pub fn body_str(&self) -> Option<&str> {
+        if let Self::Status(muon::StatusErr(_, res)) = self {
+            res.body_str().ok()
+        } else {
+            None
+        }
+    }
+}
+
+/// A result containing an error that defaults to `ApiServiceError`.
+pub type ApiServiceResult<T, E = ApiError> = Result<T, E>;
+
+#[allow(async_fn_in_trait)]
+pub trait AccountApi {
+    /// Get a new random auth modulus.
+    async fn get_auth_modulus(&self) -> ApiServiceResult<GetAuthModulusResponse>;
+
+    /// Get the available addresses in the account.
+    async fn get_addresses(&self) -> ApiServiceResult<GetAddressesResponse>;
+
+    /// Retrieves a list of available domains.
+    ///
+    /// This method queries the available domains for email address creation, optionally filtered
+    /// by domain type. See [API docs](https://protonmail.gitlab-pages.protontech.ch/Slim-API/account/#tag/Domains/operation/get_core-%7B_version%7D-domains-available)
+    /// for more details.
+    ///
+    /// # Arguments
+    /// * `domain_type` - An optional filter for the type of domains to retrieve (e.g., "custom").
+    ///
+    /// # Returns
+    /// An `ApiServiceResult` containing the list of available domains or an error.
+    ///
+    /// [API doc](https://protonmail.gitlab-pages.protontech.ch/Slim-API/account/#tag/Domains/operation/get_core-%7B_version%7D-domains-available)
+    async fn get_available_domains(
+        &self,
+        domain_type: Option<String>,
+    ) -> ApiServiceResult<GetAvailableDomainsResponse>;
+
+    /// Checks the availability of a username.
+    ///
+    /// This method verifies if a given username is available for use, with an option to parse it
+    /// as a full email address and include payment information.
+    ///
+    /// # Arguments
+    /// * `name` - The username to check.
+    /// * `parse_domain` - Indicates whether to parse the username as a full email address.
+    /// * `payment_info_token` - An optional token for payment-related validation.
+    ///
+    /// # Returns
+    /// An `ApiServiceResult` containing a response code indicating availability or an error
+    ///
+    /// [API doc](https://protonmail.gitlab-pages.protontech.ch/Slim-API/core/#tag/Users/operation/get_core-%7B_version%7D-users-available)
+    async fn check_username_availability(
+        &self,
+        name: String,
+        parse_domain: ParseDomain,
+        payment_info_token: Option<&str>,
+    ) -> ApiServiceResult<SimpleResponse>;
+
+    /// Checks the availability of an external username.
+    ///
+    /// This method verifies if an external username is available, with an optional payment token.
+    ///
+    /// # Arguments
+    /// * `name` - The external username to check.
+    /// * `payment_info_token` - An optional token for payment-related validation.
+    ///
+    /// # Returns
+    /// An `ApiServiceResult` containing a response code indicating availability or an error.
+    ///
+    /// [API doc](https://protonmail.gitlab-pages.protontech.ch/Slim-API/core/#tag/Users/operation/get_core-%7B_version%7D-users-availableExternal)
+    async fn check_external_username_availability(
+        &self,
+        name: String,
+        payment_info_token: Option<&str>,
+    ) -> ApiServiceResult<SimpleResponse>;
+
+    /// Sends a verification code to a user.
+    ///
+    /// This method requests a verification code to be sent via email or SMS, based on the provided
+    /// request details.
+    ///
+    /// # Arguments
+    /// * `request` - The request specifying the verification method and destination.
+    ///
+    /// # Returns
+    /// An `ApiServiceResult` containing a response code indicating success or an error.
+    ///
+    /// [API doc](https://protonmail.gitlab-pages.protontech.ch/Slim-API/core/#tag/Users/operation/post_core-%7B_version%7D-users-code)
+    async fn send_verification_code(
+        &self,
+        request: SendVerificationCodeRequest,
+    ) -> ApiServiceResult<SimpleResponse>;
+
+    /// Creates a new user account.
+    ///
+    /// ...
+    async fn create_user(&self, request: CreateUserRequest)
+    -> ApiServiceResult<CreateUserResponse>;
+
+    /// Creates a new external user account.
+    ///
+    /// ...
+    async fn create_external_user(
+        &self,
+        request: CreateExternalUserRequest,
+    ) -> ApiServiceResult<CreateUserResponse>;
+
+    /// Performs the initial key setup for new private users.
+    ///
+    /// This method sets up encryption keys for a new private user account, including user initialization
+    /// flags and key details.
+    ///
+    /// # Arguments
+    /// * `user_init_flag` - Flag indicating that /core/v4/welcome-mail-send and /core/v4/checklist/get-started/init endpoints are called by the client.
+    /// * `request` - The request containing key setup details.
+    ///
+    /// # Returns
+    /// An `ApiServiceResult` containing the setup response with user and key details or an error.
+    ///
+    /// [API doc](https://protonmail.gitlab-pages.protontech.ch/Slim-API/core/#tag/Keys/operation/post_core-%7B_version%7D-keys-setup)
+    async fn setup_keys_for_new_account(
+        &self,
+        user_init_flag: AsyncUserInitialization,
+        request: SetupKeysRequest,
+    ) -> ApiServiceResult<SetupKeysResponse>;
+
+    /// Sets up a new address for a non-subscriber user.
+    ///
+    /// This method sends a request to create a new email address for a non-subscriber user,
+    /// returning the result of the operation.
+    ///
+    /// # Arguments
+    /// * `request` - The request containing details for the new address setup.
+    ///
+    /// # Returns
+    /// An `ApiServiceResult` containing the response with the created address details or an error.
+    ///
+    /// [API doc](https://protonmail.gitlab-pages.protontech.ch/Slim-API/core/#tag/Address/operation/post_core-%7B_version%7D-addresses-setup)
+    async fn setup_new_nonsubuser_address(
+        &self,
+        request: PostSetupNewNonSubuserAddressRequest,
+    ) -> ApiServiceResult<PostSetupNewNonSubuserAddressResponse>;
+
+    async fn auth_request(&self, request: PostAuthRequest) -> ApiServiceResult<AuthResponse>;
+}
+
+impl AccountApi for muon::Client {
+    async fn get_auth_modulus(&self) -> ApiServiceResult<GetAuthModulusResponse> {
+        Ok(GET!("{AUTH_V4}/modulus")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn get_addresses(&self) -> ApiServiceResult<GetAddressesResponse> {
+        Ok(GET!("{CORE_V4}/addresses")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn get_available_domains(
+        &self,
+        domain_type: Option<String>,
+    ) -> ApiServiceResult<GetAvailableDomainsResponse> {
+        Ok(GET!("{CORE_V4}/domains/available")
+            .query(serde_to_query(GetAvailableDomainsRequest { domain_type })?)
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn check_username_availability(
+        &self,
+        name: String,
+        parse_domain: ParseDomain,
+        payment_info_token: Option<&str>,
+    ) -> ApiServiceResult<SimpleResponse> {
+        let mut request = GET!("{CORE_V4}/users/available")
+            .query(serde_to_query(CheckUsernameRequest { name, parse_domain })?);
+        request = add_payment_header(request, payment_info_token);
+        Ok(request.send_with(self).await?.ok()?.into_body_json()?)
+    }
+
+    async fn check_external_username_availability(
+        &self,
+        name: String,
+        payment_info_token: Option<&str>,
+    ) -> ApiServiceResult<SimpleResponse> {
+        let mut request = GET!("{CORE_V4}/users/availableExternal")
+            .query(serde_to_query(CheckExternalUsernameRequest { name })?);
+        request = add_payment_header(request, payment_info_token);
+        Ok(request.send_with(self).await?.ok()?.into_body_json()?)
+    }
+
+    async fn setup_new_nonsubuser_address(
+        &self,
+        request: PostSetupNewNonSubuserAddressRequest,
+    ) -> ApiServiceResult<PostSetupNewNonSubuserAddressResponse> {
+        Ok(POST!("{CORE_V4}/addresses/setup")
+            .body_json(request)?
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn send_verification_code(
+        &self,
+        request: SendVerificationCodeRequest,
+    ) -> ApiServiceResult<SimpleResponse> {
+        Ok(POST!("{CORE_V4}/users/code")
+            .body_json(request)?
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn create_user(
+        &self,
+        request: CreateUserRequest,
+    ) -> ApiServiceResult<CreateUserResponse> {
+        Ok(POST!("{CORE_V4}/users")
+            .body_json(request)?
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn create_external_user(
+        &self,
+        request: CreateExternalUserRequest,
+    ) -> ApiServiceResult<CreateUserResponse> {
+        Ok(POST!("{CORE_V4}/users/external")
+            .body_json(request)?
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn setup_keys_for_new_account(
+        &self,
+        user_init_flag: AsyncUserInitialization,
+        request: SetupKeysRequest,
+    ) -> ApiServiceResult<SetupKeysResponse> {
+        let user_init_flag: i32 = user_init_flag.into();
+        Ok(POST!("{CORE_V4}/keys/setup")
+            .query(serde_to_query(("AsyncUserInitialization", user_init_flag))?)
+            .body_json(request)?
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn auth_request(&self, request: PostAuthRequest) -> ApiServiceResult<AuthResponse> {
+        Ok(POST!("{AUTH_V4}")
+            .body_json(request)?
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+}
+
+fn add_payment_header(request: muon::ProtonRequest, token: Option<&str>) -> muon::ProtonRequest {
+    if let Some(token) = token {
+        request.header(("X-PM-Payment-Info-Token", token))
+    } else {
+        request
+    }
+}

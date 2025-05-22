@@ -23,6 +23,7 @@ include_dir = { workspace = true }
 num_enum = { workspace = true }
 parking_lot = { workspace = true }
 proton-core-api = { workspace = true, features = ["sql"] }
+proton-account-api = { workspace = true }
 proton-action-queue = { workspace = true }
 proton-crypto = { workspace = true }
 proton-crypto-account = { workspace = true, features = ["sql"] }

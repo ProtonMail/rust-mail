@@ -8,6 +8,7 @@ pub enum MailErrorReason {
     ActionReason(ActionErrorReason),
     SessionReason(ContextErrorReason),
     LoginReason(LoginErrorReason),
+    SignupReason(SignupErrorReason),
     DraftOpenReason(DraftOpenErrorReason),
     DraftSaveReason(DraftSaveErrorReason),
     DraftSendReason(DraftSendErrorReason),
@@ -36,6 +37,12 @@ impl From<ContextErrorReason> for MailErrorReason {
 impl From<LoginErrorReason> for MailErrorReason {
     fn from(reason: LoginErrorReason) -> Self {
         Self::LoginReason(reason)
+    }
+}
+
+impl From<SignupErrorReason> for MailErrorReason {
+    fn from(reason: SignupErrorReason) -> Self {
+        Self::SignupReason(reason)
     }
 }
 
@@ -121,6 +128,20 @@ pub enum LoginErrorReason {
     InvalidCredentials,
     UnsupportedTfa,
     CantUnlockUserKey,
+}
+
+/// Specific Reason for error occurrence within Signup Flow.
+///
+/// This enum is used to represent the specific reason for an error that occurred
+/// in handling signup related operations in order to provide only the necessary
+/// information to the user.
+#[derive(Debug)]
+pub enum SignupErrorReason {
+    SignupBlockedByServer,
+    UsernameUnavailable,
+    AccountCreationFailed,
+    AddressSetupFailed,
+    KeySetupFailed,
 }
 
 /// Specific Reason when opening a draft fails.

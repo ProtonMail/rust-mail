@@ -5,10 +5,15 @@ use crate::models::ModelExtension;
 use crate::os::{KeyChain, KeyChainExt};
 use anyhow::{Context, bail};
 use async_trait::async_trait;
+use derive_more::{Deref, DerefMut};
 use futures::TryFutureExt;
+use proton_account_api::store::AuthInfo as AccountAuthInfo;
+use proton_account_api::store::BoxStore as BoxAccountStore;
+use proton_account_api::store::Store as AccountStore;
+use proton_account_api::store::UserData as AccountUserData;
 use proton_core_api::auth::{Auth, Tokens, UserKeySecret};
 use proton_core_api::services::proton::{SessionId, UserId};
-use proton_core_api::store::{AuthInfo, Store, StoreError, UserData};
+use proton_core_api::store::{AuthInfo, DynStore, Store, StoreError, TfaMode, UserData};
 use secrecy::{ExposeSecret, SecretString, SecretVec};
 use stash::orm::Model;
 use stash::stash::Stash;
@@ -27,7 +32,7 @@ pub struct AuthStore {
 
 impl AuthStore {
     pub fn new(
-        stash: &Stash,
+        stash: Stash,
         key_chain: Arc<dyn KeyChain>,
         user_id: Option<UserId>,
         session_id: Option<SessionId>,
@@ -36,7 +41,7 @@ impl AuthStore {
             key_chain,
             user_id,
             session_id,
-            stash: stash.clone(),
+            stash,
             name_or_addr: None,
         }
     }
@@ -352,6 +357,53 @@ impl Store for AuthStore {
 
         Ok(())
     }
+}
+
+/// Wraps a store for compatibility with `proton-account-api`.
+///
+/// TODO: Remove this once enough `proton-core-*` functionality has been migrated to `proton-account-*`.
+pub fn new_account_store(store: DynStore) -> BoxAccountStore {
+    #[derive(Deref, DerefMut)]
+    struct StoreWrap(DynStore);
+
+    #[async_trait]
+    impl AccountStore for StoreWrap {
+        async fn set_name_or_addr(&mut self, name_or_addr: &str) {
+            self.write().await.set_name_or_addr(name_or_addr);
+        }
+
+        async fn set_auth_info(&mut self, info: AccountAuthInfo) -> Result<(), String> {
+            let info = AuthInfo {
+                user_id: info.user_id.into(),
+                session_id: info.session_id.into(),
+                mbp_mode: info.password_mode.into(),
+                tfa_mode: TfaMode::none(),
+            };
+
+            self.write()
+                .await
+                .set_auth_info(info)
+                .await
+                .map_err(|err| err.to_string())
+        }
+
+        async fn set_user_data(&mut self, data: AccountUserData) -> Result<(), String> {
+            let data = UserData {
+                username: data.username,
+                display_name: data.display_name,
+                primary_addr: data.primary_addr,
+                key_secret: UserKeySecret(data.key_secret),
+            };
+
+            self.write()
+                .await
+                .set_user_data(data)
+                .await
+                .map_err(|err| err.to_string())
+        }
+    }
+
+    Box::new(StoreWrap(store))
 }
 
 pub(crate) trait DecryptExt
