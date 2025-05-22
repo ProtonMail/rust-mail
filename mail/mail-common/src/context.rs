@@ -649,7 +649,29 @@ impl MailContext {
         Ok(self.core_context.logout_account(user_id).await?)
     }
 
+    /// Logs out all sessions of an account and deletes the account's data.
+    ///
+    /// Unlike [`delete_account()`] the account metadata is preserved and is still
+    /// listable in the session picker.
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn logout_account_and_delete_user_data(
+        &self,
+        user_id: UserId,
+    ) -> MailContextResult<()> {
+        tracing::info!("Logout account `{user_id}`");
+        self.active_user_contexts.lock().await.remove(&user_id);
+        let mail_cache_path = self.mail_cache_path(&user_id);
+        Ok(self
+            .core_context
+            .logout_and_delete_user_data(user_id, vec![mail_cache_path])
+            .await?)
+    }
+
     /// Removes a user session and deletes all associated data.
+    ///
+    /// This will also remove the user from the session picker.
+    /// Use [`logout_account_and_delete_user_data()`] to preserve this entry.
     ///
     /// # Errors
     ///
