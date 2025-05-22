@@ -690,8 +690,22 @@ impl ReadEntry {
 
             Some(value)
         } else {
-            // Recover by skipping rest of the line
-            r.silently(IcsReader::rest);
+            // Since properties span for at most one line, let's recover by
+            // skipping to the next line. As an edge case, it's possible that
+            // `T` already ate the entire line for us - in that case do nothing.
+            //
+            // Basically, we're either in the middle of a parse:
+            //
+            // ```
+            // PROPERTY:FOO,BAR
+            //             ^
+            // ```
+            //
+            // ... or, as is the case with parsers which call `.rest()`
+            // internally, we're already at the next line.
+            if r.pos.char > 1 {
+                r.silently(IcsReader::rest);
+            }
 
             T::reasonable_default()
         };
@@ -1089,5 +1103,51 @@ mod tests {
         ];
 
         pa::assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn try_prop_recovery() {
+        // `DateOrDt` is non-greedy, it leaves the `FOO` part unparsed for the
+        // recovery mechanism to deal with
+
+        let mut r = target(ics! {"
+            DTSTART:20180101FOO
+            UID:1234
+        "});
+
+        let mut dtstart = None;
+        let mut uid = None;
+
+        _ = r
+            .entry()
+            .unwrap()
+            .try_prop::<DtStart>(&mut r, "DTSTART", &mut dtstart);
+
+        _ = r.entry().unwrap().try_prop::<Uid>(&mut r, "UID", &mut uid);
+
+        assert_eq!(None, dtstart);
+        assert_eq!(Some("1234"), uid.as_ref().map(|uid| uid.value.as_str()));
+
+        // ---
+        // On the other hand, `Status` is greedy - it eats the entire line,
+        // including when the status is not known
+
+        let mut r = target(ics! {"
+            STATUS:FOO
+            UID:1234
+        "});
+
+        let mut status = None;
+        let mut uid = None;
+
+        _ = r
+            .entry()
+            .unwrap()
+            .try_prop::<Status>(&mut r, "STATUS", &mut status);
+
+        _ = r.entry().unwrap().try_prop::<Uid>(&mut r, "UID", &mut uid);
+
+        assert_eq!(None, status);
+        assert_eq!(Some("1234"), uid.as_ref().map(|uid| uid.value.as_str()));
     }
 }
