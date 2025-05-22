@@ -9,9 +9,7 @@ Comprehensive iCalendar parser / generator / editor.
 
 ### CLI
 
-``` bash
-$ cargo run -p proton-ical -- ./examples/example.ical
-```
+See: <../ical-cli/README.md>.
 
 ### Rust
 

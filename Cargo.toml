@@ -13,6 +13,7 @@ members = [
   "core/core-test-utils",
   "core/event-loop",
   "core/ical",
+  "core/ical-cli",
   "core/proton-canonical-email",
   "core/sqlite3",
   "core/stash",
@@ -182,6 +183,9 @@ registry = "proton"
 
 [workspace.dependencies.proton-ical]
 path = "core/ical"
+
+[workspace.dependencies.proton-ical-cli]
+path = "core/ical-cli"
 
 [workspace.dependencies.proton-vcard]
 version = "0.2"
