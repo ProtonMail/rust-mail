@@ -23,6 +23,11 @@ impl IcsRead<Property> for Status {
             Some(Status::Confirmed)
         } else if value.eq_ignore_ascii_case("CANCELLED") {
             Some(Status::Cancelled)
+        } else if value.eq_ignore_ascii_case("ACCEPTED") {
+            // Happens on production and we don't want the parser to fail in
+            // this case
+            r.warn(span, "unknown status `ACCEPTED`");
+            None
         } else {
             r.error(span, format!("unknown status `{value}`"));
             None
@@ -77,6 +82,8 @@ mod tests {
 
     #[test]
     fn unknown() {
+        let actual = Status::from_str(":foobar", Property).unwrap_err();
+
         let expected = vec![ReadMsg {
             at: Some(Span::new((1, 2), (1, 7))),
             msg: "unknown status `foobar`".into(),
@@ -84,8 +91,23 @@ mod tests {
             context: Vec::new(),
         }];
 
-        let actual = Status::from_str(":foobar", Property).unwrap_err();
-
         assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn accepted() {
+        let (obj, msgs) = Status::from_str_ex(":accepted", Property);
+
+        assert_eq!(None, obj);
+
+        assert_eq!(
+            vec![ReadMsg {
+                at: Some(Span::new((1, 2), (1, 9))),
+                msg: "unknown status `ACCEPTED`".into(),
+                kind: ReadMsgKind::Warning,
+                context: Vec::new(),
+            }],
+            msgs
+        );
     }
 }

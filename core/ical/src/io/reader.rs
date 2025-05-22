@@ -8,6 +8,7 @@ use std::{fmt, mem};
 pub struct IcsReader<'a> {
     src: &'a [u8],
     pos: IcsReaderPosition,
+    hints: IcsReaderHints,
     msgs: Vec<ReadMsg>,
     context: Vec<Spanned<String>>,
 }
@@ -18,6 +19,7 @@ impl<'a> IcsReader<'a> {
         Self {
             src,
             pos: IcsReaderPosition::default(),
+            hints: IcsReaderHints::default(),
             msgs: Vec::new(),
             context: Vec::new(),
         }
@@ -36,6 +38,11 @@ impl<'a> IcsReader<'a> {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.pos().byte >= self.len()
+    }
+
+    #[must_use]
+    pub fn hints(&self) -> &IcsReaderHints {
+        &self.hints
     }
 
     #[must_use]
@@ -71,6 +78,24 @@ impl<'a> IcsReader<'a> {
         self.msg(at, msg, ReadMsgKind::Error);
     }
 
+    /// Runs `f` under a parser with modified hints.
+    ///
+    /// It's a somewhat hacky way of passing information between parsers so that
+    /// e.g. [`ParamValue`] can know how to understand `,` (if we're currently
+    /// parsing an array, it can't consume `,` and must yield back when it sees
+    /// a comma; but in other cases it can eat the comma).
+    ///
+    /// This mechanism is used to parse technically-illegal *.ics files that we
+    /// can nonetheless reasonably recover.
+    pub fn hint(&mut self, h: impl FnOnce(&mut IcsReaderHints), f: impl FnOnce(&mut Self)) {
+        let prev_hints = self.hints;
+
+        h(&mut self.hints);
+        f(self);
+
+        self.hints = prev_hints;
+    }
+
     /// Runs `f` under a parser that contains an extra context such as "parsing
     /// `foo`".
     pub fn context<T>(&mut self, span: Span, tag: String, f: impl FnOnce(&mut Self) -> T) -> T {
@@ -88,6 +113,7 @@ impl<'a> IcsReader<'a> {
         let mut this = IcsReader {
             src: self.src,
             pos: self.pos,
+            hints: self.hints,
             msgs: Vec::new(),
             context: Vec::new(),
         };
@@ -365,6 +391,7 @@ impl<'a> IcsReader<'a> {
     /// See [`Self::char()`] for the definition of line.
     #[must_use]
     pub fn rest(&mut self) -> String {
+        let pos = self.pos;
         let mut value = String::new();
 
         while let Some(ch) = self.char() {
@@ -391,7 +418,18 @@ impl<'a> IcsReader<'a> {
         // ```
         self.pos.prev_char = self.pos.prev_char.saturating_sub(1).max(1);
 
-        value
+        // Some providers include random whitespaces, e.g. `TRANSP: OPAQUE` -
+        // let's get rid of them to make downstream parsers simpler
+        if value.starts_with(' ') || value.ends_with(' ') {
+            self.warn(
+                Span::new(pos, self.pos.prev()),
+                "non-conformant: value has extra whitespaces around it",
+            );
+
+            value.trim().to_owned()
+        } else {
+            value
+        }
     }
 
     /// Infers what kind of thing is in front of us (a component, a property,
@@ -664,8 +702,22 @@ impl ReadEntry {
 
             Some(value)
         } else {
-            // Recover by skipping rest of the line
-            r.silently(IcsReader::rest);
+            // Since properties span for at most one line, let's recover by
+            // skipping to the next line. As an edge case, it's possible that
+            // `T` already ate the entire line for us - in that case do nothing.
+            //
+            // Basically, we're either in the middle of a parse:
+            //
+            // ```
+            // PROPERTY:FOO,BAR
+            //             ^
+            // ```
+            //
+            // ... or, as is the case with parsers which call `.rest()`
+            // internally, we're already at the next line.
+            if r.pos.char > 1 {
+                r.silently(IcsReader::rest);
+            }
 
             T::reasonable_default()
         };
@@ -890,6 +942,11 @@ impl From<IcsReaderPosition> for LineAndChar {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct IcsReaderHints {
+    pub inside_array: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1058,5 +1115,51 @@ mod tests {
         ];
 
         pa::assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn try_prop_recovery() {
+        // `DateOrDt` is non-greedy, it leaves the `FOO` part unparsed for the
+        // recovery mechanism to deal with
+
+        let mut r = target(ics! {"
+            DTSTART:20180101FOO
+            UID:1234
+        "});
+
+        let mut dtstart = None;
+        let mut uid = None;
+
+        _ = r
+            .entry()
+            .unwrap()
+            .try_prop::<DtStart>(&mut r, "DTSTART", &mut dtstart);
+
+        _ = r.entry().unwrap().try_prop::<Uid>(&mut r, "UID", &mut uid);
+
+        assert_eq!(None, dtstart);
+        assert_eq!(Some("1234"), uid.as_ref().map(|uid| uid.value.as_str()));
+
+        // ---
+        // On the other hand, `Status` is greedy - it eats the entire line,
+        // including when the status is not known
+
+        let mut r = target(ics! {"
+            STATUS:FOO
+            UID:1234
+        "});
+
+        let mut status = None;
+        let mut uid = None;
+
+        _ = r
+            .entry()
+            .unwrap()
+            .try_prop::<Status>(&mut r, "STATUS", &mut status);
+
+        _ = r.entry().unwrap().try_prop::<Uid>(&mut r, "UID", &mut uid);
+
+        assert_eq!(None, status);
+        assert_eq!(Some("1234"), uid.as_ref().map(|uid| uid.value.as_str()));
     }
 }
