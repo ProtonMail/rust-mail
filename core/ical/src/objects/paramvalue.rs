@@ -142,6 +142,17 @@ impl IcsRead<Value> for ParamValue {
                         quote = true;
                     }
 
+                    '\t' => {
+                        r.warn(
+                            Span::one(r.pos()),
+                            "non-conformant: param-values shouldn't contain tabs",
+                        );
+
+                        _ = r.char();
+
+                        value.push(' ');
+                    }
+
                     ch if ch.is_control() => {
                         break;
                     }
@@ -405,5 +416,28 @@ mod tests {
         ];
 
         assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn tab() {
+        let (obj, msgs) = ParamValue::from_str_ex("Grzegorz\tBrzęczyszczykiewicz", Value);
+
+        assert_eq!(
+            Some(ParamValue {
+                value: "Grzegorz Brzęczyszczykiewicz".into(),
+                quote: false,
+            }),
+            obj,
+        );
+
+        assert_eq!(
+            vec![ReadMsg {
+                at: Some(Span::new((1, 9), (1, 9))),
+                msg: "non-conformant: param-values shouldn't contain tabs".into(),
+                kind: ReadMsgKind::Warning,
+                context: Vec::new(),
+            }],
+            msgs,
+        );
     }
 }
