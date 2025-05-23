@@ -626,19 +626,15 @@ impl<T: ScrollData> CachedScrollData<T> {
     ///
     /// Specific to database access.
     ///
-    pub async fn all(
-        local_label_id: LocalLabelId,
-        unread: ReadFilter,
-        page_size: usize,
-    ) -> Result<Self, StashError> {
+    pub fn all(local_label_id: LocalLabelId, unread: ReadFilter, page_size: usize) -> Self {
         let end = ScrollCursor::absolute_end(local_label_id, unread);
         let cursor = ScrollCursor::absolute_begining(local_label_id, unread);
 
-        Ok(Self {
+        Self {
             page_size,
             end,
             cursor,
-        })
+        }
     }
 
     /// Transform the cursor to read absolutly all items from the database.

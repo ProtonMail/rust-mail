@@ -2,8 +2,8 @@ use crate::actions::{conversations, messages};
 use crate::datatypes::{MessageLabelsCount, ReadFilter, ViewMode};
 use crate::models::default_location::IncomingDefaultLocation;
 use crate::models::{
-    ConversationScrollData, MailLabel, MailSettings, MessageScrollData, RollbackItem, ScrollCursor,
-    StoreLabelCounters,
+    CachedScrollData, ConversationScrollData, MailLabel, MailSettings, MessageScrollData,
+    RollbackItem, StoreLabelCounters,
 };
 use crate::prefetch::PrefetchJob;
 use crate::user_context::events::conversations::handle_conversation_events;
@@ -204,16 +204,17 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
         .load(&tether)
         .await?
         .ok_or_else(|| anyhow!("All mail label is missing!"))?;
+    let page_size = 100;
     let scroll_cursor = match all_mail.view_mode(&tether).await? {
-        ViewMode::Conversations => {
-            Either::Left(ScrollCursor::<ConversationScrollData>::absolute_end(
-                all_mail.local_id.unwrap(),
-                ReadFilter::All,
-            ))
-        }
-        ViewMode::Messages => Either::Right(ScrollCursor::<MessageScrollData>::absolute_end(
+        ViewMode::Conversations => Either::Left(CachedScrollData::<ConversationScrollData>::all(
             all_mail.local_id.unwrap(),
             ReadFilter::All,
+            page_size,
+        )),
+        ViewMode::Messages => Either::Right(CachedScrollData::<MessageScrollData>::all(
+            all_mail.local_id.unwrap(),
+            ReadFilter::All,
+            page_size,
         )),
     };
     let AsyncTaskResult::Completed(Ok(all_remote_labels)) = all_remote_labels
@@ -251,11 +252,12 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
         })?;
 
     match scroll_cursor {
-        // TODO: Maybe limit prefetch jobs to some reasonable number
-        Either::Left(conv_scroll_cursor) => {
-            let actions = conv_scroll_cursor
-                .visible_elements(&tether)
-                .await?
+        Either::Left(mut conv_scroll_cursor) => loop {
+            let page = conv_scroll_cursor.fetch_more(&tether).await?;
+            if page.is_empty() {
+                break;
+            }
+            let actions = page
                 .into_iter()
                 .map(|conv| conversations::RefreshMetadata::new(conv.local_id));
 
@@ -264,11 +266,13 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
                     error!("Failed to refresh conversation metadata: `{error}`",);
                 }
             }
-        }
-        Either::Right(msg_scroll_cursor) => {
-            let actions = msg_scroll_cursor
-                .visible_elements(&tether)
-                .await?
+        },
+        Either::Right(mut msg_scroll_cursor) => loop {
+            let page = msg_scroll_cursor.fetch_more(&tether).await?;
+            if page.is_empty() {
+                break;
+            }
+            let actions = page
                 .into_iter()
                 .filter_map(|msg| msg.local_id)
                 .map(messages::RefreshMetadata::new);
@@ -278,7 +282,7 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
                     error!("Failed to refresh message metadata: `{error}`",);
                 }
             }
-        }
+        },
     };
 
     InitializedComponent::set_state(

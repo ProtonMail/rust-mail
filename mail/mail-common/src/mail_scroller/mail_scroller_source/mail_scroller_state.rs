@@ -53,7 +53,7 @@ impl<T: ScrollData> MailScrollerState<T> {
         unread: ReadFilter,
         page_size: usize,
     ) -> Result<Self, StashError> {
-        let unordered = CachedScrollData::all(local_label_id, unread, page_size).await?;
+        let unordered = CachedScrollData::all(local_label_id, unread, page_size);
 
         Ok(MailScrollerState::NotSynced(unordered))
     }

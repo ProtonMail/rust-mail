@@ -109,7 +109,7 @@ impl proton_action_queue::action::Handler for Handler {
             if items.is_empty() {
                 // The conversation appears to be not found remotely, delete it.
                 tracing::warn!(
-                    "While prefetchin conversation metadata found a local conversation without remote counterpart. Deleteing."
+                    "Local conversation without remote counterpart found while refreshing. Deleteing."
                 );
                 guard
                     .tx(async |tx| {
@@ -153,6 +153,7 @@ impl proton_action_queue::action::Handler for Handler {
                             for remote_msg in remote_msgs.messages {
                                 let mut remote_msg =
                                     Message::from_api_metadata(remote_msg, tx).await?;
+                                // if remote_msg.is_draft()
                                 local_msgs.remove(&remote_msg.remote_id.clone());
                                 remote_msg.save(tx).await?;
                             }
