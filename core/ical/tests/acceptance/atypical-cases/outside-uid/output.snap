@@ -345,4 +345,4 @@ error: missing property `UID`
 
 # violations
 
-- event[0]: uid is missing
+- viol: event[0]: uid is missing

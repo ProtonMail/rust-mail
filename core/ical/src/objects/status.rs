@@ -27,7 +27,7 @@ impl IcsRead<Property> for Status {
             // Happens on production and we don't want the parser to fail in
             // this case; this will be later properly fixed with the sugery
             // process
-            r.warn(span, format!("unknown status `{value}`"));
+            r.warn(span, format!("quirky status `{value}`"));
             None
         } else {
             r.error(span, format!("unknown status `{value}`"));
@@ -104,7 +104,7 @@ mod tests {
         assert_eq!(
             vec![ReadMsg {
                 at: Some(Span::new((1, 2), (1, 9))),
-                msg: "unknown status `ACCEPTED`".into(),
+                msg: "quirky status `ACCEPTED`".into(),
                 kind: ReadMsgKind::Warning,
                 context: Vec::new(),
             }],
@@ -121,7 +121,7 @@ mod tests {
         assert_eq!(
             vec![ReadMsg {
                 at: Some(Span::new((1, 2), (1, 8))),
-                msg: "unknown status `UPDATED`".into(),
+                msg: "quirky status `UPDATED`".into(),
                 kind: ReadMsgKind::Warning,
                 context: Vec::new(),
             }],

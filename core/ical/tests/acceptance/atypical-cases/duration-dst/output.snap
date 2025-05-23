@@ -202,4 +202,4 @@ warn: unknown parameter `X-NUM-GUESTS`
 
 # violations
 
-- event[0]: dtstart: time zone `Europe/Zurich` is not known
+- viol: event[0]: dtstart: time zone `Europe/Zurich` is not known

@@ -76,11 +76,7 @@ impl IcsRead<Property> for DateOrDt {
                 let date = r.value()?;
 
                 if let Some(s) = r.spanned(|r| r.try_string("T000000")) {
-                    r.warn(
-                        s.span,
-                        "non-conformant: skipping T000000 to coerce this \
-                         date-time into date",
-                    );
+                    r.warn(s.span, "quirky time component");
                 } else if let Some(s) = r.spanned(|r| r.try_eat('T')) {
                     r.error(s.span, "unexpected time component");
 
@@ -222,7 +218,7 @@ mod tests {
             ";VALUE=DATE:20180101T000000" => ";VALUE=DATE:20180101", yielding [
                 ReadMsg {
                     at: Some(Span::new((1, 21), (1, 27))),
-                    msg: "non-conformant: skipping T000000 to coerce this date-time into date".into(),
+                    msg: "quirky time component".into(),
                     kind: ReadMsgKind::Warning,
                     context: Vec::new(),
                 },

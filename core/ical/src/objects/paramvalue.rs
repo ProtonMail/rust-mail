@@ -129,11 +129,7 @@ impl IcsRead<Value> for ParamValue {
                             break;
                         }
 
-                        r.warn(
-                            Span::one(r.pos()),
-                            "non-conformant: param-values shouldn't contain commas",
-                        );
-
+                        r.warn(Span::one(r.pos()), "quirky comma");
                         value.push(r.char()?);
 
                         // Even though we can read this comma, it's not supposed
@@ -143,13 +139,12 @@ impl IcsRead<Value> for ParamValue {
                     }
 
                     '\t' => {
-                        r.warn(
-                            Span::one(r.pos()),
-                            "non-conformant: param-values shouldn't contain tabs",
-                        );
-
+                        r.warn(Span::one(r.pos()), "quirky tab");
                         _ = r.char();
 
+                        // param-values don't support tabs even in quotes, so
+                        // let's sanitize it into a space for better
+                        // compatibility
                         value.push(' ');
                     }
 
@@ -164,11 +159,7 @@ impl IcsRead<Value> for ParamValue {
 
                         match r.char()? {
                             ch @ (';' | ':' | ',') => {
-                                r.warn(
-                                    span,
-                                    "non-conformant: param-values shouldn't contain escapes",
-                                );
-
+                                r.warn(span, "quirky escape sequence");
                                 value.push(ch);
 
                                 // Even though we can read escaped strings, they
@@ -337,7 +328,7 @@ mod tests {
         assert_eq!(
             vec![ReadMsg {
                 at: Some(Span::new((1, 11), (1, 12))),
-                msg: "non-conformant: param-values shouldn't contain escapes".into(),
+                msg: "quirky escape sequence".into(),
                 kind: ReadMsgKind::Warning,
                 context: Vec::new(),
             }],
@@ -393,7 +384,7 @@ mod tests {
         assert_eq!(
             vec![ReadMsg {
                 at: Some(Span::new((1, 14), (1, 14))),
-                msg: "non-conformant: param-values shouldn't contain commas".into(),
+                msg: "quirky comma".into(),
                 kind: ReadMsgKind::Warning,
                 context: Vec::new(),
             }],
@@ -433,7 +424,7 @@ mod tests {
         assert_eq!(
             vec![ReadMsg {
                 at: Some(Span::new((1, 9), (1, 9))),
-                msg: "non-conformant: param-values shouldn't contain tabs".into(),
+                msg: "quirky tab".into(),
                 kind: ReadMsgKind::Warning,
                 context: Vec::new(),
             }],

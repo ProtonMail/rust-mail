@@ -423,7 +423,7 @@ impl<'a> IcsReader<'a> {
         if value.starts_with(' ') || value.ends_with(' ') {
             self.warn(
                 Span::new(pos, self.pos.prev()),
-                "non-conformant: value has extra whitespaces around it",
+                "quirky whitespace around value",
             );
 
             value.trim().to_owned()
@@ -891,7 +891,7 @@ impl ReadEntry {
                 // up on `None`, meaning "dear caller, give up".
                 match kind {
                     Kind::Component => {
-                        r.warn(Span::one(r.pos().prev()), "unexpected newline");
+                        r.warn(Span::one(r.pos().prev()), "quirky newline");
                         _ = r.eat('\n');
                         Some(())
                     }

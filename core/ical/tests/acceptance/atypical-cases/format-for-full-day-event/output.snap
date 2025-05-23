@@ -123,14 +123,14 @@ warn: unknown property `X-WR-CALNAME`
  --> at 6:1..12
   | when parsing `VCalendar` at 2:1
 
-warn: non-conformant: skipping T000000 to coerce this date-time into date
+warn: quirky time component
  --> at 10:28..34
   | when parsing `DateOrDt` at 10:8
   | when parsing `DtStart` at 10:8
   | when parsing `VEvent` at 8:1
   | when parsing `VCalendar` at 2:1
 
-warn: non-conformant: skipping T000000 to coerce this date-time into date
+warn: quirky time component
  --> at 11:26..32
   | when parsing `DateOrDt` at 11:6
   | when parsing `DtEnd` at 11:6
