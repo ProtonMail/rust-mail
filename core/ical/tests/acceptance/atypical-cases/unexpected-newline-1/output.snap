@@ -18,6 +18,6 @@ VCalendar {
 
 # messages
 
-warn: unexpected newline
+warn: quirky newline
  --> at 5:1
   | when parsing `VCalendar` at 2:1

@@ -295,7 +295,7 @@ VCalendar {
 
 # messages
 
-warn: non-conformant: param-values shouldn't contain escapes
+warn: quirky escape sequence
  --> at 8:24..25
   | when parsing `ParamValue` at 8:14
   | when parsing `Cn` at 8:14
@@ -303,7 +303,7 @@ warn: non-conformant: param-values shouldn't contain escapes
   | when parsing `VEvent` at 5:1
   | when parsing `VCalendar` at 2:1
 
-warn: non-conformant: param-values shouldn't contain commas
+warn: quirky comma
  --> at 16:24
   | when parsing `ParamValue` at 16:14
   | when parsing `Cn` at 16:14

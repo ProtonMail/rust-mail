@@ -18,9 +18,9 @@ pub enum Error {
 
 #[derive(Clone, Debug, PartialEq, Eq, TError)]
 pub enum Violation {
-    #[error("event[{0}]: {1}")]
+    #[error("viol: event[{0}]: {1}")]
     InvalidEvent(usize, VEventViolation),
 
-    #[error("timezone[{0}]: {0}")]
+    #[error("viol: timezone[{0}]: {0}")]
     InvalidTimeZone(usize, VTimeZoneViolation),
 }

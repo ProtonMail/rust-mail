@@ -23,10 +23,11 @@ impl IcsRead<Property> for Status {
             Some(Status::Confirmed)
         } else if value.eq_ignore_ascii_case("CANCELLED") {
             Some(Status::Cancelled)
-        } else if value.eq_ignore_ascii_case("ACCEPTED") {
+        } else if value.eq_ignore_ascii_case("ACCEPTED") || value.eq_ignore_ascii_case("UPDATED") {
             // Happens on production and we don't want the parser to fail in
-            // this case
-            r.warn(span, "unknown status `ACCEPTED`");
+            // this case; this will be later properly fixed with the sugery
+            // process
+            r.warn(span, format!("quirky status `{value}`"));
             None
         } else {
             r.error(span, format!("unknown status `{value}`"));
@@ -96,14 +97,31 @@ mod tests {
 
     #[test]
     fn accepted() {
-        let (obj, msgs) = Status::from_str_ex(":accepted", Property);
+        let (obj, msgs) = Status::from_str_ex(":ACCEPTED", Property);
 
         assert_eq!(None, obj);
 
         assert_eq!(
             vec![ReadMsg {
                 at: Some(Span::new((1, 2), (1, 9))),
-                msg: "unknown status `ACCEPTED`".into(),
+                msg: "quirky status `ACCEPTED`".into(),
+                kind: ReadMsgKind::Warning,
+                context: Vec::new(),
+            }],
+            msgs
+        );
+    }
+
+    #[test]
+    fn updated() {
+        let (obj, msgs) = Status::from_str_ex(":UPDATED", Property);
+
+        assert_eq!(None, obj);
+
+        assert_eq!(
+            vec![ReadMsg {
+                at: Some(Span::new((1, 2), (1, 8))),
+                msg: "quirky status `UPDATED`".into(),
                 kind: ReadMsgKind::Warning,
                 context: Vec::new(),
             }],
