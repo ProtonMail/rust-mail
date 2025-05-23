@@ -28,7 +28,7 @@ impl RefreshMeta {
 }
 
 impl Action for RefreshMeta {
-    const TYPE: Type = Type("prefetch_conversation");
+    const TYPE: Type = Type("refresh_conversation_metadata");
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Lowest;
     type VersionConverter = DefaultVersionConverter<Self>;

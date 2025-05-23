@@ -1,3 +1,4 @@
+use crate::actions::{conversations, messages};
 use crate::datatypes::{MessageLabelsCount, ReadFilter, ViewMode};
 use crate::models::default_location::IncomingDefaultLocation;
 use crate::models::{
@@ -249,28 +250,36 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
             SubscriberError::Other(e)
         })?;
 
-    let jobs = match scroll_cursor {
+    match scroll_cursor {
         // TODO: Maybe limit prefetch jobs to some reasonable number
-        Either::Left(conv_scroll_cursor) => conv_scroll_cursor
-            .visible_elements(&tether)
-            .await?
-            .into_iter()
-            .map(|conv| PrefetchJob::ConversationMeta(conv.local_id))
-            .collect(),
-        Either::Right(msg_scroll_cursor) => msg_scroll_cursor
-            .visible_elements(&tether)
-            .await?
-            .into_iter()
-            .filter_map(|msg| msg.local_id)
-            .map(PrefetchJob::MessageMeta)
-            .collect(),
-    };
+        Either::Left(conv_scroll_cursor) => {
+            let actions = conv_scroll_cursor
+                .visible_elements(&tether)
+                .await?
+                .into_iter()
+                .map(|conv| conversations::RefreshMeta::new(conv.local_id));
 
-    // TODO: what on failure?
-    // We already commited transaction
-    ctx.queue_prefetch_jobs(jobs)
-        .await
-        .map_err(|e| anyhow!("Could not prefetch conversations: `{e}`"))?;
+            for action in actions {
+                if let Err(error) = ctx.action_queue().queue_action(action).await {
+                    error!("Failed to refresh conversation metadata: `{error}`",);
+                }
+            }
+        }
+        Either::Right(msg_scroll_cursor) => {
+            let actions = msg_scroll_cursor
+                .visible_elements(&tether)
+                .await?
+                .into_iter()
+                .filter_map(|msg| msg.local_id)
+                .map(messages::RefreshMeta::new);
+
+            for action in actions {
+                if let Err(error) = ctx.action_queue().queue_action(action).await {
+                    error!("Failed to refresh message metadata: `{error}`",);
+                }
+            }
+        }
+    };
 
     InitializedComponent::set_state(
         StoreLabelCounters::INIT_KEY,
@@ -353,6 +362,30 @@ async fn refresh_core(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
         &mut tether,
     )
     .await?;
+
+    Ok(())
+}
+
+pub async fn whole_refresh_tui(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> {
+    refresh_core(ctx.clone()).await?;
+    refresh_mail(ctx.clone()).await?;
+
+    let mut tether = ctx.user_context.stash().connection();
+    InitializedComponent::set_state(
+        MailUserContext::CONTEXT_INIT_KEY,
+        InitializedComponentState::NotInitialized,
+        &mut tether,
+    )
+    .await?;
+
+    // And run the initialization again
+    MailUserContext::initialize_async(ctx.as_arc())
+        .await
+        .map_err(|e| {
+            let e = anyhow!("Failed to re-initialize MailUserContext: {e}");
+            error!("{e:?}");
+            SubscriberError::Other(e)
+        })?;
 
     Ok(())
 }

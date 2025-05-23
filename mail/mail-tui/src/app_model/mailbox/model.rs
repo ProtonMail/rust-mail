@@ -29,6 +29,7 @@ use proton_mail_common::models::{
 use proton_mail_common::proton_mail_api::proton_core_api::services::proton::LabelId;
 use proton_mail_common::{
     AppError, MailContext, MailContextError, MailContextResult, MailUserContext, Mailbox,
+    whole_refresh_tui,
 };
 use ratatui::crossterm::event::Event;
 use ratatui::layout::{Flex, Rect};
@@ -363,6 +364,26 @@ impl AppStateHandler for Model {
                             }),
                         ),
                     )));
+                }
+                KeyCode::F(5) => {
+                    let ctx = self.ctx.as_arc();
+                    return Command::batch([
+                        Command::message(Messages::DisplayInfo(
+                            Some("EventLoop referesh".to_owned()),
+                            "Refresh event running...".to_owned(),
+                        )),
+                        Command::task(async move {
+                            let msg = match whole_refresh_tui(ctx).await {
+                                Ok(()) => "Refresh event finished succesfully".to_owned(),
+                                Err(e) => format!("Refresh event finished in error: `{e}`"),
+                            };
+
+                            Command::message(Messages::DisplayInfo(
+                                Some("EventLoop referesh".to_owned()),
+                                msg,
+                            ))
+                        }),
+                    ]);
                 }
                 _ => (),
             }

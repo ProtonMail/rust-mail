@@ -3,6 +3,8 @@ mod events;
 mod images;
 mod initialization;
 
+pub use events::whole_refresh_tui;
+
 use self::events::MailEventLoopContext;
 use crate::actions::draft::SEND_ACTION_GROUP;
 use crate::actions::register_mail_actions;

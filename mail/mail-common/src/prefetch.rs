@@ -40,9 +40,7 @@ pub enum PrefetchJob {
     LocationCnvView(LocalLabelId),
     LocationMsgView(LocalLabelId),
     Conversation(LocalConversationId, LocalLabelId),
-    ConversationMeta(LocalConversationId),
     Message(LocalMessageId),
-    MessageMeta(LocalMessageId),
 }
 
 impl PrefetchJob {
@@ -136,27 +134,11 @@ impl Prefetch {
                         tracing::error!("Failed to prefetch conversation {cnv_id}, {error}",);
                     }
                 }
-                PrefetchJob::ConversationMeta(cnv_id) => {
-                    tracing::debug!("Refresh conversation metadata {cnv_id}");
-                    let action = conversations::RefreshMeta::new(*cnv_id);
-                    if let Err(error) = queue.queue_action(action).await {
-                        tracing::error!(
-                            "Failed to prefetch conversation metadata {cnv_id}, {error}",
-                        );
-                    }
-                }
                 PrefetchJob::Message(msg_id) => {
                     tracing::debug!("Prefetch message {msg_id}");
                     let action = messages::Prefetch::new(*msg_id);
                     if let Err(error) = queue.queue_action(action).await {
                         tracing::error!("Failed to prefetch message {msg_id}, {error}",);
-                    }
-                }
-                PrefetchJob::MessageMeta(msg_id) => {
-                    tracing::debug!("Refresh message metadata {msg_id}");
-                    let action = messages::RefreshMeta::new(*msg_id);
-                    if let Err(error) = queue.queue_action(action).await {
-                        tracing::error!("Failed to prefetch message metadata {msg_id}, {error}",);
                     }
                 }
             }

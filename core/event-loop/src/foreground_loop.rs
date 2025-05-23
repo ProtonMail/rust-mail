@@ -221,7 +221,7 @@ impl EventLoopInternal {
                     "Failed to publish refresh to '{}': {e:?}",
                     subscriber.name()
                 );
-                return Err(EventLoopError::Subscriber(subscriber.name().into(), e));
+                return Err(EventLoopError::Refresh(subscriber.name().into(), e));
             }
         }
 
