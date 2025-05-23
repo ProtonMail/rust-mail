@@ -166,8 +166,21 @@ pub async fn registered_device_task_step(
             get_unregistered_sessions(&tether, &state.registered_sessions).await?
         }
     };
-    let status_watcher = StatusWatcher::default();
+
+    if sessions.is_empty() {
+        return Ok(());
+    }
+
+    // SAFETY: We just assured the vector is not empty
+    let any_session = &sessions[0];
+    // We need to retrieve status watcher from existing session, because
+    // we need to ensure that the `status.initialize()` is not only triggered,
+    // but the task is not aborted on drop.
+    let session_ctx = ctx.user_context_from_session(any_session, None).await?;
+    let status_watcher = session_ctx.session().status_watcher();
+
     let mut is_online = status_watcher.subscribe_to_online();
+
     if let Some(device) = state.device.as_ref() {
         // Trying in a loop. If registration fails because of network, let's retry.
         loop {
@@ -181,10 +194,14 @@ pub async fn registered_device_task_step(
             .await
             {
                 if e.is_network_failure() {
+                    tracing::error!("Network failure, waiting for online...");
                     // Recoverable failure. Repeat.
                     // Most likely happened because of network issue, so let's
                     // see if we are online.
-                    is_online.wait_for(|t| t == &true).await?;
+
+                    is_online.wait_for(|t| *t).await?;
+
+                    tracing::trace!("Device is online... Sleeping just in case");
                     // Even though we just waited for online, we should still sleep for a while.
                     // It is, because if the endpoint returns 500, the /ping endpoint may actually
                     // work just fine, so the `is_online` would return true, and yet we would
@@ -193,6 +210,7 @@ pub async fn registered_device_task_step(
                         SLEEP_IN_CASE_OF_NETWORK_ERR,
                     ))
                     .await;
+                    tracing::trace!("Awake. Retrying");
                     continue;
                 }
                 if e.is_not_fully_authenticated() {
