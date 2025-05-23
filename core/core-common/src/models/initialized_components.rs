@@ -228,17 +228,24 @@ impl InitializedComponent {
         tether: &mut Tether,
     ) -> Result<(), StashError> {
         tether
-            .tx(async |tx| {
-                Self {
-                    key: key.into(),
-                    state,
-                    row_id: None,
-                }
-                .save(tx)
-                .await
-            })
+            .tx(async |tx| Self::set_state_tx(key, state, tx).await)
             .await?;
+
         Ok(())
+    }
+
+    pub async fn set_state_tx(
+        key: InitializationKey,
+        state: InitializedComponentState,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        Self {
+            key: key.into(),
+            state,
+            row_id: None,
+        }
+        .save(bond)
+        .await
     }
 
     async fn fail(key: InitializationKey, tether: &mut Tether) -> Result<(), StashError> {

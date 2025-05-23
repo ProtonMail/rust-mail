@@ -1,3 +1,4 @@
+use crate::MailUserContext;
 use crate::actions::{conversations, messages};
 use crate::datatypes::{MessageLabelsCount, ReadFilter, ViewMode};
 use crate::models::default_location::IncomingDefaultLocation;
@@ -9,7 +10,6 @@ use crate::prefetch::PrefetchJob;
 use crate::user_context::events::conversations::handle_conversation_events;
 use crate::user_context::events::labels::handle_label_events;
 use crate::user_context::events::messages::handle_message_events;
-use crate::{MailContextError, MailUserContext};
 use crate::{datatypes::ConversationLabelsCount, events::MailEvent};
 use anyhow::{anyhow, bail};
 use async_trait::async_trait;
@@ -231,12 +231,18 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
     }
 
     tether
-        .tx::<_, _, MailContextError>(async |tx| {
+        .tx::<_, _, SubscriberError>(async |tx| {
             RollbackItem::delete_all(tx).await?;
             ConversationScrollData::delete_all(tx).await?;
             MessageScrollData::delete_all(tx).await?;
 
-            Label::sync_labels(tx, all_remote_labels).await?;
+            Label::sync_labels(tx, all_remote_labels)
+                .await
+                .map_err(|e| {
+                    let e = anyhow!("Failed to sync labels: {e}");
+                    error!("{e:?}");
+                    SubscriberError::Other(e)
+                })?;
 
             for removed_local_label in all_local_labels.into_values() {
                 removed_local_label.delete(tx).await?;
@@ -245,10 +251,8 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
             Ok(())
         })
         .await
-        .map_err(|e| {
-            let e = anyhow!("Failed to clear database entries: {e}");
-            error!("{e:?}");
-            SubscriberError::Other(e)
+        .inspect_err(|e| {
+            error!("Failed to clear database entries, while refreshing mail: {e}");
         })?;
 
     match scroll_cursor {
@@ -285,24 +289,33 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
         },
     };
 
-    InitializedComponent::set_state(
-        StoreLabelCounters::INIT_KEY,
-        InitializedComponentState::NotInitialized,
-        &mut tether,
-    )
-    .await?;
-    InitializedComponent::set_state(
-        MailSettings::INIT_KEY,
-        InitializedComponentState::NotInitialized,
-        &mut tether,
-    )
-    .await?;
-    InitializedComponent::set_state(
-        IncomingDefaultLocation::INIT_KEY,
-        InitializedComponentState::NotInitialized,
-        &mut tether,
-    )
-    .await?;
+    tether
+        .tx::<_, _, SubscriberError>(async |tx| {
+            InitializedComponent::set_state_tx(
+                StoreLabelCounters::INIT_KEY,
+                InitializedComponentState::NotInitialized,
+                tx,
+            )
+            .await?;
+            InitializedComponent::set_state_tx(
+                MailSettings::INIT_KEY,
+                InitializedComponentState::NotInitialized,
+                tx,
+            )
+            .await?;
+            InitializedComponent::set_state_tx(
+                IncomingDefaultLocation::INIT_KEY,
+                InitializedComponentState::NotInitialized,
+                tx,
+            )
+            .await?;
+
+            Ok(())
+        })
+        .await
+        .inspect_err(|e| {
+            error!("Failed to clear init states: {e}");
+        })?;
 
     Ok(())
 }
@@ -341,30 +354,26 @@ async fn refresh_core(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
                 remote_address.save(tx).await?;
             }
 
+            // User and UserSettings have common initialization path
+            InitializedComponent::set_state_tx(
+                User::INIT_KEY,
+                InitializedComponentState::NotInitialized,
+                tx,
+            )
+            .await?;
+            InitializedComponent::set_state_tx(
+                Contact::INIT_KEY,
+                InitializedComponentState::NotInitialized,
+                tx,
+            )
+            .await?;
+
             Ok(())
         })
         .await
-        .map_err(|e| {
-            let e = anyhow!("Failed to clear database entries: {e}");
-            error!("{e:?}");
-            SubscriberError::Other(e)
+        .inspect_err(|e| {
+            error!("Failed to clear database entries while refreshing core: {e}");
         })?;
-
-    // Core
-    //
-    // User and UserSettings have common initialization path
-    InitializedComponent::set_state(
-        User::INIT_KEY,
-        InitializedComponentState::NotInitialized,
-        &mut tether,
-    )
-    .await?;
-    InitializedComponent::set_state(
-        Contact::INIT_KEY,
-        InitializedComponentState::NotInitialized,
-        &mut tether,
-    )
-    .await?;
 
     Ok(())
 }
