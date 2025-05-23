@@ -1,5 +1,6 @@
 mod crypto;
 pub mod datatypes;
+pub mod device;
 mod keychain;
 pub mod observability;
 mod report_an_issue;

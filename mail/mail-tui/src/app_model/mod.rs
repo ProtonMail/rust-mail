@@ -162,6 +162,7 @@ impl AppModel {
                 Arc::new(keychain),
                 app_config.api_config(),
                 None, // TODO(jhoulahan): Support HV challenge (at least sms/email)
+                None, // TODO: Add DeviceInfoProvider support for mail-tui.
                 Some(log_file),
                 EventPollMode::Automatic(Duration::from_secs(
                     CLI_ARGS.event_loop_time.unwrap_or(15),

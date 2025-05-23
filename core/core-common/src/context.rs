@@ -10,6 +10,7 @@ use crate::db::account::{
     SessionEncryptionKey,
 };
 use crate::db::migrations::migrate_account_db;
+use crate::device::DynDeviceInfoProvider;
 use crate::event_loop::EventPollMode;
 use crate::models::{AppSettings, ModelExtension};
 use crate::nuke_utils::{
@@ -251,6 +252,7 @@ pub struct Context {
     cache_path: PathBuf,
     api_config: ApiConfig,
     hv_notifier: Option<DynChallengeNotifier>,
+    device_info_provider: Option<DynDeviceInfoProvider>,
     cancellation_token: CancellationToken,
     task_service: BackgroundAwareTaskService,
     on_session_deleted_broadcast: broadcast::Sender<(SessionId, UserId)>,
@@ -271,6 +273,7 @@ impl Context {
     /// * `initializers`: List of user database initializers that should be called.
     /// * `api_config`: Configuration for any constructed API sessions.
     /// * `hv_notifier`: Optional notifier to handle human verification challenges.
+    /// * `device_info_provider`: Optional provider to handle device info.
     /// * `cache_path`: Cache path for cached data.
     /// * `connection_pool_size`: Maximum size of DB connection pool for the account DB. If `None`, the default value is used.
     ///
@@ -285,6 +288,7 @@ impl Context {
         initializers: impl IntoIterator<Item = Box<dyn UserDatabaseInitializer>>,
         api_config: ApiConfig,
         hv_notifier: Option<DynChallengeNotifier>,
+        device_info_provider: Option<DynDeviceInfoProvider>,
         cache_path: impl Into<PathBuf>,
         connection_pool_size: Option<u32>,
         log_path: Option<PathBuf>,
@@ -330,6 +334,7 @@ impl Context {
             cache_path: cache_path.into(),
             api_config,
             hv_notifier,
+            device_info_provider,
             cancellation_token: CancellationToken::new(),
             task_service: BackgroundAwareTaskService::new(task_service),
             on_session_deleted_broadcast: broadcast_sender,

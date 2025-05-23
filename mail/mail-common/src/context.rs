@@ -15,6 +15,7 @@ use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_api::verification::DynChallengeNotifier;
 use proton_core_common::auth_store::DecryptExt;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
+use proton_core_common::device::DynDeviceInfoProvider;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::{LabelError, ModelExtension};
 use proton_core_common::os::{KeyChain, KeyChainError};
@@ -234,6 +235,7 @@ impl MailContext {
         key_chain: Arc<dyn KeyChain>,
         api_config: Config,
         hv_notifier: Option<DynChallengeNotifier>,
+        device_info_provider: Option<DynDeviceInfoProvider>,
         log_path: Option<PathBuf>,
         event_poll_mode: EventPollMode,
     ) -> Result<Arc<Self>, MailContextError> {
@@ -247,6 +249,7 @@ impl MailContext {
             initializers,
             api_config,
             hv_notifier,
+            device_info_provider,
             core_cache_path,
             connection_pool_size,
             log_path,
