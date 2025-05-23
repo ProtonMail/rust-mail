@@ -5,7 +5,7 @@ mod mark_read;
 mod mark_unread;
 mod r#move;
 mod prefetch;
-mod refresh_meta;
+mod refresh_metadata;
 mod unlabel;
 
 pub use delete::Delete;
@@ -15,5 +15,5 @@ pub use mark_read::MarkRead;
 pub use mark_unread::MarkUnread;
 pub use r#move::Move;
 pub use prefetch::Prefetch;
-pub use refresh_meta::RefreshMeta;
+pub use refresh_metadata::RefreshMetadata;
 pub use unlabel::Unlabel;

@@ -257,7 +257,7 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
                 .visible_elements(&tether)
                 .await?
                 .into_iter()
-                .map(|conv| conversations::RefreshMeta::new(conv.local_id));
+                .map(|conv| conversations::RefreshMetadata::new(conv.local_id));
 
             for action in actions {
                 if let Err(error) = ctx.action_queue().queue_action(action).await {
@@ -271,7 +271,7 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
                 .await?
                 .into_iter()
                 .filter_map(|msg| msg.local_id)
-                .map(messages::RefreshMeta::new);
+                .map(messages::RefreshMetadata::new);
 
             for action in actions {
                 if let Err(error) = ctx.action_queue().queue_action(action).await {
@@ -328,7 +328,6 @@ async fn refresh_core(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
 
     tether
         .tx::<_, _, SubscriberError>(async |tx| {
-            // Core
             Contact::delete_all(tx).await?;
 
             for removed_local_address in all_local_addresses.into_values() {

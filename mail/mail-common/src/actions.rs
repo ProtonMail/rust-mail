@@ -118,7 +118,7 @@ pub(crate) fn register_mail_actions(queue: &Queue) {
     register_action::<unblock::Unblock>(queue);
     register_action::<update_incoming_defaults::SyncIncomingDefaults>(queue);
     register_action::<conversations::Move>(queue);
-    register_action::<conversations::RefreshMeta>(queue);
+    register_action::<conversations::RefreshMetadata>(queue);
     register_action::<messages::label::Label>(queue);
     register_action::<messages::unlabel::Unlabel>(queue);
     register_action::<messages::r#move::Move>(queue);
@@ -129,7 +129,7 @@ pub(crate) fn register_mail_actions(queue: &Queue) {
     register_action::<messages::ham::Ham>(queue);
     register_action::<messages::phishing::ReportPhishing>(queue);
     register_action::<messages::prefetch::Prefetch>(queue);
-    register_action::<messages::refresh_meta::RefreshMeta>(queue);
+    register_action::<messages::refresh_metadata::RefreshMetadata>(queue);
     register_action::<draft::Save>(queue);
     register_action::<draft::Send>(queue);
     register_action::<labels::Expand>(queue);

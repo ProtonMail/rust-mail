@@ -1,8 +1,9 @@
 use anyhow::anyhow;
 use std::collections::HashMap;
 
+use crate::AppError;
 use crate::actions::MailActionError;
-use crate::models::Conversation;
+use crate::models::{Conversation, ConversationScrollData};
 use crate::{MailUserContext, models::Message};
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
@@ -14,23 +15,28 @@ use proton_task_service::AsyncTaskResult;
 use serde::{self, Deserialize, Serialize};
 use stash::stash::Bond;
 
-/// Prefetch conversation data action.
+/// Refresh conversation metadata action.
+///
+/// This action is designed to refresh existing metadata
+/// in a case of suspicion that this conversation may be outdated.
+///
+/// On failure the local conversation will be removed.
+///
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct RefreshMeta {
+pub struct RefreshMetadata {
     local_id: LocalConversationId,
 }
 
-impl RefreshMeta {
-    /// Create new instance.
+impl RefreshMetadata {
     pub fn new(local_id: LocalConversationId) -> Self {
         Self { local_id }
     }
 }
 
-impl Action for RefreshMeta {
+impl Action for RefreshMetadata {
     const TYPE: Type = Type("refresh_conversation_metadata");
     const VERSION: u32 = 1;
-    const PRIORITY: Priority = Priority::Lowest;
+    const PRIORITY: Priority = Priority::Normal;
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
@@ -44,7 +50,7 @@ impl Action for RefreshMeta {
 pub struct Handler {}
 
 impl proton_action_queue::action::Handler for Handler {
-    type Action = RefreshMeta;
+    type Action = RefreshMetadata;
     type Context = MailUserContext;
 
     async fn apply_local(
@@ -77,8 +83,29 @@ impl proton_action_queue::action::Handler for Handler {
         if let Some(remote_id) =
             Conversation::local_id_counterpart(action.local_id, guard.tether()).await?
         {
-            let items =
-                Conversation::sync_metadata(vec![remote_id.clone()], ctx.api(), &mut guard).await?;
+            let items_sync_result =
+                Conversation::sync_metadata(vec![remote_id.clone()], ctx.api(), &mut guard).await;
+            let items = match items_sync_result {
+                Ok(items) => items,
+                Err(AppError::API(e)) if e.is_network_failure() => {
+                    return Err(MailActionError::Http(e));
+                }
+                Err(e) => {
+                    tracing::error!(
+                        "Unexpected error while refreshing conversation metadata: `{e}`"
+                    );
+                    tracing::error!("Deleting local conversation: `{}`", action.local_id);
+                    guard
+                        .tx(async |tx| {
+                            Conversation::delete_by_id(action.local_id, tx).await?;
+                            Result::<(), <Self::Action as Action>::Error>::Ok(())
+                        })
+                        .await?;
+
+                    return Err(e.into());
+                }
+            };
+
             if items.is_empty() {
                 // The conversation appears to be not found remotely, delete it.
                 tracing::warn!(
@@ -87,6 +114,7 @@ impl proton_action_queue::action::Handler for Handler {
                 guard
                     .tx(async |tx| {
                         Conversation::delete_by_id(action.local_id, tx).await?;
+                        ConversationScrollData::delete_all(tx).await?;
                         Result::<(), <Self::Action as Action>::Error>::Ok(())
                     })
                     .await?;
@@ -109,6 +137,7 @@ impl proton_action_queue::action::Handler for Handler {
                         Message::in_conversation(action.local_id, guard.tether())
                             .await?
                             .into_iter()
+                            .filter(|msg| !msg.is_draft() && msg.remote_id.is_some())
                             .map(|msg| (msg.remote_id.clone(), msg))
                             .collect();
                     let AsyncTaskResult::Completed(Ok(remote_msgs)) = remote_msgs
