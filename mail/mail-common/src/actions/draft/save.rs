@@ -764,7 +764,7 @@ impl Save {
             subject,
             is_known: false,
             custom_labels: vec![],
-            has_messages: false,
+            has_messages: true,
             row_id: None,
         }
     }

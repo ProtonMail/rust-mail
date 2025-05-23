@@ -638,6 +638,9 @@ impl Conversation {
             if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
                 self.local_id = existing.local_id;
                 self.row_id = existing.row_id;
+                // We want to preserve this to prevent unnecessary resyncing of conversations
+                // messages if we update something.
+                self.has_messages = self.has_messages || existing.has_messages;
             }
         }
 
