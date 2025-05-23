@@ -175,7 +175,7 @@ pub(super) fn prepare_html_reply(
     output.push_str(&sender_reply);
     output.push_str(HTML_LINE_BREAK);
     output.push_str(BEGIN_BLOCKQUOTE);
-    output.push_str(original_body);
+    output.push_str(&sanitize_reply(original_body));
     output.push_str(CLOSE_BLOCKQUOTE);
     output.push_str(CLOSE_QUOTE);
 }
@@ -243,6 +243,22 @@ pub fn maybe_sanitize(mime_type: MimeType, body: String) -> String {
     transformer.strip_whitelist();
 
     transformer.to_string()
+}
+
+/// Used only when creating a draft from existing message.
+/// Extracts `<body>` innerHTML from the message.
+///
+/// # Parameters
+///
+/// * `body` - message body, containing full `<html>`
+fn sanitize_reply(body: &str) -> String {
+    Transformer::new(body)
+        // TODO(wpolak): In following MR's:
+        // * Inject dark mode
+        // * Move every `<style>` from `<head>` to `<body>`
+        // * Sanitize `<style>` in `<body>` so that selectors are pointing to
+        // `.protonmail_quote` (to prevent style bleeding)
+        .extract_body()
 }
 
 /// Generates a reply similar to:
