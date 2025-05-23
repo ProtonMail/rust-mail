@@ -344,9 +344,9 @@ lto = true                 # "Fat" LTO
 # panic = 'abort' We might want to enable this
 
 [patch."crates-io"]
-# TODO https://github.com/hyperium/hyper/pull/3887
+# TODO https://github.com/hyperium/hyper/pull/3887 (got merged, waiting for release)
 # TODO https://protonmail.slack.com/archives/C07FCLA1RQW/p1746692300139499
-hyper = { git = "https://github.com/Patryk27/hyper", rev = "f1ee16c0e1ef72c5f467fdf142e6525ffa03059a" }
+hyper = { git = "https://github.com/hyperium/hyper", rev = "436cadd1ac08a9508a46f550e03281db9f2fee97" }
 
 # TODO https://github.com/rust-lang/rust-bindgen/issues/3199
 # TODO https://protonmail.slack.com/archives/C07FCLA1RQW/p1747302410720299
