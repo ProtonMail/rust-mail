@@ -83,6 +83,14 @@ impl StatusWatcher {
         let online_tx = self.online_tx.clone();
         let observer = self.observer.clone();
 
+        if let Some(task) = self.task.as_ref() {
+            if !task.is_finished() {
+                // We assume at that point that the status watcher is already
+                // initialized
+                return;
+            }
+        }
+
         let task = tokio::spawn(async move {
             let mut interval = time::interval(Duration::from_secs(10));
             let mut on_update = observer.subscribe();
