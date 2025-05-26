@@ -535,6 +535,41 @@ impl MailTestContext {
             .await;
     }
 
+    /// Generate a new mock expectation for updating a draft.
+    ///
+    /// Note that this mock does not valid the draft body.
+    ///
+    /// # Parameters
+    ///
+    /// * `message_id`             - Message id to update.
+    /// * `params`                 - Expected draft params.
+    /// * `reply`                  - Expected server reply.
+    /// * `attachment_key_packets` - Attachment key packets for the attachment.
+    ///                              included in this request.
+    #[allow(clippy::doc_markdown)]
+    #[function_name::named]
+    pub async fn mock_update_draft_failure(
+        &self,
+        message_id: MessageId,
+        params: DraftParams,
+        attachment_key_packets: DraftAttachmentKeyPackets,
+        reply: ApiErrorInfo,
+    ) {
+        Mock::given(method("PUT"))
+            .and(body_partial_json(TestUpdateDraftRequest::from(
+                PutUpdateDraftRequest {
+                    message: params,
+                    attachment_key_packets,
+                },
+            )))
+            .and(path(format!("/api/mail/v4/messages/{message_id}")))
+            .respond_with(ResponseTemplate::new(422).set_body_json(reply))
+            .expect(1)
+            .named(function_name!())
+            .mount(self.mock_server())
+            .await;
+    }
+
     /// Generate a new mock expectation for cancelling a sent message.
     ///
     /// Note that this mock does not validate parameters that are cryptographically
