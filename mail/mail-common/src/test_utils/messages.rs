@@ -1,4 +1,4 @@
-use crate::test_context::MailTestContext;
+use crate::test_utils::test_context::MailTestContext;
 use itertools::Itertools;
 use proton_core_api::services::proton::LabelId;
 use proton_core_api::services::proton::common::ApiErrorInfo;

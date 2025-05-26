@@ -7,14 +7,14 @@ use proton_mail_api::services::proton::{
     common::MessageId, prelude::GetMessagesResponse,
     response_data::MessageMetadata as ApiMessageMetadata,
 };
+use proton_mail_common::api_message_meta;
+use proton_mail_common::test_utils::{init::Params as TestParams, test_context::MailTestContext};
 use proton_mail_common::{
     datatypes::SearchOptions,
     mail_scroller::MailScroller,
     models::{Conversation, Message},
 };
-use proton_mail_test_utils::api_message_meta;
-use proton_mail_test_utils::{init::Params as TestParams, test_context::MailTestContext};
-use proton_mail_test_utils::{message, msg_id};
+use proton_mail_common::{message, msg_id};
 
 use stash::stash::StashError;
 use stash::{

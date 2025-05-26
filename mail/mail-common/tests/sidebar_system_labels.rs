@@ -7,8 +7,8 @@ use proton_mail_api::services::proton::response_data::{
 };
 use proton_mail_common::Sidebar;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_test_utils::init::Params as TestParams;
-use proton_mail_test_utils::test_context::MailTestContext;
+use proton_mail_common::test_utils::init::Params as TestParams;
+use proton_mail_common::test_utils::test_context::MailTestContext;
 use std::default::Default;
 use test_case::test_case;
 use velcro::hash_map;

@@ -1,4 +1,5 @@
-use crate::test_context::MailTestContext;
+use crate::datatypes::attachment;
+use crate::test_utils::test_context::MailTestContext;
 use proton_core_api::services::proton::AddressId;
 use proton_core_api::services::proton::common::ApiErrorInfo;
 use proton_core_common::test_utils::account::TEST_ADDRESS_ID;
@@ -12,7 +13,6 @@ use proton_mail_api::services::proton::response_data::{
 use proton_mail_api::services::proton::responses::{
     GetAttachmentMetadataResponse, PostAttachmentResponse,
 };
-use proton_mail_common::datatypes::attachment;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate, Times};
 

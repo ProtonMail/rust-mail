@@ -16,8 +16,8 @@ use proton_mail_api::services::proton::response_data::{
 use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::{ExclusiveLocation, SystemLabelId};
 use proton_mail_common::models::{ConversationCounters, Message, MessageCounters};
-use proton_mail_test_utils::init::Params as TestParams;
-use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
+use proton_mail_common::test_utils::init::Params as TestParams;
+use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{StashError, Tether};

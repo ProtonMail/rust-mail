@@ -5790,9 +5790,9 @@ dependencies = [
  "proton-crypto-inbox",
  "proton-event-loop",
  "proton-mail-api",
+ "proton-mail-common",
  "proton-mail-html-transformer",
  "proton-mail-ids",
- "proton-mail-test-utils",
  "proton-sqlite3",
  "proton-task-service",
  "rmp",
@@ -5818,6 +5818,7 @@ dependencies = [
  "uuid",
  "velcro",
  "wiremock",
+ "wiremock-multipart",
  "wry",
 ]
 
@@ -5852,34 +5853,6 @@ dependencies = [
  "proton-mail-api",
  "serde",
  "stash",
-]
-
-[[package]]
-name = "proton-mail-test-utils"
-version = "0.1.0"
-dependencies = [
- "function_name",
- "futures",
- "itertools 0.13.0",
- "proton-action-queue",
- "proton-core-api",
- "proton-core-common",
- "proton-crypto-account",
- "proton-crypto-inbox",
- "proton-mail-api",
- "proton-mail-common",
- "secrecy",
- "serde",
- "serde_with",
- "stash",
- "tempdir",
- "tempfile",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "velcro",
- "wiremock",
- "wiremock-multipart",
 ]
 
 [[package]]
@@ -5932,7 +5905,6 @@ dependencies = [
  "muon",
  "non-empty-string",
  "parking_lot",
- "pretty_assertions",
  "proton-account-api",
  "proton-account-uniffi",
  "proton-action-queue",
@@ -5942,7 +5914,6 @@ dependencies = [
  "proton-event-loop",
  "proton-mail-api",
  "proton-mail-common",
- "proton-mail-test-utils",
  "proton-task-service",
  "proton-vcard",
  "secrecy",

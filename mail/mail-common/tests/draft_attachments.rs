@@ -22,11 +22,11 @@ use proton_mail_common::draft::{Draft, DraftSyncStatus, ReplyMode};
 use proton_mail_common::models::{
     Attachment, DraftAttachmentMetadata, DraftAttachmentUploadState, Message,
 };
-use proton_mail_common::{MailContextError, MailUserContext, draft};
-use proton_mail_test_utils::message_body::{
+use proton_mail_common::test_utils::message_body::{
     TEST_USER_ID, message_body_test_message_mime, message_body_test_user_secret,
 };
-use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
+use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
+use proton_mail_common::{MailContextError, MailUserContext, draft};
 use stash::stash::Tether;
 use std::path::Path;
 

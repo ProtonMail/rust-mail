@@ -1,5 +1,5 @@
+use crate::db::migrations::migrate_db;
 use proton_core_common::db::migrations::migrate_core_db;
-use proton_mail_common::db::migrations::migrate_db;
 use stash::stash::{Stash, StashConfiguration};
 use tempfile::{TempDir, tempdir};
 

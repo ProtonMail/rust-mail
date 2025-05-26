@@ -1,4 +1,5 @@
-use crate::test_context::MailTestContext;
+use crate::datatypes::SystemLabelId;
+use crate::test_utils::test_context::MailTestContext;
 use proton_core_api::services::proton::AddressSignedKeyList as ApiAddressSignedKeyList;
 use proton_core_api::services::proton::{
     Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
@@ -14,7 +15,6 @@ use proton_mail_api::services::proton::response_data::{
     AttachmentMetadata, Conversation as ApiConversation, ConversationLabel as ApiConversationLabel,
     MessageMetadata, MessageRecipient as ApiMessageRecipient, MessageSender as ApiMessageSender,
 };
-use proton_mail_common::datatypes::SystemLabelId;
 use stash::stash::{StashError, Tether};
 use std::collections::BTreeMap;
 use std::sync::LazyLock;
@@ -78,7 +78,7 @@ macro_rules! api_label {
 #[macro_export]
 macro_rules! message {
     ($($field:tt)*) => {{
-        use proton_mail_common::models::Message;
+        use $crate::models::Message;
 
         Message {
             $($field)*,
@@ -114,7 +114,7 @@ macro_rules! api_message_meta {
 #[macro_export]
 macro_rules! conversation {
     ($($field:tt)*) => {{
-        use proton_mail_common::models::Conversation;
+        use $crate::models::Conversation;
 
         Conversation {
             $($field)*,
@@ -126,7 +126,7 @@ macro_rules! conversation {
 #[macro_export]
 macro_rules! conv_label {
     ($($field:tt)*) => {{
-        use proton_mail_common::models::ConversationLabel;
+        use $crate::models::ConversationLabel;
 
         ConversationLabel {
             $($field)*,

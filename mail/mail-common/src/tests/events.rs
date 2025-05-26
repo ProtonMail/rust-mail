@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 
 use crate::events::EventId;
-use proton_mail_test_utils::db::new_test_connection;
+use proton_mail_common::test_utils::db::new_test_connection;
 
 #[tokio::test]
 async fn test_event_id_store_get_set() {

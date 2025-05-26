@@ -9,7 +9,7 @@ use proton_core_api::services::proton::Label as ApiLabel;
 use proton_core_api::services::proton::LabelId;
 use proton_core_api::services::proton::LabelType as ApiLabelType;
 use proton_core_common::models::Label;
-use proton_mail_test_utils::db::new_test_connection;
+use proton_mail_common::test_utils::db::new_test_connection;
 use stash::stash::StashError;
 
 #[tokio::test]

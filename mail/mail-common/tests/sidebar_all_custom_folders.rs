@@ -2,8 +2,8 @@ use proton_core_api::services::proton::Label as ApiLabel;
 use proton_core_api::services::proton::LabelId;
 use proton_core_api::services::proton::LabelType;
 use proton_mail_common::Sidebar;
-use proton_mail_test_utils::init::Params as TestParams;
-use proton_mail_test_utils::test_context::MailTestContext;
+use proton_mail_common::test_utils::init::Params as TestParams;
+use proton_mail_common::test_utils::test_context::MailTestContext;
 use test_case::test_case;
 use velcro::hash_map;
 

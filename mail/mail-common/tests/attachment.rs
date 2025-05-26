@@ -2,13 +2,13 @@ use futures::future::try_join_all;
 use proton_core_api::services::proton::LabelId;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{Attachment, Conversation};
-use proton_mail_common::{DecryptedAttachment, Mailbox};
-use proton_mail_ids::LocalAttachmentId;
-use proton_mail_test_utils::attachment::{
+use proton_mail_common::test_utils::attachment::{
     testdata_attachment_data, testdata_expected_attachment_decrypted,
 };
-use proton_mail_test_utils::init::Params as TestParams;
-use proton_mail_test_utils::test_context::MailTestContext;
+use proton_mail_common::test_utils::init::Params as TestParams;
+use proton_mail_common::test_utils::test_context::MailTestContext;
+use proton_mail_common::{DecryptedAttachment, Mailbox};
+use proton_mail_ids::LocalAttachmentId;
 use stash::orm::Model;
 use std::fs;
 use std::path::PathBuf;
