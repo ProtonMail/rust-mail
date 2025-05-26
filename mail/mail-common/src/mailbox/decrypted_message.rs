@@ -25,16 +25,12 @@ use tracing::{debug, trace, warn};
 /// What to do with the body. If in any of the fields `None` is specified it will read the relevant
 /// value from the user setttings. If all are set, the db query will be elided.
 #[derive(Debug, Clone, Copy)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct TransformOpts {
     /// Whether should show block quotes or not. Default: true
-    #[cfg_attr(feature = "uniffi", uniffi(default = true))]
     pub show_block_quote: bool,
     /// Whether should hide remote images or not. Default: defined in mail settings
-    #[cfg_attr(feature = "uniffi", uniffi(default = None))]
     pub hide_remote_images: Option<bool>,
     /// Whether should hide embedded images or not. Default: defined in mail settings
-    #[cfg_attr(feature = "uniffi", uniffi(default = None))]
     pub hide_embedded_images: Option<bool>,
     /// Current settings related to the color scheme.
     /// It affects on which CSS style is used in the HTML body of the message
@@ -43,14 +39,12 @@ pub struct TransformOpts {
     /// It assumes that the device supports `@media` queries. In that case
     /// passing theme would be irrelevant.
     ///
-    #[cfg_attr(feature = "uniffi", uniffi(default = None))]
     pub theme: Option<ThemeOpts>,
 }
 
 /// Current settings related to the color scheme.
 /// It affects on which CSS style is used in the HTML body of the message
 #[derive(Debug, Clone, Copy)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct ThemeOpts {
     /// What is the current UI color scheme, provided by the application.
     ///
@@ -60,14 +54,12 @@ pub struct ThemeOpts {
     ///
     /// Default: No override provided
     ///
-    #[cfg_attr(feature = "uniffi", uniffi(default = None))]
     pub theme_override: Option<MailTheme>,
 
     /// Whether the device supports `@media (prefers-color-scheme: dark) {}` or not.
     ///
     /// Default: True - only Android 9 does not support it (so far)
     ///
-    #[cfg_attr(feature = "uniffi", uniffi(default = true))]
     pub supports_dark_mode_via_media_query: bool,
 }
 
@@ -374,7 +366,6 @@ impl DecryptedMessageBody {
 /// It will have more things in the future
 #[non_exhaustive]
 #[derive(Clone, derive_more::derive::Debug)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 pub struct BodyOutput {
     /// The transformed html of the message.
     #[debug("{} bytes", body.len())]

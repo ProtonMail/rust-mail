@@ -50,6 +50,7 @@ mod connection_status;
 pub mod contact_details;
 mod contact_list;
 mod issue_report;
+mod timestamp;
 
 pub use account_details::*;
 pub use app_settings::*;
@@ -65,6 +66,7 @@ use proton_core_api::store::UserData;
 use proton_mail_api::services::proton::common::MessageId;
 use secrecy::SecretString;
 use stash::stash::Tether;
+pub use timestamp::*;
 use tracing::error;
 
 use core::fmt;
@@ -79,9 +81,8 @@ use proton_core_common::datatypes::{
     LocalContactEmailId, LocalContactId, LocalLabelId, LogAuth as RealLogAuth,
     Password as RealPassword, Phone as RealPhone, ProductUsedSpace as RealProductUsedSpace,
     Referral as RealReferral, SettingsFlags as RealSettingsFlags, TfaStatus as RealTfaStatus,
-    TimeFormat as RealTimeFormat, TwoFa as RealTwoFa, UnixTimestamp,
-    UserMnemonicStatus as RealUserMnemonicStatus, UserType as RealUserType,
-    WeekStart as RealWeekStart,
+    TimeFormat as RealTimeFormat, TwoFa as RealTwoFa, UserMnemonicStatus as RealUserMnemonicStatus,
+    UserType as RealUserType, WeekStart as RealWeekStart,
 };
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::models::{
@@ -1020,7 +1021,7 @@ impl ContactEmail {
                 .into_iter()
                 .map(Into::into)
                 .collect(),
-            last_used_time: value.last_used_time,
+            last_used_time: value.last_used_time.into(),
             name: value.name,
         })
     }
@@ -1556,7 +1557,7 @@ pub struct User {
 impl From<RealUser> for User {
     fn from(user: RealUser) -> Self {
         Self {
-            create_time: user.create_time,
+            create_time: user.create_time.into(),
             credit: user.credit,
             currency: user.currency,
             delinquent: user.delinquent as u32,

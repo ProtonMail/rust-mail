@@ -1,3 +1,4 @@
+use crate::core::datatypes::UnixTimestamp;
 use crate::{UniffiEnum, UniffiRecord};
 use crate::{core::datatypes::AvatarInformation, core::datatypes::Id};
 use itertools::Itertools;
@@ -7,7 +8,6 @@ use proton_core_common::datatypes::{
     ContactSuggestion as RealContactSuggestion, ContactSuggestionKind as RealContactSuggestionKind,
     ContactSuggestions as RealContactSuggestions, DeviceContact as RealDeviceContact,
     DeviceContactSuggestion as RealDeviceContactSuggestion, GroupedContacts as RealGroupedContacts,
-    UnixTimestamp,
 };
 use proton_core_common::utils::MapVec as _;
 
@@ -123,7 +123,7 @@ impl From<RealContactEmailItem> for ContactEmailItem {
             id: value.local_id.into(),
             email: value.email,
             is_proton: value.is_proton,
-            last_used_time: value.last_used_time,
+            last_used_time: value.last_used_time.into(),
         }
     }
 }
@@ -134,7 +134,7 @@ impl From<ContactEmailItem> for RealContactEmailItem {
             local_id: value.id.into(),
             email: value.email,
             is_proton: value.is_proton,
-            last_used_time: value.last_used_time,
+            last_used_time: value.last_used_time.into(),
         }
     }
 }

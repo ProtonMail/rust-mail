@@ -1,11 +1,10 @@
-use crate::core::datatypes::Id;
+use crate::core::datatypes::{Id, UnixTimestamp};
 use crate::errors::{
     DraftAttachmentUploadErrorReason, DraftSaveErrorReason, DraftSendErrorReason, ProtonError,
     VoidProtonResult,
 };
 use crate::mail::MailUserSession;
 use crate::{async_runtime, uniffi_async};
-use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::utils::MapVec;
 use proton_mail_common::MailContextError;
 use proton_mail_common::datatypes::LocalMessageId;
@@ -86,7 +85,7 @@ impl From<RealDraftSendResult> for DraftSendResult {
         let second_left_for_undo = value.time_left_for_undo().as_secs();
         Self {
             message_id: value.local_message_id.into(),
-            timestamp: value.timestamp,
+            timestamp: value.timestamp.into(),
             error: value
                 .error
                 .map_or(DraftSendStatus::Success(second_left_for_undo), |e| {
