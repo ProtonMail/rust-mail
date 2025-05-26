@@ -2485,9 +2485,6 @@ impl Conversation {
             return Err(AppError::EmptyListOfConversations);
         }
 
-        let handle =
-            tether.subscribe_to(|sender| Box::new(ConversationActionWatcher { sender }))?;
-
         let all_label_as = Label::find_by_kind(LabelType::Label, tether).await?;
         let conversations =
             <Conversation as ModelExtension>::find_by_ids(local_ids, tether).await?;
@@ -2502,6 +2499,8 @@ impl Conversation {
         });
 
         let res = LabelAsAction::finalize(all_label_as_actions);
+        let handle =
+            tether.subscribe_to(|sender| Box::new(ConversationActionWatcher { sender }))?;
         debug!("watch available label_as actions for conversations: {res:?}");
         Ok((res, handle))
     }

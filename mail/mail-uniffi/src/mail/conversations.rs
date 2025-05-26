@@ -747,12 +747,12 @@ pub async fn watch_conversation(
     let session = mailbox.session()?;
 
     uniffi_async(async move {
-        let receiver = ContextualConversation::watch(&stash)?;
-        let watcher = watch_channel(ctx, receiver, callback);
-
-        let Some(messages) = get_conversation(mailbox, stash, session, id).await? else {
+        let Some(messages) = get_conversation(mailbox, stash.clone(), session, id).await? else {
             return Ok(None);
         };
+
+        let receiver = ContextualConversation::watch(&stash)?;
+        let watcher = watch_channel(ctx, receiver, callback);
 
         Result::<_, RealProtonMailError>::Ok(Some(WatchedConversation {
             conversation: messages.conversation,
