@@ -3,12 +3,10 @@ use std::sync::Arc;
 use datatypes::MigrationData;
 use muon::client::flow::LoginExtraInfo;
 use proton_account_api::login as login_api;
-use proton_core_api::service::ApiServiceError;
 use tokio::{sync::Mutex, task::JoinError};
 use uniffi::Enum as UniffiEnum;
+use uniffi_common::errors::UserApiServiceError;
 use uniffi_runtime::{async_runtime, uniffi_async};
-
-use crate::errors::UserApiServiceError;
 
 mod datatypes;
 
@@ -250,42 +248,6 @@ impl From<login_api::LoginError> for LoginError {
             login_api::LoginError::UnsupportedTfa => LoginError::UnsupportedTfa,
             login_api::LoginError::WrongMailboxPassword => LoginError::WrongMailboxPassword,
             login_api::LoginError::AuthStore(error) => LoginError::AuthStore(error.to_string()),
-        }
-    }
-}
-
-impl From<ApiServiceError> for UserApiServiceError {
-    fn from(error: ApiServiceError) -> Self {
-        use ApiServiceError::{
-            AuthStore, BadGateway, BadRequest, ConnectionError, InternalServerError, NetworkError,
-            NotFound, NotImplemented, OtherHttpError, ParseEndpoint, QueryStringError, Redirect,
-            RequestError, ResponseError, ServiceUnavailable, Timeout, TooManyRequests,
-            Unauthorized, UnknownError, UnprocessableEntity, Utf8DecodingError,
-        };
-
-        match error {
-            BadRequest(_, info) => Self::BadRequest(format!("{info:?}")),
-            Unauthorized(_, info) => Self::Unauthorized(format!("{info:?}")),
-            NotFound(_, info) => Self::NotFound(format!("{info:?}")),
-            UnprocessableEntity(_, info) => Self::UnprocessableEntity(format!("{info:?}")),
-            TooManyRequests(_, info) => Self::TooManyRequests(format!("{info:?}")),
-            InternalServerError(_, info) => Self::InternalServerError(format!("{info:?}")),
-            NotImplemented(_, info) => Self::NotImplemented(format!("{info:?}")),
-            BadGateway(_, info) => Self::BadGateway(format!("{info:?}")),
-            ServiceUnavailable(_, info) => Self::ServiceUnavailable(format!("{info:?}")),
-
-            OtherHttpError(code, _, info) => {
-                Self::OtherHttpError(code.as_u16(), format!("{info:?}"))
-            }
-
-            ConnectionError(_) | NetworkError(_) | Redirect(_, _) | Timeout(_) => {
-                Self::OtherNetwork(error.to_string())
-            }
-
-            QueryStringError(_) | RequestError(_) | ResponseError(_) | Utf8DecodingError(_)
-            | ParseEndpoint(_) | AuthStore(_) | UnknownError(_) => {
-                Self::Internal(error.to_string())
-            }
         }
     }
 }

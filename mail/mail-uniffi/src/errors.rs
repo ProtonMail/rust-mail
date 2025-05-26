@@ -1,5 +1,4 @@
 mod action_error;
-pub(crate) mod api_service_error;
 mod draft_error;
 mod error_reason;
 mod event_error;
@@ -93,7 +92,7 @@ export_void_result! {
     VoidDraftSaveResult(DraftSaveError),
     VoidDraftUndoSendResult(DraftUndoSendError),
     VoidEventResult(EventError),
-    VoidLoginResult(LoginError),
+    VoidLoginResult(MailLoginError),
     VoidProtonResult(ProtonError),
     VoidSessionResult(UserSessionError),
 }

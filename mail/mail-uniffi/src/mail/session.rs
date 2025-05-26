@@ -2,7 +2,9 @@ use crate::core::datatypes::{ApiConfig, AppProtection, AppSettings, AppSettingsD
 use crate::core::verification::{ChallengeNotifierWrap, DynChallengeNotifier};
 use crate::core::{FFIKeyChain, StoredAccountState, StoredSession, StoredSessionState};
 use crate::core::{OSKeyChain, StoredAccount};
-use crate::errors::{LoginError, PinAuthError, PinSetError, UserSessionError, VoidSessionResult};
+use crate::errors::{
+    MailLoginError, PinAuthError, PinSetError, UserSessionError, VoidSessionResult,
+};
 use crate::mail::MailUserSession;
 use crate::mail::logging::init_log;
 use crate::mail::state::MailUserContextMap;
@@ -239,7 +241,7 @@ async fn create_mail_session_inner(
 #[uniffi_export]
 impl MailSession {
     /// Start new login flow.
-    pub async fn new_login_flow(&self) -> Result<Arc<LoginFlow>, LoginError> {
+    pub async fn new_login_flow(&self) -> Result<Arc<LoginFlow>, MailLoginError> {
         let mail_ctx = self.mail_ctx.clone();
 
         uniffi_async::<_, RealProtonMailError, _>(async move {
@@ -250,7 +252,7 @@ impl MailSession {
                 .map_err(RealProtonMailError::from)
         })
         .await
-        .map_err(LoginError::from)
+        .map_err(MailLoginError::from)
     }
 
     /// Resume an existing login flow.
@@ -258,7 +260,7 @@ impl MailSession {
         &self,
         user_id: String,
         session_id: String,
-    ) -> Result<Arc<LoginFlow>, LoginError> {
+    ) -> Result<Arc<LoginFlow>, MailLoginError> {
         let mail_ctx = self.mail_ctx.clone();
 
         uniffi_async::<_, RealProtonMailError, _>(async move {
@@ -269,7 +271,7 @@ impl MailSession {
                 .await
         })
         .await
-        .map_err(LoginError::from)
+        .map_err(MailLoginError::from)
     }
 
     /// Start new signup flow.
@@ -928,7 +930,7 @@ impl MailSession {
     pub async fn to_user_context(
         &self,
         ffi_flow: Arc<LoginFlow>,
-    ) -> Result<Arc<MailUserSession>, LoginError> {
+    ) -> Result<Arc<MailUserSession>, MailLoginError> {
         let core_flow = ffi_flow.inner_flow();
         let mut guard = core_flow.lock().await;
         async_runtime()
@@ -940,7 +942,7 @@ impl MailSession {
                     .map_err(RealProtonMailError::from)
                     .await
             })
-            .map_err(LoginError::from)
+            .map_err(MailLoginError::from)
     }
 }
 

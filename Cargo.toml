@@ -35,6 +35,7 @@ members = [
   "payment/payment-sdk",
   "payment/payment-uniffi",
   "uniffi/uniffi-bindgen",
+  "uniffi/uniffi-common",
   "uniffi/uniffi-macros",
   "uniffi/uniffi-runtime",
 ]
@@ -225,6 +226,9 @@ path = "uniffi/uniffi-macros"
 
 [workspace.dependencies.uniffi-runtime]
 path = "uniffi/uniffi-runtime"
+
+[workspace.dependencies.uniffi-common]
+path = "uniffi/uniffi-common"
 
 [workspace.dependencies.proton-crypto-inbox]
 version = "0.9.0"

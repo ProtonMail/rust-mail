@@ -5418,6 +5418,7 @@ dependencies = [
  "tokio",
  "tracing",
  "uniffi",
+ "uniffi-common",
  "uniffi-macros",
  "uniffi-runtime",
 ]
@@ -5935,6 +5936,7 @@ dependencies = [
  "tracing-oslog",
  "tracing-subscriber",
  "uniffi",
+ "uniffi-common",
  "uniffi-macros",
  "uniffi-runtime",
 ]
@@ -8123,6 +8125,16 @@ name = "uniffi-bindgen"
 version = "0.1.1"
 dependencies = [
  "uniffi",
+]
+
+[[package]]
+name = "uniffi-common"
+version = "0.1.0"
+dependencies = [
+ "proton-core-api",
+ "uniffi",
+ "uniffi-macros",
+ "uniffi-runtime",
 ]
 
 [[package]]

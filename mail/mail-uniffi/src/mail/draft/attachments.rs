@@ -1,5 +1,4 @@
 use crate::core::datatypes::Id;
-use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{DraftAttachmentUploadError, DraftAttachmentUploadErrorReason, ProtonError};
 use crate::mail::datatypes::AttachmentMetadata;
@@ -21,6 +20,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 use tokio::task::AbortHandle;
 use tracing::error;
+use uniffi_common::errors::UserApiServiceError;
 
 /// State of the attachment
 #[derive(uniffi::Enum)]
