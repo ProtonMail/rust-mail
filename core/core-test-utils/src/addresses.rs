@@ -1,5 +1,6 @@
+use std::sync::LazyLock;
+
 use crate::test_context::TestContext;
-use lazy_static::lazy_static;
 use proton_core_api::services::proton::AddressId;
 use proton_core_api::services::proton::AddressSignedKeyList as ApiAddressSignedKeyList;
 use proton_core_api::services::proton::{
@@ -13,9 +14,7 @@ use proton_crypto_account::keys::{
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
-lazy_static! {
-    pub static ref MY_ADDRESS_ID: AddressId = AddressId::from("MyRemoteId");
-}
+pub static MY_ADDRESS_ID: LazyLock<AddressId> = LazyLock::new(|| AddressId::from("MyRemoteId"));
 
 impl TestContext {
     #[function_name::named]

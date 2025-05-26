@@ -1,5 +1,4 @@
 use crate::test_context::MailTestContext;
-use lazy_static::lazy_static;
 use proton_core_api::services::proton::AddressSignedKeyList as ApiAddressSignedKeyList;
 use proton_core_api::services::proton::{
     Address as ApiAddress, AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
@@ -18,14 +17,15 @@ use proton_mail_api::services::proton::response_data::{
 use proton_mail_common::datatypes::SystemLabelId;
 use stash::stash::{StashError, Tether};
 use std::collections::BTreeMap;
+use std::sync::LazyLock;
 
-lazy_static! {
-    pub static ref MY_ADDRESS_ID: AddressId = AddressId::from("MyRemoteId");
-    pub static ref MY_LABEL_ID1: LabelId = LabelId::from("MyLabelID1");
-    pub static ref MY_LABEL_ID2: LabelId = LabelId::from("MyLabelID2");
-    pub static ref MY_ATTACHMENT_ID: AttachmentId = AttachmentId::from("MyAttachmentID1");
-    pub static ref MY_CONVERSATION_ID: ConversationId = ConversationId::from("MyConversationID");
-}
+pub static MY_ADDRESS_ID: LazyLock<AddressId> = LazyLock::new(|| AddressId::from("MyRemoteId"));
+pub static MY_LABEL_ID1: LazyLock<LabelId> = LazyLock::new(|| LabelId::from("MyLabelID1"));
+pub static MY_LABEL_ID2: LazyLock<LabelId> = LazyLock::new(|| LabelId::from("MyLabelID2"));
+pub static MY_ATTACHMENT_ID: LazyLock<AttachmentId> =
+    LazyLock::new(|| AttachmentId::from("MyAttachmentID1"));
+pub static MY_CONVERSATION_ID: LazyLock<ConversationId> =
+    LazyLock::new(|| ConversationId::from("MyConversationID"));
 
 #[macro_export]
 macro_rules! conv_id {

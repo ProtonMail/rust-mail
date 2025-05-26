@@ -1,5 +1,7 @@
 #![allow(non_snake_case)]
 
+use std::sync::LazyLock;
+
 use super::*;
 use crate as proton_mail_common;
 use crate::actions::{
@@ -13,7 +15,6 @@ use crate::datatypes::{
 use crate::models::{Attachment, Conversation, MailSettings, Message, MessageBodyMetadata};
 use futures::future::BoxFuture;
 use futures::{FutureExt, StreamExt as _};
-use lazy_static::lazy_static;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::{LabelColor, LabelType};
 use proton_core_common::models::Label;
@@ -48,14 +49,20 @@ use stash::stash::{Stash, Tether};
 use test_case::test_case;
 use velcro::hash_map;
 
-lazy_static! {
-    static ref STARRED: Label =
-        label!(label_type: LabelType::System, remote_id: Some(LabelId::starred()));
-    static ref FOLDER: Label = label!(label_type: LabelType::Folder, remote_id: Some("folder_label".into()), name: "MyFavouritesFolder".to_owned(), color: LabelColor::black());
-    static ref INBOX: Label = label!(label_type: LabelType::System, remote_id: Some(LabelId::inbox()), name: "Inbox".to_owned(), color: LabelColor::black());
-    static ref SPAM: Label = label!(label_type: LabelType::System, remote_id: Some(LabelId::spam()), name: "Spam".to_owned(), color: LabelColor::black());
-    static ref LABEL: Label = label!(label_type: LabelType::Label, remote_id: Some("label".into()), name: "Label".to_owned(), color: LabelColor::black());
-}
+static STARRED: LazyLock<Label> =
+    LazyLock::new(|| label!(label_type: LabelType::System, remote_id: Some(LabelId::starred())));
+static FOLDER: LazyLock<Label> = LazyLock::new(
+    || label!(label_type: LabelType::Folder, remote_id: Some("folder_label".into()), name: "MyFavouritesFolder".to_owned(), color: LabelColor::black()),
+);
+static INBOX: LazyLock<Label> = LazyLock::new(
+    || label!(label_type: LabelType::System, remote_id: Some(LabelId::inbox()), name: "Inbox".to_owned(), color: LabelColor::black()),
+);
+static SPAM: LazyLock<Label> = LazyLock::new(
+    || label!(label_type: LabelType::System, remote_id: Some(LabelId::spam()), name: "Spam".to_owned(), color: LabelColor::black()),
+);
+static LABEL: LazyLock<Label> = LazyLock::new(
+    || label!(label_type: LabelType::Label, remote_id: Some("label".into()), name: "Label".to_owned(), color: LabelColor::black()),
+);
 
 mod available_actions {
     use std::sync::LazyLock;
@@ -2659,9 +2666,8 @@ async fn unlabel_messages() {
     check_final_conv_state(&stash).await;
 }
 
-lazy_static! {
-    pub(super) static ref MY_MESSAGE_ID: MessageId = MessageId::from("MyRemoteId");
-}
+pub(super) static MY_MESSAGE_ID: LazyLock<MessageId> =
+    LazyLock::new(|| MessageId::from("MyRemoteId"));
 
 #[test_case(vec![], None; "TEST1 - no label")]
 #[test_case(
