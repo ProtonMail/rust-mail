@@ -3,7 +3,6 @@
 use std::sync::LazyLock;
 
 use super::*;
-use crate as proton_mail_common;
 use crate::actions::{
     LabelAsAction, MessageAction, MessageAvailableActions, MovableSystemFolderAction, MoveAction,
     MoveItemAction,
@@ -12,7 +11,21 @@ use crate::datatypes::{
     ContextualConversation, ExclusiveLocation, MessageFlags, MessageLabelsCount,
     MovableSystemFolder, SystemLabelId, attachment,
 };
+use crate::label;
 use crate::models::{Attachment, Conversation, MailSettings, Message, MessageBodyMetadata};
+use crate::test_utils::db::new_test_connection_file;
+use crate::test_utils::db_states::{
+    new_test_delete_db_state, new_test_label_db_state, new_test_unread_db_state,
+};
+use crate::test_utils::search::{
+    MY_ADDRESS_ID, MY_CONVERSATION_ID, MY_LABEL_ID1, MY_LABEL_ID2, create_labels,
+    test_conversation, test_starred_label,
+};
+use crate::test_utils::utils::{
+    conv_counts_as_map, find_conversation_label, msg_counts_as_map, prepare_and_patch_db_state,
+    prepare_db_state_core,
+};
+use crate::test_utils::utils::{create_address, test_address};
 use futures::future::BoxFuture;
 use futures::{FutureExt, StreamExt as _};
 use proton_core_api::services::proton::LabelId;
@@ -28,20 +41,6 @@ use proton_mail_api::services::proton::response_data::{
     MessageAttachmentHeaders as ApiMessageAttachmentHeaders, MessageFlags as ApiMessageFlags,
     MessageSender as ApiMessageSender, MimeType as ApiMimeType,
 };
-use proton_mail_test_utils::db::new_test_connection_file;
-use proton_mail_test_utils::db_states::{
-    new_test_delete_db_state, new_test_label_db_state, new_test_unread_db_state,
-};
-use proton_mail_test_utils::label;
-use proton_mail_test_utils::search::{
-    MY_ADDRESS_ID, MY_CONVERSATION_ID, MY_LABEL_ID1, MY_LABEL_ID2, create_labels,
-    test_conversation, test_starred_label,
-};
-use proton_mail_test_utils::utils::{
-    conv_counts_as_map, find_conversation_label, msg_counts_as_map, prepare_and_patch_db_state,
-    prepare_db_state_core,
-};
-use proton_mail_test_utils::utils::{create_address, test_address};
 use serde_json::json;
 use stash::orm::Model;
 use stash::params;
@@ -71,9 +70,9 @@ mod available_actions {
     use crate::datatypes::theme::MailTheme;
 
     use super::*;
+    use crate::test_utils::db::new_test_connection;
+    use crate::{conversation, message, msg_id};
     use pretty_assertions::assert_eq;
-    use proton_mail_test_utils::db::new_test_connection;
-    use proton_mail_test_utils::{conversation, message, msg_id};
     use test_case::test_case;
 
     struct TestCase {
@@ -396,8 +395,8 @@ mod available_actions {
 
 mod available_label_as_actions {
     use super::*;
-    use proton_mail_test_utils::db::new_test_connection;
-    use proton_mail_test_utils::{conv_id, conversation, label, lbl_id, message, msg_id};
+    use crate::test_utils::db::new_test_connection;
+    use crate::{conv_id, conversation, label, lbl_id, message, msg_id};
     use test_case::test_case;
 
     struct MessageWithLabels {
@@ -556,10 +555,10 @@ mod available_label_as_actions {
 
 mod available_move_to_actions {
     use super::*;
+    use crate::test_utils::db::new_test_connection;
+    use crate::{conv_id, conversation, label, lbl_id, message, msg_id};
     use futures::stream::{self, StreamExt};
     use pretty_assertions::assert_eq;
-    use proton_mail_test_utils::db::new_test_connection;
-    use proton_mail_test_utils::{conv_id, conversation, label, lbl_id, message, msg_id};
     use std::sync::LazyLock;
     use test_case::test_case;
 

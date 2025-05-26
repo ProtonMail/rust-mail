@@ -7,8 +7,8 @@ use proton_mail_api::services::proton::response_data::{
 };
 use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_test_utils::init::Params as TestParams;
-use proton_mail_test_utils::test_context::MailTestContext;
+use proton_mail_common::test_utils::init::Params as TestParams;
+use proton_mail_common::test_utils::test_context::MailTestContext;
 
 #[tokio::test]
 #[ignore]

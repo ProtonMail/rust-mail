@@ -4,8 +4,8 @@ use proton_core_api::services::proton::LabelType as ApiLabelType;
 use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Conversation;
-use proton_mail_test_utils::init::Params as TestParams;
-use proton_mail_test_utils::test_context::MailTestContext;
+use proton_mail_common::test_utils::init::Params as TestParams;
+use proton_mail_common::test_utils::test_context::MailTestContext;
 use stash::orm::Model;
 use std::fs;
 

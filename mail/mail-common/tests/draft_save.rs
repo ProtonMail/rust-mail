@@ -21,8 +21,8 @@ use proton_mail_common::models::{
     Attachment, Conversation, DraftMetadata, DraftSendResult, DraftSendResultOrigin, Message,
     RollbackItem,
 };
-use proton_mail_test_utils::message_body::*;
-use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
+use proton_mail_common::test_utils::message_body::*;
+use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
 use stash::stash::StashError;
 use uuid::Uuid;

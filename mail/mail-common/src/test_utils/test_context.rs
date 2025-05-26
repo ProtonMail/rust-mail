@@ -1,3 +1,6 @@
+use crate::actions::draft::SEND_ACTION_GROUP;
+use crate::context::{EventPollMode, MailUserDatabaseInitializer, ShouldInitializeMailUserContext};
+use crate::{MailContext, MailContextResult, MailUserContext};
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::queue::{QueuedActionState, QueuedResult};
 use proton_core_api::auth::UserKeySecret;
@@ -7,12 +10,7 @@ use proton_core_api::status_observer::StatusObserver;
 use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_common::UserDatabaseInitializer;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
-use proton_core_test_utils::test_context::{BaseTestContext, TestContext};
-use proton_mail_common::actions::draft::SEND_ACTION_GROUP;
-use proton_mail_common::context::{
-    EventPollMode, MailUserDatabaseInitializer, ShouldInitializeMailUserContext,
-};
-use proton_mail_common::{MailContext, MailContextResult, MailUserContext};
+use proton_core_common::test_utils::test_context::{BaseTestContext, TestContext};
 pub use secrecy::{ExposeSecret, SecretString as RealSecretString};
 use std::sync::Arc;
 use std::time::Duration;

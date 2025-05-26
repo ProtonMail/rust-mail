@@ -1,5 +1,5 @@
 use super::attachment::{testdata_attachment_metadata, testdata_attachment_metadata_complete};
-use crate::test_context::MailTestContext;
+use crate::test_utils::test_context::MailTestContext;
 use proton_core_api::services::proton::{
     Address as ApiAddress, AddressSignedKeyList, AddressStatus as ApiAddressStatus,
     AddressType as ApiAddressType, ContactBasic as ApiContactBasic,
@@ -31,19 +31,19 @@ use proton_mail_api::services::proton::response_data::{
     SwipeAction, ViewLayout, ViewMode,
 };
 
+use crate::datatypes::SystemLabelId;
 use proton_core_common::datatypes::ALL_LABEL_TYPES;
-use proton_core_test_utils::account::{
+use proton_core_common::test_utils::account::{
     TEST_ADDRESS_ID, TEST_ADDRESS_KEY_SIGNATURE, TEST_USER_ID, TEST_USER_MAIL,
     testdata_address_keys_for_user_address, testdata_user_keys,
 };
-use proton_core_test_utils::addresses_public::{
+use proton_core_common::test_utils::addresses_public::{
     TEST_OTHER_USER_EMAIL, testdata_address_keys_other_user,
 };
 use proton_mail_api::services::proton::responses::{
     GetConversationResponse, GetConversationsCountResponse, GetConversationsResponse,
     GetMailSettingsResponse, GetMessagesCountResponse, GetMessagesResponse,
 };
-use proton_mail_common::datatypes::SystemLabelId;
 use std::collections::{BTreeMap, HashMap};
 use velcro::hash_map;
 use wiremock::matchers::{method, path, query_param};

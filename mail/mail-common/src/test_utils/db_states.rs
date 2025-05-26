@@ -1,16 +1,18 @@
 use std::convert::Into;
 use std::sync::LazyLock;
 
-use crate::search::{MY_ADDRESS_ID, MY_LABEL_ID1, MY_LABEL_ID2, test_label1, test_label2};
-use crate::utils::{TestDBState, test_address};
+use crate::datatypes::{
+    AttachmentMetadata, Disposition, MessageRecipients, SystemLabelId as _, attachment,
+};
+use crate::models::{AttachmentType, Conversation, ConversationLabel, Message};
+use crate::test_utils::search::{
+    MY_ADDRESS_ID, MY_LABEL_ID1, MY_LABEL_ID2, test_label1, test_label2,
+};
+use crate::test_utils::utils::{TestDBState, test_address};
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::Label;
 use proton_mail_api::services::proton::common::{AttachmentId, ConversationId, MessageId};
-use proton_mail_common::datatypes::{
-    AttachmentMetadata, Disposition, MessageRecipients, SystemLabelId as _, attachment,
-};
-use proton_mail_common::models::{AttachmentType, Conversation, ConversationLabel, Message};
 
 // ------- TEST DATA -------
 

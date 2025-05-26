@@ -1,5 +1,5 @@
+use crate::Mailbox;
 use proton_core_common::models::Label;
-use proton_mail_common::Mailbox;
 use stash::orm::Model;
 use stash::stash::Tether;
 

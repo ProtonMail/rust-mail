@@ -3,7 +3,7 @@ use proton_core_common::{
     datatypes::{LabelColor, LabelType},
     models::Label,
 };
-use proton_mail_test_utils::db::new_test_connection;
+use proton_mail_common::test_utils::db::new_test_connection;
 use stash::orm::Model;
 use stash::stash::StashError;
 

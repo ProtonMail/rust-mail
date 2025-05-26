@@ -6,8 +6,8 @@ use proton_core_common::datatypes::{
     AvatarInformation, ContactEmailItem, ContactItem, ContactItemType, GroupedContacts,
 };
 use proton_core_common::models::{Contact, ModelIdExtension};
-use proton_mail_test_utils::init::Params as TestParams;
-use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
+use proton_mail_common::test_utils::init::Params as TestParams;
+use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 
 #[tokio::test]
 async fn contact_list() {

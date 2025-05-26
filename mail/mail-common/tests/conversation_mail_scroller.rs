@@ -9,17 +9,17 @@ use proton_mail_api::services::proton::{
     common::ConversationId, prelude::GetConversationsResponse,
     response_data::Conversation as ApiConversation,
 };
+use proton_mail_common::test_utils::{
+    init::Params as TestParams, test_context::MailUserContextTestExtension,
+};
 use proton_mail_common::{
     MailContextError,
     datatypes::{ContextualConversation, ReadFilter},
     mail_scroller::{DataScrollerSource, MailScroller},
     models::{Conversation, ConversationCounters, ConversationScrollData},
 };
-use proton_mail_test_utils::{
-    conv_id, conv_label, conversation, label, lbl_id, test_context::MailTestContext,
-};
-use proton_mail_test_utils::{
-    init::Params as TestParams, test_context::MailUserContextTestExtension,
+use proton_mail_common::{
+    conv_id, conv_label, conversation, label, lbl_id, test_utils::test_context::MailTestContext,
 };
 use stash::stash::StashError;
 use stash::{

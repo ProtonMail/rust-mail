@@ -3,8 +3,8 @@ use crate::datatypes::{MobileSetting, MobileSettings, MovableSystemFolder, Syste
 use crate::models::{Conversation, MailSettings, Message};
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::models::{Label, ModelIdExtension};
-use proton_mail_test_utils::db::new_test_connection;
-use proton_mail_test_utils::utils::create_address;
+use proton_mail_common::test_utils::db::new_test_connection;
+use proton_mail_common::test_utils::utils::create_address;
 use std::borrow::ToOwned;
 use std::sync::LazyLock;
 

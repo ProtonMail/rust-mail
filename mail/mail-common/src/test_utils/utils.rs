@@ -1,4 +1,11 @@
-use crate::search::MY_ADDRESS_ID;
+use crate::datatypes::{
+    ConversationLabelsCount, LocalConversationId, LocalMessageId, MessageLabelsCount,
+    MessageRecipient, MessageRecipients, MessageSender, MessageSenders,
+};
+use crate::models::{
+    Conversation, ConversationCounters, ConversationLabel, Message, MessageCounters,
+};
+use crate::test_utils::search::MY_ADDRESS_ID;
 use futures::{FutureExt as _, StreamExt};
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::{
@@ -6,13 +13,6 @@ use proton_core_common::datatypes::{
 };
 use proton_core_common::models::{Address, Label, ModelExtension, ModelIdExtension};
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
-use proton_mail_common::datatypes::{
-    ConversationLabelsCount, LocalConversationId, LocalMessageId, MessageLabelsCount,
-    MessageRecipient, MessageRecipients, MessageSender, MessageSenders,
-};
-use proton_mail_common::models::{
-    Conversation, ConversationCounters, ConversationLabel, Message, MessageCounters,
-};
 use stash::stash::{StashError, Tether};
 use std::collections::{BTreeMap, HashMap};
 

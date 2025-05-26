@@ -214,7 +214,7 @@ impl DraftStagingAreaCleaner {
 mod tests {
     use super::*;
     use crate::models::DraftMetadata;
-    use proton_mail_test_utils::db::new_test_connection_file;
+    use proton_mail_common::test_utils::db::new_test_connection_file;
 
     #[tokio::test]
     async fn background_cleaner() {

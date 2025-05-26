@@ -9,11 +9,11 @@ use proton_mail_common::actions::draft::UndoSend;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::draft::{Draft, Error, UndoError};
 use proton_mail_common::models::Message;
-use proton_mail_test_utils::message_body::{
+use proton_mail_common::test_utils::message_body::{
     TEST_USER_ID, message_body_test_message_simple, message_body_test_params,
     message_body_test_user_secret,
 };
-use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
+use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 
 #[tokio::test]
 async fn draft_undo_send() {

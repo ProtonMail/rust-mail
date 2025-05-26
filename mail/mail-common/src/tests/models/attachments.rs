@@ -13,7 +13,7 @@ use proton_mail_api::services::proton::response_data::{
     Disposition as ApiDisposition, MessageFlags as ApiMessageFlags,
     MessageMetadata as ApiMessageMetadata, MessageSender as ApiMessageSender,
 };
-use proton_mail_test_utils::db::new_test_connection_file;
+use proton_mail_common::test_utils::db::new_test_connection_file;
 use stash::orm::Model;
 
 #[tokio::test]

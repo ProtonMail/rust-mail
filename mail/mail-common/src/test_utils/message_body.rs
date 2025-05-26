@@ -1,5 +1,6 @@
 //! Message body related state and test data
-use crate::init::Params as TestParams;
+use crate::datatypes::SystemLabelId;
+use crate::test_utils::init::Params as TestParams;
 use proton_core_api::auth::UserKeySecret;
 use proton_core_api::services::proton::{
     Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
@@ -21,12 +22,11 @@ use proton_mail_api::services::proton::response_data::{
     MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
     MessageSender as ApiMessageSender, MimeType as ApiMimeType, ViewMode as ApiViewMode,
 };
-use proton_mail_common::datatypes::SystemLabelId;
 use std::collections::HashMap;
 use std::iter;
 
 #[must_use]
-pub fn message_body_test_params() -> crate::init::Params {
+pub fn message_body_test_params() -> crate::test_utils::init::Params {
     TestParams {
         user_info: Some(message_body_test_user_info()),
         addresses: message_body_test_addresses(),

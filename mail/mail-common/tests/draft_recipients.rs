@@ -6,9 +6,9 @@ use proton_mail_common::draft::recipients::{
     ChannelBackgroundValidationComplete, MaybeEmptyString, Recipient, RecipientEntry,
     ValidatingRecipientList, ValidationState,
 };
-use proton_mail_test_utils::init::Params;
-use proton_mail_test_utils::message_body::{TEST_USER_ID, message_body_test_user_secret};
-use proton_mail_test_utils::test_context::MailTestContext;
+use proton_mail_common::test_utils::init::Params;
+use proton_mail_common::test_utils::message_body::{TEST_USER_ID, message_body_test_user_secret};
+use proton_mail_common::test_utils::test_context::MailTestContext;
 use test_case::test_case;
 
 #[tokio::test]

@@ -49,9 +49,7 @@ tracing-oslog = "0.2.0"
 
 [dev-dependencies]
 proton-mail-api = { workspace = true }
-proton-mail-test-utils = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
-pretty_assertions = { workspace = true }
 
 [lints]
 workspace = true

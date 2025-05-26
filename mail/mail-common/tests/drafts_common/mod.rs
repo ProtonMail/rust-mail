@@ -21,8 +21,8 @@ use proton_mail_common::draft::ReplyMode;
 use proton_mail_common::draft::compose::{DEFAULT_SUBJECT, FORWARD_PREFIX, REPLY_PREFIX};
 use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry, RecipientList};
 use proton_mail_common::models::Message;
-use proton_mail_test_utils::init::Params as TestParams;
-use proton_mail_test_utils::message_body::{
+use proton_mail_common::test_utils::init::Params as TestParams;
+use proton_mail_common::test_utils::message_body::{
     message_body_test_addresses, message_body_test_mail_settings, message_body_test_message_simple,
     message_body_test_user_info,
 };

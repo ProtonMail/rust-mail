@@ -1,6 +1,6 @@
 use super::LabelAsAction;
 use proton_core_common::models::Label;
-use proton_mail_test_utils::label;
+use proton_mail_common::label;
 use test_case::test_case;
 
 /// Macro wrapping u64 into Option<LocalId> for easier model definition.

@@ -51,16 +51,18 @@ sqlite-watcher = { workspace = true }
 async_zip = { version = "0.0.15", features = ["deflate", "chrono"] }
 walkdir = { workspace = true }
 uniffi = { workspace = true, optional = true }
+wiremock = { workspace = true, optional = true }
+function_name = { workspace = true, optional = true }
+tempdir = { workspace = true, optional = true }
+rand = { workspace = true, optional = true }
 
 [dev-dependencies]
 futures = { workspace = true }
-futures-util = { workspace = true }
 tempdir = { workspace = true }
-wiremock = { workspace = true }
-proton-core-test-utils = { workspace = true }
 clap = { workspace = true }
 rand = { workspace = true }
 insta = { workspace = true }
+proton-core-common = { path = ".", features = ["test-utils"] }
 
 [lints]
 workspace = true
@@ -69,3 +71,4 @@ workspace = true
 default = ["sql"]
 sql = ["proton-core-api/sql"]
 uniffi = ["dep:uniffi"]
+test-utils = ["dep:wiremock", "dep:function_name", "dep:tempdir", "dep:rand"]

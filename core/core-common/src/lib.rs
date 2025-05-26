@@ -20,6 +20,9 @@ pub mod watch_handle;
 mod tests;
 pub mod validation;
 
+#[cfg(feature = "test-utils")]
+pub mod test_utils;
+
 pub use context::*;
 pub use event_subscriber::*;
 pub use user_context::*;

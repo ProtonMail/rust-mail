@@ -1,4 +1,4 @@
-use crate::test_context::TestContext;
+use crate::test_utils::test_context::TestContext;
 use proton_core_api::services::proton::ContactId;
 use proton_core_api::services::proton::PutDeleteContacts;
 use proton_core_api::services::proton::common::ApiErrorInfo;
