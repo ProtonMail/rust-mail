@@ -36,7 +36,6 @@ pub async fn watch_mail_settings(
     let ctx = ctx.ctx()?;
     uniffi_async(async move {
         let stash = ctx.user_stash();
-        let handle = RealSettings::watch(stash)?;
         let tether = stash.connection();
         let settings = RealSettings::all(&tether)
             .await?
@@ -44,6 +43,7 @@ pub async fn watch_mail_settings(
             .unwrap_or_default()
             .into();
 
+        let handle = RealSettings::watch(stash)?;
         let watcher = watch_channel(ctx, handle, callback);
 
         Result::<_, RealProtonMailError>::Ok(SettingsWatcher {
