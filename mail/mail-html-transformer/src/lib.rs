@@ -187,6 +187,11 @@ impl Transformer {
     pub fn extract_blockquote(&mut self) -> SplitDoc {
         message_detector::locate_blockquote(self.document().clone())
     }
+
+    /// Moves every `<style>` from `<head>` into `<body>`.
+    pub fn move_styles_to_body(&mut self) {
+        transforms::move_styles_to_body(self.document().clone());
+    }
 }
 
 // WARN: This is vulnerable to malicious HTMLs with very deeply nested tags.
