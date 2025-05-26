@@ -85,7 +85,6 @@ function_name = { workspace = true }
 tempfile = { workspace = true }
 velcro = { workspace = true }
 wiremock = { workspace = true }
-proton-core-test-utils = { workspace = true }
 proton-mail-test-utils = { workspace = true }
 
 # not compatible with global clippy configuration yet

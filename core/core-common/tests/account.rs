@@ -1,6 +1,6 @@
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::models::ModelExtension;
-use proton_core_test_utils::test_context::TestContext;
+use proton_core_common::test_utils::test_context::TestContext;
 
 #[tokio::test]
 async fn logout_and_delete_user_data_preserves_account_metadata() {

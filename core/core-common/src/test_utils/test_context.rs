@@ -1,5 +1,16 @@
-use crate::account::{TEST_USER_ID, TEST_USER_MAIL, testdata_user_secret};
-use crate::utils::catch_all;
+use crate::datatypes::ProductUsedSpace;
+use crate::db::account::{CoreAccount, CoreSession};
+use crate::events::{Action, AddressEvent, ContactEmailEvent, ContactEvent};
+use crate::models::{ModelExtension, User, UserSettings};
+use crate::test_utils::account::{TEST_USER_ID, TEST_USER_MAIL, testdata_user_secret};
+use crate::test_utils::utils::catch_all;
+use crate::utils::MapVec;
+use crate::{
+    Context, CoreEvent, CoreEventSubscriberConnectionProvider, UserContext,
+    UserDatabaseInitializer,
+    db::account::SessionEncryptionKey,
+    os::{InMemoryKeyChain, KeyChain, KeyChainExt},
+};
 use async_trait::async_trait;
 use proton_core_api::auth::{Tokens, UserKeySecret};
 use proton_core_api::services::proton::{
@@ -11,17 +22,6 @@ use proton_core_api::services::proton::{EventId, SessionId, UserId};
 use proton_core_api::session::{Config, Endpoint, EnvId};
 use proton_core_api::status_observer::StatusObserver;
 use proton_core_api::status_watcher::StatusWatcher;
-use proton_core_common::datatypes::ProductUsedSpace;
-use proton_core_common::db::account::{CoreAccount, CoreSession};
-use proton_core_common::events::{Action, AddressEvent, ContactEmailEvent, ContactEvent};
-use proton_core_common::models::{ModelExtension, User, UserSettings};
-use proton_core_common::utils::MapVec;
-use proton_core_common::{
-    Context, CoreEvent, CoreEventSubscriberConnectionProvider, UserContext,
-    UserDatabaseInitializer,
-    db::account::SessionEncryptionKey,
-    os::{InMemoryKeyChain, KeyChain, KeyChainExt},
-};
 use proton_event_loop::Event;
 use proton_sqlite3::MigratorError;
 use serde::Deserialize;

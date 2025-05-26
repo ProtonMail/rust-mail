@@ -1,4 +1,4 @@
-use crate::test_context::TestContext;
+use crate::test_utils::test_context::TestContext;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 

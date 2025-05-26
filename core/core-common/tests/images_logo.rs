@@ -2,7 +2,7 @@ use std::{fs, path::PathBuf};
 
 use futures::future::try_join_all;
 use pretty_assertions::assert_eq;
-use proton_core_test_utils::test_context::TestContext;
+use proton_core_common::test_utils::test_context::TestContext;
 use test_case::test_case;
 use wiremock::{
     Mock, ResponseTemplate,

@@ -6,7 +6,7 @@ use proton_core_api::services::proton::{
 use proton_core_api::services::proton::{AddressId, LabelId, LabelType as ApiLabelType, UserId};
 use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::{Label, ModelIdExtension};
-use proton_core_test_utils::addresses::ApiAddressTestUtils;
+use proton_core_common::test_utils::addresses::ApiAddressTestUtils;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as ApiUserKeys};
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
 use proton_mail_api::services::proton::response_data::{ConversationCount, MessageCount};

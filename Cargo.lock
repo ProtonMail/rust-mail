@@ -5471,7 +5471,7 @@ dependencies = [
  "pretty_assertions",
  "proton-calendar-api",
  "proton-core-api",
- "proton-core-test-utils",
+ "proton-core-common",
  "proton-crypto",
  "proton-crypto-account",
  "proton-crypto-calendar",
@@ -5538,8 +5538,8 @@ dependencies = [
  "derive_more 2.0.1",
  "email_address",
  "flume",
+ "function_name",
  "futures",
- "futures-util",
  "ical",
  "include_dir",
  "indoc",
@@ -5551,7 +5551,7 @@ dependencies = [
  "proton-account-api",
  "proton-action-queue",
  "proton-core-api",
- "proton-core-test-utils",
+ "proton-core-common",
  "proton-crypto",
  "proton-crypto-account",
  "proton-crypto-notifications",
@@ -5578,27 +5578,6 @@ dependencies = [
  "walkdir",
  "wiremock",
  "zeroize",
-]
-
-[[package]]
-name = "proton-core-test-utils"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "function_name",
- "proton-core-api",
- "proton-core-common",
- "proton-crypto-account",
- "proton-event-loop",
- "proton-sqlite3",
- "rand 0.8.5",
- "serde",
- "stash",
- "tempdir",
- "tracing",
- "tracing-subscriber",
- "wiremock",
 ]
 
 [[package]]
@@ -5755,14 +5734,11 @@ version = "0.5.0"
 dependencies = [
  "bitflags 2.9.1",
  "bytes",
- "common-multipart-rfc7578",
- "futures-util",
  "indexmap 2.9.0",
  "insta",
  "muon",
- "pretty_assertions",
  "proton-core-api",
- "proton-core-test-utils",
+ "proton-core-common",
  "proton-crypto-inbox",
  "reqwest",
  "serde",
@@ -5810,7 +5786,6 @@ dependencies = [
  "proton-calendar-common",
  "proton-core-api",
  "proton-core-common",
- "proton-core-test-utils",
  "proton-crypto-account",
  "proton-crypto-inbox",
  "proton-event-loop",
@@ -5889,7 +5864,6 @@ dependencies = [
  "proton-action-queue",
  "proton-core-api",
  "proton-core-common",
- "proton-core-test-utils",
  "proton-crypto-account",
  "proton-crypto-inbox",
  "proton-mail-api",

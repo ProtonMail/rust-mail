@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
 
-use crate::test_context::TestContext;
+use crate::test_utils::test_context::TestContext;
 use proton_core_api::services::proton::AddressId;
 use proton_core_api::services::proton::AddressSignedKeyList as ApiAddressSignedKeyList;
 use proton_core_api::services::proton::{

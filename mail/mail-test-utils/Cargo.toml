@@ -9,7 +9,7 @@ futures = { workspace = true }
 proton-core-api = { workspace = true, features = ["sql"] }
 proton-mail-api = { workspace = true, features = ["sql"] }
 proton-crypto-account = { workspace = true, features = ["sql"] }
-proton-core-common = { workspace = true, features = ["sql"] }
+proton-core-common = { workspace = true, features = ["sql", "test-utils"] }
 proton-mail-common = { workspace = true, features = ["sql"] }
 secrecy = { workspace = true }
 serde = { workspace = true }
@@ -25,7 +25,6 @@ wiremock-multipart = { workspace = true }
 proton-crypto-inbox = { workspace = true }
 velcro = { workspace = true }
 serde_with = { workspace = true }
-proton-core-test-utils = { workspace = true }
 proton-action-queue = { workspace = true }
 function_name = { workspace = true }
 

@@ -6,7 +6,7 @@ use proton_core_api::status_observer::StatusObserver;
 use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_common::models::ModelExtension;
 use proton_core_common::models::ModelIdExtension;
-use proton_core_test_utils::test_context::MockApiEnv;
+use proton_core_common::test_utils::test_context::MockApiEnv;
 use proton_mail_api::services::proton::common::ConversationId;
 use proton_mail_api::services::proton::responses::{GetConversationsResponse, GetMessagesResponse};
 use proton_mail_ids::LocalConversationId;

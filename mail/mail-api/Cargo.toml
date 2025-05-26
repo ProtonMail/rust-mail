@@ -18,14 +18,10 @@ serde_repr = { workspace = true }
 serde_with = { workspace = true, features = ["base64"] }
 smart-default = { workspace = true }
 stash = { workspace = true, optional = true }
-common-multipart-rfc7578 = { workspace = true }
-futures-util = { workspace = true }
 
 [dev-dependencies]
 bytes = "1.9.0"
-pretty_assertions = { workspace = true }
 proton-core-api = { workspace = true }
-proton-core-test-utils = { workspace = true }
 reqwest = { version = "0.12.12", features = ["stream"] }
 test-case = { workspace = true }
 tokio = { workspace = true }
@@ -33,6 +29,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 wiremock = { workspace = true }
 insta = { workspace = true }
+proton-core-common = { workspace = true, features = ["test-utils"] }
 
 [lints]
 workspace = true

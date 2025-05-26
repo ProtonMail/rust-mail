@@ -3,7 +3,7 @@ use proton_core_api::services::proton::LabelType as ApiLabelType;
 use proton_core_api::services::proton::{Address as ApiAddress, Label as ApiLabel};
 use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::{Label, ModelIdExtension};
-use proton_core_test_utils::addresses::ApiAddressTestUtils;
+use proton_core_common::test_utils::addresses::ApiAddressTestUtils;
 use proton_mail_api::services::proton::response_data::{
     Conversation as ApiConversation, ConversationCount as ApiConversationCount,
     MessageCount as ApiMessageCount,
