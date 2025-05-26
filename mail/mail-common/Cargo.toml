@@ -6,7 +6,15 @@ edition.workspace = true
 
 [features]
 default = ["sql"]
-test-utils = ["dep:wiremock", "dep:function_name", "dep:tempfile", "dep:tempdir", "dep:tracing-subscriber", "dep:velcro", "dep:wiremock-multipart"]
+test-utils = [
+  "dep:wiremock",
+  "dep:function_name",
+  "dep:tempfile",
+  "dep:tempdir",
+  "dep:tracing-subscriber",
+  "dep:velcro",
+  "dep:wiremock-multipart",
+]
 
 demo = ["dep:tao", "dep:wry"]
 sql = ["proton-core-api/sql", "proton-mail-api/sql"]
