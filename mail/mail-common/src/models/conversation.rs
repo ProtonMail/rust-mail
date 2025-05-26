@@ -2599,7 +2599,7 @@ impl Conversation {
     }
 
     /// Count all local messages from this conversation
-    pub async fn count_local_messages(
+    pub async fn message_count(
         local_id: LocalConversationId,
         tether: &Tether,
     ) -> Result<u64, StashError> {
@@ -3642,19 +3642,23 @@ impl StoreLabelCounters {
             Self::INIT_KEY,
             &[Label::INIT_KEY],
             stash.connection(),
-            async || {
-                let (a, b) =
-                    future::try_join(Conversation::fetch_counts(api), Message::fetch_counts(api))
-                        .await?;
-                Ok(Self(a, b))
-            },
-            async |tx, Self(a, b)| {
-                ConversationLabelsCount::create_or_update_conversation_counts(a, tx).await?;
-                MessageLabelsCount::create_or_update_message_counts(b, tx).await?;
-                Ok(())
-            },
+            async || Ok(Self::fetch(api).await?),
+            async |tx, this| Ok(this.save(tx).await?),
         )
         .await
+    }
+
+    pub async fn fetch(api: &impl ProtonMail) -> Result<Self, ApiServiceError> {
+        let (a, b) =
+            future::try_join(Conversation::fetch_counts(api), Message::fetch_counts(api)).await?;
+        Ok(Self(a, b))
+    }
+
+    pub async fn save(self, tx: &Bond<'_>) -> Result<(), StashError> {
+        let Self(a, b) = self;
+        ConversationLabelsCount::create_or_update_conversation_counts(a, tx).await?;
+        MessageLabelsCount::create_or_update_message_counts(b, tx).await?;
+        Ok(())
     }
 }
 

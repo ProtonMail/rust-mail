@@ -106,7 +106,7 @@ impl proton_action_queue::action::Handler for Handler {
             }
             Err(e) => {
                 tracing::error!("Unexpected error while refreshing conversations metadata: `{e}`");
-                tracing::error!("Deleting local conversations: `{:?}`", action.local_ids);
+                tracing::info!("Deleting local conversations: `{:?}`", action.local_ids);
                 guard
                     .tx(async |tx| {
                         Conversation::delete_by_ids(action.local_ids.clone(), tx).await?;
@@ -131,9 +131,8 @@ impl proton_action_queue::action::Handler for Handler {
 
         if !not_refreshed.is_empty() {
             // The conversation appears to be not found remotely, delete it.
-            tracing::warn!(
-                "Local conversation without remote counterpart found while refreshing. Deleteing."
-            );
+            tracing::warn!("Local conversation without remote counterpart found while refreshing.");
+            tracing::info!("Deleting local conversations: `{:?}`", not_refreshed);
             guard
                 .tx(async |tx| {
                     Conversation::delete_by_ids(not_refreshed, tx).await?;
@@ -157,7 +156,7 @@ async fn refresh_conversation_messages(
     guard: &mut WriterGuard<'_>,
 ) -> Result<(), MailActionError> {
     let local_id = conversation.local_id.unwrap();
-    let conv_count = Conversation::count_local_messages(local_id, guard.tether()).await?;
+    let conv_count = Conversation::message_count(local_id, guard.tether()).await?;
     if conv_count > 0 {
         let api = ctx.api().clone();
         let remote_msgs = ctx.spawn(async move {
@@ -188,9 +187,10 @@ async fn refresh_conversation_messages(
             .tx(async |tx| {
                 for remote_msg in remote_msgs.messages {
                     let mut remote_msg = Message::from_api_metadata(remote_msg, tx).await?;
-                    // if remote_msg.is_draft()
                     local_msgs.remove(&remote_msg.remote_id.clone());
-                    remote_msg.save(tx).await?;
+                    if !remote_msg.is_draft() {
+                        remote_msg.save(tx).await?;
+                    }
                 }
 
                 for local_msg in local_msgs.into_values() {

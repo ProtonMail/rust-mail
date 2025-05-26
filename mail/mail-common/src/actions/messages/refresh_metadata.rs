@@ -99,7 +99,7 @@ impl proton_action_queue::action::Handler for Handler {
             }
             Err(e) => {
                 tracing::error!("Unexpected error while refreshing messages metadata: `{e}`");
-                tracing::error!("Deleting local messages: `{:?}`", action.local_ids);
+                tracing::info!("Deleting local messages: `{:?}`", action.local_ids);
                 guard
                     .tx(async |tx| {
                         Message::delete_by_ids(action.local_ids.clone(), tx).await?;
@@ -124,9 +124,8 @@ impl proton_action_queue::action::Handler for Handler {
 
         if !not_refreshed.is_empty() {
             // The conversation appears to be not found remotely, delete it.
-            tracing::warn!(
-                "Local conversation without remote counterpart found while refreshing. Deleteing."
-            );
+            tracing::warn!("Local messages without remote counterpart found while refreshing.");
+            tracing::info!("Deleting local messages: `{:?}`", not_refreshed);
             guard
                 .tx(async |tx| {
                     Message::delete_by_ids(not_refreshed, tx).await?;

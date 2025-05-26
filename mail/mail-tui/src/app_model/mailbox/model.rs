@@ -29,7 +29,7 @@ use proton_mail_common::models::{
 use proton_mail_common::proton_mail_api::proton_core_api::services::proton::LabelId;
 use proton_mail_common::{
     AppError, MailContext, MailContextError, MailContextResult, MailUserContext, Mailbox,
-    whole_refresh_tui,
+    whole_refresh,
 };
 use ratatui::crossterm::event::Event;
 use ratatui::layout::{Flex, Rect};
@@ -370,7 +370,7 @@ impl AppStateHandler for Model {
                             "Refresh event running...".to_owned(),
                         )),
                         Command::task(async move {
-                            let msg = match whole_refresh_tui(ctx).await {
+                            let msg = match whole_refresh(ctx).await {
                                 Ok(()) => "Refresh event finished succesfully".to_owned(),
                                 Err(e) => format!("Refresh event finished in error: `{e}`"),
                             };

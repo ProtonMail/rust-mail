@@ -20,6 +20,7 @@ use itertools::Itertools;
 use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput};
 use proton_core_api::SYNC_CONTACT_PAGE_SIZE;
 use proton_core_api::consts::General;
+use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::ContactId;
 use proton_core_api::services::proton::ContactUID;
 use proton_core_api::services::proton::{
@@ -300,7 +301,7 @@ impl Contact {
     #[tracing::instrument(skip(api))]
     #[allow(clippy::too_many_lines)]
     #[must_use]
-    pub async fn sync(api: &Proton) -> CoreContextResult<SyncedContacts> {
+    pub async fn sync(api: &Proton) -> Result<SyncedContacts, ApiServiceError> {
         // In order to maximize throughput we do as follows:
         // 1. We download the first batch
         // 2. We calculate how many batches are left and request them all in parallel.
@@ -414,7 +415,7 @@ impl Contact {
             Self::INIT_KEY,
             &[Label::INIT_KEY],
             stash.connection(),
-            async move || Self::sync(api).await,
+            async move || Ok(Self::sync(api).await?),
             async |tx, res| {
                 res.store(tx).await?;
                 Ok(())
@@ -719,7 +720,7 @@ impl SyncedContacts {
     /// Panics if the local id does exist
     ///
     #[tracing::instrument(skip_all)]
-    pub async fn store(self, tx: &Bond<'_>) -> CoreContextResult<()> {
+    pub async fn store(self, tx: &Bond<'_>) -> Result<(), StashError> {
         let Self {
             contacts,
             mut emails,

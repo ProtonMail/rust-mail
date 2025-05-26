@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
+use crate::CoreContextError;
 use crate::datatypes::{
     Flags, InitializationKey, ProductUsedSpace, UnixTimestamp, UserKeys, UserMnemonicStatus,
     UserType,
 };
-use crate::{CoreContextError, CoreContextResult};
 use derive_more::TryFrom;
+use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::User as ApiUser;
 use proton_core_api::services::proton::UserId;
 use proton_core_api::services::proton::{DelinquentState as ApiDelinquentState, ProtonCore};
@@ -200,7 +201,7 @@ impl User {
     ///
     pub async fn sync_user_and_settings(
         api: &impl ProtonCore,
-    ) -> CoreContextResult<SyncedUserSettings> {
+    ) -> Result<SyncedUserSettings, ApiServiceError> {
         let user = User::from(api.get_users().await?.user);
         let mut settings = UserSettings::from(api.get_settings().await?.user_settings);
         settings.remote_id.clone_from(&user.remote_id);
@@ -231,7 +232,7 @@ impl User {
             Self::INIT_KEY,
             &[],
             stash.connection(),
-            async move || Self::sync_user_and_settings(api).await,
+            async move || Ok(Self::sync_user_and_settings(api).await?),
             async |tx, res| {
                 res.store(tx).await?;
                 Ok(())
@@ -260,7 +261,7 @@ impl SyncedUserSettings {
     /// Consume this manual closure by storing data in the Database.
     ///
     #[tracing::instrument(skip(tx))]
-    pub async fn store(self, tx: &Bond<'_>) -> CoreContextResult<()> {
+    pub async fn store(self, tx: &Bond<'_>) -> Result<(), StashError> {
         let Self {
             mut user,
             mut settings,
