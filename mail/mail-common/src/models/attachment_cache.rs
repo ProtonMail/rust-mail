@@ -28,7 +28,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime};
 use tokio::fs;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
 use super::{AttachmentType, Message};
 
@@ -105,6 +105,7 @@ impl Attachment {
                 if let Some(path) =
                     Self::path_from_cache_and_update_metadata(self.local_id.unwrap(), tx).await?
                 {
+                    debug!("Someone else won the race");
                     return Ok(path);
                 };
 
@@ -213,7 +214,7 @@ impl Attachment {
         id: LocalAttachmentId,
         into_transaction: &mut impl RunTransaction,
     ) -> MailContextResult<Option<PathBuf>> {
-        into_transaction
+        let res = into_transaction
             .run_tx(async |tx| {
                 if let Some(path) = Self::path_from_cache_and_update_metadata(id, tx).await? {
                     return Ok(Some(path));
@@ -221,7 +222,17 @@ impl Attachment {
                 Ok(None)
             })
             .await
-            .map_err(MailContextError::IntoTransactionError)
+            .map_err(MailContextError::IntoTransactionError);
+
+        let Ok(Some(path)) = res else { return res };
+
+        match fs::try_exists(&path).await {
+            Ok(true) => Ok(Some(path)),
+            _ => {
+                warn!("File no longer exists in fs");
+                Ok(None)
+            }
+        }
     }
 
     /// Returns a fs path to an attachment in the filesystem.
@@ -246,6 +257,19 @@ impl Attachment {
         match path {
             Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => Ok(None),
             Ok(path) => {
+                let Ok(true) = fs::try_exists(&path).await else {
+                    warn!("File was removed externally");
+
+                    tx.execute(
+                        indoc! {
+                            "DELETE FROM attachment_cache
+                             WHERE attachment_id = ?"
+                        },
+                        params![id],
+                    )
+                    .await?;
+                    return Ok(None);
+                };
                 tx.execute(
                     indoc! { "
                        UPDATE attachment_cache
