@@ -9,12 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- [ET-2976] Breaking change: `LoginFlow.toUserContext` functionality is now defined in `MailSessionInterface`:
-  ```
-  MailSessionInterface {
-      suspend fun `toUserContext`(`ffiFlow`: LoginFlow): MailSessionToUserContextResult
-  }
-  ```
+- [ET-2976] Breaking changes
+  - `LoginFlow.toUserContext` functionality is now defined in `MailSessionInterface`:
+    ```
+    MailSessionInterface {
+        suspend fun `toUserContext`(`ffiFlow`: LoginFlow): MailSessionToUserContextResult
+    }
+    ```
+  - `mail-uniffi/LoginError` was renamed to `MailLoginError`
 
 ## [mail-uniffi-v0.82.0] - 2025-05-27
 
