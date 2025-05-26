@@ -19,7 +19,6 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 tempdir = { workspace = true }
 wiremock = { workspace = true }
-lazy_static = { workspace = true }
 rand = "0.8"
 function_name = { workspace = true }
 

@@ -1,3 +1,5 @@
+#![allow(clippy::print_stdout)]
+
 use crate::app::App;
 use crate::cli::Cli;
 use tao::event_loop::EventLoopBuilder;

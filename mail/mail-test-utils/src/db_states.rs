@@ -3,7 +3,6 @@ use std::sync::LazyLock;
 
 use crate::search::{MY_ADDRESS_ID, MY_LABEL_ID1, MY_LABEL_ID2, test_label1, test_label2};
 use crate::utils::{TestDBState, test_address};
-use lazy_static::lazy_static;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::Label;
@@ -15,10 +14,10 @@ use proton_mail_common::models::{AttachmentType, Conversation, ConversationLabel
 
 // ------- TEST DATA -------
 
-lazy_static! {
-    pub(super) static ref DELETE_DB_CONV1: ConversationId = ConversationId::from("MyConvId1");
-    pub(super) static ref DELETE_DB_CONV2: ConversationId = ConversationId::from("MyConvId2");
-}
+pub(super) static DELETE_DB_CONV1: LazyLock<ConversationId> =
+    LazyLock::new(|| ConversationId::from("MyConvId1"));
+pub(super) static DELETE_DB_CONV2: LazyLock<ConversationId> =
+    LazyLock::new(|| ConversationId::from("MyConvId2"));
 
 static TEXT_ATTACHMENT: LazyLock<AttachmentMetadata> = LazyLock::new(|| AttachmentMetadata {
     local_id: None,

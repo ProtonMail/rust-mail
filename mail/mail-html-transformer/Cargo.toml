@@ -7,7 +7,6 @@ edition.workspace = true
 # kuchikiki requires this verion of html5ever at this time.
 html5ever = "=0.26"
 kuchikiki = "=0.8.2"
-lazy_static = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
 velcro = { workspace = true }

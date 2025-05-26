@@ -31,7 +31,6 @@ indoc = { workspace = true }
 include_dir = { workspace = true }
 itertools = { workspace = true }
 html2text = { workspace = true }
-lazy_static = { workspace = true }
 mime = { workspace = true }
 parking_lot = { workspace = true }
 proton-action-queue = { workspace = true }
@@ -73,7 +72,6 @@ clap = { workspace = true }
 ctor = { workspace = true }
 color-backtrace = { workspace = true }
 insta = { workspace = true }
-lazy_static = { workspace = true }
 pretty_assertions = { workspace = true }
 proton-core-api = { workspace = true }
 proton-mail-api = { workspace = true }
