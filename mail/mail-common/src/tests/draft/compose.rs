@@ -175,6 +175,13 @@ fn sanitize_message_body_metadata(mime_type: MimeType) -> MessageBodyMetadata {
 
 const DRAFT_BODY_HTML: &str = r##"
 <html>
+<head>
+<style>
+body {
+    color: red;
+}
+</style>
+</head>
 <body>
 <section>
     <svg id="svigi" width="5cm" height="4cm" version="1.1"

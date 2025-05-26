@@ -103,6 +103,24 @@ impl Transformer {
         self.document.clone()
     }
 
+    /// This extracts innerHTML of `<body>`
+    /// element
+    #[must_use]
+    pub fn extract_body(&self) -> String {
+        use std::fmt::Write;
+
+        let Ok(body) = self.document.select_first("body") else {
+            return String::new();
+        };
+
+        let mut result = String::new();
+        for child in body.as_node().children() {
+            write!(result, "{}", child.to_string()).expect("writing to string");
+        }
+
+        result
+    }
+
     /// Strip HTML links of UTM tracking codes.
     ///
     /// See [`utm::strip()`] for more details.
