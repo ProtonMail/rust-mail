@@ -1,9 +1,10 @@
 use crate::actions::draft::{
     SEND_ACTION_GROUP, local_all_draft_label_id, local_all_mail_label_id, local_draft_label_id,
+    local_sent_label_id,
 };
 use crate::datatypes::{
     AttachmentMetadata, Disposition, LocalMessageId, MessageSender, MessageSenders, MimeType,
-    SystemLabelId,
+    RollbackItemType, SystemLabelId,
 };
 use crate::draft::compose::maybe_sanitize;
 use crate::draft::recipients::RecipientList;
@@ -11,7 +12,7 @@ use crate::draft::{Draft, ReplyMode, SaveError, compose};
 use crate::models::{
     Attachment, Conversation, DraftAttachmentMetadata, DraftAttachmentOwnership, DraftMetadata,
     DraftSendFailure, DraftSendResult, DraftSendResultOrigin, Message, MessageBodyMetadata,
-    MetadataId,
+    MetadataId, RollbackItem,
 };
 use crate::{AppError, MailContextError, MailUserContext, draft};
 use indoc::{formatdoc, indoc};
@@ -456,12 +457,12 @@ impl Save {
 
         // Create draft on the server.
         let new_message = if let Some(remote_message_id) = remote_message_id.clone() {
-            Draft::remote_update(
+            let result = Draft::remote_update(
                 ctx,
                 session,
                 action.address_id.clone(),
                 local_message_id,
-                remote_message_id,
+                remote_message_id.clone(),
                 action,
                 &attachments,
                 &action.body,
@@ -469,7 +470,45 @@ impl Save {
             .await
             .inspect_err(|e| {
                 error!("Failed to update draft on remote: {e:?}");
-            })?
+            });
+            if matches!(
+                &result,
+                Err(MailContextError::Draft(draft::Error::Save(
+                    SaveError::AlreadySent
+                )))
+            ) {
+                // if we hit an already sent error, we should delete the draft metadata
+                // move the message to sent and schedule a resync.
+                debug!("Draft is already sent, moving to sent folder");
+
+                if let Err(e) = guard
+                    .tx::<_, _, MailContextError>(async |tx| {
+                        DraftMetadata::delete_by_id(action.metadata_id, tx).await?;
+
+                        let local_draft_label_id = local_draft_label_id(tx).await?;
+                        let local_sent_id = local_sent_label_id(tx).await?;
+                        let local_all_draft_label_id = local_all_draft_label_id(tx).await?;
+
+                        Message::remove_label(local_draft_label_id, [local_message_id], tx).await?;
+                        Message::remove_label(local_all_draft_label_id, [local_message_id], tx)
+                            .await?;
+                        Message::apply_label(local_sent_id, [local_message_id], tx).await?;
+
+                        let mut rollback_item = RollbackItem::new(
+                            remote_message_id.to_string(),
+                            RollbackItemType::Message,
+                        );
+                        Ok(rollback_item.save(tx).await?)
+                    })
+                    .await
+                {
+                    // We should report the original error, but there is not much we can do
+                    // if the transaction fails. The user will have to try again later.
+                    error!("Failed to recover after draft already sent error: {e:?}");
+                }
+            }
+
+            result?
         } else {
             Draft::remote_create(
                 ctx,
