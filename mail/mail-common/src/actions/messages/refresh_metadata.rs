@@ -1,13 +1,15 @@
+use std::collections::HashSet;
+
 use crate::actions::MailActionError;
 use crate::models::{Message, MessageScrollData};
 use crate::{AppError, MailUserContext};
+use itertools::Itertools;
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
 };
 use proton_core_common::models::ModelExtension;
 use proton_mail_ids::LocalMessageId;
 use serde::{self, Deserialize, Serialize};
-use stash::orm::Model;
 use stash::stash::Bond;
 
 /// Refresh message metadata action.
@@ -19,12 +21,12 @@ use stash::stash::Bond;
 ///
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct RefreshMetadata {
-    local_id: LocalMessageId,
+    local_ids: Vec<LocalMessageId>,
 }
 
 impl RefreshMetadata {
-    pub fn new(local_id: LocalMessageId) -> Self {
-        Self { local_id }
+    pub fn new(local_ids: Vec<LocalMessageId>) -> Self {
+        Self { local_ids }
     }
 }
 
@@ -76,45 +78,62 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let message = Message::load(action.local_id, guard.tether())
-            .await?
-            .filter(|msg| !msg.is_draft() && msg.remote_id.is_some());
+        if action.local_ids.is_empty() {
+            tracing::debug!("Refresh metadata for messages called with empty id list");
+            return Ok(());
+        }
 
-        if let Some(message) = message {
-            let remote_id = message.remote_id.unwrap();
-            let items_sync_result =
-                Message::sync_metadata(vec![remote_id], ctx.api(), &mut guard).await;
-            match items_sync_result {
-                Ok(items) if items.is_empty() => {
-                    // The message appears to be not found remotely, delete it.
-                    tracing::warn!(
-                        "Local message without remote counterpart found while refreshing. Deleteing."
-                    );
-                    guard
-                        .tx(async |tx| {
-                            Message::delete_by_id(action.local_id, tx).await?;
-                            Result::<(), <Self::Action as Action>::Error>::Ok(())
-                        })
-                        .await?;
-                }
-                Ok(_) => (),
-                Err(AppError::API(e)) if e.is_network_failure() => {
-                    return Err(MailActionError::Http(e));
-                }
-                Err(e) => {
-                    tracing::error!("Unexpected error while refreshing message metadata: `{e}`");
-                    tracing::error!("Deleting local message: `{}`", action.local_id);
-                    guard
-                        .tx(async |tx| {
-                            Message::delete_by_id(action.local_id, tx).await?;
-                            MessageScrollData::delete_all(tx).await?;
-                            Result::<(), <Self::Action as Action>::Error>::Ok(())
-                        })
-                        .await?;
+        let messages = Message::find_by_ids(action.local_ids.clone(), guard.tether()).await?;
+        let remote_ids = messages
+            .iter()
+            .filter(|msg| !msg.is_draft())
+            .filter_map(|msg| msg.remote_id.clone())
+            .collect_vec();
 
-                    return Err(e.into());
-                }
+        let items_sync_result =
+            Message::sync_metadata(remote_ids.clone(), ctx.api(), &mut guard).await;
+        let refreshed_items = match items_sync_result {
+            Ok(items) => items,
+            Err(AppError::API(e)) if e.is_network_failure() => {
+                return Err(MailActionError::Http(e));
             }
+            Err(e) => {
+                tracing::error!("Unexpected error while refreshing messages metadata: `{e}`");
+                tracing::error!("Deleting local messages: `{:?}`", action.local_ids);
+                guard
+                    .tx(async |tx| {
+                        Message::delete_by_ids(action.local_ids.clone(), tx).await?;
+                        MessageScrollData::delete_all(tx).await?;
+                        Result::<(), <Self::Action as Action>::Error>::Ok(())
+                    })
+                    .await?;
+
+                return Err(e.into());
+            }
+        };
+        let refreshed_ids: HashSet<_> = refreshed_items
+            .iter()
+            .filter_map(|msg| msg.local_id)
+            .collect();
+        let not_refreshed = action
+            .local_ids
+            .iter()
+            .filter(|x| !refreshed_ids.contains(x))
+            .copied()
+            .collect_vec();
+
+        if !not_refreshed.is_empty() {
+            // The conversation appears to be not found remotely, delete it.
+            tracing::warn!(
+                "Local conversation without remote counterpart found while refreshing. Deleteing."
+            );
+            guard
+                .tx(async |tx| {
+                    Message::delete_by_ids(not_refreshed, tx).await?;
+                    MessageScrollData::delete_all(tx).await?;
+                    Result::<(), <Self::Action as Action>::Error>::Ok(())
+                })
+                .await?;
         }
 
         Ok(())

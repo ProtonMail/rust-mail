@@ -204,7 +204,7 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
         .load(&tether)
         .await?
         .ok_or_else(|| anyhow!("All mail label is missing!"))?;
-    let page_size = 100;
+    let page_size = 25;
     let scroll_cursor = match all_mail.view_mode(&tether).await? {
         ViewMode::Conversations => Either::Left(CachedScrollData::<ConversationScrollData>::all(
             all_mail.local_id.unwrap(),
@@ -244,8 +244,20 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
                     SubscriberError::Other(e)
                 })?;
 
-            for removed_local_label in all_local_labels.into_values() {
-                removed_local_label.delete(tx).await?;
+            for local_label_to_remove in all_local_labels.into_values() {
+                if let Some(_system_label) =
+                    SystemLabel::from_rid(local_label_to_remove.remote_id.as_ref())
+                {
+                    // For some reason API does not return all system labels
+                    // we have to make sure to not delete those
+                    continue;
+                }
+
+                debug!(
+                    "Removing label with remote_id {:?}",
+                    local_label_to_remove.remote_id
+                );
+                local_label_to_remove.delete(tx).await?;
             }
 
             Ok(())
@@ -261,14 +273,11 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
             if page.is_empty() {
                 break;
             }
-            let actions = page
-                .into_iter()
-                .map(|conv| conversations::RefreshMetadata::new(conv.local_id));
+            let local_conv_ids = page.into_iter().map(|conv| conv.local_id).collect();
 
-            for action in actions {
-                if let Err(error) = ctx.action_queue().queue_action(action).await {
-                    error!("Failed to refresh conversation metadata: `{error}`",);
-                }
+            let action = conversations::RefreshMetadata::new(local_conv_ids);
+            if let Err(error) = ctx.action_queue().queue_action(action).await {
+                error!("Failed to refresh conversation metadata: `{error}`",);
             }
         },
         Either::Right(mut msg_scroll_cursor) => loop {
@@ -276,15 +285,11 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
             if page.is_empty() {
                 break;
             }
-            let actions = page
-                .into_iter()
-                .filter_map(|msg| msg.local_id)
-                .map(messages::RefreshMetadata::new);
+            let local_msg_ids = page.into_iter().filter_map(|msg| msg.local_id).collect();
+            let action = messages::RefreshMetadata::new(local_msg_ids);
 
-            for action in actions {
-                if let Err(error) = ctx.action_queue().queue_action(action).await {
-                    error!("Failed to refresh message metadata: `{error}`",);
-                }
+            if let Err(error) = ctx.action_queue().queue_action(action).await {
+                error!("Failed to refresh message metadata: `{error}`",);
             }
         },
     };

@@ -72,9 +72,6 @@ impl Model {
         let stash = ctx.user_stash();
         let tether = stash.connection();
         let mailbox = Mailbox::with_remote_id(&tether, LabelId::inbox()).await?;
-
-        ctx.prefetch().await?;
-
         let tether = ctx.user_stash().connection();
 
         let label = LabelWithCounters::load(mailbox.label_id(), &tether)

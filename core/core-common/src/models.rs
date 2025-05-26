@@ -62,6 +62,7 @@ use stash::params;
 use stash::stash::Bond;
 use stash::stash::StashError;
 use stash::stash::Tether;
+use stash::utils::placeholders;
 
 #[allow(async_fn_in_trait)]
 pub trait ModelExtension: Model {
@@ -168,7 +169,7 @@ pub trait ModelExtension: Model {
         let parameters = ids
             .map(|i| Box::new(i) as Box<dyn ToSql + Send>)
             .collect_vec();
-        let placeholders = stash::utils::placeholders(parameters.len());
+        let placeholders = placeholders(parameters.len());
 
         let query = format!("WHERE {field_name} IN ({placeholders})");
         Self::find(query, parameters, tether).await
@@ -201,6 +202,34 @@ pub trait ModelExtension: Model {
         let query = format!("DELETE FROM {table} WHERE {} = ?", Self::id_field_name(),);
 
         bond.execute(query, params![id]).await
+    }
+
+    /// Deletes records by its IDs.
+    ///
+    /// This method is a convenience method for deleting multiple records by its primary id.
+    ///
+    /// # Returns
+    ///
+    /// Returns the number of rows deleted.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if we fail to delete the item from the database.
+    #[allow(trivial_casts)]
+    #[must_use]
+    async fn delete_by_ids(ids: Vec<Self::IdType>, bond: &Bond<'_>) -> Result<usize, StashError> {
+        let table = Self::table_name();
+        let params = ids
+            .into_iter()
+            .map(|param| Box::new(param) as Box<dyn ToSql + Send>)
+            .collect::<Vec<_>>();
+        let placeholders = placeholders(params.len());
+        let query = format!(
+            "DELETE FROM {table} WHERE {} IN ({placeholders})",
+            Self::id_field_name(),
+        );
+
+        bond.execute(query, params).await
     }
 
     /// Finds record IDs matching given criteria.
@@ -410,7 +439,7 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
         let parameters = ids
             .map(|i| Box::new(i) as Box<dyn ToSql + Send>)
             .collect_vec();
-        let placeholders = stash::utils::placeholders(parameters.len());
+        let placeholders = placeholders(parameters.len());
 
         let query = format!("WHERE {field_name} IN ({placeholders})");
         Self::find(query, parameters, tether).await
@@ -485,7 +514,7 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
         remote_ids: Vec<Self::RemoteId>,
         tether: &Tether,
     ) -> Result<Vec<Self::IdType>, StashError> {
-        let placeholders = stash::utils::placeholders(remote_ids.len());
+        let placeholders = placeholders(remote_ids.len());
         #[allow(trivial_casts)]
         let values = remote_ids
             .into_iter()
@@ -565,7 +594,7 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
         local_ids: Vec<Self::IdType>,
         tether: &Tether,
     ) -> Result<Vec<Self::RemoteId>, StashError> {
-        let placeholders = stash::utils::placeholders(local_ids.len());
+        let placeholders = placeholders(local_ids.len());
         #[allow(trivial_casts)]
         let values = local_ids
             .into_iter()
