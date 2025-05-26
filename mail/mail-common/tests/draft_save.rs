@@ -876,3 +876,90 @@ async fn open_new_draft_which_was_not_saved_on_server_should_not_report_cached_s
     let (_, sync_status) = Draft::open(&user_ctx, draft_message_id).await.unwrap();
     assert_eq!(sync_status, DraftSyncStatus::Synced);
 }
+
+#[tokio::test]
+async fn new_draft_conversation_remote_id_updated_externally() {
+    // It is possible that the draft conversation gets its remote id assigned before the draft
+    // is able to update it by itself, this leads to a db constraint error.
+    // This usually happens due to the prefetcher, but can also happend because of the event loop.
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+
+    let mut message = draft_message();
+
+    let expected_draft_params = expected_create_draft_params();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_create_draft(
+        expected_draft_params,
+        None,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+    // Add some other label ids to this message to make sure they are skipped.
+    message.metadata.label_ids.push(LabelId::starred());
+
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+
+    // Create draft.
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    draft
+        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
+
+    // Load the draft.
+    let mut tether = user_ctx.user_stash().connection();
+    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+
+    let draft_conversation_id = draft.conversation_id(&tether).await.unwrap().unwrap();
+
+    // Simulate the new conversation being created via other means.
+    let mut fetched_conv = Conversation::find_by_id(draft_conversation_id, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(fetched_conv.remote_id.is_none());
+    fetched_conv.remote_id = Some(message.metadata.conversation_id.clone());
+    fetched_conv.local_id = None;
+    fetched_conv.row_id = None;
+
+    tether
+        .tx(async |tx| fetched_conv.save(tx).await)
+        .await
+        .unwrap();
+
+    assert_ne!(fetched_conv.local_id.unwrap(), draft_conversation_id);
+
+    // Execute action.
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    let draft_message = Message::load(draft_message_id, &tether)
+        .await
+        .unwrap()
+        .expect("failed to load message");
+
+    // Our conversation should be not be present.
+    assert!(
+        Conversation::find_by_id(draft_conversation_id, &tether)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    // Local conversation id should have been assigned with the existing message.
+    assert_eq!(
+        draft_message.local_conversation_id.unwrap(),
+        draft_conversation_id,
+    );
+    assert_eq!(
+        draft.conversation_id(&tether).await.unwrap().unwrap(),
+        draft_conversation_id
+    );
+}
