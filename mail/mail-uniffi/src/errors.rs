@@ -9,9 +9,7 @@ mod proton_error;
 mod session_error;
 pub(crate) mod unexpected;
 
-use proton_mail_common::decrypted_message::BodyOutput;
-
-use crate::mail::messages::EmbeddedAttachmentInfo;
+use crate::mail::messages::{BodyOutput, EmbeddedAttachmentInfo};
 
 pub use self::action_error::*;
 pub use self::draft_error::*;

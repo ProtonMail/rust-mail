@@ -50,20 +50,22 @@
 //!
 mod attachment;
 mod available_action;
+mod folder_banner;
 pub(crate) mod labels;
 mod mail_scroller;
 mod system_folder;
 mod system_label;
 
-use crate::core::datatypes::{AvatarInformation, Id};
+use crate::core::datatypes::{AvatarInformation, Id, UnixTimestamp};
 pub use crate::{UniffiEnum, UniffiRecord};
 pub use attachment::*;
 pub use available_action::*;
 use core::fmt;
+pub use folder_banner::*;
 pub use mail_scroller::*;
 use proton_core_common::datatypes::{
     AvatarInformation as RealAvatarInformation, LabelColor as RealLabelColor,
-    LabelType as RealLabelType, LocalAddressId, LocalLabelId, UnixTimestamp,
+    LabelType as RealLabelType, LocalAddressId, LocalLabelId,
 };
 use proton_core_common::models::{Address as RealAddress, Label as RealLabel, ModelIdExtension};
 use proton_core_common::utils::MapVec as _;
@@ -939,7 +941,7 @@ impl From<ContextualConversation> for Conversation {
             display_order: value.display_order,
             display_snooze_reminder: value.display_snooze_reminder,
             exclusive_location: value.exclusive_location.map(Into::into),
-            expiration_time: value.expiration_time,
+            expiration_time: value.expiration_time.into(),
             num_attachments: value.num_attachments,
             num_messages: value.num_messages,
             num_unread: value.num_unread,
@@ -960,7 +962,7 @@ impl From<ContextualConversation> for Conversation {
             size: value.size,
             is_starred: value.is_starred,
             subject: value.subject,
-            time: value.time,
+            time: value.time.into(),
             avatar: avatar.into(),
         }
     }
@@ -1125,7 +1127,7 @@ impl ConversationSearchOptions {
             },
             attachments: self.attachments,
             auto_wildcard: self.auto_wildcard,
-            begin: self.begin.map(|v| v.as_u64()),
+            begin: self.begin.map(|v| v.0),
             begin_id: match self.begin_id {
                 Some(id) => {
                     RealConversation::local_id_counterpart(LocalConversationId::from(id), tether)
@@ -1134,7 +1136,7 @@ impl ConversationSearchOptions {
                 None => None,
             },
             desc: self.desc,
-            end: self.end.map(|v| v.as_u64()),
+            end: self.end.map(|v| v.0),
             end_id: match self.end_id {
                 Some(id) => {
                     RealConversation::local_id_counterpart(LocalConversationId::from(id), tether)
@@ -1557,7 +1559,7 @@ impl From<RealMessage> for Message {
             bcc_list: value.bcc_list.value.map_vec(),
             cc_list: value.cc_list.value.map_vec(),
             exclusive_location: value.exclusive_location.map(Into::into),
-            expiration_time: value.expiration_time,
+            expiration_time: value.expiration_time.into(),
             flags: value.flags.into(),
             is_forwarded: value.is_forwarded,
             is_replied: value.is_replied,
@@ -1567,9 +1569,9 @@ impl From<RealMessage> for Message {
             reply_tos: value.reply_tos.value.map_vec(),
             sender: value.sender.into(),
             size: value.size,
-            snooze_time: value.snooze_time,
+            snooze_time: value.snooze_time.into(),
             subject: value.subject,
-            time: value.time,
+            time: value.time.into(),
             to_list: value.to_list.value.map_vec(),
             unread: value.unread,
             custom_labels: value.custom_labels.map_vec(),
@@ -1883,7 +1885,7 @@ impl MessageSearchOptions {
             attachments: self.attachments,
             auto_wildcard: self.auto_wildcard,
             bcc: self.bcc,
-            begin: self.begin.map(|v| v.as_u64()),
+            begin: self.begin.map(|v| v.0),
             begin_id: match self.begin_id {
                 Some(id) => {
                     RealMessage::local_id_counterpart(LocalMessageId::from(id), tether).await?
@@ -1899,7 +1901,7 @@ impl MessageSearchOptions {
                 None => None,
             },
             desc: self.desc,
-            end: self.end.map(|v| v.as_u64()),
+            end: self.end.map(|v| v.0),
             end_id: match self.end_id {
                 Some(id) => {
                     RealMessage::local_id_counterpart(LocalMessageId::from(id), tether).await?

@@ -86,6 +86,3 @@ impl stash::exports::FromSql for UnixTimestamp {
         u64::column_result(value).map(Self)
     }
 }
-
-#[cfg(feature = "uniffi")]
-uniffi::custom_newtype!(UnixTimestamp, u64);

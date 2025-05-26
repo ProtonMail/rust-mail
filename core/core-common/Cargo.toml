@@ -50,7 +50,6 @@ pretty_assertions = { workspace = true }
 sqlite-watcher = { workspace = true }
 async_zip = { version = "0.0.15", features = ["deflate", "chrono"] }
 walkdir = { workspace = true }
-uniffi = { workspace = true, optional = true }
 wiremock = { workspace = true, optional = true }
 function_name = { workspace = true, optional = true }
 tempdir = { workspace = true, optional = true }
@@ -70,5 +69,4 @@ workspace = true
 [features]
 default = ["sql"]
 sql = ["proton-core-api/sql"]
-uniffi = ["dep:uniffi"]
 test-utils = ["dep:wiremock", "dep:function_name", "dep:tempdir", "dep:rand"]
