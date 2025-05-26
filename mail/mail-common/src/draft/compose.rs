@@ -252,13 +252,14 @@ pub fn maybe_sanitize(mime_type: MimeType, body: String) -> String {
 ///
 /// * `body` - message body, containing full `<html>`
 fn sanitize_reply(body: &str) -> String {
-    Transformer::new(body)
-        // TODO(wpolak): In following MR's:
-        // * Inject dark mode
-        // * Move every `<style>` from `<head>` to `<body>`
-        // * Sanitize `<style>` in `<body>` so that selectors are pointing to
-        // `.protonmail_quote` (to prevent style bleeding)
-        .extract_body()
+    let mut html = Transformer::new(body);
+    // TODO(wpolak): In following MR's:
+    // * Inject dark mode
+    //     * Make sure dark mode is reversible
+    html.move_styles_to_body();
+    // * Sanitize `<style>` in `<body>` so that selectors are pointing to
+    // `.protonmail_quote` (to prevent style bleeding)
+    html.extract_body()
 }
 
 /// Generates a reply similar to:
