@@ -10,11 +10,11 @@ use proton_calendar_common::RsvpError;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::BuildError;
 use proton_core_api::services::proton::{SessionId, UserId};
-use proton_core_api::session::{Config, CoreSession};
+use proton_core_api::session::{Config, CoreSession as _};
 use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_api::verification::DynChallengeNotifier;
 use proton_core_common::auth_store::DecryptExt;
-use proton_core_common::db::account::{CoreAccount, CoreSession as SessionEntity};
+use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::models::{LabelError, ModelExtension};
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::{
@@ -347,7 +347,7 @@ impl MailContext {
             return Err(MailContextError::Other(anyhow!("account not found")));
         };
 
-        let Some(session) = SessionEntity::find_by_id(session_id.clone(), &tether).await? else {
+        let Some(session) = CoreSession::find_by_id(session_id.clone(), &tether).await? else {
             return Err(MailContextError::Other(anyhow!("session not found")));
         };
 
@@ -439,7 +439,7 @@ impl MailContext {
     ///
     pub async fn initialized_user_context_from_session(
         self: &Arc<Self>,
-        session: &SessionEntity,
+        session: &CoreSession,
         status: Option<StatusWatcher>,
     ) -> MailContextResult<Option<Arc<MailUserContext>>> {
         let ctx = self
@@ -456,7 +456,7 @@ impl MailContext {
     /// Returns error if we failed to decrypt the user session or access the user database.
     pub async fn user_context_from_session(
         self: &Arc<Self>,
-        session: &SessionEntity,
+        session: &CoreSession,
         status: Option<StatusWatcher>,
         init: ShouldInitializeMailUserContext,
     ) -> MailContextResult<Arc<MailUserContext>> {
@@ -574,7 +574,7 @@ impl MailContext {
     /// # Errors
     ///
     /// Returns an error if we fail to retrieve the sessions from the db.
-    pub async fn get_sessions(&self) -> MailContextResult<Vec<SessionEntity>> {
+    pub async fn get_sessions(&self) -> MailContextResult<Vec<CoreSession>> {
         Ok(self.core_context.get_sessions().await?)
     }
 
@@ -589,7 +589,7 @@ impl MailContext {
     /// # Errors
     ///
     /// Returns an error if the watcher cannot be registered with the database.
-    pub async fn watch_sessions(&self) -> MailContextResult<(Vec<SessionEntity>, WatcherHandle)> {
+    pub async fn watch_sessions(&self) -> MailContextResult<(Vec<CoreSession>, WatcherHandle)> {
         Ok(self.core_context.watch_sessions().await?)
     }
 
@@ -603,7 +603,7 @@ impl MailContext {
     pub async fn get_account_sessions(
         &self,
         user_id: UserId,
-    ) -> MailContextResult<Vec<SessionEntity>> {
+    ) -> MailContextResult<Vec<CoreSession>> {
         Ok(self.core_context.get_account_sessions(user_id).await?)
     }
 
@@ -617,7 +617,7 @@ impl MailContext {
     pub async fn watch_account_sessions(
         &self,
         user_id: UserId,
-    ) -> MailContextResult<(Vec<SessionEntity>, WatcherHandle)> {
+    ) -> MailContextResult<(Vec<CoreSession>, WatcherHandle)> {
         Ok(self.core_context.watch_account_sessions(user_id).await?)
     }
 
@@ -656,7 +656,7 @@ impl MailContext {
     pub async fn get_session(
         &self,
         session_id: SessionId,
-    ) -> MailContextResult<Option<SessionEntity>> {
+    ) -> MailContextResult<Option<CoreSession>> {
         Ok(self.core_context.get_session(session_id).await?)
     }
 
