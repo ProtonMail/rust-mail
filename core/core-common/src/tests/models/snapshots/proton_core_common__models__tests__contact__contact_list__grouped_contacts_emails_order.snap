@@ -1,0 +1,11 @@
+---
+source: core/core-common/src/tests/models/contact.rs
+expression: display_group(result)
+---
+1 keys:
+
+B (1 item)
+Contact B (#1ED19C): Barbara Fox (3 addresses)
+B (#0F735A): bfox@proton.me <bfox@proton.me>,  local_id: 3, Proton address
+B (#1ED19C): barbara@fox.us <barbara@fox.us>,  local_id: 2
+B (#52006A): barbara1984@yahoo.com <barbara1984@yahoo.com>,  local_id: 1

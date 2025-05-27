@@ -1,12 +1,146 @@
 #![allow(clippy::needless_pass_by_value)]
+#![allow(unused_must_use)]
+
+use crate::datatypes::{
+    ContactEmailItem, ContactGroupItem, ContactItem, ContactItemType, ContactSuggestion,
+    ContactSuggestionKind, GroupedContacts,
+};
+use std::fmt::Write as _;
+
+fn display_email_item(
+    ContactEmailItem {
+        local_id,
+        email,
+        is_proton,
+        last_used_time,
+        name,
+        avatar_information,
+    }: ContactEmailItem,
+    out: &mut String,
+) {
+    write!(
+        out,
+        "{} ({})",
+        avatar_information.text, avatar_information.color
+    );
+    write!(out, ": {name} <{email}>,  local_id: {local_id}");
+    if is_proton {
+        write!(out, ", Proton address");
+    }
+    if last_used_time.as_u64() != 0 {
+        write!(out, ", last used: {last_used_time}");
+    }
+    writeln!(out);
+}
+
+fn display_suggestions(sug: Vec<ContactSuggestion>) -> String {
+    let mut out = String::new();
+    writeln!(out, "{} suggestions:", sug.len());
+    for ContactSuggestion {
+        key,
+        name,
+        avatar_information,
+        kind,
+    } in sug
+    {
+        writeln!(out, "\n{key}: {name}");
+        match kind {
+            ContactSuggestionKind::ContactItem(em) => {
+                display_email_item(em, &mut out);
+            }
+            ContactSuggestionKind::DeviceContact(contact) => {
+                writeln!(
+                    out,
+                    "{} ({}): <{}>",
+                    avatar_information.text, avatar_information.color, contact.email
+                );
+            }
+            ContactSuggestionKind::ContactGroup(items) => {
+                for item in items {
+                    display_email_item(item, &mut out);
+                }
+            }
+        }
+    }
+    out
+}
+
+pub fn display_group(groups: Vec<GroupedContacts>) -> String {
+    let mut out = String::new();
+    writeln!(out, "{} keys:", groups.len());
+    for GroupedContacts { grouped_by, items } in groups {
+        writeln!(
+            out,
+            "\n{grouped_by} ({} {})",
+            items.len(),
+            if items.len() == 1 { "item" } else { "items" }
+        );
+        for item in items {
+            match item {
+                ContactItemType::Contact(ContactItem {
+                    local_id: _,
+                    name,
+                    avatar_information,
+                    emails,
+                }) => {
+                    // Contact A (#color): Name (1 address)
+                    write!(
+                        out,
+                        "Contact {} ({}): {}",
+                        avatar_information.text, avatar_information.color, name
+                    );
+                    writeln!(
+                        out,
+                        " ({} {})",
+                        emails.len(),
+                        if emails.len() == 1 {
+                            "address"
+                        } else {
+                            "addresses"
+                        }
+                    );
+                    for em in emails {
+                        display_email_item(em, &mut out);
+                    }
+                }
+                ContactItemType::Group(ContactGroupItem {
+                    local_id: _,
+                    name,
+                    avatar_information,
+                    contacts,
+                }) => {
+                    // Group A (#color): Name (1 address)
+                    write!(
+                        out,
+                        "Group {} ({}): {}",
+                        avatar_information.text, avatar_information.color, name
+                    );
+                    writeln!(
+                        out,
+                        " ({} {})",
+                        contacts.len(),
+                        if contacts.len() == 1 {
+                            "address"
+                        } else {
+                            "addresses"
+                        }
+                    );
+                    for em in contacts {
+                        display_email_item(em, &mut out);
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
 mod contact_list {
     use crate::datatypes::Labels;
+    use crate::models::tests::contact::display_group;
     use crate::{
         ceid, cid, contact, contact_email,
-        datatypes::{
-            AvatarInformation, ContactEmailItem, ContactGroupItem, ContactItem, ContactItemType,
-            GroupedContacts, LabelType,
-        },
+        datatypes::{GroupedContacts, LabelType},
         label, label_id, labels, lid,
         models::{Contact, ContactEmail, Label},
         tests::common::new_core_test_connection,
@@ -16,296 +150,51 @@ mod contact_list {
     use stash::stash::StashError;
     use test_case::test_case;
 
-    #[test_case(vec![], vec![], vec![]; "TEST 0 Empty")]
-    #[test_case(vec![contact!(local_id: lid!(123), name: "Barbara Lox".to_string())], vec![],
-    vec![
-        GroupedContacts {
-            grouped_by: "B".to_string(),
-            items: vec![
-                ContactItemType::Contact(
-                    ContactItem {
-                        local_id: 123.into(),
-                        name: "Barbara Lox".to_string(),
-                        avatar_information: AvatarInformation {
-                            text: "B".to_string(),
-                            color: "#A839A4".to_string(),
-                        },
-                        emails: vec![],
-                    },
-                ),
-            ],
-        }
-    ]; "TEST 1 Basic")]
+    #[test_case(vec![], vec![]
+    ,0; "TEST 0 Empty")]
+    #[test_case(vec![contact!(local_id: lid!(123), name: "Barbara Lox".to_string())], vec![]
+    ,1; "TEST 1 Basic")]
     #[test_case(vec![
         contact!(local_id: lid!(123), name: "Barbara Lox".to_string()),
         contact!(local_id: lid!(123), name: "Barbara Fox".to_string())
-    ], vec![], vec![
-        GroupedContacts {
-            grouped_by: "B".to_string(),
-            items: vec![
-                ContactItemType::Contact(
-                    ContactItem {
-                        local_id: 123.into(),
-                        name: "Barbara Fox".to_string(),
-                        avatar_information: AvatarInformation {
-                            text: "B".to_string(),
-                            color: "#1ED19C".to_string(),
-                        },
-                        emails: vec![],
-                    },
-                ),
-                ContactItemType::Contact(
-                    ContactItem {
-                        local_id: 123.into(),
-                        name: "Barbara Lox".to_string(),
-                        avatar_information: AvatarInformation {
-                            text: "B".to_string(),
-                            color: "#A839A4".to_string(),
-                        },
-                        emails: vec![],
-                    },
-                ),
-            ],
-        }
-    ]; "TEST 2 Alphabetical order")]
+    ],
+        vec![]
+    ,2; "TEST 2 Alphabetical order")]
     #[test_case(vec![
         contact!(local_id: lid!(123), name: "🐂 Barbara Lox".to_string()),
         contact!(local_id: lid!(123), name: "🦊 Barbara Fox".to_string())
-    ], vec![], vec![
-        GroupedContacts {
-            grouped_by: "B".to_string(),
-            items: vec![
-                ContactItemType::Contact(
-                    ContactItem {
-                        local_id: 123.into(),
-                        name: "🦊 Barbara Fox".to_string(),
-                        avatar_information: AvatarInformation {
-                            text: "B".to_string(),
-                            color: "#3C8B8C".to_string(),
-                        },
-                        emails: vec![],
-                    },
-                ),
-                ContactItemType::Contact(
-                    ContactItem {
-                        local_id: 123.into(),
-                        name: "🐂 Barbara Lox".to_string(),
-                        avatar_information: AvatarInformation {
-                            text: "B".to_string(),
-                            color: "#415DF0".to_string(),
-                        },
-                        emails: vec![],
-                    },
-                ),
-            ],
-        }
-    ]; "TEST 3 With emojis")]
+    ], vec![]
+    ,3; "TEST 3 With emojis")]
     #[test_case(vec![
         contact!(local_id: lid!(123), name: "🙀".to_string()),
         contact!(local_id: lid!(123), name: "🙀 Barbara Lox".to_string()),
         contact!(local_id: lid!(123), name: "❤️‍🔥 Barbara Fox".to_string())
-    ], vec![],
-    vec![
-        GroupedContacts {
-            grouped_by: "#".to_string(),
-            items: vec![
-                ContactItemType::Contact(
-                    ContactItem {
-                        local_id:  123.into(),
-                        name: "🙀".to_string(),
-                        avatar_information: AvatarInformation {
-                            text: "?".to_string(),
-                            color: "#3CBB3A".to_string(),
-                        },
-                        emails: vec![],
-                    },
-                ),
-            ],
-        },
-        GroupedContacts {
-            grouped_by: "B".to_string(),
-            items: vec![
-                ContactItemType::Contact(
-                    ContactItem {
-                        local_id: 123.into(),
-                        name: "❤️‍🔥 Barbara Fox".to_string(),
-                        avatar_information: AvatarInformation {
-                            text: "B".to_string(),
-                            color: "#0047AB".to_string(),
-                        },
-                        emails: vec![],
-                    },
-                ),
-                ContactItemType::Contact(
-                    ContactItem {
-                        local_id: 123.into(),
-                        name: "🙀 Barbara Lox".to_string(),
-                        avatar_information: AvatarInformation {
-                            text: "B".to_string(),
-                            color: "#4989FF".to_string(),
-                        },
-                        emails: vec![],
-                    },
-                ),
-            ],
-        }
-    ]; "TEST 4 Mutliple groups")]
+    ], vec![]
+    ,4 ; "TEST 4 Mutliple groups")]
     #[test_case(vec![
         contact!(local_id: lid!(123), label_ids: labels!("family"), name: "Mom".to_string()),
         contact!(local_id: lid!(124), label_ids: labels!("family"), name: "Dad".to_string()),
         contact!(local_id: lid!(125), label_ids: labels!("family"), name: "Sister".to_string())
     ], vec![
         label!(local_id: lid!(100), remote_id: Some(label_id!("family")), name: "Family".to_string(), label_type: LabelType::ContactGroup)
-    ], vec![
-        GroupedContacts {
-            grouped_by: "D".to_string(),
-            items: vec![
-                ContactItemType::Contact (
-                    ContactItem {
-                        local_id: 124.into(),
-                        name: "Dad".to_string(),
-                        avatar_information: AvatarInformation {
-                            text: "D".to_string(),
-                            color: "#A839A4".to_string(),
-                        },
-                        emails: vec![]
-                    }
-                ),
-            ]
-        },
-        GroupedContacts {
-            grouped_by: "F".to_string(),
-            items: vec![
-                ContactItemType::Group (
-                    ContactGroupItem {
-                        local_id: 100.into(),
-                        name: "Family".to_string(),
-                        avatar_information: AvatarInformation {
-                            text: "F".to_string(),
-                            color: "#A839A4".to_string(),
-                        },
-                        contacts: vec![
-                            ContactItem {
-                                local_id: 124.into(),
-                                name: "Dad".to_string(),
-                                avatar_information: AvatarInformation {
-                                    text: "D".to_string(),
-                                    color: "#A839A4".to_string(),
-                                },
-                                emails: vec![]
-                            },
-                            ContactItem {
-                                local_id: 123.into(),
-                                name: "Mom".to_string(),
-                                avatar_information: AvatarInformation {
-                                    text: "M".to_string(),
-                                    color: "#213474".to_string(),
-                                },
-                                emails: vec![]
-                            },
-                            ContactItem {
-                                local_id: 125.into(),
-                                name: "Sister".to_string(),
-                                avatar_information: AvatarInformation {
-                                    text: "S".to_string(),
-                                    color: "#9C89FF".to_string(),
-                                },
-                                emails: vec![]
-                            }
-                        ]
-                    }
-                ),
-            ]
-        },
-        GroupedContacts {
-            grouped_by: "M".to_string(),
-            items: vec![
-                ContactItemType::Contact (
-                    ContactItem {
-                        local_id: 123.into(),
-                        name: "Mom".to_string(),
-                        avatar_information: AvatarInformation {
-                            text: "M".to_string(),
-                            color: "#213474".to_string(),
-                        },
-                        emails: vec![]
-                    }
-                ),
-            ]
-        },
-        GroupedContacts {
-            grouped_by: "S".to_string(),
-            items: vec![
-                ContactItemType::Contact (
-                    ContactItem {
-                        local_id: 125.into(),
-                        name: "Sister".to_string(),
-                        avatar_information: AvatarInformation {
-                            text: "S".to_string(),
-                            color: "#9C89FF".to_string(),
-                        },
-                        emails: vec![]
-                    }
-                ),
-            ]
-        },
-
-    ]; "TEST 5 Contact groups (labels)")]
-    fn test_grouped_contacts(
-        contacts: Vec<Contact>,
-        groups: Vec<Label>,
-        expected: Vec<GroupedContacts>,
-    ) {
-        let result = GroupedContacts::from_contacts_and_groups(contacts, groups);
-        assert_eq!(result, expected);
+    ]
+    ,5; "TEST 5 Contact groups (labels)")]
+    fn test_grouped_contacts(contacts: Vec<Contact>, groups: Vec<Label>, test_number: u32) {
+        let groups = GroupedContacts::from_contacts_and_groups(contacts, groups);
+        insta::assert_snapshot!(
+            format!("test_grouped_contacts_{}", test_number),
+            display_group(groups)
+        );
     }
 
-    #[test_case(vec![
-        contact_email!(remote_id: ceid!("3"), email: "barbara1984@yahoo.com".to_string(), display_order: 3),
-        contact_email!(remote_id: ceid!("1"), email: "barbara@fox.us".to_string(), display_order: 2),
-        contact_email!(remote_id: ceid!("2"), email: "bfox@proton.me".to_string(), display_order: 1, is_proton: true),
-    ], vec![
-    GroupedContacts {
-        grouped_by: "B".to_string(),
-        items: vec![
-            ContactItemType::Contact(
-                ContactItem {
-                    local_id: 1.into(),
-                    name: "Barbara Fox".to_string(),
-                    avatar_information: AvatarInformation {
-                        text: "B".to_string(),
-                        color: "#1ED19C".to_string(),
-                    },
-                    emails: vec![
-                        ContactEmailItem {
-                            local_id: 3.into(),
-                            email: "bfox@proton.me".to_string(),
-                            is_proton: true,
-                            last_used_time: 0.into(),
-                        },
-                        ContactEmailItem {
-                            local_id: 2.into(),
-                            email: "barbara@fox.us".to_string(),
-                            is_proton: false,
-                            last_used_time: 0.into(),
-                        },
-                        ContactEmailItem {
-                            local_id: 1.into(),
-                            email: "barbara1984@yahoo.com".to_string(),
-                            is_proton: false,
-                            last_used_time: 0.into(),
-                        },
-                    ],
-                },
-            ),
-        ],
-    },
-    ]; "TEST 1 emails are sorted by display order")]
     #[tokio::test]
-    async fn test_grouped_contacts_emails_order(
-        emails: Vec<ContactEmail>,
-        expected: Vec<GroupedContacts>,
-    ) {
+    async fn test_grouped_contacts_emails_order() {
+        let emails = vec![
+            contact_email!(remote_id: ceid!("3"), email: "barbara1984@yahoo.com".to_string(), display_order: 3),
+            contact_email!(remote_id: ceid!("1"), email: "barbara@fox.us".to_string(), display_order: 2),
+            contact_email!(remote_id: ceid!("2"), email: "bfox@proton.me".to_string(), display_order: 1, is_proton: true),
+        ];
+
         let mut tether = new_core_test_connection().await.connection();
         let mut contact = contact!(remote_id: cid!("123"), name: "Barbara Fox".to_string());
         tether
@@ -322,7 +211,7 @@ mod contact_list {
             .expect("commit failed");
 
         let result = Contact::contact_list(&tether).await.unwrap();
-        assert_eq!(result, expected);
+        insta::assert_snapshot!(display_group(result));
     }
 
     #[tokio::test]
@@ -475,7 +364,7 @@ mod contact_suggestions {
         ceid, cid, contact, contact_email,
         datatypes::{
             AvatarInformation, ContactEmailItem, ContactSuggestion, ContactSuggestionKind,
-            ContactSuggestions, DeviceContact, DeviceContactSuggestion, LabelType,
+            ContactSuggestions, DeviceContact, LabelType,
         },
         device_contact, label, label_id, labels, lid,
         models::{Contact, Label},
@@ -483,39 +372,25 @@ mod contact_suggestions {
     };
     use test_case::test_case;
 
-    fn pretty_assert(expected: Vec<ContactSuggestion>) -> impl Fn(Vec<ContactSuggestion>) {
-        move |actual| pretty_assertions::assert_eq!(actual, expected)
-    }
+    use super::display_suggestions;
 
+    #[derive(Default)]
     struct TestCase {
         contacts: Vec<Contact>,
         contact_groups: Vec<Label>,
         device_contacts: Vec<DeviceContact>,
     }
 
-    #[test_case(TestCase { contacts: vec![], contact_groups: vec![], device_contacts: vec![]} => Vec::<ContactSuggestion>::new() ; "TEST 0 - Empty")]
+    #[test_case(TestCase::default()
+    ,0; "TEST 0 - Empty")]
     #[test_case(TestCase {
-        contacts: vec![ contact!(name: "Barbara Lox".to_string(), contact_emails: vec![
-            contact_email!(local_id: lid!(123), is_proton: false, email: "barbara@lox.com".to_string(), last_used_time: 1.into())
-        ])],
-        contact_groups:  vec![],
-        device_contacts: vec![]
-     } => using pretty_assert(vec![
-        ContactSuggestion {
-            key: "contact/123".to_string(),
-            name: "Barbara Lox".to_string(),
-            avatar_information: AvatarInformation {
-                text: "B".to_string(),
-                color: "#A839A4".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 123.into(),
-                email: "barbara@lox.com".to_string(),
-                is_proton: false,
-                last_used_time: 1.into()
-            })
-        }
-     ]) ; "TEST 1 - Single contact")]
+        contacts: vec![
+            contact!(name: "Barbara Lox".to_string(), 
+                    contact_emails: vec![contact_email!(local_id: lid!(123), is_proton: false, email: "barbara@lox.com".to_string(), last_used_time: 1.into())
+                ])],
+        ..Default::default()
+     }
+    ,1; "TEST 1 - Single contact")]
     #[test_case(TestCase {
         contacts: vec![
             contact!(name: "Barbara Lox".to_string(), contact_emails: vec![
@@ -525,39 +400,9 @@ mod contact_suggestions {
                 contact_email!(local_id: lid!(234), is_proton: true, email: "m.scott@pm.me".to_string(), last_used_time: 1.into())
             ])
         ],
-        contact_groups:  vec![],
-        device_contacts: vec![]
-     } => using pretty_assert(vec![
-        ContactSuggestion {
-            key: "contact/234".to_string(),
-            name: "Michael Scott".to_string(),
-            avatar_information: AvatarInformation {
-                text: "M".to_string(),
-                color: "#213474".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 234.into(),
-                email: "m.scott@pm.me".to_string(),
-                is_proton: true,
-                last_used_time: 1.into()
-            })
-        },
-        ContactSuggestion {
-            key: "contact/123".to_string(),
-            name: "Barbara Lox".to_string(),
-            avatar_information: AvatarInformation {
-                text: "B".to_string(),
-                color: "#A839A4".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 123.into(),
-                email: "barbara@lox.com".to_string(),
-                is_proton: false,
-                last_used_time: 1.into()
-            })
-
-        }
-     ]) ; "TEST 2 - Proton mails go first")]
+        ..Default::default()
+     }
+    ,2; "TEST 2 - Proton mails go first")]
     #[test_case(TestCase {
         contacts: vec![
             contact!(name: "Barbara Lox".to_string(), contact_emails: vec![
@@ -570,52 +415,9 @@ mod contact_suggestions {
                 contact_email!(local_id: lid!(456), is_proton: false, email: "jake.peralta@99.com".to_string(), last_used_time: 3.into())
             ])
         ],
-        contact_groups:  vec![],
-        device_contacts: vec![]
-     } => using pretty_assert(vec![
-        ContactSuggestion {
-            key: "contact/234".to_string(),
-            name: "Michael Scott".to_string(),
-            avatar_information: AvatarInformation {
-                text: "M".to_string(),
-                color: "#213474".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 234.into(),
-                email: "m.scott@pm.me".to_string(),
-                is_proton: true,
-                last_used_time: 2.into()
-            })
-        },
-        ContactSuggestion {
-            key: "contact/123".to_string(),
-            name: "Barbara Lox".to_string(),
-            avatar_information: AvatarInformation {
-                text: "B".to_string(),
-                color: "#A839A4".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 123.into(),
-                email: "barbara@pm.me".to_string(),
-                is_proton: true,
-                last_used_time: 1.into()
-            })
-        },
-        ContactSuggestion {
-            key: "contact/456".to_string(),
-            name: "Jake Peralta".to_string(),
-            avatar_information: AvatarInformation {
-                text: "J".to_string(),
-                color: "#9C89FF".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 456.into(),
-                email: "jake.peralta@99.com".to_string(),
-                is_proton: false,
-                last_used_time: 3.into()
-            })
-        }
-     ]) ; "TEST 3 - Frequently used mails go first")]
+        ..Default::default()
+     }
+    ,3; "TEST 3 - Frequently used mails go first")]
     #[test_case(TestCase {
         contacts: vec![
             contact!(name: "Barbara Lox".to_string(), contact_emails: vec![
@@ -631,66 +433,9 @@ mod contact_suggestions {
                 contact_email!(local_id: lid!(456), is_proton: false, email: "jake.peralta@99.com".to_string(), last_used_time: 3.into())
             ]),
         ],
-        contact_groups:  vec![],
-        device_contacts: vec![]
-     } => using pretty_assert(vec![
-        ContactSuggestion {
-            key: "contact/678".to_string(),
-            name: "Jason Mendoza".to_string(),
-            avatar_information: AvatarInformation {
-                text: "J".to_string(),
-                color: "#3CBB3A".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 678.into(),
-                email: "jianyu.li@pm.me".to_string(),
-                is_proton: true,
-                last_used_time: 2.into()
-            })
-        },
-        ContactSuggestion {
-            key: "contact/234".to_string(),
-            name: "Michael Scott".to_string(),
-            avatar_information: AvatarInformation {
-                text: "M".to_string(),
-                color: "#213474".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 234.into(),
-                email: "m.scott@pm.me".to_string(),
-                is_proton: true,
-                last_used_time: 2.into()
-            })
-        },
-        ContactSuggestion {
-            key: "contact/123".to_string(),
-            name: "Barbara Lox".to_string(),
-            avatar_information: AvatarInformation {
-                text: "B".to_string(),
-                color: "#A839A4".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 123.into(),
-                email: "barbara@pm.me".to_string(),
-                is_proton: true,
-                last_used_time: 1.into()
-            })
-        },
-        ContactSuggestion {
-            key: "contact/456".to_string(),
-            name: "Jake Peralta".to_string(),
-            avatar_information: AvatarInformation {
-                text: "J".to_string(),
-                color: "#9C89FF".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 456.into(),
-                email: "jake.peralta@99.com".to_string(),
-                is_proton: false,
-                last_used_time: 3.into()
-            })
-        }
-     ]) ; "TEST 4 - In the end lexicographic order is used")]
+        ..Default::default()
+     }
+    ,4; "TEST 4 - In the end lexicographic order is used")]
     #[test_case(TestCase {
         contacts: vec![
             contact!(name: "Barbara Lox".to_string(), contact_emails: vec![
@@ -711,107 +456,9 @@ mod contact_suggestions {
         contact_groups: vec![
             label!(local_id: lid!(910), remote_id: Some(label_id!("m.schur.productions")), name: "M. Schur Productions".to_string(), label_type: LabelType::ContactGroup),
         ],
-        device_contacts: vec![]
-     } => using pretty_assert(vec![
-        ContactSuggestion {
-            key: "contact/678".to_string(),
-            name: "Jason Mendoza".to_string(),
-            avatar_information: AvatarInformation {
-                text: "J".to_string(),
-                color: "#3CBB3A".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 678.into(),
-                email: "jianyu.li@pm.me".to_string(),
-                is_proton: true,
-                last_used_time: 2.into()
-            })
-        },
-        ContactSuggestion {
-            key: "contact/234".to_string(),
-            name: "Michael Scott".to_string(),
-            avatar_information: AvatarInformation {
-                text: "M".to_string(),
-                color: "#213474".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 234.into(),
-                email: "m.scott@pm.me".to_string(),
-                is_proton: true,
-                last_used_time: 2.into()
-            })
-        },
-        ContactSuggestion {
-            key: "contact/123".to_string(),
-            name: "Barbara Lox".to_string(),
-            avatar_information: AvatarInformation {
-                text: "B".to_string(),
-                color: "#A839A4".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 123.into(),
-                email: "barbara@pm.me".to_string(),
-                is_proton: true,
-                last_used_time: 1.into()
-            })
-        },
-        ContactSuggestion {
-            key: "contact/456".to_string(),
-            name: "Jake Peralta".to_string(),
-            avatar_information: AvatarInformation {
-                text: "J".to_string(),
-                color: "#9C89FF".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 456.into(),
-                email: "jake.peralta@99.com".to_string(),
-                is_proton: false,
-                last_used_time: 3.into()
-            })
-        },
-        ContactSuggestion {
-            key: "contact/112".to_string(),
-            name: "Jake Peralta".to_string(),
-            avatar_information: AvatarInformation {
-                text: "J".to_string(),
-                color: "#9C89FF".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 112.into(),
-                email: "harvey@jp.com".to_string(),
-                is_proton: false,
-                last_used_time: 1.into()
-            })
-        },
-        ContactSuggestion {
-            key: "group/910".to_string(),
-            name: "M. Schur Productions".to_string(),
-            avatar_information: AvatarInformation {
-                text: "M".to_string(),
-                color: "#52006A".to_string()
-            },
-            kind: ContactSuggestionKind::ContactGroup(vec![
-                ContactEmailItem {
-                    local_id: 678.into(),
-                    email: "jianyu.li@pm.me".to_string(),
-                    is_proton: true,
-                    last_used_time: 2.into()
-                },
-                ContactEmailItem {
-                    local_id: 234.into(),
-                    email: "m.scott@pm.me".to_string(),
-                    is_proton: true,
-                    last_used_time: 2.into()
-                },
-                ContactEmailItem {
-                    local_id: 456.into(),
-                    email: "jake.peralta@99.com".to_string(),
-                    is_proton: false,
-                    last_used_time: 3.into()
-                },
-            ])
-        }
-     ]) ; "TEST 5 - Contact groups")]
+        ..Default::default()
+     }
+    ,5; "TEST 5 - Contact groups")]
     #[test_case(TestCase {
         contacts: vec![
             contact!(name: "Barbara Lox".to_string(), contact_emails: vec![
@@ -838,129 +485,8 @@ mod contact_suggestions {
                 "badass@aunt.com".to_string(),
             ])
         ]
-     } => using pretty_assert(vec![
-        ContactSuggestion {
-            key: "contact/678".to_string(),
-            name: "Jason Mendoza".to_string(),
-            avatar_information: AvatarInformation {
-                text: "J".to_string(),
-                color: "#3CBB3A".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 678.into(),
-                email: "jianyu.li@pm.me".to_string(),
-                is_proton: true,
-                last_used_time: 2.into()
-            })
-        },
-        ContactSuggestion {
-            key: "contact/234".to_string(),
-            name: "Michael Scott".to_string(),
-            avatar_information: AvatarInformation {
-                text: "M".to_string(),
-                color: "#213474".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 234.into(),
-                email: "m.scott@pm.me".to_string(),
-                is_proton: true,
-                last_used_time: 2.into()
-            })
-        },
-        ContactSuggestion {
-            key: "contact/123".to_string(),
-            name: "Barbara Lox".to_string(),
-            avatar_information: AvatarInformation {
-                text: "B".to_string(),
-                color: "#A839A4".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 123.into(),
-                email: "barbara@pm.me".to_string(),
-                is_proton: true,
-                last_used_time: 1.into()
-            })
-        },
-        ContactSuggestion {
-            key: "contact/456".to_string(),
-            name: "Jake Peralta".to_string(),
-            avatar_information: AvatarInformation {
-                text: "J".to_string(),
-                color: "#9C89FF".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 456.into(),
-                email: "jake.peralta@99.com".to_string(),
-                is_proton: false,
-                last_used_time: 3.into()
-            })
-        },
-        ContactSuggestion {
-            key: "contact/112".to_string(),
-            name: "Jake Peralta".to_string(),
-            avatar_information: AvatarInformation {
-                text: "J".to_string(),
-                color: "#9C89FF".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 112.into(),
-                email: "harvey@jp.com".to_string(),
-                is_proton: false,
-                last_used_time: 1.into()
-            })
-        },
-        ContactSuggestion {
-            key: "device-contact-email/000-0".to_string(),
-            name: "Aunt Molly".to_string(),
-            avatar_information: AvatarInformation {
-                text: "A".to_string(),
-                color: "#52006A".to_string(),
-            },
-            kind: ContactSuggestionKind::DeviceContact(DeviceContactSuggestion {
-                email: "molly@family.com".to_string()
-            })
-        },
-        // Device contact emails are not sorted by email address
-        ContactSuggestion {
-            key: "device-contact-email/000-1".to_string(),
-            name: "Aunt Molly".to_string(),
-            avatar_information: AvatarInformation {
-                text: "A".to_string(),
-                color: "#52006A".to_string(),
-            },
-            kind: ContactSuggestionKind::DeviceContact(DeviceContactSuggestion {
-                email: "badass@aunt.com".to_string()
-            })
-        },
-        ContactSuggestion {
-            key: "group/910".to_string(),
-            name: "M. Schur Productions".to_string(),
-            avatar_information: AvatarInformation {
-                text: "M".to_string(),
-                color: "#52006A".to_string()
-            },
-            kind: ContactSuggestionKind::ContactGroup(vec![
-                ContactEmailItem {
-                    local_id: 678.into(),
-                    email: "jianyu.li@pm.me".to_string(),
-                    is_proton: true,
-                    last_used_time: 2.into()
-                },
-                ContactEmailItem {
-                    local_id: 234.into(),
-                    email: "m.scott@pm.me".to_string(),
-                    is_proton: true,
-                    last_used_time: 2.into()
-                },
-                ContactEmailItem {
-                    local_id: 456.into(),
-                    email: "jake.peralta@99.com".to_string(),
-                    is_proton: false,
-                    last_used_time: 3.into()
-                },
-            ])
-        }
-     ]) ; "TEST 6 - Contact groups and device contacts are in the end, sorted by name")]
+     }
+    ,6; "TEST 6 - Contact groups and device contacts are in the end, sorted by name")]
     #[test_case(TestCase {
         contacts: vec![
             contact!(name: "Barbara Lox".to_string(), contact_emails: vec![
@@ -989,128 +515,8 @@ mod contact_suggestions {
                 "badass@aunt.com".to_string(),
             ])
         ]
-     } => using pretty_assert(vec![
-        ContactSuggestion {
-            key: "contact/678".to_string(),
-            name: "Jason Mendoza".to_string(),
-            avatar_information: AvatarInformation {
-                text: "J".to_string(),
-                color: "#3CBB3A".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 678.into(),
-                email: "jianyu.li@pm.me".to_string(),
-                is_proton: true,
-                last_used_time: 2.into()
-            })
-        },
-        ContactSuggestion {
-            key: "contact/234".to_string(),
-            name: "Michael Scott".to_string(),
-            avatar_information: AvatarInformation {
-                text: "M".to_string(),
-                color: "#213474".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 234.into(),
-                email: "m.scott@pm.me".to_string(),
-                is_proton: true,
-                last_used_time: 2.into()
-            })
-        },
-        ContactSuggestion {
-            key: "contact/123".to_string(),
-            name: "Barbara Lox".to_string(),
-            avatar_information: AvatarInformation {
-                text: "B".to_string(),
-                color: "#A839A4".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 123.into(),
-                email: "barbara@pm.me".to_string(),
-                is_proton: true,
-                last_used_time: 1.into()
-            })
-        },
-        ContactSuggestion {
-            key: "contact/456".to_string(),
-            name: "Jake Peralta".to_string(),
-            avatar_information: AvatarInformation {
-                text: "J".to_string(),
-                color: "#9C89FF".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 456.into(),
-                email: "jake.peralta@99.com".to_string(),
-                is_proton: false,
-                last_used_time: 3.into()
-            })
-        },
-        ContactSuggestion {
-            key: "contact/112".to_string(),
-            name: "Jake Peralta".to_string(),
-            avatar_information: AvatarInformation {
-                text: "J".to_string(),
-                color: "#9C89FF".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 112.into(),
-                email: "harvey@jp.com".to_string(),
-                is_proton: false,
-                last_used_time: 1.into()
-            })
-        },
-        ContactSuggestion {
-            key: "device-contact-email/000-0".to_string(),
-            name: "Aunt Molly".to_string(),
-            avatar_information: AvatarInformation {
-                text: "A".to_string(),
-                color: "#52006A".to_string(),
-            },
-            kind: ContactSuggestionKind::DeviceContact(DeviceContactSuggestion {
-                email: "molly@family.com".to_string()
-            })
-        },
-        ContactSuggestion {
-            key: "device-contact-email/001-0".to_string(),
-            name: "Aunt Molly".to_string(),
-            avatar_information: AvatarInformation {
-                text: "A".to_string(),
-                color: "#52006A".to_string(),
-            },
-            kind: ContactSuggestionKind::DeviceContact(DeviceContactSuggestion {
-                email: "badass@aunt.com".to_string()
-            })
-        },
-        ContactSuggestion {
-            key: "group/910".to_string(),
-            name: "M. Schur Productions".to_string(),
-            avatar_information: AvatarInformation {
-                text: "M".to_string(),
-                color: "#52006A".to_string()
-            },
-            kind: ContactSuggestionKind::ContactGroup(vec![
-                ContactEmailItem {
-                    local_id: 678.into(),
-                    email: "jianyu.li@pm.me".to_string(),
-                    is_proton: true,
-                    last_used_time: 2.into()
-                },
-                ContactEmailItem {
-                    local_id: 234.into(),
-                    email: "m.scott@pm.me".to_string(),
-                    is_proton: true,
-                    last_used_time: 2.into()
-                },
-                ContactEmailItem {
-                    local_id: 456.into(),
-                    email: "jake.peralta@99.com".to_string(),
-                    is_proton: false,
-                    last_used_time: 3.into()
-                },
-            ])
-        }
-     ]) ; "TEST 7 - Device Contacts are sorted by name and ids")]
+     }
+    ,7; "TEST 7 - Device Contacts are sorted by name and ids")]
     #[test_case(TestCase {
         contacts: vec![
             contact!(name: "Barbara Lox".to_string(), contact_emails: vec![
@@ -1149,139 +555,23 @@ mod contact_suggestions {
                 "badass@aunt.com".to_string(),
             ]),
         ]
-     } => using pretty_assert(vec![
-        ContactSuggestion {
-            key: "contact/678".to_string(),
-            name: "Jason Mendoza".to_string(),
-            avatar_information: AvatarInformation {
-                text: "J".to_string(),
-                color: "#3CBB3A".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 678.into(),
-                email: "jianyu.li@pm.me".to_string(),
-                is_proton: true,
-                last_used_time: 2.into()
-            })
-        },
-        ContactSuggestion {
-            key: "contact/234".to_string(),
-            name: "Michael Scott".to_string(),
-            avatar_information: AvatarInformation {
-                text: "M".to_string(),
-                color: "#213474".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 234.into(),
-                email: "m.scott@pm.me".to_string(),
-                is_proton: true,
-                last_used_time: 2.into()
-            })
-        },
-        ContactSuggestion {
-            key: "contact/123".to_string(),
-            name: "Barbara Lox".to_string(),
-            avatar_information: AvatarInformation {
-                text: "B".to_string(),
-                color: "#A839A4".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 123.into(),
-                email: "barbara@pm.me".to_string(),
-                is_proton: true,
-                last_used_time: 1.into()
-            })
-        },
-        ContactSuggestion {
-            key: "contact/999".to_string(),
-            name: "Detective Peralta".to_string(),
-            avatar_information: AvatarInformation {
-                text: "D".to_string(),
-                color: "#415DF0".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 999.into(),
-                email: "jake.peralta@99.com".to_string(),
-                is_proton: false,
-                last_used_time: 3.into()
-            })
-        },
-        ContactSuggestion {
-            key: "contact/112".to_string(),
-            name: "Jake Peralta".to_string(),
-            avatar_information: AvatarInformation {
-                text: "J".to_string(),
-                color: "#9C89FF".to_string()
-            },
-            kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                local_id: 112.into(),
-                email: "harvey@jp.com".to_string(),
-                is_proton: false,
-                last_used_time: 1.into()
-            })
-        },
-        ContactSuggestion {
-            key: "device-contact-email/000-0".to_string(),
-            name: "Aunt Molly".to_string(),
-            avatar_information: AvatarInformation {
-                text: "A".to_string(),
-                color: "#52006A".to_string(),
-            },
-            kind: ContactSuggestionKind::DeviceContact(DeviceContactSuggestion {
-                email: "molly@family.com".to_string()
-            })
-        },
-        ContactSuggestion {
-            key: "device-contact-email/001-0".to_string(),
-            name: "Aunt Molly".to_string(),
-            avatar_information: AvatarInformation {
-                text: "A".to_string(),
-                color: "#52006A".to_string(),
-            },
-            kind: ContactSuggestionKind::DeviceContact(DeviceContactSuggestion {
-                email: "badass@aunt.com".to_string()
-            })
-        },
-        ContactSuggestion {
-            key: "group/910".to_string(),
-            name: "M. Schur Productions".to_string(),
-            avatar_information: AvatarInformation {
-                text: "M".to_string(),
-                color: "#52006A".to_string()
-            },
-            kind: ContactSuggestionKind::ContactGroup(vec![
-                ContactEmailItem {
-                    local_id: 678.into(),
-                    email: "jianyu.li@pm.me".to_string(),
-                    is_proton: true,
-                    last_used_time: 2.into()
-                },
-                ContactEmailItem {
-                    local_id: 234.into(),
-                    email: "m.scott@pm.me".to_string(),
-                    is_proton: true,
-                    last_used_time: 2.into()
-                },
-                ContactEmailItem {
-                    local_id: 456.into(),
-                    email: "jake.peralta@99.com".to_string(),
-                    is_proton: false,
-                    last_used_time: 3.into()
-                },
-            ])
-        }
-     ]) ; "TEST 8 - contacts are deduplicated")]
-    fn test_contact_suggestions(test_case: TestCase) -> Vec<ContactSuggestion> {
-        ContactSuggestions::from_contacts_and_device_contacts(
+     }
+    ,8; "TEST 8 - contacts are deduplicated")]
+    fn test_contact_suggestions(test_case: TestCase, test_number: u32) {
+        let res = ContactSuggestions::from_contacts_and_device_contacts(
             test_case.contacts,
             test_case.contact_groups,
             test_case.device_contacts,
         )
         .all()
-        .to_vec()
+        .to_vec();
+        insta::assert_snapshot!(
+            format!("test_contact_suggestions_{}", test_number),
+            display_suggestions(res)
+        );
     }
 
-    #[test_case(ContactSuggestions::from (
+    #[test_case(ContactSuggestions::from(
              vec![
                 ContactSuggestion {
                     key: "contact/234".to_string(),
@@ -1291,6 +581,11 @@ mod contact_suggestions {
                         color: "#213474".to_string()
                     },
                     kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
+                        name: "Michael Scott".to_string(),
+                        avatar_information: AvatarInformation {
+                            text: "M".to_string(),
+                            color: "#213474".to_string()
+                        },
                         local_id: 234.into(),
                         email: "m.scott@pm.me".to_string(),
                         is_proton: true,
@@ -1305,6 +600,11 @@ mod contact_suggestions {
                         color: "#A839A4".to_string()
                     },
                     kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
+                        name: "Barbara Lox".to_string(),
+                        avatar_information: AvatarInformation {
+                            text: "B".to_string(),
+                            color: "#A839A4".to_string()
+                        },
                         local_id: 123.into(),
                         email: "barbara@pm.me".to_string(),
                         is_proton: true,
@@ -1313,70 +613,48 @@ mod contact_suggestions {
                 },
             ]
         ),
-         ContactSuggestions::from(
-             vec![
-                ContactSuggestion {
-                    key: "contact/234".to_string(),
-                    name: "Michael Scott".to_string(),
-                    avatar_information: AvatarInformation {
-                        text: "M".to_string(),
-                        color: "#213474".to_string()
-                    },
-                    kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                        local_id: 234.into(),
-                        email: "m.scott@pm.me".to_string(),
-                        is_proton: true,
-                        last_used_time: 2.into()
-                    })
-                },
-                ContactSuggestion {
-                    key: "contact/123".to_string(),
-                    name: "Barbara Lox".to_string(),
-                    avatar_information: AvatarInformation {
-                        text: "B".to_string(),
-                        color: "#A839A4".to_string()
-                    },
-                    kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                        local_id: 123.into(),
-                        email: "barbara@pm.me".to_string(),
-                        is_proton: true,
-                        last_used_time: 1.into()
-                    })
-                },
-            ]
-        ) =>
         ContactSuggestions::from(
-             vec![
-                ContactSuggestion {
-                    key: "contact/234".to_string(),
-                    name: "Michael Scott".to_string(),
-                    avatar_information: AvatarInformation {
-                        text: "M".to_string(),
-                        color: "#213474".to_string()
-                    },
-                    kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                        local_id: 234.into(),
-                        email: "m.scott@pm.me".to_string(),
-                        is_proton: true,
-                        last_used_time: 2.into()
-                    })
-                },
-                ContactSuggestion {
-                    key: "contact/123".to_string(),
-                    name: "Barbara Lox".to_string(),
-                    avatar_information: AvatarInformation {
-                        text: "B".to_string(),
-                        color: "#A839A4".to_string()
-                    },
-                    kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                        local_id: 123.into(),
-                        email: "barbara@pm.me".to_string(),
-                        is_proton: true,
-                        last_used_time: 1.into()
-                    })
-                },
-            ]
-        );
+            vec![
+               ContactSuggestion {
+                   key: "contact/234".to_string(),
+                   name: "Michael Scott".to_string(),
+                   avatar_information: AvatarInformation {
+                       text: "M".to_string(),
+                       color: "#213474".to_string()
+                   },
+                   kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
+                       name: "Michael Scott".to_string(),
+                       avatar_information: AvatarInformation {
+                           text: "M".to_string(),
+                           color: "#213474".to_string()
+                       },
+                       local_id: 234.into(),
+                       email: "m.scott@pm.me".to_string(),
+                       is_proton: true,
+                       last_used_time: 2.into()
+                   })
+               },
+               ContactSuggestion {
+                   key: "contact/123".to_string(),
+                   name: "Barbara Lox".to_string(),
+                   avatar_information: AvatarInformation {
+                       text: "B".to_string(),
+                       color: "#A839A4".to_string()
+                   },
+                   kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
+                       name: "Barbara Lox".to_string(),
+                       avatar_information: AvatarInformation {
+                           text: "B".to_string(),
+                           color: "#A839A4".to_string()
+                       },
+                       local_id: 123.into(),
+                       email: "barbara@pm.me".to_string(),
+                       is_proton: true,
+                       last_used_time: 1.into()
+                   })
+               },
+           ]
+        ), 0;
         "TEST0: Concat the same suggestions ends up in the initial list"
     )]
     #[test_case(ContactSuggestions::from (
@@ -1389,6 +667,11 @@ mod contact_suggestions {
                         color: "#213474".to_string()
                     },
                     kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
+                        name: "Michael Brogile".to_string(),
+                        avatar_information: AvatarInformation {
+                            text: "M".to_string(),
+                            color: "#213474".to_string()
+                        },
                         local_id: 234.into(),
                         email: "m.brogile@pm.me".to_string(),
                         is_proton: true,
@@ -1403,6 +686,11 @@ mod contact_suggestions {
                         color: "#A839A4".to_string()
                     },
                     kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
+                        name: "Barbara Lox".to_string(),
+                        avatar_information: AvatarInformation {
+                            text: "B".to_string(),
+                            color: "#A839A4".to_string()
+                        },
                         local_id: 123.into(),
                         email: "barbara@pm.me".to_string(),
                         is_proton: true,
@@ -1421,6 +709,11 @@ mod contact_suggestions {
                         color: "#213474".to_string()
                     },
                     kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
+                        name: "Michael Scott".to_string(),
+                        avatar_information: AvatarInformation {
+                            text: "M".to_string(),
+                            color: "#213474".to_string()
+                        },
                         local_id: 234.into(),
                         email: "m.scott@pm.me".to_string(),
                         is_proton: true,
@@ -1435,6 +728,11 @@ mod contact_suggestions {
                         color: "#A839A4".to_string()
                     },
                     kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
+                        avatar_information: AvatarInformation {
+                            text: "B".to_string(),
+                            color: "#A839A4".to_string()
+                        },
+                        name: "Barbara Lox".into(),
                         local_id: 123.into(),
                         email: "barbara@pm.me".to_string(),
                         is_proton: true,
@@ -1442,61 +740,19 @@ mod contact_suggestions {
                     })
                 },
             ]
-        ) =>
-        ContactSuggestions::from(
-             vec![
-                ContactSuggestion {
-                    key: "contact/235".to_string(),
-                    name: "Michael Brogile".to_string(),
-                    avatar_information: AvatarInformation {
-                        text: "M".to_string(),
-                        color: "#213474".to_string()
-                    },
-                    kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                        local_id: 234.into(),
-                        email: "m.brogile@pm.me".to_string(),
-                        is_proton: true,
-                        last_used_time: 2.into()
-                    })
-                },
-                ContactSuggestion {
-                    key: "contact/123".to_string(),
-                    name: "Barbara Lox".to_string(),
-                    avatar_information: AvatarInformation {
-                        text: "B".to_string(),
-                        color: "#A839A4".to_string()
-                    },
-                    kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                        local_id: 123.into(),
-                        email: "barbara@pm.me".to_string(),
-                        is_proton: true,
-                        last_used_time: 1.into()
-                    })
-                },
-                ContactSuggestion {
-                    key: "contact/234".to_string(),
-                    name: "Michael Scott".to_string(),
-                    avatar_information: AvatarInformation {
-                        text: "M".to_string(),
-                        color: "#213474".to_string()
-                    },
-                    kind: ContactSuggestionKind::ContactItem(ContactEmailItem {
-                        local_id: 234.into(),
-                        email: "m.scott@pm.me".to_string(),
-                        is_proton: true,
-                        last_used_time: 2.into()
-                    })
-                },
-            ]
-        );
+        ), 1;
         "TEST1: Concat different suggestions are correctly deduplicated and sorted (other's at the end)"
     )]
     fn concat_contact_suggestions(
         mut one: ContactSuggestions,
         other: ContactSuggestions,
-    ) -> ContactSuggestions {
+        test_number: u32,
+    ) {
         one.concat(other);
-        one
+        insta::assert_snapshot!(
+            format!("concat_contact_suggestions_{}", test_number),
+            display_suggestions(one.all().to_vec())
+        );
     }
 
     fn pretty_assert_emails(expected: Vec<&'static str>) -> impl Fn(Vec<ContactSuggestion>) {
@@ -1519,13 +775,6 @@ mod contact_suggestions {
         }
     }
 
-    fn empty_test_case() -> TestCase {
-        TestCase {
-            contacts: vec![],
-            contact_groups: vec![],
-            device_contacts: vec![],
-        }
-    }
     fn filtering_test_case() -> TestCase {
         TestCase {
             contacts: vec![
@@ -1557,8 +806,8 @@ mod contact_suggestions {
         }
     }
 
-    #[test_case("pe", empty_test_case() => using pretty_assert_emails(vec![]) ; "TEST 0A - empty contact book")]
-    #[test_case("", empty_test_case() => using pretty_assert_emails(vec![]) ; "TEST 0B - empty query")]
+    #[test_case("pe", TestCase::default() => using pretty_assert_emails(vec![]) ; "TEST 0A - empty contact book")]
+    #[test_case("", TestCase::default() => using pretty_assert_emails(vec![]) ; "TEST 0B - empty query")]
     #[test_case("", filtering_test_case() => using pretty_assert_emails(vec![]) ; "TEST 0C - empty query with non-empty contact book")]
     #[test_case("Lox", filtering_test_case() => using pretty_assert_emails(vec![ "Barbara Lox <barbara@pm.me>" ]) ; "TEST 1 - filtering by name")]
     #[test_case("lox", filtering_test_case() => using pretty_assert_emails(vec![ "Barbara Lox <barbara@pm.me>" ]) ; "TEST 2 - filtering case insensitive")]
