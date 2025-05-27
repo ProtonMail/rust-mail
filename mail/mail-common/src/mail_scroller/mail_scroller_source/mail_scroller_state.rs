@@ -131,7 +131,12 @@ impl<T: ScrollData> MailScrollerState<T> {
         match self {
             MailScrollerState::Online(ordered) | MailScrollerState::Offline { ordered, .. } => {
                 if !ordered.has_more_than_a_page(tether).await? {
-                    ordered.update(tether).await?;
+                    if let Err(e) = ordered.update(tether).await {
+                        tracing::error!(
+                            "Could not update scroller end cursor, it has been removed: `{e}`"
+                        );
+                        *self = MailScrollerState::NotSynced(ordered.clone());
+                    }
                 }
 
                 return Ok(());
