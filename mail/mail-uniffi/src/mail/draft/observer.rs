@@ -53,7 +53,10 @@ pub enum DraftSendStatus {
     /// Everything was completed with success. Contains the number of seconds left
     /// until the message's sending can be cancelled. `0` means it is no longer
     /// possible or the operation can not be done.
-    Success(u64),
+    Success {
+        seconds_until_cancel: u64,
+        delivery_time: UnixTimestamp,
+    },
     /// Something failed.
     Failure(DraftSendFailure),
 }
@@ -86,9 +89,12 @@ impl From<RealDraftSendResult> for DraftSendResult {
         Self {
             message_id: value.local_message_id.into(),
             timestamp: value.timestamp.into(),
-            error: value
-                .error
-                .map_or(DraftSendStatus::Success(second_left_for_undo), |e| {
+            error: value.error.map_or(
+                DraftSendStatus::Success {
+                    seconds_until_cancel: second_left_for_undo,
+                    delivery_time: value.undo_timestamp.into(),
+                },
+                |e| {
                     let proton_error = RealProtonMailError::from(e);
                     match proton_error {
                         RealProtonMailError::Reason(RealMailErrorReason::DraftSendReason(e)) => {
@@ -102,7 +108,8 @@ impl From<RealDraftSendResult> for DraftSendResult {
                         ) => DraftSendStatus::Failure(DraftSendFailure::AttachmentUpload(e.into())),
                         _ => DraftSendStatus::Failure(DraftSendFailure::Other(proton_error.into())),
                     }
-                }),
+                },
+            ),
             origin: value.origin.into(),
         }
     }
