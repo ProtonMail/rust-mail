@@ -1698,6 +1698,11 @@ impl MessageFlags {
     pub fn is_schedule_send(&self) -> bool {
         self.intersects(MessageFlags::SCHEDULED_SEND)
     }
+
+    #[must_use]
+    pub fn is_sent(&self) -> bool {
+        self.intersects(MessageFlags::SENT)
+    }
 }
 
 impl From<ApiMessageFlags> for MessageFlags {
