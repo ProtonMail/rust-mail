@@ -6,6 +6,7 @@ pub mod event_poll;
 pub mod labels;
 pub mod messages;
 pub mod notifications_quick_actions;
+pub mod refresh;
 pub mod rollback;
 
 pub use self::available_action::*;
@@ -141,6 +142,7 @@ pub(crate) fn register_mail_actions(queue: &Queue) {
     register_action::<draft::AttachmentUpload>(queue);
     register_action::<draft::AttachmentRemove>(queue);
     register_action::<event_poll::EventPoll>(queue);
+    register_action::<refresh::ActionRefresh>(queue);
     register_action::<rollback::RollbackAction>(queue);
 }
 

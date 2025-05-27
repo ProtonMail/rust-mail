@@ -7,5 +7,3 @@ pub(crate) mod subscriber;
 
 pub(crate) use event_loop::EventLoopActionIds;
 pub(crate) use event_loop::MailEventLoopContext;
-
-pub use self::subscriber::whole_refresh;

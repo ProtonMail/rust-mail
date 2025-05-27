@@ -1,4 +1,5 @@
 use crate::MailUserContext;
+use crate::actions::refresh::ActionRefresh;
 use crate::actions::{conversations, messages};
 use crate::datatypes::{MessageLabelsCount, ReadFilter, ViewMode};
 use crate::models::default_location::IncomingDefaultLocation;
@@ -14,6 +15,7 @@ use crate::{datatypes::ConversationLabelsCount, events::MailEvent};
 use anyhow::{anyhow, bail};
 use async_trait::async_trait;
 use either::Either;
+use proton_action_queue::queue::{ActionError as QueueActionError, QueuedActionOutput};
 use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::{Address, Contact, Label, ModelExtension, User};
 use proton_event_loop::subscriber::{Subscriber, SubscriberError};
@@ -148,8 +150,25 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
     }
 
     async fn on_refresh(&self, event: &MailEvent) -> Result<(), SubscriberError> {
-        debug!("Handling refresh event");
         let ctx = self.inner()?;
+
+        ctx.on_refresh_impl(event.refresh).await
+    }
+}
+
+impl MailUserContext {
+    pub async fn refresh_action(
+        &self,
+    ) -> Result<QueuedActionOutput<ActionRefresh>, QueueActionError<ActionRefresh>> {
+        self.action_queue().queue_action(ActionRefresh {}).await
+    }
+
+    pub(crate) async fn on_refresh_impl(
+        self: Arc<Self>,
+        refresh: u8,
+    ) -> Result<(), SubscriberError> {
+        debug!("Handling refresh event");
+        let ctx = self;
 
         macro_rules! try_refresh {
             ($fn_name:tt) => {{
@@ -165,7 +184,7 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
             }};
         }
 
-        match event.refresh {
+        match refresh {
             0 => {
                 warn!("Nothing to refresh, this may idicate bug in SDK event loop implementation");
                 return Ok(());
@@ -419,13 +438,6 @@ async fn refresh_contacts(ctx: Arc<MailUserContext>) -> Result<(), SubscriberErr
         .inspect_err(|e| {
             error!("Failed to clear database entries while refreshing core: {e}");
         })?;
-
-    Ok(())
-}
-
-pub async fn whole_refresh(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> {
-    refresh_core(ctx.clone()).await?;
-    refresh_mail(ctx.clone()).await?;
 
     Ok(())
 }
