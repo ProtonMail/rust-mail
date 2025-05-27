@@ -37,7 +37,7 @@ impl GroupedContacts {
     ///
     #[must_use]
     pub fn from_contacts_and_groups(
-        contacts: Vec<Contact>,
+        mut contacts: Vec<Contact>,
         contact_groups: Vec<Label>,
     ) -> Vec<Self> {
         debug_assert!(
@@ -46,8 +46,11 @@ impl GroupedContacts {
                 .all(|group| group.label_type == LabelType::ContactGroup)
         );
 
+        let mut btmap: BTreeMap<String, Vec<ContactItemType>> = BTreeMap::new();
+
         let mut contact_group_items: HashMap<LabelId, ContactGroupItem> = contact_groups
             .into_iter()
+            .filter(|group| !cfg!(debug_assertions) || group.remote_id.is_some())
             .filter(|group| group.label_type == LabelType::ContactGroup)
             .map(|group| {
                 (
@@ -62,27 +65,20 @@ impl GroupedContacts {
             })
             .collect();
 
-        let contact_items = contacts
-            .into_iter()
-            .sorted_by(|one, other| {
-                let one_words: String = one.name.unicode_words().collect();
-                let other_words: String = other.name.unicode_words().collect();
-                one_words.cmp(&other_words)
-            })
-            .map(|contact| {
-                let item = ContactItem::from(contact.clone());
-                contact.label_ids.iter().for_each(|id| {
-                    if let Some(group) = contact_group_items.get_mut(id) {
-                        group.contacts.push(item.clone());
-                    }
-                });
-                item
-            })
-            .collect::<Vec<_>>();
+        contacts.sort_by_key(|c| c.name.unicode_words().collect::<String>());
+        for contact in &contacts {
+            for id in &contact.label_ids.0 {
+                if let Some(group) = contact_group_items.get_mut(id) {
+                    group
+                        .contacts
+                        .extend(contact.contact_emails.iter().map(|x| x.clone().into()));
+                }
+            }
+        }
 
-        let mut btmap: BTreeMap<String, Vec<ContactItemType>> = BTreeMap::new();
-        contact_items
+        contacts
             .into_iter()
+            .map_into::<ContactItem>()
             .map_into::<ContactItemType>()
             .chain(
                 contact_group_items
@@ -142,16 +138,9 @@ impl From<ContactGroupItem> for ContactItemType {
 /// This is the main data structure that is used to represent the contact.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ContactItem {
-    /// The field represent the unique identifier of the contact in the database
     pub local_id: LocalContactId,
-
-    /// The field represent the name of the contact
     pub name: String,
-
-    /// The field represent the avatar information of the contact
     pub avatar_information: AvatarInformation,
-
-    /// The field represent the list of emails of the contact
     pub emails: Vec<ContactEmailItem>,
 }
 
@@ -177,42 +166,39 @@ impl From<Contact> for ContactItem {
 /// This is the main data structure that is used to represent the contact group.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ContactGroupItem {
-    /// The field represent the unique identifier of the contact group in the database
     pub local_id: LocalLabelId,
-
-    /// The field represent the name of the contact group
     pub name: String,
-
-    /// The field represent the avatar information of the contact group
     pub avatar_information: AvatarInformation,
-
-    /// The field represent the list of emails of the contact group
-    pub contacts: Vec<ContactItem>,
+    pub contacts: Vec<ContactEmailItem>,
 }
 
 /// This is the main data structure that is used to represent the contact email.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContactEmailItem {
-    /// The field represent the unique identifier of the contact email in the database
     pub local_id: LocalContactEmailId,
-
-    /// The field represent the email of the contact
     pub email: String,
-
-    /// The field represent if the email is a proton email
+    /// The field represents if the email is a proton email like foo@pm.me
     pub is_proton: bool,
-
-    /// The field represent the last used time of the email
     pub last_used_time: UnixTimestamp,
+    pub name: String,
+    pub avatar_information: AvatarInformation,
 }
 
 impl From<ContactEmail> for ContactEmailItem {
     fn from(value: ContactEmail) -> Self {
+        let name = if value.name.is_empty() {
+            value.email.clone()
+        } else {
+            value.name
+        };
+
         Self {
             local_id: value.local_id.unwrap(),
             email: value.email,
             is_proton: value.is_proton,
             last_used_time: value.last_used_time,
+            avatar_information: AvatarInformation::from(&name),
+            name,
         }
     }
 }
@@ -289,6 +275,7 @@ impl ContactSuggestions {
 
         let mut contact_groups: HashMap<LabelId, ContactGroup> = contact_groups
             .into_iter()
+            .filter(|group| !cfg!(debug_assertions) || group.remote_id.is_some())
             .filter(|group| group.label_type == LabelType::ContactGroup)
             // TODO(ET-2030): We should not reference groups by remote ids, instead we should use local ids
             // This is to ensure the offline mode works with contacts and contact groups not synced with API
