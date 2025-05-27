@@ -471,7 +471,7 @@ impl Label {
 
     /// Get all contact labels
     ///
-    pub async fn all_contacts(tether: &Tether) -> Result<Vec<Self>, StashError> {
+    pub async fn all_contact_groups(tether: &Tether) -> Result<Vec<Self>, StashError> {
         Self::find_by_kinds(&CONTACT_LABEL_TYPES, tether).await
     }
 

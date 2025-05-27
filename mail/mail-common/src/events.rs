@@ -39,7 +39,7 @@ use crate::models::{Conversation, MailSettings};
 use proton_core_api::services::proton::LabelEvent as ApiLabelEvent;
 use proton_core_api::services::proton::{EventId, LabelId};
 use proton_core_common::CoreEvent;
-use proton_core_common::datatypes::ProductUsedSpace;
+use proton_core_common::datatypes::{ProductUsedSpace, Refresh};
 use proton_core_common::events::ContactEvent;
 use proton_core_common::events::{Action, AddressEvent, ContactEmailEvent};
 use proton_core_common::models::{Label, User, UserSettings};
@@ -149,7 +149,7 @@ pub struct MailEvent {
     pub contact_emails: Option<Vec<ContactEmailEvent>>,
 
     /// Indicates whether we should refresh our data.
-    pub refresh: u8,
+    pub refresh: Refresh,
 }
 
 impl CoreEvent for MailEvent {
@@ -214,7 +214,7 @@ impl Event for MailEvent {
     }
 
     fn is_refresh(&self) -> bool {
-        self.refresh != 0
+        self.refresh.is_refresh()
     }
 }
 
@@ -256,7 +256,7 @@ impl From<ApiMailEvent> for MailEvent {
                     .map(ContactEmailEvent::from)
                     .collect()
             }),
-            refresh: value.refresh,
+            refresh: value.refresh.into(),
             incoming_defaults: value.incoming_defaults,
         }
     }

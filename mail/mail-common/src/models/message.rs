@@ -2749,11 +2749,11 @@ impl Message {
     /// Whether this message is a draft and has been modified locally.
     ///
     pub async fn is_local_draft(&self, tether: &Tether) -> Result<bool, StashError> {
-        Ok(self.is_draft()
-            && self.local_id.is_some()
-            && DraftMetadata::find_by_message_id(self.local_id.unwrap(), tether)
+        Ok(
+            DraftMetadata::find_by_message_id(self.local_id.unwrap(), tether)
                 .await?
-                .is_some())
+                .is_some(),
+        )
     }
 
     /// [`RemoteId`] on its own is useless, because all our UniFFI endpoints operate on

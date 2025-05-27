@@ -16,7 +16,7 @@ use anyhow::{anyhow, bail};
 use async_trait::async_trait;
 use either::Either;
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedActionOutput};
-use proton_core_common::datatypes::SystemLabel;
+use proton_core_common::datatypes::{Refresh, SystemLabel};
 use proton_core_common::models::{Address, Contact, Label, ModelExtension, User};
 use proton_event_loop::subscriber::{Subscriber, SubscriberError};
 use proton_task_service::AsyncTaskResult;
@@ -159,13 +159,16 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
 impl MailUserContext {
     pub async fn refresh_action(
         &self,
+        refresh: impl Into<Refresh>,
     ) -> Result<QueuedActionOutput<ActionRefresh>, QueueActionError<ActionRefresh>> {
-        self.action_queue().queue_action(ActionRefresh {}).await
+        self.action_queue()
+            .queue_action(ActionRefresh::new(refresh.into()))
+            .await
     }
 
     pub(crate) async fn on_refresh_impl(
         self: Arc<Self>,
-        refresh: u8,
+        refresh: Refresh,
     ) -> Result<(), SubscriberError> {
         debug!("Handling refresh event");
         let ctx = self;
@@ -180,33 +183,31 @@ impl MailUserContext {
                         return Err(e);
                     }
                     attempts += 1;
+                    warn!("Refresh event attempt {attempts} failed");
                 }
             }};
         }
 
         match refresh {
-            0 => {
+            Refresh::None => {
                 warn!("Nothing to refresh, this may idicate bug in SDK event loop implementation");
                 return Ok(());
             }
-            1 => {
+            Refresh::Mail => {
                 info!("Handling mail refresh");
                 try_refresh!(refresh_mail);
             }
-            2 => {
+            Refresh::Contacts => {
                 info!("Handling contacts refresh");
                 try_refresh!(refresh_contacts);
             }
-            255 => {
+            Refresh::All => {
                 info!("Handling refresh all");
                 try_refresh!(refresh_core);
                 try_refresh!(refresh_mail);
             }
-            e => {
-                error!("Unhandled refresh event: `{e}`");
-                return Err(SubscriberError::Other(anyhow!(
-                    "Unhandled refresh event: `{e}`"
-                )));
+            Refresh::Unknown(other) => {
+                warn!("Unknown refresh event type: {other}");
             }
         }
 
@@ -372,7 +373,7 @@ async fn refresh_core(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
         .into_iter()
         .map(|addr| (addr.remote_id.clone(), addr))
         .collect();
-    let mut all_local_labels: HashMap<_, _> = Label::all_contacts(&tether)
+    let mut all_local_labels: HashMap<_, _> = Label::all_contact_groups(&tether)
         .await?
         .into_iter()
         .map(|label| (label.remote_id.clone(), label))

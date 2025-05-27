@@ -3,17 +3,24 @@ use anyhow::anyhow;
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
 };
+use proton_core_common::datatypes::Refresh;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 
 use super::MailActionError;
 
-/// Action which polls the event loop.
+/// Action which runs whole refresh symulating Subscriber::on_refresh for Resync of eventloop
 ///
-/// Rather than control exclusive execution access between the queue and the event loop, run
-/// the event loop as action in the queue.
 #[derive(Serialize, Deserialize)]
-pub struct ActionRefresh {}
+pub struct ActionRefresh {
+    refresh: Refresh,
+}
+
+impl ActionRefresh {
+    pub fn new(refresh: Refresh) -> Self {
+        Self { refresh }
+    }
+}
 
 impl Action for ActionRefresh {
     const TYPE: Type = Type("refresh");
@@ -60,12 +67,12 @@ impl proton_action_queue::action::Handler for RefreshHandler {
         &self,
         _: ActionId,
         context: &Self::Context,
-        _: &mut Self::Action,
+        action: &mut Self::Action,
         _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         context
             .as_arc()
-            .on_refresh_impl(255)
+            .on_refresh_impl(action.refresh)
             .await
             .map_err(|e| MailActionError::Other(anyhow!("{e}")))?;
 
