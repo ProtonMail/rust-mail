@@ -306,6 +306,7 @@ async fn create_draft_reply_without_body_is_error() {
         existing_message.local_id.unwrap(),
         ReplyMode::Sender,
         true,
+        None,
     )
     .await;
 
@@ -354,6 +355,7 @@ async fn create_draft_reply_should_fail_for_drafts() {
         existing_message.local_id.unwrap(),
         ReplyMode::Sender,
         true,
+        None,
     )
     .await;
 
@@ -429,13 +431,18 @@ async fn create_draft_reply_html() {
 
 #[tokio::test]
 async fn create_draft_reply_plain_text() {
-    let draft_body = create_draft_reply_impl(MimeType::TextPlain, ReplyMode::Sender).await;
+    let draft_body = create_draft_reply_with_override(
+        MimeType::TextPlain,
+        ReplyMode::Sender,
+        MimeType::TextPlain,
+    )
+    .await;
     insta::assert_snapshot!(draft_body.body)
 }
 
 #[tokio::test]
 async fn create_draft_reply_inherits_only_inline_attachments() {
-    let draft_body = create_draft_reply_impl(MimeType::TextPlain, ReplyMode::Sender).await;
+    let draft_body = create_draft_reply_impl(MimeType::TextHtml, ReplyMode::Sender).await;
     assert_eq!(draft_body.metadata.attachments.len(), 1);
     assert_eq!(draft_body.metadata.attachments.len(), 1);
     let attachment = draft_body.metadata.attachments.first().unwrap();
@@ -495,7 +502,7 @@ async fn draft_save_failure_creates_send_result_with_correct_origin() {
 
 #[tokio::test]
 async fn create_draft_forward_inherits_all_attachments() {
-    let draft_body = create_draft_reply_impl(MimeType::TextPlain, ReplyMode::Forward).await;
+    let draft_body = create_draft_reply_impl(MimeType::TextHtml, ReplyMode::Forward).await;
     assert_eq!(draft_body.metadata.attachments.len(), 2);
 
     let attachment_1 = &draft_body.metadata.attachments[1];
@@ -531,10 +538,24 @@ fn compare_inline_attachment(attachment: &Attachment, inline_attachment: Message
         inline_attachment.headers.content_id.map(ContentId::from)
     );
 }
-
 async fn create_draft_reply_impl(
     mime_type: MimeType,
     reply_mode: ReplyMode,
+) -> DecryptedMessageBody {
+    create_draft_reply_with_override_impl(mime_type, reply_mode, None).await
+}
+async fn create_draft_reply_with_override(
+    mime_type: MimeType,
+    reply_mode: ReplyMode,
+    mime_type_override: MimeType,
+) -> DecryptedMessageBody {
+    create_draft_reply_with_override_impl(mime_type, reply_mode, Some(mime_type_override)).await
+}
+
+async fn create_draft_reply_with_override_impl(
+    mime_type: MimeType,
+    reply_mode: ReplyMode,
+    mime_type_override: Option<MimeType>,
 ) -> DecryptedMessageBody {
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
@@ -653,6 +674,7 @@ async fn create_draft_reply_impl(
         existing_message.local_id.unwrap(),
         reply_mode,
         true,
+        mime_type_override,
     )
     .await
     .unwrap();

@@ -565,6 +565,7 @@ async fn draft_reply_or_forward_creates_new_attachments() {
         existing_message.local_id.unwrap(),
         reply_mode,
         true,
+        None,
     )
     .await
     .unwrap();
@@ -660,6 +661,7 @@ async fn deleting_draft_metadata_cleans_not_uploaded_attachments() {
         existing_message.local_id.unwrap(),
         reply_mode,
         true,
+        None,
     )
     .await
     .unwrap();
