@@ -445,6 +445,7 @@ async fn discard_reply_draft_after_cancelled_or_failed_save_action_only_deletes_
         existing_message.local_id.unwrap(),
         ReplyMode::All,
         true,
+        None,
     )
     .await
     .unwrap();
@@ -553,6 +554,7 @@ async fn delete_reply_draft_after_cancelled_or_failed_save_action_only_deletes_m
         existing_message.local_id.unwrap(),
         ReplyMode::All,
         true,
+        None,
     )
     .await
     .unwrap();

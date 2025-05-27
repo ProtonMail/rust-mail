@@ -65,8 +65,24 @@ async fn check_reply_signature_html() {
 
 #[tokio::test]
 async fn check_reply_signature_text() {
+    let mut source_body_metadata = existing_message_body_metadata();
+    source_body_metadata.mime_type = MimeType::TextPlain;
+    let source_body = "Hello World".to_owned();
+    let (draft, _, _) = create_reply_with_mime_and_body(
+        ReplyMode::All,
+        MimeType::TextPlain,
+        source_body_metadata,
+        source_body,
+    )
+    .await;
+    assert_snapshot!(draft.body());
+}
+
+#[tokio::test]
+async fn check_reply_from_html_with_text_as_default() {
     let (draft, _, _) = create_reply_with(ReplyMode::All, MimeType::TextPlain).await;
     assert_snapshot!(draft.body());
+    assert_eq!(draft.mime_type, MimeType::TextHtml);
 }
 
 #[tokio::test]
@@ -144,26 +160,6 @@ async fn sanitize_draft_reply_html() {
 
     // This should be identical before the save.
     assert_eq!(sanitized, draft.body);
-}
-
-#[tokio::test]
-async fn sanitize_draft_reply_plain_text() {
-    // Draft replies need to be sanitized. For plain text we sanitize the body before converting
-    // to text and afterwards there should be no further changes.
-    let (mut draft, _, _) = create_reply_with_mime_and_body(
-        ReplyMode::All,
-        MimeType::TextPlain,
-        sanitize_message_body_metadata(MimeType::TextHtml),
-        DRAFT_BODY_HTML.to_owned(),
-    )
-    .await;
-
-    assert_snapshot!(draft.body);
-
-    let sanitized = draft.body.clone();
-
-    draft.sanitize_body();
-    assert_eq!(draft.body(), sanitized);
 }
 
 fn sanitize_message_body_metadata(mime_type: MimeType) -> MessageBodyMetadata {
@@ -259,6 +255,7 @@ async fn create_reply_with_mime_and_body(
         &source_message,
         source_body,
         true,
+        None,
     )
     .await;
     (draft, source_message, attachments)

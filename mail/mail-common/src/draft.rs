@@ -632,6 +632,7 @@ impl Draft {
         message_id: LocalMessageId,
         reply_mode: ReplyMode,
         use_utc: bool,
+        mime_type_override: Option<MimeType>,
     ) -> Result<Self, MailContextError> {
         let mut tether = context.user_stash().connection();
         // Load the message we reply to.
@@ -697,6 +698,7 @@ impl Draft {
                     &source_message,
                     source_message_body,
                     use_utc,
+                    mime_type_override,
                 )
                 .await;
 
@@ -763,10 +765,23 @@ impl Draft {
         source_message: &Message,
         source_message_body: DecryptedMessageBody,
         use_utc: bool,
+        mime_type_override: Option<MimeType>,
     ) -> (Self, Vec<Attachment>) {
         let mut body = get_signature(address, mail_settings);
 
-        if mail_settings.draft_mime_type == MimeType::TextHtml {
+        let mime_type = if let Some(mime_type) = mime_type_override {
+            mime_type
+        } else if mail_settings.draft_mime_type == MimeType::TextHtml
+            || source_message_body.metadata.mime_type == MimeType::TextHtml
+        {
+            MimeType::TextHtml
+        } else {
+            MimeType::TextPlain
+        };
+
+        // If the message we are replying to is HTML we should also generate an HTML body for
+        // replying even if the user has selected plain text as the default editing mode.
+        if mime_type == MimeType::TextHtml {
             prepare_html_reply(
                 &mut body,
                 source_message,
@@ -781,7 +796,7 @@ impl Draft {
                 source_message_body.metadata.mime_type,
                 use_utc,
             );
-        }
+        };
 
         let mut attachments = source_message_body.metadata.attachments;
 
@@ -799,7 +814,7 @@ impl Draft {
             subject: String::new(),
             send_result: None,
             body,
-            mime_type: mail_settings.draft_mime_type,
+            mime_type,
         };
 
         patch_draft_with_reply_mode(

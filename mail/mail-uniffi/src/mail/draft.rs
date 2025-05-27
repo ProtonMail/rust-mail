@@ -144,13 +144,13 @@ pub async fn new_draft(
         let draft = match create_mode {
             DraftCreateMode::Empty => RealDraft::empty(ctx.user_stash()).await,
             DraftCreateMode::Reply(id) => {
-                RealDraft::reply(&ctx, id.into(), ReplyMode::Sender, false).await
+                RealDraft::reply(&ctx, id.into(), ReplyMode::Sender, false, None).await
             }
             DraftCreateMode::ReplyAll(id) => {
-                RealDraft::reply(&ctx, id.into(), ReplyMode::All, false).await
+                RealDraft::reply(&ctx, id.into(), ReplyMode::All, false, None).await
             }
             DraftCreateMode::Forward(id) => {
-                RealDraft::reply(&ctx, id.into(), ReplyMode::Forward, false).await
+                RealDraft::reply(&ctx, id.into(), ReplyMode::Forward, false, None).await
             }
         }
         .map_err(RealProtonMailError::from)?;

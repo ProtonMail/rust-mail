@@ -86,7 +86,7 @@ impl Composer {
             Command::task(async move {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
-                    match Draft::reply(&context, message_id, reply_mode, false).await {
+                    match Draft::reply(&context, message_id, reply_mode, false, None).await {
                         Ok(draft) => {
                             Composer::create(draft, None, context.user_stash().clone()).await
                         }
