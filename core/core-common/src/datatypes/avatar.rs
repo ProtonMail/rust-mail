@@ -6,13 +6,23 @@ use crate::utils::{first_grapheme_upppercase, proton_color};
 use unicode_segmentation::UnicodeSegmentation;
 
 /// This is the main data structure that is used to represent the avatar information.
-#[derive(Debug, Default, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct AvatarInformation {
     /// The field represent the first grapheme of the name of the contact
     pub text: String,
 
     /// The field represent the color of the avatar.
     pub color: String,
+}
+
+/// Default avatar information if there is no recipient e.g. in draft.
+impl Default for AvatarInformation {
+    fn default() -> Self {
+        AvatarInformation {
+            text: "?".to_string(),
+            color: "#A7AAB0".to_string(),
+        }
+    }
 }
 
 impl AvatarInformation {
