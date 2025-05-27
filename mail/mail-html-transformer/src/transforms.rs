@@ -6,6 +6,7 @@ mod tests;
 pub mod styles;
 
 use html5ever::{LocalName, QualName, namespace_url, tendril::TendrilSink};
+use itertools::Itertools;
 use kuchikiki::{Attribute, ExpandedName, NodeData, NodeRef, iter::NodeEdge};
 use std::fmt::Write;
 use url::Url;
@@ -23,6 +24,27 @@ fn node_ref_from_str(html: &str, tag: &str) -> NodeRef {
 pub enum ColorMode {
     LightMode,
     DarkMode,
+}
+
+/// Moves every `<style>` node from `<head>` into `<body>`
+pub fn move_styles_to_body(document: NodeRef) {
+    let Ok(styles) = document.select("head style") else {
+        return;
+    };
+
+    let Ok(body) = document.select_first("body") else {
+        return;
+    };
+
+    // Apparently detaching and appending nodes affects this iterator
+    // Therefore we need to collect all references to styles before mutating the DOM
+    let styles = styles.into_iter().collect_vec();
+
+    for style in styles {
+        let style = style.as_node();
+        style.detach();
+        body.as_node().append(style.clone());
+    }
 }
 
 #[allow(clippy::missing_panics_doc)] // The select is well formed.

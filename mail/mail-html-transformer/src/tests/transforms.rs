@@ -124,3 +124,23 @@ To: lorem@ipsum.ch <lorem@ipsum.ch>
     let html = Transformer::new_text_plain(input);
     insta::assert_snapshot!(html.to_string());
 }
+
+#[test]
+fn move_styles_to_body() {
+    let input = r#"
+       <html>
+       <head>
+       <title>Title</title>
+       <style> body { color: red; }  </style>
+       <style> .a { color: black; } </style>
+       </head>
+       <body>
+       <span>Text in body</span>
+       </body>
+       </html>
+    "#;
+
+    let mut html = Transformer::new(input);
+    html.move_styles_to_body();
+    insta::assert_snapshot!(html.to_string());
+}
