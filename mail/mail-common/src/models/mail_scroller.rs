@@ -688,6 +688,46 @@ impl<T: ScrollData> CachedScrollData<T> {
         }
     }
 
+    /// Fetch more items from the database, optimized to use with `while` loop.
+    ///
+    pub async fn while_fetch_more(
+        &mut self,
+        tether: &Tether,
+    ) -> Result<Option<Vec<T::Item>>, StashError> {
+        let all = self.end.visible_element_count(tether).await?;
+        let cursor_count = self.cursor.visible_element_count(tether).await?;
+
+        if cursor_count < all {
+            let offset = Some(cursor_count);
+            let limit = Some(self.page_size);
+            let items = self
+                .end
+                .visible_elements_limit(limit, offset, false, tether)
+                .await?;
+            let cursor = match items.last() {
+                Some(last) => ScrollCursor::builder()
+                    .local_label_id(self.local_label_id)
+                    .unread(self.unread)
+                    .time(T::time(last))
+                    .display_order(T::display_order(last))
+                    .build(),
+                None => self.end.clone(),
+            };
+
+            self.cursor = cursor;
+
+            if items.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(items))
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Available elements count to fetch with this cursor
+    ///
     pub async fn all_element_count(&self, tether: &Tether) -> Result<u64, StashError> {
         self.end.visible_element_count(tether).await
     }

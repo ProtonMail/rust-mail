@@ -252,7 +252,7 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
         .load(&tether)
         .await?
         .ok_or_else(|| anyhow!("All mail label is missing!"))?;
-    let page_size = 25;
+    let page_size = 50; // 80 exceeds HTTP URI limit, 50 seems to be safe softspot
     let scroll_cursor = match all_mail.view_mode(&tether).await? {
         ViewMode::Conversations => Either::Left(CachedScrollData::<ConversationScrollData>::all(
             all_mail.local_id.unwrap(),
@@ -326,11 +326,7 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
                 conv_scroll_cursor.all_element_count(&tether).await?
             );
 
-            loop {
-                let page = conv_scroll_cursor.fetch_more(&tether).await?;
-                if page.is_empty() {
-                    break;
-                }
+            while let Some(page) = conv_scroll_cursor.while_fetch_more(&tether).await? {
                 let local_conv_ids = page.into_iter().map(|conv| conv.local_id).collect();
 
                 let action = conversations::RefreshMetadata::new(local_conv_ids);
@@ -345,11 +341,7 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
                 msg_scroll_cursor.all_element_count(&tether).await?
             );
 
-            loop {
-                let page = msg_scroll_cursor.fetch_more(&tether).await?;
-                if page.is_empty() {
-                    break;
-                }
+            while let Some(page) = msg_scroll_cursor.while_fetch_more(&tether).await? {
                 let local_msg_ids = page.into_iter().filter_map(|msg| msg.local_id).collect();
                 let action = messages::RefreshMetadata::new(local_msg_ids);
 
