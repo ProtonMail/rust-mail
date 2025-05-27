@@ -373,6 +373,7 @@ impl Contact {
             .flatten()
             .map(Into::into)
             .collect();
+        debug!("Fetched {} contacts", contacts.len());
 
         let emails = emails_joinset.join_all().await;
         // We don't need the data afterwards so we don't need to Arc it.
@@ -383,6 +384,7 @@ impl Contact {
             .map(Into::into)
             .collect();
 
+        debug!("Fetched {} emails", emails.len());
         debug!(
             "Downloaded and converted all contacts in {:?}",
             t0.elapsed()

@@ -688,6 +688,10 @@ impl<T: ScrollData> CachedScrollData<T> {
         }
     }
 
+    pub async fn all_element_count(&self, tether: &Tether) -> Result<u64, StashError> {
+        self.end.visible_element_count(tether).await
+    }
+
     /// Check if there are more items to fetch for in memory cursor.
     ///
     pub async fn has_more(&self, tether: &Tether) -> Result<bool, StashError> {

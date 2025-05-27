@@ -2551,7 +2551,9 @@ impl Message {
             .run_tx(async |tx| {
                 for msg in remote_msgs {
                     let mut msg = Message::from_api_metadata(msg, tx).await?;
-                    msg.save(tx).await?;
+                    if !msg.is_local_draft(tx).await? {
+                        msg.save(tx).await?;
+                    }
                     local_msgs.push(msg);
                 }
                 Ok(())
@@ -2742,6 +2744,16 @@ impl Message {
     #[must_use]
     pub fn is_draft(&self) -> bool {
         self.label_ids.contains(&LabelId::all_drafts()) && self.flags.is_draft()
+    }
+
+    /// Whether this message is a draft and has been modified locally.
+    ///
+    pub async fn is_local_draft(&self, tether: &Tether) -> Result<bool, StashError> {
+        Ok(self.is_draft()
+            && self.local_id.is_some()
+            && DraftMetadata::find_by_message_id(self.local_id.unwrap(), tether)
+                .await?
+                .is_some())
     }
 
     /// [`RemoteId`] on its own is useless, because all our UniFFI endpoints operate on

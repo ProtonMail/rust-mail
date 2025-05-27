@@ -218,10 +218,10 @@ impl EventLoopInternal {
         for subscriber in subscribers {
             if let Err(e) = subscriber.on_refresh(event).await {
                 error!(
-                    "Failed to publish refresh to '{}': {e:?}",
+                    "Failed to process refresh in subscriber '{}': {e:?}",
                     subscriber.name()
                 );
-                return Err(EventLoopError::Refresh(subscriber.name().into(), e));
+                return Err(EventLoopError::Refresh(subscriber.name().to_owned(), e));
             }
         }
 

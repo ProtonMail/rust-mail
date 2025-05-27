@@ -150,16 +150,18 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
     async fn on_refresh(&self, event: &MailEvent) -> Result<(), SubscriberError> {
         debug!("Handling refresh event");
         let ctx = self.inner()?;
-        let attempts = 2;
 
         macro_rules! try_refresh {
             ($fn_name:tt) => {{
-                for _ in 0..attempts {
-                    if $fn_name(ctx.clone()).await.is_ok() {
-                        break;
+                let max_attempts = 2;
+                let mut attempts = 0;
+
+                while let Err(e) = $fn_name(ctx.clone()).await {
+                    if attempts >= max_attempts {
+                        return Err(e);
                     }
+                    attempts += 1;
                 }
-                $fn_name(ctx.clone()).await?;
             }};
         }
 
@@ -208,6 +210,7 @@ macro_rules! join_task {
     }};
 }
 
+#[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
 async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> {
     let api = ctx.api().clone();
     let all_remote_labels = ctx.spawn(async move { Label::all_labels(&api).await });
@@ -222,6 +225,10 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
         .into_iter()
         .map(|label| (label.remote_id.clone(), label))
         .collect();
+    debug!(
+        "Number of labels available localy: {}",
+        all_local_labels.len()
+    );
     let all_mail = SystemLabel::AllMail
         .load(&tether)
         .await?
@@ -244,6 +251,10 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
     let counters = join_task!(counters, "label counters");
     let mail_settings = join_task!(mail_settings, "mail settings");
 
+    debug!(
+        "Number of labels available remotely: {}",
+        all_remote_labels.len()
+    );
     for remote_label in all_remote_labels.iter() {
         all_local_labels.remove(&remote_label.remote_id);
     }
@@ -290,35 +301,50 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
     IncomingDefaultLocation::action_resync(ctx.action_queue()).await;
 
     match scroll_cursor {
-        Either::Left(mut conv_scroll_cursor) => loop {
-            let page = conv_scroll_cursor.fetch_more(&tether).await?;
-            if page.is_empty() {
-                break;
-            }
-            let local_conv_ids = page.into_iter().map(|conv| conv.local_id).collect();
+        Either::Left(mut conv_scroll_cursor) => {
+            debug!(
+                "Queue conversations to refresh, count: {}",
+                conv_scroll_cursor.all_element_count(&tether).await?
+            );
 
-            let action = conversations::RefreshMetadata::new(local_conv_ids);
-            if let Err(error) = ctx.action_queue().queue_action(action).await {
-                error!("Failed to refresh conversation metadata: `{error}`",);
-            }
-        },
-        Either::Right(mut msg_scroll_cursor) => loop {
-            let page = msg_scroll_cursor.fetch_more(&tether).await?;
-            if page.is_empty() {
-                break;
-            }
-            let local_msg_ids = page.into_iter().filter_map(|msg| msg.local_id).collect();
-            let action = messages::RefreshMetadata::new(local_msg_ids);
+            loop {
+                let page = conv_scroll_cursor.fetch_more(&tether).await?;
+                if page.is_empty() {
+                    break;
+                }
+                let local_conv_ids = page.into_iter().map(|conv| conv.local_id).collect();
 
-            if let Err(error) = ctx.action_queue().queue_action(action).await {
-                error!("Failed to refresh message metadata: `{error}`",);
+                let action = conversations::RefreshMetadata::new(local_conv_ids);
+                if let Err(error) = ctx.action_queue().queue_action(action).await {
+                    error!("Failed to refresh conversation metadata: `{error}`",);
+                }
             }
-        },
+        }
+        Either::Right(mut msg_scroll_cursor) => {
+            debug!(
+                "Queue messages to refresh, count: {}",
+                msg_scroll_cursor.all_element_count(&tether).await?
+            );
+
+            loop {
+                let page = msg_scroll_cursor.fetch_more(&tether).await?;
+                if page.is_empty() {
+                    break;
+                }
+                let local_msg_ids = page.into_iter().filter_map(|msg| msg.local_id).collect();
+                let action = messages::RefreshMetadata::new(local_msg_ids);
+
+                if let Err(error) = ctx.action_queue().queue_action(action).await {
+                    error!("Failed to refresh message metadata: `{error}`",);
+                }
+            }
+        }
     };
 
     Ok(())
 }
 
+#[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
 async fn refresh_core(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> {
     let api = ctx.api().clone();
     let all_remote_addresses = ctx.spawn(async move { Address::sync(&api).await });
@@ -334,9 +360,18 @@ async fn refresh_core(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
         .map(|addr| (addr.remote_id.clone(), addr))
         .collect();
 
+    debug!(
+        "Number of addresses available localy: {}",
+        all_local_addresses.len()
+    );
+
     let all_remote_addresses = join_task!(all_remote_addresses, "addresses").inner();
     let user_and_settings = join_task!(user_and_settings, "user and settings");
 
+    debug!(
+        "Number of addresses available remotely: {}",
+        all_remote_addresses.len()
+    );
     for remote_label in all_remote_addresses.iter() {
         all_local_addresses.remove(&remote_label.remote_id);
     }
@@ -346,6 +381,10 @@ async fn refresh_core(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
     tether
         .tx::<_, _, SubscriberError>(async |tx| {
             for local_address_to_remove in all_local_addresses.into_values() {
+                debug!(
+                    "Removing address with remote_id {:?}",
+                    local_address_to_remove.remote_id
+                );
                 local_address_to_remove.delete(tx).await?;
             }
             for mut remote_address in all_remote_addresses {
@@ -365,6 +404,7 @@ async fn refresh_core(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
     Ok(())
 }
 
+#[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
 async fn refresh_contacts(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> {
     let contacts = Contact::sync(ctx.api()).await?;
     let mut tether = ctx.user_context.stash().connection();

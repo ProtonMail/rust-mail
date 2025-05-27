@@ -172,7 +172,7 @@ async fn refresh_conversation_messages(
         let mut local_msgs: HashMap<_, _> = Message::in_conversation(local_id, guard.tether())
             .await?
             .into_iter()
-            .filter(|msg| !msg.is_draft() && msg.remote_id.is_some())
+            .filter(|msg| msg.remote_id.is_some())
             .map(|msg| (msg.remote_id.clone(), msg))
             .collect();
         let AsyncTaskResult::Completed(Ok(remote_msgs)) = remote_msgs
@@ -187,12 +187,20 @@ async fn refresh_conversation_messages(
             .tx(async |tx| {
                 for remote_msg in remote_msgs.messages {
                     let mut remote_msg = Message::from_api_metadata(remote_msg, tx).await?;
-                    local_msgs.remove(&remote_msg.remote_id.clone());
-                    if !remote_msg.is_draft() {
-                        remote_msg.save(tx).await?;
+                    let local_msg = local_msgs.remove(&remote_msg.remote_id.clone());
+                    match local_msg {
+                        Some(local_msg) => {
+                            if !local_msg.is_local_draft(tx).await? {
+                                remote_msg.save(tx).await?;
+                            }
+                        }
+                        None => remote_msg.save(tx).await?,
                     }
                 }
 
+                // `local_msgs` map is filtered by remote_id
+                // so even if it is a draft it had to be removed from remote
+                // remove it locally as well
                 for local_msg in local_msgs.into_values() {
                     local_msg.delete(tx).await?;
                 }
