@@ -232,14 +232,14 @@ macro_rules! join_task {
 #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
 async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> {
     let api = ctx.api().clone();
-    let all_remote_labels = ctx.spawn(async move { Label::all_labels(&api).await });
+    let all_remote_labels = ctx.spawn(async move { Label::fetch_mail_labels(&api).await });
     let api = ctx.api().clone();
     let counters = ctx.spawn(async move { StoreLabelCounters::fetch(&api).await });
     let api = ctx.api().clone();
     let mail_settings = ctx.spawn(async move { MailSettings::sync_mail_settings(&api).await });
 
     let mut tether = ctx.user_context.stash().connection();
-    let mut all_local_labels: HashMap<_, _> = Label::all(&tether)
+    let mut all_local_labels: HashMap<_, _> = Label::all_mail(&tether)
         .await?
         .into_iter()
         .map(|label| (label.remote_id.clone(), label))
@@ -366,11 +366,13 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
 #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
 async fn refresh_core(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> {
     let api = ctx.api().clone();
+    let contacts = ctx.spawn(async move { Contact::sync(&api).await });
+    let api = ctx.api().clone();
     let all_remote_addresses = ctx.spawn(async move { Address::sync(&api).await });
     let api = ctx.api().clone();
     let user_and_settings = ctx.spawn(async move { User::sync_user_and_settings(&api).await });
     let api = ctx.api().clone();
-    let contacts = ctx.spawn(async move { Contact::sync(&api).await });
+    let all_remote_labels = ctx.spawn(async move { Label::fetch_contact_labels(&api).await });
 
     let mut tether = ctx.user_context.stash().connection();
     let mut all_local_addresses: HashMap<_, _> = Address::all(&tether)
@@ -378,6 +380,15 @@ async fn refresh_core(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
         .into_iter()
         .map(|addr| (addr.remote_id.clone(), addr))
         .collect();
+    let mut all_local_labels: HashMap<_, _> = Label::all_contacts(&tether)
+        .await?
+        .into_iter()
+        .map(|label| (label.remote_id.clone(), label))
+        .collect();
+    debug!(
+        "Number of labels available localy: {}",
+        all_local_labels.len()
+    );
 
     debug!(
         "Number of addresses available localy: {}",
@@ -386,6 +397,7 @@ async fn refresh_core(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
 
     let all_remote_addresses = join_task!(all_remote_addresses, "addresses").inner();
     let user_and_settings = join_task!(user_and_settings, "user and settings");
+    let all_remote_labels = join_task!(all_remote_labels, "labels");
 
     debug!(
         "Number of addresses available remotely: {}",
@@ -393,6 +405,13 @@ async fn refresh_core(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
     );
     for remote_label in all_remote_addresses.iter() {
         all_local_addresses.remove(&remote_label.remote_id);
+    }
+    debug!(
+        "Number of labels available remotely: {}",
+        all_remote_labels.len()
+    );
+    for remote_label in all_remote_labels.iter() {
+        all_local_labels.remove(&remote_label.remote_id);
     }
 
     let contacts = join_task!(contacts, "contacts");
@@ -410,6 +429,21 @@ async fn refresh_core(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
                 remote_address.save(tx).await?;
             }
 
+            Label::sync_labels(tx, all_remote_labels)
+                .await
+                .map_err(|e| {
+                    let e = anyhow!("Failed to sync labels: {e}");
+                    error!("{e:?}");
+                    SubscriberError::Other(e)
+                })?;
+
+            for local_label_to_remove in all_local_labels.into_values() {
+                debug!(
+                    "Removing label with remote_id {:?}",
+                    local_label_to_remove.remote_id
+                );
+                local_label_to_remove.delete(tx).await?;
+            }
             user_and_settings.store(tx).await?;
             contacts.store(tx).await?;
 

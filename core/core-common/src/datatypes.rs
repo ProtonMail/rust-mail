@@ -722,6 +722,9 @@ pub const ALL_LABEL_TYPES: [LabelType; 4] = [
     LabelType::Folder,
     LabelType::System,
 ];
+pub const MAIL_LABEL_TYPES: [LabelType; 3] =
+    [LabelType::Label, LabelType::Folder, LabelType::System];
+pub const CONTACT_LABEL_TYPES: [LabelType; 1] = [LabelType::ContactGroup];
 
 /// In which environment are we going to register the device
 /// for the push notification.
