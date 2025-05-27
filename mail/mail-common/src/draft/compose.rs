@@ -13,7 +13,6 @@ use proton_mail_api::services::proton::request_data::DraftRecipient;
 use proton_mail_html_transformer::Transformer;
 use std::borrow::Cow;
 use std::fmt::Display;
-use std::io;
 use tracing::error;
 
 #[cfg(test)]
@@ -219,10 +218,7 @@ pub fn html_to_text(input: &str) -> String {
     transformer.add_noreferrer();
     transformer.strip_utm();
     transformer.strip_whitelist();
-    let transformed = transformer.to_string();
-    let cursor = io::Cursor::new(transformed);
-    let config = html2text::config::plain();
-    match config.string_from_read(cursor, 80) {
+    match transformer.to_plain_text() {
         Ok(text_body) => text_body,
         Err(e) => {
             error!("Failed to convert html to text: {e:?}");

@@ -25,7 +25,6 @@ use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, List};
 use stash::stash::{Stash, StashError, Tether};
-use std::io::Cursor;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
@@ -248,10 +247,7 @@ impl Composer {
         let cc_list = recipient_list_to_display_value(&draft.cc_list);
         let bcc_list = recipient_list_to_display_value(&draft.bcc_list);
         let text_area = if draft.mime_type() == MimeType::TextHtml {
-            let config = html2text::config::plain();
-            let cursor = Cursor::new(draft.body());
-            let text = config
-                .string_from_read(cursor, 80)
+            let text = proton_mail_html_transformer::Transformer::html2text_str(draft.body())
                 .unwrap_or_else(|e| format!("Failed to parse html:{e}"));
             TextArea::new(text.split('\n').map(str::to_owned).collect())
         } else if draft.mime_type() == MimeType::TextPlain {

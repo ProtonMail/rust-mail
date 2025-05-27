@@ -44,6 +44,7 @@ use html5ever::tendril::TendrilSink;
 use kuchikiki::NodeRef;
 use message_detector::SplitDoc;
 use std::fmt::{Display, Formatter};
+use std::io::Read;
 use transforms::{ColorMode, keep_spaces_and_escape_gt_and_lt, styles::BrowserCapabilities};
 
 // NOTE: each new transformation pass should be its own module.
@@ -54,6 +55,7 @@ pub mod sanitizer;
 pub mod transforms;
 pub mod utm;
 
+mod html2text;
 #[cfg(test)]
 #[path = "tests/lib.rs"]
 mod tests;
@@ -191,6 +193,20 @@ impl Transformer {
     /// Moves every `<style>` from `<head>` into `<body>`.
     pub fn move_styles_to_body(&mut self) {
         transforms::move_styles_to_body(self.document().clone());
+    }
+
+    pub fn to_plain_text(&self) -> Result<String, ::html2text::Error> {
+        let html = self.to_string();
+        Self::html2text_str(&html)
+    }
+
+    pub fn html2text(reader: impl Read) -> Result<String, ::html2text::Error> {
+        html2text::convert_html_to_text(reader, html2text::DEFAULT_COLUMN_WIDTH)
+    }
+
+    pub fn html2text_str(reader: &str) -> Result<String, ::html2text::Error> {
+        let cursor = std::io::Cursor::new(reader);
+        Self::html2text(cursor)
     }
 }
 

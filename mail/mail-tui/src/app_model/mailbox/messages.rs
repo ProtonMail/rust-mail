@@ -979,9 +979,7 @@ impl DecryptedMessage {
 fn html_to_text(message: &str) -> Result<String> {
     // TODO: Best effort terminal image rendering. See https://docs.rs/termimage/latest/termimage/
     let cursor = std::io::Cursor::new(message);
-    let config = html2text::config::plain();
-    config
-        .string_from_read(cursor, 80)
+    proton_mail_html_transformer::Transformer::html2text(cursor)
         .map_err(|e| anyhow!("Failed to parse HTML: {e}"))
 }
 

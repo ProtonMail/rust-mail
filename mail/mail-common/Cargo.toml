@@ -39,7 +39,6 @@ futures = { workspace = true }
 indoc = { workspace = true }
 include_dir = { workspace = true }
 itertools = { workspace = true }
-html2text = { workspace = true }
 mime = { workspace = true }
 parking_lot = { workspace = true }
 proton-action-queue = { workspace = true }
@@ -51,7 +50,7 @@ proton-core-common = { workspace = true }
 proton-crypto-account = { workspace = true }
 proton-crypto-inbox = { workspace = true }
 proton-event-loop = { workspace = true }
-proton-mail-html-transformer = { version = "0.2.0", path = "../mail-html-transformer", registry = "proton" }
+proton-mail-html-transformer = { workspace = true }
 proton-sqlite3 = { workspace = true }
 proton-task-service = { workspace = true }
 rmp = { workspace = true }

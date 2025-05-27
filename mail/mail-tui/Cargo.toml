@@ -11,7 +11,6 @@ crossterm = "0.28.1"
 dirs = "5"
 flume = { workspace = true }
 futures = { workspace = true }
-html2text = { workspace = true }
 itertools = { workspace = true }
 log = "0.4.25"
 proton-action-queue = { workspace = true }
@@ -19,6 +18,7 @@ proton-calendar-api = { workspace = true }
 proton-calendar-common = { workspace = true }
 proton-core-common = { workspace = true }
 proton-mail-common = { workspace = true }
+proton-mail-html-transformer = { workspace = true }
 ratatui = { version = "0.28.1", features = ["all-widgets"] }
 ratatui-explorer = { version = "=0.1.2", features = ["crossterm"] }
 secrecy = { workspace = true }

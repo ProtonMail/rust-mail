@@ -18,6 +18,7 @@ lightningcss = { version = "1.0.0-alpha.65", features = [
   "grid",
 ], default-features = false }
 smart-default = { workspace = true }
+html2text = { workspace = true }
 
 [lints]
 workspace = true
