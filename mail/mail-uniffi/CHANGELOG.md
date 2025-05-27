@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.82.0] - 2025-05-27
+
+### Features
+
+- [ET-3101] Move styles to body
+- [ET-3101] Move styles to body in draft reply
+- Expose delivery time in draftsendresult
+
+### Fixes
+
+- [ET-2742] Replies to html messages should always be in html
+- [ET-3021] Add default implementation for avatar information (e.g. draft)
+
+
 ## [mail-uniffi-v0.81.0] - 2025-05-26
 
 ### Features
