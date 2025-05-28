@@ -31,7 +31,7 @@ impl MailEventLoopContext {
     pub fn inner(&self) -> Result<Arc<MailUserContext>, anyhow::Error> {
         match self.0.upgrade() {
             Some(ctx) => Ok(ctx),
-            None => bail!("This context no longer exists"),
+            None => bail!("MailUserContext no longer alive"),
         }
     }
 

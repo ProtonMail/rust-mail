@@ -6,7 +6,10 @@ mod labels;
 
 use std::collections::BTreeSet;
 
-use crate::datatypes::{ALL_LABEL_TYPES, InitializationKey, LabelColor, LabelType, LocalLabelId};
+use crate::datatypes::{
+    ALL_LABEL_TYPES, CONTACT_LABEL_TYPES, InitializationKey, LabelColor, LabelType, LocalLabelId,
+    MAIL_LABEL_TYPES,
+};
 use crate::models::ModelIdExtension;
 use itertools::Itertools;
 use proton_core_api::service::ApiServiceError;
@@ -15,10 +18,12 @@ use proton_core_api::services::proton::LabelId;
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::services::proton::{PatchLabelRequest, PostLabelsRequest, PutLabelRequest};
 use sqlite_watcher::watcher::TableObserver;
+use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
+use stash::utils::placeholders;
 use thiserror::Error;
 use tracing::{debug, error};
 
@@ -190,12 +195,53 @@ impl Label {
     where
         API: ProtonCore,
     {
-        let label_requests =
-            futures::future::join_all(ALL_LABEL_TYPES.into_iter().map(|category| {
-                debug!("Fetching labels ({:?})", category);
-                api.get_labels(category.into())
-            }))
-            .await;
+        Self::fetch_labels(api, &ALL_LABEL_TYPES).await
+    }
+
+    /// Fetches mail labels from the API.
+    ///
+    /// # Parameters
+    /// * `api` - The API instance to use.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API request failed
+    ///
+    pub async fn fetch_mail_labels<API>(api: &API) -> Result<Vec<Label>, LabelError>
+    where
+        API: ProtonCore,
+    {
+        Self::fetch_labels(api, &MAIL_LABEL_TYPES).await
+    }
+
+    /// Fetches contact labels from the API.
+    ///
+    /// # Parameters
+    /// * `api` - The API instance to use.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the API request failed
+    ///
+    pub async fn fetch_contact_labels<API>(api: &API) -> Result<Vec<Label>, LabelError>
+    where
+        API: ProtonCore,
+    {
+        Self::fetch_labels(api, &CONTACT_LABEL_TYPES).await
+    }
+
+    async fn fetch_labels<API>(
+        api: &API,
+        label_types: &[LabelType],
+    ) -> Result<Vec<Label>, LabelError>
+    where
+        API: ProtonCore,
+    {
+        let label_requests = futures::future::join_all(label_types.iter().map(|category| {
+            debug!("Fetching labels ({:?})", category);
+            api.get_labels((*category).into())
+        }))
+        .await;
 
         Ok(label_requests
             .into_iter()
@@ -385,6 +431,48 @@ impl Label {
             tether,
         )
         .await
+    }
+
+    /// Get all labels with given kinds
+    ///
+    /// # Parameters
+    ///
+    /// * `kinds` - The list of label kinds, eg. System, Folder etc.
+    /// * `tx`    - The tether to use for the database connection.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data could not be read from the database.
+    ///
+    #[allow(trivial_casts)]
+    pub async fn find_by_kinds(
+        kinds: &[LabelType],
+        tether: &Tether,
+    ) -> Result<Vec<Self>, StashError> {
+        let placeholders = placeholders(kinds.len());
+        let params = kinds
+            .iter()
+            .copied()
+            .map(|param| Box::new(param) as Box<dyn ToSql + Send>)
+            .collect::<Vec<_>>();
+        Label::find(
+            format!("WHERE label_type IN ({placeholders}) ORDER BY display_order ASC"),
+            params,
+            tether,
+        )
+        .await
+    }
+
+    /// Get all mail labels
+    ///
+    pub async fn all_mail(tether: &Tether) -> Result<Vec<Self>, StashError> {
+        Self::find_by_kinds(&MAIL_LABEL_TYPES, tether).await
+    }
+
+    /// Get all contact labels
+    ///
+    pub async fn all_contact_groups(tether: &Tether) -> Result<Vec<Self>, StashError> {
+        Self::find_by_kinds(&CONTACT_LABEL_TYPES, tether).await
     }
 
     /// Watch a label with the given `local_id` for changes.

@@ -804,7 +804,6 @@ impl QueueExecutor {
     /// # Errors
     ///
     /// Returns error if the queued action could not be executed locally or remotely, or if
-    /// another thread is currently invoking this function.
     pub async fn execute_all(&self) -> QueuedResult<usize> {
         let mut tether = self.shared.stash.connection();
         let mut counter = 0;

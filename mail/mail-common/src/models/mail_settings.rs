@@ -401,7 +401,7 @@ impl SyncedMailSettings {
     /// Consume this manual closure by storing data in the Database.
     ///
     #[tracing::instrument(skip(tx))]
-    pub async fn store(mut self, tx: &Bond<'_>) -> Result<(), AppError> {
+    pub async fn store(mut self, tx: &Bond<'_>) -> Result<(), StashError> {
         self.settings.save(tx).await?;
         Ok(())
     }

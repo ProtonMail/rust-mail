@@ -127,6 +127,46 @@ impl ToSql for AddressStatus {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+pub enum Refresh {
+    None,
+    Mail,
+    Contacts,
+    All,
+    Unknown(u8),
+}
+
+impl Refresh {
+    #[must_use]
+    pub fn is_refresh(&self) -> bool {
+        !matches!(self, Refresh::None)
+    }
+}
+
+impl From<u8> for Refresh {
+    fn from(value: u8) -> Self {
+        match value {
+            0 => Self::None,
+            1 => Self::Mail,
+            2 => Self::Contacts,
+            255 => Self::All,
+            other => Self::Unknown(other),
+        }
+    }
+}
+
+impl From<Refresh> for u8 {
+    fn from(value: Refresh) -> Self {
+        match value {
+            Refresh::None => 0,
+            Refresh::Mail => 1,
+            Refresh::Contacts => 2,
+            Refresh::All => 255,
+            Refresh::Unknown(other) => other,
+        }
+    }
+}
+
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, TryFrom)]
 #[try_from(repr)]
@@ -722,6 +762,9 @@ pub const ALL_LABEL_TYPES: [LabelType; 4] = [
     LabelType::Folder,
     LabelType::System,
 ];
+pub const MAIL_LABEL_TYPES: [LabelType; 3] =
+    [LabelType::Label, LabelType::Folder, LabelType::System];
+pub const CONTACT_LABEL_TYPES: [LabelType; 1] = [LabelType::ContactGroup];
 
 /// In which environment are we going to register the device
 /// for the push notification.

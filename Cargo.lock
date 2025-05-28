@@ -5774,6 +5774,7 @@ dependencies = [
  "color-backtrace",
  "ctor",
  "derive_more 2.0.1",
+ "either",
  "file-format",
  "flume",
  "function_name",

@@ -74,10 +74,13 @@ pub async fn remove_or_clear_dir_safe(path: impl AsRef<Path>) {
     // When it fails, fallback to deleting one-by-one
     if result.is_err() {
         clear_dir_safe(path).await;
+
+        // Clean the directory structure
+        let _ = fs::remove_dir_all(&path).await;
     }
 }
 
-async fn clear_dir_safe(path: impl AsRef<Path>) {
+pub async fn clear_dir_safe(path: impl AsRef<Path>) {
     let path = path.as_ref().to_path_buf();
     let path_clone = path.clone();
     // Get all files paths in max_depth eq 4
@@ -105,10 +108,7 @@ async fn clear_dir_safe(path: impl AsRef<Path>) {
 
     let failed = remove_files(&all_files).await;
 
-    if failed.is_empty() {
-        // Clean the folder structure
-        let _ = fs::remove_dir_all(&path).await;
-    } else {
+    if !failed.is_empty() {
         // We have still some files not removed
         // lets derefer this to the background
         task::spawn(async move {
@@ -121,7 +121,6 @@ async fn clear_dir_safe(path: impl AsRef<Path>) {
                 failed = remove_files(&failed).await;
                 if failed.is_empty() {
                     tracing::info!("Whole path was cleared in the background");
-                    let _ = fs::remove_dir_all(&path).await;
                     break;
                 }
                 if start.elapsed() >= max_wait {
@@ -207,14 +206,9 @@ mod tests {
 
         assert!(file_path.exists());
 
-        // Since it is not easy to decouple if the file
-        // was removed in walkdir search or later
-        // by removing whole directory I've made sure
-        // manually that indeed this file is removed
-        // in walkdir search.
         clear_dir_safe(&original_path).await;
         assert!(!file_path.exists());
-        assert!(!original_path.exists());
+        assert!(original_path.exists());
     }
 
     #[tokio::test]
@@ -232,13 +226,8 @@ mod tests {
         assert!(file_path.exists());
 
         // due to the fact that `clear_dir_safe`
-        // does a clean up of the path when there are no more entries
-        // to delete it will `remove_dir_all` at the end to make sure
-        // to not leave any remaining folder structure behind which
-        // in most cases will also remove any files which depth is more
-        // than walkdir search
         clear_dir_safe(&original_path).await;
-        assert!(!file_path.exists());
-        assert!(!original_path.exists());
+        assert!(file_path.exists());
+        assert!(original_path.exists());
     }
 }

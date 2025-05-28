@@ -53,7 +53,7 @@ impl<T: ScrollData> MailScrollerState<T> {
         unread: ReadFilter,
         page_size: usize,
     ) -> Result<Self, StashError> {
-        let unordered = CachedScrollData::all(local_label_id, unread, page_size).await?;
+        let unordered = CachedScrollData::all(local_label_id, unread, page_size);
 
         Ok(MailScrollerState::NotSynced(unordered))
     }
@@ -131,7 +131,12 @@ impl<T: ScrollData> MailScrollerState<T> {
         match self {
             MailScrollerState::Online(ordered) | MailScrollerState::Offline { ordered, .. } => {
                 if !ordered.has_more_than_a_page(tether).await? {
-                    ordered.update(tether).await?;
+                    if let Err(e) = ordered.update(tether).await {
+                        tracing::error!(
+                            "Could not update scroller end cursor, it has been removed: `{e}`"
+                        );
+                        *self = MailScrollerState::NotSynced(ordered.clone());
+                    }
                 }
 
                 return Ok(());

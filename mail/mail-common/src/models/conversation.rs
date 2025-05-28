@@ -2197,6 +2197,36 @@ impl Conversation {
         Ok(conversations)
     }
 
+    /// Sync only messages metadata
+    ///
+    pub async fn sync_metadata<PM: ProtonMail>(
+        ids: Vec<ConversationId>,
+        api: &PM,
+        mut run_tx: impl RunTransaction,
+    ) -> Result<Vec<Self>, AppError> {
+        let remote_convs = api
+            .get_conversations(GetConversationsOptions {
+                ids: ids.into_iter().map_into().collect(),
+                ..Default::default()
+            })
+            .await?
+            .conversations;
+        let mut local_convs = Vec::with_capacity(remote_convs.len());
+
+        run_tx
+            .run_tx(async |tx| {
+                for conv in remote_convs {
+                    let mut conv = Self::from(conv);
+                    conv.save(tx).await?;
+                    local_convs.push(conv);
+                }
+                Ok(())
+            })
+            .await?;
+
+        Ok(local_convs)
+    }
+
     /// Synchronize the first `count` conversations of the label with `label_id`.
     ///
     /// # Parameters
@@ -2568,6 +2598,19 @@ impl Conversation {
         let res = MoveAction::finalize(all_move_to_actions, tether).await?;
         debug!("available move_to actions: {res:?}");
         Ok(res)
+    }
+
+    /// Count all local messages from this conversation
+    pub async fn message_count(
+        local_id: LocalConversationId,
+        tether: &Tether,
+    ) -> Result<u64, StashError> {
+        Message::count(
+            "WHERE local_conversation_id == ? ORDER BY time ASC, display_order ASC",
+            params![local_id],
+            tether,
+        )
+        .await
     }
 
     /// Finds all the messages from this conversation
@@ -3601,19 +3644,23 @@ impl StoreLabelCounters {
             Self::INIT_KEY,
             &[Label::INIT_KEY],
             stash.connection(),
-            async || {
-                let (a, b) =
-                    future::try_join(Conversation::fetch_counts(api), Message::fetch_counts(api))
-                        .await?;
-                Ok(Self(a, b))
-            },
-            async |tx, Self(a, b)| {
-                ConversationLabelsCount::create_or_update_conversation_counts(a, tx).await?;
-                MessageLabelsCount::create_or_update_message_counts(b, tx).await?;
-                Ok(())
-            },
+            async || Ok(Self::fetch(api).await?),
+            async |tx, this| Ok(this.save(tx).await?),
         )
         .await
+    }
+
+    pub async fn fetch(api: &impl ProtonMail) -> Result<Self, ApiServiceError> {
+        let (a, b) =
+            future::try_join(Conversation::fetch_counts(api), Message::fetch_counts(api)).await?;
+        Ok(Self(a, b))
+    }
+
+    pub async fn save(self, tx: &Bond<'_>) -> Result<(), StashError> {
+        let Self(a, b) = self;
+        ConversationLabelsCount::create_or_update_conversation_counts(a, tx).await?;
+        MessageLabelsCount::create_or_update_message_counts(b, tx).await?;
+        Ok(())
     }
 }
 

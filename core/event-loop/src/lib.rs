@@ -78,8 +78,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum EventLoopError {
-    #[error("We were asked to refresh, but this is not implemented")]
-    Refresh,
+    #[error("Subscriber ({0}) failed to apply refresh event: {1}")]
+    Refresh(String, SubscriberError),
     #[error("Failed to read from store: {0}")]
     StoreRead(AnyhowError),
     #[error("Failed to write store: {0}")]

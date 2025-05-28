@@ -4,6 +4,7 @@ use crate::datatypes::LocalLabelId;
 use crate::models::{Label, ModelIdExtension};
 use derive_more::TryFrom;
 use serde::{Deserialize, Serialize};
+use stash::orm::Model;
 use stash::stash::{StashError, Tether};
 
 use crate::datatypes::{LabelId, LabelType};
@@ -114,6 +115,14 @@ impl SystemLabel {
 
     pub async fn local_id(&self, tether: &Tether) -> Result<Option<LocalLabelId>, StashError> {
         Label::remote_id_counterpart(self.remote_id(), tether).await
+    }
+
+    pub async fn load(&self, tether: &Tether) -> Result<Option<Label>, StashError> {
+        let Some(local_id) = self.local_id(tether).await? else {
+            return Ok(None);
+        };
+
+        Label::load(local_id, tether).await
     }
 }
 

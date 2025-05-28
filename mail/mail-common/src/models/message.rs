@@ -2529,6 +2529,40 @@ impl Message {
             .collect()
     }
 
+    /// Sync only messages metadata
+    ///
+    pub async fn sync_metadata<PM: ProtonMail>(
+        ids: Vec<MessageId>,
+        api: &PM,
+        mut run_tx: impl RunTransaction,
+    ) -> Result<Vec<Self>, AppError> {
+        let remote_msgs = Self::fetch_metadata(
+            GetMessagesOptions {
+                ids: ids.into_iter().map_into().collect(),
+                ..Default::default()
+            },
+            api,
+        )
+        .await?
+        .messages;
+        let mut local_msgs = Vec::with_capacity(remote_msgs.len());
+
+        run_tx
+            .run_tx(async |tx| {
+                for msg in remote_msgs {
+                    let mut msg = Message::from_api_metadata(msg, tx).await?;
+                    if !msg.is_local_draft(tx).await? {
+                        msg.save(tx).await?;
+                    }
+                    local_msgs.push(msg);
+                }
+                Ok(())
+            })
+            .await?;
+
+        Ok(local_msgs)
+    }
+
     /// Sync the contents of the message and the body from the server for the given `message_id`.
     ///
     /// Note that this function always overrides the data that was previously available.
@@ -2710,6 +2744,16 @@ impl Message {
     #[must_use]
     pub fn is_draft(&self) -> bool {
         self.label_ids.contains(&LabelId::all_drafts()) && self.flags.is_draft()
+    }
+
+    /// Whether this message is a draft and has been modified locally.
+    ///
+    pub async fn is_local_draft(&self, tether: &Tether) -> Result<bool, StashError> {
+        Ok(
+            DraftMetadata::find_by_message_id(self.local_id.unwrap(), tether)
+                .await?
+                .is_some(),
+        )
     }
 
     /// [`RemoteId`] on its own is useless, because all our UniFFI endpoints operate on

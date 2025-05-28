@@ -6,6 +6,7 @@ pub mod event_poll;
 pub mod labels;
 pub mod messages;
 pub mod notifications_quick_actions;
+pub mod refresh;
 pub mod rollback;
 
 pub use self::available_action::*;
@@ -74,6 +75,12 @@ impl From<WriterGuardError> for MailActionError {
     }
 }
 
+impl From<anyhow::Error> for MailActionError {
+    fn from(value: anyhow::Error) -> Self {
+        Self::Other(value)
+    }
+}
+
 impl From<CoreActionError> for MailActionError {
     fn from(value: CoreActionError) -> Self {
         match value {
@@ -112,6 +119,7 @@ pub(crate) fn register_mail_actions(queue: &Queue) {
     register_action::<unblock::Unblock>(queue);
     register_action::<update_incoming_defaults::SyncIncomingDefaults>(queue);
     register_action::<conversations::Move>(queue);
+    register_action::<conversations::RefreshMetadata>(queue);
     register_action::<messages::label::Label>(queue);
     register_action::<messages::unlabel::Unlabel>(queue);
     register_action::<messages::r#move::Move>(queue);
@@ -122,6 +130,7 @@ pub(crate) fn register_mail_actions(queue: &Queue) {
     register_action::<messages::ham::Ham>(queue);
     register_action::<messages::phishing::ReportPhishing>(queue);
     register_action::<messages::prefetch::Prefetch>(queue);
+    register_action::<messages::refresh_metadata::RefreshMetadata>(queue);
     register_action::<draft::Save>(queue);
     register_action::<draft::Send>(queue);
     register_action::<labels::Expand>(queue);
@@ -133,6 +142,7 @@ pub(crate) fn register_mail_actions(queue: &Queue) {
     register_action::<draft::AttachmentUpload>(queue);
     register_action::<draft::AttachmentRemove>(queue);
     register_action::<event_poll::EventPoll>(queue);
+    register_action::<refresh::ActionRefresh>(queue);
     register_action::<rollback::RollbackAction>(queue);
 }
 

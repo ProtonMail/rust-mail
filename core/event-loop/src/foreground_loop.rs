@@ -145,11 +145,6 @@ impl EventLoopInternal {
             events.iter().map(Event::event_id).collect::<Vec<_>>()
         );
 
-        if events.iter().any(Event::is_refresh) {
-            error!("Received refresh event, but this is not yet implemented");
-            return Err(EventLoopError::Refresh);
-        }
-
         // Run 1 tx per event to avoid having long running transactions. Under normal circumstances
         // this is not really an issue, but with the current iOS setup, if we enter a background
         // state and we allow transactions to finish we can get killed by the OS. On Average
@@ -157,14 +152,18 @@ impl EventLoopInternal {
         // the whole process can take > 200ms together.
         for event in events {
             let new_event_id = event.event_id().clone();
-            self.publish_events_to_subscribers(&mut [event], subscribers)
-                .await?;
+            if event.is_refresh() {
+                self.publish_refresh_to_subscribers(&event, subscribers)
+                    .await?;
+            } else {
+                self.publish_events_to_subscribers(&mut [event], subscribers)
+                    .await?;
+            }
 
             if let Err(e) = store.store(new_event_id.clone()).await {
                 error!("Failed to store new event id: {e:?}");
                 return Err(EventLoopError::StoreWrite(e));
             }
-
             debug!("New Event ID = {}", new_event_id);
         }
 
@@ -205,6 +204,24 @@ impl EventLoopInternal {
             if let Err(e) = subscriber.on_events(events).await {
                 error!("Failed to publish events to '{}': {e:?}", subscriber.name());
                 return Err(EventLoopError::Subscriber(subscriber.name().into(), e));
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn publish_refresh_to_subscribers<T: Event>(
+        &self,
+        event: &T,
+        subscribers: &[Box<dyn Subscriber<T>>],
+    ) -> Result<(), EventLoopError> {
+        for subscriber in subscribers {
+            if let Err(e) = subscriber.on_refresh(event).await {
+                error!(
+                    "Failed to process refresh in subscriber '{}': {e:?}",
+                    subscriber.name()
+                );
+                return Err(EventLoopError::Refresh(subscriber.name().to_owned(), e));
             }
         }
 

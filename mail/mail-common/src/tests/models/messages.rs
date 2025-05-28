@@ -26,6 +26,7 @@ use crate::test_utils::utils::{
     prepare_db_state_core,
 };
 use crate::test_utils::utils::{create_address, test_address};
+use crate::{conv_id, conversation, message, msg_id};
 use futures::future::BoxFuture;
 use futures::{FutureExt, StreamExt as _};
 use proton_core_api::services::proton::LabelId;
@@ -71,7 +72,6 @@ mod available_actions {
 
     use super::*;
     use crate::test_utils::db::new_test_connection;
-    use crate::{conversation, message, msg_id};
     use pretty_assertions::assert_eq;
     use test_case::test_case;
 
@@ -2973,4 +2973,44 @@ pub(super) async fn resolve_local_ids(tether: &Tether, message: &mut Message) {
         .unwrap();
         message.local_conversation_id = conversation.local_id;
     }
+}
+
+#[tokio::test]
+async fn test_deleting_address_will_trigger_message_deletion() {
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection();
+    let address = create_address(&mut tether).await;
+    let mut conv = conversation!(remote_id: conv_id!("my_conv"));
+    let id = tether
+        .tx::<_, _, StashError>(async |tx| {
+            conv.save(tx).await?;
+            let mut msg = message!(
+                remote_id: msg_id!("my_msg"),
+                local_conversation_id: conv.local_id,
+                remote_conversation_id: conv.remote_id.clone(),
+                local_address_id: address.local_id.unwrap(),
+                remote_address_id: address.remote_id.clone().unwrap()
+            );
+            msg.save(tx).await?;
+
+            Ok(msg.local_id.unwrap())
+        })
+        .await
+        .unwrap();
+    let db_message = Message::load(id, &tether)
+        .await
+        .expect("failed to get message");
+    assert!(db_message.is_some());
+    let addresses = Address::all(&tether).await.unwrap();
+    assert_eq!(addresses.len(), 1);
+    tether
+        .tx::<_, _, StashError>(async |tx| Ok(Address::delete_all(tx).await?))
+        .await
+        .unwrap();
+    let addresses = Address::all(&tether).await.unwrap();
+    assert_eq!(addresses.len(), 0);
+    let db_message = Message::load(id, &tether)
+        .await
+        .expect("failed to get message");
+    assert!(db_message.is_none());
 }

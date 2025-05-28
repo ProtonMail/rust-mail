@@ -626,19 +626,15 @@ impl<T: ScrollData> CachedScrollData<T> {
     ///
     /// Specific to database access.
     ///
-    pub async fn all(
-        local_label_id: LocalLabelId,
-        unread: ReadFilter,
-        page_size: usize,
-    ) -> Result<Self, StashError> {
+    pub fn all(local_label_id: LocalLabelId, unread: ReadFilter, page_size: usize) -> Self {
         let end = ScrollCursor::absolute_end(local_label_id, unread);
         let cursor = ScrollCursor::absolute_begining(local_label_id, unread);
 
-        Ok(Self {
+        Self {
             page_size,
             end,
             cursor,
-        })
+        }
     }
 
     /// Transform the cursor to read absolutly all items from the database.
@@ -670,26 +666,74 @@ impl<T: ScrollData> CachedScrollData<T> {
             } else {
                 Some(self.page_size)
             };
-            let items = self
-                .end
-                .visible_elements_limit(limit, offset, false, tether)
-                .await?;
-            let cursor = match items.last() {
-                Some(last) => ScrollCursor::builder()
-                    .local_label_id(self.local_label_id)
-                    .unread(self.unread)
-                    .time(T::time(last))
-                    .display_order(T::display_order(last))
-                    .build(),
-                None => self.end.clone(),
-            };
 
-            self.cursor = cursor;
-
-            Ok(items)
+            self.fetch_more_impl(limit, offset, tether).await
         } else {
             Ok(vec![])
         }
+    }
+
+    /// Fetch more items from the database, optimized to use with `while` loop.
+    ///
+    /// The method returns `None` for empty vector and the last page logic from
+    /// [`fetch_more`] is omitted to return at most page_size worth of items,
+    /// which makes it very easy to write:
+    ///
+    /// ```ignore
+    /// while let Some(page) = scroller.while_fetch_more(tether).await? { ... }
+    /// ```
+    ///
+    pub async fn while_fetch_more(
+        &mut self,
+        tether: &Tether,
+    ) -> Result<Option<Vec<T::Item>>, StashError> {
+        let all = self.end.visible_element_count(tether).await?;
+        let cursor_count = self.cursor.visible_element_count(tether).await?;
+
+        if cursor_count < all {
+            let offset = Some(cursor_count);
+            let limit = Some(self.page_size);
+            let items = self.fetch_more_impl(limit, offset, tether).await?;
+
+            if items.is_empty() {
+                Ok(None)
+            } else {
+                Ok(Some(items))
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn fetch_more_impl(
+        &mut self,
+        limit: Option<usize>,
+        offset: Option<u64>,
+        tether: &Tether,
+    ) -> Result<Vec<T::Item>, StashError> {
+        let items = self
+            .end
+            .visible_elements_limit(limit, offset, false, tether)
+            .await?;
+        let cursor = match items.last() {
+            Some(last) => ScrollCursor::builder()
+                .local_label_id(self.local_label_id)
+                .unread(self.unread)
+                .time(T::time(last))
+                .display_order(T::display_order(last))
+                .build(),
+            None => self.end.clone(),
+        };
+
+        self.cursor = cursor;
+
+        Ok(items)
+    }
+
+    /// Available elements count to fetch with this cursor
+    ///
+    pub async fn all_element_count(&self, tether: &Tether) -> Result<u64, StashError> {
+        self.end.visible_element_count(tether).await
     }
 
     /// Check if there are more items to fetch for in memory cursor.

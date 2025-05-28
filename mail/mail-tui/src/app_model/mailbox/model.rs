@@ -17,7 +17,7 @@ use futures::FutureExt;
 use crate::widgets::utils::date_from_timestamp;
 use proton_action_queue::observers::{ActionFailureObserver, ActionFailureReason};
 use proton_action_queue::queue::{ActionError, AsActionError};
-use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::datatypes::{LocalLabelId, Refresh};
 use proton_core_common::models::{Label, ModelExtension};
 use proton_mail_common::actions::event_poll::EventPoll;
 use proton_mail_common::datatypes::{ReadFilter, SystemLabelId, ViewMode};
@@ -71,9 +71,6 @@ impl MailboxModel {
         let stash = ctx.user_stash();
         let tether = stash.connection();
         let mailbox = Mailbox::with_remote_id(&tether, LabelId::inbox()).await?;
-
-        ctx.prefetch().await?;
-
         let tether = ctx.user_stash().connection();
 
         let label = LabelWithCounters::load(mailbox.label_id(), &tether)
@@ -368,6 +365,24 @@ impl AppStateHandler for MailboxModel {
                             }),
                         ),
                     )));
+                }
+                KeyCode::F(5) => {
+                    let ctx = self.ctx.as_arc();
+                    return Command::batch([
+                        Command::message(Messages::DisplayInfo(
+                            Some("Event Loop referesh".to_owned()),
+                            "Refresh event running...".to_owned(),
+                        )),
+                        Command::task(async move {
+                            match ctx.refresh_action(Refresh::All).await {
+                                Ok(_) => Command::None,
+                                Err(e) => Command::message(Messages::DisplayError(
+                                    Some("Event Loop referesh".to_owned()),
+                                    anyhow!("{e}"),
+                                )),
+                            }
+                        }),
+                    ]);
                 }
                 _ => (),
             }
