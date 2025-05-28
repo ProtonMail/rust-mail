@@ -14,7 +14,6 @@ use crate::user_context::events::messages::handle_message_events;
 use crate::{datatypes::ConversationLabelsCount, events::MailEvent};
 use anyhow::{anyhow, bail};
 use async_trait::async_trait;
-use either::Either;
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedActionOutput};
 use proton_core_common::datatypes::{Refresh, SystemLabel};
 use proton_core_common::models::{Address, Contact, Label, ModelExtension, User};
@@ -166,8 +165,8 @@ impl MailUserContext {
             .await
     }
 
-    pub(crate) async fn on_refresh_impl(
-        self: Arc<Self>,
+    pub async fn on_refresh_impl(
+        self: &Arc<Self>,
         refresh: Refresh,
     ) -> Result<(), SubscriberError> {
         debug!("Handling refresh event");
@@ -183,7 +182,7 @@ impl MailUserContext {
                         return Err(e);
                     }
                     attempts += 1;
-                    warn!("Refresh event attempt {attempts} failed");
+                    warn!("Refresh event attempt {attempts} failed: `{e}`");
                 }
             }};
         }
@@ -224,7 +223,8 @@ macro_rules! join_task {
             value
         } else {
             return Err(SubscriberError::Other(anyhow!(
-                "The task was cancelled, we need to run refresh again"
+                "The task `{}` was cancelled, we need to run refresh again",
+                $description
             )));
         }
     }};
@@ -249,23 +249,6 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
         "Number of labels available localy: {}",
         all_local_labels.len()
     );
-    let all_mail = SystemLabel::AllMail
-        .load(&tether)
-        .await?
-        .ok_or_else(|| anyhow!("All mail label is missing!"))?;
-    let page_size = 50; // 80 exceeds HTTP URI limit, 50 seems to be safe softspot
-    let scroll_cursor = match all_mail.view_mode(&tether).await? {
-        ViewMode::Conversations => Either::Left(CachedScrollData::<ConversationScrollData>::all(
-            all_mail.local_id.unwrap(),
-            ReadFilter::All,
-            page_size,
-        )),
-        ViewMode::Messages => Either::Right(CachedScrollData::<MessageScrollData>::all(
-            all_mail.local_id.unwrap(),
-            ReadFilter::All,
-            page_size,
-        )),
-    };
 
     let all_remote_labels = join_task!(all_remote_labels, "labels");
     let counters = join_task!(counters, "label counters");
@@ -320,9 +303,21 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
 
     IncomingDefaultLocation::action_resync(ctx.action_queue()).await;
 
-    match scroll_cursor {
-        Either::Left(mut conv_scroll_cursor) => {
-            debug!(
+    let all_mail = SystemLabel::AllMail
+        .load(&tether)
+        .await?
+        .ok_or_else(|| anyhow!("All mail label is missing!"))?;
+    let page_size = 50; // 80 exceeds HTTP URI limit, 50 seems to be safe softspot
+
+    match all_mail.view_mode(&tether).await? {
+        ViewMode::Conversations => {
+            let mut conv_scroll_cursor = CachedScrollData::<ConversationScrollData>::all(
+                all_mail.local_id.unwrap(),
+                ReadFilter::All,
+                page_size,
+            );
+
+            info!(
                 "Queue conversations to refresh, count: {}",
                 conv_scroll_cursor.all_element_count(&tether).await?
             );
@@ -336,8 +331,14 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
                 }
             }
         }
-        Either::Right(mut msg_scroll_cursor) => {
-            debug!(
+        ViewMode::Messages => {
+            let mut msg_scroll_cursor = CachedScrollData::<MessageScrollData>::all(
+                all_mail.local_id.unwrap(),
+                ReadFilter::All,
+                page_size,
+            );
+
+            info!(
                 "Queue messages to refresh, count: {}",
                 msg_scroll_cursor.all_element_count(&tether).await?
             );

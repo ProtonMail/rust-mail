@@ -5,6 +5,8 @@ use proton_core_api::services::proton::LabelId;
 use proton_core_api::services::proton::PatchLabelRequest;
 use proton_core_api::services::proton::{GetLabelsResponse, PatchLabelResponse};
 use proton_core_common::datatypes::LabelType;
+use wiremock::MockBuilder;
+use wiremock::Times;
 use wiremock::matchers::{body_json, method, path};
 use wiremock::{Mock, ResponseTemplate};
 
@@ -52,6 +54,23 @@ impl MailTestContext {
             .and(body_json(request))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
             .expect(1)
+            .named(function_name!())
+            .mount(self.mock_server())
+            .await;
+    }
+
+    #[function_name::named]
+    pub async fn mock_get_labels_and(
+        &self,
+        labels: Vec<ApiLabel>,
+        fun: impl Fn(MockBuilder) -> MockBuilder,
+        expect: impl Into<Times>,
+    ) {
+        let response = GetLabelsResponse { labels };
+
+        fun(Mock::given(method("GET")).and(path("/api/core/v4/labels")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .expect(expect)
             .named(function_name!())
             .mount(self.mock_server())
             .await;
