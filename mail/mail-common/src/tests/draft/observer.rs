@@ -355,7 +355,7 @@ async fn draft_attachment_observer_updates_when_attachment_is_removed() {
         .unwrap();
 
     let mut attachment_metadata =
-        DraftAttachmentMetadata::new(metadata.id.unwrap(), attachment.local_id.unwrap(), 0);
+        DraftAttachmentMetadata::new(metadata.id.unwrap(), attachment.local_id.unwrap(), 0, false);
     // Create metadata.
     conn.tx::<_, _, StashError>(async |tx| {
         attachment_metadata.save(tx).await.unwrap();

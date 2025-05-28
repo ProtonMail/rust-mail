@@ -58,7 +58,7 @@ impl Composer {
             Command::task(async move {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
-                    match Draft::empty(ctx.user_stash()).await {
+                    match Draft::empty(&ctx).await {
                         Ok(draft) => Composer::create(draft, None, ctx.user_stash().clone()).await,
                         Err(e) => {
                             error!("Failed to create new draft:{e:?}");

@@ -838,6 +838,10 @@ pub struct DraftAttachmentMetadata {
     /// We keep it hidden until the action succeeds so we can recover.
     #[DbField]
     pub deleted: bool,
+
+    #[DbField]
+    pub is_public_key: bool,
+
     #[RowIdField]
     pub row_id: Option<u64>,
 }
@@ -848,6 +852,7 @@ impl DraftAttachmentMetadata {
         metadata_id: MetadataId,
         local_attachment_id: LocalAttachmentId,
         display_order: usize,
+        is_public_key: bool,
     ) -> Self {
         Self {
             local_attachment_id,
@@ -860,6 +865,7 @@ impl DraftAttachmentMetadata {
             display_order,
             row_id: None,
             deleted: false,
+            is_public_key,
         }
     }
 
@@ -871,6 +877,7 @@ impl DraftAttachmentMetadata {
         metadata_id: MetadataId,
         local_attachment_id: LocalAttachmentId,
         display_order: usize,
+        is_public_key: bool,
     ) -> Self {
         Self {
             local_attachment_id,
@@ -883,6 +890,7 @@ impl DraftAttachmentMetadata {
             display_order,
             row_id: None,
             deleted: false,
+            is_public_key,
         }
     }
 
@@ -906,6 +914,7 @@ impl DraftAttachmentMetadata {
             display_order,
             row_id: None,
             deleted: false,
+            is_public_key: Attachment::is_public_key_attachment_filename(&attachment.filename),
         }
     }
 
@@ -914,6 +923,7 @@ impl DraftAttachmentMetadata {
         metadata_id: MetadataId,
         attachment_id: LocalAttachmentId,
         display_order: usize,
+        is_public_key: bool,
     ) -> Self {
         Self {
             local_attachment_id: attachment_id,
@@ -926,6 +936,7 @@ impl DraftAttachmentMetadata {
             display_order,
             row_id: None,
             deleted: false,
+            is_public_key,
         }
     }
 
@@ -1101,6 +1112,7 @@ impl DraftAttachmentMetadata {
                 display_order: order,
                 row_id: None,
                 deleted: false,
+                is_public_key: Attachment::is_public_key_attachment_filename(&a.filename),
             })
             .collect::<Vec<_>>();
 

@@ -43,7 +43,7 @@ use rusqlite::types::{FromSqlError, FromSqlResult, ValueRef};
 use serde::{Deserialize, Serialize};
 use stash::exports::{FromSql, SqliteError, ToSql, ToSqlOutput};
 use stash::orm::Model;
-use stash::stash::{Stash, StashError, Tether};
+use stash::stash::{StashError, Tether};
 use std::mem;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -561,9 +561,9 @@ impl Draft {
     ///
     /// Returns error if we can not load or modify the required data or write the
     /// body into the cache.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(stash))]
-    pub async fn empty(stash: &Stash) -> Result<Self, MailContextError> {
-        let mut tether = stash.connection();
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip_all)]
+    pub async fn empty(context: &MailUserContext) -> Result<Self, MailContextError> {
+        let mut tether = context.user_stash().connection();
         // Default address should have display_order 0
         let addresses = Address::find("ORDER BY display_order ASC LIMIT 1", vec![], &tether)
             .await
@@ -576,13 +576,29 @@ impl Draft {
             return Err(OpenError::UserHasNoAddresses.into());
         }
 
-        let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
         let address = &addresses[0];
+        let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
+
         let metadata = tether
-            .tx(async |tx| {
-                DraftMetadata::empty(tx)
+            .tx::<_, _, MailContextError>(async |tx| {
+                let metadata = DraftMetadata::empty(tx)
                     .await
-                    .inspect_err(|e| error!("Failed to create new empty draft metadata: {e:?}"))
+                    .inspect_err(|e| error!("Failed to create new empty draft metadata: {e:?}"))?;
+                if mail_settings.attach_public_key {
+                    let public_key_attachment = Attachment::create_public_key(context, address, tx)
+                        .await
+                        .inspect_err(|e| error!("Failed to create public key attachment: {e:?}"))?;
+
+                    DraftAttachmentMetadata::pending(
+                        metadata.id.unwrap(),
+                        public_key_attachment.local_id.unwrap(),
+                        0,
+                        true,
+                    )
+                    .save(tx)
+                    .await?
+                }
+                Ok(metadata)
             })
             .await?;
 
@@ -702,6 +718,26 @@ impl Draft {
                 )
                 .await;
 
+                if mail_settings.attach_public_key {
+                    let public_key_attachment =
+                        Attachment::gen_public_key(context, &address, tx).await?;
+
+                    // If we already have the public key, we should just skip adding the attachment.
+                    if !attachments.iter().any(|attachment| {
+                        attachment.filename == public_key_attachment.attachment.filename
+                    }) {
+                        let attachment = public_key_attachment.store(context, tx).await?;
+                        DraftAttachmentMetadata::pending(
+                            metadata.id.unwrap(),
+                            attachment.local_id.unwrap(),
+                            0,
+                            true,
+                        )
+                        .save(tx)
+                        .await?;
+                    }
+                }
+
                 for (order, attachment) in attachments.into_iter().enumerate() {
                     let mut attachment_metadata =
                         if matches!(attachment.attachment_type, AttachmentType::Pgp) {
@@ -723,6 +759,7 @@ impl Draft {
                                 metadata.id.unwrap(),
                                 new_attachment.local_id.unwrap(),
                                 order,
+                                false,
                             )
                         } else {
                             DraftAttachmentMetadata::inherited(
@@ -1455,6 +1492,7 @@ impl DraftSaveActionQueuer {
 
         //TODO: queue batching so we can fail everything together.
         for attachment_id in pending_attachment_ids {
+            tracing::info!("Queuing attachment upload for pending attachment {attachment_id}");
             let metadata = MetadataBuilder::new()
                 .with_resource(&self.id)
                 .expect("This should never fail")

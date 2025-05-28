@@ -87,7 +87,7 @@ async fn main() {
 
     let user_ctx = ctx.user_context_from_login_flow(&mut flow).await.unwrap();
 
-    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft.subject = subject;
     body.push_str(draft.body());

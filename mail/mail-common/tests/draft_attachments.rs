@@ -76,7 +76,7 @@ async fn attachment_not_removed_on_error() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -140,7 +140,7 @@ async fn remove_attachment_updates_attachment_list() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -189,7 +189,7 @@ async fn remove_attachment_by_cid() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -293,7 +293,7 @@ async fn removing_non_uploaded_attachment() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -392,7 +392,7 @@ async fn removing_uploaded_attachment() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -714,7 +714,7 @@ async fn override_attachment_name() {
         .unwrap();
 
     let filename_override = "OverriddenFileName.exe";
-    let draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let draft = Draft::empty(&user_ctx).await.unwrap();
     let local_attachment = Attachment::create_local(
         &user_ctx,
         draft.address_id,
