@@ -44,14 +44,6 @@ use proton_mail_api::services::proton::common::{AttachmentId, MessageId};
 use proton_mail_ids::LocalConversationId;
 use thiserror::Error;
 
-// Avoid breaking back compat.
-//
-// TODO: We should probably use a better name at some point for the clients like "protonSdk" or something
-// but that would be a breaking change
-// (fixed with search and replace but something we need to coordinate.)
-#[cfg(feature = "uniffi")]
-uniffi::setup_scaffolding!();
-
 #[macro_export]
 macro_rules! find_in_query {
     ($query:expr, $params:expr) => {{
