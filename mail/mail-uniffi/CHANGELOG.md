@@ -5,18 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## UNRELEASED
+## [Unreleased]
 
-### Changed
+### Features
 
-- [ET-2976] Breaking changes
-  - `LoginFlow.toUserContext` functionality is now defined in `MailSessionInterface`:
-    ```
-    MailSessionInterface {
-        suspend fun `toUserContext`(`ffiFlow`: LoginFlow): MailSessionToUserContextResult
-    }
-    ```
-  - `mail-uniffi/LoginError` was renamed to `MailLoginError`
+- [ET-2140] Resync event for mail eventloop
+- Move loginflow to account crate
+- Contact email type now has name and avatar information, and groups now use contact emails instead of contacts
+
+### Fixes
+
+- Revert renaming coresession
+- Ios fixes: conflicting named enums
+- Draftsendresultwatcher not triggering after send
+
 
 ## [mail-uniffi-v0.82.0] - 2025-05-27
 
@@ -33,9 +35,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ## [mail-uniffi-v0.81.0] - 2025-05-26
-### Changed
-
-- [android] register tokio threads with jni
 
 ### Features
 
