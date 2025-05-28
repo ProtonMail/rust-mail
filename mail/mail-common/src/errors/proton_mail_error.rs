@@ -175,11 +175,7 @@ impl From<AppError> for ProtonMailError {
             }
             AppError::LabelNotFound(_local_label_id) => Self::Unexpected(Unexpected::Internal),
             AppError::InvalidMimeType(_string) => Self::Unexpected(Unexpected::InvalidArgument),
-            AppError::MessageBodyMetadataMissing(_local_massage_id) => {
-                Self::Unexpected(Unexpected::Internal)
-            }
             AppError::RemoteLabelDoesNotExist(_label_id) => Self::Unexpected(Unexpected::Internal),
-            AppError::RemoteLabelHasNoCounters(_label_id) => Self::Unexpected(Unexpected::Internal),
             AppError::LocalLabelHasNoCounters(_label_id) => Self::Unexpected(Unexpected::Internal),
             AppError::IO(io_error) => Self::from(io_error),
             AppError::Stash(stash_error) => Self::from(stash_error),
@@ -189,10 +185,7 @@ impl From<AppError> for ProtonMailError {
                 Self::Unexpected(Unexpected::Database)
             }
             AppError::AddressHasNoRemoteId(_) => Self::Unexpected(Unexpected::Internal),
-            AppError::ActionStillQueued(_string) => Self::Unexpected(Unexpected::Internal),
             AppError::AttachmentMissing(_string) => Self::Unexpected(Unexpected::Database),
-            AppError::UnknownAttachment(_) => Self::Unexpected(Unexpected::Unknown),
-            AppError::AttachmentDoesNotHaveRemoteId(_) => Self::Unexpected(Unexpected::Internal),
             AppError::ConversationDoesNotHaveLabel(_, _) => Self::Unexpected(Unexpected::Database),
             AppError::ConversationNotFound(_) => Self::Unexpected(Unexpected::Database),
             AppError::ConversationHasNoMessages(_) => Self::Unexpected(Unexpected::Database),
@@ -204,17 +197,6 @@ impl From<AppError> for ProtonMailError {
             AppError::InvalidMobileActions(_) => Self::reason(OtherErrorReason::InvalidParameter),
             AppError::MessageHasNoRemoteId(_local_id) => Self::Unexpected(Unexpected::Internal),
             AppError::MessageMissing(_local_id) => Self::Unexpected(Unexpected::Database),
-            AppError::UnknownMessage(_remote_id) => Self::Unexpected(Unexpected::Unknown),
-            AppError::NoConversationWithValidRemoteIdFoundInPage => {
-                Self::Unexpected(Unexpected::Database)
-            }
-            AppError::NoMessageWithValidRemoteIdFoundInPage => {
-                Self::Unexpected(Unexpected::Database)
-            }
-            AppError::UserNotFound => Self::reason(OtherErrorReason::InvalidParameter),
-            AppError::MessageBodyMissing(_) => Self::Unexpected(Unexpected::Database),
-            AppError::RmpDeserialization(_rmp_error) => Self::Unexpected(Unexpected::Internal),
-            AppError::RmpSerialization(_rmp_error) => Self::Unexpected(Unexpected::Internal),
             AppError::UnknownCid(_, _) => Self::reason(ActionErrorReason::UnknownContentId),
             AppError::AttachmentHasNoAddressId(_) => Self::Unexpected(Unexpected::Internal),
             AppError::AttachmentMissingKeyPackets(_) => Self::Unexpected(Unexpected::Internal),
