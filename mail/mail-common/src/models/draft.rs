@@ -396,12 +396,11 @@ impl DraftSendResult {
             self.row_id = existing.row_id;
         }
 
+        // Only overwrite if present.
         if let Some(metadata_id) =
             DraftMetadata::find_by_message_id(self.local_message_id, bond).await?
         {
             self.has_send_action = metadata_id.send_action_id.is_some();
-        } else {
-            self.has_send_action = false;
         }
 
         <Self as Model>::save(self, bond).await

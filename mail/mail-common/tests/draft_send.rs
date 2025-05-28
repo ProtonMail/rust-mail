@@ -204,6 +204,7 @@ async fn basic_send_check() {
         send_result.remote_message_id,
         Some(draft_message.remote_id.unwrap())
     );
+    assert!(send_result.has_send_action);
     assert!(send_result.timestamp < send_result.undo_timestamp);
     assert!(!send_result.seen);
 }
