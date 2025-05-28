@@ -638,6 +638,9 @@ impl Conversation {
             if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
                 self.local_id = existing.local_id;
                 self.row_id = existing.row_id;
+                // We want to preserve this to prevent unnecessary resyncing of conversations
+                // messages if we update something.
+                self.has_messages = self.has_messages || existing.has_messages;
             }
         }
 
@@ -2512,9 +2515,6 @@ impl Conversation {
             return Err(AppError::EmptyListOfConversations);
         }
 
-        let handle =
-            tether.subscribe_to(|sender| Box::new(ConversationActionWatcher { sender }))?;
-
         let all_label_as = Label::find_by_kind(LabelType::Label, tether).await?;
         let conversations =
             <Conversation as ModelExtension>::find_by_ids(local_ids, tether).await?;
@@ -2529,6 +2529,8 @@ impl Conversation {
         });
 
         let res = LabelAsAction::finalize(all_label_as_actions);
+        let handle =
+            tether.subscribe_to(|sender| Box::new(ConversationActionWatcher { sender }))?;
         debug!("watch available label_as actions for conversations: {res:?}");
         Ok((res, handle))
     }

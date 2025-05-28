@@ -1,5 +1,4 @@
 mod action_error;
-pub(crate) mod api_service_error;
 mod draft_error;
 mod error_reason;
 mod event_error;
@@ -9,9 +8,7 @@ mod proton_error;
 mod session_error;
 pub(crate) mod unexpected;
 
-use proton_mail_common::decrypted_message::BodyOutput;
-
-use crate::mail::messages::EmbeddedAttachmentInfo;
+use crate::mail::messages::{BodyOutput, EmbeddedAttachmentInfo};
 
 pub use self::action_error::*;
 pub use self::draft_error::*;
@@ -95,7 +92,7 @@ export_void_result! {
     VoidDraftSaveResult(DraftSaveError),
     VoidDraftUndoSendResult(DraftUndoSendError),
     VoidEventResult(EventError),
-    VoidLoginResult(LoginError),
+    VoidLoginResult(MailLoginError),
     VoidProtonResult(ProtonError),
     VoidSessionResult(UserSessionError),
 }

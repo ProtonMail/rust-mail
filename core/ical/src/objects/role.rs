@@ -83,18 +83,18 @@ mod tests {
 
     #[test]
     fn unknown() {
-        let (obj, errs) = Role::from_str_ex("foobar", Value);
+        let (obj, msgs) = Role::from_str_ex("foobar", Value);
 
         assert_eq!(Some(Role::ReqParticipant), obj);
 
         assert_eq!(
             vec![ReadMsg {
-                at: Some(Span::new(0, 6)),
+                at: Some(Span::new((1, 1), (1, 6))),
                 msg: "unknown role `foobar`".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             }],
-            errs,
+            msgs,
         );
     }
 }

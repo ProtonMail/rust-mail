@@ -6,7 +6,7 @@ use super::*;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParamValue {
     value: String,
-    quoted: bool,
+    quote: bool,
 }
 
 impl ParamValue {
@@ -15,21 +15,21 @@ impl ParamValue {
     /// See also: [`Self::new_checked()`].
     #[must_use]
     pub fn new(value: impl Into<String>) -> Self {
-        let mut quoted = false;
+        let mut quote = false;
 
         let value = value
             .into()
             .chars()
             .filter(|ch| {
                 if let ';' | ':' | ',' = ch {
-                    quoted = true;
+                    quote = true;
                 }
 
                 !ch.is_control() && *ch != '"'
             })
             .collect();
 
-        Self { value, quoted }
+        Self { value, quote }
     }
 
     /// Creates a parameter value; returns an error if given string contains
@@ -37,14 +37,14 @@ impl ParamValue {
     ///
     /// See also: [`Self::new()`].
     pub fn new_checked(value: impl Into<String>) -> Result<Self, ParamValueViolation> {
-        let mut quoted = false;
+        let mut quote = false;
 
         let value = value
             .into()
             .char_indices()
             .map(|(idx, ch)| {
                 if let ';' | ':' | ',' = ch {
-                    quoted = true;
+                    quote = true;
                 }
 
                 if ch.is_control() || ch == '"' {
@@ -55,7 +55,7 @@ impl ParamValue {
             })
             .collect::<Result<_, _>>()?;
 
-        Ok(Self { value, quoted })
+        Ok(Self { value, quote })
     }
 
     /// Creates a parameter value without validating given string.
@@ -66,10 +66,10 @@ impl ParamValue {
     /// Analyze [`Self::new_checked()`] for invariants you're expected to
     /// uphold.
     #[must_use]
-    pub fn new_unchecked(value: impl Into<String>, quoted: bool) -> Self {
+    pub fn new_unchecked(value: impl Into<String>, quote: bool) -> Self {
         Self {
             value: value.into(),
-            quoted,
+            quote,
         }
     }
 
@@ -98,43 +98,104 @@ where
 impl IcsRead<Value> for ParamValue {
     fn read(r: &mut IcsReader) -> Option<Self> {
         let mut value = String::new();
-        let quoted;
+        let mut quote;
 
         if r.try_eat('"').is_some() {
-            quoted = true;
+            quote = true;
 
-            while let Some(ch) = r.char() {
-                if ch == '"' || ch.is_control() {
+            while let Some(ch) = r.peek() {
+                if ch == '"' {
+                    _ = r.char();
                     break;
                 }
 
-                value.push(ch);
-            }
-        } else {
-            quoted = false;
-
-            while let Some(ch) = r.peek() {
-                if ch == ';' || ch == ':' || ch == ',' || ch == '"' || ch.is_control() {
+                if ch.is_control() {
                     break;
                 }
 
                 value.push(r.char()?);
             }
+        } else {
+            quote = false;
+
+            while let Some(ch) = r.peek() {
+                match ch {
+                    ';' | ':' | '"' => {
+                        break;
+                    }
+
+                    ',' => {
+                        if r.hints().inside_array {
+                            break;
+                        }
+
+                        r.warn(Span::one(r.pos()), "quirky comma");
+                        value.push(r.char()?);
+
+                        // Even though we can read this comma, it's not supposed
+                        // to be here - so when printing back, enquote the
+                        // string for better compatibility
+                        quote = true;
+                    }
+
+                    '\t' => {
+                        r.warn(Span::one(r.pos()), "quirky tab");
+                        _ = r.char();
+
+                        // param-values don't support tabs even in quotes, so
+                        // let's sanitize it into a space for better
+                        // compatibility
+                        value.push(' ');
+                    }
+
+                    ch if ch.is_control() => {
+                        break;
+                    }
+
+                    '\\' => {
+                        _ = r.char();
+
+                        let span = Span::new(r.pos().prev(), r.pos());
+
+                        match r.char()? {
+                            ch @ (';' | ':' | ',') => {
+                                r.warn(span, "quirky escape sequence");
+                                value.push(ch);
+
+                                // Even though we can read escaped strings, they
+                                // are not supported by the standard - so when
+                                // printing, let's convert them into quoted
+                                // strings they should've been from the
+                                // beginning for better compatibility
+                                quote = true;
+                            }
+
+                            _ => {
+                                r.error(span, "unrecognized escape sequence");
+                            }
+                        }
+                    }
+
+                    _ => {
+                        value.push(r.char()?);
+                    }
+                }
+            }
         }
 
-        Some(Self { value, quoted })
+        Some(Self { value, quote })
     }
 }
 
 impl IcsWrite<Value> for ParamValue {
     fn write(&self, w: &mut IcsWriter) {
-        if self.quoted {
+        if self.quote {
             w.raw("\"");
         }
 
         w.raw(self.value.as_str());
 
-        if self.quoted {
+        if self.quote {
             w.raw("\"");
         }
     }
@@ -248,5 +309,126 @@ mod tests {
             .into_string();
 
         assert_eq!("John Smith", actual);
+    }
+
+    #[test_case(';' ; "semicolon")]
+    #[test_case(':' ; "colon")]
+    #[test_case(',' ; "comma")]
+    fn escape(ch: char) {
+        let (obj, msgs) = ParamValue::from_str_ex(&format!("John Smith\\{ch} MD"), Value);
+
+        assert_eq!(
+            Some(ParamValue {
+                value: format!("John Smith{ch} MD"),
+                quote: true,
+            }),
+            obj,
+        );
+
+        assert_eq!(
+            vec![ReadMsg {
+                at: Some(Span::new((1, 11), (1, 12))),
+                msg: "quirky escape sequence".into(),
+                kind: ReadMsgKind::Warning,
+                context: Vec::new(),
+            }],
+            msgs,
+        );
+    }
+
+    #[test]
+    fn unrecognized_escape() {
+        let (obj, msgs) = ParamValue::from_str_ex("John Smith\\n MD", Value);
+
+        assert_eq!(
+            Some(ParamValue {
+                value: "John Smith MD".into(),
+                quote: false,
+            }),
+            obj,
+        );
+
+        assert_eq!(
+            vec![ReadMsg {
+                at: Some(Span::new((1, 11), (1, 12))),
+                msg: "unrecognized escape sequence".into(),
+                kind: ReadMsgKind::Error,
+                context: Vec::new(),
+            }],
+            msgs,
+        );
+    }
+
+    #[test]
+    fn escape_trip() {
+        let actual = ParamValue::from_str_ex("John Smith\\, MD", Value)
+            .0
+            .unwrap()
+            .to_string(Value);
+
+        assert_eq!("\"John Smith, MD\"", actual);
+    }
+
+    #[test]
+    fn comma() {
+        let (obj, msgs) = ParamValue::from_str_ex("Gregory House, MD", Value);
+
+        assert_eq!(
+            Some(ParamValue {
+                value: "Gregory House, MD".into(),
+                quote: true,
+            }),
+            obj,
+        );
+
+        assert_eq!(
+            vec![ReadMsg {
+                at: Some(Span::new((1, 14), (1, 14))),
+                msg: "quirky comma".into(),
+                kind: ReadMsgKind::Warning,
+                context: Vec::new(),
+            }],
+            msgs,
+        );
+
+        // ---
+
+        let actual = Vec::<ParamValue>::from_str("Gregory House, MD", Value).unwrap();
+
+        let expected = vec![
+            ParamValue {
+                value: "Gregory House".into(),
+                quote: false,
+            },
+            ParamValue {
+                value: " MD".into(),
+                quote: false,
+            },
+        ];
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn tab() {
+        let (obj, msgs) = ParamValue::from_str_ex("Grzegorz\tBrzęczyszczykiewicz", Value);
+
+        assert_eq!(
+            Some(ParamValue {
+                value: "Grzegorz Brzęczyszczykiewicz".into(),
+                quote: false,
+            }),
+            obj,
+        );
+
+        assert_eq!(
+            vec![ReadMsg {
+                at: Some(Span::new((1, 9), (1, 9))),
+                msg: "quirky tab".into(),
+                kind: ReadMsgKind::Warning,
+                context: Vec::new(),
+            }],
+            msgs,
+        );
     }
 }

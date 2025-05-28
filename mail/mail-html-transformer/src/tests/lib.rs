@@ -21,3 +21,11 @@ fn pathologic_nested() {
     t.insert_links(tok);
     // .to_string(); // https://github.com/servo/html5ever/issues/290
 }
+
+#[test]
+fn return_only_body() {
+    let doc = include_str!("../../tests/htmls/acceptable.html");
+    let t = Transformer::new(doc);
+    let result = t.extract_body();
+    insta::assert_snapshot!(result);
+}

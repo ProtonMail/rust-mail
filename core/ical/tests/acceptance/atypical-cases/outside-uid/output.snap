@@ -176,7 +176,7 @@ VCalendar {
                         Cn {
                             value: ParamValue {
                                 value: "iamblueuser@gmail.com",
-                                quoted: false,
+                                quote: false,
                             },
                         },
                     ),
@@ -195,7 +195,7 @@ VCalendar {
                         Cn {
                             value: ParamValue {
                                 value: "calendar-user-pentest1@protonmail.com",
-                                quoted: false,
+                                quote: false,
                             },
                         },
                     ),
@@ -224,7 +224,7 @@ VCalendar {
                         Cn {
                             value: ParamValue {
                                 value: "1",
-                                quoted: false,
+                                quote: false,
                             },
                         },
                     ),
@@ -253,7 +253,7 @@ VCalendar {
                         Cn {
                             value: ParamValue {
                                 value: "iamblueuser@gmail.com",
-                                quoted: false,
+                                quote: false,
                             },
                         },
                     ),
@@ -345,4 +345,4 @@ error: missing property `UID`
 
 # violations
 
-- event[0]: uid is missing
+- viol: event[0]: uid is missing

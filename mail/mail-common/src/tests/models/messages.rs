@@ -1,7 +1,8 @@
 #![allow(non_snake_case)]
 
+use std::sync::LazyLock;
+
 use super::*;
-use crate as proton_mail_common;
 use crate::actions::{
     LabelAsAction, MessageAction, MessageAvailableActions, MovableSystemFolderAction, MoveAction,
     MoveItemAction,
@@ -10,10 +11,24 @@ use crate::datatypes::{
     ContextualConversation, ExclusiveLocation, MessageFlags, MessageLabelsCount,
     MovableSystemFolder, SystemLabelId, attachment,
 };
+use crate::label;
 use crate::models::{Attachment, Conversation, MailSettings, Message, MessageBodyMetadata};
+use crate::test_utils::db::new_test_connection_file;
+use crate::test_utils::db_states::{
+    new_test_delete_db_state, new_test_label_db_state, new_test_unread_db_state,
+};
+use crate::test_utils::search::{
+    MY_ADDRESS_ID, MY_CONVERSATION_ID, MY_LABEL_ID1, MY_LABEL_ID2, create_labels,
+    test_conversation, test_starred_label,
+};
+use crate::test_utils::utils::{
+    conv_counts_as_map, find_conversation_label, msg_counts_as_map, prepare_and_patch_db_state,
+    prepare_db_state_core,
+};
+use crate::test_utils::utils::{create_address, test_address};
+use crate::{conv_id, conversation, message, msg_id};
 use futures::future::BoxFuture;
 use futures::{FutureExt, StreamExt as _};
-use lazy_static::lazy_static;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::{LabelColor, LabelType};
 use proton_core_common::models::Label;
@@ -27,21 +42,6 @@ use proton_mail_api::services::proton::response_data::{
     MessageAttachmentHeaders as ApiMessageAttachmentHeaders, MessageFlags as ApiMessageFlags,
     MessageSender as ApiMessageSender, MimeType as ApiMimeType,
 };
-use proton_mail_test_utils::db::new_test_connection_file;
-use proton_mail_test_utils::db_states::{
-    new_test_delete_db_state, new_test_label_db_state, new_test_unread_db_state,
-};
-use proton_mail_test_utils::label;
-use proton_mail_test_utils::search::{
-    MY_ADDRESS_ID, MY_CONVERSATION_ID, MY_LABEL_ID1, MY_LABEL_ID2, create_labels,
-    test_conversation, test_starred_label,
-};
-use proton_mail_test_utils::utils::{
-    conv_counts_as_map, find_conversation_label, msg_counts_as_map, prepare_and_patch_db_state,
-    prepare_db_state_core,
-};
-use proton_mail_test_utils::utils::{create_address, test_address};
-use proton_mail_test_utils::{conv_id, conversation, message, msg_id};
 use serde_json::json;
 use stash::orm::Model;
 use stash::params;
@@ -49,14 +49,20 @@ use stash::stash::{Stash, Tether};
 use test_case::test_case;
 use velcro::hash_map;
 
-lazy_static! {
-    static ref STARRED: Label =
-        label!(label_type: LabelType::System, remote_id: Some(LabelId::starred()));
-    static ref FOLDER: Label = label!(label_type: LabelType::Folder, remote_id: Some("folder_label".into()), name: "MyFavouritesFolder".to_owned(), color: LabelColor::black());
-    static ref INBOX: Label = label!(label_type: LabelType::System, remote_id: Some(LabelId::inbox()), name: "Inbox".to_owned(), color: LabelColor::black());
-    static ref SPAM: Label = label!(label_type: LabelType::System, remote_id: Some(LabelId::spam()), name: "Spam".to_owned(), color: LabelColor::black());
-    static ref LABEL: Label = label!(label_type: LabelType::Label, remote_id: Some("label".into()), name: "Label".to_owned(), color: LabelColor::black());
-}
+static STARRED: LazyLock<Label> =
+    LazyLock::new(|| label!(label_type: LabelType::System, remote_id: Some(LabelId::starred())));
+static FOLDER: LazyLock<Label> = LazyLock::new(
+    || label!(label_type: LabelType::Folder, remote_id: Some("folder_label".into()), name: "MyFavouritesFolder".to_owned(), color: LabelColor::black()),
+);
+static INBOX: LazyLock<Label> = LazyLock::new(
+    || label!(label_type: LabelType::System, remote_id: Some(LabelId::inbox()), name: "Inbox".to_owned(), color: LabelColor::black()),
+);
+static SPAM: LazyLock<Label> = LazyLock::new(
+    || label!(label_type: LabelType::System, remote_id: Some(LabelId::spam()), name: "Spam".to_owned(), color: LabelColor::black()),
+);
+static LABEL: LazyLock<Label> = LazyLock::new(
+    || label!(label_type: LabelType::Label, remote_id: Some("label".into()), name: "Label".to_owned(), color: LabelColor::black()),
+);
 
 mod available_actions {
     use std::sync::LazyLock;
@@ -65,8 +71,8 @@ mod available_actions {
     use crate::datatypes::theme::MailTheme;
 
     use super::*;
+    use crate::test_utils::db::new_test_connection;
     use pretty_assertions::assert_eq;
-    use proton_mail_test_utils::db::new_test_connection;
     use test_case::test_case;
 
     struct TestCase {
@@ -389,8 +395,8 @@ mod available_actions {
 
 mod available_label_as_actions {
     use super::*;
-    use proton_mail_test_utils::db::new_test_connection;
-    use proton_mail_test_utils::{conv_id, conversation, label, lbl_id, message, msg_id};
+    use crate::test_utils::db::new_test_connection;
+    use crate::{conv_id, conversation, label, lbl_id, message, msg_id};
     use test_case::test_case;
 
     struct MessageWithLabels {
@@ -549,10 +555,10 @@ mod available_label_as_actions {
 
 mod available_move_to_actions {
     use super::*;
+    use crate::test_utils::db::new_test_connection;
+    use crate::{conv_id, conversation, label, lbl_id, message, msg_id};
     use futures::stream::{self, StreamExt};
     use pretty_assertions::assert_eq;
-    use proton_mail_test_utils::db::new_test_connection;
-    use proton_mail_test_utils::{conv_id, conversation, label, lbl_id, message, msg_id};
     use std::sync::LazyLock;
     use test_case::test_case;
 
@@ -2659,9 +2665,8 @@ async fn unlabel_messages() {
     check_final_conv_state(&stash).await;
 }
 
-lazy_static! {
-    pub(super) static ref MY_MESSAGE_ID: MessageId = MessageId::from("MyRemoteId");
-}
+pub(super) static MY_MESSAGE_ID: LazyLock<MessageId> =
+    LazyLock::new(|| MessageId::from("MyRemoteId"));
 
 #[test_case(vec![], None; "TEST1 - no label")]
 #[test_case(

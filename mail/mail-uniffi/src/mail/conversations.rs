@@ -12,7 +12,7 @@
 use crate::core::datatypes::Id;
 use crate::errors::{ActionError, VoidActionResult};
 use crate::mail::datatypes::{
-    AllBottomBarMessageActions, Conversation, ConversationAvailableActions,
+    AllBottomBarMessageActions, AutoDeleteBanner, Conversation, ConversationAvailableActions,
     ConversationSearchOptions, LabelAsAction, Message, MoveAction, ReadFilter,
 };
 use crate::mail::{MailUserSession, Mailbox};
@@ -21,7 +21,6 @@ use itertools::Itertools;
 use proton_core_api::session::Session;
 use proton_core_common::models::Label as RealLabel;
 use proton_core_common::utils::MapVec;
-use proton_mail_common::datatypes::folder_banner::AutoDeleteBanner;
 use proton_mail_common::datatypes::{
     ContextualConversation, ContextualConversationAndMessages, LocalConversationId,
 };
@@ -747,12 +746,12 @@ pub async fn watch_conversation(
     let session = mailbox.session()?;
 
     uniffi_async(async move {
-        let receiver = ContextualConversation::watch(&stash)?;
-        let watcher = watch_channel(ctx, receiver, callback);
-
-        let Some(messages) = get_conversation(mailbox, stash, session, id).await? else {
+        let Some(messages) = get_conversation(mailbox, stash.clone(), session, id).await? else {
             return Ok(None);
         };
+
+        let receiver = ContextualConversation::watch(&stash)?;
+        let watcher = watch_channel(ctx, receiver, callback);
 
         Result::<_, RealProtonMailError>::Ok(Some(WatchedConversation {
             conversation: messages.conversation,
@@ -915,7 +914,7 @@ pub async fn get_auto_delete_banner(
     let ctx = session.ctx()?;
     uniffi_async(async move {
         let banner = ContextualConversation::auto_delete_banner(label_id.into(), &ctx).await?;
-        Ok::<_, RealProtonMailError>(banner)
+        Ok::<_, RealProtonMailError>(banner.map(Into::into))
     })
     .await
     .map_err(ActionError::from)

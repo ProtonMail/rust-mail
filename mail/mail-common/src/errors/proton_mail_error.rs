@@ -11,9 +11,10 @@ use crate::{
     draft::SaveError as DraftSaveError, draft::SendError as DraftSendError,
     draft::UndoError as DraftUndoError,
 };
+use proton_account_api::login::LoginError;
+use proton_account_api::signup::SignupError;
 use proton_action_queue::action::Action;
 use proton_action_queue::queue::ActionError as InternalActionError;
-use proton_core_api::login::LoginError;
 use proton_core_api::service::ApiServiceError;
 use proton_core_common::ContactError;
 use proton_core_common::device_registration::RegisteredDeviceTaskError;
@@ -76,6 +77,17 @@ impl From<ApiServiceError> for ProtonMailError {
     }
 }
 
+impl From<proton_account_api::ApiError> for ProtonMailError {
+    fn from(error: proton_account_api::ApiError) -> Self {
+        match error {
+            proton_account_api::ApiError::Muon(error) => Self::from(ApiServiceError::from(error)),
+            proton_account_api::ApiError::Status(error) => Self::from(ApiServiceError::from(error)),
+            proton_account_api::ApiError::Serialization(_) => Self::from(Unexpected::Internal),
+            proton_account_api::ApiError::InternalError(_) => Self::from(Unexpected::Internal),
+        }
+    }
+}
+
 impl From<PinError> for ProtonMailError {
     fn from(value: PinError) -> Self {
         match value {
@@ -127,6 +139,29 @@ impl From<LoginError> for ProtonMailError {
             LoginError::UnsupportedTfa => Self::Reason(LoginErrorReason::UnsupportedTfa.into()),
             LoginError::WrongMailboxPassword => Self::Unexpected(Unexpected::Internal),
             LoginError::AuthStore(store_error) => Self::from(store_error),
+        }
+    }
+}
+
+impl From<SignupError> for ProtonMailError {
+    fn from(error: SignupError) -> Self {
+        match error {
+            SignupError::Api(e) => Self::from(e),
+            SignupError::Crypto(_) => Self::Unexpected(Unexpected::Crypto),
+            SignupError::SignupBlockedByServer => {
+                Self::reason(SignupErrorReason::SignupBlockedByServer)
+            }
+            SignupError::UsernameUnavailable => {
+                Self::reason(SignupErrorReason::UsernameUnavailable)
+            }
+            SignupError::AccountCreationFailed => {
+                Self::reason(SignupErrorReason::AccountCreationFailed)
+            }
+            SignupError::AddressSetupFailed => Self::reason(SignupErrorReason::AddressSetupFailed),
+            SignupError::KeySetupFailed => Self::reason(SignupErrorReason::KeySetupFailed),
+            SignupError::SetAuthInfoFailed(_) => Self::Unexpected(Unexpected::Internal),
+            SignupError::SetUserDataFailed(_) => Self::Unexpected(Unexpected::Internal),
+            SignupError::InvalidState => Self::Unexpected(Unexpected::Internal),
         }
     }
 }
@@ -201,6 +236,7 @@ impl From<MailContextError> for ProtonMailError {
                 Self::Unexpected(Unexpected::Crypto)
             }
             MailContextError::Login(login_error) => Self::from(login_error),
+            MailContextError::Signup(signup_error) => Self::from(signup_error),
             MailContextError::KeyChain(key_chain_error) => Self::from(key_chain_error),
             MailContextError::IO(io_error) => Self::from(io_error),
             MailContextError::DBMigration(migrator_error) => Self::from(migrator_error),

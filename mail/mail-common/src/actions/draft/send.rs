@@ -560,6 +560,9 @@ async fn save_send_status(
             }
         }
     };
+    // We need to manually set this as it is possible the draft metadata has already been
+    // wiped at this point.
+    send_result.has_send_action = true;
 
     guard
         .tx::<_, _, WriterGuardError>(async |tx| Ok(send_result.save(tx).await?))

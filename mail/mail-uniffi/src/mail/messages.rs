@@ -13,7 +13,7 @@ use super::datatypes::{LabelAsAction, MessageAvailableActions, MimeType, MoveAct
 use super::state::MailUserContextPtr;
 use super::{MailUserSession, Mailbox};
 use crate::PaginatorSearchOptions;
-use crate::core::datatypes::{Id, RemoteId};
+use crate::core::datatypes::{Id, RemoteId, UnixTimestamp};
 use crate::errors::{
     ActionError, BodyOutputResult, EmbeddedAttachmentInfoResult, ProtonError, VoidActionResult,
 };
@@ -29,8 +29,11 @@ use proton_mail_common::errors::unexpected::Unexpected;
 
 use proton_mail_common::datatypes::LocalConversationId;
 use proton_mail_common::datatypes::attachment::ContentId;
+use proton_mail_common::datatypes::message_banner::MessageBanner as RealMessageBanner;
+use proton_mail_common::datatypes::theme::MailTheme as RealMailTheme;
 use proton_mail_common::decrypted_message::{
-    self, BodyOutput, DecryptedMessageBody, ThemeOpts, TransformOpts,
+    self, BodyOutput as RealBodyOutput, DecryptedMessageBody, ThemeOpts as RealThemeOpts,
+    TransformOpts as RealTransformOpts,
 };
 use proton_mail_common::errors::{
     ActionErrorReason as RealActionErrorReason, ProtonMailError as RealProtonMailError,
@@ -75,7 +78,7 @@ impl DecryptedMessage {
     pub async fn body(self: Arc<Self>, opts: TransformOpts) -> Result<BodyOutput, ProtonError> {
         uniffi_async(async move {
             let tether = self.ctx()?.user_stash().connection();
-            Ok::<_, RealProtonMailError>(self.body.transformed(opts, &tether).await)
+            Ok::<_, RealProtonMailError>(self.body.transformed(opts.into(), &tether).await.into())
         })
         .await
         .map_err(ProtonError::from)
@@ -140,6 +143,234 @@ impl DecryptedMessage {
         .await
         .map_err(ProtonError::from)
         .into()
+    }
+}
+
+#[derive(uniffi::Record)]
+pub struct BodyOutput {
+    /// The transformed html of the message.
+    pub body: String,
+
+    /// Whether or not [`RemoteContent::Strip`] removed a blockquote.
+    pub had_blockquote: bool,
+
+    /// How many html tags it has removed.
+    pub tags_stripped: u64,
+
+    /// How many UTM tracking params it has removed.
+    pub utm_stripped: u64,
+
+    /// How many html tags it has removed.
+    pub remote_images_disabled: u64,
+
+    /// How many embedded images it has disabled.
+    pub embedded_images_disabled: u64,
+
+    /// The transform opts that were used. All fields are actually Some.
+    pub transform_opts: TransformOpts,
+
+    /// This instructs the client on what banners they should show.
+    pub body_banners: Vec<MessageBanner>,
+}
+
+impl From<RealBodyOutput> for BodyOutput {
+    fn from(output: RealBodyOutput) -> Self {
+        Self {
+            body: output.body,
+            had_blockquote: output.had_blockquote,
+            tags_stripped: output.tags_stripped,
+            utm_stripped: output.utm_stripped,
+            remote_images_disabled: output.remote_images_disabled,
+            embedded_images_disabled: output.embedded_images_disabled,
+            transform_opts: output.transform_opts.into(),
+            body_banners: output.body_banners.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, uniffi::Record)]
+pub struct TransformOpts {
+    /// Whether should show block quotes or not. Default: true
+    #[uniffi(default = true)]
+    pub show_block_quote: bool,
+    /// Whether should hide remote images or not. Default: defined in mail settings
+    #[uniffi(default = None)]
+    pub hide_remote_images: Option<bool>,
+    /// Whether should hide embedded images or not. Default: defined in mail settings
+    #[uniffi(default = None)]
+    pub hide_embedded_images: Option<bool>,
+    /// Current settings related to the color scheme.
+    /// It affects on which CSS style is used in the HTML body of the message
+    ///
+    /// Default: None
+    /// It assumes that the device supports `@media` queries. In that case
+    /// passing theme would be irrelevant.
+    ///
+    #[uniffi(default = None)]
+    pub theme: Option<ThemeOpts>,
+}
+
+impl From<RealTransformOpts> for TransformOpts {
+    fn from(opts: RealTransformOpts) -> Self {
+        Self {
+            show_block_quote: opts.show_block_quote,
+            hide_remote_images: opts.hide_remote_images,
+            hide_embedded_images: opts.hide_embedded_images,
+            theme: opts.theme.map(Into::into),
+        }
+    }
+}
+
+impl From<TransformOpts> for RealTransformOpts {
+    fn from(opts: TransformOpts) -> Self {
+        Self {
+            show_block_quote: opts.show_block_quote,
+            hide_remote_images: opts.hide_remote_images,
+            hide_embedded_images: opts.hide_embedded_images,
+            theme: opts.theme.map(Into::into),
+        }
+    }
+}
+
+/// Current settings related to the color scheme.
+/// It affects on which CSS style is used in the HTML body of the message
+#[derive(Debug, Clone, Copy, uniffi::Record)]
+pub struct ThemeOpts {
+    /// What is the current UI color scheme, provided by the application.
+    ///
+    pub current_theme: MailTheme,
+    /// While using the dark mode, some bodies of messages might be hard to read.
+    /// User has an option to override the theme inside of the message (without changing the overall theme).
+    ///
+    /// Default: No override provided
+    ///
+    #[uniffi(default = None)]
+    pub theme_override: Option<MailTheme>,
+
+    /// Whether the device supports `@media (prefers-color-scheme: dark) {}` or not.
+    ///
+    /// Default: True - only Android 9 does not support it (so far)
+    ///
+    #[uniffi(default = true)]
+    pub supports_dark_mode_via_media_query: bool,
+}
+
+impl From<RealThemeOpts> for ThemeOpts {
+    fn from(opts: RealThemeOpts) -> Self {
+        Self {
+            current_theme: opts.current_theme.into(),
+            theme_override: opts.theme_override.map(Into::into),
+            supports_dark_mode_via_media_query: opts.supports_dark_mode_via_media_query,
+        }
+    }
+}
+
+impl From<ThemeOpts> for RealThemeOpts {
+    fn from(opts: ThemeOpts) -> Self {
+        Self {
+            current_theme: opts.current_theme.into(),
+            theme_override: opts.theme_override.map(Into::into),
+            supports_dark_mode_via_media_query: opts.supports_dark_mode_via_media_query,
+        }
+    }
+}
+#[derive(Debug, Clone, Copy, uniffi::Enum)]
+pub enum MailTheme {
+    LightMode,
+    DarkMode,
+}
+
+impl From<RealMailTheme> for MailTheme {
+    fn from(value: RealMailTheme) -> Self {
+        match value {
+            RealMailTheme::LightMode => Self::LightMode,
+            RealMailTheme::DarkMode => Self::DarkMode,
+        }
+    }
+}
+
+impl From<MailTheme> for RealMailTheme {
+    fn from(value: MailTheme) -> Self {
+        match value {
+            MailTheme::LightMode => Self::LightMode,
+            MailTheme::DarkMode => Self::DarkMode,
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord, uniffi::Enum)]
+pub enum MessageBanner {
+    /// The sender of this message is blocked.
+    BlockedSender,
+
+    /// The message might be a phishing attempt.
+    PhishingAttempt {
+        /// Whether the system or the user marked it as phishing.
+        auto: bool,
+    },
+
+    /// The message has been marked as spam
+    Spam {
+        /// Whether the system or the user marked it as phishing.
+        auto: bool,
+    },
+
+    /// The message has an expiration date.
+    Expiry {
+        /// The Unix timestamp indicating when the message expires.
+        timestamp: UnixTimestamp,
+    },
+
+    /// The message is scheduled for automatic deletion at a specific time because it is in spam or trash.
+    AutoDelete {
+        /// The Unix timestamp indicating when the message will be deleted.
+        timestamp: UnixTimestamp,
+    },
+
+    /// The message provides an option to unsubscribe from a newsletter.
+    UnsubscribeNewsletter,
+
+    /// The message is scheduled to be sent at a future time.
+    ScheduledSend {
+        /// The Unix timestamp indicating when the message is scheduled to be sent.
+        timestamp: UnixTimestamp,
+    },
+
+    /// The message has been snoozed and will reappear later.
+    Snoozed {
+        /// The Unix timestamp indicating when the message will reappear.
+        timestamp: UnixTimestamp,
+    },
+
+    /// The message contains embedded images.
+    EmbeddedImages,
+
+    /// The message contains remote content (e.g., external images or links).
+    RemoteContent,
+}
+
+impl From<RealMessageBanner> for MessageBanner {
+    fn from(value: RealMessageBanner) -> Self {
+        match value {
+            RealMessageBanner::BlockedSender => Self::BlockedSender,
+            RealMessageBanner::PhishingAttempt { auto } => Self::PhishingAttempt { auto },
+            RealMessageBanner::Spam { auto } => Self::Spam { auto },
+            RealMessageBanner::Expiry { timestamp } => Self::Expiry {
+                timestamp: timestamp.into(),
+            },
+            RealMessageBanner::AutoDelete { timestamp } => Self::AutoDelete {
+                timestamp: timestamp.into(),
+            },
+            RealMessageBanner::UnsubscribeNewsletter => Self::UnsubscribeNewsletter,
+            RealMessageBanner::ScheduledSend { timestamp } => Self::ScheduledSend {
+                timestamp: timestamp.into(),
+            },
+            RealMessageBanner::Snoozed { timestamp } => Self::Snoozed {
+                timestamp: timestamp.into(),
+            },
+            RealMessageBanner::EmbeddedImages => Self::EmbeddedImages,
+            RealMessageBanner::RemoteContent => Self::RemoteContent,
+        }
     }
 }
 
@@ -427,7 +658,8 @@ pub async fn available_actions_for_message(
         let view = RealLabel::load(view, &tether)
             .await?
             .ok_or_else(|| RealProtonMailError::reason(RealActionErrorReason::UnknownLabel))?;
-        let actions = RealMessage::available_actions(view, id.into(), theme, &tether).await?;
+        let actions =
+            RealMessage::available_actions(view, id.into(), theme.into(), &tether).await?;
 
         Ok::<_, RealProtonMailError>(MessageAvailableActions::from(actions))
     })

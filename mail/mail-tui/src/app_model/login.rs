@@ -4,8 +4,8 @@ use crate::app_model::{AppState, AppStateHandler, context_init, twofa};
 use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
 use anyhow::anyhow;
+use proton_account_api::login::{LoginError, LoginFlow};
 use proton_mail_common::MailContext;
-use proton_mail_common::proton_mail_api::proton_core_api::login::{Flow, LoginError};
 use proton_mail_common::proton_mail_api::proton_core_api::services::proton::muon::client::flow::LoginExtraInfo;
 use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Flex;
@@ -16,17 +16,17 @@ use std::sync::Arc;
 pub enum Message {
     Submit,
     ToggleInput,
-    LoginSuccess(Flow),
+    LoginSuccess(LoginFlow),
     LoginFailed(LoginError),
 }
 
-pub struct Model {
+pub struct LoginModel {
     email_input_state: TextInputState,
     password_input_state: TextInputState,
     active_input: ActiveInput,
 }
 
-impl Model {
+impl LoginModel {
     pub fn new() -> Self {
         let email = CLI_ARGS.username.as_deref().unwrap_or_default();
         let password = CLI_ARGS.password.as_deref().unwrap_or_default();
@@ -60,7 +60,7 @@ impl Model {
     }
 }
 
-impl AppStateHandler for Model {
+impl AppStateHandler for LoginModel {
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
         let Event::Key(k) = event else {
             return Command::None;
@@ -139,13 +139,15 @@ impl AppStateHandler for Model {
             }
             Message::LoginSuccess(mut flow) => {
                 if flow.is_awaiting_2fa() {
-                    Command::message(Messages::SwitchAppState(twofa::Model::new(flow).into()))
+                    Command::message(Messages::SwitchAppState(
+                        twofa::TwoFaModel::new(flow).into(),
+                    ))
                 } else {
                     let ctx = Arc::clone(ctx);
                     Command::task(async move {
                         match ctx.user_context_from_login_flow(&mut flow).await {
                             Ok(context) => Command::message(Messages::SwitchAppState(
-                                context_init::Model::new(context).into(),
+                                context_init::ContextInitModel::new(context).into(),
                             )),
                             Err(e) => {
                                 let e = anyhow!("Failed to login: {e}");
@@ -211,6 +213,10 @@ impl AppStateHandler for Model {
     fn view_status_bar(&mut self, frame: &mut Frame, area: Rect) {
         frame.render_widget(Text::from("Login"), area);
     }
+
+    fn help_options(&self) -> Vec<(&'static str, &'static str)> {
+        vec![("enter", "Submit"), ("tab", "Switch Input")]
+    }
 }
 
 enum ActiveInput {
@@ -218,8 +224,8 @@ enum ActiveInput {
     Password,
 }
 
-impl From<Model> for AppState {
-    fn from(value: Model) -> Self {
+impl From<LoginModel> for AppState {
+    fn from(value: LoginModel) -> Self {
         Self::Login(value)
     }
 }

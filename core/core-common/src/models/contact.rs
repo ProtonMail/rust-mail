@@ -603,10 +603,9 @@ impl Contact {
     pub async fn watch_contact_list(
         stash: &Stash,
     ) -> Result<(Vec<GroupedContacts>, WatcherHandle), StashError> {
-        let handle = stash.subscribe_to(|sender| Box::new(ContactListWatcher { sender }))?;
         let tether = stash.connection();
         let contacts = Contact::contact_list(&tether).await?;
-
+        let handle = stash.subscribe_to(|sender| Box::new(ContactListWatcher { sender }))?;
         Ok((contacts, handle))
     }
 }

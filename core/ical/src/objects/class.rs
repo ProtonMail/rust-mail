@@ -81,18 +81,18 @@ mod tests {
 
     #[test]
     fn unknown() {
-        let (obj, errs) = Class::from_str_ex(":foobar", Property);
+        let (obj, msgs) = Class::from_str_ex(":foobar", Property);
 
         assert_eq!(Some(Class::Private), obj);
 
         assert_eq!(
             vec![ReadMsg {
-                at: Some(Span::new(1, 7)),
+                at: Some(Span::new((1, 2), (1, 7))),
                 msg: "unknown classification `foobar`".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             }],
-            errs,
+            msgs,
         );
     }
 }

@@ -14,21 +14,25 @@ pub enum Message {
     InitComplete,
     InitFailed(MailContextError),
 }
-pub struct Model {
+pub struct ContextInitModel {
     ctx: Arc<MailUserContext>,
     throbber_state: ThrobberState,
 }
 
-impl Model {
+impl ContextInitModel {
     pub fn new(ctx: Arc<MailUserContext>) -> Self {
         Self {
             ctx,
             throbber_state: ThrobberState::default(),
         }
     }
+
+    pub fn ctx(&self) -> Arc<MailUserContext> {
+        Arc::clone(&self.ctx)
+    }
 }
 
-impl AppStateHandler for Model {
+impl AppStateHandler for ContextInitModel {
     fn on_state_enter(&mut self) -> Command<Messages> {
         Command::message(Message::Init.into())
     }
@@ -59,7 +63,7 @@ impl AppStateHandler for Model {
             Message::InitComplete => {
                 let ctx = Arc::clone(&self.ctx);
                 Command::task(async move {
-                    match mailbox::Model::new(ctx).await {
+                    match mailbox::MailboxModel::new(ctx).await {
                         Ok(model) => Command::message(Messages::SwitchAppState(model.into())),
                         Err(e) => Command::message(e.into()),
                     }
@@ -86,10 +90,13 @@ impl AppStateHandler for Model {
     fn view_help_bar(&mut self, _: &mut Frame, _: Rect) {}
 
     fn view_status_bar(&mut self, _: &mut Frame, _: Rect) {}
+    fn help_options(&self) -> Vec<(&'static str, &'static str)> {
+        vec![]
+    }
 }
 
-impl From<Model> for AppState {
-    fn from(value: Model) -> Self {
+impl From<ContextInitModel> for AppState {
+    fn from(value: ContextInitModel) -> Self {
         Self::ContextInit(value)
     }
 }

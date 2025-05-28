@@ -59,7 +59,7 @@ impl IcsRead<Property> for Trigger {
                 break;
             }
 
-            e.burn(r);
+            e.burn(r, Kind::Property)?;
         }
 
         if let Some(Spanned { span, value }) = value {

@@ -27,7 +27,7 @@ pub struct AuthStore {
 
 impl AuthStore {
     pub fn new(
-        stash: &Stash,
+        stash: Stash,
         key_chain: Arc<dyn KeyChain>,
         user_id: Option<UserId>,
         session_id: Option<SessionId>,
@@ -36,7 +36,7 @@ impl AuthStore {
             key_chain,
             user_id,
             session_id,
-            stash: stash.clone(),
+            stash,
             name_or_addr: None,
         }
     }
@@ -354,7 +354,7 @@ impl Store for AuthStore {
     }
 }
 
-pub(crate) trait DecryptExt
+pub trait DecryptExt
 where
     for<'a> &'a Self: Deref<Target = EncryptedData>,
 {

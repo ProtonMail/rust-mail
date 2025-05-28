@@ -67,4 +67,8 @@ impl Search {
             _ => Command::none(),
         }
     }
+
+    pub fn help_options(vec: &mut Vec<(&'static str, &'static str)>) {
+        vec.extend_from_slice(&[("esc", "Close search"), ("enter", "Submit search")]);
+    }
 }

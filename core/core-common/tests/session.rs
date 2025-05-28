@@ -2,7 +2,7 @@ use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_common::OnSessionDeletedResponse;
 use proton_core_common::db::account::CoreSession;
 use proton_core_common::models::ModelExtension;
-use proton_core_test_utils::test_context::TestContext;
+use proton_core_common::test_utils::test_context::TestContext;
 use stash::stash::{Bond, StashError};
 use std::time::Duration;
 

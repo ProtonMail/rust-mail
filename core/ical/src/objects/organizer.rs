@@ -45,7 +45,7 @@ impl IcsRead<Property> for Organizer {
                 break;
             }
 
-            e.burn(r);
+            e.burn(r, Kind::Property)?;
         }
 
         Some(Self {

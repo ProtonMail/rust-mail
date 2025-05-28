@@ -2,7 +2,7 @@ mod attachments;
 mod observer;
 mod recipients;
 
-use crate::core::datatypes::Id;
+use crate::core::datatypes::{Id, UnixTimestamp};
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{
     DraftCancelScheduleSendError, DraftDiscardError, DraftOpenError, DraftSaveError,
@@ -17,7 +17,6 @@ use crate::mail::messages::EmbeddedAttachmentInfo;
 use crate::mail::state::MailUserContextPtr;
 use crate::{async_runtime, uniffi_async};
 use chrono::Local;
-use proton_core_common::datatypes::UnixTimestamp;
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::draft::{
     Draft as RealDraft, DraftSyncStatus as RealDraftSyncStatus, ReplyMode, ScheduleSendOptions,
@@ -52,8 +51,10 @@ pub struct DraftScheduleSendOptions {
 impl From<ScheduleSendOptions<Local>> for DraftScheduleSendOptions {
     fn from(value: ScheduleSendOptions<Local>) -> Self {
         Self {
-            tomorrow_time: value.time_tomorrow.into(),
-            monday_time: value.time_next_monday.into(),
+            tomorrow_time: proton_core_common::datatypes::UnixTimestamp::from(value.time_tomorrow)
+                .into(),
+            monday_time: proton_core_common::datatypes::UnixTimestamp::from(value.time_next_monday)
+                .into(),
             is_custom_option_available: value.is_custom_datetime_available,
         }
     }
@@ -143,13 +144,13 @@ pub async fn new_draft(
         let draft = match create_mode {
             DraftCreateMode::Empty => RealDraft::empty(ctx.user_stash()).await,
             DraftCreateMode::Reply(id) => {
-                RealDraft::reply(&ctx, id.into(), ReplyMode::Sender, false).await
+                RealDraft::reply(&ctx, id.into(), ReplyMode::Sender, false, None).await
             }
             DraftCreateMode::ReplyAll(id) => {
-                RealDraft::reply(&ctx, id.into(), ReplyMode::All, false).await
+                RealDraft::reply(&ctx, id.into(), ReplyMode::All, false, None).await
             }
             DraftCreateMode::Forward(id) => {
-                RealDraft::reply(&ctx, id.into(), ReplyMode::Forward, false).await
+                RealDraft::reply(&ctx, id.into(), ReplyMode::Forward, false, None).await
             }
         }
         .map_err(RealProtonMailError::from)?;
@@ -414,12 +415,11 @@ impl Draft {
                 UnexpectedError::Internal,
             )));
         };
-        let timestamp =
-            timestamp
-                .to_date_time()
-                .ok_or(DraftSendError::Other(ProtonError::Unexpected(
-                    UnexpectedError::Internal,
-                )))?;
+        let timestamp = proton_core_common::datatypes::UnixTimestamp::from(timestamp)
+            .to_date_time()
+            .ok_or(DraftSendError::Other(ProtonError::Unexpected(
+                UnexpectedError::Internal,
+            )))?;
         uniffi_async(async move {
             let mut instance = self.instance.write().await;
             instance
@@ -564,7 +564,7 @@ pub async fn draft_cancel_schedule_send(
     .map_err(DraftCancelScheduleSendError::from)?;
 
     Ok(DraftCancelScheduledSendInfo {
-        last_scheduled_time: old_time.into(),
+        last_scheduled_time: proton_core_common::datatypes::UnixTimestamp::from(old_time).into(),
     })
 }
 

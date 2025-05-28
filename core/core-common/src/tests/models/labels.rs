@@ -9,7 +9,7 @@ use pretty_assertions::assert_eq;
 use proton_core_api::services::proton::Label as ApiLabel;
 use proton_core_api::services::proton::LabelId;
 use proton_core_api::services::proton::LabelType as ApiLabelType;
-use proton_core_test_utils::utils::random_string;
+use proton_core_common::test_utils::utils::random_string;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::Tether;

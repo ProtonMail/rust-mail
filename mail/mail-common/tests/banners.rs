@@ -12,14 +12,14 @@ use proton_mail_common::models::Conversation;
 use proton_mail_common::models::MailSettings;
 use proton_mail_common::models::MessageBodyMetadata;
 use proton_mail_common::models::default_location::IncomingDefaultLocation;
-use proton_mail_test_utils::init::Params;
+use proton_mail_common::test_utils::init::Params;
 use stash::stash::Tether;
 use test_case::test_case;
 
 use proton_mail_common::models::Message;
 
-use proton_mail_test_utils::test_context::MailTestContext;
-use proton_mail_test_utils::test_context::MailUserContextTestExtension;
+use proton_mail_common::test_utils::test_context::MailTestContext;
+use proton_mail_common::test_utils::test_context::MailUserContextTestExtension;
 use stash::orm::Model;
 use stash::stash::StashError;
 use wiremock::Mock;

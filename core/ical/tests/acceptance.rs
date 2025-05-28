@@ -70,57 +70,6 @@ fn with_event() {
 }
 
 #[test]
-fn with_broken_event() {
-    let str = ics! {"
-        BEGIN:VCALENDAR
-        PRODID:-//Proton AG//iCal//EN
-        VERSION:2.0
-        CALSCALE:GREGORIAN
-        BEGIN:VEVENT
-        DTSTART:20240101T100000
-        RRULE:FREQ=DAILY;COUNT=5
-        END:VEVENT
-        END:VCALENDAR
-    "};
-
-    let out = VCalendar::from_str(&str).unwrap();
-
-    // ---
-    // Assert calendar
-
-    assert_eq!(1, out.cal.events.len());
-
-    // ---
-    // Assert messages
-
-    let actual: Vec<_> = out
-        .msgs
-        .into_iter()
-        .map(|msg| msg.to_string(None))
-        .collect();
-
-    let expected = vec![
-        "error: missing property `UID`",
-        "error: missing property `DTSTAMP`",
-    ];
-
-    assert_eq!(actual, expected);
-
-    // ---
-    // Assert violations
-
-    let actual = out
-        .viols
-        .into_iter()
-        .map(|viol| viol.to_string())
-        .collect::<Vec<_>>();
-
-    let expected = vec!["event[0]: uid is missing", "event[0]: dtstamp is missing"];
-
-    assert_eq!(actual, expected);
-}
-
-#[test]
 fn with_method() {
     let cal = VCalendar::new("-//Proton AG//iCal//EN").with_method(Method::Publish);
 
@@ -154,9 +103,9 @@ fn without_calscale() {
 
 /// Make sure we can parse various atypical and funny cases.
 ///
-/// Fixtures here were taken from the surgery dataset, but since we don't have
-/// the surgery logic here yet, what we do is that we simply parse the files and
-/// make sure the output looks reasonable enough.
+/// Fixtures here were taken (mostly) from the surgery dataset, but since we
+/// don't have the surgery logic here yet, what we do is that we simply parse
+/// the files and make sure the output looks reasonable enough.
 #[test_case("broken-attendee-1")]
 #[test_case("broken-attendee-1-email")]
 #[test_case("broken-organizer-broken-cn-non-strict")]
@@ -180,10 +129,14 @@ fn without_calscale() {
 #[test_case("missing-sequence")]
 #[test_case("multiple-exdates")]
 #[test_case("multiple-exdates-tz")]
+#[test_case("non-conformant-cn")]
 #[test_case("nuku-alofa-tz")]
 #[test_case("outside-uid")]
 #[test_case("tentative-status")]
+#[test_case("unexpected-newline-1")]
+#[test_case("unexpected-newline-2")]
 #[test_case("upper-case-status")]
+#[test_case("whitespaces")]
 fn atypical_case(name: &str) {
     let dir = Path::new("acceptance").join("atypical-cases").join(name);
     let src = fs::read(Path::new("tests").join(&dir).join("input.ics")).unwrap();
@@ -202,7 +155,7 @@ fn atypical_case(name: &str) {
 
             for msg in cal.msgs {
                 _ = writeln!(buf);
-                _ = writeln!(buf, "{}", msg.to_string(src.as_slice()).trim_end());
+                _ = writeln!(buf, "{msg}");
             }
         }
 

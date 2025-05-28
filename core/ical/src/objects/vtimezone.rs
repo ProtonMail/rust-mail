@@ -94,7 +94,7 @@ impl IcsRead<Component> for VTimeZone {
                 break;
             }
 
-            e.burn(r);
+            e.burn(r, Kind::Component)?;
         }
 
         let tzid = r.unwrap_prop("TZID", tzid);
@@ -191,7 +191,7 @@ impl IcsRead<Component> for TzProps {
                 break;
             }
 
-            e.burn(r);
+            e.burn(r, Kind::Component)?;
         }
 
         let dtstart = r.unwrap_prop("DTSTART", dtstart);

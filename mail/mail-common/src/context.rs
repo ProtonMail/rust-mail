@@ -1,29 +1,33 @@
 use crate::actions::MailActionError;
 use crate::{AppError, MailUserContext, draft};
+use anyhow::anyhow;
 use futures::executor::block_on;
+use proton_account_api::login::{LoginError, LoginFlow};
+use proton_account_api::signup::{SignupError, SignupFlow};
 use proton_action_queue::action::{Action, WriterGuardError};
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
 use proton_calendar_common::RsvpError;
-use proton_core_api::login::{Flow, LoginError};
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::BuildError;
 use proton_core_api::services::proton::{SessionId, UserId};
-use proton_core_api::session::Config;
+use proton_core_api::session::{Config, CoreSession as _};
 use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_api::verification::DynChallengeNotifier;
-use proton_core_common::UserDatabaseInitializer;
+use proton_core_common::auth_store::DecryptExt;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
-use proton_core_common::models::LabelError;
+use proton_core_common::models::{LabelError, ModelExtension};
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::{
     ContactError, Context, CoreAccountState, CoreContextError, CoreSessionState, KeyHandlingError,
     UserContext,
 };
+use proton_core_common::{OnSessionDeletedResponse, UserDatabaseInitializer};
 use proton_crypto_inbox::attachment::AttachmentEncryptionError;
 use proton_crypto_inbox::keys::EncryptionPreferencesError;
 use proton_event_loop::EventLoopError;
 use proton_sqlite3::MigratorError;
 use proton_task_service::{AsyncTaskResult, TaskSpawner};
+use secrecy::ExposeSecret;
 use stash::stash::{Stash, StashError, WatcherHandle};
 use std::collections::HashMap;
 use std::future::Future;
@@ -32,6 +36,7 @@ use std::sync::{Arc, Weak};
 use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio::task::{JoinError, JoinHandle};
+use tracing::{Level, error};
 
 /// Whether we should initialize MailUserContext on creation
 #[derive(Debug, Clone, Copy)]
@@ -89,6 +94,8 @@ pub enum MailContextError {
     Stash(#[from] StashError),
     #[error("Login Error: {0}")]
     Login(#[from] LoginError),
+    #[error("Signup Error: {0}")]
+    Signup(#[from] SignupError),
     #[error("API Error: {0}")]
     Api(#[from] ApiServiceError),
     #[error("Problem with loading contact: {0}")]
@@ -163,7 +170,6 @@ impl From<CoreContextError> for MailContextError {
             CoreContextError::AccountMissing(id) => MailContextError::AccountMissing(id),
             CoreContextError::SettingsMissing(id) => MailContextError::SettingsMissing(id),
             CoreContextError::Build(err) => MailContextError::Build(err),
-            CoreContextError::Login(err) => MailContextError::Login(err),
             CoreContextError::Api(err) => MailContextError::Api(err),
             CoreContextError::Crypto => MailContextError::Crypto,
             CoreContextError::KeyChain(err) => MailContextError::KeyChain(err),
@@ -257,13 +263,31 @@ impl MailContext {
         )
         .await?;
 
-        Ok(Arc::new(Self {
+        let ctx = Arc::new(Self {
             core_context,
             mail_cache_path: mail_cache_path.into(),
             attachment_cache_size: cache_size,
             active_user_contexts: Mutex::new(HashMap::new()),
             event_poll_mode,
-        }))
+        });
+
+        let ctx_weak = Arc::downgrade(&ctx);
+
+        ctx.core_context.on_session_deleted(move |_, user_id| {
+            let ctx_weak = ctx_weak.clone();
+            async move {
+                let Some(ctx) = ctx_weak.upgrade() else {
+                    return OnSessionDeletedResponse::Terminate;
+                };
+
+                tracing::info!("Removing `{user_id}`, from active contexts");
+                ctx.active_user_contexts.lock().await.remove(&user_id);
+
+                OnSessionDeletedResponse::Continue
+            }
+        });
+
+        Ok(ctx)
     }
 
     /// Creates MailContext instance based on provided core Context.
@@ -291,37 +315,88 @@ impl MailContext {
     /// # Errors
     ///
     /// See [`Context::new_login_flow`].
-    pub async fn new_login_flow(&self) -> MailContextResult<Flow> {
-        Ok(self.core_context.new_login_flow().await?)
+    pub async fn new_login_flow(&self) -> MailContextResult<LoginFlow> {
+        // Ensure we have an encryption key
+        let _ = self.core_context.get_encryption_key()?;
+        // Create a new API session
+        let session = self.core_context.new_api_session(None, None).await?;
+        // Create a new login flow
+        Ok(LoginFlow::new(session))
     }
 
-    /// Resume a partially completed login flow.
+    /// Create a new login flow for an existing user.
     ///
-    /// The initial [`Flow::login`] call creates a new session in the database.
-    /// However, this session may not yet be usable if 2FA or an additional
-    /// password is required. If at this point the login flow is interrupted,
-    /// the session is left in an incomplete state. This method allows resuming
-    /// the flow to complete the login process.
-    ///
-    /// # Arguments
-    ///
-    /// * `user_id` - The ID of the user to log in (from [`Flow::user_id`]).
-    /// * `session_id` - The ID of the session to resume (from [`Flow::session_id`]).
+    /// This can be used to resume a login flow that was interrupted.
+    /// For instance, if the user has already entered their login credentials,
+    /// but the flow was interrupted while waiting for a second factor,
+    /// the flow can be resumed by calling this method with the user and session IDs.
     ///
     /// # Errors
     ///
-    /// See [`Context::resume_login_flow`].
+    /// Returns an error if there is no encryption key in the keychain
+    /// or if no session with the given IDs is able to be resumed.
     pub async fn resume_login_flow(
         &self,
         user_id: UserId,
         session_id: SessionId,
-    ) -> MailContextResult<Flow> {
-        let flow = self
-            .core_context
-            .resume_login_flow(user_id, session_id)
-            .await?;
+    ) -> MailContextResult<LoginFlow> {
+        let key = self.core_context.get_encryption_key()?;
+        let tether = self.core_context.account_stash().connection();
 
-        Ok(flow)
+        let Some(account) = CoreAccount::find_by_id(user_id.clone(), &tether).await? else {
+            return Err(MailContextError::Other(anyhow!("account not found")));
+        };
+
+        let Some(session) = CoreSession::find_by_id(session_id.clone(), &tether).await? else {
+            return Err(MailContextError::Other(anyhow!("session not found")));
+        };
+
+        let password = (account.password)
+            .map(|p| p.decrypt_to_string(&key))
+            .transpose()
+            .or(Err(CoreContextError::Crypto))?
+            .map(|p| p.expose_secret().to_owned());
+
+        match CoreSessionState::of(&session) {
+            CoreSessionState::NeedTfa => Ok(LoginFlow::new_from_tfa(
+                self.core_context
+                    .new_api_session(Some(&session), None)
+                    .await?,
+                user_id,
+                session_id,
+                password,
+            )),
+
+            CoreSessionState::NeedKey => Ok(LoginFlow::new_from_mbp(
+                self.core_context
+                    .new_api_session(Some(&session), None)
+                    .await?,
+                user_id,
+                session_id,
+            )),
+
+            CoreSessionState::Authenticated => Err(MailContextError::Other(anyhow!(
+                "session is already logged in"
+            ))),
+        }
+    }
+
+    /// Begin a signup flow.
+    ///
+    /// # Errors
+    ///
+    /// See [`Context::new_signup_flow`].
+    pub async fn new_signup_flow(&self) -> MailContextResult<SignupFlow> {
+        // Ensure we have an encryption key
+        let _ = self.core_context.get_encryption_key()?;
+
+        // Create a new API session
+        let session = self.core_context.new_api_session(None, None).await?;
+        let client = session.api().to_owned();
+        let store = session.store().to_owned();
+
+        // Create a new signup flow
+        Ok(SignupFlow::new(client, store).await?)
     }
 
     /// Create a new context from a login flow.
@@ -329,17 +404,26 @@ impl MailContext {
     /// # Errors
     /// Returns error if the flow is in an invalid state or there was an issue initializing
     /// the user database.
+    #[tracing::instrument(level=Level::DEBUG, skip_all)]
     pub async fn user_context_from_login_flow(
         self: &Arc<Self>,
-        login_flow: &mut Flow,
+        flow: &mut LoginFlow,
     ) -> MailContextResult<Arc<MailUserContext>> {
-        let ctx = self
-            .core_context
-            .user_context_from_login_flow(login_flow)
-            .await?;
+        if !flow.is_logged_in() {
+            return Err(MailContextError::Other(anyhow!("invalid login state")));
+        }
 
+        let user_id: UserId = flow.user_id()?.to_owned();
+        let session_id: SessionId = flow.session_id()?.to_owned();
+        let session = flow.take_session()?;
+
+        let user_ctx = self
+            .core_context
+            .new_user_context(user_id, session, session_id)
+            .await
+            .map_err(MailContextError::from)?;
         Arc::clone(self)
-            .new_user_context(ctx, ShouldInitializeMailUserContext::Yes)
+            .new_user_context(user_ctx, ShouldInitializeMailUserContext::Yes)
             .await
     }
 
@@ -612,10 +696,34 @@ impl MailContext {
     ///
     /// Returns an error if the database operation fails.
     pub async fn logout_account(&self, user_id: UserId) -> MailContextResult<()> {
+        tracing::info!("Logout account `{user_id}`");
+        self.active_user_contexts.lock().await.remove(&user_id);
         Ok(self.core_context.logout_account(user_id).await?)
     }
 
+    /// Logs out all sessions of an account and deletes the account's data.
+    ///
+    /// Unlike [`delete_account()`] the account metadata is preserved and is still
+    /// listable in the session picker.
+    ///
+    /// Returns an error if the database operation fails.
+    pub async fn logout_account_and_delete_user_data(
+        &self,
+        user_id: UserId,
+    ) -> MailContextResult<()> {
+        tracing::info!("Logout account `{user_id}`");
+        self.active_user_contexts.lock().await.remove(&user_id);
+        let mail_cache_path = self.mail_cache_path(&user_id);
+        Ok(self
+            .core_context
+            .logout_and_delete_user_data(user_id, vec![mail_cache_path])
+            .await?)
+    }
+
     /// Removes a user session and deletes all associated data.
+    ///
+    /// This will also remove the user from the session picker.
+    /// Use [`logout_account_and_delete_user_data()`] to preserve this entry.
     ///
     /// # Errors
     ///
@@ -623,7 +731,7 @@ impl MailContext {
     /// first, which is non failing operations.
     ///
     pub async fn delete_account(&self, user_id: UserId) -> MailContextResult<()> {
-        tracing::warn!("Delete account `{user_id}`");
+        tracing::info!("Delete account `{user_id}`");
         self.active_user_contexts.lock().await.remove(&user_id);
         let mail_cache_path = self.mail_cache_path(&user_id);
 

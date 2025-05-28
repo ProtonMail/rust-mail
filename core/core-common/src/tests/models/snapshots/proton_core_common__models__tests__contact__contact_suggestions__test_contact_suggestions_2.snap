@@ -1,0 +1,11 @@
+---
+source: core/core-common/src/tests/models/contact.rs
+expression: display_suggestions(res)
+---
+2 suggestions:
+
+contact/234: Michael Scott
+M (#4989FF): m.scott@pm.me <m.scott@pm.me>,  local_id: 234, Proton address, last used: 1
+
+contact/123: Barbara Lox
+B (#0F735A): barbara@lox.com <barbara@lox.com>,  local_id: 123, last used: 1

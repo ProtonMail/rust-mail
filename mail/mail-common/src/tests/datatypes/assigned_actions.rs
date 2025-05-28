@@ -5,7 +5,7 @@ use pretty_assertions::assert_eq;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::Label;
-use proton_mail_test_utils::test_context::MailTestContext;
+use proton_mail_common::test_utils::test_context::MailTestContext;
 use test_case::test_case;
 
 #[test_case(SwipeAction::NoAction, LabelId::inbox(), AssignedSwipeAction::NoAction)]

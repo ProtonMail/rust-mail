@@ -22,7 +22,6 @@ use futures::TryFutureExt;
 use itertools::Itertools;
 use proton_action_queue::action::{Action, WriterGuardError};
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
-use proton_core_api::login::{Flow, LoginError};
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::BuildError;
 use proton_core_api::services::proton::{SessionId, UserId};
@@ -36,7 +35,6 @@ use proton_sqlite3::MigratorError;
 use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use proton_task_service::{BackgroundAwareTaskService, TaskService};
 use proton_vcard::VcardValidationError;
-use secrecy::ExposeSecret;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
 use std::collections::HashMap;
 use std::future::Future;
@@ -56,8 +54,6 @@ pub enum CoreContextError {
     SettingsMissing(UserId),
     #[error("Build error: {0}")]
     Build(#[from] BuildError),
-    #[error("Login error: {0}")]
-    Login(#[from] LoginError),
     #[error("API error: {0}")]
     Api(#[from] ApiServiceError),
     #[error("A Cryptography error occurred")]
@@ -316,7 +312,7 @@ impl Context {
             on_session_deletion(session_observer, sender).await;
         });
 
-        Ok(Arc::new_cyclic(|this| Self {
+        let ctx = Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
             user_db_path,
             account_db_path,
@@ -331,7 +327,21 @@ impl Context {
             cancellation_token: CancellationToken::new(),
             task_service: BackgroundAwareTaskService::new(task_service),
             on_session_deleted_broadcast: broadcast_sender,
-        }))
+        });
+
+        let ctx_weak = ctx.this.clone();
+        ctx.on_session_deleted(move |_, user_id| {
+            let ctx_weak = ctx_weak.clone();
+            async move {
+                let Some(ctx) = ctx_weak.upgrade() else {
+                    return OnSessionDeletedResponse::Terminate;
+                };
+                ctx.active_user_contexts.lock().await.remove(&user_id);
+                OnSessionDeletedResponse::Continue
+            }
+        });
+
+        Ok(ctx)
     }
 
     /// Get all available accounts.
@@ -571,97 +581,6 @@ impl Context {
         Ok(())
     }
 
-    /// Create a new login flow for a new user.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if there is no encryption key in the keychain.
-    pub async fn new_login_flow(&self) -> CoreContextResult<Flow> {
-        // Ensure we have an encryption key
-        let _ = self.get_encryption_key()?;
-
-        // Create a new API session
-        let session = self.new_api_session(None, None).await?;
-
-        // Create a new login flow
-        Ok(Flow::new(session))
-    }
-
-    /// Create a new login flow for an existing user.
-    ///
-    /// This can be used to resume a login flow that was interrupted.
-    /// For instance, if the user has already entered their login credentials,
-    /// but the flow was interrupted while waiting for a second factor,
-    /// the flow can be resumed by calling this method with the user and session IDs.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if there is no encryption key in the keychain
-    /// or if no session with the given IDs is able to be resumed.
-    pub async fn resume_login_flow(
-        &self,
-        user_id: UserId,
-        session_id: SessionId,
-    ) -> CoreContextResult<Flow> {
-        let key = self.get_encryption_key()?;
-        let tether = self.account_stash().connection();
-
-        let Some(account) = CoreAccount::find_by_id(user_id.clone(), &tether).await? else {
-            return Err(CoreContextError::Other(anyhow!("account not found")));
-        };
-
-        let Some(session) = CoreSession::find_by_id(session_id.clone(), &tether).await? else {
-            return Err(CoreContextError::Other(anyhow!("session not found")));
-        };
-
-        let password = (account.password)
-            .map(|p| p.decrypt_to_string(&key))
-            .transpose()
-            .or(Err(CoreContextError::Crypto))?
-            .map(|p| p.expose_secret().to_owned());
-
-        match CoreSessionState::of(&session) {
-            CoreSessionState::NeedTfa => Ok(Flow::new_from_tfa(
-                self.new_api_session(Some(&session), None).await?,
-                user_id,
-                session_id,
-                password,
-            )),
-
-            CoreSessionState::NeedKey => Ok(Flow::new_from_mbp(
-                self.new_api_session(Some(&session), None).await?,
-                user_id,
-                session_id,
-            )),
-
-            CoreSessionState::Authenticated => Err(CoreContextError::Other(anyhow!(
-                "session is already logged in"
-            ))),
-        }
-    }
-
-    /// Create a user context from a login flow.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the flow is not in the logged in state or if the user
-    /// context could not be created.
-    #[tracing::instrument(level=Level::DEBUG, skip_all)]
-    pub async fn user_context_from_login_flow(
-        &self,
-        flow: &mut Flow,
-    ) -> CoreContextResult<Arc<UserContext>> {
-        if !flow.is_logged_in() {
-            return Err(CoreContextError::Other(anyhow!("invalid login state")));
-        }
-
-        let user_id: UserId = flow.user_id()?.to_owned();
-        let session_id: SessionId = flow.session_id()?.to_owned();
-        let session = flow.take_session()?;
-
-        self.new_user_context(user_id, session, session_id).await
-    }
-
     /// Get a user context from an existing session.
     ///
     /// # Errors
@@ -737,26 +656,23 @@ impl Context {
         Ok(())
     }
 
-    /// Logs out and removes an account, dropping associated data from user
-    /// database and renaming empty database file to include `.nuked` extension,
-    /// after which try to remove any remaining files from the hard drive
-    /// including archived databases and supplied caches.
+    /// Log out and delete all associated user data.
     ///
-    /// ### Errors
-    ///
-    /// Returns an error if db operation failed on removing account.
+    /// Unlike [`delete_account()`] it preserve the account metadata so that it still available
+    /// from the session picker.
     ///
     /// ### Notes
     ///
-    ///  Function assumes seperatnes between database files as in
+    ///  Function assumes separate database files for
     /// `Account` and `User` databases
     ///
-    pub async fn delete_account(
+    #[tracing::instrument(level=Level::DEBUG, skip(self,caches))]
+    pub async fn logout_and_delete_user_data(
         &self,
         user_id: UserId,
         caches: Vec<PathBuf>,
     ) -> CoreContextResult<()> {
-        tracing::warn!("Kill all background tasks for this user");
+        tracing::info!("Kill all background tasks for this user");
         self.cancel_user_tasks(&user_id).await;
 
         let session = self
@@ -766,7 +682,7 @@ impl Context {
             .find(|session| CoreSessionState::Authenticated == CoreSessionState::of(session));
 
         if let Some(session) = session {
-            tracing::warn!("Clear all user data from database");
+            tracing::info!("Clear all user data from database");
             if let Ok(user_ctx) = self.user_context_from_session(&session, None).await {
                 let tether = user_ctx.stash().connection();
 
@@ -776,25 +692,49 @@ impl Context {
             }
         }
 
-        tracing::warn!("Logout user");
+        tracing::info!("Logout user");
         if let Err(e) = self.logout_account(user_id.clone()).await {
             tracing::error!("Could not logout account, details: `{e}`");
         }
 
-        tracing::warn!("Remove user from active_contexts");
+        tracing::info!("Remove user from active_contexts");
         self.active_user_contexts.lock().await.remove(&user_id);
 
-        tracing::warn!("Archive & try to remove user database");
+        tracing::info!("Archive & try to remove user database");
         let user_db_location = self.user_db_path(&user_id);
         rename_database_files(&user_db_location).await;
         remove_or_clear_dir_safe(&user_db_location).await;
 
-        tracing::warn!("Clear user associated caches");
+        tracing::info!("Clear user associated caches");
         for cache_path in caches {
             remove_or_clear_dir_safe(cache_path).await;
         }
+        Ok(())
+    }
 
-        tracing::warn!("Remove account");
+    /// Logs out and removes an account, dropping associated data from user
+    /// database and renaming empty database file to include `.nuked` extension,
+    /// after which try to remove any remaining files from the hard drive
+    /// including archived databases and supplied caches.
+    ///
+    /// ### Notes
+    ///
+    /// Unlike [`logout_and_delete_user_data()`] it does not preserve the account metadata, and it
+    /// will no longer be available in the session picker.
+    ///
+    ///  Function assumes separate database files for
+    /// `Account` and `User` databases
+    ///
+    #[tracing::instrument(level=Level::DEBUG, skip(self,caches))]
+    pub async fn delete_account(
+        &self,
+        user_id: UserId,
+        caches: Vec<PathBuf>,
+    ) -> CoreContextResult<()> {
+        self.logout_and_delete_user_data(user_id.clone(), caches)
+            .await?;
+
+        tracing::info!("Remove account");
         let mut tether = self.account_stash().connection();
         tether
             .tx(async |tx| {
@@ -845,7 +785,7 @@ impl Context {
     }
 
     #[tracing::instrument(err, skip(self))]
-    fn get_encryption_key(&self) -> CoreContextResult<SessionEncryptionKey> {
+    pub fn get_encryption_key(&self) -> CoreContextResult<SessionEncryptionKey> {
         let Some(key) = self.load_secret::<SessionEncryptionKey>()? else {
             return Err(CoreContextError::KeyChainHasNoKey);
         };
@@ -904,18 +844,17 @@ impl Context {
     }
 
     /// Initializes a new API session, optionally pre-configured to use a specific core session.
-    async fn new_api_session(
+    pub async fn new_api_session(
         &self,
         session: Option<&CoreSession>,
         status: Option<StatusWatcher>,
     ) -> CoreContextResult<ApiSession> {
         let user_id = session.map(|s| &s.account_id).cloned();
         let session_id = session.map(|s| &s.remote_id).cloned();
-        let account_stash = self.account_stash();
+        let account_stash = self.account_stash().to_owned();
         let keychain = Arc::clone(&self.key_chain);
         let store = AuthStore::new(account_stash, keychain, user_id, session_id);
-        let tether = account_stash.connection();
-        let app_settings = AppSettings::get_or_default(&tether).await;
+        let app_settings = AppSettings::get_or_default(&self.account_stash().connection()).await;
         let mut builder = ApiSession::builder().with_store(store);
 
         if app_settings.use_alternative_routing {
@@ -923,10 +862,8 @@ impl Context {
             builder = builder.with_config(&self.api_config);
         } else {
             debug!("Alternative routing setting is disabled");
-            let api_config = self.api_config.clone().without_alternative_routing()?;
-
-            builder = builder.with_config(&api_config);
-        };
+            builder = builder.with_config(self.api_config.clone().without_alternative_routing()?);
+        }
 
         if let Some(status) = status {
             builder = builder.with_status(status);
@@ -957,7 +894,7 @@ impl Context {
     /// Returns error if the user context failed to initialize or
     /// if we detect that we are trying to create duplicate contexts with
     /// different session id.
-    async fn new_user_context(
+    pub async fn new_user_context(
         &self,
         user_id: UserId,
         session: ApiSession,

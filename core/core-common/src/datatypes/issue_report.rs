@@ -219,7 +219,7 @@ fn create_bug_report_payload(
 /// * `path` - path to the file
 /// * `now` - the current time in Utc, used for file creation time & as a prefix for zipped file name.
 /// * `max_bytes` - how many bytes should be written to the zip if the file size exceeds the `max_byte` value.
-///               Value is not verified but it is not recomended exceeding `MAX_LOG_BYTES` value as 50 Mb.
+///   Value is not verified but it is not recomended exceeding `MAX_LOG_BYTES` value as 50 Mb.
 ///
 /// # Returns
 ///

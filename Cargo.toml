@@ -2,14 +2,17 @@
 resolver = "2"
 
 members = [
+  "account/account-api",
+  "account/account-common",
+  "account/account-uniffi",
   "calendar/calendar-api",
   "calendar/calendar-common",
   "core/action-queue",
   "core/core-api",
   "core/core-common",
-  "core/core-test-utils",
   "core/event-loop",
   "core/ical",
+  "core/ical-cli",
   "core/proton-canonical-email",
   "core/sqlite3",
   "core/stash",
@@ -25,15 +28,16 @@ members = [
   "mail/mail-common",
   "mail/mail-html-transformer",
   "mail/mail-ids",
-  "mail/mail-test-utils",
   "mail/mail-tui",
   "mail/mail-uniffi",
   "mail/mail-wasm",
-  "mail/uniffi-bindgen",
-  "mail/uniffi-macros",
+  "payment/payment-crux",
   "payment/payment-sdk",
   "payment/payment-uniffi",
-  "payment/payment-crux",
+  "uniffi/uniffi-bindgen",
+  "uniffi/uniffi-common",
+  "uniffi/uniffi-macros",
+  "uniffi/uniffi-runtime",
 ]
 
 [workspace.package]
@@ -47,6 +51,8 @@ base64 = "0.22"
 argon2 = "0.5.3"
 bitflags = { version = "2.8.0" }
 bytes = "1.9"
+camino = "1"
+cargo_metadata = "0.19"
 cfg-if = "1"
 chrono = { version = "0.4", features = ["default", "serde"] }
 clap = { version = "4.5.27", features = ["derive"] }
@@ -75,7 +81,6 @@ itertools = "0.13.0"
 html2text = "0.14.2"
 jiff = "0.2.4"
 file-format = { version = "0.26.0", features = ["reader"] }
-lazy_static = "1"
 mime = "0.3.17"
 mockall = "0.12"
 num_enum = "0.7.3"
@@ -118,6 +123,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tynm = "0.1"
 typed-builder = "0.20.0"
 unicode-segmentation = "1.12.0"
+uniffi_bindgen = "0.29"
+uniffi_meta = "0.29"
 uniffi = { version = "0.29.1", features = ["tokio"] }
 url = { version = "2.5.4", features = ["serde"] }
 utf8-width = "0.1.7"
@@ -127,6 +134,20 @@ walkdir = "2.5.0"
 wiremock = "0.6.2"
 wiremock-multipart = "1.0.1"
 zeroize = "1.8.1"
+
+[workspace.dependencies.proton-account-api]
+version = "0.1"
+path = "account/account-api"
+registry = "proton"
+
+[workspace.dependencies.proton-account-common]
+version = "0.1"
+path = "account/account-common"
+registry = "proton"
+
+[workspace.dependencies.proton-account-uniffi]
+path = "account/account-uniffi"
+registry = "proton"
 
 [workspace.dependencies.proton-action-queue]
 version = "0.7"
@@ -162,6 +183,9 @@ registry = "proton"
 [workspace.dependencies.proton-ical]
 path = "core/ical"
 
+[workspace.dependencies.proton-ical-cli]
+path = "core/ical-cli"
+
 [workspace.dependencies.proton-vcard]
 version = "0.2"
 path = "core/vcard"
@@ -194,10 +218,18 @@ path = "mail/mail-common"
 registry = "proton"
 features = ["sql"]
 
-[workspace.dependencies.proton-uniffi-macros]
-version = "0.1"
-path = "mail/uniffi-macros"
+[workspace.dependencies.proton-mail-uniffi]
+path = "mail/mail-uniffi"
 registry = "proton"
+
+[workspace.dependencies.uniffi-macros]
+path = "uniffi/uniffi-macros"
+
+[workspace.dependencies.uniffi-runtime]
+path = "uniffi/uniffi-runtime"
+
+[workspace.dependencies.uniffi-common]
+path = "uniffi/uniffi-common"
 
 [workspace.dependencies.proton-crypto-inbox]
 version = "0.9.0"
@@ -210,12 +242,12 @@ path = "crypto/crypto-inbox-mime"
 registry = "proton"
 
 [workspace.dependencies.proton-crypto-account]
-version = "0.10.1"
+version = "0.11.0"
 registry = "proton"
 features = ["sql"]
 
 [workspace.dependencies.proton-crypto]
-version = "0.4.15"
+version = "0.5.0"
 registry = "proton"
 
 [workspace.dependencies.proton-crypto-notifications]
@@ -268,6 +300,11 @@ version = "0.1"
 path = "crypto/crypto-calendar"
 registry = "proton"
 
+[workspace.dependencies.proton-mail-html-transformer]
+version = "0.2.0"
+path = "mail/mail-html-transformer"
+registry = "proton"
+
 [workspace.lints.rust]
 trivial_numeric_casts = "warn"
 unused_extern_crates = "warn"
@@ -314,9 +351,9 @@ lto = true                 # "Fat" LTO
 # panic = 'abort' We might want to enable this
 
 [patch."crates-io"]
-# TODO https://github.com/hyperium/hyper/pull/3887
+# TODO https://github.com/hyperium/hyper/pull/3887 (got merged, waiting for release)
 # TODO https://protonmail.slack.com/archives/C07FCLA1RQW/p1746692300139499
-hyper = { git = "https://github.com/Patryk27/hyper", rev = "f1ee16c0e1ef72c5f467fdf142e6525ffa03059a" }
+hyper = { git = "https://github.com/hyperium/hyper", rev = "436cadd1ac08a9508a46f550e03281db9f2fee97" }
 
 # TODO https://github.com/rust-lang/rust-bindgen/issues/3199
 # TODO https://protonmail.slack.com/archives/C07FCLA1RQW/p1747302410720299

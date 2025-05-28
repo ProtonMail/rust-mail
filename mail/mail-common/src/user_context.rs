@@ -442,9 +442,20 @@ impl MailUserContext {
         Ok(())
     }
 
+    /// Unlike [sign_out()] the user's metadata is preserved so it still shows up in the session
+    /// picker.
+    pub async fn logout_and_delete_data(&self) -> MailContextResult<()> {
+        self.mail_context
+            .logout_account_and_delete_user_data(self.user_id().clone())
+            .await?;
+
+        Ok(())
+    }
+
     /// Sign this user out.
     ///
-    /// Method will delete user's account and data from the device.
+    /// Method will delete user's account and data from the device. The user will no longer
+    /// be available in the session picker.
     ///
     pub async fn sign_out(&self) -> MailContextResult<()> {
         self.mail_context

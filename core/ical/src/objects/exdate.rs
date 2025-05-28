@@ -25,7 +25,7 @@ impl IcsRead<Property> for ExDate {
                 break;
             }
 
-            e.burn(r);
+            e.burn(r, Kind::Property)?;
         }
 
         match value.unwrap_or_default() {

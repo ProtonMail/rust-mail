@@ -3,7 +3,7 @@ use proton_core_api::services::proton::LabelType as ApiLabelType;
 use proton_core_api::services::proton::{Address as ApiAddress, Label as ApiLabel};
 use proton_core_common::datatypes::LabelType;
 use proton_core_common::models::Label;
-use proton_core_test_utils::addresses::ApiAddressTestUtils;
+use proton_core_common::test_utils::addresses::ApiAddressTestUtils;
 use proton_mail_api::services::proton::response_data::{
     Conversation as ApiConversation, ConversationCount as ApiConversationCount,
     MessageCount as ApiMessageCount,
@@ -11,11 +11,11 @@ use proton_mail_api::services::proton::response_data::{
 use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Conversation;
-use proton_mail_test_utils::conversations::ApiConversationTestUtils;
-use proton_mail_test_utils::init::Params as TestParams;
-use proton_mail_test_utils::labels::ApiLabelTestUtils;
-use proton_mail_test_utils::mailbox::MailboxTestUtils;
-use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
+use proton_mail_common::test_utils::conversations::ApiConversationTestUtils;
+use proton_mail_common::test_utils::init::Params as TestParams;
+use proton_mail_common::test_utils::labels::ApiLabelTestUtils;
+use proton_mail_common::test_utils::mailbox::MailboxTestUtils;
+use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
 use std::collections::HashMap;
 use velcro::hash_map;

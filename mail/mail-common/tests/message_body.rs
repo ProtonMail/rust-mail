@@ -7,13 +7,13 @@ use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::attachment::MimeType;
 use proton_mail_common::models::Message;
-use proton_mail_common::{AppError, MailContextError, Mailbox};
-use proton_mail_test_utils::message_body::{
+use proton_mail_common::test_utils::message_body::{
     TEST_MESSAGE_BODY_DECRYPTED, TEST_MESSAGE_BODY_MIME_DECRYPTED,
     TEST_MESSAGE_BODY_MIME_SIGNATURE, TEST_USER_ID, message_body_test_message_mime,
     message_body_test_message_simple, message_body_test_params, message_body_test_user_secret,
 };
-use proton_mail_test_utils::test_context::MailTestContext;
+use proton_mail_common::test_utils::test_context::MailTestContext;
+use proton_mail_common::{AppError, MailContextError, Mailbox};
 use stash::orm::Model;
 
 #[tokio::test]

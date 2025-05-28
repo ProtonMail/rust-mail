@@ -37,12 +37,5 @@ url = { workspace = true }
 default = []
 sql = ["dep:stash"]
 
-[dev-dependencies]
-tokio = { workspace = true }
-tracing-subscriber = { workspace = true }
-
-[[example]]
-name = "user_id"
-
 [lints]
 workspace = true

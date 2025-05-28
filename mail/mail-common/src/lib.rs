@@ -16,6 +16,9 @@ pub mod background_execution;
 pub mod draft;
 pub mod mail_scroller;
 mod send_queries;
+
+#[cfg(feature = "test-utils")]
+pub mod test_utils;
 #[cfg(test)]
 mod tests;
 

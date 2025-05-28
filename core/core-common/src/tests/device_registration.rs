@@ -1,12 +1,12 @@
 use std::sync::{Arc, Mutex};
 
 use proton_core_api::services::proton::{SessionId, UserId};
-use proton_core_test_utils::test_context::TestContext;
+use proton_core_common::test_utils::test_context::TestContext;
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
 
 // To break cyclic dependency
-use proton_core_test_utils::reexport::proton_core_common::{
+use proton_core_common::{
     datatypes::{DeviceEnvironment, RegisteredDevice},
     device_registration::{RegisteredDeviceTaskState, registered_device_task_step},
 };

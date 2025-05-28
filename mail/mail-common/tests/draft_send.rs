@@ -24,18 +24,18 @@ use proton_mail_api::services::proton::response_data::{
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::draft::Draft;
 use proton_mail_common::draft::compose::DEFAULT_SUBJECT;
-use proton_mail_common::draft::observers::DraftSendResultWatcher;
+use proton_mail_common::draft::observers::{DraftSendResultWatcher, DraftSendResultWatcherMode};
 use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry};
 use proton_mail_common::models::{
     DraftSendFailure, DraftSendFailureSend, DraftSendResult, DraftSendResultOrigin, MailSettings,
     Message, MessageBodyMetadata,
 };
+use proton_mail_common::test_utils::init::Params as TestParams;
+use proton_mail_common::test_utils::message_body::*;
+use proton_mail_common::test_utils::messages::TestDraftSendRequest;
+use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use proton_mail_common::{MailContextError, MailUserContext, draft};
 use proton_mail_ids::LocalMessageId;
-use proton_mail_test_utils::init::Params as TestParams;
-use proton_mail_test_utils::message_body::*;
-use proton_mail_test_utils::messages::TestDraftSendRequest;
-use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
 use stash::stash::Bond;
 use std::sync::Arc;
@@ -204,6 +204,7 @@ async fn basic_send_check() {
         send_result.remote_message_id,
         Some(draft_message.remote_id.unwrap())
     );
+    assert!(send_result.has_send_action);
     assert!(send_result.timestamp < send_result.undo_timestamp);
     assert!(!send_result.seen);
 }
@@ -753,9 +754,12 @@ async fn already_sent_error_does_not_produce_error() {
         .await
         .unwrap();
 
-    let mut observer = DraftSendResultWatcher::new(user_ctx.user_stash().clone())
-        .await
-        .unwrap();
+    let mut observer = DraftSendResultWatcher::new(
+        user_ctx.user_stash().clone(),
+        DraftSendResultWatcherMode::All,
+    )
+    .await
+    .unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();

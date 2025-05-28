@@ -1,3 +1,4 @@
+use crate::core::datatypes::UnixTimestamp;
 use crate::{UniffiEnum, UniffiRecord};
 use crate::{core::datatypes::AvatarInformation, core::datatypes::Id};
 use itertools::Itertools;
@@ -7,7 +8,6 @@ use proton_core_common::datatypes::{
     ContactSuggestion as RealContactSuggestion, ContactSuggestionKind as RealContactSuggestionKind,
     ContactSuggestions as RealContactSuggestions, DeviceContact as RealDeviceContact,
     DeviceContactSuggestion as RealDeviceContactSuggestion, GroupedContacts as RealGroupedContacts,
-    UnixTimestamp,
 };
 use proton_core_common::utils::MapVec as _;
 
@@ -87,14 +87,14 @@ pub struct ContactGroupItem {
     pub avatar_color: String,
 
     /// The field represent the list of emails of the contact group
-    pub contacts: Vec<ContactItem>,
+    pub contact_emails: Vec<ContactEmailItem>,
 }
 
 impl From<RealContactGroupItem> for ContactGroupItem {
     fn from(value: RealContactGroupItem) -> Self {
         Self {
             id: value.local_id.into(),
-            contacts: value.contacts.map_vec(),
+            contact_emails: value.contacts.map_vec(),
             avatar_color: value.avatar_information.color,
             name: value.name,
         }
@@ -104,17 +104,13 @@ impl From<RealContactGroupItem> for ContactGroupItem {
 /// This is the main data structure that is used to represent the contact email.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct ContactEmailItem {
-    /// The field represent the unique identifier of the contact email in the database
     pub id: Id,
-
-    /// The field represent the email of the contact
     pub email: String,
-
-    /// The field represent if the email is a proton email
+    /// The field represents if the email is a proton email like foo@pm.me
     pub is_proton: bool,
-
-    /// The field represent the last used time of the email
     pub last_used_time: UnixTimestamp,
+    pub name: String,
+    pub avatar_information: AvatarInformation,
 }
 
 impl From<RealContactEmailItem> for ContactEmailItem {
@@ -123,18 +119,9 @@ impl From<RealContactEmailItem> for ContactEmailItem {
             id: value.local_id.into(),
             email: value.email,
             is_proton: value.is_proton,
-            last_used_time: value.last_used_time,
-        }
-    }
-}
-
-impl From<ContactEmailItem> for RealContactEmailItem {
-    fn from(value: ContactEmailItem) -> Self {
-        Self {
-            local_id: value.id.into(),
-            email: value.email,
-            is_proton: value.is_proton,
-            last_used_time: value.last_used_time,
+            last_used_time: value.last_used_time.into(),
+            avatar_information: value.avatar_information.into(),
+            name: value.name,
         }
     }
 }

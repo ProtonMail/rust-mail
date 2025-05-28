@@ -23,6 +23,12 @@ impl IcsRead<Property> for Status {
             Some(Status::Confirmed)
         } else if value.eq_ignore_ascii_case("CANCELLED") {
             Some(Status::Cancelled)
+        } else if value.eq_ignore_ascii_case("ACCEPTED") || value.eq_ignore_ascii_case("UPDATED") {
+            // Happens on production and we don't want the parser to fail in
+            // this case; this will be later properly fixed with the sugery
+            // process
+            r.warn(span, format!("quirky status `{value}`"));
+            None
         } else {
             r.error(span, format!("unknown status `{value}`"));
             None
@@ -77,15 +83,49 @@ mod tests {
 
     #[test]
     fn unknown() {
+        let actual = Status::from_str(":foobar", Property).unwrap_err();
+
         let expected = vec![ReadMsg {
-            at: Some(Span::new(1, 7)),
+            at: Some(Span::new((1, 2), (1, 7))),
             msg: "unknown status `foobar`".into(),
             kind: ReadMsgKind::Error,
             context: Vec::new(),
         }];
 
-        let actual = Status::from_str(":foobar", Property).unwrap_err();
-
         assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn accepted() {
+        let (obj, msgs) = Status::from_str_ex(":ACCEPTED", Property);
+
+        assert_eq!(None, obj);
+
+        assert_eq!(
+            vec![ReadMsg {
+                at: Some(Span::new((1, 2), (1, 9))),
+                msg: "quirky status `ACCEPTED`".into(),
+                kind: ReadMsgKind::Warning,
+                context: Vec::new(),
+            }],
+            msgs
+        );
+    }
+
+    #[test]
+    fn updated() {
+        let (obj, msgs) = Status::from_str_ex(":UPDATED", Property);
+
+        assert_eq!(None, obj);
+
+        assert_eq!(
+            vec![ReadMsg {
+                at: Some(Span::new((1, 2), (1, 8))),
+                msg: "quirky status `UPDATED`".into(),
+                kind: ReadMsgKind::Warning,
+                context: Vec::new(),
+            }],
+            msgs
+        );
     }
 }

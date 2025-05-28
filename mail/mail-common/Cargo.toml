@@ -4,11 +4,35 @@ version = "0.8.0"
 edition.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = ["sql"]
+test-utils = [
+  "dep:wiremock",
+  "dep:function_name",
+  "dep:tempfile",
+  "dep:tempdir",
+  "dep:tracing-subscriber",
+  "dep:velcro",
+  "dep:wiremock-multipart",
+  "proton-core-common/test-utils",
+]
+
+demo = ["dep:tao", "dep:wry"]
+sql = ["proton-core-api/sql", "proton-mail-api/sql"]
+
+[[example]]
+name = "demo"
+required-features = ["demo"]
+
+[[example]]
+name = "context_reuse"
+
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 bitflags = { workspace = true }
 bytes = { workspace = true }
+cfg-if = { workspace = true }
 non-empty-string = { workspace = true }
 chrono = { workspace = true }
 derive_more = { workspace = true, features = ["try_from"] }
@@ -19,11 +43,10 @@ futures = { workspace = true }
 indoc = { workspace = true }
 include_dir = { workspace = true }
 itertools = { workspace = true }
-html2text = { workspace = true }
-lazy_static = { workspace = true }
 mime = { workspace = true }
 parking_lot = { workspace = true }
 proton-action-queue = { workspace = true }
+proton-account-api = { workspace = true }
 proton-calendar-common = { workspace = true }
 proton-core-api = { workspace = true, features = ["sql"] }
 proton-mail-api = { workspace = true, features = ["sql"] }
@@ -31,7 +54,7 @@ proton-core-common = { workspace = true }
 proton-crypto-account = { workspace = true }
 proton-crypto-inbox = { workspace = true }
 proton-event-loop = { workspace = true }
-proton-mail-html-transformer = { version = "0.2.0", path = "../mail-html-transformer", registry = "proton" }
+proton-mail-html-transformer = { workspace = true }
 proton-sqlite3 = { workspace = true }
 proton-task-service = { workspace = true }
 rmp = { workspace = true }
@@ -52,12 +75,24 @@ sqlite-watcher = { workspace = true }
 proton-mail-ids = { workspace = true }
 uniffi = { workspace = true, optional = true }
 
+# test-util option deps
+function_name = { workspace = true, optional = true }
+tempdir = { workspace = true, optional = true }
+tempfile = { workspace = true, optional = true }
+wiremock = { workspace = true, optional = true }
+tracing-subscriber = { workspace = true, optional = true }
+velcro = { workspace = true, optional = true }
+wiremock-multipart = { workspace = true, optional = true }
+
+# Optional dependencies for the `demo` example
+wry = { version = "0.51", optional = true }
+tao = { version = "0.33", optional = true }
+
 [dev-dependencies]
 clap = { workspace = true }
 ctor = { workspace = true }
 color-backtrace = { workspace = true }
 insta = { workspace = true }
-lazy_static = { workspace = true }
 pretty_assertions = { workspace = true }
 proton-core-api = { workspace = true }
 proton-mail-api = { workspace = true }
@@ -71,8 +106,7 @@ function_name = { workspace = true }
 tempfile = { workspace = true }
 velcro = { workspace = true }
 wiremock = { workspace = true }
-proton-core-test-utils = { workspace = true }
-proton-mail-test-utils = { workspace = true }
+proton-mail-common = { path = ".", features = ["test-utils"] }
 
 # not compatible with global clippy configuration yet
 # [lints]
@@ -96,9 +130,3 @@ module_name_repetitions = "allow"
 print_stdout = "warn"
 unseparated_literal_suffix = "warn"
 wrong_self_convention = "warn"
-
-
-[features]
-default = ["sql"]
-sql = ["proton-core-api/sql", "proton-mail-api/sql"]
-uniffi = ["proton-core-common/uniffi", "dep:uniffi"]

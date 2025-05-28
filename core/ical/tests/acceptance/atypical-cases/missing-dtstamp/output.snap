@@ -109,4 +109,4 @@ error: missing property `DTSTAMP`
 
 # violations
 
-- event[0]: dtstamp is missing
+- viol: event[0]: dtstamp is missing

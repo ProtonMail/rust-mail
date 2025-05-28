@@ -1,6 +1,7 @@
 mod drafts_common;
 use drafts_common::*;
 use itertools::Itertools;
+use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
 use proton_core_api::consts::{CoreBundle, Mail};
 use proton_core_api::services::proton::common::ApiErrorInfo;
 use proton_core_api::services::proton::{LabelId, UserId};
@@ -13,14 +14,15 @@ use proton_mail_api::services::proton::response_data::MessageFlags;
 use proton_mail_api::services::proton::response_data::{Disposition, MessageAttachment};
 use proton_mail_common::MailContextError;
 use proton_mail_common::datatypes::attachment::ContentId;
-use proton_mail_common::datatypes::{MimeType, SystemLabelId};
+use proton_mail_common::datatypes::{MimeType, RollbackItemType, SystemLabelId};
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
-use proton_mail_common::draft::{Draft, DraftSyncStatus, Error, OpenError, ReplyMode};
+use proton_mail_common::draft::{Draft, DraftSyncStatus, Error, OpenError, ReplyMode, SaveError};
 use proton_mail_common::models::{
     Attachment, Conversation, DraftMetadata, DraftSendResult, DraftSendResultOrigin, Message,
+    RollbackItem,
 };
-use proton_mail_test_utils::message_body::*;
-use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
+use proton_mail_common::test_utils::message_body::*;
+use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
 use stash::stash::StashError;
 use uuid::Uuid;
@@ -304,6 +306,7 @@ async fn create_draft_reply_without_body_is_error() {
         existing_message.local_id.unwrap(),
         ReplyMode::Sender,
         true,
+        None,
     )
     .await;
 
@@ -352,6 +355,7 @@ async fn create_draft_reply_should_fail_for_drafts() {
         existing_message.local_id.unwrap(),
         ReplyMode::Sender,
         true,
+        None,
     )
     .await;
 
@@ -427,13 +431,18 @@ async fn create_draft_reply_html() {
 
 #[tokio::test]
 async fn create_draft_reply_plain_text() {
-    let draft_body = create_draft_reply_impl(MimeType::TextPlain, ReplyMode::Sender).await;
+    let draft_body = create_draft_reply_with_override(
+        MimeType::TextPlain,
+        ReplyMode::Sender,
+        MimeType::TextPlain,
+    )
+    .await;
     insta::assert_snapshot!(draft_body.body)
 }
 
 #[tokio::test]
 async fn create_draft_reply_inherits_only_inline_attachments() {
-    let draft_body = create_draft_reply_impl(MimeType::TextPlain, ReplyMode::Sender).await;
+    let draft_body = create_draft_reply_impl(MimeType::TextHtml, ReplyMode::Sender).await;
     assert_eq!(draft_body.metadata.attachments.len(), 1);
     assert_eq!(draft_body.metadata.attachments.len(), 1);
     let attachment = draft_body.metadata.attachments.first().unwrap();
@@ -493,7 +502,7 @@ async fn draft_save_failure_creates_send_result_with_correct_origin() {
 
 #[tokio::test]
 async fn create_draft_forward_inherits_all_attachments() {
-    let draft_body = create_draft_reply_impl(MimeType::TextPlain, ReplyMode::Forward).await;
+    let draft_body = create_draft_reply_impl(MimeType::TextHtml, ReplyMode::Forward).await;
     assert_eq!(draft_body.metadata.attachments.len(), 2);
 
     let attachment_1 = &draft_body.metadata.attachments[1];
@@ -529,10 +538,24 @@ fn compare_inline_attachment(attachment: &Attachment, inline_attachment: Message
         inline_attachment.headers.content_id.map(ContentId::from)
     );
 }
-
 async fn create_draft_reply_impl(
     mime_type: MimeType,
     reply_mode: ReplyMode,
+) -> DecryptedMessageBody {
+    create_draft_reply_with_override_impl(mime_type, reply_mode, None).await
+}
+async fn create_draft_reply_with_override(
+    mime_type: MimeType,
+    reply_mode: ReplyMode,
+    mime_type_override: MimeType,
+) -> DecryptedMessageBody {
+    create_draft_reply_with_override_impl(mime_type, reply_mode, Some(mime_type_override)).await
+}
+
+async fn create_draft_reply_with_override_impl(
+    mime_type: MimeType,
+    reply_mode: ReplyMode,
+    mime_type_override: Option<MimeType>,
 ) -> DecryptedMessageBody {
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
@@ -651,6 +674,7 @@ async fn create_draft_reply_impl(
         existing_message.local_id.unwrap(),
         reply_mode,
         true,
+        mime_type_override,
     )
     .await
     .unwrap();
@@ -875,4 +899,178 @@ async fn open_new_draft_which_was_not_saved_on_server_should_not_report_cached_s
     // Opening this draft should work;
     let (_, sync_status) = Draft::open(&user_ctx, draft_message_id).await.unwrap();
     assert_eq!(sync_status, DraftSyncStatus::Synced);
+}
+
+#[tokio::test]
+async fn new_draft_conversation_remote_id_updated_externally() {
+    // It is possible that the draft conversation gets its remote id assigned before the draft
+    // is able to update it by itself, this leads to a db constraint error.
+    // This usually happens due to the prefetcher, but can also happend because of the event loop.
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+
+    let mut message = draft_message();
+
+    let expected_draft_params = expected_create_draft_params();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_create_draft(
+        expected_draft_params,
+        None,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+    // Add some other label ids to this message to make sure they are skipped.
+    message.metadata.label_ids.push(LabelId::starred());
+
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+
+    // Create draft.
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    draft
+        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
+
+    // Load the draft.
+    let mut tether = user_ctx.user_stash().connection();
+    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+
+    let draft_conversation_id = draft.conversation_id(&tether).await.unwrap().unwrap();
+
+    // Simulate the new conversation being created via other means.
+    let mut fetched_conv = Conversation::find_by_id(draft_conversation_id, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(fetched_conv.remote_id.is_none());
+    fetched_conv.remote_id = Some(message.metadata.conversation_id.clone());
+    fetched_conv.local_id = None;
+    fetched_conv.row_id = None;
+
+    tether
+        .tx(async |tx| fetched_conv.save(tx).await)
+        .await
+        .unwrap();
+
+    assert_ne!(fetched_conv.local_id.unwrap(), draft_conversation_id);
+
+    // Execute action.
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    let draft_message = Message::load(draft_message_id, &tether)
+        .await
+        .unwrap()
+        .expect("failed to load message");
+
+    // Our conversation should be not be present.
+    assert!(
+        Conversation::find_by_id(draft_conversation_id, &tether)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    // Local conversation id should have been assigned with the existing message.
+    assert_eq!(
+        draft_message.local_conversation_id.unwrap(),
+        draft_conversation_id,
+    );
+    assert_eq!(
+        draft.conversation_id(&tether).await.unwrap().unwrap(),
+        draft_conversation_id
+    );
+}
+
+#[tokio::test]
+async fn already_sent_error_move_draft_to_sent_and_schedules_rollback() {
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+
+    let message = draft_message();
+
+    let expected_draft_params = expected_create_draft_params();
+    let mut updated_draft_params = expected_draft_params.clone();
+    updated_draft_params.subject = "Modified".to_string();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_create_draft(
+        expected_draft_params,
+        None,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+    ctx.mock_update_draft_failure(
+        message.metadata.id.clone(),
+        updated_draft_params,
+        DraftAttachmentKeyPackets::new(),
+        ApiErrorInfo {
+            code: Mail::MessageAlreadySent as u32,
+            error: None,
+            details: None,
+        },
+    )
+    .await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+
+    // Create draft.
+    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    draft
+        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
+    // Execute action.
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    // Load the draft.
+    let tether = user_ctx.user_stash().connection();
+    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+
+    draft.subject = "Modified".to_owned();
+    draft
+        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
+
+    let err = user_ctx.execute_all_send_actions().await.unwrap_err();
+    let QueuedError::Action(err, _) = err else {
+        panic!("unexpected error")
+    };
+    let err = err
+        .as_action_error::<proton_mail_common::actions::draft::Save>()
+        .unwrap();
+    assert!(matches!(
+        err,
+        ActionError::Action(MailContextError::Draft(Error::Save(SaveError::AlreadySent)))
+    ));
+    let draft_message = Message::load(draft_message_id, &tether)
+        .await
+        .unwrap()
+        .expect("failed to load message");
+    assert_eq!(draft_message.remote_id, Some(message.metadata.id.clone()));
+
+    assert!(!draft_message.label_ids.contains(&LabelId::drafts()));
+    assert!(!draft_message.label_ids.contains(&LabelId::all_drafts()));
+    assert!(draft_message.label_ids.contains(&LabelId::sent()));
+    assert!(!draft_message.is_draft());
+
+    let rollback_item = RollbackItem::find_by_id(message.metadata.id.clone().into_inner(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(rollback_item.item_type, RollbackItemType::Message);
 }

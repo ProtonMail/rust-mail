@@ -92,7 +92,7 @@ impl IcsRead<Property> for DateTime<AnyForm> {
                 break;
             }
 
-            e.burn(r);
+            e.burn(r, Kind::Property)?;
         }
 
         let date = r.value()?;

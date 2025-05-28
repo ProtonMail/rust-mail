@@ -141,35 +141,35 @@
 //! crates that are the subject of the translations.*
 //!
 
-use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
-use stash::stash::WatcherHandle;
-// Reexport renamed items from the `uniffi` crate.
-pub use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
-
 use proton_core_common::watch_handle::WatchHandle as RealWatchHandle;
 use proton_mail_common::datatypes::SearchOptions as RealSearchOptions;
 use proton_mail_common::{MailContext, MailUserContext};
 use proton_task_service::{AsyncTaskResult, TaskSpawner};
+use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
+use stash::stash::WatcherHandle;
 use std::future::Future;
-use std::sync::{Arc, OnceLock};
-use tokio::runtime::Runtime;
-use tokio::task::JoinError;
+use std::sync::Arc;
 use tokio::task::JoinHandle;
+use uniffi_runtime::{async_runtime, async_runtime_slim, uniffi_async};
+
+// Reexport renamed items from the `uniffi` crate.
+pub use uniffi::{Enum as UniffiEnum, Record as UniffiRecord};
 
 #[macro_use]
-extern crate proton_uniffi_macros;
+extern crate uniffi_macros;
 
-pub mod core;
 #[macro_use]
 pub mod errors;
+
+pub mod core;
 mod log;
 pub mod mail;
-
-#[cfg(target_os = "android")]
-pub mod tls;
 pub mod version;
 
-uniffi::setup_scaffolding!("proton_mail_uniffi");
+#[cfg(target_os = "android")]
+pub mod jni;
+
+uniffi::setup_scaffolding!();
 
 /// A callback interface for live queries.
 ///
@@ -228,93 +228,6 @@ impl WatchHandle {
     }
 }
 
-static RUNTIME: OnceLock<Runtime> = OnceLock::new();
-
-/// Get the async runtime.
-///
-/// # Using both [`async_runtime`] and [`async_runtime_slim`]
-///
-/// Both functions are competing for initializing common runtime. It means, that whichever function
-/// is called first, it's configuring the runtime, and all other following calls are only
-/// returning already initialized runtime.
-///
-/// ## Examples
-///
-/// ```ignore
-/// let runtime1 = async_runtime();
-/// let runtime2 = async_runtime_slim();
-/// // This runtime2 is a static reference to FULL runtime using all possible cores,
-/// // because `async_runtime()` was called first
-/// ```
-///
-/// ```ignore
-/// let runtime1 = async_runtime_slim();
-/// let runtime2 = async_runtime();
-/// // This runtime2 is a static reference to SLIM runtime using limited number of cores,
-/// // because `async_runtime_slim()` was called first
-/// ```
-///
-/// # Panics
-///
-/// This function may panic if Tokio fails to init async runtime
-///
-#[must_use]
-pub fn async_runtime() -> &'static Runtime {
-    RUNTIME.get_or_init(|| {
-        tokio::runtime::Builder::new_multi_thread()
-            .enable_io()
-            .enable_time()
-            .build()
-            .expect("Failed to init runtime")
-    })
-}
-
-/// Get slimmer version of the async runtime.
-///
-/// Comparing to [`async_runtime`] this takes very limited number of threads.
-/// It is to enable Rust SDK in apps with limited amount of memory.
-///
-/// # Using both [`async_runtime`] and [`async_runtime_slim`]
-///
-/// Both functions are competing for initializing common runtime. It means, that whichever function
-/// is called first, it's configuring the runtime, and all other following calls are only
-/// returning already initialized runtime.
-///
-/// ## Examples
-///
-/// ```ignore
-/// let runtime1 = async_runtime();
-/// let runtime2 = async_runtime_slim();
-/// // This runtime2 is a static reference to FULL runtime using all possible cores,
-/// // because `async_runtime()` was called first
-/// ```
-///
-/// ```ignore
-/// let runtime1 = async_runtime_slim();
-/// let runtime2 = async_runtime();
-/// // This runtime2 is a static reference to SLIM runtime using limited number of cores,
-/// // because `async_runtime_slim()` was called first
-/// ```
-///
-/// # Panics
-///
-/// This function may panic if Tokio fails to init async runtime
-///
-#[must_use]
-pub fn async_runtime_slim() -> &'static Runtime {
-    // Those numbers are arbitrary
-    //
-    RUNTIME.get_or_init(|| {
-        tokio::runtime::Builder::new_multi_thread()
-            .worker_threads(4)
-            .max_blocking_threads(4)
-            .enable_io()
-            .enable_time()
-            .build()
-            .expect("Failed to init runtime")
-    })
-}
-
 /// Spawn an async function on the runtime.
 fn spawn_async<S, T, F>(ctx: impl AsRef<S>, future: F) -> JoinHandle<AsyncTaskResult<T>>
 where
@@ -323,17 +236,6 @@ where
     F: Future<Output = T> + Send + 'static,
 {
     ctx.as_ref().spawn(future)
-}
-
-/// Run an async function on the Tokio runtime.
-async fn uniffi_async<T, E, F>(future: F) -> Result<T, E>
-where
-    E: Send + From<JoinError> + 'static,
-    T: Send + 'static,
-    F: Future<Output = Result<T, E>> + Send + 'static,
-{
-    let handle = async_runtime().spawn(future);
-    handle.await?
 }
 
 /// Abstraction trait so we can reference either [`MailContext`] or [`MailUserContext`]

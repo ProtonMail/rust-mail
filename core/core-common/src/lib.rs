@@ -1,6 +1,6 @@
 //! Common features of the core domain, such user account and session management and per user settings.
 pub mod actions;
-mod auth_store;
+pub mod auth_store;
 mod context;
 pub mod datatypes;
 #[allow(clippy::unused_async)]
@@ -20,9 +20,9 @@ pub mod watch_handle;
 mod tests;
 pub mod validation;
 
+#[cfg(feature = "test-utils")]
+pub mod test_utils;
+
 pub use context::*;
 pub use event_subscriber::*;
 pub use user_context::*;
-
-#[cfg(feature = "uniffi")]
-uniffi::setup_scaffolding!();

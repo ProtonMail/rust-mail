@@ -114,7 +114,7 @@ VCalendar {
                         Cn {
                             value: ParamValue {
                                 value: "iamblueuser@gmail.com",
-                                quoted: false,
+                                quote: false,
                             },
                         },
                     ),
@@ -133,7 +133,7 @@ VCalendar {
                         Cn {
                             value: ParamValue {
                                 value: "test@protonmail.dev",
-                                quoted: false,
+                                quote: false,
                             },
                         },
                     ),
@@ -202,4 +202,4 @@ warn: unknown parameter `X-NUM-GUESTS`
 
 # violations
 
-- event[0]: dtstart: time zone `Europe/Zurich` is not known
+- viol: event[0]: dtstart: time zone `Europe/Zurich` is not known

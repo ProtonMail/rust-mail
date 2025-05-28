@@ -20,15 +20,16 @@ pub enum Message {
     NewAccount,
     Init,
     Delete,
+    Logout,
     DeleteSuccess(String),
 }
 
-pub struct Model {
+pub struct SessionSelectModel {
     accounts: Vec<CoreAccount>,
     session_list_state: ScrollableListState,
 }
 
-impl Model {
+impl SessionSelectModel {
     pub async fn new(ctx: &MailContext) -> Result<Self, MailContextError> {
         let accounts = ctx.get_accounts().await?;
         let index = accounts
@@ -43,7 +44,7 @@ impl Model {
     }
 }
 
-impl AppStateHandler for Model {
+impl AppStateHandler for SessionSelectModel {
     fn on_state_enter(&mut self) -> Command<Messages> {
         Command::message(Message::Init.into())
     }
@@ -63,6 +64,7 @@ impl AppStateHandler for Model {
                 self.session_list_state.next();
                 Command::None
             }
+            KeyCode::Char('l') => Command::message(Message::Logout.into()),
             KeyCode::Enter => Command::message(Message::Submit.into()),
             _ => Command::None,
         }
@@ -74,6 +76,49 @@ impl AppStateHandler for Model {
             return Command::None;
         };
         match message {
+            Message::Logout => {
+                let Some(index) = self.session_list_state.selected() else {
+                    return Command::message(Messages::DisplayError(
+                        None,
+                        anyhow!("No session selected"),
+                    ));
+                };
+
+                let Some(account) = self.accounts.get(index) else {
+                    return Command::message(Messages::DisplayError(
+                        None,
+                        anyhow!("Invalid session index",),
+                    ));
+                };
+
+                let account_email = account.name_or_addr.clone();
+                let remote_id = account.remote_id.clone();
+                let ctx = Arc::clone(ctx);
+                Command::message(Messages::raise_popup(
+                    YesNoPopup::new(
+                        "Confirm Account Logout",
+                        format!(
+                            "Are you sure you wish to logout '{account_email}' and delete all its data",
+                        ),
+                    )
+                        .on_accept(
+                            Command::batch([
+                                Command::message(Messages::DisplayBackgroundProgress(format!("Logging out account {account_email}"))),
+                            Command::task(async move {
+                            let cmd =if let Err(e) = ctx.logout_account_and_delete_user_data(remote_id).await {
+                                let e = anyhow!("Failed to delete session: {e}");
+                                error!("{e:?}");
+                                Command::message(Messages::DisplayError(None, e))
+                            } else {
+                                Command::none()
+                            };
+                                Command::batch([
+                                    Command::message(Messages::DismissBackgroundProgress),
+                                    cmd,
+                                ])
+                        })]),
+                )))
+            }
             Message::Delete => {
                 let Some(index) = self.session_list_state.selected() else {
                     return Command::message(Messages::DisplayError(
@@ -99,15 +144,24 @@ impl AppStateHandler for Model {
                             "Are you sure you wish to delete '{account_email}' and all its data",
                         ),
                     )
-                    .on_accept(Command::task(async move {
-                        if let Err(e) = ctx.delete_account(remote_id).await {
-                            let e = anyhow!("Failed to delete session: {e}");
-                            error!("{e:?}");
-                            return Command::message(Messages::DisplayError(None, e));
-                        }
-
-                        Command::message(Message::DeleteSuccess(account_email).into())
-                    })),
+                    .on_accept(Command::batch([
+                        Command::message(Messages::DisplayBackgroundProgress(format!(
+                            "Deleting account {account_email}"
+                        ))),
+                        Command::task(async move {
+                            let cmd = if let Err(e) = ctx.delete_account(remote_id).await {
+                                let e = anyhow!("Failed to delete session: {e}");
+                                error!("{e:?}");
+                                Command::message(Messages::DisplayError(None, e))
+                            } else {
+                                Command::message(Message::DeleteSuccess(account_email).into())
+                            };
+                            Command::batch([
+                                Command::message(Messages::DismissBackgroundProgress),
+                                cmd,
+                            ])
+                        }),
+                    ])),
                 ))
             }
             Message::Submit => {
@@ -136,7 +190,8 @@ impl AppStateHandler for Model {
                                     account.remote_id
                                 );
                                 Command::message(Messages::SwitchAppState(
-                                    login::Model::with_email(account.name_or_addr.clone()).into(),
+                                    login::LoginModel::with_email(account.name_or_addr.clone())
+                                        .into(),
                                 ))
                             }
                             Some(sess) => {
@@ -148,7 +203,7 @@ impl AppStateHandler for Model {
                                     )
                                     .await
                                     .context("Error creating MailUserContext")?;
-                                let message = mailbox::Model::new(context).await?;
+                                let message = mailbox::MailboxModel::new(context).await?;
 
                                 let tok = &sess.account_id;
                                 debug!(
@@ -175,11 +230,11 @@ impl AppStateHandler for Model {
                 })
             }
             Message::NewAccount => {
-                Command::message(Messages::SwitchAppState(login::Model::new().into()))
+                Command::message(Messages::SwitchAppState(login::LoginModel::new().into()))
             }
             Message::Init => {
                 if self.accounts.is_empty() {
-                    Command::message(Messages::SwitchAppState(login::Model::new().into()))
+                    Command::message(Messages::SwitchAppState(login::LoginModel::new().into()))
                 } else {
                     Command::None
                 }
@@ -223,6 +278,17 @@ impl AppStateHandler for Model {
         );
     }
 
+    fn help_options(&self) -> Vec<(&'static str, &'static str)> {
+        vec![
+            ("k, ▲", "Go up"),
+            ("j, ▼", "Go down"),
+            ("enter", "Log in"),
+            ("N", "Log in with a new account"),
+            ("D", "Delete an account and all of its info"),
+            ("L", "Logout an account and delete all of its info"),
+        ]
+    }
+
     fn view_help_bar(&mut self, frame: &mut Frame, area: Rect) {
         frame.render_widget(
             Line::from(vec![
@@ -246,8 +312,8 @@ impl AppStateHandler for Model {
     }
 }
 
-impl From<Model> for AppState {
-    fn from(value: Model) -> Self {
+impl From<SessionSelectModel> for AppState {
+    fn from(value: SessionSelectModel) -> Self {
         Self::SessionSelect(value)
     }
 }

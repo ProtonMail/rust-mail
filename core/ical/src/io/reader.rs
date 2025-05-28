@@ -1,5 +1,4 @@
 use super::*;
-use std::fmt::Write as _;
 use std::{fmt, mem};
 
 /// *.ics-aware reader.
@@ -8,7 +7,8 @@ use std::{fmt, mem};
 #[derive(Debug)]
 pub struct IcsReader<'a> {
     src: &'a [u8],
-    pos: usize,
+    pos: IcsReaderPosition,
+    hints: IcsReaderHints,
     msgs: Vec<ReadMsg>,
     context: Vec<Spanned<String>>,
 }
@@ -18,14 +18,15 @@ impl<'a> IcsReader<'a> {
     pub fn new(src: &'a [u8]) -> Self {
         Self {
             src,
-            pos: 0,
+            pos: IcsReaderPosition::default(),
+            hints: IcsReaderHints::default(),
             msgs: Vec::new(),
             context: Vec::new(),
         }
     }
 
     #[must_use]
-    pub fn pos(&self) -> usize {
+    pub fn pos(&self) -> IcsReaderPosition {
         self.pos
     }
 
@@ -36,7 +37,12 @@ impl<'a> IcsReader<'a> {
 
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.pos() >= self.len()
+        self.pos().byte >= self.len()
+    }
+
+    #[must_use]
+    pub fn hints(&self) -> &IcsReaderHints {
+        &self.hints
     }
 
     #[must_use]
@@ -72,6 +78,24 @@ impl<'a> IcsReader<'a> {
         self.msg(at, msg, ReadMsgKind::Error);
     }
 
+    /// Runs `f` under a parser with modified hints.
+    ///
+    /// It's a somewhat hacky way of passing information between parsers so that
+    /// e.g. [`ParamValue`] can know how to understand `,` (if we're currently
+    /// parsing an array, it can't consume `,` and must yield back when it sees
+    /// a comma; but in other cases it can eat the comma).
+    ///
+    /// This mechanism is used to parse technically-illegal *.ics files that we
+    /// can nonetheless reasonably recover.
+    pub fn hint(&mut self, h: impl FnOnce(&mut IcsReaderHints), f: impl FnOnce(&mut Self)) {
+        let prev_hints = self.hints;
+
+        h(&mut self.hints);
+        f(self);
+
+        self.hints = prev_hints;
+    }
+
     /// Runs `f` under a parser that contains an extra context such as "parsing
     /// `foo`".
     pub fn context<T>(&mut self, span: Span, tag: String, f: impl FnOnce(&mut Self) -> T) -> T {
@@ -89,6 +113,7 @@ impl<'a> IcsReader<'a> {
         let mut this = IcsReader {
             src: self.src,
             pos: self.pos,
+            hints: self.hints,
             msgs: Vec::new(),
             context: Vec::new(),
         };
@@ -126,7 +151,7 @@ impl<'a> IcsReader<'a> {
         let pos = self.pos;
         let value = f(self)?;
 
-        Some(Spanned::new(Span::new(pos, self.pos), value))
+        Some(Spanned::new(Span::new(pos, self.pos.prev()), value))
     }
 
     /// Returns the next byte, part of [`Self::char()`].
@@ -139,21 +164,39 @@ impl<'a> IcsReader<'a> {
     /// > sequence.  For this reason, implementations need to unfold lines
     /// > in such a way to properly restore the original sequence.
     fn byte(&mut self) -> Option<u8> {
+        self.pos.prev_line = self.pos.line;
+        self.pos.prev_char = self.pos.char;
+
         loop {
-            let c0 = self.src.get(self.pos);
-            let c1 = self.src.get(self.pos + 1);
+            let c0 = self.src.get(self.pos.byte);
+            let c1 = self.src.get(self.pos.byte + 1);
 
             match (c0, c1) {
                 (Some(b'\r'), _) => {
-                    self.pos += 1;
+                    self.pos.byte += 1;
                 }
+
                 (Some(b'\n'), Some(b' ' | b'\t')) => {
-                    self.pos += 2;
+                    self.pos.byte += 2;
+                    self.pos.line += 1;
+                    self.pos.char = 2;
                 }
+
+                (Some(b'\n'), _) => {
+                    self.pos.byte += 1;
+                    self.pos.line += 1;
+                    self.pos.char = 1;
+
+                    break Some(b'\n');
+                }
+
                 (Some(ch), _) => {
-                    self.pos += 1;
+                    self.pos.byte += 1;
+                    self.pos.char += 1;
+
                     break Some(*ch);
                 }
+
                 (None, _) => {
                     break None;
                 }
@@ -191,7 +234,7 @@ impl<'a> IcsReader<'a> {
                 }
             }
 
-            self.warn(Span::new(pos, pos + 1), "invalid unicode character");
+            self.warn(Span::new(pos, self.pos), "invalid unicode character");
         }
     }
 
@@ -239,7 +282,7 @@ impl<'a> IcsReader<'a> {
                 |got| format!("expected {ch:?}, got {got:?}"),
             );
 
-            self.error(Span::new(self.pos, self.pos + 1), msg);
+            self.error(Span::one(self.pos), msg);
 
             None
         }
@@ -286,7 +329,7 @@ impl<'a> IcsReader<'a> {
                 |got| format!("expected digit (0-9), got {got:?}"),
             );
 
-            self.error(Span::new(self.pos, self.pos + 1), msg);
+            self.error(Span::one(self.pos), msg);
 
             None
         }
@@ -315,13 +358,13 @@ impl<'a> IcsReader<'a> {
         let mut value = String::new();
 
         let Some(got) = self.peek() else {
-            self.error(Span::new(self.pos, self.pos + 1), "incomplete source");
+            self.error(Span::one(self.pos), "incomplete source");
             return None;
         };
 
         if !got.is_alphabetic() {
             self.error(
-                Span::new(self.pos, self.pos + 1),
+                Span::one(self.pos),
                 format!("expected identifier (a-zA-Z), got {got:?}"),
             );
 
@@ -348,6 +391,7 @@ impl<'a> IcsReader<'a> {
     /// See [`Self::char()`] for the definition of line.
     #[must_use]
     pub fn rest(&mut self) -> String {
+        let pos = self.pos;
         let mut value = String::new();
 
         while let Some(ch) = self.char() {
@@ -358,13 +402,44 @@ impl<'a> IcsReader<'a> {
             value.push(ch);
         }
 
-        value
+        // Logically the newline character we've just read doesn't belong to the
+        // string, so let's strip it. This makes error reporting a bit better,
+        // because otherwise cases like:
+        //
+        // ```
+        // FOO:BAR
+        // ```
+        //
+        // ... look like off-by-one:
+        //
+        // ```
+        // error: invalid bar
+        //  --> at 1:5..8
+        // ```
+        self.pos.prev_char = self.pos.prev_char.saturating_sub(1).max(1);
+
+        // Some providers include random whitespaces, e.g. `TRANSP: OPAQUE` -
+        // let's get rid of them to make downstream parsers simpler
+        if value.starts_with(' ') || value.ends_with(' ') {
+            self.warn(
+                Span::new(pos, self.pos.prev()),
+                "quirky whitespace around value",
+            );
+
+            value.trim().to_owned()
+        } else {
+            value
+        }
     }
 
     /// Infers what kind of thing is in front of us (a component, a property,
-    /// etc.), eats it, and returns it.
+    /// etc.) and returns it.
     #[must_use]
     pub fn entry(&mut self) -> Option<ReadEntry> {
+        if self.peek() == Some('\n') {
+            return Some(ReadEntry::Newline);
+        }
+
         if self.try_eat(':').is_some() {
             return Some(ReadEntry::Value);
         }
@@ -438,7 +513,7 @@ impl<'a> IcsReader<'a> {
             });
 
             if let Some(entry) = entry {
-                entry.burn(self);
+                entry.burn(self, Kind::Property)?;
             } else {
                 break;
             }
@@ -475,11 +550,7 @@ impl<'a> IcsReader<'a> {
     where
         T: IcsRead<M>,
     {
-        self.context(
-            Span::new(self.pos, self.pos + 1),
-            format!("`{}`", T::name()),
-            T::read,
-        )
+        self.context(Span::one(self.pos), format!("`{}`", T::name()), T::read)
     }
 }
 
@@ -491,45 +562,30 @@ pub struct ReadMsg {
     pub context: Vec<Spanned<String>>,
 }
 
-impl ReadMsg {
-    /// Converts this message into string.
-    ///
-    /// If you provide `src`, i.e. the buffer passed to `VCalendar::from_str()`
-    /// etc., the returned message will contain more information about the
-    /// context in which the error occurred.
-    #[must_use]
-    pub fn to_string<'a>(&self, src: impl Into<Option<&'a [u8]>>) -> String {
-        let mut out = String::new();
-
-        _ = write!(
-            out,
+impl fmt::Display for ReadMsg {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
             "{}: ",
             match self.kind {
                 ReadMsgKind::Warning => "warn",
                 ReadMsgKind::Error => "error",
             }
-        );
+        )?;
 
-        _ = write!(out, "{}", self.msg);
+        write!(f, "{}", self.msg)?;
 
-        if let Some(src) = src.into() {
-            _ = writeln!(out);
-
-            if let Some(at) = self.at {
-                _ = writeln!(out, " --> at {}", at.resolve(src));
-            }
-
-            for ctx in self.context.iter().rev() {
-                _ = writeln!(
-                    out,
-                    "  | when parsing {} at {}",
-                    ctx.as_str(),
-                    ctx.span.resolve(src)
-                );
-            }
+        if let Some(at) = self.at {
+            writeln!(f)?;
+            write!(f, " --> at {at}")?;
         }
 
-        out
+        for ctx in self.context.iter().rev() {
+            writeln!(f)?;
+            write!(f, "  | when parsing {} at {}", ctx.as_str(), ctx.span,)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -560,6 +616,9 @@ pub enum ReadEntry {
 
     /// Parameter's value, as in `:something`.
     Value,
+
+    /// Newline character (`\n`), used for error recovery.
+    Newline,
 }
 
 impl ReadEntry {
@@ -643,8 +702,22 @@ impl ReadEntry {
 
             Some(value)
         } else {
-            // Recover by skipping rest of the line
-            r.silently(IcsReader::rest);
+            // Since properties span for at most one line, let's recover by
+            // skipping to the next line. As an edge case, it's possible that
+            // `T` already ate the entire line for us - in that case do nothing.
+            //
+            // Basically, we're either in the middle of a parse:
+            //
+            // ```
+            // PROPERTY:FOO,BAR
+            //             ^
+            // ```
+            //
+            // ... or, as is the case with parsers which call `.rest()`
+            // internally, we're already at the next line.
+            if r.pos.char > 1 {
+                r.silently(IcsReader::rest);
+            }
 
             T::reasonable_default()
         };
@@ -702,7 +775,13 @@ impl ReadEntry {
     }
 
     /// Throws the "unknown property / component / ..." error and recovers.
-    pub fn burn(self, r: &mut IcsReader) {
+    ///
+    /// Returns `Some` if caller can continue and `None` if caller should jump
+    /// back to _its_ caller; this happens when we detect that the caller cannot
+    /// possibly recover from this case on its own (e.g. some crucial
+    /// information is missing from the input data).
+    #[must_use]
+    pub fn burn(self, r: &mut IcsReader, kind: Kind) -> Option<()> {
         match self {
             ReadEntry::Comp { name } => {
                 r.error(name.span, format!("unknown component `{}`", name.value));
@@ -715,12 +794,14 @@ impl ReadEntry {
                                 return Some(());
                             }
 
-                            e.burn(r);
+                            e.burn(r, kind)?;
                         }
 
                         None::<()>
                     })
                 });
+
+                Some(())
             }
 
             ReadEntry::CompEnd { name } => {
@@ -728,6 +809,8 @@ impl ReadEntry {
 
                 // No need to recover, the entire `END:SOMETHING` part has been
                 // already read
+
+                Some(())
             }
 
             ReadEntry::Prop { name } => {
@@ -745,6 +828,8 @@ impl ReadEntry {
 
                 // Recover by skipping rest of the line
                 r.silently(IcsReader::rest);
+
+                Some(())
             }
 
             ReadEntry::Param { name } => {
@@ -769,16 +854,97 @@ impl ReadEntry {
                         _ = r.char();
                     }
                 });
+
+                Some(())
             }
 
             ReadEntry::Value => {
-                r.error(Span::new(r.pos() - 1, r.pos()), "unexpected value");
+                r.error(Span::one(r.pos().prev()), "unexpected value");
 
                 // Recover by skipping rest of the line
                 r.silently(IcsReader::rest);
+
+                Some(())
+            }
+
+            ReadEntry::Newline => {
+                // Newline is always kinda unexpected in the sense that both of
+                // those are technically illegal cases:
+                //
+                // ```
+                // BEGIN:VEVENT
+                //
+                // DTSTART:20180101T120000
+                // ```
+                //
+                // ```
+                // ORGANIZER;CN=
+                // ```
+                //
+                // ... but the main difference between those is the first one
+                // is properly-recoverable (just ignore the empty line), while
+                // the other one is actually _missing_ a piece of information,
+                // forcing us to skip that entire parse branch.
+                //
+                // That's why in the first case we return `Some(())`, meaning
+                // "dear caller, feel free to continue", and the other one ends
+                // up on `None`, meaning "dear caller, give up".
+                match kind {
+                    Kind::Component => {
+                        r.warn(Span::one(r.pos().prev()), "quirky newline");
+                        _ = r.eat('\n');
+                        Some(())
+                    }
+
+                    Kind::Property => {
+                        r.error(
+                            Span::one(r.pos().prev()),
+                            "unexpected newline, expecting property's value",
+                        );
+                        None
+                    }
+                }
             }
         }
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct IcsReaderPosition {
+    pub byte: usize,
+    pub line: u32,
+    pub char: u32,
+    pub prev_line: u32,
+    pub prev_char: u32,
+}
+
+impl IcsReaderPosition {
+    pub(crate) fn prev(self) -> LineAndChar {
+        (self.prev_line, self.prev_char)
+    }
+}
+
+impl Default for IcsReaderPosition {
+    fn default() -> Self {
+        Self {
+            byte: 0,
+            line: 1,
+            char: 1,
+            prev_line: 1,
+            prev_char: 1,
+        }
+    }
+}
+
+impl From<IcsReaderPosition> for LineAndChar {
+    fn from(value: IcsReaderPosition) -> Self {
+        (value.line, value.char)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct IcsReaderHints {
+    pub inside_array: bool,
 }
 
 #[cfg(test)]
@@ -829,7 +995,7 @@ mod tests {
             END:VEVENT
         "});
 
-        r.entry().unwrap().burn(&mut r);
+        r.entry().unwrap().burn(&mut r, Kind::Component).unwrap();
 
         assert!(r.entry().is_none());
 
@@ -837,13 +1003,13 @@ mod tests {
 
         let expected = vec![
             ReadMsg {
-                at: Some(Span::new(6, 14)),
+                at: Some(Span::new((1, 7), (1, 12))),
                 msg: "unknown component `VEVENT`".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             },
             ReadMsg {
-                at: Some(Span::new(50, 51)),
+                at: Some(Span::new((4, 11), (4, 11))),
                 msg: "incomplete source".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
@@ -862,10 +1028,10 @@ mod tests {
             X-TEST:six
         "});
 
-        r.entry().unwrap().burn(&mut r);
-        r.entry().unwrap().burn(&mut r);
-        r.entry().unwrap().burn(&mut r);
-        r.entry().unwrap().burn(&mut r);
+        r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
+        r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
+        r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
+        r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
 
         assert!(r.entry().is_none());
 
@@ -873,31 +1039,31 @@ mod tests {
 
         let expected = vec![
             ReadMsg {
-                at: Some(Span::new(0, 3)),
+                at: Some(Span::new((1, 1), (1, 3))),
                 msg: "unknown property `FOO`".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             },
             ReadMsg {
-                at: Some(Span::new(9, 12)),
+                at: Some(Span::new((2, 1), (2, 3))),
                 msg: "unknown property `BAR`".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             },
             ReadMsg {
-                at: Some(Span::new(29, 32)),
+                at: Some(Span::new((3, 1), (3, 3))),
                 msg: "unknown property `ZAR`".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             },
             ReadMsg {
-                at: Some(Span::new(39, 45)),
+                at: Some(Span::new((4, 1), (4, 6))),
                 msg: "unknown property `X-TEST`".into(),
                 kind: ReadMsgKind::Warning,
                 context: Vec::new(),
             },
             ReadMsg {
-                at: Some(Span::new(49, 50)),
+                at: Some(Span::new((4, 11), (4, 11))),
                 msg: "incomplete source".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
@@ -913,9 +1079,9 @@ mod tests {
             ;FOO=one;BAR=two-tree/four;ZAR=five
         "});
 
-        r.entry().unwrap().burn(&mut r);
-        r.entry().unwrap().burn(&mut r);
-        r.entry().unwrap().burn(&mut r);
+        r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
+        r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
+        r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
 
         assert!(r.entry().is_none());
 
@@ -923,25 +1089,25 @@ mod tests {
 
         let expected = vec![
             ReadMsg {
-                at: Some(Span::new(1, 4)),
+                at: Some(Span::new((1, 2), (1, 4))),
                 msg: "unknown parameter `FOO`".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             },
             ReadMsg {
-                at: Some(Span::new(9, 12)),
+                at: Some(Span::new((1, 10), (1, 12))),
                 msg: "unknown parameter `BAR`".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             },
             ReadMsg {
-                at: Some(Span::new(27, 30)),
+                at: Some(Span::new((1, 28), (1, 30))),
                 msg: "unknown parameter `ZAR`".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             },
             ReadMsg {
-                at: Some(Span::new(35, 36)),
+                at: Some(Span::new((1, 36), (1, 36))),
                 msg: "incomplete source".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
@@ -949,5 +1115,51 @@ mod tests {
         ];
 
         pa::assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn try_prop_recovery() {
+        // `DateOrDt` is non-greedy, it leaves the `FOO` part unparsed for the
+        // recovery mechanism to deal with
+
+        let mut r = target(ics! {"
+            DTSTART:20180101FOO
+            UID:1234
+        "});
+
+        let mut dtstart = None;
+        let mut uid = None;
+
+        _ = r
+            .entry()
+            .unwrap()
+            .try_prop::<DtStart>(&mut r, "DTSTART", &mut dtstart);
+
+        _ = r.entry().unwrap().try_prop::<Uid>(&mut r, "UID", &mut uid);
+
+        assert_eq!(None, dtstart);
+        assert_eq!(Some("1234"), uid.as_ref().map(|uid| uid.value.as_str()));
+
+        // ---
+        // On the other hand, `Status` is greedy - it eats the entire line,
+        // including when the status is not known
+
+        let mut r = target(ics! {"
+            STATUS:FOO
+            UID:1234
+        "});
+
+        let mut status = None;
+        let mut uid = None;
+
+        _ = r
+            .entry()
+            .unwrap()
+            .try_prop::<Status>(&mut r, "STATUS", &mut status);
+
+        _ = r.entry().unwrap().try_prop::<Uid>(&mut r, "UID", &mut uid);
+
+        assert_eq!(None, status);
+        assert_eq!(Some("1234"), uid.as_ref().map(|uid| uid.value.as_str()));
     }
 }

@@ -154,7 +154,7 @@ VCalendar {
                         Cn {
                             value: ParamValue {
                                 value: "Juste SavSav",
-                                quoted: false,
+                                quote: false,
                             },
                         },
                     ),
@@ -173,7 +173,7 @@ VCalendar {
                         Cn {
                             value: ParamValue {
                                 value: "james8@example.me",
-                                quoted: false,
+                                quote: false,
                             },
                         },
                     ),

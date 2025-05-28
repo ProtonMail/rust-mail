@@ -1,4 +1,4 @@
-use proton_mail_test_utils::test_context::MailTestContext;
+use proton_mail_common::test_utils::test_context::MailTestContext;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 

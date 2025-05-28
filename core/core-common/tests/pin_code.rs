@@ -1,8 +1,8 @@
+use proton_core_common::test_utils::test_context::TestContext;
 use proton_core_common::{
     models::{AppProtection, AppSettings, ModelExtension, PinProtection},
     pin_code::{PinCode, PinError},
 };
-use proton_core_test_utils::test_context::TestContext;
 use stash::{
     orm::Model,
     stash::{StashError, Tether},

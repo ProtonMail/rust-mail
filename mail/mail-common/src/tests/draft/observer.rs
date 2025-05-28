@@ -1,14 +1,19 @@
-use crate::draft::observers::{DraftAttachmentObserver, DraftSendResultWatcher};
+use crate::draft::observers::{
+    DraftAttachmentObserver, DraftSendResultWatcher, DraftSendResultWatcherMode,
+};
 use crate::models::{
     Attachment, Conversation, DraftAttachmentMetadata, DraftMetadata, DraftSendFailure,
     DraftSendFailureSave, DraftSendResult, DraftSendResultOrigin, Message,
 };
+use proton_action_queue::action::Priority;
+use proton_action_queue::db::StoredAction;
 use proton_core_api::services::proton::AddressId;
 use proton_core_common::datatypes::{AddressStatus, AddressType};
 use proton_core_common::models::Address;
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
+use proton_mail_common::test_utils::db::new_test_connection_file;
 use proton_mail_ids::LocalMessageId;
-use proton_mail_test_utils::db::new_test_connection_file;
+use stash::orm::Model;
 use stash::stash::{Bond, StashError};
 #[tokio::test]
 async fn draft_send_observer_only_triggers_for_new_items_empty_db() {
@@ -22,7 +27,9 @@ async fn draft_send_observer_only_triggers_for_new_items_empty_db() {
     .await
     .unwrap();
 
-    let mut watcher = DraftSendResultWatcher::new(stash.clone()).await.unwrap();
+    let mut watcher = DraftSendResultWatcher::new(stash.clone(), DraftSendResultWatcherMode::All)
+        .await
+        .unwrap();
 
     let mut v1 = DraftSendResult::failure(
         LocalMessageId::from(1),
@@ -100,7 +107,9 @@ async fn draft_send_observer_only_triggers_for_new_items_with_existing() {
     .await
     .unwrap();
 
-    let mut watcher = DraftSendResultWatcher::new(stash.clone()).await.unwrap();
+    let mut watcher = DraftSendResultWatcher::new(stash.clone(), DraftSendResultWatcherMode::All)
+        .await
+        .unwrap();
 
     let mut v1 = DraftSendResult::failure(
         LocalMessageId::from(4),
@@ -184,7 +193,9 @@ async fn draft_send_observer_re_triggers_for_same_message_with_different_error()
     .await
     .unwrap();
 
-    let mut watcher = DraftSendResultWatcher::new(stash.clone()).await.unwrap();
+    let mut watcher = DraftSendResultWatcher::new(stash.clone(), DraftSendResultWatcherMode::All)
+        .await
+        .unwrap();
 
     let mut v1 = DraftSendResult::failure(
         LocalMessageId::from(1),
@@ -212,6 +223,82 @@ async fn draft_send_observer_re_triggers_for_same_message_with_different_error()
     assert_eq!(new_values, vec![v1.clone()]);
 
     // insert second record
+    conn.tx::<_, _, StashError>(async |tx| {
+        v2.save(tx).await.unwrap();
+        Ok(())
+    })
+    .await
+    .unwrap();
+
+    let new_values = tokio::time::timeout(std::time::Duration::from_secs(5), watcher.next())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(new_values, vec![v2.clone()]);
+}
+
+#[tokio::test]
+async fn draft_send_observer_only_triggers_when_send_action_is_queued() {
+    let (stash, _db_dir) = new_test_connection_file().await;
+
+    let mut action = StoredAction {
+        id: None,
+        action_type: "foo".to_string(),
+        debug_string: None,
+        dependencies: vec![],
+        created: Default::default(),
+        priority: Priority::Highest,
+        scheduled: Default::default(),
+        state: vec![],
+        action_group: "default".to_string(),
+        resources: Default::default(),
+        version: 1,
+        row_id: None,
+    };
+    let mut conn = stash.connection();
+    let mut draft_metadata = DraftMetadata::builder()
+        .local_message_id(LocalMessageId::from(2))
+        .build();
+    conn.tx::<_, _, StashError>(async |tx| {
+        create_test_messages(2, tx).await;
+        action.save(tx).await.unwrap();
+        draft_metadata.send_action_id = action.id;
+        draft_metadata.save(tx).await.unwrap();
+        Ok(())
+    })
+    .await
+    .unwrap();
+
+    let mut watcher =
+        DraftSendResultWatcher::new(stash.clone(), DraftSendResultWatcherMode::SentOnly)
+            .await
+            .unwrap();
+
+    let mut v1 = DraftSendResult::failure(
+        LocalMessageId::from(1),
+        DraftSendResultOrigin::Save,
+        DraftSendFailure::Internal,
+    );
+    let mut v2 = DraftSendResult::failure(
+        LocalMessageId::from(2),
+        DraftSendResultOrigin::SaveBeforeSend,
+        DraftSendFailure::Save(DraftSendFailureSave::MessageDoesNotExist),
+    );
+
+    // insert first record
+    conn.tx::<_, _, StashError>(async |tx| {
+        v1.save(tx).await.unwrap();
+        Ok(())
+    })
+    .await
+    .unwrap();
+
+    // No notification on first update.
+    tokio::time::timeout(std::time::Duration::from_secs(1), watcher.next())
+        .await
+        .unwrap_err();
+
+    // insert second record, which will trigger since there is now a send action
     conn.tx::<_, _, StashError>(async |tx| {
         v2.save(tx).await.unwrap();
         Ok(())

@@ -2,8 +2,8 @@ use proton_crypto_inbox::keys::PackageCryptoType;
 use proton_crypto_inbox::message::packages::PackageMimeType;
 use proton_crypto_inbox::proton_crypto;
 use proton_mail_common::models::MailSettings;
-use proton_mail_test_utils::init::Params as TestParams;
-use proton_mail_test_utils::test_context::MailTestContext;
+use proton_mail_common::test_utils::init::Params as TestParams;
+use proton_mail_common::test_utils::test_context::MailTestContext;
 
 #[tokio::test]
 async fn load_sending_preferences() {

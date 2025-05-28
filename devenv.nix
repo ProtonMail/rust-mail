@@ -27,7 +27,7 @@ in
     with pkgs; [
       libiconv
       findutils
-      darwin.xcode_16_2
+      darwin.xcode_16_3
       # pkgsCross.x86_64-darwin.apple-sdk_15
     ]
   );
@@ -53,7 +53,7 @@ in
     description = "Opens XCode";
     binary = "bash";
     exec = ''
-      open -n "${pkgs.darwin.xcode_16_2}"
+      open -n "${pkgs.darwin.xcode_16_3}"
     '';
   } else null;
 

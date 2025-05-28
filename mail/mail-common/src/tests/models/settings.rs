@@ -2,7 +2,7 @@
 
 use super::*;
 use pretty_assertions::assert_eq;
-use proton_mail_test_utils::db::new_test_connection;
+use proton_mail_common::test_utils::db::new_test_connection;
 
 #[tokio::test]
 async fn test_mail_settings_store_read() {

@@ -6,8 +6,8 @@ use proton_core_common::datatypes::{
     AvatarInformation, ContactEmailItem, ContactItem, ContactItemType, GroupedContacts,
 };
 use proton_core_common::models::{Contact, ModelIdExtension};
-use proton_mail_test_utils::init::Params as TestParams;
-use proton_mail_test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
+use proton_mail_common::test_utils::init::Params as TestParams;
+use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 
 #[tokio::test]
 async fn contact_list() {
@@ -16,25 +16,27 @@ async fn contact_list() {
 
     params.contacts = vec![ApiContactBasic {
         id: "123".into(),
+        name: "Mr Banksy".to_string(),
+        uid: "123".into(),
+
         create_time: 0,
         label_ids: vec![],
         modify_time: 0,
-        name: "Mr Banksy".to_string(),
         size: 0,
-        uid: "123".into(),
     }];
 
     params.emails = vec![ApiContactEmail {
         id: "321".into(),
         contact_id: "123".into(),
+        email: "banksy@proton.me".to_string(),
+        name: "Mr Banksy".to_string(),
         canonical_email: "".to_string(),
+
         contact_type: vec![],
         defaults: ContactSendingPreferences::Default,
-        email: "banksy@proton.me".to_string(),
         is_proton: true,
         label_ids: vec![],
         last_used_time: 0,
-        name: "Mr Banksy".to_string(),
         order: 0,
     }];
 
@@ -60,6 +62,11 @@ async fn contact_list() {
                     color: "#1ED19C".to_string()
                 },
                 emails: vec![ContactEmailItem {
+                    name: "Mr Banksy".into(),
+                    avatar_information: AvatarInformation {
+                        text: "M".to_string(),
+                        color: "#1ED19C".to_string()
+                    },
                     local_id: 1.into(),
                     email: "banksy@proton.me".to_string(),
                     is_proton: true,

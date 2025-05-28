@@ -1,15 +1,16 @@
-use crate::core::datatypes::Id;
+use crate::core::datatypes::{Id, UnixTimestamp};
 use crate::errors::{
     DraftAttachmentUploadErrorReason, DraftSaveErrorReason, DraftSendErrorReason, ProtonError,
     VoidProtonResult,
 };
 use crate::mail::MailUserSession;
 use crate::{async_runtime, uniffi_async};
-use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::utils::MapVec;
 use proton_mail_common::MailContextError;
 use proton_mail_common::datatypes::LocalMessageId;
-use proton_mail_common::draft::observers::DraftSendResultWatcher as RealDraftSendResultWatcher;
+use proton_mail_common::draft::observers::{
+    DraftSendResultWatcher as RealDraftSendResultWatcher, DraftSendResultWatcherMode,
+};
 use proton_mail_common::errors::MailErrorReason as RealMailErrorReason;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::{
@@ -52,7 +53,10 @@ pub enum DraftSendStatus {
     /// Everything was completed with success. Contains the number of seconds left
     /// until the message's sending can be cancelled. `0` means it is no longer
     /// possible or the operation can not be done.
-    Success(u64),
+    Success {
+        seconds_until_cancel: u64,
+        delivery_time: UnixTimestamp,
+    },
     /// Something failed.
     Failure(DraftSendFailure),
 }
@@ -84,10 +88,13 @@ impl From<RealDraftSendResult> for DraftSendResult {
         let second_left_for_undo = value.time_left_for_undo().as_secs();
         Self {
             message_id: value.local_message_id.into(),
-            timestamp: value.timestamp,
-            error: value
-                .error
-                .map_or(DraftSendStatus::Success(second_left_for_undo), |e| {
+            timestamp: value.timestamp.into(),
+            error: value.error.map_or(
+                DraftSendStatus::Success {
+                    seconds_until_cancel: second_left_for_undo,
+                    delivery_time: value.undo_timestamp.into(),
+                },
+                |e| {
                     let proton_error = RealProtonMailError::from(e);
                     match proton_error {
                         RealProtonMailError::Reason(RealMailErrorReason::DraftSendReason(e)) => {
@@ -101,7 +108,8 @@ impl From<RealDraftSendResult> for DraftSendResult {
                         ) => DraftSendStatus::Failure(DraftSendFailure::AttachmentUpload(e.into())),
                         _ => DraftSendStatus::Failure(DraftSendFailure::Other(proton_error.into())),
                     }
-                }),
+                },
+            ),
             origin: value.origin.into(),
         }
     }
@@ -130,7 +138,11 @@ pub async fn new_draft_send_watcher(
 ) -> Result<Arc<DraftSendResultWatcher>, ProtonError> {
     let ctx = session.ctx()?;
     uniffi_async(async move {
-        let mut observer = RealDraftSendResultWatcher::new(ctx.user_stash().clone()).await?;
+        let mut observer = RealDraftSendResultWatcher::new(
+            ctx.user_stash().clone(),
+            DraftSendResultWatcherMode::SentOnly,
+        )
+        .await?;
         let handle = async_runtime()
             .spawn(async move {
                 loop {

@@ -4,8 +4,8 @@ use crate::messages::Messages;
 use crate::messages::Messages::DismissBackgroundProgress;
 use crate::widgets::{TextInput, TextInputState};
 use anyhow::anyhow;
+use proton_account_api::login::{LoginError, LoginFlow};
 use proton_mail_common::MailContext;
-use proton_mail_common::proton_mail_api::proton_core_api::login::{Flow, LoginError};
 use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Flex;
 use ratatui::prelude::*;
@@ -14,17 +14,17 @@ use std::sync::Arc;
 pub enum Message {
     Abort,
     Submit,
-    TwoFASuccess(Flow),
-    TwoFAFailed(Flow, LoginError),
+    TwoFASuccess(LoginFlow),
+    TwoFAFailed(LoginFlow, LoginError),
 }
 
-pub struct Model {
-    flow: Option<Flow>,
+pub struct TwoFaModel {
+    flow: Option<LoginFlow>,
     input_state: TextInputState,
 }
 
-impl Model {
-    pub fn new(flow: Flow) -> Self {
+impl TwoFaModel {
+    pub fn new(flow: LoginFlow) -> Self {
         Self {
             flow: Some(flow),
             input_state: TextInputState::new().selected(true),
@@ -32,7 +32,7 @@ impl Model {
     }
 }
 
-impl AppStateHandler for Model {
+impl AppStateHandler for TwoFaModel {
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
         let Event::Key(k) = event else {
             return Command::None;
@@ -57,7 +57,7 @@ impl AppStateHandler for Model {
                 if let Some(_flow) = self.flow.take() {
                     //TODO: Logout
                 }
-                Command::message(Messages::SwitchAppState(login::Model::new().into()))
+                Command::message(Messages::SwitchAppState(login::LoginModel::new().into()))
             }
             Message::Submit => {
                 if self.input_state.value().is_empty() {
@@ -99,7 +99,7 @@ impl AppStateHandler for Model {
                     Command::task(async move {
                         match ctx.user_context_from_login_flow(&mut flow).await {
                             Ok(context) => Command::message(Messages::SwitchAppState(
-                                context_init::Model::new(context).into(),
+                                context_init::ContextInitModel::new(context).into(),
                             )),
                             Err(e) => {
                                 let e = anyhow!("Failed to login: {e}");
@@ -157,13 +157,17 @@ impl AppStateHandler for Model {
         );
     }
 
+    fn help_options(&self) -> Vec<(&'static str, &'static str)> {
+        [("esc", "Cancel"), ("Enter", "Submit")].to_vec()
+    }
+
     fn view_status_bar(&mut self, frame: &mut Frame, area: Rect) {
         frame.render_widget(Text::from("TwoFA"), area);
     }
 }
 
-impl From<Model> for AppState {
-    fn from(value: Model) -> Self {
+impl From<TwoFaModel> for AppState {
+    fn from(value: TwoFaModel) -> Self {
         Self::TwoFA(value)
     }
 }

@@ -15,8 +15,7 @@ pub struct ChallengePayload {
     pub methods: Vec<String>,
     pub description: String,
     pub expires_at: u64,
-
-    web_url: Url,
+    pub web_url: Url,
 }
 
 impl ChallengePayload {
@@ -81,7 +80,7 @@ impl ChallengeResponse {
 
 /// An interface by which human verification challenges can be handled.
 #[async_trait]
-pub trait ChallengeNotifier: Send + Sync + 'static {
+pub trait ChallengeNotifier: Send + Sync {
     async fn on_challenge(&self, payload: ChallengePayload) -> ChallengeResponse;
 }
 

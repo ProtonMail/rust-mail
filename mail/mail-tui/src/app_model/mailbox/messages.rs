@@ -643,6 +643,25 @@ impl MessagesState {
             frame.render_stateful_widget(scrollable_table, table_area, &mut self.table_state);
         }
     }
+
+    pub fn help_options(&self, vec: &mut Vec<(&'static str, &'static str)>) {
+        if matches!(self.open_message, DecryptedMessageStatus::Success(_)) {
+            vec.extend_from_slice(&[
+                ("Shift + ▲ ", "Scroll up in a message"),
+                ("Shift + ▼ ", "Scroll down in a message"),
+            ]);
+        }
+        vec.extend_from_slice(&[
+            ("esc", "Close message"),
+            ("a", "Download all attachments"),
+            ("e", "Open composer"),
+            ("Ctrl + r", "Reply"),
+            ("Ctrl + R", "Reply to all"),
+            ("Ctrl + t", "Reply to all"),
+            ("Ctrl + f", "Forward this message"),
+            ("b/B", "block/unblock the sender of this message"),
+        ]);
+    }
 }
 
 pub struct DecryptedMessage {
@@ -960,9 +979,7 @@ impl DecryptedMessage {
 fn html_to_text(message: &str) -> Result<String> {
     // TODO: Best effort terminal image rendering. See https://docs.rs/termimage/latest/termimage/
     let cursor = std::io::Cursor::new(message);
-    let config = html2text::config::plain();
-    config
-        .string_from_read(cursor, 80)
+    proton_mail_html_transformer::Transformer::html2text(cursor)
         .map_err(|e| anyhow!("Failed to parse HTML: {e}"))
 }
 

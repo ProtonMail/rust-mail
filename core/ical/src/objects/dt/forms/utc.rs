@@ -70,7 +70,7 @@ impl IcsRead<Value> for DateTime<UtcForm> {
 
         if r.try_eat('Z').is_none() {
             r.warn(
-                Span::new(r.pos(), r.pos() + 1),
+                Span::one(r.pos()),
                 "expected utc-date-time (missing `Z` here)",
             );
         }
@@ -104,7 +104,7 @@ mod tests {
         assert_trip!(
             "20180101T123456" => "20180101T123456Z", yielding [
                 ReadMsg {
-                    at: Some(Span::new(15, 16)),
+                    at: Some(Span::new((1, 16), (1, 16))),
                     msg: "expected utc-date-time (missing `Z` here)".into(),
                     kind: ReadMsgKind::Warning,
                     context: Vec::new(),

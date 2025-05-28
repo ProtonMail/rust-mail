@@ -502,6 +502,6 @@ warn: unknown property `X-WR-CALNAME`
 
 # violations
 
-- event[0]: dtstart: time zone `Eastern Standard Time` is not known
+- viol: event[0]: dtstart: time zone `Eastern Standard Time` is not known
 
-- event[0]: dtend: time zone `Eastern Standard Time` is not known
+- viol: event[0]: dtend: time zone `Eastern Standard Time` is not known

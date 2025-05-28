@@ -13,13 +13,17 @@ use crate::app::{Command, Model};
 use crate::app_model::path_select_popup::PathSelectPopup;
 use crate::keychain::AppKeyChain;
 use crate::messages::Messages;
+use crate::widgets::ScrollableListState;
 use anyhow::anyhow;
+use futures::FutureExt;
+use proton_core_common::OnSessionDeletedResponse;
 use proton_mail_common::MailContext;
 use proton_mail_common::context::EventPollMode;
 use ratatui::crossterm::event::{Event, KeyCode, KeyEventKind};
-use ratatui::layout::Flex;
+use ratatui::layout::{Constraint, Flex};
 use ratatui::prelude::*;
-use ratatui::widgets::{Block, Borders, Clear, Paragraph, Wrap};
+use ratatui::widgets::{Block, Borders, Clear, Paragraph, Row, Table, Wrap};
+use session_select::SessionSelectModel;
 use std::backtrace::Backtrace;
 use std::error::Error;
 use std::fs::{File, read_to_string};
@@ -43,19 +47,19 @@ pub const APP_ID: &str = "com.proton.proton-mail-tui";
 /// Internal application state.
 pub enum AppState {
     /// There are existing sessions available, allow user to select one.
-    SessionSelect(session_select::Model),
+    SessionSelect(SessionSelectModel),
     /// Log into a new account.
-    Login(login::Model),
+    Login(login::LoginModel),
     /// Submit 2FA code.
-    TwoFA(twofa::Model),
+    TwoFA(twofa::TwoFaModel),
     /// Initialize the user context.
-    ContextInit(context_init::Model),
+    ContextInit(context_init::ContextInitModel),
     /// Display conversation/messages.
-    Mailbox(mailbox::Model),
+    Mailbox(mailbox::MailboxModel),
     /// Display contacts and groups
-    Contacts(contacts::Model),
+    Contacts(contacts::ContactsModel),
     /// Background Execution Simulator
-    Background(background::Model),
+    Background(background::BackgroundModel),
 }
 
 /// Trait to enforce behavior on each of the app states.
@@ -71,6 +75,9 @@ pub trait AppStateHandler {
     fn update(&mut self, ctx: &Arc<MailContext>, message: Messages) -> Command<Messages>;
     /// Called to display the current state.
     fn view(&mut self, frame: &mut Frame, area: Rect);
+
+    /// What will get shown on the help popup (F1)
+    fn help_options(&self) -> Vec<(&'static str, &'static str)>;
 
     /// Called to provide contextual help that is displayed at the top.
     fn view_help_bar(&mut self, frame: &mut Frame, area: Rect);
@@ -96,6 +103,12 @@ pub trait Popup {
     }
     /// Display popup contents.
     fn view(&mut self, frame: &mut Frame, area: Rect);
+    fn vertical_constraint(&self) -> Constraint {
+        Constraint::Percentage(60)
+    }
+    fn horizontal_constraint(&self) -> Constraint {
+        Constraint::Percentage(60)
+    }
 }
 
 pub struct AppModel {
@@ -156,7 +169,7 @@ impl AppModel {
             )
             .await?;
 
-            let sessions_model = session_select::Model::new(&context).await?;
+            let sessions_model = SessionSelectModel::new(&context).await?;
             Ok(Self {
                 context,
                 state: AppState::SessionSelect(sessions_model),
@@ -193,7 +206,25 @@ impl AppModel {
 
 impl Model<Messages> for AppModel {
     fn on_ready(&mut self) -> Command<Messages> {
-        self.state.on_state_enter()
+        let ready_cmd = self.state.on_state_enter();
+
+        let ctx = self.context.clone();
+        let session_observer_cmd = Command::background_task(move |sender| {
+            async move {
+                ctx.core_context().on_session_deleted(move |_, user_id| {
+                    let sender = sender.clone();
+                    async move {
+                        let _ = sender
+                            .send_async(Command::message(Messages::SessionExpired(user_id)))
+                            .await;
+                        OnSessionDeletedResponse::Continue
+                    }
+                });
+            }
+            .boxed()
+        });
+
+        Command::batch([session_observer_cmd, ready_cmd])
     }
 
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
@@ -269,6 +300,31 @@ impl Model<Messages> for AppModel {
                 self.state = new_state;
                 return self.state.on_state_enter();
             }
+            Messages::SessionExpired(ref user_id) => {
+                if let Some(ctx) = match &self.state {
+                    AppState::ContextInit(state) => Some(state.ctx()),
+                    AppState::Mailbox(state) => Some(state.ctx()),
+                    AppState::Contacts(state) => Some(state.ctx()),
+                    AppState::Background(state) => Some(state.ctx()),
+                    _ => None,
+                } {
+                    if *ctx.user_id() == *user_id {
+                        let ctx = self.context.clone();
+                        return Command::task(async move {
+                            match SessionSelectModel::new(&ctx).await {
+                                Ok(m) => Command::message(Messages::SwitchAppState(
+                                    AppState::SessionSelect(m),
+                                )),
+                                Err(e) => Command::message(Messages::DisplayError(
+                                    Some("Irrecoverable Error".to_string()),
+                                    anyhow!("Failed to load session select state: {e:?}"),
+                                )),
+                            }
+                        });
+                    }
+                }
+                message
+            }
             _ => message,
         };
 
@@ -313,20 +369,12 @@ impl Model<Messages> for AppModel {
             bg_progress.draw(frame);
         }
         if let Some(popup) = &mut self.popup {
-            let [_, box_area, _] = Layout::vertical([
-                Constraint::Percentage(20),
-                Constraint::Percentage(60),
-                Constraint::Percentage(20),
-            ])
-            .flex(Flex::SpaceAround)
-            .areas(area);
-            let [_, box_area, _] = Layout::horizontal([
-                Constraint::Percentage(20),
-                Constraint::Percentage(60),
-                Constraint::Percentage(20),
-            ])
-            .flex(Flex::SpaceAround)
-            .areas(box_area);
+            let [box_area] = Layout::vertical([popup.vertical_constraint()])
+                .flex(Flex::Center)
+                .areas(area);
+            let [box_area] = Layout::horizontal([popup.horizontal_constraint()])
+                .flex(Flex::Center)
+                .areas(box_area);
             let popup_area = box_area.inner(Margin {
                 horizontal: 1,
                 vertical: 1,
@@ -356,6 +404,14 @@ impl AppStateHandler for AppState {
     }
 
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
+        if let Event::Key(k) = event {
+            if k.code == KeyCode::F(1) {
+                return Command::Message(Messages::RaisePopup(Box::new(HelpPopup {
+                    items: self.help_options(),
+                    list_state: ScrollableListState::new(Some(0)),
+                })));
+            }
+        }
         match self {
             AppState::SessionSelect(state) => state.handle_event(event),
             AppState::Login(state) => state.handle_event(event),
@@ -424,6 +480,18 @@ impl AppStateHandler for AppState {
             AppState::Mailbox(state) => state.help_bar_lines(),
             AppState::Contacts(state) => state.help_bar_lines(),
             AppState::Background(state) => state.help_bar_lines(),
+        }
+    }
+
+    fn help_options(&self) -> Vec<(&'static str, &'static str)> {
+        match self {
+            AppState::SessionSelect(state) => state.help_options(),
+            AppState::Login(state) => state.help_options(),
+            AppState::TwoFA(state) => state.help_options(),
+            AppState::ContextInit(state) => state.help_options(),
+            AppState::Mailbox(state) => state.help_options(),
+            AppState::Contacts(state) => state.help_options(),
+            AppState::Background(state) => state.help_options(),
         }
     }
 }
@@ -702,5 +770,40 @@ impl Popup for YesNoPopup {
             .bold(),
             instructions,
         );
+    }
+}
+
+pub struct HelpPopup {
+    items: Vec<(&'static str, &'static str)>,
+    list_state: ScrollableListState,
+}
+
+impl Popup for HelpPopup {
+    fn title(&self) -> Option<String> {
+        Some("Help".into())
+    }
+
+    fn view(&mut self, frame: &mut Frame, area: Rect) {
+        let Some(max) = self.items.iter().map(|x| x.0.len()).max() else {
+            error!("Help list was somehow emtpy");
+            return;
+        };
+
+        let max: u16 = max.try_into().unwrap();
+
+        let rows = self.items.iter().map(|(key, desc)| Row::new([*key, *desc]));
+
+        let table = Table::new(rows, [Constraint::Length(max), Constraint::Fill(1)]);
+        frame.render_widget(table, area);
+    }
+
+    fn vertical_constraint(&self) -> Constraint {
+        let len: u16 = self.items.len().try_into().unwrap();
+        Constraint::Length(len + 2) // +2 to account for margins
+    }
+
+    fn handle_event(&mut self, event: Event) -> Command<Messages> {
+        self.list_state.handle_event(&event);
+        Command::None
     }
 }

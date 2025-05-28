@@ -13,7 +13,6 @@ use proton_mail_api::services::proton::request_data::DraftRecipient;
 use proton_mail_html_transformer::Transformer;
 use std::borrow::Cow;
 use std::fmt::Display;
-use std::io;
 use tracing::error;
 
 #[cfg(test)]
@@ -175,7 +174,7 @@ pub(super) fn prepare_html_reply(
     output.push_str(&sender_reply);
     output.push_str(HTML_LINE_BREAK);
     output.push_str(BEGIN_BLOCKQUOTE);
-    output.push_str(original_body);
+    output.push_str(&sanitize_reply(original_body));
     output.push_str(CLOSE_BLOCKQUOTE);
     output.push_str(CLOSE_QUOTE);
 }
@@ -219,10 +218,7 @@ pub fn html_to_text(input: &str) -> String {
     transformer.add_noreferrer();
     transformer.strip_utm();
     transformer.strip_whitelist();
-    let transformed = transformer.to_string();
-    let cursor = io::Cursor::new(transformed);
-    let config = html2text::config::plain();
-    match config.string_from_read(cursor, 80) {
+    match transformer.to_plain_text() {
         Ok(text_body) => text_body,
         Err(e) => {
             error!("Failed to convert html to text: {e:?}");
@@ -243,6 +239,23 @@ pub fn maybe_sanitize(mime_type: MimeType, body: String) -> String {
     transformer.strip_whitelist();
 
     transformer.to_string()
+}
+
+/// Used only when creating a draft from existing message.
+/// Extracts `<body>` innerHTML from the message.
+///
+/// # Parameters
+///
+/// * `body` - message body, containing full `<html>`
+fn sanitize_reply(body: &str) -> String {
+    let mut html = Transformer::new(body);
+    // TODO(wpolak): In following MR's:
+    // * Inject dark mode
+    //     * Make sure dark mode is reversible
+    html.move_styles_to_body();
+    // * Sanitize `<style>` in `<body>` so that selectors are pointing to
+    // `.protonmail_quote` (to prevent style bleeding)
+    html.extract_body()
 }
 
 /// Generates a reply similar to:

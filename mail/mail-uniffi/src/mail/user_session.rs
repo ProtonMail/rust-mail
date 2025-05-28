@@ -89,10 +89,14 @@ impl MailUserSession {
     pub async fn logout(&self) -> Result<(), UserSessionError> {
         let ctx = self.take_ctx()?;
 
-        uniffi_async(async move { ctx.sign_out().map_err(RealProtonMailError::from).await })
-            .await
-            .map_err(UserSessionError::from)
-            .into()
+        uniffi_async(async move {
+            ctx.logout_and_delete_data()
+                .map_err(RealProtonMailError::from)
+                .await
+        })
+        .await
+        .map_err(UserSessionError::from)
+        .into()
     }
 }
 

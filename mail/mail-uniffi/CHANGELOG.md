@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## UNRELEASED
+
+### Changed
+
+- [ET-2976] Breaking changes
+  - `LoginFlow.toUserContext` functionality is now defined in `MailSessionInterface`:
+    ```
+    MailSessionInterface {
+        suspend fun `toUserContext`(`ffiFlow`: LoginFlow): MailSessionToUserContextResult
+    }
+    ```
+  - `mail-uniffi/LoginError` was renamed to `MailLoginError`
+
+## [mail-uniffi-v0.82.0] - 2025-05-27
+
+### Features
+
+- [ET-3101] Move styles to body
+- [ET-3101] Move styles to body in draft reply
+- Expose delivery time in draftsendresult
+
+### Fixes
+
+- [ET-2742] Replies to html messages should always be in html
+- [ET-3021] Add default implementation for avatar information (e.g. draft)
+
+
+## [mail-uniffi-v0.81.0] - 2025-05-26
+### Changed
+
+- [android] register tokio threads with jni
+
+### Features
+
+- [ET-3101] Replying to message creates a draft with only a body of the message
+
+### Fixes
+
+- Registering push notification waits for the network in the offline mode
+- Correct cached status for conversations created by a draft
+- Attachments get downloaded again if they're deleted from disk
+- Conversation create race condition
+- [ET-2328] Move draft to sent folder on already sent error
+- Update watcher create order to avoid races
+
+
+## [mail-uniffi-v0.80.0] - 2025-05-22
+
+### Features
+
+- [ET-735] Account sign-up flow
+
+
 ## [mail-uniffi-v0.79.0] - 2025-05-19
 
 ### Changed
@@ -74,39 +127,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [mail-uniffi-v0.76.0] - 2025-05-07
 
-### Changed
-
-- Ical: simplify violation management
-- Ical: shuffle date-time tests around
-- Ical: simplify date-time management
-- Ical: simplify test-only prodids
-- Ical: support `readentry::value`
-- Update `get_unsent_messages_ids_in_queue`
-- Ical: s/ical/proton-ical
-- Ical: use `tz.is_unknown()`
-- Ical: address compatibility issues around a couple enums
-- Ical: s/read/icsread, s/write/icswrite
-- Ical: address tzid's todo comment
-- Ical: clarify terminology (ical -> ics)
-- Ical: support \t within content lines
-
-### Features
-
-- Ical: implement models
-- Ical: implement writer & reader
-- Ical: implement validator
-- Ical: implement rrule iterator
-- Ical: implement php module
-- Ical: add benchmarks
-- Ical: handle trailing data
-- Enable rollback items
-- Db interruption
-
 ### Fixes
 
-- Sort changelog chronologically
-- [ET-2850] Prevent double compression in pgp/mime sending
-- [ET-2783] Ensure all logged in and intialized contexts are used
 - [ET-2786] Only save draft if body and/or subject differ
 
 
@@ -125,14 +147,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Run 'cargo generate-lockfile' for proton-mail-uniffi@0.75.4
 
 
-## [mail-uniffi-v0.75.3] - 2025-05-05
-
-### Fixes
-
-- [ET-2716] Autodelete banner no longer waits for the event loop to clear upon mark as legitimate and expiry and autodelete banners don't show both
-- [ET-2716] Auto-delete banner no longer visible after disabling auto-delete
-
-
 ## [mail-uniffi-v0.75.2] - 2025-04-30
 
 ### Fixes
@@ -140,31 +154,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Ensure last conversation messages is marked as unread
 
 
-## [mail-uniffi-v0.75.1] - 2025-04-30
-
-### Fixes
-
-- [ET-2804] Delete conversation & message actions now resolve ids before marking message/conversation as deleted
-- [ET-2809] Duplicate entries in trash location should no longer be visible
-
-
 ## [mail-uniffi-v0.75.0] - 2025-04-28
 
 ### Changed
 
 - [ET-2328] Do not report errors on already sent
-
-### Features
-
-- Send tracing logs both to file and to ios os-logger
-- [ET-2375] Quick actions for push notifications
-- [ET-2731] Remove attachments from draft with content-id
-
-### Fixes
-
-- [ET-2754] Fix add_inline in draft (after merging release 0.72.x to master)
-- [ET-2778] Correctly store content-id for inline attachments
-- 'seen' should consider both commit and tag
 
 
 ## [mail-uniffi-v0.72.13] - 2025-04-25
@@ -175,24 +169,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-2754] Draft now holds weak handle to `mailusercontext`.
 - [ET-2754] Decrypted message now hold s weak handle to the `mailusercontext`
 - Do not sync mailbox, fix of b8a6329bb0fe62a7cc3acc8676ea6553d3f2eeca
-
-
-## [mail-uniffi-v0.74.0] - 2025-04-24
-
-### Features
-
-- Et-2713: expose observability features via uniffi
-- Et-2713: guarantee a single observability background job even when multiple sessions are created
-
-### Fixes
-
-- Improved delete all messages in label
-- Spam and trash folders correctly get assigned in the banner
-- Decrease memory footprint of the app by compiling the vcard regexes on demand.
-- Ensure changelog generation doesn't filter out certain commits
-- Cleanly close git repo when done
-- Google paymentreceipt type.
-- Remove timeout on transactions
 
 
 ## [mail-uniffi-v0.72.12] - 2025-04-24

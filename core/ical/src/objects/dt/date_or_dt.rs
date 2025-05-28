@@ -68,25 +68,19 @@ impl IcsRead<Property> for DateOrDt {
                 break;
             }
 
-            e.burn(r);
+            e.burn(r, Kind::Property)?;
         }
 
         match value.unwrap_or_default() {
             DtValueType::Date => {
                 let date = r.value()?;
 
-                if let Some(s) = r.spanned(|r| r.try_eat('T')) {
-                    if let Some(s) = r.spanned(|r| r.try_string("000000")) {
-                        r.warn(
-                            s.span,
-                            "non-conformant: skipping T000000 to coerce this \
-                             date-time into date",
-                        );
-                    } else {
-                        r.error(s.span, "unexpected time component");
+                if let Some(s) = r.spanned(|r| r.try_string("T000000")) {
+                    r.warn(s.span, "quirky time component");
+                } else if let Some(s) = r.spanned(|r| r.try_eat('T')) {
+                    r.error(s.span, "unexpected time component");
 
-                        _ = r.silently(IcsReader::value::<Time>);
-                    }
+                    _ = r.silently(IcsReader::value::<Time>);
                 }
 
                 Some(DateOrDt::Date(date))
@@ -223,9 +217,21 @@ mod tests {
         assert_trip!(
             ";VALUE=DATE:20180101T000000" => ";VALUE=DATE:20180101", yielding [
                 ReadMsg {
-                    at: Some(Span::new(21, 27)),
-                    msg: "non-conformant: skipping T000000 to coerce this date-time into date".into(),
+                    at: Some(Span::new((1, 21), (1, 27))),
+                    msg: "quirky time component".into(),
                     kind: ReadMsgKind::Warning,
+                    context: Vec::new(),
+                },
+            ],
+            DateOrDt as Property
+        );
+
+        assert_trip!(
+            ";VALUE=DATE:20180101T123456" => ";VALUE=DATE:20180101", yielding [
+                ReadMsg {
+                    at: Some(Span::new((1, 21), (1, 21))),
+                    msg: "unexpected time component".into(),
+                    kind: ReadMsgKind::Error,
                     context: Vec::new(),
                 },
             ],

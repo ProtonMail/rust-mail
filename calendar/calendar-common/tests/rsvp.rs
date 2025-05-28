@@ -10,7 +10,7 @@ use proton_calendar_common::{
     RsvpAttendee, RsvpCalendar, RsvpError, RsvpEvent, RsvpEventId, RsvpOccurrence,
 };
 use proton_core_api::session::{Config, Session};
-use proton_core_test_utils::test_context::{MockApiEnv, TestContext};
+use proton_core_common::test_utils::test_context::{MockApiEnv, TestContext};
 use proton_crypto::crypto::{KeyGeneratorAlgorithm, PGPProviderSync};
 use proton_crypto::{new_pgp_provider, new_srp_provider};
 use proton_crypto_account::keys::{

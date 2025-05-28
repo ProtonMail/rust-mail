@@ -318,7 +318,7 @@ impl OpenedContactState {
     }
 }
 
-pub struct Model {
+pub struct ContactsModel {
     ctx: Arc<MailUserContext>,
     contacts: Vec<FlatContact>,
     open_contact: OpenedContactState,
@@ -326,7 +326,7 @@ pub struct Model {
     watcher: Option<WatchHandle>,
 }
 
-impl Model {
+impl ContactsModel {
     pub fn new(ctx: Arc<MailUserContext>) -> Self {
         Self {
             ctx,
@@ -335,6 +335,10 @@ impl Model {
             open_contact: OpenedContactState::default(),
             watcher: None,
         }
+    }
+
+    pub fn ctx(&self) -> Arc<MailUserContext> {
+        Arc::clone(&self.ctx)
     }
 
     fn selected_contact_item(&self) -> Option<&ContactItemType> {
@@ -455,24 +459,17 @@ impl Model {
     }
 }
 
-impl AppStateHandler for Model {
+impl AppStateHandler for ContactsModel {
     fn on_state_enter(&mut self) -> Command<Messages> {
         Command::message(Message::Init.into())
     }
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
+        self.list_state.handle_event(&event);
         let Event::Key(key) = event else {
             return Command::None;
         };
 
         match key.code {
-            KeyCode::Char('k') | KeyCode::Up => {
-                self.list_state.prev();
-                Command::None
-            }
-            KeyCode::Char('j') | KeyCode::Down => {
-                self.list_state.next();
-                Command::None
-            }
             KeyCode::Enter => Command::message(Message::OpenContactPopup.into()),
             KeyCode::Esc => {
                 if self.open_contact.is_open() {
@@ -485,7 +482,7 @@ impl AppStateHandler for Model {
                             "Loading mailbox ...".to_owned(),
                         )),
                         Command::task(async move {
-                            let model = crate::app_model::mailbox::Model::new(ctx).await;
+                            let model = crate::app_model::mailbox::MailboxModel::new(ctx).await;
                             let message = match model {
                                 Ok(model) => Messages::SwitchAppState(model.into()),
                                 Err(e) => e.into(),
@@ -603,11 +600,20 @@ impl AppStateHandler for Model {
         );
     }
 
+    fn help_options(&self) -> Vec<(&'static str, &'static str)> {
+        vec![
+            ("k, ▲", "Go up"),
+            ("j, ▼", "Go down"),
+            ("enter", "See details for a contact"),
+            ("esc", "Close the contact"),
+        ]
+    }
+
     fn view_status_bar(&mut self, _frame: &mut Frame, _area: Rect) {}
 }
 
-impl From<Model> for AppState {
-    fn from(value: Model) -> Self {
+impl From<ContactsModel> for AppState {
+    fn from(value: ContactsModel) -> Self {
         Self::Contacts(value)
     }
 }

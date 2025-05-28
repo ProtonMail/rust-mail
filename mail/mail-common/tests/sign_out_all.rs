@@ -1,6 +1,6 @@
 use proton_core_common::datatypes::{LocalLabelId, SystemLabel};
-use proton_mail_test_utils::init::Params as TestParams;
-use proton_mail_test_utils::test_context::MailTestContext;
+use proton_mail_common::test_utils::init::Params as TestParams;
+use proton_mail_common::test_utils::test_context::MailTestContext;
 
 const CACHED_FILE_NAME: &str = "my_file.txt";
 

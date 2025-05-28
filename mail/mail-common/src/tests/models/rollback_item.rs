@@ -6,15 +6,15 @@ use proton_core_api::status_observer::StatusObserver;
 use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_common::models::ModelExtension;
 use proton_core_common::models::ModelIdExtension;
-use proton_core_test_utils::test_context::MockApiEnv;
+use proton_core_common::test_utils::test_context::MockApiEnv;
 use proton_mail_api::services::proton::common::ConversationId;
 use proton_mail_api::services::proton::responses::{GetConversationsResponse, GetMessagesResponse};
-use proton_mail_ids::LocalConversationId;
-use proton_mail_test_utils::db::new_test_connection_file;
-use proton_mail_test_utils::{
+use proton_mail_common::test_utils::db::new_test_connection_file;
+use proton_mail_common::{
     api_conversation, api_label, api_message_meta, conversation, label, message,
-    utils::create_address,
+    test_utils::utils::create_address,
 };
+use proton_mail_ids::LocalConversationId;
 use test_case::test_case;
 #[allow(unused_imports)]
 use wiremock::{

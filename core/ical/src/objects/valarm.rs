@@ -94,7 +94,7 @@ impl IcsRead<Component> for VAlarm {
                 break;
             }
 
-            e.burn(r);
+            e.burn(r, Kind::Component)?;
         }
 
         let duration_and_repeat = if duration.is_some() || repeat.is_some() {
