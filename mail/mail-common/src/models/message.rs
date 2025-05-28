@@ -2844,6 +2844,11 @@ impl Message {
         self.label_ids.contains(&LabelId::all_scheduled()) && self.flags.is_schedule_send()
     }
 
+    #[must_use]
+    pub fn is_sent(&self) -> bool {
+        self.label_ids.contains(&LabelId::sent()) && self.flags.is_sent()
+    }
+
     /// Returns id of the `invite.ics` attachment, if any.
     ///
     /// See [`Self::is_rsvp()`], [`Self::fetch_rsvp()`].
