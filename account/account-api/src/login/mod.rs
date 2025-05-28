@@ -1,9 +1,11 @@
 use crate::login::state::State;
-use crate::service::{ApiServiceError, ServiceError};
-use crate::services::proton::{SessionId, UserId};
-use crate::session::Session;
-use crate::store::{StoreError, UserData};
 use muon::client::flow::{LoginExtraInfo, LoginFlowData};
+use proton_core_api::{
+    service::{ApiServiceError, ServiceError},
+    services::proton::{SessionId, UserId},
+    session::Session,
+    store::{StoreError, UserData},
+};
 use secrecy::SecretString;
 use std::fmt::Debug;
 use thiserror::Error;

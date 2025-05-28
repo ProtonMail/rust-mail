@@ -1,12 +1,12 @@
 use crate::login::state::{HasSessionId, HasUserId, StateData};
 use crate::login::{LoginError, state::State};
-use crate::service::ApiServiceError;
-use crate::services::observability::metrics::{self};
-use crate::services::proton::{SessionId, UserId};
 use derive_more::From;
 use futures::TryFutureExt;
 use muon::Client;
 use muon::client::flow::{AuthFlow, LoginTwoFactorFlow};
+use proton_core_api::service::ApiServiceError;
+use proton_core_api::services::observability::metrics;
+use proton_core_api::services::proton::{SessionId, UserId};
 use tracing::info;
 
 /// Represents the login flow state where the user must provide their two-factor authentication code.

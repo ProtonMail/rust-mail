@@ -10,11 +10,11 @@ extern crate tracing;
 extern crate muon;
 
 pub mod countries;
+pub mod login;
 pub mod prelude;
 pub mod requests;
 pub mod responses;
 pub mod signup;
-pub mod store;
 
 /// The Proton Core API base path (v4).
 pub const CORE_V4: &str = "/core/v4";

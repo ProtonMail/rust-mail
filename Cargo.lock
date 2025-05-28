@@ -5380,7 +5380,10 @@ dependencies = [
  "derive_more 2.0.1",
  "futures",
  "muon",
+ "proton-core-api",
+ "proton-core-common",
  "proton-crypto-account",
+ "secrecy",
  "serde",
  "serde-aux",
  "serde_json",
@@ -5390,6 +5393,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -5405,12 +5409,16 @@ version = "0.1.0"
 dependencies = [
  "futures",
  "itertools 0.13.0",
+ "muon",
  "proton-account-api",
  "proton-account-common",
+ "proton-core-api",
+ "secrecy",
  "thiserror 1.0.69",
  "tokio",
  "tracing",
  "uniffi",
+ "uniffi-common",
  "uniffi-macros",
  "uniffi-runtime",
 ]
@@ -5518,7 +5526,6 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
- "tracing-subscriber",
  "url",
 ]
 
@@ -5548,7 +5555,6 @@ dependencies = [
  "num_enum",
  "parking_lot",
  "pretty_assertions",
- "proton-account-api",
  "proton-action-queue",
  "proton-core-api",
  "proton-core-common",
@@ -5736,6 +5742,7 @@ dependencies = [
  "indexmap 2.9.0",
  "insta",
  "muon",
+ "proton-account-api",
  "proton-core-api",
  "proton-core-common",
  "proton-crypto-inbox",
@@ -5868,6 +5875,7 @@ dependencies = [
  "itertools 0.13.0",
  "keyring",
  "log",
+ "proton-account-api",
  "proton-action-queue",
  "proton-calendar-api",
  "proton-calendar-common",
@@ -5928,6 +5936,7 @@ dependencies = [
  "tracing-oslog",
  "tracing-subscriber",
  "uniffi",
+ "uniffi-common",
  "uniffi-macros",
  "uniffi-runtime",
 ]
@@ -8116,6 +8125,16 @@ name = "uniffi-bindgen"
 version = "0.1.1"
 dependencies = [
  "uniffi",
+]
+
+[[package]]
+name = "uniffi-common"
+version = "0.1.0"
+dependencies = [
+ "proton-core-api",
+ "uniffi",
+ "uniffi-macros",
+ "uniffi-runtime",
 ]
 
 [[package]]

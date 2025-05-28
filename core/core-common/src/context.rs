@@ -1,7 +1,7 @@
 //! Core context contains all the necessary information to retrieve or create new accounts and sessions.
 
 use crate::action_queue::CoreActionError;
-use crate::auth_store::{AuthStore, DecryptExt, new_account_store};
+use crate::auth_store::{AuthStore, DecryptExt};
 use crate::datatypes::{
     LocalContactId, PasswordMode, StoredDevicePrivateKey, StoredDevicePublicKey, TfaStatus,
 };
@@ -20,15 +20,13 @@ use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{Error as AnyhowError, anyhow};
 use futures::TryFutureExt;
 use itertools::Itertools;
-use proton_account_api::signup::{SignupError, SignupFlow};
 use proton_action_queue::action::{Action, WriterGuardError};
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
-use proton_core_api::login::{LoginError, LoginFlow};
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::BuildError;
 use proton_core_api::services::proton::{SessionId, UserId};
+use proton_core_api::session::Config as ApiConfig;
 use proton_core_api::session::Session as ApiSession;
-use proton_core_api::session::{Config as ApiConfig, CoreSession as _};
 use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_api::verification::DynChallengeNotifier;
 use proton_crypto_account::keys::PGPDeviceKey;
@@ -37,7 +35,6 @@ use proton_sqlite3::MigratorError;
 use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use proton_task_service::{BackgroundAwareTaskService, TaskService};
 use proton_vcard::VcardValidationError;
-use secrecy::ExposeSecret;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
 use std::collections::HashMap;
 use std::future::Future;
@@ -57,10 +54,6 @@ pub enum CoreContextError {
     SettingsMissing(UserId),
     #[error("Build error: {0}")]
     Build(#[from] BuildError),
-    #[error("Login error: {0}")]
-    Login(#[from] LoginError),
-    #[error("Signup error: {0}")]
-    Signup(#[from] SignupError),
     #[error("API error: {0}")]
     Api(#[from] ApiServiceError),
     #[error("A Cryptography error occurred")]
@@ -588,118 +581,6 @@ impl Context {
         Ok(())
     }
 
-    /// Create a new login flow for a new user.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if there is no encryption key in the keychain.
-    pub async fn new_login_flow(&self) -> CoreContextResult<LoginFlow> {
-        // Ensure we have an encryption key
-        let _ = self.get_encryption_key()?;
-
-        // Create a new API session
-        let session = self.new_api_session(None, None).await?;
-
-        // Create a new login flow
-        Ok(LoginFlow::new(session))
-    }
-
-    /// Create a new login flow for an existing user.
-    ///
-    /// This can be used to resume a login flow that was interrupted.
-    /// For instance, if the user has already entered their login credentials,
-    /// but the flow was interrupted while waiting for a second factor,
-    /// the flow can be resumed by calling this method with the user and session IDs.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if there is no encryption key in the keychain
-    /// or if no session with the given IDs is able to be resumed.
-    pub async fn resume_login_flow(
-        &self,
-        user_id: UserId,
-        session_id: SessionId,
-    ) -> CoreContextResult<LoginFlow> {
-        let key = self.get_encryption_key()?;
-        let tether = self.account_stash().connection();
-
-        let Some(account) = CoreAccount::find_by_id(user_id.clone(), &tether).await? else {
-            return Err(CoreContextError::Other(anyhow!("account not found")));
-        };
-
-        let Some(session) = CoreSession::find_by_id(session_id.clone(), &tether).await? else {
-            return Err(CoreContextError::Other(anyhow!("session not found")));
-        };
-
-        let password = (account.password)
-            .map(|p| p.decrypt_to_string(&key))
-            .transpose()
-            .or(Err(CoreContextError::Crypto))?
-            .map(|p| p.expose_secret().to_owned());
-
-        match CoreSessionState::of(&session) {
-            CoreSessionState::NeedTfa => Ok(LoginFlow::new_from_tfa(
-                self.new_api_session(Some(&session), None).await?,
-                user_id,
-                session_id,
-                password,
-            )),
-
-            CoreSessionState::NeedKey => Ok(LoginFlow::new_from_mbp(
-                self.new_api_session(Some(&session), None).await?,
-                user_id,
-                session_id,
-            )),
-
-            CoreSessionState::Authenticated => Err(CoreContextError::Other(anyhow!(
-                "session is already logged in"
-            ))),
-        }
-    }
-
-    /// Begin a signup flow.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the flow could not be created.
-    pub async fn new_signup_flow(&self) -> CoreContextResult<SignupFlow> {
-        // Ensure we have an encryption key
-        let _ = self.get_encryption_key()?;
-
-        // Create a new API session
-        let session = self.new_api_session(None, None).await?;
-        let client = session.api().to_owned();
-        let store = session.store().to_owned();
-
-        // Wrap the store for compatibility.
-        let store = new_account_store(store);
-
-        // Create a new signup flow
-        Ok(SignupFlow::new(client, store).await?)
-    }
-
-    /// Create a user context from a login flow.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the flow is not in the logged in state or if the user
-    /// context could not be created.
-    #[tracing::instrument(level=Level::DEBUG, skip_all)]
-    pub async fn user_context_from_login_flow(
-        &self,
-        flow: &mut LoginFlow,
-    ) -> CoreContextResult<Arc<UserContext>> {
-        if !flow.is_logged_in() {
-            return Err(CoreContextError::Other(anyhow!("invalid login state")));
-        }
-
-        let user_id: UserId = flow.user_id()?.to_owned();
-        let session_id: SessionId = flow.session_id()?.to_owned();
-        let session = flow.take_session()?;
-
-        self.new_user_context(user_id, session, session_id).await
-    }
-
     /// Get a user context from an existing session.
     ///
     /// # Errors
@@ -904,7 +785,7 @@ impl Context {
     }
 
     #[tracing::instrument(err, skip(self))]
-    fn get_encryption_key(&self) -> CoreContextResult<SessionEncryptionKey> {
+    pub fn get_encryption_key(&self) -> CoreContextResult<SessionEncryptionKey> {
         let Some(key) = self.load_secret::<SessionEncryptionKey>()? else {
             return Err(CoreContextError::KeyChainHasNoKey);
         };
@@ -963,7 +844,7 @@ impl Context {
     }
 
     /// Initializes a new API session, optionally pre-configured to use a specific core session.
-    async fn new_api_session(
+    pub async fn new_api_session(
         &self,
         session: Option<&CoreSession>,
         status: Option<StatusWatcher>,
@@ -1013,7 +894,7 @@ impl Context {
     /// Returns error if the user context failed to initialize or
     /// if we detect that we are trying to create duplicate contexts with
     /// different session id.
-    async fn new_user_context(
+    pub async fn new_user_context(
         &self,
         user_id: UserId,
         session: ApiSession,

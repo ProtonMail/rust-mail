@@ -1,19 +1,18 @@
 use futures::TryFutureExt;
+use proton_core_api::services::proton::{SessionId, UserId};
 use tracing::info;
 
 use crate::login::state::{HasSessionId, HasUserId, StateData};
 use crate::login::{LoginError, state::State};
-use crate::services::proton::Proton;
-use crate::services::proton::{SessionId, UserId};
 
 /// Represents the login flow state where the user must provide their mailbox password.
 pub struct WantMbp {
-    client: Proton,
+    client: muon::Client,
     data: StateData,
 }
 
 impl WantMbp {
-    pub fn new(client: Proton, data: StateData) -> Self {
+    pub fn new(client: muon::Client, data: StateData) -> Self {
         info!("Login flow wants mailbox password");
 
         Self { client, data }

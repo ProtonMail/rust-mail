@@ -1,6 +1,6 @@
+use proton_account_api::login::SaltError;
 use proton_action_queue::action::FactoryError;
 use proton_action_queue::queue::{Error as QueueError, QueuedError};
-use proton_core_api::login::SaltError;
 use proton_core_api::store::StoreError;
 use proton_core_common::KeyHandlingError;
 use proton_core_common::os::KeyChainError;

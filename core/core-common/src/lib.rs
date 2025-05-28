@@ -1,6 +1,6 @@
 //! Common features of the core domain, such user account and session management and per user settings.
 pub mod actions;
-mod auth_store;
+pub mod auth_store;
 mod context;
 pub mod datatypes;
 #[allow(clippy::unused_async)]

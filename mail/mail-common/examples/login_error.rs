@@ -1,6 +1,6 @@
 #![allow(clippy::print_stdout)]
 use clap::Parser;
-use proton_core_api::login::LoginFlow;
+use proton_account_api::login::LoginFlow;
 use proton_core_api::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_core_api::session::Session;
 use proton_mail_common::errors::ProtonMailError;

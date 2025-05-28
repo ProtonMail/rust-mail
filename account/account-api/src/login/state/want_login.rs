@@ -1,16 +1,17 @@
 use crate::login::state::StateData;
 use crate::login::{LoginError, state::State};
-use crate::service::ApiServiceError;
-use crate::services::observability::metrics::AuthV4RequestMetric;
-use crate::services::observability::{ApiServiceObservabilityResponse, ObservabilityRecorder};
-use crate::services::proton::Proton;
-use crate::services::proton::{SessionId, UserId};
-use crate::session::SessionParts;
-use crate::store::{AuthInfo, MbpMode, TfaMode, UserData};
 use futures::TryFutureExt;
 use muon::client::PasswordMode::{One, Two};
 use muon::client::flow::{AuthFlow, LoginExtraInfo, LoginFlow, LoginFlowData};
 use muon::client::{Auth, Tokens};
+use proton_core_api::service::ApiServiceError;
+use proton_core_api::services::observability::metrics::AuthV4RequestMetric;
+use proton_core_api::services::observability::{
+    ApiServiceObservabilityResponse, ObservabilityRecorder,
+};
+use proton_core_api::services::proton::{SessionId, UserId};
+use proton_core_api::session::SessionParts;
+use proton_core_api::store::{AuthInfo, MbpMode, TfaMode, UserData};
 use secrecy::{ExposeSecret, SecretString};
 use tracing::info;
 
@@ -50,7 +51,7 @@ impl WantLogin {
     ///
     pub async fn migrate(
         self,
-        client: Proton,
+        client: muon::Client,
         user: UserData,
         data: LoginFlowData,
         refresh_token: SecretString,
@@ -62,7 +63,7 @@ impl WantLogin {
 
     async fn try_migrate(
         self,
-        client: Proton,
+        client: muon::Client,
         user: UserData,
         data: LoginFlowData,
         refresh_token: SecretString,
