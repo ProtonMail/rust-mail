@@ -6,7 +6,6 @@ pub mod datatypes;
 #[allow(clippy::unused_async)]
 pub mod db;
 pub mod device_registration;
-mod event_subscriber;
 pub mod events;
 #[allow(clippy::unused_async)]
 pub mod models;
@@ -24,5 +23,4 @@ pub mod validation;
 pub mod test_utils;
 
 pub use context::*;
-pub use event_subscriber::*;
 pub use user_context::*;

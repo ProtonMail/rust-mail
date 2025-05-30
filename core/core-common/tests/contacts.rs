@@ -8,11 +8,11 @@ use proton_core_api::services::proton::{
 use proton_core_api::services::proton::{ContactEmailId, ContactId, ContactUID, LabelId};
 use proton_core_api::session::CoreSession;
 use proton_core_common::datatypes::{ContactSendingPreferences, ContactTypes, Labels};
-use proton_core_common::events::{Action, ContactEmailEvent, ContactEvent};
+use proton_core_common::events::{Action, ContactEmailEvent, ContactEvent, CoreEvent};
 use proton_core_common::models::{Contact, ContactCard, ContactEmail, ModelIdExtension};
 use proton_core_common::test_utils::account::unlocked_user_key;
-use proton_core_common::test_utils::test_context::{TestContext, TestCoreEvent};
-use proton_core_common::{CoreEventSubscriber, UserContext};
+use proton_core_common::test_utils::test_context::TestContext;
+use proton_core_common::{CoreEventLoopContext, UserContext};
 use proton_crypto_account::contacts::ContactCardType;
 use proton_crypto_account::proton_crypto::crypto::AccessKeyInfo;
 use proton_crypto_account::proton_crypto::new_pgp_provider;
@@ -175,7 +175,7 @@ async fn test_sync_and_load_contacts_mixed() {
 async fn test_sync_and_delete_event_contact() {
     let ctx = TestContext::new().await;
     let user_ctx = ctx.user_context().await;
-    let test_event_subscriber = CoreEventSubscriber::new(Arc::downgrade(&ctx));
+    let test_event_subscriber = CoreEventLoopContext::from(Arc::downgrade(&user_ctx));
 
     let test_contacts = create_test_remote_partial_contacts();
     let test_contacts_email = create_test_remote_contact_emails();
@@ -202,7 +202,7 @@ async fn test_sync_and_delete_event_contact() {
         action: Action::Delete,
         contact: None,
     };
-    let events = TestCoreEvent {
+    let events = CoreEvent {
         contact_emails: Some(vec![delete_event]),
         contacts: Some(vec![delete_contact_event]),
         ..Default::default()
@@ -234,7 +234,7 @@ async fn test_sync_and_delete_event_contact() {
 async fn test_sync_and_modify_event_contact() {
     let ctx = TestContext::new().await;
     let user_ctx = ctx.user_context().await;
-    let test_event_subscriber = CoreEventSubscriber::new(Arc::downgrade(&ctx));
+    let test_event_subscriber = CoreEventLoopContext::from(Arc::downgrade(&user_ctx));
 
     let test_contacts = create_test_remote_partial_contacts();
     let test_contacts_email = create_test_remote_contact_emails();
@@ -266,7 +266,7 @@ async fn test_sync_and_modify_event_contact() {
         action: Action::Create,
         contact_email: Some(added_email.clone()),
     };
-    let event = TestCoreEvent {
+    let event = CoreEvent {
         contacts: Some(vec![modify_contact_event]),
         contact_emails: Some(vec![delete_email_event, add_email_event]),
         ..Default::default()

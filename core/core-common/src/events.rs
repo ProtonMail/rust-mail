@@ -30,12 +30,15 @@
 //! way.
 //!
 
-use crate::models::{Address, Contact, ContactEmail};
+use crate::datatypes::{ProductUsedSpace, Refresh};
+use crate::models::{Address, Contact, ContactEmail, User, UserSettings};
 use proton_core_api::services::proton::{
     Action as ApiAction, AddressEvent as ApiAddressEvent,
-    ContactEmailEvent as ApiContactEmailEvent, ContactEvent as ApiContactEvent, ProtonIdMarker,
+    ContactEmailEvent as ApiContactEmailEvent, ContactEvent as ApiContactEvent, EventId,
+    ProtonIdMarker,
 };
 use proton_core_api::services::proton::{AddressId, ContactEmailId, ContactId};
+use proton_event_loop::Event;
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -141,5 +144,126 @@ impl From<ApiAddressEvent> for AddressEvent {
             action: value.action.into(),
             address: value.address.map(Address::from),
         }
+    }
+}
+
+/// Core event data structure that contains only the core fields from events.
+/// This is identical to `MailEvent` but contains only the core-related fields.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CoreEvent {
+    /// TODO: Document this field.
+    pub event_id: EventId,
+
+    /// TODO: Document this field.
+    pub addresses: Option<Vec<AddressEvent>>,
+
+    /// TODO: Document this field.
+    pub has_more: bool,
+
+    /// TODO: Document this field.
+    pub product_used_space: Option<ProductUsedSpace>,
+
+    /// TODO: Document this field.
+    pub used_space: Option<i64>,
+
+    /// TODO: Document this field.
+    pub user: Option<User>,
+
+    /// TODO: Document this field.
+    pub user_settings: Option<UserSettings>,
+
+    /// TODO: Document this field.
+    pub contacts: Option<Vec<ContactEvent>>,
+
+    /// TODO: Document this field.
+    pub contact_emails: Option<Vec<ContactEmailEvent>>,
+
+    /// Indicates whether we should refresh our data.
+    pub refresh: Refresh,
+}
+
+impl CoreEvent {
+    /// Get a mutable reference to the core event user
+    #[must_use]
+    pub fn get_core_event_user_mut(&mut self) -> Option<&mut User> {
+        self.user.as_mut()
+    }
+
+    /// Get a mutable reference to the core event user settings
+    #[must_use]
+    pub fn get_core_event_user_settings_mut(&mut self) -> Option<&mut UserSettings> {
+        self.user_settings.as_mut()
+    }
+
+    /// Get the core event used space
+    #[must_use]
+    pub fn get_core_event_used_space(&self) -> Option<i64> {
+        self.used_space
+    }
+
+    /// Get the core event used product space
+    #[must_use]
+    pub fn get_core_event_used_product_space(&self) -> Option<&ProductUsedSpace> {
+        self.product_used_space.as_ref()
+    }
+
+    /// Get a mutable reference to the core event addresses
+    #[must_use]
+    pub fn get_core_event_addresses_mut(&mut self) -> Option<&mut [AddressEvent]> {
+        self.addresses.as_deref_mut()
+    }
+
+    /// Get a mutable reference to the core event contacts
+    #[must_use]
+    pub fn get_core_event_contacts_mut(&mut self) -> Option<&mut [ContactEvent]> {
+        self.contacts.as_deref_mut()
+    }
+
+    /// Get a mutable reference to the core event contact emails
+    #[must_use]
+    pub fn get_core_event_contact_emails_mut(&mut self) -> Option<&mut [ContactEmailEvent]> {
+        self.contact_emails.as_deref_mut()
+    }
+}
+
+impl Event for CoreEvent {
+    type Response = String;
+
+    fn event_id(&self) -> &EventId {
+        &self.event_id
+    }
+
+    fn has_more(&self) -> bool {
+        self.has_more
+    }
+
+    fn is_refresh(&self) -> bool {
+        self.refresh.is_refresh()
+    }
+}
+
+// TODO: Implement proper From conversion when core API event support is added
+impl Default for CoreEvent {
+    fn default() -> Self {
+        Self {
+            event_id: EventId::from("default"),
+            addresses: None,
+            has_more: false,
+            product_used_space: None,
+            used_space: None,
+            user: None,
+            user_settings: None,
+            contacts: None,
+            contact_emails: None,
+            refresh: Refresh::None,
+        }
+    }
+}
+
+impl From<String> for CoreEvent {
+    fn from(_json_string: String) -> Self {
+        // For now, just return default until proper core API event support is added
+        // TODO: Implement proper JSON parsing when core API event support is added
+        Self::default()
     }
 }

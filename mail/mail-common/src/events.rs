@@ -38,11 +38,9 @@ use crate::datatypes::{ConversationLabelsCount, MessageLabelsCount};
 use crate::models::{Conversation, MailSettings};
 use proton_core_api::services::proton::LabelEvent as ApiLabelEvent;
 use proton_core_api::services::proton::{EventId, LabelId};
-use proton_core_common::CoreEvent;
-use proton_core_common::datatypes::{ProductUsedSpace, Refresh};
-use proton_core_common::events::ContactEvent;
-use proton_core_common::events::{Action, AddressEvent, ContactEmailEvent};
-use proton_core_common::models::{Label, User, UserSettings};
+use proton_core_common::datatypes::Refresh;
+use proton_core_common::events::Action;
+use proton_core_common::models::Label;
 use proton_core_common::utils::MapVec as _;
 use proton_event_loop::Event;
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
@@ -105,9 +103,6 @@ pub struct MailEvent {
     pub event_id: EventId,
 
     /// TODO: Document this field.
-    pub addresses: Option<Vec<AddressEvent>>,
-
-    /// TODO: Document this field.
     pub conversation_counts: Option<Vec<ConversationLabelsCount>>,
 
     /// TODO: Document this field.
@@ -130,76 +125,8 @@ pub struct MailEvent {
     /// TODO: Document this field.
     pub messages: Option<Vec<MessageEvent>>,
 
-    /// TODO: Document this field.
-    pub product_used_space: Option<ProductUsedSpace>,
-
-    /// TODO: Document this field.
-    pub used_space: Option<i64>,
-
-    /// TODO: Document this field.
-    pub user: Option<User>,
-
-    /// TODO: Document this field.
-    pub user_settings: Option<UserSettings>,
-
-    /// TODO: Document this field.
-    pub contacts: Option<Vec<ContactEvent>>,
-
-    /// TODO: Document this field.
-    pub contact_emails: Option<Vec<ContactEmailEvent>>,
-
     /// Indicates whether we should refresh our data.
     pub refresh: Refresh,
-}
-
-impl CoreEvent for MailEvent {
-    fn get_core_event_user(&self) -> Option<&User> {
-        self.user.as_ref()
-    }
-
-    fn get_core_event_user_mut(&mut self) -> Option<&mut User> {
-        self.user.as_mut()
-    }
-
-    fn get_core_event_user_settings(&self) -> Option<&UserSettings> {
-        self.user_settings.as_ref()
-    }
-
-    fn get_core_event_user_settings_mut(&mut self) -> Option<&mut UserSettings> {
-        self.user_settings.as_mut()
-    }
-
-    fn get_core_event_used_space(&self) -> Option<i64> {
-        self.used_space
-    }
-
-    fn get_core_event_used_product_space(&self) -> Option<&ProductUsedSpace> {
-        self.product_used_space.as_ref()
-    }
-
-    fn get_core_event_addresses(&self) -> Option<&[AddressEvent]> {
-        self.addresses.as_deref()
-    }
-
-    fn get_core_event_addresses_mut(&mut self) -> Option<&mut [AddressEvent]> {
-        self.addresses.as_deref_mut()
-    }
-
-    fn get_core_event_contacts(&self) -> Option<&[ContactEvent]> {
-        self.contacts.as_deref()
-    }
-
-    fn get_core_event_contacts_mut(&mut self) -> Option<&mut [ContactEvent]> {
-        self.contacts.as_deref_mut()
-    }
-
-    fn get_core_event_contact_emails(&self) -> Option<&[ContactEmailEvent]> {
-        self.contact_emails.as_deref()
-    }
-
-    fn get_core_event_contact_emails_mut(&mut self) -> Option<&mut [ContactEmailEvent]> {
-        self.contact_emails.as_deref_mut()
-    }
 }
 
 impl Event for MailEvent {
@@ -221,8 +148,7 @@ impl Event for MailEvent {
 impl From<ApiMailEvent> for MailEvent {
     fn from(value: ApiMailEvent) -> Self {
         Self {
-            event_id: value.event_id,
-            addresses: value.addresses.map(|addresses| addresses.map_vec()),
+            event_id: value.core_event.event_id,
             conversation_counts: value.conversation_counts.map(|conversation_counts| {
                 conversation_counts
                     .into_iter()
@@ -235,8 +161,8 @@ impl From<ApiMailEvent> for MailEvent {
                     .map(ConversationEvent::from)
                     .collect()
             }),
-            has_more: value.has_more,
-            labels: value.labels.map(|labels| labels.map_vec()),
+            has_more: value.core_event.has_more,
+            labels: value.core_event.labels.map(|labels| labels.map_vec()),
             mail_settings: value.mail_settings.map(MailSettings::from),
             message_counts: value.message_counts.map(|message_counts| {
                 message_counts
@@ -245,18 +171,7 @@ impl From<ApiMailEvent> for MailEvent {
                     .collect()
             }),
             messages: value.messages.map(|messages| messages.map_vec()),
-            product_used_space: value.product_used_space.map(ProductUsedSpace::from),
-            used_space: value.used_space,
-            user: value.user.map(User::from),
-            user_settings: value.user_settings.map(UserSettings::from),
-            contacts: value.contacts.map(|contacts| contacts.map_vec()),
-            contact_emails: value.contact_emails.map(|contact_emails| {
-                contact_emails
-                    .into_iter()
-                    .map(ContactEmailEvent::from)
-                    .collect()
-            }),
-            refresh: value.refresh.into(),
+            refresh: value.core_event.refresh.into(),
             incoming_defaults: value.incoming_defaults,
         }
     }

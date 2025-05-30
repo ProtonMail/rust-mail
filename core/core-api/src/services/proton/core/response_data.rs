@@ -1050,3 +1050,37 @@ pub struct LabelEvent {
     /// TODO: Document this field.
     pub label: Option<Label>,
 }
+
+/// Core event data structure that matches the core fields from events.
+#[serde_as]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct CoreEvent {
+    #[serde(rename = "EventID")]
+    pub event_id: EventId,
+
+    pub addresses: Option<Vec<AddressEvent>>,
+
+    pub labels: Option<Vec<LabelEvent>>,
+
+    pub product_used_space: Option<ProductUsedSpace>,
+
+    pub used_space: Option<i64>,
+
+    pub user: Option<User>,
+
+    pub user_settings: Option<UserSettings>,
+
+    pub contacts: Option<Vec<ContactEvent>>,
+
+    pub contact_emails: Option<Vec<ContactEmailEvent>>,
+
+    /// Indicates whether to refresh.
+    pub refresh: u8,
+
+    /// Whether we need to request more events after this.
+    #[serde(rename = "More")]
+    #[serde_as(as = "BoolFromInt")]
+    pub has_more: bool,
+}

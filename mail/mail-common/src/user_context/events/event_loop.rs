@@ -11,7 +11,6 @@ use proton_core_api::services::proton::EventId;
 use proton_core_api::services::proton::GetEventOptions;
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::session::CoreSession;
-use proton_core_common::CoreEventSubscriber;
 use proton_event_loop::provider::Provider;
 use proton_event_loop::store::Store;
 use proton_event_loop::{EventLoopError, RawEvent};
@@ -246,14 +245,9 @@ impl MailUserContext {
     /// it does not hurt to leave them here as for now.
     ///
     pub(crate) async fn register_subscribers(&self) -> Result<(), EventLoopError> {
-        let core_subscriber = CoreEventSubscriber::new(Weak::clone(&self.this));
         let mail_subscriber = MailEventSubscriber::new(Weak::clone(&self.this));
 
-        self.event_loop
-            .register(Box::new(core_subscriber))
-            .await?
-            .register(Box::new(mail_subscriber))
-            .await?;
+        self.event_loop.register(Box::new(mail_subscriber)).await?;
 
         Ok(())
     }
