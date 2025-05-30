@@ -27,7 +27,7 @@ use proton_crypto_inbox::keys::{ComposerPreference, CryptoMailSettings, SendPref
 use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
-use proton_event_loop::foreground_loop::EventLoop;
+use proton_event_loop::poll::EventPoll;
 use proton_task_service::{AsyncTaskResult, TaskService, TaskSpawner};
 use stash::orm::Model;
 use stash::stash::{RunTransaction, Stash, Tether};
@@ -49,7 +49,7 @@ pub struct MailUserContext {
     this: Weak<Self>,
     mail_context: Arc<MailContext>,
     user_context: Arc<UserContext>,
-    event_loop: EventLoop<MailEvent>,
+    event_loop: EventPoll<MailEvent>,
     default_queue_executor: QueueAutoExecutor,
     send_queue_executors: QueueAutoExecutorPool,
     prefetch: PrefetchNotify,
@@ -93,7 +93,7 @@ impl MailUserContext {
                 this: Weak::clone(this),
                 mail_context,
                 user_context,
-                event_loop: EventLoop::new(event_ctx.boxed(), event_ctx.boxed()),
+                event_loop: EventPoll::new(event_ctx.boxed(), event_ctx.boxed()),
                 prefetch: OnceLock::new(),
                 default_queue_executor,
                 send_queue_executors,

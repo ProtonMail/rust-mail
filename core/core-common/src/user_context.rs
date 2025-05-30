@@ -18,7 +18,7 @@ use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::services::proton::{EventId, ProtonCore, SessionId, UserId};
 use proton_core_api::session::{CoreSession, Session};
 use proton_event_loop::RawEvent;
-use proton_event_loop::foreground_loop::EventLoop;
+use proton_event_loop::poll::EventPoll;
 use proton_event_loop::provider::Provider;
 use proton_event_loop::store::Store;
 use proton_event_loop::subscriber::{Subscriber, SubscriberError};
@@ -423,7 +423,7 @@ pub struct UserContext {
     cancellation_token: CancellationToken,
     pub cache_path: PathBuf,
     pub initialization_watcher: Arc<InitializationWatcher>,
-    event_loop: EventLoop<CoreEvent>,
+    event_loop: EventPoll<CoreEvent>,
 }
 
 impl Debug for UserContext {
@@ -463,7 +463,7 @@ impl UserContext {
                 cache_path,
                 cancellation_token,
                 initialization_watcher,
-                event_loop: EventLoop::new(event_ctx.boxed(), event_ctx.boxed()),
+                event_loop: EventPoll::new(event_ctx.boxed(), event_ctx.boxed()),
             }
         });
         let this_weak = Arc::downgrade(&this);

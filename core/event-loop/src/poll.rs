@@ -11,21 +11,21 @@ use proton_core_api::services::proton::EventId;
 use tokio::sync::Mutex;
 use tracing::{self, Level, debug, error};
 
-pub struct EventLoop<T: Send + Sync> {
-    eloop: EventLoopInternal,
+pub struct EventPoll<T: Send + Sync> {
+    epoll: EventPollInternal,
     store: Box<dyn Store>,
     provider: Box<dyn Provider>,
     uniqe_sub: Mutex<HashMap<&'static str, usize>>,
     subscribers: Mutex<Vec<Box<dyn Subscriber<T>>>>,
 }
 
-impl<T: Event + From<<T as Event>::Response>> EventLoop<T> {
+impl<T: Event + From<<T as Event>::Response>> EventPoll<T> {
     #[must_use]
     pub fn new(store: Box<dyn Store>, provider: Box<dyn Provider>) -> Self {
-        let eloop = EventLoopInternal::new();
+        let epoll = EventPollInternal::new();
 
         Self {
-            eloop,
+            epoll,
             store,
             provider,
             uniqe_sub: Mutex::new(HashMap::new()),
@@ -34,7 +34,7 @@ impl<T: Event + From<<T as Event>::Response>> EventLoop<T> {
     }
 
     pub async fn initialize(&self) -> Result<&Self, EventLoopError> {
-        self.eloop
+        self.epoll
             .initialize(self.store.as_ref(), self.provider.as_ref())
             .await?;
 
@@ -58,7 +58,7 @@ impl<T: Event + From<<T as Event>::Response>> EventLoop<T> {
     }
 
     pub async fn poll(&self) -> Result<(), EventLoopError> {
-        self.eloop
+        self.epoll
             .poll::<T>(
                 self.store.as_ref(),
                 self.provider.as_ref(),
@@ -73,10 +73,10 @@ impl<T: Event + From<<T as Event>::Response>> EventLoop<T> {
 /// This version requires the user to call the [`EventLoop::poll`] function each time they wish to
 /// iterate the loop.
 #[derive(Debug, Default)]
-pub struct EventLoopInternal;
+pub struct EventPollInternal;
 
 const MAX_EVENTS_PER_POLL: usize = 50;
-impl EventLoopInternal {
+impl EventPollInternal {
     #[must_use]
     pub fn new() -> Self {
         Self

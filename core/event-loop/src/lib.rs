@@ -1,64 +1,39 @@
-//! Utilities to listen to the proton event loop. This crate provides both a Foreground event loop
-//! ([`EventLoop`]) and a Background event loop ([`BackgroundEventLoop`]).
-//! Handling of events is delegated to a [`Subscriber`]. These need to be registered with either loop version.
+//! Utilities to listen to the proton event loop. This crate provides an event polling system
+//! through the parametrized [`EventPoll<T>`] which is the main entry point to this crate.
+//! Handling of events is delegated to a [`Subscriber`]. These need to be registered with the poll.
 //!
-//! # Foreground Event Loop
+//! # Event Polling
 //!
-//! This version of the loop requires the user to poll the loop manually so that it can progress.
+//! The event polling system requires the user to poll the loop manually so that it can progress.
 //! The user is fully responsible for handling errors at the poll call site.
-//! This is also the only one we currently use.
 //!
 //! ## Example
 //!
 //! ```ignore
-//! use proton_core_api::domain::Event;
-//! use proton_event_loop::{EventLoop, Provider, Store};
+//! use proton_event_loop::{Event, EventPoll, Provider, Store, Subscriber};
 //!
-//! async fn create_loop_and_poll<T: Event>(store: &dyn Store, provider: &dyn Provider<T>) {
-//!     let mut event_loop = EventLoop::new();
+//! async fn create_poll_and_run<T: Event>(
+//!     store: Box<dyn Store>,
+//!     provider: Box<dyn Provider>,
+//!     subscriber: Box<dyn Subscriber<T>>
+//! ) {
+//!     let event_poll = EventPoll::new(store, provider);
+//!
+//!     // Initialize the poll to set up the initial event ID if needed
+//!     event_poll.initialize().await?;
+//!
+//!     // Register subscriber to handle events
+//!     event_poll.register(subscriber).await?;
 //!
 //!     loop {
-//!         if let Err(_) = event_loop.poll(store, provider, &[]).await {
+//!         if let Err(_) = event_poll.poll().await {
 //!             // Handle error
 //!         }
 //!     }
 //! }
 //! ```
 //!
-//! # Background Event Loop
-//!
-//! This version of the loop runs automatically in a background task with a user defined interval.
-//! Additionally, this version also has modifiers to pause, resume and cancel the loop.
-//! You need to provide a custom error handler to it.
-//! This is currently not used.
-//!
-//! ## Example
-//!
-//! ```ignore
-//! use std::time::Duration;
-//! use proton_core_api::domain::Event;
-//! use proton_event_loop::{BackgroundEventLoop, EventLoop, EventLoopErrorHandler, Provider, Store};
-//!
-//! async fn create_background_loop<Ev: Event + 'static>(
-//!     store: Box<dyn Store>,
-//!     provider: Box<dyn Provider<Ev>>,
-//!     error_handler: Box<dyn EventLoopErrorHandler>,
-//! ) {
-//!     let bg_event_loop = BackgroundEventLoop::new();
-//!
-//!     bg_event_loop
-//!         .start(Duration::from_secs(15), store, provider, error_handler)
-//!         .await
-//!         .unwrap();
-//!     // Background event loop is always created in a paused state
-//!     bg_event_loop.resume();
-//!
-//!     // Events are now processed in the background.
-//! }
-//!
-//! ```
-//!
-pub mod foreground_loop;
+pub mod poll;
 pub mod provider;
 pub mod store;
 pub mod subscriber;
