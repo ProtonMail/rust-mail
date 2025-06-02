@@ -52,6 +52,14 @@ pub enum SignupError {
     /// The requested operation is not valid in the current state of the flow.
     #[error("Operation is not valid in the current state")]
     InvalidState,
+
+    /// The recovery email format is invalid
+    #[error("Recovery email format is invalid")]
+    RecoveryEmailInvalid,
+
+    /// The recovery phone number format is invalid
+    #[error("Recovery phone number format is invalid")]
+    RecoveryPhoneNumberInvalid
 }
 
 #[derive(Debug, Error)]
@@ -161,10 +169,10 @@ impl SignupFlow {
     }
 
     /// Submit a recovery email.
-    pub fn submit_recovery_email(&mut self, email: String) -> Result<(), SignupError> {
+    pub async fn submit_recovery_email(&mut self, email: String) -> Result<(), SignupError> {
         let recovery = Recovery::Email(email);
 
-        let next = self.state()?.submit_recovery(recovery)?;
+        let next = self.state()?.submit_recovery(recovery).await?;
 
         self.state.push(next);
 
@@ -172,10 +180,10 @@ impl SignupFlow {
     }
 
     /// Submit a recovery phone number.
-    pub fn submit_recovery_phone(&mut self, phone: String) -> Result<(), SignupError> {
+    pub async fn submit_recovery_phone(&mut self, phone: String) -> Result<(), SignupError> {
         let recovery = Recovery::Phone(phone);
 
-        let next = self.state()?.submit_recovery(recovery)?;
+        let next = self.state()?.submit_recovery(recovery).await?;
 
         self.state.push(next);
 
@@ -183,10 +191,10 @@ impl SignupFlow {
     }
 
     /// Skip recovery information.
-    pub fn skip_recovery(&mut self) -> Result<(), SignupError> {
+    pub async fn skip_recovery(&mut self) -> Result<(), SignupError> {
         let recovery = Recovery::None;
 
-        let next = self.state()?.submit_recovery(recovery)?;
+        let next = self.state()?.submit_recovery(recovery).await?;
 
         self.state.push(next);
 

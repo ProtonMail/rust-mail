@@ -57,6 +57,14 @@ pub enum SignupError {
     /// An unexpected internal error occurred.
     #[error("Internal error")]
     Internal,
+
+    /// The recovery email format is invalid
+    #[error("Recovery email format is invalid")]
+    RecoveryEmailInvalid,
+
+    /// The recovery phone number format is invalid
+    #[error("Recovery phone number format is invalid")]
+    RecoveryPhoneNumberInvalid
 }
 
 impl From<RealSignupError> for SignupError {
