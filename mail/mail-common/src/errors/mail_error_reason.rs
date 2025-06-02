@@ -15,6 +15,7 @@ pub enum MailErrorReason {
     DraftUndoSendReason(DraftUndoSendErrorReason),
     DraftDiscardReason(DraftDiscardErrorReason),
     DraftAttachmentUploadReason(DraftAttachmentUploadErrorReason),
+    DraftAttachmentRemoveReason(DraftAttachmentRemoveErrorReason),
     DraftCancelScheduleSendReason(DraftCancelScheduleSendErrorReason),
     EventReason(EventErrorReason),
     PinSetReson(PinSetErrorReason),
@@ -243,6 +244,12 @@ pub enum DraftAttachmentUploadErrorReason {
     AttachmentTooLarge,
     /// Upload Retry in invalid state
     RetryInvalidState,
+}
+
+#[derive(Debug)]
+pub enum DraftAttachmentRemoveErrorReason {
+    /// Can't remove public key attachments when mail settings to attach public keys are active
+    AttachmentIsPublicKey,
 }
 
 /// Specific Reason when attempting to discard a draft.

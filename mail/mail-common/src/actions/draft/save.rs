@@ -638,6 +638,7 @@ impl Save {
                                 action.metadata_id,
                                 new_attachment.local_id.unwrap(),
                                 current_display_order,
+                                false,
                             );
                             new_attachment_metadata.save(bond).await.inspect_err(|e| {
                                 error!("Failed to save new draft attachment metadata: {e:?}")

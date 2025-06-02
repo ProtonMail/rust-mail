@@ -6,7 +6,8 @@ use proton_core_api::consts::{CoreBundle, Mail};
 use proton_core_api::services::proton::common::ApiErrorInfo;
 use proton_core_api::services::proton::{LabelId, UserId};
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
-use proton_mail_api::services::proton::prelude::AttachmentId;
+use proton_crypto_inbox::attachment::KeyPackets;
+use proton_mail_api::services::proton::prelude::{AttachmentId, MessageAttachmentHeaders};
 use proton_mail_api::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftRecipient,
 };
@@ -18,13 +19,13 @@ use proton_mail_common::datatypes::{MimeType, RollbackItemType, SystemLabelId};
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
 use proton_mail_common::draft::{Draft, DraftSyncStatus, Error, OpenError, ReplyMode, SaveError};
 use proton_mail_common::models::{
-    Attachment, Conversation, DraftMetadata, DraftSendResult, DraftSendResultOrigin, Message,
-    RollbackItem,
+    Attachment, Conversation, DraftAttachmentMetadata, DraftAttachmentUploadState, DraftMetadata,
+    DraftSendResult, DraftSendResultOrigin, Message, RollbackItem,
 };
 use proton_mail_common::test_utils::message_body::*;
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use stash::orm::Model;
-use stash::stash::StashError;
+use stash::stash::{StashError, Tether};
 use uuid::Uuid;
 
 #[tokio::test]
@@ -60,7 +61,7 @@ async fn create_empty_draft() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -238,7 +239,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -481,7 +482,7 @@ async fn draft_save_failure_creates_send_result_with_correct_origin() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -787,7 +788,7 @@ async fn open_draft_sync_status_success() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -847,7 +848,7 @@ async fn open_draft_sync_status_cached() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -886,7 +887,7 @@ async fn open_new_draft_which_was_not_saved_on_server_should_not_report_cached_s
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -933,7 +934,7 @@ async fn new_draft_conversation_remote_id_updated_externally() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -1028,7 +1029,7 @@ async fn already_sent_error_move_draft_to_sent_and_schedules_rollback() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -1073,4 +1074,230 @@ async fn already_sent_error_move_draft_to_sent_and_schedules_rollback() {
         .unwrap()
         .unwrap();
     assert_eq!(rollback_item.item_type, RollbackItemType::Message);
+}
+
+#[tokio::test]
+async fn attach_public_key_empty_draft() {
+    // We don't need to validate that the full attachment pipeline works, only that
+    // the attachment was created and is pending state.
+    // The rest of the behavior is validated with the attachment upload tests.
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let mut params = draft_test_params();
+    params.mail_settings.as_mut().unwrap().attach_public_key = true;
+    ctx.setup_user(params.clone()).await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+    let tether = user_ctx.user_stash().connection();
+
+    // Create draft.
+    let draft = Draft::empty(&user_ctx).await.unwrap();
+
+    let draft_attachments =
+        DraftAttachmentMetadata::attachment_for_draft(draft.metadata_id, &tether)
+            .await
+            .unwrap();
+    assert_eq!(draft_attachments.len(), 1);
+    assert!(draft_attachments[0].is_public_key_attachment());
+    assert_eq!(
+        draft_attachments[0].disposition,
+        Disposition::Attachment.into()
+    );
+}
+
+#[tokio::test]
+async fn attach_public_key_reply_draft() {
+    // If the reply does not have the public key it should be added.
+    prepare_draft_reply_attach_public_key(false, ReplyMode::Forward, async |draft, tether| {
+        let draft_attachments =
+            DraftAttachmentMetadata::attachment_for_draft(draft.metadata_id, tether)
+                .await
+                .unwrap();
+        assert_eq!(draft_attachments.len(), 1);
+        assert!(draft_attachments[0].is_public_key_attachment());
+        assert_eq!(
+            draft_attachments[0].disposition,
+            Disposition::Attachment.into()
+        );
+        let attachment_metadata =
+            DraftAttachmentMetadata::find_by_id(draft_attachments[0].local_id.unwrap(), tether)
+                .await
+                .unwrap()
+                .unwrap();
+        // Upload state should be pending since this was created.
+        assert_eq!(
+            attachment_metadata.state(),
+            DraftAttachmentUploadState::Pending
+        );
+        assert!(attachment_metadata.is_public_key)
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn attach_public_key_reply_draft_does_not_duplicate_if_already_there() {
+    // If an existing public key is already present in the attachment list of the reply,
+    // we should not add it again.
+    prepare_draft_reply_attach_public_key(true, ReplyMode::Forward, async |draft, tether| {
+        let draft_attachments =
+            DraftAttachmentMetadata::attachment_for_draft(draft.metadata_id, tether)
+                .await
+                .unwrap();
+        assert_eq!(draft_attachments.len(), 1);
+        assert!(draft_attachments[0].is_public_key_attachment());
+        assert_eq!(
+            draft_attachments[0].disposition,
+            Disposition::Attachment.into()
+        );
+        let attachment_metadata =
+            DraftAttachmentMetadata::find_by_id(draft_attachments[0].local_id.unwrap(), tether)
+                .await
+                .unwrap()
+                .unwrap();
+        // Upload state should be uploaded since it already exists.
+        assert_eq!(
+            attachment_metadata.state(),
+            DraftAttachmentUploadState::Uploaded
+        );
+        assert!(attachment_metadata.is_public_key)
+    })
+    .await;
+}
+
+async fn prepare_draft_reply_attach_public_key(
+    pre_attach_public_key: bool,
+    reply_mode: ReplyMode,
+    closure: impl AsyncFnOnce(&Draft, &Tether),
+) {
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let mut params = draft_test_params();
+    params.mail_settings.as_mut().unwrap().attach_public_key = true;
+
+    ctx.setup_user(params.clone()).await;
+
+    // Create one message we can reply to.
+    let mut remote_existing_message = draft_message();
+    remote_existing_message.metadata.sender.address = "me@proton.me".to_owned();
+    remote_existing_message.metadata.id = "FancyRemoteId".into();
+    remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
+
+    remote_existing_message.body.attachments.reverse();
+
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
+
+    if pre_attach_public_key {
+        let addresses = Address::find("ORDER BY display_order ASC LIMIT 1", vec![], &tether)
+            .await
+            .unwrap();
+        let address = addresses.first().unwrap();
+        let public_key = Attachment::gen_public_key(&user_ctx, address, &tether)
+            .await
+            .unwrap();
+        remote_existing_message
+            .body
+            .attachments
+            .push(MessageAttachment {
+                id: AttachmentId::from("public-key-attachment"),
+                disposition: Disposition::Attachment,
+                enc_signature: None,
+                headers: MessageAttachmentHeaders {
+                    content_disposition: "attachment".to_string(),
+                    content_id: None,
+                    content_transfer_encoding: None,
+                    image_height: None,
+                    image_width: None,
+                },
+                key_packets: KeyPackets::from_vec(vec![]),
+                mime_type: "application/pgp-keys".to_string(),
+                name: public_key.attachment.filename,
+                signature: None,
+                size: 0,
+            })
+    }
+
+    let (mut existing_message, _, _) =
+        Message::from_api_data(remote_existing_message.clone(), &tether)
+            .await
+            .unwrap();
+    tether
+        .tx(async |tx| existing_message.save(tx).await)
+        .await
+        .unwrap();
+    let existing_message = existing_message;
+
+    let mut message = draft_message();
+    message.body.attachments = remote_existing_message.body.attachments.clone();
+    if reply_mode != ReplyMode::Forward {
+        message
+            .body
+            .attachments
+            .retain(|a| a.disposition == Disposition::Inline)
+    }
+    // Inherited attachments get new remote ids
+    for attachment in &mut message.body.attachments {
+        attachment.id = AttachmentId::from(Uuid::new_v4().to_string());
+    }
+
+    ctx.mock_get_message(
+        &remote_existing_message.metadata.id,
+        remote_existing_message.clone(),
+    )
+    .await;
+    // Decrypted message downloads attachments.
+    for attachment in &message.body.attachments {
+        ctx.mock_maybe_get_attachment_data(attachment.id.clone(), vec![])
+            .await;
+    }
+    ctx.catch_all().await;
+
+    // Get the message body - required to reply to draft.
+    Message::force_sync_message_and_body(&user_ctx, existing_message.remote_id.unwrap(), false)
+        .await
+        .unwrap();
+
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            // Insert attachment data into the cache.
+            for attachment in &remote_existing_message.body.attachments {
+                let local_attachment_id =
+                    Attachment::remote_id_counterpart(attachment.id.clone(), tx)
+                        .await
+                        .unwrap()
+                        .unwrap();
+                Attachment::store_in_cache(
+                    &user_ctx,
+                    &attachment.name,
+                    local_attachment_id,
+                    attachment.name.as_bytes().to_vec(),
+                    tx,
+                )
+                .await
+                .unwrap();
+            }
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    // Create draft.
+    let draft = Draft::reply(
+        &user_ctx,
+        existing_message.local_id.unwrap(),
+        reply_mode,
+        true,
+        None,
+    )
+    .await
+    .unwrap();
+
+    closure(&draft, &tether).await;
 }

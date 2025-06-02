@@ -270,12 +270,7 @@ impl From<DraftError> for ProtonMailError {
             DraftError::Discard(v) => v.into(),
             DraftError::Undo(v) => v.into(),
             DraftError::AttachmentUpload(v) => v.into(),
-            DraftError::AttachmentRemove(v) => match v {
-                AttachmentRemoveError::MetadataNotFound(_)
-                | AttachmentRemoveError::AttachmentMetadataNotFound(_) => {
-                    Self::Unexpected(Unexpected::Draft)
-                }
-            },
+            DraftError::AttachmentRemove(v) => v.into(),
             DraftError::CancelScheduleSend(v) => v.into(),
         }
     }
@@ -449,6 +444,24 @@ impl From<AttachmentUploadError> for ProtonMailError {
             AttachmentUploadError::RetryInvalidState(_) => {
                 Self::Reason(MailErrorReason::DraftAttachmentUploadReason(
                     DraftAttachmentUploadErrorReason::RetryInvalidState,
+                ))
+            }
+        }
+    }
+}
+
+impl From<AttachmentRemoveError> for ProtonMailError {
+    fn from(value: AttachmentRemoveError) -> Self {
+        match value {
+            AttachmentRemoveError::MetadataNotFound(_)
+            | AttachmentRemoveError::AttachmentNotFound(_)
+            | AttachmentRemoveError::AddressNotFound(_)
+            | AttachmentRemoveError::AttachmentMetadataNotFound(_) => {
+                Self::Unexpected(Unexpected::Draft)
+            }
+            AttachmentRemoveError::AttachmentIsPublicKey(_) => {
+                Self::Reason(MailErrorReason::DraftAttachmentRemoveReason(
+                    DraftAttachmentRemoveErrorReason::AttachmentIsPublicKey,
                 ))
             }
         }

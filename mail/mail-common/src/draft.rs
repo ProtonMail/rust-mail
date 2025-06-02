@@ -43,7 +43,7 @@ use rusqlite::types::{FromSqlError, FromSqlResult, ValueRef};
 use serde::{Deserialize, Serialize};
 use stash::exports::{FromSql, SqliteError, ToSql, ToSqlOutput};
 use stash::orm::Model;
-use stash::stash::{Stash, StashError, Tether};
+use stash::stash::{StashError, Tether};
 use std::mem;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -204,6 +204,12 @@ pub enum AttachmentRemoveError {
     MetadataNotFound(MetadataId),
     #[error("Attachment Metadata for Attachment {0} does not exist")]
     AttachmentMetadataNotFound(LocalAttachmentId),
+    #[error("Attachment {0} does not exist")]
+    AttachmentNotFound(LocalAttachmentId),
+    #[error("Address {0} not found")]
+    AddressNotFound(AddressId),
+    #[error("Attachment is a public key and current mail settings prevent its removal")]
+    AttachmentIsPublicKey(LocalAttachmentId),
 }
 
 impl From<AttachmentRemoveError> for MailContextError {
@@ -561,9 +567,9 @@ impl Draft {
     ///
     /// Returns error if we can not load or modify the required data or write the
     /// body into the cache.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(stash))]
-    pub async fn empty(stash: &Stash) -> Result<Self, MailContextError> {
-        let mut tether = stash.connection();
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip_all)]
+    pub async fn empty(context: &MailUserContext) -> Result<Self, MailContextError> {
+        let mut tether = context.user_stash().connection();
         // Default address should have display_order 0
         let addresses = Address::find("ORDER BY display_order ASC LIMIT 1", vec![], &tether)
             .await
@@ -576,13 +582,29 @@ impl Draft {
             return Err(OpenError::UserHasNoAddresses.into());
         }
 
-        let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
         let address = &addresses[0];
+        let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
+
         let metadata = tether
-            .tx(async |tx| {
-                DraftMetadata::empty(tx)
+            .tx::<_, _, MailContextError>(async |tx| {
+                let metadata = DraftMetadata::empty(tx)
                     .await
-                    .inspect_err(|e| error!("Failed to create new empty draft metadata: {e:?}"))
+                    .inspect_err(|e| error!("Failed to create new empty draft metadata: {e:?}"))?;
+                if mail_settings.attach_public_key {
+                    let public_key_attachment = Attachment::create_public_key(context, address, tx)
+                        .await
+                        .inspect_err(|e| error!("Failed to create public key attachment: {e:?}"))?;
+
+                    DraftAttachmentMetadata::pending(
+                        metadata.id.unwrap(),
+                        public_key_attachment.local_id.unwrap(),
+                        0,
+                        true,
+                    )
+                    .save(tx)
+                    .await?
+                }
+                Ok(metadata)
             })
             .await?;
 
@@ -702,6 +724,26 @@ impl Draft {
                 )
                 .await;
 
+                if mail_settings.attach_public_key {
+                    let public_key_attachment =
+                        Attachment::gen_public_key(context, &address, tx).await?;
+
+                    // If we already have the public key, we should just skip adding the attachment.
+                    if !attachments.iter().any(|attachment| {
+                        attachment.filename == public_key_attachment.attachment.filename
+                    }) {
+                        let attachment = public_key_attachment.store(context, tx).await?;
+                        DraftAttachmentMetadata::pending(
+                            metadata.id.unwrap(),
+                            attachment.local_id.unwrap(),
+                            0,
+                            true,
+                        )
+                        .save(tx)
+                        .await?;
+                    }
+                }
+
                 for (order, attachment) in attachments.into_iter().enumerate() {
                     let mut attachment_metadata =
                         if matches!(attachment.attachment_type, AttachmentType::Pgp) {
@@ -723,6 +765,7 @@ impl Draft {
                                 metadata.id.unwrap(),
                                 new_attachment.local_id.unwrap(),
                                 order,
+                                false,
                             )
                         } else {
                             DraftAttachmentMetadata::inherited(
@@ -1281,9 +1324,8 @@ impl Draft {
     ) -> Result<ActionId, MailContextError> {
         let remove_action = self.to_remove_attachment_action(attachment_id);
 
-        let queue = ctx.action_queue();
         let tether = ctx.user_stash().connection();
-        let result = remove_action.queue(queue, &tether).await?;
+        let result = remove_action.queue(ctx, &tether).await?;
 
         Ok(result.id)
     }
@@ -1299,6 +1341,7 @@ impl Draft {
         DraftAttachmentRemovalQueuer::new(
             self.metadata_id,
             AttachmentRemovalId::Local(attachment_id),
+            self.address_id.clone(),
         )
     }
 
@@ -1316,9 +1359,8 @@ impl Draft {
     ) -> Result<ActionId, MailContextError> {
         let remove_action = self.to_remove_attachment_action_with_cid(content_id);
 
-        let queue = ctx.action_queue();
         let tether = ctx.user_stash().connection();
-        let result = remove_action.queue(queue, &tether).await?;
+        let result = remove_action.queue(ctx, &tether).await?;
 
         Ok(result.id)
     }
@@ -1331,7 +1373,11 @@ impl Draft {
         &self,
         content_id: ContentId,
     ) -> DraftAttachmentRemovalQueuer {
-        DraftAttachmentRemovalQueuer::new(self.metadata_id, AttachmentRemovalId::Cid(content_id))
+        DraftAttachmentRemovalQueuer::new(
+            self.metadata_id,
+            AttachmentRemovalId::Cid(content_id),
+            self.address_id.clone(),
+        )
     }
 
     /// Retry the upload of a failed attachment.
@@ -1455,6 +1501,7 @@ impl DraftSaveActionQueuer {
 
         //TODO: queue batching so we can fail everything together.
         for attachment_id in pending_attachment_ids {
+            tracing::info!("Queuing attachment upload for pending attachment {attachment_id}");
             let metadata = MetadataBuilder::new()
                 .with_resource(&self.id)
                 .expect("This should never fail")
@@ -1668,21 +1715,27 @@ enum AttachmentRemovalId {
 /// Utility type to wrap the queueing of attachment removal.
 pub struct DraftAttachmentRemovalQueuer {
     id: MetadataId,
+    address_id: AddressId,
     attachment_id: AttachmentRemovalId,
 }
 
 impl DraftAttachmentRemovalQueuer {
-    fn new(id: MetadataId, attachment_id: AttachmentRemovalId) -> Self {
-        Self { id, attachment_id }
+    fn new(id: MetadataId, attachment_id: AttachmentRemovalId, address_id: AddressId) -> Self {
+        Self {
+            id,
+            attachment_id,
+            address_id,
+        }
     }
 
     /// Consume and queue this action.
     #[tracing::instrument(level=tracing::Level::DEBUG, name="draft::attachment_remove",skip_all)]
     pub async fn queue(
         self,
-        queue: &Queue,
+        ctx: &MailUserContext,
         tether: &Tether,
     ) -> Result<QueuedActionOutput<AttachmentRemove>, MailContextError> {
+        let queue = ctx.action_queue();
         // Find existing attachment metadata.
         let attachment_metadata = match self.attachment_id {
             AttachmentRemovalId::Local(id) => {
@@ -1705,6 +1758,28 @@ impl DraftAttachmentRemovalQueuer {
                 }
             }
         };
+
+        // if an attachment is the public key of the current active address and the
+        // mail setting to attach the draft is active, it can't be removed.
+        let mail_settings = MailSettings::get_or_default(tether).await;
+        if mail_settings.attach_public_key && attachment_metadata.is_public_key {
+            let attachment_file_name =
+                Attachment::filename(attachment_metadata.local_attachment_id, tether)
+                    .await?
+                    .ok_or(AttachmentRemoveError::AttachmentNotFound(
+                        attachment_metadata.local_attachment_id,
+                    ))?;
+            let address = Address::find_by_remote_id(self.address_id.clone(), tether)
+                .await?
+                .ok_or(AttachmentRemoveError::AddressNotFound(self.address_id))?;
+            let public_key_attachment = Attachment::gen_public_key(ctx, &address, tether).await?;
+            if public_key_attachment.attachment.filename == attachment_file_name {
+                return Err(AttachmentRemoveError::AttachmentIsPublicKey(
+                    attachment_metadata.local_attachment_id,
+                )
+                .into());
+            }
+        }
 
         let mut metadata = MetadataBuilder::new()
             .with_resource(&self.id)

@@ -134,7 +134,7 @@ async fn basic_send_check() {
     let tether = user_ctx.user_stash().connection();
 
     // Create draft.
-    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
     draft
         .to_list
         .add_single(RecipientEntry {
@@ -310,7 +310,7 @@ async fn basic_schedule_send_check() {
     let tether = user_ctx.user_stash().connection();
 
     // Create draft.
-    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
     draft
         .to_list
         .add_single(RecipientEntry {
@@ -440,7 +440,7 @@ async fn schedule_send_with_old_delivery_time_fails() {
     let tether = user_ctx.user_stash().connection();
 
     // Create draft.
-    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
     draft
         .to_list
         .add_single(RecipientEntry {
@@ -602,7 +602,7 @@ async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_be
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
     draft
         .to_list
         .add_single(RecipientEntry {
@@ -651,7 +651,7 @@ async fn save_after_send_is_an_error() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
     draft
         .to_list
         .add_single(RecipientEntry {
@@ -741,7 +741,7 @@ async fn already_sent_error_does_not_produce_error() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
     draft
         .to_list
         .add_single(RecipientEntry {
@@ -844,7 +844,7 @@ async fn cancel_schedule_send_on_queued_send() {
     let tether = user_ctx.user_stash().connection();
 
     // Create draft.
-    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
     draft
         .to_list
         .add_single(RecipientEntry {
@@ -1047,7 +1047,7 @@ async fn send_fails_if_recipient_is_not_valid_impl(
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
-    let mut draft = Draft::empty(user_ctx.user_stash()).await.unwrap();
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
     draft
         .to_list
         .add_single(RecipientEntry {

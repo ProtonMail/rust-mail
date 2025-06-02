@@ -58,7 +58,7 @@ impl Composer {
             Command::task(async move {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
-                    match Draft::empty(ctx.user_stash()).await {
+                    match Draft::empty(&ctx).await {
                         Ok(draft) => Composer::create(draft, None, ctx.user_stash().clone()).await,
                         Err(e) => {
                             error!("Failed to create new draft:{e:?}");
@@ -413,7 +413,7 @@ impl Composer {
             )),
             Command::task(async move {
                 let tether = context.user_stash().connection();
-                let cmd = if let Err(e) = action.queue(context.action_queue(), &tether).await {
+                let cmd = if let Err(e) = action.queue(&context, &tether).await {
                     Command::message(anyhow::Error::new(e).into())
                 } else {
                     Command::message(ComposerMessage::RefreshAttachmentList.into())

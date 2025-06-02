@@ -142,7 +142,7 @@ pub async fn new_draft(
     let ptr = session.ptr();
     uniffi_async(async move {
         let draft = match create_mode {
-            DraftCreateMode::Empty => RealDraft::empty(ctx.user_stash()).await,
+            DraftCreateMode::Empty => RealDraft::empty(&ctx).await,
             DraftCreateMode::Reply(id) => {
                 RealDraft::reply(&ctx, id.into(), ReplyMode::Sender, false, None).await
             }
