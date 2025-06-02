@@ -295,7 +295,6 @@ impl RunTransaction for WriterGuard<'_> {
             self.tether
                 .tx(closure)
                 .await
-                .inspect_err(|e| error!("Could not create transaction for writerguard: {:?}", e))
                 .context("Could not create transaction for writerguard")
         }
     }

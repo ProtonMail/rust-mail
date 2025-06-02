@@ -3,21 +3,11 @@ use crate::test_utils::test_context::MailTestContext;
 use proton_core_api::services::proton::{
     Address as ApiAddress, AddressSignedKeyList, AddressStatus as ApiAddressStatus,
     AddressType as ApiAddressType, ContactBasic as ApiContactBasic,
-    ContactEmail as ApiContactEmail, DateFormat as ApiDateFormat, DelinquentState,
-    Density as ApiDensity, Email as ApiEmail, Flags as ApiFlags, HighSecurity as ApiHighSecurity,
-    Label as ApiLabel, LogAuth as ApiLogAuth, Password as ApiPassword, Phone as ApiPhone,
-    ProductUsedSpace as ApiProductUsedSpace, SettingsFlags as ApiSettingsFlags,
-    TfaStatus as ApiTfaStatus, TimeFormat as ApiTimeFormat, TwoFa as ApiTwoFa, User as ApiUser,
-    UserMnemonicStatus as ApiUserMnemonicStatus, UserSettings as ApiUserSettings,
-    UserType as ApiUserType, WeekStart as ApiWeekStart,
+    ContactEmail as ApiContactEmail, Label as ApiLabel, User as ApiUser,
+    UserSettings as ApiUserSettings,
 };
-use proton_core_api::services::proton::{
-    AddressId, EventId, LabelId, LabelType as ApiLabelType, UserId,
-};
-use proton_core_api::services::proton::{
-    GetAddressesResponse, GetContactsEmailsResponse, GetContactsResponse, GetEventsLatestResponse,
-    GetKeysAllResponse, GetSettingsResponse as GetCoreSettingsResponse, GetUsersResponse,
-};
+use proton_core_api::services::proton::{AddressId, EventId, LabelId, LabelType as ApiLabelType};
+use proton_core_api::services::proton::{GetEventsLatestResponse, GetKeysAllResponse};
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
 use proton_mail_api::services::proton::prelude::GetIncomingDefaultResponse;
 use proton_mail_api::services::proton::response_data::MessageMetadata;
@@ -33,8 +23,8 @@ use proton_mail_api::services::proton::response_data::{
 use crate::datatypes::SystemLabelId;
 use proton_core_common::datatypes::ALL_LABEL_TYPES;
 use proton_core_common::test_utils::account::{
-    TEST_ADDRESS_ID, TEST_ADDRESS_KEY_SIGNATURE, TEST_USER_ID, TEST_USER_MAIL,
-    testdata_address_keys_for_user_address, testdata_user_keys,
+    TEST_ADDRESS_ID, TEST_ADDRESS_KEY_SIGNATURE, TEST_USER_MAIL,
+    testdata_address_keys_for_user_address,
 };
 use proton_core_common::test_utils::addresses_public::{
     TEST_OTHER_USER_EMAIL, testdata_address_keys_other_user,
@@ -237,7 +227,7 @@ impl MailTestContext {
         self.mock_get_user(params.user_info, number_of_calls).await;
 
         // User settings
-        self.mock_user_settings(params.user_settings, number_of_calls)
+        self.mock_get_user_settings(params.user_settings, number_of_calls)
             .await;
 
         // Mail settings
@@ -245,7 +235,8 @@ impl MailTestContext {
             .await;
 
         // Mail addresses
-        self.mock_get_addresses(Some(params.addresses), number_of_calls)
+        self.core_test_context
+            .mock_get_addresses(Some(params.addresses), number_of_calls)
             .await;
 
         // Incoming defaults
@@ -263,9 +254,11 @@ impl MailTestContext {
             .await;
         }
 
-        self.mock_get_contacts_emails(Some(params.emails), number_of_calls)
+        self.core_test_context
+            .mock_get_contacts_emails(Some(params.emails), number_of_calls)
             .await;
-        self.mock_get_contacts(Some(params.contacts), number_of_calls)
+        self.core_test_context
+            .mock_get_contacts(Some(params.contacts), number_of_calls)
             .await;
 
         // Message counts
@@ -566,116 +559,6 @@ impl MailTestContext {
             .await;
     }
 
-    /// Generate new mock expectations for retrieving contacts.
-    ///
-    /// This function will mock the response for the given contacts.
-    ///
-    /// # Parameters
-    ///
-    /// * `contacts` - The list of contacts to respond with. If `None`, an empty list will be used.
-    /// * `expect`   - How many times the endpoint should be called.
-    ///
-    #[function_name::named]
-    pub async fn mock_get_contacts(
-        &self,
-        contacts: Option<Vec<ApiContactBasic>>,
-        expect: impl Into<Times>,
-    ) {
-        let contacts = contacts.unwrap_or_default();
-        Mock::given(method("GET"))
-            .and(path("/api/contacts"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(GetContactsResponse {
-                    total: contacts.len() as u64,
-                    contacts,
-                }),
-            )
-            .expect(expect)
-            .named(function_name!())
-            .mount(self.mock_server())
-            .await;
-    }
-
-    /// Generate new mock expectations for retrieving contact emails.
-    ///
-    /// This function will mock the response for the given contact emails.
-    ///
-    /// # Parameters
-    ///
-    /// * `contact_emails` - The list of contact emails to respond with. If `None`, an empty list will be used.
-    /// * `expect`         - How many times the endpoint should be called.
-    ///
-    #[function_name::named]
-    pub async fn mock_get_contacts_emails(
-        &self,
-        contact_emails: Option<Vec<ApiContactEmail>>,
-        expect: impl Into<Times>,
-    ) {
-        let contact_emails = contact_emails.unwrap_or_default();
-        Mock::given(method("GET"))
-            .and(path("/api/contacts/emails"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(GetContactsEmailsResponse {
-                    total: contact_emails.len() as u64,
-                    contact_emails,
-                }),
-            )
-            .expect(expect)
-            .named(function_name!())
-            .mount(self.mock_server())
-            .await;
-    }
-
-    /// Generate new mock expectations for retrieving user settings.
-    ///
-    /// This function will mock the response for the given user settings.
-    ///
-    /// # Parameters
-    ///
-    /// * `settings` - The user settings to respond with. If `None`, default values will be used.
-    /// * `expect`   - How many times the endpoint should be called.
-    ///
-    #[function_name::named]
-    pub async fn mock_user_settings(
-        &self,
-        settings: Option<ApiUserSettings>,
-        expect: impl Into<Times>,
-    ) {
-        Mock::given(method("GET"))
-            .and(path("/api/core/v4/settings"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(GetCoreSettingsResponse {
-                    user_settings: settings.unwrap_or_else(|| DEFAULT_USER_SETTINGS.clone()),
-                }),
-            )
-            .expect(expect)
-            .named(function_name!())
-            .mount(self.mock_server())
-            .await;
-    }
-
-    /// Generate new mock expectations for retrieving user information.
-    ///
-    /// This function will mock the response for the given user.
-    ///
-    /// # Parameters
-    ///
-    /// * `user`   - The user to respond with. If `None`, default values will be used.
-    /// * `expect` - How many times the endpoint should be called.
-    ///
-    #[function_name::named]
-    pub async fn mock_get_user(&self, user: Option<ApiUser>, expect: impl Into<Times>) {
-        Mock::given(method("GET"))
-            .and(path("/api/core/v4/users"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(GetUsersResponse {
-                user: user.unwrap_or_else(|| DEFAULT_USER.clone()),
-            }))
-            .expect(expect)
-            .named(function_name!())
-            .mount(self.mock_server())
-            .await;
-    }
-
     /// Generate new mock expectations for retrieving message counts.
     ///
     /// This function will mock the response for the given message counts.
@@ -723,33 +606,6 @@ impl MailTestContext {
             .and(path("/api/mail/v4/conversations/count"))
             .respond_with(
                 ResponseTemplate::new(200).set_body_json(GetConversationsCountResponse { counts }),
-            )
-            .expect(expect)
-            .named(function_name!())
-            .mount(self.mock_server())
-            .await;
-    }
-
-    /// Generate new mock expectations for retrieving addresses.
-    ///
-    /// This function will mock the response for the given addresses.
-    ///
-    /// # Parameters
-    ///
-    /// * `addresses` - The addresses to respond with. If `None`, an empty list will be used.
-    /// * `expect`    - How many times the endpoint should be called.
-    ///
-    #[function_name::named]
-    pub async fn mock_get_addresses(
-        &self,
-        addresses: Option<Vec<ApiAddress>>,
-        expect: impl Into<Times>,
-    ) {
-        let addresses = addresses.unwrap_or_default();
-        Mock::given(method("GET"))
-            .and(path("/api/core/v4/addresses"))
-            .respond_with(
-                ResponseTemplate::new(200).set_body_json(GetAddressesResponse { addresses }),
             )
             .expect(expect)
             .named(function_name!())
@@ -831,89 +687,4 @@ pub static DEFAULT_MAIL_SETTINGS: LazyLock<ApiMailSettings> = LazyLock::new(|| A
     hide_remote_images: false,
     hide_embedded_images: false,
     hide_sender_images: false,
-});
-
-static DEFAULT_USER_SETTINGS: LazyLock<ApiUserSettings> = LazyLock::new(|| ApiUserSettings {
-    email: ApiEmail {
-        value: String::new(),
-        status: 0,
-        notify: 0,
-        reset: 0,
-    },
-    password: ApiPassword {
-        mode: 0,
-        expiration_time: None,
-    },
-    phone: ApiPhone {
-        value: String::new(),
-        status: 0,
-        notify: 0,
-        reset: 0,
-    },
-    two_factor_auth: ApiTwoFa {
-        enabled: ApiTfaStatus::None,
-        allowed: ApiTfaStatus::None,
-        expiration_time: None,
-        registered_keys: vec![],
-    },
-    news: 0,
-    locale: String::new(),
-    log_auth: ApiLogAuth::Disabled,
-    invoice_text: String::new(),
-    density: ApiDensity::Comfortable,
-    week_start: ApiWeekStart::Default,
-    date_format: ApiDateFormat::Default,
-    time_format: ApiTimeFormat::Default,
-    welcome: false,
-    early_access: false,
-    flags: ApiSettingsFlags { welcomed: false },
-    referral: None,
-    device_recovery: false,
-    telemetry: false,
-    crash_reports: false,
-    hide_side_panel: false,
-    high_security: ApiHighSecurity {
-        eligible: false,
-        value: false,
-    },
-    session_account_recovery: false,
-});
-
-static DEFAULT_USER: LazyLock<ApiUser> = LazyLock::new(|| ApiUser {
-    id: UserId::from(TEST_USER_ID),
-    name: None,
-    display_name: None,
-    email: TEST_USER_MAIL.to_owned(),
-    used_space: 0,
-    max_space: 0,
-    max_upload: 0,
-    user_type: ApiUserType::Proton,
-    create_time: 0,
-    credit: 0,
-    currency: String::new(),
-    keys: testdata_user_keys(),
-    product_used_space: ApiProductUsedSpace {
-        calendar: 0,
-        contact: 0,
-        drive: 0,
-        mail: 0,
-        pass: 0,
-    },
-    to_migrate: false,
-    mnemonic_status: ApiUserMnemonicStatus::Disabled,
-    role: 0,
-    private: 0,
-    subscribed: 0,
-    services: 0,
-    delinquent: DelinquentState::Paid,
-    flags: ApiFlags {
-        protected: false,
-        onboard_checklist_storage_granted: false,
-        has_temporary_password: false,
-        test_account: false,
-        no_login: false,
-        recovery_attempt: false,
-        sso: false,
-        no_proton_address: false,
-    },
 });

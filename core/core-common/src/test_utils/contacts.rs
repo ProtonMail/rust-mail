@@ -9,6 +9,8 @@ use proton_core_api::services::proton::{
     GetContactResponse, GetContactsEmailsResponse, GetContactsResponse, PutDeleteContactResponse,
     PutDeleteContactsResponse,
 };
+use wiremock::MockBuilder;
+use wiremock::Times;
 use wiremock::{
     Mock, ResponseTemplate,
     matchers::{body_json, method, path},
@@ -32,6 +34,73 @@ impl TestContext {
             .and(path(r"/api/contacts"))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
             .expect(1)
+            .named(function_name!())
+            .mount(self.mock_server())
+            .await;
+    }
+
+    /// Generate new mock expectations for retrieving contacts.
+    ///
+    /// This function will mock the response for the given contacts.
+    ///
+    /// # Parameters
+    ///
+    /// * `contacts` - The list of contacts to respond with. If `None`, an empty list will be used.
+    /// * `expect`   - How many times the endpoint should be called.
+    ///
+    #[function_name::named]
+    pub async fn mock_get_contacts(
+        &self,
+        contacts: Option<Vec<ApiContactBasic>>,
+        expect: impl Into<Times>,
+    ) {
+        let contacts = contacts.unwrap_or_default();
+        Mock::given(method("GET"))
+            .and(path("/api/contacts"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(GetContactsResponse {
+                    total: contacts.len() as u64,
+                    contacts,
+                }),
+            )
+            .expect(expect)
+            .named(function_name!())
+            .mount(self.mock_server())
+            .await;
+    }
+
+    #[function_name::named]
+    pub async fn mock_get_contacts_respond_with(&self, respond_with: impl Fn(MockBuilder) -> Mock) {
+        let mock = Mock::given(method("GET")).and(path("/api/contacts"));
+        let mock = respond_with(mock);
+        mock.named(function_name!()).mount(self.mock_server()).await;
+    }
+
+    /// Generate new mock expectations for retrieving contact emails.
+    ///
+    /// This function will mock the response for the given contact emails.
+    ///
+    /// # Parameters
+    ///
+    /// * `contact_emails` - The list of contact emails to respond with. If `None`, an empty list will be used.
+    /// * `expect`         - How many times the endpoint should be called.
+    ///
+    #[function_name::named]
+    pub async fn mock_get_contacts_emails(
+        &self,
+        contact_emails: Option<Vec<ApiContactEmail>>,
+        expect: impl Into<Times>,
+    ) {
+        let contact_emails = contact_emails.unwrap_or_default();
+        Mock::given(method("GET"))
+            .and(path("/api/contacts/emails"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(GetContactsEmailsResponse {
+                    total: contact_emails.len() as u64,
+                    contact_emails,
+                }),
+            )
+            .expect(expect)
             .named(function_name!())
             .mount(self.mock_server())
             .await;

@@ -38,6 +38,8 @@ pub enum LabelError {
     CouldNotResolveRemoteLabel(LocalLabelId),
     #[error("Could not resolve local label: {0}")]
     CouldNotResolveLocalLabel(LabelId),
+    #[error("Label does not have neither remote nor local id")]
+    LabelWithoutIds,
 }
 
 /// TODO: Document this struct.

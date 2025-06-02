@@ -50,7 +50,7 @@ use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::datatypes::{
     LabelType, LocalAddressId, LocalLabelId, SystemLabel, UnixTimestamp,
 };
-use proton_core_common::models::{Address, Label, ModelExtension, ModelIdExtension};
+use proton_core_common::models::{Address, Label, LabelError, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::proton_crypto;
 use proton_mail_api::MAX_PAGE_ELEMENT_COUNT;
 use proton_mail_api::services::proton::ProtonMail;
@@ -2749,7 +2749,7 @@ impl Message {
 
     /// Whether this message is a draft and has been modified locally.
     ///
-    pub async fn is_local_draft(&self, tether: &Tether) -> Result<bool, StashError> {
+    pub async fn is_local_draft(&self, tether: &Tether) -> Result<bool, AppError> {
         let local_id = match self.local_id {
             Some(local_id) => local_id,
             None if self.remote_id.is_some() => {
@@ -2761,9 +2761,7 @@ impl Message {
                 local_id
             }
             _ => {
-                return Err(StashError::Critical(anyhow!(
-                    "Message without Remote and Local ID"
-                )));
+                return Err(AppError::Label(LabelError::LabelWithoutIds));
             }
         };
 
