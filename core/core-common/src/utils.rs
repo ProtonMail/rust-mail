@@ -14,8 +14,21 @@ pub fn first_grapheme_upppercase<S: AsRef<str>>(s: S) -> Option<String> {
 
 /// List of Proton colors defined by designers.
 static PROTON_COLORS: [&str; 15] = [
-    "#0F735A", "#059A6F", "#1ED19C", "#3CBB3A", "#3C8B8C", "#6638B7", "#9553F9", "#9C89FF",
-    "#A839A4", "#52006A", "#213474", "#0047AB", "#4989FF", "#29C0E6", "#415DF0",
+    "#2E8378", // Green-1 (Genoa)
+    "#34A48A", // Green-2 (Gossamer)
+    "#52CD96", // Green-3 (Mountain Meadow)
+    "#51BE50", // Green-4 (Apple)
+    "#3F8B8E", // Green-5 (Paradiso)
+    "#764AC4", // Purple-1 (Royal Purple)
+    "#9E66FC", // Purple-2 (Heliotrope)
+    "#9C89FF", // Purple-3 (Melrose)
+    "#A1439F", // Purple-4 (Medium Red Violet)
+    "#7B3185", // Purple-5 (Ripe Plum)
+    "#495EA9", // Blue-1 (Bay of Many)
+    "#4E7ABB", // Blue-2 (Cobalt)
+    "#4989FF", // Blue-3 (Dodger Blue)
+    "#3FB0D9", // Blue-4 (Picton Blue)
+    "#4F66DF", // Blue-5 (Royal Blue)
 ];
 
 /// Returns hexadecimal Proton color based on string value.
