@@ -2506,163 +2506,149 @@ async fn label_messages() {
 async fn unlabel_messages() {
     // assign a label to messages and progressively remove it.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut conn = stash.connection();
+    let mut tether = stash.connection();
     let mut state = new_test_label_db_state();
-    prepare_db_state_core(&mut conn, &mut state.addresses).await;
-    let (state, state_map) = prepare_and_patch_db_state(&mut conn, state.clone()).await;
+    prepare_db_state_core(&mut tether, &mut state.addresses).await;
+    let (state, state_map) = prepare_and_patch_db_state(&mut tether, state.clone()).await;
 
-    let local_conv_id = *state_map
+    let conv = *state_map
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_msg_id1 = *state_map
+    let msg1 = *state_map
         .messages
         .get(state.messages[0].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_msg_id2 = *state_map
+    let msg2 = *state_map
         .messages
         .get(state.messages[1].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_msg_id3 = *state_map
+    let msg3 = *state_map
         .messages
         .get(state.messages[2].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+    let label = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
 
-    conn.tx::<_, _, StashError>(async |tx| {
-        Message::apply_label(
-            local_label_id1,
-            [local_msg_id1, local_msg_id2, local_msg_id3],
-            tx,
-        )
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            Message::apply_label(label, [msg1, msg2, msg3], tx)
+                .await
+                .expect("failed to label");
+
+            // unlabel first message.
+            Message::remove_label(label, [msg1], tx).await.unwrap();
+            Ok(())
+        })
         .await
-        .expect("failed to label");
+        .unwrap();
+    let msg1_remote = state.messages[0].remote_id.clone().unwrap();
 
-        // unlabel first message.
-        Message::remove_label(local_label_id1, std::iter::once(local_msg_id1), tx)
-            .await
-            .unwrap();
-        Ok(())
-    })
-    .await
-    .unwrap();
-    let remote_msg_id1 = state.messages[0].remote_id.clone().unwrap();
-
-    let db_conversation = ContextualConversation::load(local_conv_id, local_label_id1, &conn)
+    let db_conversation = ContextualConversation::load(conv, label, &tether)
         .await
         .expect("failed to get conversation")
         .unwrap();
 
+    let curr_msgs = state
+        .messages
+        .iter()
+        .filter(|m| m.remote_id.as_ref() != Some(&msg1_remote));
+
     // Check conversation status.
     assert_eq!(db_conversation.num_unread, 1);
     assert_eq!(db_conversation.num_messages, 2);
+    assert_eq!(
+        db_conversation.num_messages,
+        curr_msgs.clone().count() as u64
+    );
+    assert_eq!(
+        db_conversation.num_unread,
+        curr_msgs.clone().filter(|m| m.unread).count() as u64
+    );
     assert_eq!(db_conversation.num_attachments, 0);
     assert_eq!(
         db_conversation.size,
-        state
-            .messages
-            .iter()
-            .filter(|m| m.remote_id.as_ref() != Some(&remote_msg_id1))
-            .fold(0, |x, m| x + m.size)
+        curr_msgs.clone().map(|m| m.size).sum::<u64>()
     );
     assert_eq!(
         db_conversation.time,
-        state
-            .messages
-            .iter()
-            .filter(|m| m.remote_id.as_ref() != Some(&remote_msg_id1))
-            .fold(UnixTimestamp::new(0), |x, m| x.max(m.time))
+        curr_msgs.clone().map(|m| m.time).max().unwrap()
     );
     assert_eq!(
         db_conversation.expiration_time,
-        state
-            .messages
-            .iter()
-            .filter(|m| m.remote_id.as_ref() != Some(&remote_msg_id1))
-            .fold(UnixTimestamp::new(0), |x, m| x.max(m.expiration_time))
+        curr_msgs.clone().map(|m| m.expiration_time).max().unwrap()
     );
     assert_eq!(
         db_conversation.snooze_time,
-        state
-            .messages
-            .iter()
-            .filter(|m| m.remote_id.as_ref() != Some(&remote_msg_id1))
-            .fold(UnixTimestamp::new(0), |x, m| x.max(m.snooze_time))
+        curr_msgs.clone().map(|m| m.snooze_time).max().unwrap()
     );
 
     // Check conversation counts have the new conversation.
     {
-        let conv_counts = conv_counts_as_map(&conn).await;
-        let label_counts = conv_counts.get(&local_label_id1).unwrap();
+        let conv_counts = conv_counts_as_map(&tether).await;
+        let label_counts = conv_counts.get(&label).unwrap();
         assert_eq!(label_counts.unread, 1);
         assert_eq!(label_counts.total, 1);
     }
 
     // Check message counts.
     {
-        let message_counts = msg_counts_as_map(&conn).await;
-        let label_counts = message_counts.get(&local_label_id1).unwrap();
+        let message_counts = msg_counts_as_map(&tether).await;
+        let label_counts = message_counts.get(&label).unwrap();
         assert_eq!(label_counts.unread, 1);
         assert_eq!(label_counts.total, 2);
     }
 
-    let check_final_conv_state = |stash: &Stash| -> BoxFuture<'_, ()> {
-        let tether = stash.connection();
-        async move {
-            // Conversation should no longer have the label
-            assert!(
-                ContextualConversation::load(local_conv_id, local_label_id1, &tether)
-                    .await
-                    .expect("failed to get conversation")
-                    .is_none()
-            );
+    let check_final_conv_state = async |tether: &Tether| {
+        assert_eq!(
+            ContextualConversation::load(conv, label, tether)
+                .await
+                .unwrap(),
+            None,
+            "Conversation should no longer have the label"
+        );
 
-            // Check conversation counts.
-            {
-                let conv_counts = conv_counts_as_map(&tether).await;
-                let label_counts = conv_counts.get(&local_label_id1).unwrap();
-                assert_eq!(label_counts.unread, 0);
-                assert_eq!(label_counts.total, 0);
-            }
-
-            // Check message counts.
-            {
-                let message_counts = msg_counts_as_map(&tether).await;
-                let label_counts = message_counts.get(&local_label_id1).unwrap();
-                assert_eq!(label_counts.unread, 0);
-                assert_eq!(label_counts.total, 0);
-            }
+        // Check conversation counts.
+        {
+            let conv_counts = conv_counts_as_map(tether).await;
+            let label_counts = conv_counts.get(&label).unwrap();
+            assert_eq!(label_counts.unread, 0);
+            assert_eq!(label_counts.total, 0);
         }
-        .boxed()
+
+        // Check message counts.
+        {
+            let message_counts = msg_counts_as_map(tether).await;
+            let label_counts = message_counts.get(&label).unwrap();
+            assert_eq!(label_counts.unread, 0);
+            assert_eq!(label_counts.total, 0);
+        }
     };
 
-    // Label remaining messages.
-    conn.tx::<_, _, StashError>(async |tx| {
-        Message::remove_label(local_label_id1, [local_msg_id2, local_msg_id3], tx)
-            .await
-            .unwrap();
-        Ok(())
-    })
-    .await
-    .unwrap();
-
-    check_final_conv_state(&stash).await;
-
-    // Apply again, should be noop.
-    conn.tx::<_, _, StashError>(async |tx| {
-        Message::remove_label(
-            local_label_id1,
-            [local_msg_id1, local_msg_id2, local_msg_id3],
-            tx,
-        )
+    // remove labels
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            Message::remove_label(label, [msg2, msg3], tx)
+                .await
+                .unwrap();
+            Ok(())
+        })
         .await
         .unwrap();
-        Ok(())
-    })
-    .await
-    .unwrap();
 
-    check_final_conv_state(&stash).await;
+    check_final_conv_state(&tether).await;
+
+    // Apply again, should be noop.
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            Message::remove_label(label, [msg1, msg2, msg3], tx)
+                .await
+                .unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    check_final_conv_state(&tether).await;
 }
 
 pub(super) static MY_MESSAGE_ID: LazyLock<MessageId> =

@@ -20,11 +20,12 @@ use crate::models::*;
 use crate::{MailContextError, find_in_query};
 use futures::try_join;
 use indoc::{formatdoc, indoc};
+use proton_action_queue::action::MetadataBuilder;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
 use proton_calendar_common::{RsvpError, RsvpEvent, RsvpEventId};
 use proton_core_common::utils::MapVec as _;
 use sqlite_watcher::watcher::TableObserver;
-use stash::exports::SqliteError;
+use stash::utils::{MapToSql, placeholders};
 use std::collections::HashSet;
 use tokio::fs;
 
@@ -67,7 +68,6 @@ use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
-use std::collections::btree_map::Entry;
 use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::future::Future;
@@ -157,7 +157,8 @@ pub struct Message {
     #[DbField]
     pub is_replied_all: bool,
 
-    /// TODO: Document this field.
+    /// You shouldn't add or remove labels from this field as some things will not get updated.
+    /// If you want to modify this use [`Message::apply_label`]
     pub label_ids: Vec<LabelId>,
 
     /// TODO: Document this field.
@@ -411,7 +412,7 @@ impl Message {
     /// Returns an error if the data could not be written to the database.
     ///
     pub async fn mark_multiple_as_read(
-        ids: Vec<LocalMessageId>,
+        ids: impl IntoIterator<Item = LocalMessageId>,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         for id in ids {
@@ -481,86 +482,100 @@ impl Message {
         Ok(())
     }
 
-    /// Remove all removable labels from given messages.
-    ///
-    /// N.B.: `all_mail` label is the only not removable label.
-    async fn remove_all_labels(
-        message_ids: Vec<LocalMessageId>,
+    async fn remove_all_labels_except_all_mail(
+        ids: &[LocalMessageId],
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
+        let label_ids: Vec<LocalLabelId> = bond
+            .query_values(
+                formatdoc! {"
+                SELECT local_label_id AS value
+                FROM message_labels 
+                WHERE 
+                    local_message_id in ({})"
+                    , placeholders(ids)
+                },
+                ids.to_sql(),
+            )
+            .await?;
+
         let all_mail_id = Label::remote_id_counterpart(LabelId::all_mail(), bond)
             .await?
             .expect("AllMail should be set");
 
-        let (query, mut parameters) = find_in_query!(
-            "DELETE FROM message_labels WHERE local_message_id in ({}) AND local_label_id != ?",
-            message_ids
-        );
-        parameters.push(Box::new(all_mail_id) as Box<dyn ToSql + Send>);
+        // It's a good moment to apply all mail label to messages in the case that it slipped by
+        if !label_ids.contains(&all_mail_id) {
+            Self::apply_label(all_mail_id, ids.iter().cloned(), bond).await?;
+        }
 
-        bond.execute(query, parameters).await?;
+        for label_id in label_ids {
+            if label_id == all_mail_id {
+                continue;
+            }
+
+            Self::remove_label(label_id, ids.iter().cloned(), bond).await?;
+        }
+
         Ok(())
     }
 
     /// Move messages between two labels.
     ///
-    /// # Parameters
-    /// * `source_id`      - Local label id where the messages currently are.
-    /// * `destination_id` - Local label id where the messages should be moved.
-    /// * `message_ids`    - The IDs of the conversations to move.
-    /// * `interface`      - A tether or a stash to use for the database connection.
-    ///
-    /// # Remarks
-    ///
-    /// This function can only be called with an active transaction.
-    ///
-    /// # Errors
-    ///
-    /// Returns errors if the operation failed.
+    /// Note that the logic is the same as [`Conversation::move_conversations`],
+    /// so any changes made here should be reflected there.
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub async fn move_messages(
         source_id: LocalLabelId,
         destination_id: LocalLabelId,
         message_ids: Vec<LocalMessageId>,
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
-        let remote_source_id = Label::resolve_remote_label_id(source_id, bond).await?;
-        let remote_destination_id = Label::resolve_remote_label_id(destination_id, bond).await?;
+        debug_assert_ne!(source_id, destination_id);
+        if message_ids.is_empty() {
+            debug!("List of ids was empty");
+            return Ok(());
+        }
+        trace!("Moving {n} messages", n = message_ids.len());
 
-        // If moving to trash, mark targets as read.
-        if remote_destination_id == LabelId::trash() {
-            Message::mark_multiple_as_read(message_ids.to_vec(), bond)
+        let spam = Label::resolve_local_label_id(LabelId::spam(), bond).await?;
+        let trash = Label::resolve_local_label_id(LabelId::trash(), bond).await?;
+
+        if destination_id == trash {
+            Message::mark_multiple_as_read(message_ids.iter().cloned(), bond)
                 .await
-                .inspect_err(|e| {
-                    error!("Failed to mark messages as read when moving to trash: {e:?}")
-                })?;
+                .context("Failed to mark as read when moving to trash: {e:?}")?;
         }
 
-        // When moving in Trash or Spam, remove all labels (but AllMail)
-        if remote_destination_id == LabelId::trash() || remote_destination_id == LabelId::spam() {
-            Message::remove_all_labels(message_ids.to_vec(), bond)
+        let source_label = Label::load(source_id, bond).await?.context(
+            "Failed to load source label. This should never happen because we have the local id.",
+        )?;
+
+        if [trash, spam].contains(&destination_id) {
+            // When moving to trash or spam we delete all labels except all mail.
+            trace!("Deleting all labels except AllMail");
+            Self::remove_all_labels_except_all_mail(&message_ids, bond).await?;
+        } else if source_label.is_movable_folder() {
+            trace!("Deleting soruce label {source_id}");
+            Message::remove_label(source_id, message_ids.clone(), bond)
                 .await
-                .inspect_err(|e| error!("Failed to remove labels: {e:?}"))?;
-        } else if remote_source_id == LabelId::trash() || remote_source_id == LabelId::spam() {
-            // When moving out of Trash or Spam, add AlmostAllMail label
-            let almost_all_mail =
-                Label::resolve_local_label_id(LabelId::almost_all_mail(), bond).await?;
-            Message::apply_label(almost_all_mail, message_ids.to_vec(), bond)
-                .await
-                .inspect_err(|e| error!("Failed to add messages to almost_all_mail when moving out of spam/trash: {e:?}"))?;
+                .context("Failed to remove source label")?;
+        } else {
+            warn!("Source label {source_id} is not a movable folder, not removing...")
         }
 
-        let Some(source) = Label::load(source_id, bond).await? else {
-            return Err(AppError::LabelNotFound(source_id));
-        };
-        if source.is_movable_folder() {
-            Message::remove_label(source_id, message_ids.to_vec(), bond)
-                .await
-                .inspect_err(|e| error!("Failed to remove source label from messages: {e:?}"))?;
-        }
-
-        Message::apply_label(destination_id, message_ids.to_vec(), bond)
+        if [trash, spam].contains(&source_id) {
+            Message::apply_remote_label(
+                LabelId::almost_all_mail(),
+                message_ids.iter().cloned(),
+                bond,
+            )
             .await
-            .inspect_err(|e| error!("Failed to apply destination label to messages: {e:?}"))?;
+            .context("Failed to add messages to almost_all_mail when moving out of spam/trash")?;
+        }
+
+        Message::apply_label(destination_id, message_ids, bond)
+            .await
+            .context("Failed to apply destination label")?;
 
         Ok(())
     }
@@ -865,47 +880,6 @@ impl Message {
             trash,
             spam,
         )
-    }
-
-    /// Revert locally the LabelAs action for conversation.
-    pub(crate) async fn undo_label_as(
-        local_ids: Vec<LocalMessageId>,
-        source_label_id: LocalLabelId,
-        mut added_labels: HashMap<LocalMessageId, HashSet<LocalLabelId>>,
-        mut removed_labels: HashMap<LocalMessageId, HashSet<LocalLabelId>>,
-        original_location: HashMap<LocalMessageId, Option<ExclusiveLocation>>,
-        must_archive: bool,
-        bond: &Bond<'_>,
-    ) -> Result<(), AppError> {
-        let archive_id = Label::remote_id_counterpart(LabelId::archive(), bond)
-            .await?
-            .expect("Archive label must have a RemoteId");
-
-        for message_id in &local_ids {
-            let Some(mut message) = Message::load(*message_id, bond).await? else {
-                warn!("While reverting locally, could not find message with id: {message_id:?}");
-                continue;
-            };
-
-            let added_labels = added_labels.remove(message_id).unwrap_or_default();
-            let removed_labels = removed_labels.remove(message_id).unwrap_or_default();
-            let current_labels =
-                Label::remote_ids_counterpart(message.label_ids.clone(), bond).await?;
-            let current_labels = HashSet::from_iter(current_labels.into_iter());
-            let new_labels = &(&current_labels - &removed_labels) | &added_labels;
-            let new_labels = Label::local_ids_counterpart(Vec::from_iter(new_labels), bond).await?;
-            message.label_ids = new_labels.into_iter().map_into().collect();
-
-            if let Some(location) = original_location.get(message_id) {
-                message.exclusive_location = location.clone();
-            }
-            if must_archive {
-                Message::move_messages(archive_id, source_label_id, local_ids.clone(), bond)
-                    .await?;
-            }
-            message.save(bond).await?
-        }
-        Ok(())
     }
 
     /// Save a message to the database.
@@ -1344,16 +1318,9 @@ impl Message {
                         SELECT local_id FROM labels WHERE remote_id IN ({})
                     )
                 ",
-                    stash::utils::placeholders(self.label_ids.len()),
+                    stash::utils::placeholders(&self.label_ids),
                 ),
-                vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
-                    .into_iter()
-                    .chain(
-                        self.label_ids
-                            .iter()
-                            .map(|label| Box::new(label.clone()) as Box<dyn ToSql + Send>),
-                    )
-                    .collect(),
+                [self.local_id.unwrap()].to_sql_extend(&*self.label_ids),
             )
             .await?;
         } else {
@@ -1371,6 +1338,8 @@ impl Message {
             .await?;
         }
 
+        // FIXME: this is wrong because we don't update anything.
+        // We should use Message::apply_label and Message::remove_label instead.
         for label_id in &mut self.label_ids {
             bond.execute(
                 format!(
@@ -1411,17 +1380,9 @@ impl Message {
                                 AND attachments.local_id NOT IN ({})
 
                             )",
-                    stash::utils::placeholders(local_ids.len()),
+                    stash::utils::placeholders_n(local_ids.len()),
                 ),
-                vec![Box::new(self.local_id) as Box<dyn ToSql + Send>,
-                Box::new(Disposition::Attachment) as Box<dyn ToSql + Send>]
-                    .into_iter()
-                    .chain(
-                        local_ids
-                            .iter()
-                            .map(|attachment| Box::new(*attachment) as Box<dyn ToSql + Send>),
-                    )
-                    .collect(),
+               (self.local_id, Disposition::Attachment).to_sql_extend(&*local_ids)
             )
             .await?;
         } else {
@@ -2188,6 +2149,17 @@ impl Message {
         })
     }
 
+    pub async fn apply_remote_label(
+        label_id: LabelId,
+        ids: impl IntoIterator<Item = LocalMessageId>,
+        bond: &Bond<'_>,
+    ) -> Result<(), AppError> {
+        let local_label_id = Label::resolve_local_label_id(label_id, bond).await?;
+
+        Self::apply_label(local_label_id, ids, bond).await?;
+        Ok(())
+    }
+
     /// Apply label with `local_label_id` to the given messages with `ids`.
     ///
     /// This will also update conversation labels and label counters.
@@ -2195,6 +2167,7 @@ impl Message {
     /// # Errors
     ///
     /// Returns error if the queries fail.
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(ids, bond))]
     pub async fn apply_label(
         local_label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalMessageId>,
@@ -2203,40 +2176,27 @@ impl Message {
         let mut conversation_messages = BTreeMap::<LocalConversationId, Vec<LocalMessageId>>::new();
 
         for id in ids {
-            if match bond
-                .query_value::<_, LocalConversationId>(
-                    "INSERT OR IGNORE INTO message_labels VALUES (?,?) RETURNING local_message_id AS value",
+            if bond
+                .query_value_opt::<LocalConversationId>(
+                    indoc::indoc! {
+                    "INSERT OR IGNORE INTO message_labels
+                    VALUES (?,?) 
+                    RETURNING local_message_id AS value",
+                    },
                     params![id, local_label_id],
                 )
-                .await
+                .await?
+                .is_some()
             {
-                Ok(_) => true,
-                Err(e) => {
-                    if !matches!(
-                        e,
-                        StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
-                    ) {
-                        return Err(e);
-                    }
-                    false
-                }
-            } {
                 if let Some(message) = Message::find_by_id(id, bond).await? {
-                    match conversation_messages.entry(message.local_conversation_id.unwrap()) {
-                        Entry::Vacant(v) => {
-                            v.insert(vec![id]);
-                        }
-                        Entry::Occupied(mut o) => {
-                            o.get_mut().push(id);
-                        }
-                    }
+                    conversation_messages
+                        .entry(message.local_conversation_id.unwrap())
+                        .and_modify(|v| v.push(id))
+                        .or_insert_with(|| vec![id]);
                 }
+            } else {
+                warn!("{id:?} already labeled {local_label_id:?}");
             }
-        }
-
-        if conversation_messages.is_empty() {
-            // Nothing to do.
-            return Ok(());
         }
 
         for (conversation_id, message_ids) in conversation_messages {
@@ -2253,126 +2213,184 @@ impl Message {
     /// # Errors
     ///
     /// Returns error if the queries fail.
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub async fn remove_label(
         local_label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalMessageId>,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
-        let mut unread_count = 0_u64;
+        let mut ids = ids.into_iter().peekable();
+        if ids.peek().is_none() {
+            if cfg!(debug_assertions) {
+                panic!("remove_label for no messages")
+            } else {
+                return Ok(());
+            }
+        }
+
+        // First let's unlabel all messages.
+
+        // We need to remember how many were unread and modified so we can update
+        // the unread counts and the message counter
+        let mut unread_msg_count = 0_u64;
         let mut updated_count = 0_u64;
-        let mut conversation_messages = BTreeMap::<LocalConversationId, Vec<LocalMessageId>>::new();
+
+        let ids = ids.collect_vec();
+        let params = ids.to_sql();
+        let conversations = bond
+            .query_values::<_, LocalConversationId>(
+                indoc::formatdoc! {"
+                    SELECT DISTINCT m.local_conversation_id AS value
+                    FROM messages m
+                    WHERE local_id IN ({})
+                    ", placeholders(&params)},
+                params,
+            )
+            .await?;
 
         for id in ids {
-            let id = match bond.query_value::<_,LocalMessageId>(
-                "DELETE FROM message_labels WHERE local_label_id=? AND local_message_id=? RETURNING local_message_id AS value",
-                params![local_label_id, id],
-            ).await {
-                Ok(v) => v,
-                Err(e) => {
-                    if !matches!(e, StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) {
-                        return Err(e)
-                    }
-                    continue;
-                }
+            // unlabel the message and return whether it was unlabeled
+            if bond
+                .query_value_opt::<LocalMessageId>(
+                    indoc::indoc! {"
+                    DELETE FROM message_labels
+                    WHERE local_label_id=? 
+                      AND local_message_id=? 
+                    RETURNING local_message_id AS value
+                    "},
+                    params![local_label_id, id],
+                )
+                .await?
+                .is_none()
+            {
+                tracing::debug!("Message {id} was not labeled with {local_label_id}");
+                //  Notice that we're not updating updated_count
+                continue;
             };
 
-            let message = Message::find_by_id(id, bond)
-                .await?
-                .ok_or(StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
+            let unread = bond
+                .query_value::<_, u64>(
+                    indoc::formatdoc! {"
+                    SELECT unread as value
+                    FROM messages
+                    WHERE local_id = ?
+                "},
+                    params![id],
+                )
+                .await?;
 
-            match conversation_messages.entry(message.local_conversation_id.unwrap()) {
-                Entry::Vacant(v) => {
-                    v.insert(vec![id]);
-                }
-                Entry::Occupied(mut o) => {
-                    o.get_mut().push(id);
-                }
-            }
-
-            if message.unread {
-                unread_count += 1;
-            }
-
+            unread_msg_count += unread;
             updated_count += 1;
         }
 
-        if conversation_messages.is_empty() {
-            // nothing to do.
+        // Update message counters
+        if updated_count == 0 {
+            warn!("No updated messages?");
             return Ok(());
         }
 
-        for (conversation_id, message_ids) in conversation_messages {
-            let label_stats = ConversationMessageLabelStats::without(
-                conversation_id,
-                local_label_id,
-                &message_ids,
+        let mut msg_counters = MessageCounters::find_by_id(local_label_id, bond)
+            .await?
+            .context("No message counter for label")?;
+
+        msg_counters.unread = msg_counters.unread.saturating_sub(unread_msg_count);
+        msg_counters.total = msg_counters.total.saturating_sub(updated_count);
+        msg_counters
+            .save(bond)
+            .await
+            .context("Error saving counters")?;
+
+        let mut conv_counters = ConversationCounters::find_by_id(local_label_id, bond)
+            .await?
+            .context("No conversation counter for label")?;
+
+        for conversation_id in conversations {
+            // We get the stats for the remaining messages (those that have not just been deleted)
+            // and update the conversation label accordingly.
+            let messages = Message::find(
+                indoc! {"
+                    JOIN message_labels AS ML
+                    ON ML.local_message_id = messages.local_id
+                       AND ML.local_label_id = ?
+                    WHERE messages.local_conversation_id = ?
+                "},
+                params![local_label_id, conversation_id],
                 bond,
             )
-            .await;
-            let (remaining_unread, remaining_messages): (u64, u64) = match label_stats {
-                Ok(stats) => {
-                    if let Some(mut conversation_label) =
-                        ConversationLabel::find_by_conversation_and_label(
-                            &conversation_id,
-                            local_label_id,
-                            bond,
-                        )
-                        .await?
-                    {
-                        conversation_label.context_time = stats.time;
-                        conversation_label.context_snooze_time = stats.snooze_time;
-                        conversation_label.context_expiration_time = stats.expiration_time;
-                        conversation_label.context_size = stats.size;
-                        conversation_label.context_num_messages = stats.count;
-                        conversation_label.context_num_attachments = stats.num_attachments as u64;
-                        conversation_label.save(bond).await?;
-                        (
-                            conversation_label.context_num_unread,
-                            conversation_label.context_num_messages,
-                        )
-                    } else {
-                        (0, 0)
-                    }
-                }
-                Err(e) => {
-                    if !matches!(
-                        e,
-                        StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
-                    ) {
-                        return Err(e);
-                    }
-                    // If no information is returned it means there are no messages associated
-                    // with this label.
-                    bond.execute("DELETE FROM conversation_labels WHERE local_conversation_id=? AND local_label_id=?", params![conversation_id,local_label_id]).await?;
-                    (0, 0)
-                }
+            .await?;
+
+            let label_stats = if messages.is_empty() {
+                // Now we can delete the conversation_label too
+                None
+            } else {
+                Some(ConversationMessageLabelStats::from_messages(&messages))
             };
 
-            let mut conv_counters = ConversationCounters::find_by_id(local_label_id, bond)
-                .await?
-                .ok_or(StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
+            let conversation_label = ConversationLabel::find_by_conversation_and_label(
+                &conversation_id,
+                local_label_id,
+                bond,
+            )
+            .await?;
 
-            // update conversation counters
-            if remaining_unread == 0 || remaining_messages == 0 {
-                if remaining_unread == 0 && unread_count != 0 {
-                    conv_counters.unread = conv_counters.unread.saturating_sub(1);
+            match (label_stats, conversation_label) {
+                // If some messages in the conversation still remain in the label
+                (Some(stats), Some(mut conversation_label)) => {
+                    assert_ne!(
+                        stats.count, 0,
+                        "Entered unreachable code: At least one message must still exist here."
+                    );
+
+                    conversation_label.context_num_messages = stats.count;
+                    conversation_label.context_time = stats.time;
+                    conversation_label.context_snooze_time = stats.snooze_time;
+                    conversation_label.context_expiration_time = stats.expiration_time;
+                    conversation_label.context_size = stats.size;
+                    conversation_label.context_num_attachments = stats.num_attachments as u64;
+                    conversation_label.save(bond).await?;
+
+                    // If it had at least 1 unread message that has been removed &&
+                    // there aren't any more in the conversation we can decrease the counter
+                    // because the last unread message(s) for this conversation have been removed
+                    if unread_msg_count != 0 && conversation_label.context_num_unread == 0 {
+                        conv_counters.unread = conv_counters.unread.saturating_sub(1);
+                    }
                 }
-                if remaining_messages == 0 {
-                    conv_counters.total = conv_counters.total.saturating_sub(1);
+                // If no more messages remain we can unlabel the conversation
+                _ => {
+                    if bond
+                        .query_value_opt::<u64>(
+                            indoc::indoc! {"
+                            DELETE FROM conversation_labels
+                            WHERE local_label_id=? 
+                              AND local_conversation_id=? 
+                            RETURNING local_conversation_id AS value
+                            "},
+                            params![local_label_id, conversation_id],
+                        )
+                        .await?
+                        .is_some()
+                    {
+                        trace!("Deleting conversation label");
+
+                        conv_counters.total = conv_counters.total.saturating_sub(1);
+                        // See previous match arm for an explanation of the logic
+                        if unread_msg_count != 0 {
+                            assert_ne!(unread_msg_count, 0);
+                            conv_counters.unread = conv_counters.unread.saturating_sub(1);
+                        }
+                    } else {
+                        tracing::warn!("Conversation {conversation_id} was not labeled");
+                        continue;
+                    }
                 }
             }
-
-            // update message counters
-            let mut msg_counters = MessageCounters::find_by_id(local_label_id, bond)
-                .await?
-                .ok_or(StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
-
-            msg_counters.unread = msg_counters.unread.saturating_sub(unread_count);
-            msg_counters.total = msg_counters.total.saturating_sub(updated_count);
-
-            conv_counters.save(bond).await?;
-            msg_counters.save(bond).await?;
         }
+
+        conv_counters
+            .save(bond)
+            .await
+            .context("Error saving counters")?;
 
         Ok(())
     }

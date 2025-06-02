@@ -85,13 +85,6 @@ pub trait MailLabel {
     ///
     async fn view_mode(&self, tether: &Tether) -> Result<ViewMode, StashError>;
 
-    /// TODO: Document this function.
-    fn is_applicable(&self) -> bool;
-
-    /// Checks if label is a System label - starred.
-    fn is_starred(&self) -> bool;
-
-    /// TODO: Document this function.
     fn is_movable_folder(&self) -> bool;
 
     fn recipient_display_mode(&self) -> MessageRecipientDisplayMode;
@@ -111,16 +104,6 @@ impl MailLabel for Label {
             }
         }
         Ok(MailSettings::get_or_default(tether).await.view_mode)
-    }
-
-    fn is_applicable(&self) -> bool {
-        self.label_type == LabelType::Label || self.is_starred()
-    }
-
-    fn is_starred(&self) -> bool {
-        self.remote_id
-            .as_ref()
-            .is_some_and(|rid| *rid == LabelId::starred())
     }
 
     fn is_movable_folder(&self) -> bool {

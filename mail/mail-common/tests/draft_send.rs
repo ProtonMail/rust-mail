@@ -251,9 +251,9 @@ async fn basic_schedule_send_check() {
         expiration_time: 0,
         labels: vec![ConversationLabel {
             id: LabelId::sent(),
+            context_num_messages: 1,
             context_expiration_time: 0,
             context_num_attachments: 0,
-            context_num_messages: 1,
             context_num_unread: 0,
             context_size: 0,
             context_snooze_time: 0,
@@ -339,7 +339,7 @@ async fn basic_schedule_send_check() {
         .unwrap();
 
     // Check draft is in outbox.
-    let draft_message = Message::load(draft_message_id, &tether)
+    let mut draft_message = Message::load(draft_message_id, &tether)
         .await
         .unwrap()
         .expect("failed to load message");
@@ -353,16 +353,13 @@ async fn basic_schedule_send_check() {
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
-    let tether = user_ctx.user_stash().connection();
-    let draft_message = Message::load(draft_message_id, &tether)
-        .await
-        .unwrap()
-        .expect("failed to load message");
+    draft_message.reload(&tether).await.unwrap();
 
     // Check message is in the sent folder
-    assert!(!draft_message.label_ids.contains(&LabelId::outbox()));
-    assert!(!draft_message.label_ids.contains(&LabelId::drafts()));
-    assert!(draft_message.label_ids.contains(&LabelId::all_scheduled()));
+    assert_eq!(
+        draft_message.label_ids,
+        vec![LabelId::inbox(), LabelId::all_scheduled()] // No all_drafts
+    );
     assert_eq!(draft_message.remote_id, Some(message.metadata.id));
     assert!(
         draft_message
