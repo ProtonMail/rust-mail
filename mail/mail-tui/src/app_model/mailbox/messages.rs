@@ -234,23 +234,22 @@ impl MessagesState {
         let WatcherHandle {
             handle, receiver, ..
         } = ContextualConversation::watch(ctx.user_stash())?;
-        let (watcher, background_command) =
-            WatchHandle::new_dampened(receiver, handle, move || {
-                let tether = ctx.user_stash().connection();
-                async move {
-                    Some(
-                        match MailMessage::in_conversation(conversation_id, &tether).await {
-                            Ok(m) => MessageMessage::Refreshed(m).into(),
-                            Err(e) => {
-                                let e = anyhow!("Message list Query error: {e}");
-                                tracing::error!("{e:?}");
-                                e.into()
-                            }
-                        },
-                    )
-                }
-                .boxed()
-            });
+        let (watcher, background_command) = WatchHandle::new(receiver, handle, move |()| {
+            let tether = ctx.user_stash().connection();
+            async move {
+                Some(
+                    match MailMessage::in_conversation(conversation_id, &tether).await {
+                        Ok(m) => MessageMessage::Refreshed(m).into(),
+                        Err(e) => {
+                            let e = anyhow!("Message list Query error: {e}");
+                            tracing::error!("{e:?}");
+                            e.into()
+                        }
+                    },
+                )
+            }
+            .boxed()
+        });
 
         let index = conv_and_messages
             .messages
@@ -542,6 +541,11 @@ impl MessagesState {
                 .selected_message_id()
                 .map(|id| Command::message(MessageMessage::CancelScheduleSend(id).into()))
                 .unwrap_or_default(),
+            KeyCode::Char('p') => self
+                .selected_message_id()
+                .map(|id| Command::message(MessageMessage::ReportPhishing(id).into()))
+                .unwrap_or_default(),
+
             _ => Command::None,
         }
     }
@@ -590,6 +594,19 @@ impl MessagesState {
             }
             MessageMessage::UnstarMessage(id) => {
                 return unstar_message(user_ctx.to_owned(), id);
+            }
+            MessageMessage::ReportPhishing(id) => {
+                let ctx = user_ctx.to_owned();
+                let popup = YesNoPopup::new(
+                    "Confirm phishing report",
+                    "Reporting a message as a phishing atempt will send the message to us, so we can analyze it and improve our filters. This means that we will be able to see the contents of the message in full.",
+                )
+                .on_accept(Command::from_future(async move {
+                    MailMessage::action_report_phishing(ctx.action_queue(), id, &ctx.user_stash().connection())
+                        .await
+                        .context("Failed to star message")
+                }));
+                return Command::message(Messages::raise_popup(popup));
             }
             MessageMessage::NextPage(messages) => {
                 self.messages.extend(messages);
