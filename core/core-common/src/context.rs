@@ -31,6 +31,7 @@ use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_api::verification::DynChallengeNotifier;
 use proton_crypto_account::keys::PGPDeviceKey;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
+use proton_event_loop::EventLoopError;
 use proton_sqlite3::MigratorError;
 use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use proton_task_service::{BackgroundAwareTaskService, TaskService};
@@ -72,6 +73,8 @@ pub enum CoreContextError {
     DBMigration(#[from] MigratorError),
     #[error("No session key is available in the keychain")]
     KeyChainHasNoKey,
+    #[error("Event Loop: {0}")]
+    EventLoop(#[from] EventLoopError),
     #[error("Failed to access PGP keys: {0}")]
     PGPKeyAccess(#[from] KeyHandlingError),
     #[error("Stash Error: {0}")]

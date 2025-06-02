@@ -32,6 +32,8 @@ pub enum ActionEventLoopError {
     #[error(transparent)]
     EventLoop(#[from] EventLoopError),
     #[error(transparent)]
+    Subscriber(#[from] SubscriberError),
+    #[error(transparent)]
     WriterGuard(#[from] WriterGuardError),
 }
 
@@ -41,7 +43,8 @@ impl proton_action_queue::action::Error for ActionEventLoopError {
         | ActionEventLoopError::EventLoop(EventLoopError::Subscriber(
             _,
             SubscriberError::Api(e),
-        )) = &self
+        ))
+        | ActionEventLoopError::Subscriber(SubscriberError::Api(e)) = &self
         {
             return e.is_network_failure();
         }
@@ -91,9 +94,16 @@ impl proton_action_queue::action::Handler for EventPollHandler {
         _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         context
+            .user_context()
             .poll_event_loop_impl()
             .await
             .map_err(ActionEventLoopError::from)?;
+
+        context
+            .poll_event_loop_impl()
+            .await
+            .map_err(ActionEventLoopError::from)?;
+
         Ok(())
     }
 }

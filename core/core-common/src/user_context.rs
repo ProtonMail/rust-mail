@@ -138,16 +138,8 @@ impl UserContext {
             }
         });
 
-        // Register the core event subscriber
-        let event_ctx = CoreEventLoopContext::from(Arc::downgrade(&this));
-        this.event_loop
-            .register(Box::new(event_ctx))
-            .await
-            .map_err(|e| {
-                CoreContextError::Other(anyhow::anyhow!(
-                    "Failed to register core event subscriber: {e}"
-                ))
-            })?;
+        // Register the core event subscribers.
+        this.register_subscribers().await?;
 
         Ok(this)
     }

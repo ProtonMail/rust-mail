@@ -229,6 +229,11 @@ impl MailUserContext {
         &self.user_context
     }
 
+    /// Get the inner core context which this context wraps as an Arc.
+    pub fn arc_user_context(&self) -> &Arc<UserContext> {
+        &self.user_context
+    }
+
     /// Get `MailUserContext` for each logged in account.
     ///
     pub async fn all_mail_user_ctxs(&self) -> MailContextResult<Vec<Arc<Self>>> {

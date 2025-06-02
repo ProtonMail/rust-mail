@@ -16,12 +16,11 @@ use proton_core_api::{
     session::CoreSession,
 };
 use proton_event_loop::{
-    RawEvent,
+    EventLoopError, RawEvent,
     provider::Provider,
     store::Store,
     subscriber::{Subscriber, SubscriberError},
 };
-use proton_task_service::AsyncTaskResult;
 use stash::{
     exports::SqliteError,
     orm::Model,
@@ -29,6 +28,52 @@ use stash::{
     stash::{Bond, StashError},
 };
 use tracing::{debug, error, info, warn};
+
+/// Common macros for event loop operations
+pub mod macros {
+    /// Macro to handle `AsyncTaskResult` completion and error handling
+    #[macro_export]
+    macro_rules! join_task {
+        ($name:tt, $description: expr) => {{
+            if let proton_task_service::AsyncTaskResult::Completed(Ok(value)) = $name
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to download remote {}: `{e}`", $description))?
+            {
+                value
+            } else {
+                return Err(proton_event_loop::subscriber::SubscriberError::Other(
+                    anyhow::anyhow!(
+                        "The task `{}` was cancelled, we need to run refresh again",
+                        $description
+                    ),
+                ));
+            }
+        }};
+    }
+
+    /// Macro to implement retry logic for refresh operations
+    #[macro_export]
+    macro_rules! try_refresh {
+        ($fn_name:tt, $ctx:expr) => {{
+            let max_attempts = 2;
+            let mut attempts = 0;
+
+            while let Err(e) = $fn_name($ctx.clone()).await {
+                if attempts >= max_attempts {
+                    return Err(e);
+                }
+                attempts += 1;
+                tracing::warn!("Refresh event attempt {attempts} failed: `{e}`");
+            }
+        }};
+    }
+
+    pub use join_task;
+    pub use try_refresh;
+}
+
+// Re-export macros for easier access
+pub use macros::*;
 
 const CORE_EVENT_TYPE_ID: &str = "proton-core-event";
 
@@ -131,8 +176,32 @@ impl Provider for CoreEventLoopContext {
     }
 }
 
+/// Event loop subscriber for core events
+#[derive(Clone)]
+pub struct CoreEventSubscriber(Weak<UserContext>);
+
+impl CoreEventSubscriber {
+    pub fn inner(&self) -> Result<Arc<UserContext>, anyhow::Error> {
+        match self.0.upgrade() {
+            Some(ctx) => Ok(ctx),
+            None => bail!("UserContext no longer alive"),
+        }
+    }
+
+    #[must_use]
+    pub fn boxed(self) -> Box<Self> {
+        Box::new(self)
+    }
+}
+
+impl From<Weak<UserContext>> for CoreEventSubscriber {
+    fn from(value: Weak<UserContext>) -> Self {
+        Self(value)
+    }
+}
+
 #[async_trait]
-impl Subscriber<CoreEvent> for CoreEventLoopContext {
+impl Subscriber<CoreEvent> for CoreEventSubscriber {
     fn name(&self) -> &'static str {
         "proton-core-event-subscriber"
     }
@@ -213,33 +282,18 @@ impl UserContext {
         info!("Handling refresh event: {refresh:?}");
         let ctx = self;
 
-        macro_rules! try_refresh {
-            ($fn_name:tt) => {{
-                let max_attempts = 2;
-                let mut attempts = 0;
-
-                while let Err(e) = $fn_name(ctx.clone()).await {
-                    if attempts >= max_attempts {
-                        return Err(e);
-                    }
-                    attempts += 1;
-                    warn!("Refresh event attempt {attempts} failed: `{e}`");
-                }
-            }};
-        }
-
         match refresh {
             Refresh::None => {
                 warn!("Nothing to refresh, this may idicate bug in SDK event loop implementation");
             }
             Refresh::Contacts => {
-                try_refresh!(refresh_contacts);
+                try_refresh!(refresh_contacts, ctx);
             }
             Refresh::Mail => {
                 // Mail refresh is handled by the mail context
             }
             Refresh::All => {
-                try_refresh!(refresh_core);
+                try_refresh!(refresh_core, ctx);
             }
             Refresh::Unknown(other) => {
                 warn!("Unknown refresh event type: {other}");
@@ -248,22 +302,28 @@ impl UserContext {
 
         Ok(())
     }
-}
 
-macro_rules! join_task {
-    ($name:tt, $description: expr) => {{
-        if let AsyncTaskResult::Completed(Ok(value)) = $name
-            .await
-            .map_err(|e| anyhow!("Failed to download remote {}: `{e}`", $description))?
-        {
-            value
-        } else {
-            return Err(SubscriberError::Other(anyhow!(
-                "The task `{}` was cancelled, we need to run refresh again",
-                $description
-            )));
-        }
-    }};
+    pub(crate) async fn register_subscribers(self: &Arc<Self>) -> Result<(), EventLoopError> {
+        let core_subscriber = CoreEventSubscriber::from(Arc::downgrade(self));
+
+        self.event_loop.register(core_subscriber.boxed()).await?;
+
+        Ok(())
+    }
+
+    /// Perform one iteration of the event loop, which consists of retrieving the latest events,
+    /// publishing it on all the registered subscribers and storing the event id for the next
+    /// iteration.
+    ///
+    /// The execution of the polling is aborted on the first error.
+    ///
+    /// # Error
+    ///
+    /// Returns error if the event loop failed to poll.
+    ///
+    pub async fn poll_event_loop_impl(&self) -> Result<(), EventLoopError> {
+        self.event_loop.poll().await
+    }
 }
 
 #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
@@ -354,7 +414,7 @@ async fn refresh_core(ctx: Arc<UserContext>) -> Result<(), SubscriberError> {
         })
         .await
         .inspect_err(|e| {
-            error!("Failed to clear database entries while refreshing core: {e}");
+            error!("Failed to update database entries while refreshing core: {e}");
         })?;
 
     Ok(())
@@ -362,18 +422,55 @@ async fn refresh_core(ctx: Arc<UserContext>) -> Result<(), SubscriberError> {
 
 #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
 async fn refresh_contacts(ctx: Arc<UserContext>) -> Result<(), SubscriberError> {
-    let contacts = Contact::sync(ctx.session().api()).await?;
+    let api = ctx.session().api().clone();
+    let contacts = ctx.spawn(async move { Contact::sync(&api).await });
+    let api = ctx.session().api().clone();
+    let all_remote_labels = ctx.spawn(async move { Label::fetch_contact_labels(&api).await });
     let mut tether = ctx.stash().connection();
+    let mut all_local_labels: HashMap<_, _> = Label::all_contact_groups(&tether)
+        .await?
+        .into_iter()
+        .map(|label| (label.remote_id.clone(), label))
+        .collect();
+    debug!(
+        "Number of labels available localy: {}",
+        all_local_labels.len()
+    );
+    let all_remote_labels = join_task!(all_remote_labels, "labels");
+    debug!(
+        "Number of labels available remotely: {}",
+        all_remote_labels.len()
+    );
+    for remote_label in &all_remote_labels {
+        all_local_labels.remove(&remote_label.remote_id);
+    }
+
+    let contacts = join_task!(contacts, "contacts");
 
     tether
         .tx::<_, _, SubscriberError>(async |tx| {
+            Label::sync_labels(tx, all_remote_labels)
+                .await
+                .map_err(|e| {
+                    let e = anyhow!("Failed to sync labels: {e}");
+                    error!("{e:?}");
+                    SubscriberError::Other(e)
+                })?;
+
+            for local_label_to_remove in all_local_labels.into_values() {
+                debug!(
+                    "Removing label with remote_id {:?}",
+                    local_label_to_remove.remote_id
+                );
+                local_label_to_remove.delete(tx).await?;
+            }
             contacts.store(tx).await?;
 
             Ok(())
         })
         .await
         .inspect_err(|e| {
-            error!("Failed to clear database entries while refreshing core: {e}");
+            error!("Failed to update database entries while refreshing core: {e}");
         })?;
 
     Ok(())

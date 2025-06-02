@@ -185,6 +185,7 @@ impl From<CoreContextError> for MailContextError {
             CoreContextError::Action(core_action_error) => Self::Action(core_action_error.into()),
             CoreContextError::QueuedAction(queued_error) => Self::QueuedAction(queued_error),
             CoreContextError::ActionQueue(error) => Self::ActionQueue(error),
+            CoreContextError::EventLoop(err) => Self::EventLoop(err),
         }
     }
 }

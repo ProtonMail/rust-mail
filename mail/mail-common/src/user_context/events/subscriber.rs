@@ -18,10 +18,12 @@ use proton_action_queue::queue::{ActionError as QueueActionError, QueuedActionOu
 use proton_core_common::datatypes::{Refresh, SystemLabel};
 use proton_core_common::models::{Label, ModelExtension};
 use proton_event_loop::subscriber::{Subscriber, SubscriberError};
-use proton_task_service::AsyncTaskResult;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use tracing::{debug, error, info, warn};
+
+// Import common macros from core
+use proton_core_common::event_loop::{join_task, try_refresh};
 
 pub struct MailEventSubscriber(Weak<MailUserContext>);
 
@@ -171,29 +173,13 @@ impl MailUserContext {
     ) -> Result<(), SubscriberError> {
         info!("Handling refresh event: {refresh:?}");
         let ctx = self;
-        ctx.user_context.on_refresh_impl(refresh).await?;
-
-        macro_rules! try_refresh {
-            ($fn_name:tt) => {{
-                let max_attempts = 2;
-                let mut attempts = 0;
-
-                while let Err(e) = $fn_name(ctx.clone()).await {
-                    if attempts >= max_attempts {
-                        return Err(e);
-                    }
-                    attempts += 1;
-                    warn!("Refresh event attempt {attempts} failed: `{e}`");
-                }
-            }};
-        }
 
         match refresh {
             Refresh::None => {
                 warn!("Nothing to refresh, this may idicate bug in SDK event loop implementation");
             }
             Refresh::Mail | Refresh::All => {
-                try_refresh!(refresh_mail);
+                try_refresh!(refresh_mail, ctx);
             }
             Refresh::Contacts => {
                 // Contacts refresh is handled by the core event subscriber
@@ -205,22 +191,6 @@ impl MailUserContext {
 
         Ok(())
     }
-}
-
-macro_rules! join_task {
-    ($name:tt, $description: expr) => {{
-        if let AsyncTaskResult::Completed(Ok(value)) = $name
-            .await
-            .map_err(|e| anyhow!("Failed to download remote {}: `{e}`", $description))?
-        {
-            value
-        } else {
-            return Err(SubscriberError::Other(anyhow!(
-                "The task `{}` was cancelled, we need to run refresh again",
-                $description
-            )));
-        }
-    }};
 }
 
 #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
