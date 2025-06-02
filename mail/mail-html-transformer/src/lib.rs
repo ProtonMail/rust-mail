@@ -111,7 +111,6 @@ impl Transformer {
     /// element
     #[must_use]
     pub fn extract_body(&self) -> String {
-
         let Ok(body) = self.document.select_first("body") else {
             return String::new();
         };
@@ -176,8 +175,12 @@ impl Transformer {
         let source = self.document.clone();
         let target = NodeRef::new_document();
         let head = NodeRef::new_element(
-            html5ever::QualName::new(None, html5ever::ns!(html), html5ever::LocalName::from("head")),
-            vec![]
+            html5ever::QualName::new(
+                None,
+                html5ever::ns!(html),
+                html5ever::LocalName::from("head"),
+            ),
+            vec![],
         );
         target.append(head.clone());
 

@@ -94,3 +94,27 @@ fn inject_style_to_another_target() {
     insta::assert_snapshot!(html.to_string());
     insta::assert_snapshot!(head);
 }
+
+#[test]
+fn inject_style_to_another_target_twice() {
+    // This is to see what will happen if we execute draft.composer_head() twice in a row.
+
+    let capabilities = BrowserCapabilities {
+        supports_dark_mode_via_media_query: true,
+    };
+    let html = include_str!("../../tests/htmls/styles/with_text_color_in_stylesheet.html");
+    let mut html = Transformer::new(html);
+    let head_after_first_pass =
+        html.inject_dark_mode_to_another_target(ColorMode::DarkMode, capabilities);
+    let html_after_first_pass = html.to_string();
+
+    // Second pass
+    let mut html = Transformer::new(&html_after_first_pass);
+    let head_after_second_pass =
+        html.inject_dark_mode_to_another_target(ColorMode::DarkMode, capabilities);
+    let html_after_second_pass = html.to_string();
+
+    // It should not affect it anymore
+    assert_eq!(head_after_first_pass, head_after_second_pass);
+    assert_eq!(html_after_first_pass, html_after_second_pass);
+}

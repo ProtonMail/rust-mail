@@ -217,12 +217,11 @@ impl Draft {
     /// Get head content for the composer.
     /// It is **NOT** a head of the message.
     /// It contains styles for dark mode and nothing else.
-    /// 
+    ///
     /// **WARNING**: This function modifies the draft content by removing `!important` flag.
     pub fn composer_head(&self, theme_opts: ThemeOpts) -> String {
         let theme_opts = theme_opts.into();
-        async_runtime()
-            .block_on(async { self.instance.write().await.head(theme_opts) })
+        async_runtime().block_on(async { self.instance.write().await.head(theme_opts) })
     }
 
     /// Get the draft's body.
