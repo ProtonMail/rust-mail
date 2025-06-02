@@ -64,6 +64,12 @@ pub struct ThemeOpts {
 }
 
 impl ThemeOpts {
+    pub fn color_mode(&self) -> ColorMode {
+        match self.theme() {
+            MailTheme::LightMode => ColorMode::LightMode,
+            MailTheme::DarkMode => ColorMode::DarkMode,
+        }
+    }
     /// Theme, either provided by the system or overriden by the user
     pub fn theme(&self) -> MailTheme {
         self.theme_override.unwrap_or(self.current_theme)
@@ -397,13 +403,6 @@ pub fn transform_html(html: &str, opts: TransformOptsResolved, mime_type: MimeTy
     transform_html_with_banners(html, opts, mime_type, vec![])
 }
 
-fn resolve_style(theme: ThemeOpts) -> ColorMode {
-    match theme.theme() {
-        MailTheme::LightMode => ColorMode::LightMode,
-        MailTheme::DarkMode => ColorMode::DarkMode,
-    }
-}
-
 #[tracing::instrument(skip_all)]
 pub fn transform_html_with_banners(
     html: &str,
@@ -455,7 +454,7 @@ mime_type: {mime_type:?}"
     }
 
     transformer.inject_dark_mode(
-        resolve_style(theme),
+        theme.color_mode(),
         BrowserCapabilities {
             supports_dark_mode_via_media_query: theme.supports_dark_mode_via_media_query,
         },

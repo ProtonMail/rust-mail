@@ -29,14 +29,25 @@ mod support_level;
 ///
 /// Parameters:
 /// * `source` - the source HTML document. Usually a message fetched from remote. Might be modified by removing `!important` flag from
-/// styles and attributes.
+///   styles and attributes.
 /// * `target` - the target HTML document. Stylesheets and CSS supplements are appended to the head of the document.
-/// 
+///
 /// # Difference between `source` and `target`
 /// In the view mode of the message, both nodes are pointing to the same document.
 /// However in the composer, `source` is the message being edited, while `target` is the head of HTML editor that wraps
 /// the message. Styles appended to the `target` are not sent to the recipient.
-pub fn inject_dark_mode(source: NodeRef, target: NodeRef, mode: ColorMode, capabilities: BrowserCapabilities) {
+pub fn inject_dark_mode(
+    source: NodeRef,
+    target: NodeRef,
+    mode: ColorMode,
+    capabilities: BrowserCapabilities,
+) {
+    // TODO(wpolak): In following MRs:
+    // * remove `!important` only from attributes.
+    //   Apparently we can override styles provided by <style> tags if we use stronger specificity.
+    //   For example if our supplement stylesheet has selector prefix of `#protonmail_editor `
+    // * Make sure that `!important` removal from attributes is reversible.
+    //   For example by keeping `data-proton-original-style` attribute.
     let level = DarkStyleSupportLevel::new(mode, &source, capabilities);
 
     let BrowserCapabilities {

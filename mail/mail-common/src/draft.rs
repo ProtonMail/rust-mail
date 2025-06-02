@@ -4,11 +4,12 @@ use crate::actions::draft::{
 };
 use crate::datatypes::attachment::ContentId;
 use crate::datatypes::{Disposition, LocalAttachmentId, LocalMessageId, MimeType};
-use crate::decrypted_message::DecryptedMessageBody;
+
+use crate::decrypted_message::{DecryptedMessageBody, ThemeOpts};
 use crate::draft::attachments::DraftAttachment;
 use crate::draft::compose::{
-    encrypt_draft_body, get_signature, patch_draft_with_reply_mode, prepare_html_reply,
-    prepare_plain_text_reply,
+    encrypt_draft_body, get_signature, inject_dark_mode, patch_draft_with_reply_mode,
+    prepare_html_reply, prepare_plain_text_reply,
 };
 use crate::draft::recipients::{ContactGroupResolver, ProtonContactGroupResolver, RecipientList};
 use crate::models::{
@@ -37,6 +38,7 @@ use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_api::services::proton::prelude::DraftReplyOrForwardParams;
 use proton_mail_api::services::proton::request_data::{DraftAction, DraftAttachmentKeyPackets};
 use proton_mail_api::services::proton::response_data::Message as ApiMessage;
+use proton_mail_html_transformer::transforms::styles::BrowserCapabilities;
 use proton_mail_ids::LocalConversationId;
 use proton_sqlite3::rusqlite;
 use rusqlite::types::{FromSqlError, FromSqlResult, ValueRef};
@@ -1424,6 +1426,28 @@ impl Draft {
     /// Get the list of attachments and their upload status.
     pub async fn attachments(&self, tether: &Tether) -> Result<Vec<DraftAttachment>, StashError> {
         DraftAttachment::build_list(self.metadata_id, tether).await
+    }
+
+    /// On-the-fly generated head with injected the dark mode styles.
+    /// The content of returned string depends on body and modifies it.
+    ///
+    /// # Modifications to the body
+    ///
+    /// * If the body contains `!important` flag, it will be removed.
+    pub fn head(&mut self, theme_opts: ThemeOpts) -> String {
+        let color_mode = theme_opts.color_mode();
+
+        let body = mem::take(&mut self.body);
+        let injection = inject_dark_mode(
+            body,
+            color_mode,
+            BrowserCapabilities {
+                supports_dark_mode_via_media_query: theme_opts.supports_dark_mode_via_media_query,
+            },
+        );
+        self.body = injection.body;
+
+        injection.head
     }
 
     pub fn body(&self) -> &str {

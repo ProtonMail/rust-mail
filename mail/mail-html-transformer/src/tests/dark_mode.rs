@@ -80,3 +80,17 @@ fn inject_style_transparency_handling() {
     );
     insta::assert_snapshot!(html.to_string());
 }
+
+#[test]
+fn inject_style_to_another_target() {
+    let html = include_str!("../../tests/htmls/styles/with_text_color_in_stylesheet.html");
+    let mut html = Transformer::new(html);
+    let head = html.inject_dark_mode_to_another_target(
+        ColorMode::DarkMode,
+        BrowserCapabilities {
+            supports_dark_mode_via_media_query: true,
+        },
+    );
+    insta::assert_snapshot!(html.to_string());
+    insta::assert_snapshot!(head);
+}

@@ -13,7 +13,7 @@ use crate::mail::MailUserSession;
 use crate::mail::datatypes::MimeType;
 use crate::mail::draft::attachments::AttachmentList;
 use crate::mail::draft::observer::DraftSendResult;
-use crate::mail::messages::EmbeddedAttachmentInfo;
+use crate::mail::messages::{EmbeddedAttachmentInfo, ThemeOpts};
 use crate::mail::state::MailUserContextPtr;
 use crate::{async_runtime, uniffi_async};
 use chrono::Local;
@@ -212,6 +212,17 @@ impl Draft {
     /// Get the draft's subject.
     pub fn subject(&self) -> String {
         async_runtime().block_on(async { self.instance.read().await.subject.clone() })
+    }
+
+    /// Get head content for the composer.
+    /// It is **NOT** a head of the message.
+    /// It contains styles for dark mode and nothing else.
+    /// 
+    /// **WARNING**: This function modifies the draft content by removing `!important` flag.
+    pub fn composer_head(&self, theme_opts: ThemeOpts) -> String {
+        let theme_opts = theme_opts.into();
+        async_runtime()
+            .block_on(async { self.instance.write().await.head(theme_opts) })
     }
 
     /// Get the draft's body.
