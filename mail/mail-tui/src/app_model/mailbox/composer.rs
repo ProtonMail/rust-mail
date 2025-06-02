@@ -413,7 +413,7 @@ impl Composer {
             )),
             Command::task(async move {
                 let tether = context.user_stash().connection();
-                let cmd = if let Err(e) = action.queue(context.action_queue(), &tether).await {
+                let cmd = if let Err(e) = action.queue(&context, &tether).await {
                     Command::message(anyhow::Error::new(e).into())
                 } else {
                     Command::message(ComposerMessage::RefreshAttachmentList.into())

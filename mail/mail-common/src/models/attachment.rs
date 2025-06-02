@@ -931,7 +931,8 @@ impl Attachment {
             .inspect_err(|e| error!("Failed to export public key: {e:?}"))
             .map_err(|_| MailContextError::Crypto)?;
 
-        let attachment_file_name = Self::public_key_attachment_filename(&address.email, fingerprint);
+        let attachment_file_name =
+            Self::public_key_attachment_filename(&address.email, fingerprint);
 
         Ok(PublicKeyAttachment {
             attachment: Attachment {
@@ -981,6 +982,26 @@ impl Attachment {
 
     pub fn is_public_key_attachment_filename(name: &str) -> bool {
         name.starts_with("publickey - ") && name.ends_with(".asc")
+    }
+
+    pub async fn filename(
+        id: LocalAttachmentId,
+        tether: &Tether,
+    ) -> Result<Option<String>, StashError> {
+        match tether
+            .query_value(
+                format!(
+                    "SELECT filename AS value FROM {} WHERE local_id=?",
+                    Self::table_name()
+                ),
+                params![id],
+            )
+            .await
+        {
+            Ok(v) => Ok(Some(v)),
+            Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => Ok(None),
+            Err(e) => Err(e),
+        }
     }
 }
 

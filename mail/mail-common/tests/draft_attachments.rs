@@ -18,7 +18,7 @@ use proton_mail_api::services::proton::request_data::NewAttachmentParams;
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::{Disposition, MimeType};
 use proton_mail_common::draft::attachments::DraftAttachmentState;
-use proton_mail_common::draft::{Draft, DraftSyncStatus, ReplyMode};
+use proton_mail_common::draft::{AttachmentRemoveError, Draft, DraftSyncStatus, ReplyMode};
 use proton_mail_common::models::{
     Attachment, DraftAttachmentMetadata, DraftAttachmentUploadState, Message,
 };
@@ -727,6 +727,42 @@ async fn override_attachment_name() {
     .unwrap();
 
     assert_eq!(local_attachment.filename, filename_override);
+}
+
+#[tokio::test]
+async fn removing_address_public_key_is_an_error() {
+    // Removing the public key when the mail settings have attach public key setup is an error.
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let mut params = draft_test_params();
+    params.mail_settings.as_mut().unwrap().attach_public_key = true;
+
+    ctx.setup_user(params.clone()).await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+
+    let draft = Draft::empty(&user_ctx).await.unwrap();
+    let tether = user_ctx.user_stash().connection();
+    let draft_attachments = draft.attachments(&tether).await.unwrap();
+    assert_eq!(draft_attachments.len(), 1);
+    assert!(matches!(
+        draft_attachments[0].state,
+        DraftAttachmentState::Pending
+    ));
+
+    let err = draft
+        .remove_attachment(&user_ctx, draft_attachments[0].metadata.local_id.unwrap())
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        MailContextError::Draft(draft::Error::AttachmentRemove(
+            AttachmentRemoveError::AttachmentIsPublicKey(_)
+        ))
+    ));
 }
 
 async fn create_and_add_attachment(
