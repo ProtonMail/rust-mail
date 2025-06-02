@@ -914,7 +914,7 @@ impl DraftAttachmentMetadata {
             display_order,
             row_id: None,
             deleted: false,
-            is_public_key: Attachment::is_public_key_attachment_filename(&attachment.filename),
+            is_public_key: attachment.is_public_key_attachment(),
         }
     }
 
@@ -1112,7 +1112,7 @@ impl DraftAttachmentMetadata {
                 display_order: order,
                 row_id: None,
                 deleted: false,
-                is_public_key: Attachment::is_public_key_attachment_filename(&a.filename),
+                is_public_key: a.is_public_key_attachment(),
             })
             .collect::<Vec<_>>();
 

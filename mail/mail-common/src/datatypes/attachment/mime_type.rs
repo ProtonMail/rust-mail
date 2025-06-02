@@ -169,6 +169,13 @@ impl MimeType {
             category: MimeTypeCategory::Code,
         }
     }
+
+    pub fn application_pgp_keys() -> Self {
+        MimeType {
+            mime: "application/pgp-keys".parse().expect("Should never fail"),
+            category: MimeTypeCategory::Key,
+        }
+    }
 }
 
 impl std::fmt::Display for MimeType {

@@ -1101,9 +1101,7 @@ async fn attach_public_key_empty_draft() {
             .await
             .unwrap();
     assert_eq!(draft_attachments.len(), 1);
-    assert!(Attachment::is_public_key_attachment_filename(
-        &draft_attachments[0].filename
-    ));
+    assert!(draft_attachments[0].is_public_key_attachment());
     assert_eq!(
         draft_attachments[0].disposition,
         Disposition::Attachment.into()
@@ -1119,9 +1117,7 @@ async fn attach_public_key_reply_draft() {
                 .await
                 .unwrap();
         assert_eq!(draft_attachments.len(), 1);
-        assert!(Attachment::is_public_key_attachment_filename(
-            &draft_attachments[0].filename
-        ));
+        assert!(draft_attachments[0].is_public_key_attachment());
         assert_eq!(
             draft_attachments[0].disposition,
             Disposition::Attachment.into()
@@ -1151,9 +1147,7 @@ async fn attach_public_key_reply_draft_does_not_duplicate_if_already_there() {
                 .await
                 .unwrap();
         assert_eq!(draft_attachments.len(), 1);
-        assert!(Attachment::is_public_key_attachment_filename(
-            &draft_attachments[0].filename
-        ));
+        assert!(draft_attachments[0].is_public_key_attachment());
         assert_eq!(
             draft_attachments[0].disposition,
             Disposition::Attachment.into()
@@ -1223,7 +1217,7 @@ async fn prepare_draft_reply_attach_public_key(
                     image_width: None,
                 },
                 key_packets: KeyPackets::from_vec(vec![]),
-                mime_type: "text/plain".to_string(),
+                mime_type: "application/pgp-keys".to_string(),
                 name: public_key.attachment.filename,
                 signature: None,
                 size: 0,

@@ -948,7 +948,7 @@ impl Attachment {
                 enc_signature: None,
                 is_auto_forwardee: false,
                 key_packets: None,
-                mime_type: MimeType::text_plain(),
+                mime_type: MimeType::application_pgp_keys(),
                 filename: attachment_file_name,
                 sender: None,
                 signature: None,
@@ -1002,6 +1002,11 @@ impl Attachment {
             Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => Ok(None),
             Err(e) => Err(e),
         }
+    }
+
+    pub fn is_public_key_attachment(&self) -> bool {
+        self.mime_type == MimeType::application_pgp_keys()
+            && Self::is_public_key_attachment_filename(&self.filename)
     }
 }
 
