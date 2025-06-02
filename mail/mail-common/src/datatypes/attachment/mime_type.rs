@@ -141,7 +141,6 @@ impl MimeType {
     }
 }
 
-#[cfg(any(test, debug_assertions))]
 impl MimeType {
     pub fn text_html() -> Self {
         MimeType {
