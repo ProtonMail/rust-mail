@@ -582,7 +582,7 @@ impl Attachment {
         Attachment::find(
             format!(
                 "WHERE local_id IN ({})",
-                stash::utils::placeholders(params.len())
+                stash::utils::placeholders_n(params.len())
             ),
             params,
             tether,

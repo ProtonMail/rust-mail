@@ -921,7 +921,7 @@ pub async fn perform_save<M: Model>(model: &mut M, bond: &Bond<'_>) -> Result<()
                 // and needs to be set before saving.
                 return Err(StashError::IdNotSet);
             }
-            let placeholders = crate::utils::placeholders(fields.len());
+            let placeholders = crate::utils::placeholders(&fields);
             let query = formatdoc!(
                 "
                 INSERT INTO

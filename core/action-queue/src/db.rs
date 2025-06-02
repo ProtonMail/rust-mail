@@ -18,6 +18,7 @@ use stash::params;
 use stash::stash::{Bond, StashError, Tether};
 use std::collections::HashSet;
 use std::hash::RandomState;
+use stash::utils::{MapToSql as _, placeholders};
 use std::ops::Add;
 use std::time::Duration;
 use tracing::{debug, error};
@@ -309,6 +310,7 @@ impl StoredAction {
         if !self.dependencies.is_empty() {
             // Insert or ignore doesn't take into account that the foreign key does not exist.
             // This is an SQLite limitation. So we need to manually check this before inserts.
+<<<<<<< HEAD
             #[allow(trivial_casts)]
             let parameters = self
                 .dependencies
@@ -318,11 +320,26 @@ impl StoredAction {
             let placeholders = stash::utils::placeholders(parameters.len());
             let existing_action_ids: HashSet<ActionId, RandomState> = HashSet::from_iter(
                 bond.query_values::<_, ActionId>(
+||||||| parent of b0e6e2c4 (refactor*: New helper MapIntoSql trait, placeholder fn for slices)
+            #[allow(trivial_casts)]
+            let parameters = self
+                .dependencies
+                .iter()
+                .map(|i| Box::new(*i) as Box<dyn ToSql + Send>)
+                .collect::<Vec<_>>();
+            let placeholders = stash::utils::placeholders(parameters.len());
+            let dependency_ids = bond
+                .query_values::<_, ActionId>(
+=======
+            let placeholders = placeholders(&self.dependencies);
+            let dependency_ids = bond
+                .query_values::<_, ActionId>(
+>>>>>>> b0e6e2c4 (refactor*: New helper MapIntoSql trait, placeholder fn for slices)
                     format!(
                         "SELECT id AS value FROM {} WHERE id IN ({placeholders})",
                         Self::table_name()
                     ),
-                    parameters,
+                    self.dependencies.to_sql(),
                 )
                 .await?,
             );

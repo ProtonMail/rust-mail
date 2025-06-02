@@ -13,7 +13,7 @@ use proton_core_common::models::{
 };
 use sqlite_watcher::watcher::TableObserver;
 use stash::stash::{Stash, WatcherHandle};
-use stash::utils::placeholders;
+use stash::utils::placeholders_n;
 use stash::{
     exports::ToSql,
     macros::DbRecord,
@@ -255,7 +255,7 @@ impl LabelWithCounters {
             .into_iter()
             .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
             .collect_vec();
-        let placeholders = placeholders(label_ids.len());
+        let placeholders = placeholders_n(label_ids.len());
 
         let values = tether
             .query(
