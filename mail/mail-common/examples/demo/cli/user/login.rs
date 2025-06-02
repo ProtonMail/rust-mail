@@ -1,7 +1,7 @@
 use crate::Result;
 use crate::cli::read;
 use futures::TryFutureExt;
-use proton_core_api::login::LoginFlow;
+use proton_account_api::login::LoginFlow;
 use proton_core_api::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_core_common::CoreAccountState;
 use proton_mail_common::MailContext;
