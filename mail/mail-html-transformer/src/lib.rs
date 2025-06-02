@@ -160,8 +160,8 @@ impl Transformer {
 
     /// This function adds dark mode support. This fails if the html doesn't have a head tag.
     #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
-    pub fn inject_style(&mut self, mode: ColorMode, capabilities: BrowserCapabilities) {
-        transforms::styles::transform_style(self.document.clone(), mode, capabilities);
+    pub fn inject_dark_mode(&mut self, mode: ColorMode, capabilities: BrowserCapabilities) {
+        transforms::styles::inject_dark_mode(self.document.clone(), self.document.clone(), mode, capabilities);
     }
 
     ///

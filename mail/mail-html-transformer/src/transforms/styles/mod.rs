@@ -27,8 +27,17 @@ mod support_level;
 /// checks whether the style is applicable in the dark mode and if not - modifies
 /// the style of the message to suit better the theme.
 ///
-pub fn transform_style(document: NodeRef, mode: ColorMode, capabilities: BrowserCapabilities) {
-    let level = DarkStyleSupportLevel::new(mode, &document, capabilities);
+/// Parameters:
+/// * `source` - the source HTML document. Usually a message fetched from remote. Might be modified by removing `!important` flag from
+/// styles and attributes.
+/// * `target` - the target HTML document. Stylesheets and CSS supplements are appended to the head of the document.
+/// 
+/// # Difference between `source` and `target`
+/// In the view mode of the message, both nodes are pointing to the same document.
+/// However in the composer, `source` is the message being edited, while `target` is the head of HTML editor that wraps
+/// the message. Styles appended to the `target` are not sent to the recipient.
+pub fn inject_dark_mode(source: NodeRef, target: NodeRef, mode: ColorMode, capabilities: BrowserCapabilities) {
+    let level = DarkStyleSupportLevel::new(mode, &source, capabilities);
 
     let BrowserCapabilities {
         supports_dark_mode_via_media_query,
@@ -38,16 +47,16 @@ pub fn transform_style(document: NodeRef, mode: ColorMode, capabilities: Browser
         (DarkStyleSupportLevel::NoDarkMode, false) => {
             // If dark mode is currently not supported, let's just inject static css style.
             //
-            inject_style(&document, include_str!("./light.css"));
+            inject_style(&target, include_str!("./light.css"));
         }
         (DarkStyleSupportLevel::Native, false) => {
             // We detected, that the message can be safely rendered in the dark mode.
             // We just need to inject our style.
-            inject_style(&document, include_str!("./dark.css"));
+            inject_style(&target, include_str!("./dark.css"));
         }
         (DarkStyleSupportLevel::NoDarkMode | DarkStyleSupportLevel::Native, true) => {
             // Browser supports `@media (prefers-color-scheme: dark)`. So instead switching between light/dark CSS we can inject merged one
-            inject_style(&document, include_str!("./light_and_dark.css"));
+            inject_style(&target, include_str!("./light_and_dark.css"));
         }
         (DarkStyleSupportLevel::Injected, supports_media_query) => {
             // In order to support dark mode, we need to analyze all colors used by the message.
@@ -57,14 +66,14 @@ pub fn transform_style(document: NodeRef, mode: ColorMode, capabilities: Browser
             // 1. If yes, we can keep existing color.
             // 2. If not, we shall generate a CSS override (by removing `!important` from original place and adding new rule afterwards)
             //     that would use transformed color (keeping the same hue and saturation but changed light component).
-            let maybe_supplement_css = sanitize_dark_mode(&document);
+            let maybe_supplement_css = sanitize_dark_mode(&source);
 
             if supports_media_query {
-                inject_style(&document, include_str!("./light_and_dark.css"));
+                inject_style(&target, include_str!("./light_and_dark.css"));
 
                 if let Some(supplement_css) = maybe_supplement_css {
                     inject_style(
-                        &document,
+                        &target,
                         &format!(
                             r"
                   @media ( prefers-color-scheme: dark ) {{
@@ -75,9 +84,9 @@ pub fn transform_style(document: NodeRef, mode: ColorMode, capabilities: Browser
                     );
                 }
             } else {
-                inject_style(&document, include_str!("./dark.css"));
+                inject_style(&target, include_str!("./dark.css"));
                 if let Some(supplement_css) = maybe_supplement_css {
-                    inject_style(&document, &supplement_css);
+                    inject_style(&target, &supplement_css);
                 }
             }
         }

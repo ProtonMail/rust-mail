@@ -454,7 +454,7 @@ mime_type: {mime_type:?}"
         transformer.inject_ios_content_size();
     }
 
-    transformer.inject_style(
+    transformer.inject_dark_mode(
         resolve_style(theme),
         BrowserCapabilities {
             supports_dark_mode_via_media_query: theme.supports_dark_mode_via_media_query,

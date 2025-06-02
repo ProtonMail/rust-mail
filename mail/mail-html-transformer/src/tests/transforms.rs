@@ -9,7 +9,7 @@ use crate::{
 fn inject_style() {
     let html = include_str!("../../tests/htmls/empty.html");
     let mut html = Transformer::new(html);
-    html.inject_style(
+    html.inject_dark_mode(
         ColorMode::LightMode,
         BrowserCapabilities {
             supports_dark_mode_via_media_query: false,
@@ -27,7 +27,7 @@ fn inject_style_no_head() {
         ";
 
     let mut html = Transformer::new(html);
-    html.inject_style(
+    html.inject_dark_mode(
         ColorMode::LightMode,
         BrowserCapabilities {
             supports_dark_mode_via_media_query: false,

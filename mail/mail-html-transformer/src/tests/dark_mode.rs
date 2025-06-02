@@ -7,7 +7,7 @@ use crate::{
 fn inject_style_text_color_stylesheet_query_supported() {
     let html = include_str!("../../tests/htmls/styles/with_text_color_in_stylesheet.html");
     let mut html = Transformer::new(html);
-    html.inject_style(
+    html.inject_dark_mode(
         ColorMode::DarkMode,
         BrowserCapabilities {
             supports_dark_mode_via_media_query: true,
@@ -20,7 +20,7 @@ fn inject_style_text_color_stylesheet_query_supported() {
 fn inject_style_text_color_stylesheet_query_not_supported() {
     let html = include_str!("../../tests/htmls/styles/with_text_color_in_stylesheet.html");
     let mut html = Transformer::new(html);
-    html.inject_style(
+    html.inject_dark_mode(
         ColorMode::DarkMode,
         BrowserCapabilities {
             supports_dark_mode_via_media_query: false,
@@ -33,7 +33,7 @@ fn inject_style_text_color_stylesheet_query_not_supported() {
 fn inject_style_if_media_size_is_used() {
     let html = include_str!("../../tests/htmls/styles/with_media_size_in_stylesheet.html");
     let mut html = Transformer::new(html);
-    html.inject_style(
+    html.inject_dark_mode(
         ColorMode::DarkMode,
         BrowserCapabilities {
             supports_dark_mode_via_media_query: true,
@@ -46,7 +46,7 @@ fn inject_style_if_media_size_is_used() {
 fn inject_style_check_contrast() {
     let html = include_str!("../../tests/htmls/styles/contrast.html");
     let mut html = Transformer::new(html);
-    html.inject_style(
+    html.inject_dark_mode(
         ColorMode::DarkMode,
         BrowserCapabilities {
             supports_dark_mode_via_media_query: true,
@@ -59,7 +59,7 @@ fn inject_style_check_contrast() {
 fn inject_style_inline_attributes() {
     let html = include_str!("../../tests/htmls/styles/inline_attributes.html");
     let mut html = Transformer::new(html);
-    html.inject_style(
+    html.inject_dark_mode(
         ColorMode::DarkMode,
         BrowserCapabilities {
             supports_dark_mode_via_media_query: true,
@@ -72,7 +72,7 @@ fn inject_style_inline_attributes() {
 fn inject_style_transparency_handling() {
     let html = include_str!("../../tests/htmls/styles/transparent_colors.html");
     let mut html = Transformer::new(html);
-    html.inject_style(
+    html.inject_dark_mode(
         ColorMode::DarkMode,
         BrowserCapabilities {
             supports_dark_mode_via_media_query: true,
