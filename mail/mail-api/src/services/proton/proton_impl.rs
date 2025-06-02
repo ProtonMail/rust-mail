@@ -454,12 +454,12 @@ impl ProtonMail for Proton {
             "Body": body
         });
 
-        Ok(POST!("{CORE_V4}/reports/phishing")
+        POST!("{CORE_V4}/reports/phishing")
             .body_json(query)?
             .send_with(self)
             .await?
-            .ok()?
-            .into_body_json()?)
+            .ok()?;
+        Ok(())
     }
     async fn delete_all_messages_in_label(&self, label_id: LabelId) -> ApiServiceResult<()> {
         let query = json! ({

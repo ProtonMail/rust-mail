@@ -1,13 +1,11 @@
 use crate::actions::MailActionError;
-use crate::datatypes::{LocalMessageId, MessageFlags, SystemLabelId};
+use crate::datatypes::{LocalMessageId, MessageFlags};
 use crate::models::Message;
 use crate::{AppError, MailUserContext};
 use anyhow::Context as _;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
 use proton_action_queue::action::{ActionId, Handler as ActionHandler};
-use proton_core_api::services::proton::LabelId;
-use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::{Label, LabelError, ModelIdExtension};
+use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
@@ -17,17 +15,14 @@ use stash::stash::Bond;
 /// It will also blacklist the sender so that next messages also go to spam.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ReportPhishing {
-    label_id: LocalLabelId,
     message_id: LocalMessageId,
 }
 
 impl ReportPhishing {
     /// Create a new instance which reports a message as phishing
-    pub fn new(label_id: LocalLabelId, message_id: LocalMessageId) -> Self {
-        Self {
-            label_id,
-            message_id,
-        }
+    /// Don't call this directly, use [`Message::action_report_phishing`] instead.
+    pub fn new(message_id: LocalMessageId) -> Self {
+        Self { message_id }
     }
 }
 
@@ -58,11 +53,6 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        let spam = Label::remote_id_counterpart(LabelId::spam(), bond)
-            .await?
-            .ok_or_else(|| LabelError::CouldNotResolveLocalLabel(LabelId::spam()))?;
-
-        Message::move_messages(action.label_id, spam, vec![action.message_id], bond).await?;
         Message::set_flags(action.message_id, MessageFlags::PHISHING_MANUAL, bond).await?;
 
         Ok(())
@@ -75,11 +65,6 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        let spam = Label::remote_id_counterpart(LabelId::spam(), bond)
-            .await?
-            .ok_or_else(|| LabelError::CouldNotResolveLocalLabel(LabelId::spam()))?;
-
-        Message::move_messages(spam, action.label_id, vec![action.message_id], bond).await?;
         Message::unset_flags(action.message_id, MessageFlags::PHISHING_MANUAL, bond).await?;
 
         Ok(())

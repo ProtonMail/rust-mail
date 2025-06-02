@@ -457,11 +457,28 @@ impl Message {
     ///
     pub async fn action_report_phishing(
         queue: &Queue,
-        label_id: LocalLabelId,
         message_id: LocalMessageId,
-    ) -> Result<QueuedActionOutput<ReportPhishing>, QueueActionError<ReportPhishing>> {
-        let action = ReportPhishing::new(label_id, message_id);
-        queue.queue_action(action).await
+        tether: &Tether,
+    ) -> anyhow::Result<()> {
+        let spam = Label::remote_id_counterpart(LabelId::spam(), tether)
+            .await?
+            .ok_or_else(|| LabelError::CouldNotResolveLocalLabel(LabelId::spam()))?;
+        let source_label_id = Message::load(message_id, tether)
+            .await?
+            .context("No message")?
+            .exclusive_location
+            .context("No exclusive location")?
+            .local_id();
+
+        let move_action = Move::new(source_label_id, spam, [message_id]);
+        let queued_move = queue.queue_action(move_action).await?;
+        let meta = MetadataBuilder::new()
+            .with_dependency(queued_move.id)
+            .build();
+
+        let action = ReportPhishing::new(message_id);
+        queue.queue_action_with_metadata(action, meta).await?;
+        Ok(())
     }
 
     /// Remove all removable labels from given messages.
