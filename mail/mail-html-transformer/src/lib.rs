@@ -151,6 +151,12 @@ impl Transformer {
         sanitizer::strip_whitelist(self.document.clone())
     }
 
+    /// Reverts dark mode injection in inline attributes.
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    pub fn revert_dark_mode_in_inline_attributes(&mut self) {
+        transforms::styles::revert_dark_mode_in_inline_attributes(&self.document);
+    }
+
     /// This function adds dark mode support. This fails if the html doesn't have a head tag.
     #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub fn inject_dark_mode(&mut self, mode: ColorMode, capabilities: BrowserCapabilities) {

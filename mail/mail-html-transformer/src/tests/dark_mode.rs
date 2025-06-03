@@ -69,6 +69,31 @@ fn inject_style_inline_attributes() {
 }
 
 #[test]
+fn revert_dark_mode_in_inline_attributes() {
+    let original_html = include_str!("../../tests/htmls/styles/inline_attributes.html");
+    // First, inject dark mode - just a copy of previous test
+    let mut html = Transformer::new(original_html);
+    // But we are not interested in HEAD, just the changes that could end up in sent message.
+    html.inject_dark_mode_to_another_target(
+        ColorMode::DarkMode,
+        BrowserCapabilities {
+            supports_dark_mode_via_media_query: true,
+        },
+        "#protonmail-message".to_owned(),
+    );
+
+    let html = html.to_string();
+
+    // Now, revert dark mode
+    let mut html = Transformer::new(&html);
+    html.revert_dark_mode_in_inline_attributes();
+    let html_after_revert = html.to_string();
+
+    // We are not using `assert_eq!` here because HTML formatting might be different while the content is identical.
+    insta::assert_snapshot!(html_after_revert);
+}
+
+#[test]
 fn inject_style_transparency_handling() {
     let html = include_str!("../../tests/htmls/styles/transparent_colors.html");
     let mut html = Transformer::new(html);

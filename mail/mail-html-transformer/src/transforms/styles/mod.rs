@@ -21,6 +21,26 @@ mod capabilities;
 mod dark_mode_visitor;
 mod support_level;
 
+/// Reverts dark mode injection in inline attributes.
+/// This function removes modified `style` attribute and restores original style from `data-proton-original-style` attribute.
+#[allow(clippy::missing_panics_doc)]
+pub fn revert_dark_mode_in_inline_attributes(document: &NodeRef) {
+    let Ok(res) = document.select("[data-proton-original-style]") else {
+        tracing::warn!("Could not select nodes with data-proton-original-style attribute");
+        return;
+    };
+
+    for element in res {
+        // SAFETY: we know that the attribute exists, because we selected it
+        let style = element
+            .attributes
+            .borrow_mut()
+            .remove("data-proton-original-style")
+            .unwrap();
+        element.attributes.borrow_mut().insert("style", style.value);
+    }
+}
+
 /// This function provides stylesheets for dark mode in plaintext messages.
 /// In plaintext we do not need to parse HTML/CSS and just need to return static
 /// stylesheets builtin in the SDK.
