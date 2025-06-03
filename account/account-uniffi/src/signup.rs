@@ -64,7 +64,7 @@ pub enum SignupError {
 
     /// The recovery phone number format is invalid
     #[error("Recovery phone number format is invalid")]
-    RecoveryPhoneNumberInvalid
+    RecoveryPhoneNumberInvalid,
 }
 
 impl From<RealSignupError> for SignupError {
@@ -81,7 +81,7 @@ impl From<RealSignupError> for SignupError {
             RealSignupError::SetUserDataFailed(_) => Self::Internal,
             RealSignupError::InvalidState => Self::Internal,
             RealSignupError::RecoveryEmailInvalid => Self::RecoveryEmailInvalid,
-            RealSignupError::RecoveryPhoneNumberInvalid => Self::RecoveryPhoneNumberInvalid
+            RealSignupError::RecoveryPhoneNumberInvalid => Self::RecoveryPhoneNumberInvalid,
         }
     }
 }
@@ -281,8 +281,14 @@ impl SignupFlow {
     pub async fn skip_recovery(&self) -> Result<SimpleSignupState, SignupError> {
         let flow = self.flow.clone();
 
-        uniffi_async(async move { flow.lock().await.skip_recovery().await.map_err(SignupError::from) })
-            .await?;
+        uniffi_async(async move {
+            flow.lock()
+                .await
+                .skip_recovery()
+                .await
+                .map_err(SignupError::from)
+        })
+        .await?;
 
         Ok(self.get_state())
     }

@@ -59,7 +59,7 @@ pub enum SignupError {
 
     /// The recovery phone number format is invalid
     #[error("Recovery phone number format is invalid")]
-    RecoveryPhoneNumberInvalid
+    RecoveryPhoneNumberInvalid,
 }
 
 #[derive(Debug, Error)]
