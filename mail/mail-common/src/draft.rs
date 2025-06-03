@@ -623,7 +623,7 @@ impl Draft {
         address: &Address,
         mail_settings: &MailSettings,
     ) -> Self {
-        let body = compose::get_signature(address, mail_settings);
+        let body = compose::get_signature(address, mail_settings, mail_settings.draft_mime_type);
         Self {
             metadata_id,
             sender: address.email.clone(),
@@ -810,8 +810,6 @@ impl Draft {
         use_utc: bool,
         mime_type_override: Option<MimeType>,
     ) -> (Self, Vec<Attachment>) {
-        let mut body = get_signature(address, mail_settings);
-
         let mime_type = if let Some(mime_type) = mime_type_override {
             mime_type
         } else if mail_settings.draft_mime_type == MimeType::TextHtml
@@ -821,6 +819,8 @@ impl Draft {
         } else {
             MimeType::TextPlain
         };
+
+        let mut body = get_signature(address, mail_settings, mime_type);
 
         // If the message we are replying to is HTML we should also generate an HTML body for
         // replying even if the user has selected plain text as the default editing mode.

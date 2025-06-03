@@ -56,6 +56,8 @@ pub mod transforms;
 pub mod utm;
 
 mod html2text;
+
+pub use html2text::Html2TextOptions;
 #[cfg(test)]
 #[path = "tests/lib.rs"]
 mod tests;
@@ -195,18 +197,24 @@ impl Transformer {
         transforms::move_styles_to_body(self.document().clone());
     }
 
-    pub fn to_plain_text(&self) -> Result<String, ::html2text::Error> {
+    pub fn to_plain_text(&self, options: Html2TextOptions) -> Result<String, ::html2text::Error> {
         let html = self.to_string();
-        Self::html2text_str(&html)
+        Self::html2text_str(&html, options)
     }
 
-    pub fn html2text(reader: impl Read) -> Result<String, ::html2text::Error> {
-        html2text::convert_html_to_text(reader, html2text::DEFAULT_COLUMN_WIDTH)
+    pub fn html2text(
+        reader: impl Read,
+        options: Html2TextOptions,
+    ) -> Result<String, ::html2text::Error> {
+        html2text::convert_html_to_text(reader, options)
     }
 
-    pub fn html2text_str(reader: &str) -> Result<String, ::html2text::Error> {
+    pub fn html2text_str(
+        reader: &str,
+        options: Html2TextOptions,
+    ) -> Result<String, ::html2text::Error> {
         let cursor = std::io::Cursor::new(reader);
-        Self::html2text(cursor)
+        Self::html2text(cursor, options)
     }
 }
 

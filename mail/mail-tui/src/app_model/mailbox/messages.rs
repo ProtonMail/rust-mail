@@ -34,6 +34,7 @@ use proton_mail_common::models::{
     Attachment, LabelWithCounters, Message as MailMessage, MessageScrollData,
 };
 use proton_mail_common::{AppError, MailContextResult, MailUserContext, Mailbox};
+use proton_mail_html_transformer::Html2TextOptions;
 use ratatui::Frame;
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::Rect;
@@ -979,7 +980,7 @@ impl DecryptedMessage {
 fn html_to_text(message: &str) -> Result<String> {
     // TODO: Best effort terminal image rendering. See https://docs.rs/termimage/latest/termimage/
     let cursor = std::io::Cursor::new(message);
-    proton_mail_html_transformer::Transformer::html2text(cursor)
+    proton_mail_html_transformer::Transformer::html2text(cursor, Html2TextOptions::default())
         .map_err(|e| anyhow!("Failed to parse HTML: {e}"))
 }
 
