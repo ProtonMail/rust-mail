@@ -160,7 +160,7 @@ impl Transformer {
             self.document.clone(),
             mode,
             capabilities,
-            "[data-protonmail-message]".to_owned() 
+            "[data-protonmail-message]".to_owned(),
         );
     }
 
@@ -168,7 +168,7 @@ impl Transformer {
     /// of removing `!important` flag from styles and attributes.
     ///
     /// Supplement CSS are not injected, instead the function returns the head of the new document.
-    /// 
+    ///
     /// * `root_selector` - the CSS selector of the root of message.
     ///   In case of viewing message, it is usually data attribute pointing to the `html` tag.
     ///   In case of composer, it is ID pointing to custom editor that wraps the message.
@@ -192,7 +192,13 @@ impl Transformer {
         );
         target.append(head.clone());
 
-        transforms::styles::inject_dark_mode(source, target.clone(), mode, capabilities, root_selector);
+        transforms::styles::inject_dark_mode(
+            source,
+            target.clone(),
+            mode,
+            capabilities,
+            root_selector,
+        );
         inner_html(&head)
     }
 

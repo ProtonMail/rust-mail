@@ -26,15 +26,14 @@ pub enum ShouldStoreOverridenProps {
     No,
 }
 
-
 /// Whether to remove `!important` flag from the original properties.
-/// 
+///
 /// When we are parsing stylesheets we do not need to remove `!important` flag. Instead
 /// we can create a supplement with higher specificity.
-/// 
+///
 /// However, when we are parsing `style=""` attribute, `!important` flag has utmost priority.
 /// We need to remove it in order to be able to override the property.
-/// 
+///
 #[derive(Clone, Copy, Debug, Default)]
 pub enum ShouldRemoveImportant {
     Yes,
@@ -160,7 +159,8 @@ impl Visitor<'_> for DeclarationBlockVisitor {
                 }
 
                 if matches!(self.should_remove_important, ShouldRemoveImportant::Yes) {
-                    if let Some(pos) = decls.important_declarations.iter().position(|p| p == &prop) {
+                    if let Some(pos) = decls.important_declarations.iter().position(|p| p == &prop)
+                    {
                         decls.important_declarations.remove(pos);
                         decls.declarations.push(prop);
                     }

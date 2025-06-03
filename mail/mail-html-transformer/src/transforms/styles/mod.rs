@@ -53,9 +53,14 @@ pub fn dark_mode_for_plaintext(mode: ColorMode, capabilities: BrowserCapabilitie
 /// Injects the data-proton-message attrubute to the html tag.
 /// Used to create a selector with bigger specificity than any provided by the sender.
 pub fn inject_root_selector_to_html(document: &NodeRef) {
-    // SAFETY: Kuchiki always adds the html tag.
-    let html = document.select_first("html").unwrap();
-    html.attributes.borrow_mut().insert("data-protonmail-message", "true".to_owned());
+    let Ok(html) = document.select_first("html") else {
+        tracing::warn!("Could not select <html /> tag in the message body");
+        return;
+    };
+
+    html.attributes
+        .borrow_mut()
+        .insert("data-protonmail-message", "true".to_owned());
 }
 
 /// Adjusts style of the message to the light/dark mode.
@@ -82,7 +87,7 @@ pub fn inject_dark_mode(
     target: NodeRef,
     mode: ColorMode,
     capabilities: BrowserCapabilities,
-    root_selector: String
+    root_selector: String,
 ) {
     // TODO(wpolak): In following MRs:
     // * Make sure that `!important` removal from attributes is reversible.
@@ -144,7 +149,8 @@ pub fn inject_dark_mode(
 }
 
 fn sanitize_dark_mode(document: &NodeRef, root_selector: String) -> Option<String> {
-    let maybe_supplement_for_stylesheets = sanitize_dark_mode_in_stylesheets(document, root_selector);
+    let maybe_supplement_for_stylesheets =
+        sanitize_dark_mode_in_stylesheets(document, root_selector);
     let maybe_supplement_for_inline_attributes = sanitize_dark_mode_in_inline_attributes(document);
 
     if maybe_supplement_for_stylesheets.is_none()
@@ -235,7 +241,12 @@ fn sanitize_dark_mode_in_stylesheets(document: &NodeRef, root_selector: String) 
             continue;
         };
 
-        sanitize_dark_mode_in_stylesheet(stylesheet, style, &mut overrides, printer_options, root_selector.clone());
+        sanitize_dark_mode_in_stylesheet(
+            stylesheet,
+            &mut overrides,
+            printer_options,
+            root_selector.clone(),
+        );
     }
 
     if overrides.is_empty() {
@@ -310,7 +321,6 @@ fn printer_options() -> PrinterOptions<'static> {
 
 fn sanitize_dark_mode_in_stylesheet(
     mut stylesheet: StyleSheet<'_, '_>,
-    node: NodeDataRef<ElementData>,
     overrides: &mut StylesheetOverrides,
     printer_options: fn() -> PrinterOptions<'static>,
     root_selector: String,
@@ -323,29 +333,11 @@ fn sanitize_dark_mode_in_stylesheet(
         return;
     }
 
-    // If we found anything to change, we want to re-write the style.
-    let css = match stylesheet.to_css(printer_options()) {
-        Ok(css) => css,
-        Err(err) => {
-            tracing::error!("Could not write CSS: {err:?}");
-            return;
-        }
-    };
+    // We do not modify original stylesheet
 
     for (key, value) in visitor_overrides {
         overrides.entry(key).or_default().extend(value);
     }
-
-    let text_node = NodeRef::new(NodeData::Text(RefCell::new(css.code)));
-
-    // Clear existing text
-    let existing_children = node.as_node().children().collect::<Vec<_>>();
-    for child in existing_children {
-        child.detach();
-    }
-
-    // Then append new text
-    node.as_node().append(text_node);
 }
 
 fn sanitize_dark_mode_in_inline_attribute(

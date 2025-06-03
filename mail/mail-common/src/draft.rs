@@ -1429,9 +1429,9 @@ impl Draft {
 
     /// On-the-fly generated head with injected the dark mode styles.
     /// The content of returned string depends on body and modifies it.
-    /// 
+    ///
     /// # Parameters
-    /// 
+    ///
     /// * `editor_id` - the HTML ID of the editor that wraps the message. The same used to reference DOM in javascript.
     ///
     /// # Modifications to the body
@@ -1465,7 +1465,11 @@ impl Draft {
     /// ");
     ///
     /// ```
-    pub fn html_head_content_for_composer(&mut self, theme_opts: ThemeOpts, editor_id: String) -> String {
+    pub fn html_head_content_for_composer(
+        &mut self,
+        theme_opts: ThemeOpts,
+        editor_id: String,
+    ) -> String {
         let color_mode = theme_opts.color_mode();
 
         let mime_type = self.mime_type();

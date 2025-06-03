@@ -9,7 +9,10 @@ use lightningcss::{
 };
 use smart_default::SmartDefault;
 
-use crate::transforms::styles::{dark_mode_visitor::declaration_block::ShouldRemoveImportant, printer_options, Selector, StylesheetOverrides};
+use crate::transforms::styles::{
+    Selector, StylesheetOverrides, dark_mode_visitor::declaration_block::ShouldRemoveImportant,
+    printer_options,
+};
 
 use super::declaration_block::{DeclarationBlockVisitor, ShouldStoreOverridenProps};
 
@@ -58,8 +61,11 @@ impl Visitor<'_> for StylesheetVisitor {
         &mut self,
         decls: &mut lightningcss::declaration::DeclarationBlock<'_>,
     ) -> Result<(), Self::Error> {
-        let mut visitor =
-            DeclarationBlockVisitor::new(ShouldStoreOverridenProps::No, ShouldRemoveImportant::No, self.printer_options);
+        let mut visitor = DeclarationBlockVisitor::new(
+            ShouldStoreOverridenProps::No,
+            ShouldRemoveImportant::No,
+            self.printer_options,
+        );
 
         decls.visit(&mut visitor)?;
 
@@ -98,7 +104,10 @@ impl StylesheetVisitor {
         let printer_options = (self.printer_options)();
         match rule {
             CssRule::Style(style) => {
-                style.selectors.to_css_string(printer_options).ok()
+                style
+                    .selectors
+                    .to_css_string(printer_options)
+                    .ok()
                     .map(|selector| {
                         if selector == "html" {
                             format!("html{}", self.root_selector)

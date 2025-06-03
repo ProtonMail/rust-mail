@@ -7,7 +7,10 @@ use lightningcss::{
 };
 use smart_default::SmartDefault;
 
-use crate::transforms::styles::{dark_mode_visitor::declaration_block::ShouldRemoveImportant, printer_options, NewProperty, OldProperty};
+use crate::transforms::styles::{
+    NewProperty, OldProperty, dark_mode_visitor::declaration_block::ShouldRemoveImportant,
+    printer_options,
+};
 
 use super::declaration_block::{DeclarationBlockVisitor, ShouldStoreOverridenProps};
 
@@ -49,8 +52,11 @@ impl Visitor<'_> for StyleAttributeVisitor {
         &mut self,
         decls: &mut lightningcss::declaration::DeclarationBlock<'_>,
     ) -> Result<(), Self::Error> {
-        let mut visitor =
-            DeclarationBlockVisitor::new(ShouldStoreOverridenProps::Yes, ShouldRemoveImportant::Yes, self.printer_options);
+        let mut visitor = DeclarationBlockVisitor::new(
+            ShouldStoreOverridenProps::Yes,
+            ShouldRemoveImportant::Yes,
+            self.printer_options,
+        );
 
         decls.visit(&mut visitor)?;
 
