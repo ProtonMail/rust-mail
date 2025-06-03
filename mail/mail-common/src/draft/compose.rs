@@ -279,11 +279,11 @@ pub struct DarkModeInjection {
 ///
 /// Supplement CSS are not injected, instead the function returns the head in a separate string.
 pub fn inject_dark_mode(
-    body: String,
+    body: &str,
     color_mode: ColorMode,
     capabilities: BrowserCapabilities,
 ) -> DarkModeInjection {
-    let mut transformer = Transformer::new(&body);
+    let mut transformer = Transformer::new(body);
     let head = transformer.inject_dark_mode_to_another_target(color_mode, capabilities);
     DarkModeInjection {
         head,
@@ -292,12 +292,12 @@ pub fn inject_dark_mode(
 }
 
 /// Only html content is sanitized, plain text is ignored.
-pub fn maybe_sanitize(mime_type: MimeType, body: String) -> String {
+pub fn maybe_sanitize(mime_type: MimeType, body: &str) -> String {
     // There is no point in sanitizing content that is not HTML.
     if mime_type != MimeType::TextHtml {
-        return body;
+        return body.to_owned();
     }
-    let mut transformer = Transformer::new(&body);
+    let mut transformer = Transformer::new(body);
     transformer.add_noreferrer();
     transformer.strip_utm();
     transformer.strip_whitelist();
