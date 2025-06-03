@@ -12,6 +12,7 @@ use proton_core_common::UserDatabaseInitializer;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::test_utils::test_context::{BaseTestContext, TestContext};
 pub use secrecy::{ExposeSecret, SecretString as RealSecretString};
+use std::ops::Deref;
 use std::sync::Arc;
 use std::time::Duration;
 use tempdir::TempDir;
@@ -34,6 +35,13 @@ pub struct MailTestContext {
     tmp_dir: TempDir,
     core_account: CoreAccount,
     core_session: CoreSession,
+}
+
+impl Deref for MailTestContext {
+    type Target = TestContext;
+    fn deref(&self) -> &Self::Target {
+        &self.core_test_context
+    }
 }
 
 impl BaseTestContext for MailTestContext {}

@@ -84,9 +84,14 @@ impl proton_action_queue::action::Handler for Handler {
         }
 
         let messages = Message::find_by_ids(action.local_ids.clone(), guard.tether()).await?;
-        let remote_ids = messages
+        let mut non_drafts = vec![];
+        for msg in messages.into_iter().filter(|msg| msg.remote_id.is_some()) {
+            if !msg.is_local_draft(guard.tether()).await? {
+                non_drafts.push(msg);
+            }
+        }
+        let remote_ids = non_drafts
             .iter()
-            .filter(|msg| !msg.is_draft())
             .filter_map(|msg| msg.remote_id.clone())
             .collect_vec();
 
@@ -115,11 +120,10 @@ impl proton_action_queue::action::Handler for Handler {
             .iter()
             .filter_map(|msg| msg.local_id)
             .collect();
-        let not_refreshed = action
-            .local_ids
+        let not_refreshed = non_drafts
             .iter()
+            .filter_map(|msg| msg.local_id)
             .filter(|x| !refreshed_ids.contains(x))
-            .copied()
             .collect_vec();
 
         if !not_refreshed.is_empty() {

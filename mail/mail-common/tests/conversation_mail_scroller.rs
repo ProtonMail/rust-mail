@@ -3,14 +3,16 @@ use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::{
     datatypes::SystemLabel,
-    models::{Label, ModelExtension, ModelIdExtension},
+    models::{Label, ModelIdExtension},
 };
 use proton_mail_api::services::proton::{
     common::ConversationId, prelude::GetConversationsResponse,
     response_data::Conversation as ApiConversation,
 };
 use proton_mail_common::test_utils::{
-    init::Params as TestParams, test_context::MailUserContextTestExtension,
+    init::Params as TestParams,
+    scroller::{StoreLabeledModelMap, save_single_conversation, test_conversations},
+    test_context::MailUserContextTestExtension,
 };
 use proton_mail_common::{
     MailContextError,
@@ -18,14 +20,9 @@ use proton_mail_common::{
     mail_scroller::{DataScrollerSource, MailScroller},
     models::{Conversation, ConversationCounters, ConversationScrollData},
 };
-use proton_mail_common::{
-    conv_id, conv_label, conversation, label, lbl_id, test_utils::test_context::MailTestContext,
-};
+use proton_mail_common::{conv_id, lbl_id, test_utils::test_context::MailTestContext};
 use stash::stash::StashError;
-use stash::{
-    orm::Model,
-    stash::{Bond, Tether, WatcherHandle},
-};
+use stash::{orm::Model, stash::WatcherHandle};
 use std::{collections::HashMap, time::Duration};
 use velcro::hash_map;
 use wiremock::{
@@ -33,54 +30,12 @@ use wiremock::{
     matchers::{method, path, query_param_contains},
 };
 
-fn test_conversations(n: usize, order_shift: u64) -> Vec<Conversation> {
-    (0..n)
-        .map(|i| {
-            let order = i as u64 + order_shift;
-            conversation!(remote_id: conv_id!(format!("myconv_{order}")), display_order: order)
-        })
-        .collect()
-}
-
-async fn save_single_conversation(label: &Label, conversation: &mut Conversation, bond: &Bond<'_>) {
-    conversation.save(bond).await.unwrap();
-    let mut conv_label = conv_label!(
-        local_conversation_id: conversation.local_id,
-        remote_label_id: label.remote_id.clone(),
-        local_label_id: label.local_id,
-        context_time: 0.into()
-    );
-
-    conv_label.save(bond).await.unwrap();
-    conversation.reload(bond).await.unwrap();
-}
-
-async fn save_to_database(data: &mut HashMap<&str, Vec<Conversation>>, tether: &mut Tether) {
-    tether
-        .tx::<_, _, StashError>(async |tx| {
-            for (label_rid, conversations) in data.iter_mut() {
-                let mut label = label!(remote_id: lbl_id!(label_rid));
-                label.save(tx).await.unwrap();
-                let mut counters = ConversationCounters::new(label.local_id.unwrap());
-                counters.total = conversations.len() as u64;
-                counters.save(tx).await.unwrap();
-
-                for conversation in conversations.iter_mut() {
-                    save_single_conversation(&label, conversation, tx).await;
-                }
-            }
-            Ok(())
-        })
-        .await
-        .unwrap();
-}
-
 fn expected_conversations(
     n: usize,
     label_id: &str,
-    data: &HashMap<&str, Vec<Conversation>>,
+    data: &HashMap<Vec<&str>, Vec<Conversation>>,
 ) -> Option<Vec<ContextualConversation>> {
-    let convs = data.get(label_id)?;
+    let convs = data.get(&vec![label_id])?;
     // Conversations are read in DESC order
     Some(
         convs
@@ -110,11 +65,11 @@ async fn test_conversation_mail_scroller_reads_correct_items_within_visible_rang
     let mut tether = user_ctx.user_stash().connection();
 
     let mut data = hash_map! {
-        REMOTE_LABEL_ID: test_conversations(100, 100),
-        "rid2": test_conversations(50, 0),
+        vec![REMOTE_LABEL_ID]: test_conversations(100, 100),
+        vec!["rid2"]: test_conversations(50, 0),
     };
 
-    save_to_database(&mut data, &mut tether).await;
+    data.save_to_database(&mut tether).await;
 
     let remote_label_id = LabelId::from(REMOTE_LABEL_ID);
     let local_label_id = Label::resolve_local_label_id(remote_label_id, &tether)
@@ -350,7 +305,7 @@ async fn test_conversation_mail_scroller_notificate_about_changes() {
     let test_conversation = test_conversations(1, 100).pop().unwrap();
     tether
         .tx::<_, _, StashError>(async |bond| {
-            save_single_conversation(&label, &mut test_conversation.clone(), bond).await;
+            save_single_conversation(&[label], &mut test_conversation.clone(), bond).await;
             Ok(())
         })
         .await
@@ -492,10 +447,10 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     // Set up cached data
     let remote_label_id = SystemLabel::Inbox.remote_id();
     let mut data = hash_map! {
-        remote_label_id.as_str(): test_conversations(1, 100),
-        "rid2": test_conversations(50, 0),
+        vec![remote_label_id.as_str()]: test_conversations(1, 100),
+        vec!["rid2"]: test_conversations(50, 0),
     };
-    save_to_database(&mut data, &mut tether).await;
+    data.save_to_database(&mut tether).await;
 
     mock_not_responsive_api(&ctx).await;
     ctx.catch_all().await;
@@ -543,10 +498,10 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     // Set up cached data
     let remote_label_id = SystemLabel::Inbox.remote_id();
     let mut data = hash_map! {
-        remote_label_id.as_str(): test_conversations(11, 100),
-        "rid2": test_conversations(50, 0),
+        vec![remote_label_id.as_str()]: test_conversations(11, 100),
+        vec!["rid2"]: test_conversations(50, 0),
     };
-    save_to_database(&mut data, &mut tether).await;
+    data.save_to_database(&mut tether).await;
 
     mock_not_responsive_api(&ctx).await;
     ctx.catch_all().await;
@@ -755,11 +710,11 @@ async fn test_conversation_mail_scroller_reads_cached_data_and_return_error_on_o
     // Set up cached data
     let remote_label_id = SystemLabel::Inbox.remote_id();
     let mut data = hash_map! {
-        remote_label_id.as_str(): test_conversations(100, 100),
-        "rid2": test_conversations(50, 0),
+        vec![remote_label_id.as_str()]: test_conversations(100, 100),
+        vec!["rid2"]: test_conversations(50, 0),
     };
 
-    save_to_database(&mut data, &mut tether).await;
+    data.save_to_database(&mut tether).await;
     let last_conversation =
         Conversation::find_by_remote_id(ConversationId::from("myconv_150"), &tether)
             .await
@@ -835,9 +790,9 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     let remote_label_id = SystemLabel::Inbox.remote_id();
     let mut data = hash_map! {
-        remote_label_id.as_str(): test_conversations(3, 100),
+        vec![remote_label_id.as_str()]: test_conversations(3, 100),
     };
-    save_to_database(&mut data, &mut tether).await;
+    data.save_to_database(&mut tether).await;
 
     setup_api_sync_previous_page(&ctx, "myconv_102", 1).await;
     let params = setup_api_conversation_pages(&ctx, page_size, 0, 2).await;

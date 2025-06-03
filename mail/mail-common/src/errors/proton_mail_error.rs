@@ -608,6 +608,7 @@ impl From<LabelError> for ProtonMailError {
             LabelError::CouldNotResolveLocalLabel(_label_id) => {
                 Self::Unexpected(Unexpected::Internal)
             }
+            LabelError::LabelWithoutIds => Self::Unexpected(Unexpected::Internal),
         }
     }
 }

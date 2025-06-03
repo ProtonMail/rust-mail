@@ -17,6 +17,7 @@ use std::future::Future;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
+use tracing::error;
 
 /// Actions can return any error type, but we need to be able to inspect the http request error
 /// to detect network failure and [`WriterGuard`] expirations so we can gracefully retry the

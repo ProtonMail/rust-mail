@@ -2,84 +2,40 @@ use itertools::Itertools;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::{
     datatypes::SystemLabel,
-    models::{Address, Label, ModelExtension, ModelIdExtension},
+    models::{Address, Label, ModelIdExtension},
 };
 use proton_mail_api::services::proton::{
     common::MessageId, prelude::GetMessagesResponse,
     response_data::MessageMetadata as ApiMessageMetadata,
 };
 use proton_mail_common::api_message_meta;
-use proton_mail_common::test_utils::{
-    init::Params as TestParams, test_context::MailTestContext, utils::create_address,
+use proton_mail_common::test_utils::scroller::{
+    StoreLabeledModelMap, save_single_message, test_messages,
 };
-use proton_mail_common::{conv_id, conversation, label, lbl_id, message, msg_id};
+use proton_mail_common::test_utils::{init::Params as TestParams, test_context::MailTestContext};
 use proton_mail_common::{
     datatypes::ReadFilter,
     mail_scroller::MailScroller,
     models::{Conversation, Message, MessageCounters, MessageScrollData},
 };
-use velcro::btree_map;
+use proton_mail_common::{message, msg_id};
+use velcro::hash_map;
 
 use stash::stash::StashError;
-use stash::{
-    orm::Model,
-    stash::{Bond, Tether, WatcherHandle},
-};
-use std::{collections::BTreeMap, vec};
+use stash::{orm::Model, stash::WatcherHandle};
+use std::{collections::HashMap, vec};
 use wiremock::{
     Mock, ResponseTemplate,
     matchers::{method, path, query_param_contains},
 };
 
-fn test_message(n: usize, order_shift: u64) -> Vec<Message> {
-    (0..n)
-        .map(|i| {
-            let order = i as u64 + order_shift;
-            message!(remote_id: msg_id!(order),  display_order: order, time: order.into())
-        })
-        .collect()
-}
-
-async fn save_single_message(label: &Label, message: &mut Message, bond: &Bond<'_>) {
-    message.label_ids = vec![label.remote_id.clone().unwrap()];
-    message.save(bond).await.unwrap();
-    message.reload(bond).await.unwrap();
-}
-
-async fn save_to_database(data: &mut BTreeMap<&str, Vec<Message>>, tether: &mut Tether) {
-    let address = create_address(tether).await;
-    tether
-        .tx::<_, _, StashError>(async |bond| {
-            let mut conv = conversation!(remote_id: conv_id!("convid_1"));
-            conv.save(bond).await.unwrap();
-            for (label_rid, messages) in data.iter_mut() {
-                let mut label = label!(remote_id: lbl_id!(label_rid));
-                label.save(bond).await.unwrap();
-                let mut counters = MessageCounters::new(label.local_id.unwrap());
-                counters.total = messages.len() as u64;
-                counters.save(bond).await.unwrap();
-
-                for message in messages.iter_mut() {
-                    message.local_address_id = address.local_id.unwrap();
-                    message.remote_address_id = address.remote_id.clone().unwrap();
-                    message.local_conversation_id = conv.local_id;
-                    message.remote_conversation_id = conv.remote_id.clone();
-                    save_single_message(&label, message, bond).await;
-                }
-            }
-            Ok(())
-        })
-        .await
-        .unwrap();
-}
-
 fn expected_messages(
     n: usize,
     label_id: &str,
-    data: &BTreeMap<&str, Vec<Message>>,
+    data: &HashMap<Vec<&str>, Vec<Message>>,
 ) -> Option<Vec<Message>> {
-    let convs = data.get(label_id)?;
-    Some(convs.iter().rev().take(n).cloned().collect())
+    let msgs = data.get(&vec![label_id])?;
+    Some(msgs.iter().rev().take(n).cloned().collect())
 }
 
 #[tokio::test]
@@ -90,19 +46,19 @@ async fn test_message_mail_scroller_reads_correct_items_within_visible_range_for
     let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
 
-    let mut data = btree_map! {
-        REMOTE_LABEL_ID: test_message(100, 100),
-        "rid2": test_message(50, 0),
+    let mut data = hash_map! {
+        vec![REMOTE_LABEL_ID]: test_messages(100, 100),
+        vec!["rid2"]: test_messages(50, 0),
     };
 
-    save_to_database(&mut data, &mut tether).await;
+    data.save_to_database(&mut tether).await;
 
     let remote_label_id = LabelId::from(REMOTE_LABEL_ID);
     let local_label_id = Label::resolve_local_label_id(remote_label_id, &tether)
         .await
         .unwrap();
     let unread = ReadFilter::All;
-    let last_message = Message::find_by_remote_id(MessageId::from("150"), &tether)
+    let last_message = Message::find_by_remote_id(MessageId::from("mymsg_150"), &tether)
         .await
         .unwrap()
         .unwrap();
@@ -425,7 +381,7 @@ async fn test_message_mail_scroller_notificate_about_changes() {
     tether
         .tx::<_, _, StashError>(async |bond| {
             let label = Label::load(local_label_id, bond).await.unwrap().unwrap();
-            save_single_message(&label, &mut test_message.clone(), bond).await;
+            save_single_message(&[label], &mut test_message.clone(), bond).await;
             Ok(())
         })
         .await

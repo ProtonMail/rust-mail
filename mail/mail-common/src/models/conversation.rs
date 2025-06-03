@@ -2197,7 +2197,7 @@ impl Conversation {
         Ok(conversations)
     }
 
-    /// Sync only messages metadata
+    /// Sync only conversations metadata
     ///
     pub async fn sync_metadata<PM: ProtonMail>(
         ids: Vec<ConversationId>,

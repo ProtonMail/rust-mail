@@ -310,6 +310,27 @@ pub trait ModelExtension: Model {
         Ok(())
     }
 
+    /// Checks if the model exists in the database.
+    ///
+    /// # Errors
+    ///
+    /// See [`Model::load()`].
+    ///
+    async fn exists(&self, tether: &Tether) -> Result<bool, StashError> {
+        tether
+            .query_values::<_, Self::IdType>(
+                formatdoc!(
+                    "SELECT {} AS value FROM {} WHERE {} = ? LIMIT 1",
+                    Self::id_field_name(),
+                    Self::table_name(),
+                    Self::id_field_name(),
+                ),
+                params![self.id_value()?],
+            )
+            .await
+            .map(|v| !v.is_empty())
+    }
+
     /// Deletes the model instance from database.
     ///
     /// # Errors

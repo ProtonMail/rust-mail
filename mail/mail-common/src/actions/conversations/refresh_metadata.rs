@@ -1,5 +1,4 @@
 use anyhow::anyhow;
-use itertools::Itertools;
 use std::collections::{HashMap, HashSet};
 
 use crate::AppError;
@@ -122,12 +121,20 @@ impl proton_action_queue::action::Handler for Handler {
             .iter()
             .filter_map(|conv| conv.local_id)
             .collect();
-        let not_refreshed = action
+        let mut not_refreshed = Vec::new();
+        for not_fresh in action
             .local_ids
             .iter()
             .filter(|x| !refreshed_ids.contains(x))
             .copied()
-            .collect_vec();
+        {
+            if Conversation::local_id_counterpart(not_fresh, guard.tether())
+                .await?
+                .is_some()
+            {
+                not_refreshed.push(not_fresh);
+            }
+        }
 
         if !not_refreshed.is_empty() {
             // The conversation appears to be not found remotely, delete it.
@@ -202,7 +209,9 @@ async fn refresh_conversation_messages(
                 // so even if it is a draft it had to be removed from remote
                 // remove it locally as well
                 for local_msg in local_msgs.into_values() {
-                    local_msg.delete(tx).await?;
+                    if !local_msg.is_local_draft(tx).await? {
+                        local_msg.delete(tx).await?;
+                    }
                 }
 
                 Result::<(), MailActionError>::Ok(())

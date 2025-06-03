@@ -11,6 +11,7 @@ use proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, ArmoredPrivateKey, EncryptedKeyToken, KeyFlag, KeyId,
     KeyTokenSignature, LockedKey,
 };
+use wiremock::Times;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, ResponseTemplate};
 
@@ -38,6 +39,33 @@ impl TestContext {
         Mock::given(method("GET"))
             .and(path(format!("/api/core/v4/addresses/{}", address.id)))
             .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .named(function_name!())
+            .mount(self.mock_server())
+            .await;
+    }
+
+    /// Generate new mock expectations for retrieving addresses.
+    ///
+    /// This function will mock the response for the given addresses.
+    ///
+    /// # Parameters
+    ///
+    /// * `addresses` - The addresses to respond with. If `None`, an empty list will be used.
+    /// * `expect`    - How many times the endpoint should be called.
+    ///
+    #[function_name::named]
+    pub async fn mock_get_addresses(
+        &self,
+        addresses: Option<Vec<ApiAddress>>,
+        expect: impl Into<Times>,
+    ) {
+        let addresses = addresses.unwrap_or_default();
+        Mock::given(method("GET"))
+            .and(path("/api/core/v4/addresses"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(GetAddressesResponse { addresses }),
+            )
+            .expect(expect)
             .named(function_name!())
             .mount(self.mock_server())
             .await;
