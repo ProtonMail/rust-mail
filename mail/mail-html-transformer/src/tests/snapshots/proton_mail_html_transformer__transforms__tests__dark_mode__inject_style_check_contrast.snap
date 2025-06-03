@@ -316,12 +316,12 @@ img {
 }
 </style><style style="text/css">
                   @media ( prefers-color-scheme: dark ) {
-                      .case1 {
+                      #protonmail_message .case1 {
 background-color:#16171d!important;
 color:#fff!important
- }.case2 {
+ }#protonmail_message .case2 {
 background-color:#16171d!important
- }.case3 {
+ }#protonmail_message .case3 {
 background-color:#1c1b24!important
  }
 

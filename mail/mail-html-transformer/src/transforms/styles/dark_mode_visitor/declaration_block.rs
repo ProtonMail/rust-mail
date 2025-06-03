@@ -26,6 +26,22 @@ pub enum ShouldStoreOverridenProps {
     No,
 }
 
+
+/// Whether to remove `!important` flag from the original properties.
+/// 
+/// When we are parsing stylesheets we do not need to remove `!important` flag. Instead
+/// we can create a supplement with higher specificity.
+/// 
+/// However, when we are parsing `style=""` attribute, `!important` flag has utmost priority.
+/// We need to remove it in order to be able to override the property.
+/// 
+#[derive(Clone, Copy, Debug, Default)]
+pub enum ShouldRemoveImportant {
+    Yes,
+    #[default]
+    No,
+}
+
 /// Walks through the CSS declaration block, detects which
 /// color needs to be adjusted to dark theme.
 /// It modifies original stylesheet by removing `!important` flag if necessary.
@@ -39,6 +55,8 @@ pub(crate) struct DeclarationBlockVisitor {
 
     should_store_overriden_props: ShouldStoreOverridenProps,
 
+    should_remove_important: ShouldRemoveImportant,
+
     // Because PrinterOptions do not implement Clone
     #[default(printer_options)]
     pub printer_options: fn() -> PrinterOptions<'static>,
@@ -47,10 +65,12 @@ pub(crate) struct DeclarationBlockVisitor {
 impl DeclarationBlockVisitor {
     pub fn new(
         should_store_overriden_props: ShouldStoreOverridenProps,
+        should_remove_important: ShouldRemoveImportant,
         printer_options: fn() -> PrinterOptions<'static>,
     ) -> Self {
         Self {
             should_store_overriden_props,
+            should_remove_important,
             printer_options,
             ..Default::default()
         }
@@ -139,9 +159,11 @@ impl Visitor<'_> for DeclarationBlockVisitor {
                     }
                 }
 
-                if let Some(pos) = decls.important_declarations.iter().position(|p| p == &prop) {
-                    decls.important_declarations.remove(pos);
-                    decls.declarations.push(prop);
+                if matches!(self.should_remove_important, ShouldRemoveImportant::Yes) {
+                    if let Some(pos) = decls.important_declarations.iter().position(|p| p == &prop) {
+                        decls.important_declarations.remove(pos);
+                        decls.declarations.push(prop);
+                    }
                 }
             }
         }

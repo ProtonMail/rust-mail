@@ -159,6 +159,7 @@ impl Transformer {
             self.document.clone(),
             mode,
             capabilities,
+            "protonmail_message".to_owned() // TODO (wpolak): Inject that ID to the html tag
         );
     }
 
@@ -166,10 +167,16 @@ impl Transformer {
     /// of removing `!important` flag from styles and attributes.
     ///
     /// Supplement CSS are not injected, instead the function returns the head of the new document.
+    /// 
+    /// * `root_id` - the HTML ID of the message.
+    ///   In case of viewing message, it is usually pointing to the `html` tag.
+    ///   In case of composer, it is pointing to custom editor that wraps the message.
+    ///   Used to create a selector with bigger specificity than any provided by the sender.
     pub fn inject_dark_mode_to_another_target(
         &mut self,
         mode: ColorMode,
         capabilities: BrowserCapabilities,
+        root_id: String,
     ) -> String {
         use html5ever::namespace_url;
         let source = self.document.clone();
@@ -184,7 +191,7 @@ impl Transformer {
         );
         target.append(head.clone());
 
-        transforms::styles::inject_dark_mode(source, target.clone(), mode, capabilities);
+        transforms::styles::inject_dark_mode(source, target.clone(), mode, capabilities, root_id);
         inner_html(&head)
     }
 

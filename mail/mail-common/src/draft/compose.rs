@@ -280,11 +280,17 @@ pub struct DarkModeInjection {
 /// of removing `!important` flag from styles and attributes.
 ///
 /// Supplement CSS are not injected, instead the function returns the head in a separate string.
+/// 
+/// * `root_id` - the HTML ID of the message.
+///   In case of viewing message, it is usually pointing to the `html` tag.
+///   In case of composer, it is pointing to custom editor that wraps the message.
+///   Used to create a selector with bigger specificity than any provided by the sender.
 pub fn inject_dark_mode(
     mime_type: MimeType,
     body: &str,
     color_mode: ColorMode,
     capabilities: BrowserCapabilities,
+    root_id: String,
 ) -> DarkModeInjection {
     if mime_type == MimeType::TextPlain {
         return DarkModeInjection {
@@ -294,7 +300,7 @@ pub fn inject_dark_mode(
     }
 
     let mut transformer = Transformer::new(body);
-    let head = transformer.inject_dark_mode_to_another_target(color_mode, capabilities);
+    let head = transformer.inject_dark_mode_to_another_target(color_mode, capabilities, root_id);
     DarkModeInjection {
         head,
         body: transformer.to_string(),

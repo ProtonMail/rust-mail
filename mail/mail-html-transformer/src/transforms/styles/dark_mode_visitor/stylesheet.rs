@@ -9,7 +9,7 @@ use lightningcss::{
 };
 use smart_default::SmartDefault;
 
-use crate::transforms::styles::{Selector, StylesheetOverrides, printer_options};
+use crate::transforms::styles::{dark_mode_visitor::declaration_block::ShouldRemoveImportant, printer_options, Selector, StylesheetOverrides};
 
 use super::declaration_block::{DeclarationBlockVisitor, ShouldStoreOverridenProps};
 
@@ -24,13 +24,16 @@ pub(crate) struct StylesheetVisitor {
 
     selector_stack: Vec<Selector>,
 
+    root_id: String,
+
     // Because PrinterOptions do not implement Clone
     #[default(printer_options)]
     pub printer_options: fn() -> PrinterOptions<'static>,
 }
 impl StylesheetVisitor {
-    pub fn new(printer_options: fn() -> PrinterOptions<'static>) -> Self {
+    pub fn new(printer_options: fn() -> PrinterOptions<'static>, root_id: String) -> Self {
         Self {
+            root_id,
             printer_options,
             ..Default::default()
         }
@@ -56,7 +59,7 @@ impl Visitor<'_> for StylesheetVisitor {
         decls: &mut lightningcss::declaration::DeclarationBlock<'_>,
     ) -> Result<(), Self::Error> {
         let mut visitor =
-            DeclarationBlockVisitor::new(ShouldStoreOverridenProps::No, self.printer_options);
+            DeclarationBlockVisitor::new(ShouldStoreOverridenProps::No, ShouldRemoveImportant::No, self.printer_options);
 
         decls.visit(&mut visitor)?;
 
@@ -94,7 +97,16 @@ impl StylesheetVisitor {
     fn get_selectors(&self, rule: &CssRule<'_>) -> Option<String> {
         let printer_options = (self.printer_options)();
         match rule {
-            CssRule::Style(style) => style.selectors.to_css_string(printer_options).ok(),
+            CssRule::Style(style) => {
+                style.selectors.to_css_string(printer_options).ok()
+                    .map(|selector| {
+                        if selector == "html" {
+                            format!("html#{}", self.root_id)
+                        } else {
+                            format!("#{} {}", self.root_id, selector)
+                        }
+                    })
+            }
             CssRule::Media(media_rule) => {
                 let query = media_rule.query.to_css_string(printer_options).ok();
 

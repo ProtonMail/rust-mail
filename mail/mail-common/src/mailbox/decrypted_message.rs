@@ -61,6 +61,7 @@ pub struct ThemeOpts {
     /// Default: True - only Android 9 does not support it (so far)
     ///
     pub supports_dark_mode_via_media_query: bool,
+
 }
 
 impl ThemeOpts {

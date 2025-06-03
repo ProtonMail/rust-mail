@@ -314,7 +314,7 @@ img {
 }
 </style><style style="text/css">
                   @media ( prefers-color-scheme: dark ) {
-                      .main {
+                      #protonmail_message .main {
 color:#fff!important
  }
 
