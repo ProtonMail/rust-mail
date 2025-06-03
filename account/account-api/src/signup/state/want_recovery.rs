@@ -33,13 +33,13 @@ impl WantRecovery {
         match recovery.clone() {
             Recovery::Email(email) => {
                 self.client
-                    .validate_email(ValidateEmailRequest { email: email })
+                    .validate_email(ValidateEmailRequest { email })
                     .map_err(|_| SignupError::RecoveryEmailInvalid)
                     .await?;
             }
             Recovery::Phone(phone) => {
                 self.client
-                    .validate_phone(ValidatePhoneRequest { phone: phone })
+                    .validate_phone(ValidatePhoneRequest { phone })
                     .map_err(|_| SignupError::RecoveryPhoneNumberInvalid)
                     .await?;
             }

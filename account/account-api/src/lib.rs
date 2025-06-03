@@ -326,20 +326,24 @@ impl AccountApi for muon::Client {
         &self,
         request: ValidateEmailRequest,
     ) -> ApiServiceResult<SimpleResponse> {
-        let req = POST!("{CORE_V4}/validate/email").body_json(request)?;
         // We need an unauth session for this call so we the request through the client send function.
-        let res = self.send(req).await?;
-        Ok(res.ok()?.into_body_json()?)
+        Ok(self
+            .send(POST!("{CORE_V4}/validate/email").body_json(request)?)
+            .await?
+            .ok()?
+            .into_body_json()?)
     }
 
     async fn validate_phone(
         &self,
         request: ValidatePhoneRequest,
     ) -> ApiServiceResult<SimpleResponse> {
-        let req = POST!("{CORE_V4}/validate/phone").body_json(request)?;
         // We need an unauth session for this call so we the request through the client send function.
-        let res = self.send(req).await?;
-        Ok(res.ok()?.into_body_json()?)
+        Ok(self
+            .send(POST!("{CORE_V4}/validate/phone").body_json(request)?)
+            .await?
+            .ok()?
+            .into_body_json()?)
     }
 }
 
