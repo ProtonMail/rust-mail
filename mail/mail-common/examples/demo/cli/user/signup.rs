@@ -22,7 +22,7 @@ impl Cmd {
         Self::on_want_password(&mut flow)?;
 
         assert!(matches!(flow.kind()?, StateKind::WantRecovery));
-        Self::on_want_recovery(&mut flow)?;
+        Self::on_want_recovery(&mut flow).await?;
 
         assert!(matches!(flow.kind()?, StateKind::WantCreate));
         Self::on_want_create(&mut flow).await?;
@@ -63,10 +63,10 @@ impl Cmd {
         Ok(())
     }
 
-    fn on_want_recovery(flow: &mut SignupFlow) -> Result<()> {
+    async fn on_want_recovery(flow: &mut SignupFlow) -> Result<()> {
         let email = read("recovery email")?;
 
-        flow.submit_recovery_email(email)?;
+        flow.submit_recovery_email(email).await?;
 
         Ok(())
     }
