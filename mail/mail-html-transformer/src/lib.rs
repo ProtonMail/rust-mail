@@ -154,12 +154,13 @@ impl Transformer {
     /// This function adds dark mode support. This fails if the html doesn't have a head tag.
     #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub fn inject_dark_mode(&mut self, mode: ColorMode, capabilities: BrowserCapabilities) {
+        transforms::styles::inject_root_id_to_html(&self.document, "protonmail_message".to_owned());
         transforms::styles::inject_dark_mode(
             self.document.clone(),
             self.document.clone(),
             mode,
             capabilities,
-            "protonmail_message".to_owned() // TODO (wpolak): Inject that ID to the html tag
+            "protonmail_message".to_owned() 
         );
     }
 

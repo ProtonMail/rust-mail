@@ -2,7 +2,7 @@
 source: mail/mail-html-transformer/src/tests/transforms.rs
 expression: html.to_string()
 ---
-<html><head><style style="text/css">article,
+<html id="protonmail_message"><head><style style="text/css">article,
 aside,
 details,
 dialog,

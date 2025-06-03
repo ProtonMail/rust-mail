@@ -50,6 +50,13 @@ pub fn dark_mode_for_plaintext(mode: ColorMode, capabilities: BrowserCapabilitie
     }
 }
 
+/// Injects the root ID to the html tag.
+pub fn inject_root_id_to_html(document: &NodeRef, root_id: String) {
+    // SAFETY: Kuchiki always adds the html tag.
+    let html = document.select_first("html").unwrap();
+    html.attributes.borrow_mut().insert("id", root_id);
+}
+
 /// Adjusts style of the message to the light/dark mode.
 /// In case of light mode only slight changes are applied.
 /// In case of the dark mode, this function scans all styles provided by the sender,
