@@ -15,6 +15,7 @@ use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_api::verification::DynChallengeNotifier;
 use proton_core_common::auth_store::DecryptExt;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
+use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::{LabelError, ModelExtension};
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::{
@@ -33,7 +34,6 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::path::PathBuf;
 use std::sync::{Arc, Weak};
-use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio::task::{JoinError, JoinHandle};
 use tracing::{Level, error};
@@ -207,23 +207,12 @@ impl From<JoinError> for MailContextError {
     }
 }
 
-/// Defines how the event loop should be polled
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
-pub enum EventPollMode {
-    /// On demand,
-    Manual,
-    /// Background task that queues a request to polls the event loop in the
-    /// specified duration.
-    Automatic(Duration),
-}
-
 pub struct MailContext {
     core_context: Arc<Context>,
     mail_cache_path: PathBuf,
     /// This will get used in the near future.
     pub attachment_cache_size: u64,
     active_user_contexts: Mutex<HashMap<UserId, Weak<MailUserContext>>>,
-    pub event_poll_mode: EventPollMode,
 }
 
 impl MailContext {
@@ -261,6 +250,7 @@ impl MailContext {
             core_cache_path,
             connection_pool_size,
             log_path,
+            event_poll_mode,
         )
         .await?;
 
@@ -269,7 +259,6 @@ impl MailContext {
             mail_cache_path: mail_cache_path.into(),
             attachment_cache_size: cache_size,
             active_user_contexts: Mutex::new(HashMap::new()),
-            event_poll_mode,
         });
 
         let ctx_weak = Arc::downgrade(&ctx);
@@ -296,14 +285,12 @@ impl MailContext {
         core_context: Arc<Context>,
         mail_cache_path: PathBuf,
         mail_cache_size: u64,
-        event_poll_mode: EventPollMode,
     ) -> Result<Arc<Self>, MailContextError> {
         Ok(Arc::new(Self {
             core_context,
             mail_cache_path,
             attachment_cache_size: mail_cache_size,
             active_user_contexts: Mutex::new(HashMap::new()),
-            event_poll_mode,
         }))
     }
 

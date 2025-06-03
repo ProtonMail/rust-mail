@@ -1,5 +1,4 @@
 use crate::actions::rollback::RollbackAction;
-use crate::context::EventPollMode;
 use crate::user_context::events::subscriber::MailEventSubscriber;
 use crate::{MailContextError, MailUserContext};
 use anyhow::{anyhow, bail};
@@ -11,6 +10,7 @@ use proton_core_api::services::proton::EventId;
 use proton_core_api::services::proton::GetEventOptions;
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::session::CoreSession;
+use proton_core_common::event_loop::EventPollMode;
 use proton_event_loop::provider::Provider;
 use proton_event_loop::store::Store;
 use proton_event_loop::{EventLoopError, RawEvent};
@@ -182,7 +182,7 @@ impl MailUserContext {
     pub async fn poll_event_loop(
         &self,
     ) -> Result<(), ActionError<crate::actions::event_poll::EventPoll>> {
-        if self.mail_context.event_poll_mode != EventPollMode::Manual {
+        if self.user_context().event_poll_mode() != EventPollMode::Manual {
             warn!("Event poll mode is not configured as manual");
             return Ok(());
         }

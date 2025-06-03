@@ -1,5 +1,5 @@
 use crate::actions::draft::SEND_ACTION_GROUP;
-use crate::context::{EventPollMode, MailUserDatabaseInitializer, ShouldInitializeMailUserContext};
+use crate::context::{MailUserDatabaseInitializer, ShouldInitializeMailUserContext};
 use crate::{MailContext, MailContextResult, MailUserContext};
 use proton_action_queue::action::ActionGroup;
 use proton_action_queue::queue::{QueuedActionState, QueuedResult};
@@ -96,7 +96,6 @@ impl MailTestContext {
             core_test_context.context.clone(),
             mail_cache_path,
             mail_cache_size,
-            EventPollMode::Manual,
         )
         .await
         .expect("failed to create mail context");

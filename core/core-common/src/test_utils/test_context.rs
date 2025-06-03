@@ -1,4 +1,5 @@
 use crate::db::account::{CoreAccount, CoreSession};
+use crate::event_loop::EventPollMode;
 use crate::models::ModelExtension;
 use crate::test_utils::account::{TEST_USER_ID, TEST_USER_MAIL, testdata_user_secret};
 use crate::test_utils::utils::catch_all;
@@ -188,6 +189,7 @@ impl TestContext {
             tmp_dir.path().join("core-cache"),
             None,
             Some(tmp_dir.path().join("logs")),
+            EventPollMode::Manual,
         )
         .await
         .expect("failed to create core context");

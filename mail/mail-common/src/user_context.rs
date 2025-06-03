@@ -6,7 +6,6 @@ mod initialization;
 use self::events::MailEventLoopContext;
 use crate::actions::draft::SEND_ACTION_GROUP;
 use crate::actions::register_mail_actions;
-use crate::context::EventPollMode;
 use crate::draft::attachments::DraftStagingAreaCleaner;
 use crate::events::MailEvent;
 use crate::models::{Conversation, Message};
@@ -21,6 +20,7 @@ use proton_core_api::services::proton::{AddressId, SessionId, UserId};
 use proton_core_api::services::proton::{Proton, ProtonCore};
 use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::datatypes::{AccountDetails, LocalAddressId};
+use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::{Address, User, UserSettings};
 use proton_core_common::{ContactError, CoreContextError, UserContext};
 use proton_crypto_inbox::keys::{ComposerPreference, CryptoMailSettings, SendPreferences};
@@ -112,7 +112,7 @@ impl MailUserContext {
         this.init_expiration_loop();
         this.register_subscribers().await?;
 
-        if let EventPollMode::Automatic(interval) = this.mail_context.event_poll_mode {
+        if let EventPollMode::Automatic(interval) = this.user_context().event_poll_mode() {
             this.init_event_loop_poll(interval)
                 .await
                 .inspect_err(|e| error!("Failed to init event loop task: {e:?}"))?;
@@ -230,7 +230,7 @@ impl MailUserContext {
     }
 
     /// Get the inner core context which this context wraps as an Arc.
-    pub fn arc_user_context(&self) -> &Arc<UserContext> {
+    pub fn user_context_arc(&self) -> &Arc<UserContext> {
         &self.user_context
     }
 

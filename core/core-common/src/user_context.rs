@@ -2,6 +2,7 @@ pub use self::keys::*;
 use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
+use crate::event_loop::EventPollMode;
 use crate::events::CoreEvent;
 use crate::models::{InitializationWatcher, UserSettings};
 use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse};
@@ -172,6 +173,11 @@ impl UserContext {
     #[must_use]
     pub fn user_id(&self) -> &UserId {
         &self.user_id
+    }
+
+    /// Get the event poll mode of this context.
+    pub fn event_poll_mode(&self) -> EventPollMode {
+        self.context.event_poll_mode
     }
 
     /// Get path to the log file.

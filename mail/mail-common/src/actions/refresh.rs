@@ -68,7 +68,7 @@ impl proton_action_queue::action::Handler for RefreshHandler {
         _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         context
-            .arc_user_context()
+            .user_context_arc()
             .on_refresh_impl(action.refresh)
             .await?;
         context.as_arc().on_refresh_impl(action.refresh).await?;

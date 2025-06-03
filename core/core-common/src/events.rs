@@ -185,50 +185,6 @@ pub struct CoreEvent {
     pub refresh: Refresh,
 }
 
-impl CoreEvent {
-    /// Get a mutable reference to the core event user
-    #[must_use]
-    pub fn get_core_event_user_mut(&mut self) -> Option<&mut User> {
-        self.user.as_mut()
-    }
-
-    /// Get a mutable reference to the core event user settings
-    #[must_use]
-    pub fn get_core_event_user_settings_mut(&mut self) -> Option<&mut UserSettings> {
-        self.user_settings.as_mut()
-    }
-
-    /// Get the core event used space
-    #[must_use]
-    pub fn get_core_event_used_space(&self) -> Option<i64> {
-        self.used_space
-    }
-
-    /// Get the core event used product space
-    #[must_use]
-    pub fn get_core_event_used_product_space(&self) -> Option<&ProductUsedSpace> {
-        self.product_used_space.as_ref()
-    }
-
-    /// Get a mutable reference to the core event addresses
-    #[must_use]
-    pub fn get_core_event_addresses_mut(&mut self) -> Option<&mut [AddressEvent]> {
-        self.addresses.as_deref_mut()
-    }
-
-    /// Get a mutable reference to the core event contacts
-    #[must_use]
-    pub fn get_core_event_contacts_mut(&mut self) -> Option<&mut [ContactEvent]> {
-        self.contacts.as_deref_mut()
-    }
-
-    /// Get a mutable reference to the core event contact emails
-    #[must_use]
-    pub fn get_core_event_contact_emails_mut(&mut self) -> Option<&mut [ContactEmailEvent]> {
-        self.contact_emails.as_deref_mut()
-    }
-}
-
 impl Event for CoreEvent {
     type Response = ApiCoreEvent;
 

@@ -10,6 +10,7 @@ use crate::db::account::{
     SessionEncryptionKey,
 };
 use crate::db::migrations::migrate_account_db;
+use crate::event_loop::EventPollMode;
 use crate::models::{AppSettings, ModelExtension};
 use crate::nuke_utils::{
     drop_all_tables_in_database, remove_or_clear_dir_safe, rename_database_files,
@@ -253,6 +254,7 @@ pub struct Context {
     cancellation_token: CancellationToken,
     task_service: BackgroundAwareTaskService,
     on_session_deleted_broadcast: broadcast::Sender<(SessionId, UserId)>,
+    pub event_poll_mode: EventPollMode,
 }
 
 const SESSION_OBSERVER_BROADCAST_CAPACITY: usize = 8;
@@ -286,6 +288,7 @@ impl Context {
         cache_path: impl Into<PathBuf>,
         connection_pool_size: Option<u32>,
         log_path: Option<PathBuf>,
+        event_poll_mode: EventPollMode,
     ) -> CoreContextResult<Arc<Self>> {
         let initializers = initializers.into_iter().collect::<Vec<_>>();
         let account_db_path = account_db_path.into();
@@ -330,6 +333,7 @@ impl Context {
             cancellation_token: CancellationToken::new(),
             task_service: BackgroundAwareTaskService::new(task_service),
             on_session_deleted_broadcast: broadcast_sender,
+            event_poll_mode,
         });
 
         let ctx_weak = ctx.this.clone();

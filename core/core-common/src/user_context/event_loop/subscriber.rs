@@ -215,14 +215,14 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
         let mut conn = stash.connection();
         conn.tx::<_, _, StashError>(async |tx| {
             for event in events.iter_mut() {
-                if let Some(user) = event.get_core_event_user_mut() {
+                if let Some(user) = event.user.as_mut() {
                     debug!("Handling user event");
                     user.save(tx).await.map_err(|e| {
                         error!("Failed to update user: {e:?}");
                         e
                     })?;
                 }
-                if let Some(settings) = event.get_core_event_user_settings_mut() {
+                if let Some(settings) = event.user_settings.as_mut() {
                     debug!("Handling user setting event");
                     settings.remote_id = Some(user_id.clone());
                     settings.save(tx).await.map_err(|e| {
@@ -230,7 +230,7 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
                         e
                     })?;
                 }
-                if let Some(used_space) = event.get_core_event_used_space() {
+                if let Some(used_space) = event.used_space {
                     debug!("Handling user space event");
                     let mut user = User::load(user_id.clone(), tx).await?.unwrap();
                     user.used_space = used_space;
@@ -239,7 +239,7 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
                         e
                     })?;
                 }
-                if let Some(used_product_space) = event.get_core_event_used_product_space() {
+                if let Some(used_product_space) = event.product_used_space.as_ref() {
                     debug!("Handling user product space event");
                     let mut user = User::load(user_id.clone(), tx).await?.unwrap();
                     user.product_used_space = used_product_space.clone();
@@ -248,15 +248,15 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
                         e
                     })?;
                 }
-                if let Some(addresses) = event.get_core_event_addresses_mut() {
+                if let Some(addresses) = event.addresses.as_mut() {
                     debug!("Handling address event");
                     handle_address_event(tx, addresses).await?;
                 }
-                if let Some(contacts) = event.get_core_event_contacts_mut() {
+                if let Some(contacts) = event.contacts.as_mut() {
                     debug!("Handling contact events");
                     handle_contact_event(tx, contacts).await?;
                 }
-                if let Some(contact_emails) = event.get_core_event_contact_emails_mut() {
+                if let Some(contact_emails) = event.contact_emails.as_mut() {
                     debug!("Handling contact email events");
                     handle_contact_email_event(tx, contact_emails).await?;
                 }
