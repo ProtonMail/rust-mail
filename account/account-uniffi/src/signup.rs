@@ -57,6 +57,14 @@ pub enum SignupError {
     /// An unexpected internal error occurred.
     #[error("Internal error")]
     Internal,
+
+    /// The recovery email format is invalid
+    #[error("Recovery email format is invalid")]
+    RecoveryEmailInvalid,
+
+    /// The recovery phone number format is invalid
+    #[error("Recovery phone number format is invalid")]
+    RecoveryPhoneNumberInvalid,
 }
 
 impl From<RealSignupError> for SignupError {
@@ -72,6 +80,8 @@ impl From<RealSignupError> for SignupError {
             RealSignupError::SetAuthInfoFailed(_) => Self::Internal,
             RealSignupError::SetUserDataFailed(_) => Self::Internal,
             RealSignupError::InvalidState => Self::Internal,
+            RealSignupError::RecoveryEmailInvalid => Self::RecoveryEmailInvalid,
+            RealSignupError::RecoveryPhoneNumberInvalid => Self::RecoveryPhoneNumberInvalid,
         }
     }
 }
@@ -240,6 +250,7 @@ impl SignupFlow {
             flow.lock()
                 .await
                 .submit_recovery_email(email)
+                .await
                 .map_err(SignupError::from)
         })
         .await?;
@@ -258,6 +269,7 @@ impl SignupFlow {
             flow.lock()
                 .await
                 .submit_recovery_phone(phone)
+                .await
                 .map_err(SignupError::from)
         })
         .await?;
@@ -269,8 +281,14 @@ impl SignupFlow {
     pub async fn skip_recovery(&self) -> Result<SimpleSignupState, SignupError> {
         let flow = self.flow.clone();
 
-        uniffi_async(async move { flow.lock().await.skip_recovery().map_err(SignupError::from) })
-            .await?;
+        uniffi_async(async move {
+            flow.lock()
+                .await
+                .skip_recovery()
+                .await
+                .map_err(SignupError::from)
+        })
+        .await?;
 
         Ok(self.get_state())
     }

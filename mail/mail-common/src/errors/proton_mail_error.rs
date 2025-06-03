@@ -162,6 +162,8 @@ impl From<SignupError> for ProtonMailError {
             SignupError::SetAuthInfoFailed(_) => Self::Unexpected(Unexpected::Internal),
             SignupError::SetUserDataFailed(_) => Self::Unexpected(Unexpected::Internal),
             SignupError::InvalidState => Self::Unexpected(Unexpected::Internal),
+            SignupError::RecoveryEmailInvalid => Self::Unexpected(Unexpected::Internal),
+            SignupError::RecoveryPhoneNumberInvalid => Self::Unexpected(Unexpected::Internal),
         }
     }
 }

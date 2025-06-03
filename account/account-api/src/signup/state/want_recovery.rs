@@ -1,7 +1,11 @@
+use crate::AccountApi;
 use crate::countries::{COUNTRIES, Country};
+use crate::prelude::{ValidateEmailRequest, ValidatePhoneRequest};
+use crate::signup::SignupError;
 use crate::signup::state::want_create::WantCreate;
-use crate::signup::state::{Recovery, State, Username};
+use crate::signup::state::{Recovery, StateResult, Username};
 use derive_more::Display;
+use futures::TryFutureExt;
 use muon::Client;
 
 /// Represents the state where the user can provide recovery information.
@@ -25,8 +29,24 @@ impl WantRecovery {
     }
 
     /// Submits recovery info, or skips it if `Recovery::None` is provided.
-    pub fn submit_recovery(self, recovery: Recovery) -> State {
-        WantCreate::new(self.client, self.username, self.password, recovery).into()
+    pub async fn submit_recovery(self, recovery: Recovery) -> StateResult {
+        match recovery.clone() {
+            Recovery::Email(email) => {
+                self.client
+                    .validate_email(ValidateEmailRequest { email })
+                    .map_err(|_| SignupError::RecoveryEmailInvalid)
+                    .await?;
+            }
+            Recovery::Phone(phone) => {
+                self.client
+                    .validate_phone(ValidatePhoneRequest { phone })
+                    .map_err(|_| SignupError::RecoveryPhoneNumberInvalid)
+                    .await?;
+            }
+            Recovery::None => {}
+        };
+
+        Ok(WantCreate::new(self.client, self.username, self.password, recovery).into())
     }
 
     /// Available countries getter.

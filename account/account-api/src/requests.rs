@@ -275,6 +275,20 @@ pub struct SetupKeysRequest {
     pub encrypted_secret: Option<String>,
 }
 
+/// Represents a request to validate an email address
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ValidateEmailRequest {
+    pub email: String,
+}
+
+/// Represents a request to validate a phone number
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ValidatePhoneRequest {
+    pub phone: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -466,5 +480,23 @@ mod tests {
         let deserialized: SetupKeysRequest =
             serde_json::from_str(json).expect("Failed to deserialize");
         assert_eq!(deserialized, expected);
+    }
+
+    #[test]
+    fn test_validate_email_serialization() {
+        let request_with_type = ValidateEmailRequest {
+            email: "einstein@pm.me".to_string(),
+        };
+        let serialized = serde_json::to_string(&request_with_type).expect("Failed to serialize");
+        assert_eq!(serialized, r#"{"Email":"einstein@pm.me"}"#);
+    }
+
+    #[test]
+    fn test_validate_phone_serialization() {
+        let request_with_type = ValidatePhoneRequest {
+            phone: "+4915735774265".to_string(),
+        };
+        let serialized = serde_json::to_string(&request_with_type).expect("Failed to serialize");
+        assert_eq!(serialized, r#"{"Phone":"+4915735774265"}"#);
     }
 }
