@@ -78,7 +78,7 @@ pub fn parse(c: &mut Criterion) {
                     BrowserCapabilities {
                         supports_dark_mode_via_media_query: true,
                     },
-                    "protonmail_message".to_owned(),
+                    "#protonmail-message".to_owned(),
                 );
             })
         });

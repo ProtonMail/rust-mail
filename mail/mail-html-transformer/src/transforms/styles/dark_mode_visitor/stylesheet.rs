@@ -24,16 +24,16 @@ pub(crate) struct StylesheetVisitor {
 
     selector_stack: Vec<Selector>,
 
-    root_id: String,
+    root_selector: String,
 
     // Because PrinterOptions do not implement Clone
     #[default(printer_options)]
     pub printer_options: fn() -> PrinterOptions<'static>,
 }
 impl StylesheetVisitor {
-    pub fn new(printer_options: fn() -> PrinterOptions<'static>, root_id: String) -> Self {
+    pub fn new(printer_options: fn() -> PrinterOptions<'static>, root_selector: String) -> Self {
         Self {
-            root_id,
+            root_selector,
             printer_options,
             ..Default::default()
         }
@@ -101,9 +101,9 @@ impl StylesheetVisitor {
                 style.selectors.to_css_string(printer_options).ok()
                     .map(|selector| {
                         if selector == "html" {
-                            format!("html#{}", self.root_id)
+                            format!("html{}", self.root_selector)
                         } else {
-                            format!("#{} {}", self.root_id, selector)
+                            format!("{} {}", self.root_selector, selector)
                         }
                     })
             }

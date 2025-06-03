@@ -314,8 +314,10 @@ img {
 }
 </style><style style="text/css">
                   @media ( prefers-color-scheme: dark ) {
-                      #protonmail_message .main {
+                      #protonmail-message .main {
 color:#fff!important
+ }html#protonmail-message {
+background-color:#1c1b24!important
  }
 
                   }

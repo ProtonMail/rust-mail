@@ -154,13 +154,13 @@ impl Transformer {
     /// This function adds dark mode support. This fails if the html doesn't have a head tag.
     #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub fn inject_dark_mode(&mut self, mode: ColorMode, capabilities: BrowserCapabilities) {
-        transforms::styles::inject_root_id_to_html(&self.document, "protonmail_message".to_owned());
+        transforms::styles::inject_root_selector_to_html(&self.document);
         transforms::styles::inject_dark_mode(
             self.document.clone(),
             self.document.clone(),
             mode,
             capabilities,
-            "protonmail_message".to_owned() 
+            "[data-protonmail-message]".to_owned() 
         );
     }
 
@@ -169,15 +169,15 @@ impl Transformer {
     ///
     /// Supplement CSS are not injected, instead the function returns the head of the new document.
     /// 
-    /// * `root_id` - the HTML ID of the message.
-    ///   In case of viewing message, it is usually pointing to the `html` tag.
-    ///   In case of composer, it is pointing to custom editor that wraps the message.
+    /// * `root_selector` - the CSS selector of the root of message.
+    ///   In case of viewing message, it is usually data attribute pointing to the `html` tag.
+    ///   In case of composer, it is ID pointing to custom editor that wraps the message.
     ///   Used to create a selector with bigger specificity than any provided by the sender.
     pub fn inject_dark_mode_to_another_target(
         &mut self,
         mode: ColorMode,
         capabilities: BrowserCapabilities,
-        root_id: String,
+        root_selector: String,
     ) -> String {
         use html5ever::namespace_url;
         let source = self.document.clone();
@@ -192,7 +192,7 @@ impl Transformer {
         );
         target.append(head.clone());
 
-        transforms::styles::inject_dark_mode(source, target.clone(), mode, capabilities, root_id);
+        transforms::styles::inject_dark_mode(source, target.clone(), mode, capabilities, root_selector);
         inner_html(&head)
     }
 
