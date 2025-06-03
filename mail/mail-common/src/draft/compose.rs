@@ -10,7 +10,7 @@ use proton_core_common::models::Address;
 use proton_crypto_inbox::message::{EncryptableDraft, EncryptedDraft};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_api::services::proton::request_data::DraftRecipient;
-use proton_mail_html_transformer::Transformer;
+use proton_mail_html_transformer::{Html2TextOptions, Transformer};
 use std::borrow::Cow;
 use std::fmt::Display;
 use tracing::error;
@@ -88,18 +88,37 @@ pub(super) async fn patch_draft_with_reply_mode(
 }
 
 /// Build signature from mail settings.
-pub(super) fn get_signature(address: &Address, mail_settings: &MailSettings) -> String {
-    let line_break = if mail_settings.draft_mime_type == MimeType::TextHtml {
+///
+/// `mime_type` is passed in explicitly since it can be overridden when reply to html content
+/// for instance.
+pub(super) fn get_signature(
+    address: &Address,
+    mail_settings: &MailSettings,
+    mime_type: MimeType,
+) -> String {
+    let line_break = if mime_type == MimeType::TextHtml {
         HTML_LINE_BREAK
     } else {
         "\n"
     };
-    let mut signature = address.signature.clone();
+    let mut signature = if mime_type == MimeType::TextPlain {
+        // convert signature from html to text, since it is possible there html content in it.
+        Transformer::html2text_str(
+            &address.signature,
+            Html2TextOptions {
+                link_foot_notes: false,
+                ..Default::default()
+            },
+        )
+        .unwrap_or(address.signature.clone())
+    } else {
+        address.signature.clone()
+    };
 
     if mail_settings.pm_signature != PmSignature::Disabled {
         signature.push_str(line_break);
         signature.push_str(line_break);
-        if mail_settings.draft_mime_type == MimeType::TextHtml {
+        if mime_type == MimeType::TextHtml {
             signature.push_str(PM_SIGNATURE_HTML);
         } else {
             signature.push_str(PM_SIGNATURE_PLAIN_TEXT);
@@ -236,7 +255,7 @@ pub fn html_to_text(input: &str) -> String {
     transformer.add_noreferrer();
     transformer.strip_utm();
     transformer.strip_whitelist();
-    match transformer.to_plain_text() {
+    match transformer.to_plain_text(Default::default()) {
         Ok(text_body) => text_body,
         Err(e) => {
             error!("Failed to convert html to text: {e:?}");
