@@ -34,13 +34,13 @@ impl WantRecovery {
             Recovery::Email(email) => {
                 self.client
                     .validate_email( ValidateEmailRequest { email: email })
-                    .map_err(|_| SignupError::UsernameUnavailable)
+                    .map_err(|_| SignupError::RecoveryEmailInvalid)
                     .await?;
             },
             Recovery::Phone(phone) => {
                 self.client
                     .validate_phone( ValidatePhoneRequest { phone: phone })
-                    .map_err(|_| SignupError::UsernameUnavailable)
+                    .map_err(|_| SignupError::RecoveryPhoneNumberInvalid)
                     .await?;
             },
             Recovery::None => {}
