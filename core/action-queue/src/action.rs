@@ -1,4 +1,4 @@
-use crate::db::{ExecutionGuard, StoredAction};
+use crate::db::{ActionDependency, ExecutionGuard, StoredAction};
 use crate::queue::{QueuedAction, QueuedMetadata, TypeErasedAction};
 use anyhow::Context;
 use derive_more::derive::TryFrom;
@@ -457,7 +457,7 @@ sql_using_serde!(Resources);
 pub struct Metadata {
     /// List of queued actions the action depends upon. The action will only execute if all
     /// the dependencies have been executed.
-    pub(crate) dependencies: Vec<ActionId>,
+    pub(crate) dependencies: Vec<ActionDependency>,
     /// Optional debug string which can be assigned to diagnose issues or provide more context.
     pub(crate) debug_string: Option<String>,
     /// A list of resources to associate with this action. Can be any of any type as long as it is
@@ -536,7 +536,47 @@ impl MetadataBuilder {
         Ok(self)
     }
 
+    /// Assign `action_id` as a sequential dependency of this action.
+    ///
+    /// If the dependent action fails, this action will still be executed.
+    ///
+    /// The action to which this metadata will be assigned will not execute until
+    /// `action_id` has completed.
+    ///
+    /// This function is cumulative and  will not override previous values if called
+    /// multiple times.
+    #[must_use]
+    pub fn with_sequential_dependency(mut self, action_id: ActionId) -> Self {
+        self.metadata
+            .dependencies
+            .push(ActionDependency::sequential(action_id));
+        self
+    }
+
+    /// Assign `action_ids` as a sequential dependency of this action.
+    ///
+    /// If the dependent action fails, this action will still be executed.
+    ///
+    /// The action to which this metadata will be assigned will not execute until
+    /// all the actions in `action_ids` have completed.
+    ///
+    /// This function is cumulative and  will not override previous values if called
+    /// multiple times.
+    #[must_use]
+    pub fn with_sequential_dependencies(
+        mut self,
+        action_ids: impl IntoIterator<Item = ActionId>,
+    ) -> Self {
+        self.metadata
+            .dependencies
+            .extend(action_ids.into_iter().map(ActionDependency::sequential));
+        self
+    }
+
     /// Assign `action_id` as a dependency of this action.
+    ///
+    /// If the dependent action fails, this action will not be executed and local state will
+    /// be reverted.
     ///
     /// The action to which this metadata will be assigned will not execute until
     /// `action_id` has completed.
@@ -545,11 +585,16 @@ impl MetadataBuilder {
     /// multiple times.
     #[must_use]
     pub fn with_dependency(mut self, action_id: ActionId) -> Self {
-        self.metadata.dependencies.push(action_id);
+        self.metadata
+            .dependencies
+            .push(ActionDependency::direct(action_id));
         self
     }
 
     /// Assign `action_ids` as a dependency of this action.
+    ///
+    /// If the dependent action fails, this action will not be executed and local state will
+    /// be reverted.
     ///
     /// The action to which this metadata will be assigned will not execute until
     /// all the actions in `action_ids` have completed.
@@ -558,7 +603,9 @@ impl MetadataBuilder {
     /// multiple times.
     #[must_use]
     pub fn with_dependencies(mut self, action_ids: impl IntoIterator<Item = ActionId>) -> Self {
-        self.metadata.dependencies.extend(action_ids);
+        self.metadata
+            .dependencies
+            .extend(action_ids.into_iter().map(ActionDependency::direct));
         self
     }
 

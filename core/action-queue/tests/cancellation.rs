@@ -206,6 +206,73 @@ async fn accidental_cyclic_dependency_with_replace() {
     };
     assert!(matches!(err, ActionError::Queue(Error::CyclicDependency)));
 }
+
+#[tokio::test]
+async fn cancel_causes_revert_to_only_direct_dependees() {
+    // Check that cancellation reverts local state and all the subsequent actions
+    // that depend on the cancelled action.
+    let queue = new_queue_typed::<ChainCancelAction>().await;
+
+    let key = "foo";
+    let value = 30_u32;
+    let value2 = 1245_u32;
+    let value3 = 100_u32;
+    let value4 = 400_u32;
+
+    {
+        let mut conn = queue.stash().connection();
+        conn.tx(async |tx| tx.ext_insert_value(key, value).await)
+            .await
+            .unwrap();
+    }
+
+    let action_id1 = queue
+        .queue_action(ChainCancelAction {
+            key: key.to_string(),
+            value: value2,
+            old_value: 0,
+        })
+        .await
+        .unwrap()
+        .id;
+
+    let action_id2 = queue
+        .queue_action_with_metadata(
+            ChainCancelAction {
+                key: key.to_string(),
+                value: value3,
+                old_value: 0,
+            },
+            MetadataBuilder::new().with_dependency(action_id1).build(),
+        )
+        .await
+        .unwrap()
+        .id;
+
+    let action_id3 = queue
+        .queue_action_with_metadata(
+            ChainCancelAction {
+                key: key.to_string(),
+                value: value4,
+                old_value: 0,
+            },
+            MetadataBuilder::new()
+                .with_sequential_dependencies([action_id2])
+                .build(),
+        )
+        .await
+        .unwrap()
+        .id;
+
+    // Cancel first action and observe the last action is still present.
+    let cancelled = queue.cancel(action_id1).await.unwrap();
+    assert!(cancelled.contains(&action_id2));
+    assert!(!cancelled.contains(&action_id3));
+    assert!(!queue.contains(action_id1).await.unwrap());
+    assert!(queue.contains(action_id3).await.unwrap());
+    assert!(!queue.contains(action_id2).await.unwrap());
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct CancelAction {
     pub key: String,
