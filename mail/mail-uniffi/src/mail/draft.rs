@@ -219,37 +219,42 @@ impl Draft {
     /// It contains styles for dark mode and nothing else.
     ///
     /// **WARNING**: This function modifies the draft content by removing `!important` flag.
-    /// 
+    ///
     /// # Returned HTML
-    /// 
+    ///
     /// This function returns HTML that can be inserted INTO `<head>` tag.
     /// It does not provide `<head>` tag on its own.
     /// Therefore, the returned HTML can be inserted alongside with other html nodes.
-    /// 
+    ///
     /// ## Example of usage
-    /// 
+    ///
     /// ```ignore
     /// let head_to_inject = draft.html_head_content_for_composer(theme_opts);
-    /// 
+    ///
     /// let template = format!("
     /// <html>
     /// <head>
-    /// 
+    ///
     ///    <meta ...things set up for the composer />
     ///    
     ///    {head_to_inject}
-    /// 
+    ///
     /// </head>
     /// <body>
     /// ...
     /// </body>
     /// </html>
     /// ");
-    /// 
+    ///
     /// ```
     pub fn html_head_content_for_composer(&self, theme_opts: ThemeOpts) -> String {
         let theme_opts = theme_opts.into();
-        async_runtime().block_on(async { self.instance.write().await.html_head_content_for_composer(theme_opts) })
+        async_runtime().block_on(async {
+            self.instance
+                .write()
+                .await
+                .html_head_content_for_composer(theme_opts)
+        })
     }
 
     /// Get the draft's body.

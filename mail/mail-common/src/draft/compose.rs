@@ -10,9 +10,11 @@ use proton_core_common::models::Address;
 use proton_crypto_inbox::message::{EncryptableDraft, EncryptedDraft};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_api::services::proton::request_data::DraftRecipient;
-use proton_mail_html_transformer::{Html2TextOptions, Transformer};
 use proton_mail_html_transformer::transforms::ColorMode;
-use proton_mail_html_transformer::transforms::styles::BrowserCapabilities;
+use proton_mail_html_transformer::transforms::styles::{
+    BrowserCapabilities, dark_mode_for_plaintext,
+};
+use proton_mail_html_transformer::{Html2TextOptions, Transformer};
 use std::borrow::Cow;
 use std::fmt::Display;
 use tracing::error;
@@ -279,10 +281,18 @@ pub struct DarkModeInjection {
 ///
 /// Supplement CSS are not injected, instead the function returns the head in a separate string.
 pub fn inject_dark_mode(
+    mime_type: MimeType,
     body: &str,
     color_mode: ColorMode,
     capabilities: BrowserCapabilities,
 ) -> DarkModeInjection {
+    if mime_type == MimeType::TextPlain {
+        return DarkModeInjection {
+            head: dark_mode_for_plaintext(color_mode, capabilities).to_owned(),
+            body: body.to_owned(),
+        };
+    }
+
     let mut transformer = Transformer::new(body);
     let head = transformer.inject_dark_mode_to_another_target(color_mode, capabilities);
     DarkModeInjection {

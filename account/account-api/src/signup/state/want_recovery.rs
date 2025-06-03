@@ -44,7 +44,7 @@ impl WantRecovery {
                     .await?;
             }
             Recovery::None => {}
-        };
+        }
 
         Ok(WantCreate::new(self.client, self.username, self.password, recovery).into())
     }

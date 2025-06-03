@@ -1433,38 +1433,41 @@ impl Draft {
     /// # Modifications to the body
     ///
     /// * If the body contains `!important` flag, it will be removed.
-    /// 
+    ///
     /// # Returned HTML
-    /// 
+    ///
     /// This function returns HTML that can be inserted INTO `<head>` tag.
     /// It does not provide `<head>` tag on its own.
     /// Therefore, the returned HTML can be inserted alongside with other html nodes.
-    /// 
+    ///
     /// ## Example of usage
-    /// 
+    ///
     /// ```ignore
     /// let head_to_inject = draft.html_head_content_for_composer(theme_opts);
-    /// 
+    ///
     /// let template = format!("
     /// <html>
     /// <head>
-    /// 
+    ///
     ///    <meta ...things set up for the composer />
     ///    
     ///    {head_to_inject}
-    /// 
+    ///
     /// </head>
     /// <body>
     /// ...
     /// </body>
     /// </html>
     /// ");
-    /// 
+    ///
     /// ```
     pub fn html_head_content_for_composer(&mut self, theme_opts: ThemeOpts) -> String {
         let color_mode = theme_opts.color_mode();
 
+        let mime_type = self.mime_type();
+
         let injection = inject_dark_mode(
+            mime_type,
             &self.body,
             color_mode,
             BrowserCapabilities {

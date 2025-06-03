@@ -21,6 +21,35 @@ mod capabilities;
 mod dark_mode_visitor;
 mod support_level;
 
+/// This function provides stylesheets for dark mode in plaintext messages.
+/// In plaintext we do not need to parse HTML/CSS and just need to return static
+/// stylesheets builtin in the SDK.
+///
+pub fn dark_mode_for_plaintext(mode: ColorMode, capabilities: BrowserCapabilities) -> &'static str {
+    let level = DarkStyleSupportLevel::new_for_plaintext(mode, capabilities);
+
+    let BrowserCapabilities {
+        supports_dark_mode_via_media_query,
+    } = capabilities;
+
+    match (level, supports_dark_mode_via_media_query) {
+        (DarkStyleSupportLevel::NoDarkMode, false) => {
+            // If dark mode is currently not supported, let's just inject static css style.
+            //
+            include_str!("./light.css")
+        }
+        (_, false) => {
+            // We detected, that the message can be safely rendered in the dark mode.
+            include_str!("./dark.css")
+        }
+        (_, true) => {
+            // Browser supports `@media (prefers-color-scheme: dark)`.
+            // So instead switching between light/dark CSS we can inject merged one
+            include_str!("./light_and_dark.css")
+        }
+    }
+}
+
 /// Adjusts style of the message to the light/dark mode.
 /// In case of light mode only slight changes are applied.
 /// In case of the dark mode, this function scans all styles provided by the sender,
@@ -48,7 +77,7 @@ pub fn inject_dark_mode(
     //   For example if our supplement stylesheet has selector prefix of `#protonmail_editor `
     // * Make sure that `!important` removal from attributes is reversible.
     //   For example by keeping `data-proton-original-style` attribute.
-    let level = DarkStyleSupportLevel::new(mode, &source, capabilities);
+    let level = DarkStyleSupportLevel::new_for_html(mode, &source, capabilities);
 
     let BrowserCapabilities {
         supports_dark_mode_via_media_query,
