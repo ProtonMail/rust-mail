@@ -14,6 +14,8 @@ use tokio::sync::Mutex;
 use tokio::task::JoinError;
 use uniffi_runtime::{async_runtime, uniffi_async};
 
+use crate::password_validator::PasswordValidatorServiceToken;
+
 /// Errors that can occur during the signup flow, exposed via `UniFFI`.
 #[derive(Debug, Error, uniffi::Error)]
 pub enum SignupError {
@@ -41,6 +43,12 @@ pub enum SignupError {
 
     #[error("Passwords do not match")]
     PasswordsNotMatching,
+
+    #[error("Password validation mismatch")]
+    PasswordValidationMismatch,
+
+    #[error("Password not validated")]
+    PasswordNotValidated,
 
     /// Account creation step failed.
     #[error("Account creation failed")]
@@ -212,31 +220,29 @@ impl SignupFlow {
         Ok(self.get_state())
     }
 
+    /// Submit validated password.
+    pub async fn submit_validated_password(
+        &self,
+        password: String,
+        confirm_password: String,
+        token: Option<Arc<PasswordValidatorServiceToken>>,
+    ) -> Result<SimpleSignupState, SignupError> {
+        token
+            .ok_or(SignupError::PasswordNotValidated)?
+            .matches(&password)
+            .then_some(())
+            .ok_or(SignupError::PasswordValidationMismatch)?;
+
+        self.submit_password_flow(password, confirm_password).await
+    }
+
     /// Submit password.
     pub async fn submit_password(
         &self,
         password: String,
         confirm_password: String,
     ) -> Result<SimpleSignupState, SignupError> {
-        if password.trim().is_empty() {
-            return Err(SignupError::PasswordEmpty);
-        }
-
-        if password != confirm_password {
-            return Err(SignupError::PasswordsNotMatching);
-        }
-
-        let flow = self.flow.clone();
-
-        uniffi_async(async move {
-            flow.lock()
-                .await
-                .submit_password(password)
-                .map_err(SignupError::from)
-        })
-        .await?;
-
-        Ok(self.get_state())
+        self.submit_password_flow(password, confirm_password).await
     }
 
     /// Submit a recovery email address.
@@ -353,5 +359,33 @@ impl SignupFlow {
             })
         })
         .await
+    }
+}
+
+impl SignupFlow {
+    async fn submit_password_flow(
+        &self,
+        password: String,
+        confirm_password: String,
+    ) -> Result<SimpleSignupState, SignupError> {
+        if password.trim().is_empty() {
+            return Err(SignupError::PasswordEmpty);
+        }
+
+        if password != confirm_password {
+            return Err(SignupError::PasswordsNotMatching);
+        }
+
+        let flow = self.flow.clone();
+
+        uniffi_async(async move {
+            flow.lock()
+                .await
+                .submit_password(password)
+                .map_err(SignupError::from)
+        })
+        .await?;
+
+        Ok(self.get_state())
     }
 }

@@ -5399,6 +5399,7 @@ name = "proton-account-common"
 version = "0.1.0"
 dependencies = [
  "proton-account-api",
+ "secrecy",
 ]
 
 [[package]]

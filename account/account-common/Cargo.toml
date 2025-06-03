@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 proton-account-api.workspace = true
+secrecy.workspace = true
 
 [lints]
 workspace = true
