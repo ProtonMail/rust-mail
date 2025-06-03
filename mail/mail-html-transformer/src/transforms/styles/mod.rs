@@ -5,7 +5,7 @@ pub use capabilities::BrowserCapabilities;
 
 use dark_mode_visitor::{StyleAttributeVisitor, StylesheetVisitor};
 use html5ever::{LocalName, QualName, namespace_url};
-use kuchikiki::{Attributes, ElementData, NodeData, NodeDataRef, NodeRef};
+use kuchikiki::{Attribute, Attributes, ElementData, NodeData, NodeDataRef, NodeRef};
 use lightningcss::{
     printer::PrinterOptions,
     properties::Property,
@@ -89,9 +89,6 @@ pub fn inject_dark_mode(
     capabilities: BrowserCapabilities,
     root_selector: String,
 ) {
-    // TODO(wpolak): In following MRs:
-    // * Make sure that `!important` removal from attributes is reversible.
-    //   For example by keeping `data-proton-original-style` attribute.
     let level = DarkStyleSupportLevel::new_for_html(mode, &source, capabilities);
 
     let BrowserCapabilities {
@@ -388,8 +385,21 @@ fn sanitize_dark_mode_in_inline_attribute(
         .or_default()
         .extend(property_overrides);
 
-    if let Some(style_attr) = node.attributes.borrow_mut().get_mut("style") {
-        *style_attr = style.code;
+    let original_style = node
+        .attributes
+        .borrow_mut()
+        .get_mut("style")
+        .map(move |style_attr| std::mem::replace(style_attr, style.code));
+
+    if let Some(original_style) = original_style {
+        // In case it already exists, we do not want to override it.
+        node.attributes
+            .borrow_mut()
+            .entry("data-proton-original-style")
+            .or_insert(Attribute {
+                prefix: None,
+                value: original_style,
+            });
     }
 }
 
