@@ -9,6 +9,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
+- [ET-2568] Attach public key to messages
+- [ET-2568] Removing public keys is considered an error
+- Et-3080 add email and phone validation
+- Et-3080 fix build errors
+- Et-3080 fixes
+- Et-3080 run cargo fmt
+- [ET-3101] Do not remove !important flag from stylesheets
+- Et-3080 fix clippy issues
+- [ET-3101] Insert extra id to the html root
+- [ET-3101] Expose `html_head_content_for_composer()` method in drafts
+- [ET-3101] Removing !important from style attributes is reversible
+- [ET-3101] Revert dark mode before saving a draft
+
+### Fixes
+
+- [ET-2066] Do not use sender when replying to a sent message
+- [ET-3021] Update list of proton colors used for avatars
+- Convert html signature to plain text
+
+
+## [mail-uniffi-v0.83.0] - 2025-05-28
+
+### Features
+
 - [ET-2140] Resync event for mail eventloop
 - Move loginflow to account crate
 - Contact email type now has name and avatar information, and groups now use contact emails instead of contacts
@@ -30,8 +54,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
-- [ET-2742] Replies to html messages should always be in html
 - [ET-3021] Add default implementation for avatar information (e.g. draft)
+- [ET-2742] Replies to html messages should always be in html
 
 
 ## [mail-uniffi-v0.81.0] - 2025-05-26
