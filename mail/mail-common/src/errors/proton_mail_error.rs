@@ -81,7 +81,7 @@ impl From<proton_account_api::ApiError> for ProtonMailError {
             proton_account_api::ApiError::Muon(error) => Self::from(ApiServiceError::from(error)),
             proton_account_api::ApiError::Status(error) => Self::from(ApiServiceError::from(error)),
             proton_account_api::ApiError::Serialization(_) => Self::from(Unexpected::Internal),
-            proton_account_api::ApiError::InternalError(_) => Self::from(Unexpected::Internal),
+            proton_account_api::ApiError::Internal(_) => Self::from(Unexpected::Internal),
         }
     }
 }

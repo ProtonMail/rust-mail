@@ -33,7 +33,7 @@ pub enum ApiError {
     Status(#[from] muon::StatusErr),
 
     #[error("Internal error: {0}")]
-    InternalError(String),
+    Internal(String),
 }
 
 impl ApiError {

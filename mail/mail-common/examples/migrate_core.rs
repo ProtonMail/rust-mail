@@ -84,7 +84,7 @@ async fn main() {
 
     let mut flow = legacy_context.new_login_flow().await.unwrap();
 
-    flow.login(user_email, user_password, LoginExtraInfo::default())
+    flow.login_with_credentials(user_email, user_password, LoginExtraInfo::default())
         .await
         .unwrap();
 

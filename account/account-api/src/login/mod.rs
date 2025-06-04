@@ -1,3 +1,4 @@
+use crate::ApiError;
 use crate::DelinquentState;
 use crate::login::state::State;
 use muon::client::flow::{LoginExtraInfo, LoginFlowData};
@@ -13,7 +14,7 @@ use thiserror::Error;
 pub type SaltError = proton_crypto_account::salts::SaltError;
 
 /// Implements the possible states that the login flow can be in.
-mod state;
+pub mod state;
 
 /// TODO: Document this enum.
 #[derive(Debug, Error)]
@@ -85,6 +86,16 @@ pub enum LoginError {
     /// Authentication Store operation failed.
     #[error("Authentication Store error: {0}")]
     AuthStore(#[from] StoreError),
+
+    /// Authentication Store operation failed.
+    #[error("ApiError: {0}")]
+    ApiError(#[from] ApiError),
+
+    #[error("Failed to poll the fork for completion: {0}")]
+    WithCodePollFlowFailed(#[from] muon::Error),
+
+    #[error("Failed during QR login encoding or encryption")]
+    QRLoginEncoding,
 }
 
 impl ServiceError for LoginError {}
@@ -156,13 +167,46 @@ impl LoginFlow {
     /// # Errors
     ///
     /// Returns error if the login request or SRP proof calculations failed.
-    pub async fn login(
+    pub async fn login_with_credentials(
         &mut self,
         user: String,
         pass: String,
         info: LoginExtraInfo,
     ) -> Result<(), LoginError> {
-        self.transition(|s: State| s.login(user, pass, info))
+        self.transition(|s: State| s.login_with_credentials(user, pass, info))
+            .await
+            .inspect_err(|_| self.try_recover())
+    }
+
+    /// Generates a QR code for user sign-in, optionally including an encryption key.
+    ///
+    /// This method initiates a code-based authentication flow and constructs a QR code string
+    /// in the format: `version:user_code:encryption_key_base64:client_id`.
+    /// If an encryption key is required, a secure 32-byte key is generated and encoded in Base64.
+    /// The resulting state includes the QR code, user code, and encryption key (if applicable) for further processing.
+    ///
+    /// # Arguments
+    /// * `need_encryption_key` - If `true`, generates a 32-byte encryption key; otherwise, uses an empty default.
+    pub async fn generate_sign_in_qr_code(
+        &mut self,
+        need_encryption_key: bool,
+    ) -> Result<String, LoginError> {
+        self.transition(|s: State| s.generate_sign_in_qr_code(need_encryption_key))
+            .await
+            .inspect_err(|_| self.try_recover())?;
+        match &self.state {
+            State::WantQrConfirmation(state) => Ok(state.qr_code.clone()),
+            _ => Err(LoginError::InvalidState),
+        }
+    }
+
+    /// Verifies host device confirmation for QR code login and completes the authentication process.
+    ///
+    /// This method waits for host device confirmation of the QR code login, decodes the payload using
+    /// the provided encryption key, fetches user information, validates the passphrase, and stores user
+    /// data. On success, it constructs a completed authentication state with session details.
+    pub async fn check_host_device_confirmation(&mut self) -> Result<(), LoginError> {
+        self.transition(|s: State| s.check_host_device_confirmation())
             .await
             .inspect_err(|_| self.try_recover())
     }
@@ -235,6 +279,11 @@ impl LoginFlow {
     #[must_use]
     pub fn is_awaiting_mailbox_password(&self) -> bool {
         matches!(self.state, State::WantMbp(_))
+    }
+
+    #[must_use]
+    pub fn is_awaiting_host_device_confirmation(&self) -> bool {
+        matches!(self.state, State::WantQrConfirmation(_))
     }
 
     /// Check whether the session has logged in.

@@ -12,10 +12,13 @@ proton-core-common = { workspace = true }
 muon = { workspace = true }
 
 # crates.io dependencies
+aes-gcm = { workspace = true }
 async-trait = { workspace = true }
+base64 = { workspace = true }
 derive_more = { workspace = true }
 futures = { workspace = true }
 itertools = { workspace = true }
+regex = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true }
 serde-aux = { workspace = true }

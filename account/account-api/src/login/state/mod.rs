@@ -9,7 +9,7 @@ use crate::shared::crypto::{NewAddrKey, NewUserKey, SharedCryptoError};
 use derive_more::{Debug, From};
 use futures::TryFutureExt;
 use itertools::Itertools;
-use muon::client::flow::{AuthFlow, LoginExtraInfo, LoginFlowData};
+use muon::client::flow::{LoginExtraInfo, LoginFlowData};
 use proton_core_api::auth::UserKeySecret;
 use proton_core_api::services::observability::ObservabilityRecorder;
 use proton_core_api::services::proton::{Address, AddressId, ProtonCore, SessionId, User, UserId};
@@ -22,10 +22,12 @@ use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use proton_crypto_account::salts::{Salt, Salts};
 use secrecy::SecretString;
 use std::collections::HashMap;
+use want_qr_confirmation::WantQrConfirmation;
 
 pub mod complete;
 mod want_login;
 mod want_mbp;
+pub mod want_qr_confirmation;
 mod want_tfa;
 
 /// Represents the possible states that the login flow can be in,
@@ -60,6 +62,10 @@ pub enum State {
     #[debug("MbpRetry")]
     MbpRetry(UserId, SessionId),
 
+    /// This device is the Target device and is waiting for Origin to scan and therefore confirm the login
+    #[debug("WantQrConfirmation")]
+    WantQrConfirmation(WantQrConfirmation),
+
     /// The flow is complete.
     #[debug("Complete")]
     Complete(Complete),
@@ -72,14 +78,53 @@ pub enum State {
 /// Public actions that can be taken on the state.
 impl State {
     /// Attempt to login with the provided credentials.
-    pub async fn login(
+    pub async fn login_with_credentials(
         self,
         user: String,
         pass: String,
         info: LoginExtraInfo,
     ) -> Result<Self, (Self, LoginError)> {
         if let Self::WantLogin(state) = self {
-            Ok(state.login(user, pass, info).await?)
+            Ok(state.login_with_credentials(user, pass, info).await?)
+        } else {
+            Err((self, LoginError::InvalidState))
+        }
+    }
+
+    /// Generates a QR code for user sign-in, optionally including an encryption key.
+    ///
+    /// This method initiates a code-based authentication flow and constructs a QR code string
+    /// in the format: `version:user_code:encryption_key_base64:client_id`.
+    /// If an encryption key is required, a secure 32-byte key is generated and encoded in Base64.
+    /// The resulting state includes the QR code, user code, and encryption key (if applicable) for further processing.
+    ///
+    /// # Arguments
+    /// * `need_encryption_key` - If `true`, generates a 32-byte encryption key; otherwise, uses an empty default.
+    pub async fn generate_sign_in_qr_code(
+        self,
+        need_encryption_key: bool,
+    ) -> Result<Self, (Self, LoginError)> {
+        if let Self::WantLogin(state) = self {
+            state
+                .generate_sign_in_qr_code(need_encryption_key)
+                .await
+                .map_err(|err| (Self::LoginRetry, err))
+        } else {
+            Err((self, LoginError::InvalidState))
+        }
+    }
+
+    /// Verifies host device confirmation for QR code login and completes the authentication process.
+    ///
+    /// This method waits for host device confirmation of the QR code login, decodes the payload using
+    /// the provided encryption key, fetches user information, validates the passphrase, and stores user
+    /// data. On success, it constructs a completed authentication state with session details.
+    pub async fn check_host_device_confirmation(self) -> Result<Self, (Self, LoginError)> {
+        if let Self::WantQrConfirmation(state) = self {
+            state
+                .check_host_device_confirmation()
+                .await
+                .map_err(|err| (Self::LoginRetry, err))
         } else {
             Err((self, LoginError::InvalidState))
         }
@@ -168,11 +213,13 @@ impl State {
 /// Public entrypoints for creating new states.
 impl State {
     /// Create a `WantLogin` state.
+    #[must_use]
     pub fn new(client: muon::Client, parts: SessionParts) -> Self {
-        Self::want_login(client.auth(), parts)
+        Self::want_login(client, parts)
     }
 
     /// Create a `WantTfa` state from a resumed login flow.
+    #[must_use]
     pub fn new_from_tfa(
         client: muon::Client,
         parts: SessionParts,
@@ -191,6 +238,7 @@ impl State {
     }
 
     /// Create a `WantMbp` state from a resumed login flow.
+    #[must_use]
     pub fn new_from_mbp(
         client: muon::Client,
         parts: SessionParts,
@@ -211,8 +259,8 @@ impl State {
 /// Private entrypoints for creating new states.
 impl State {
     /// Create a `WantLogin` state.
-    fn want_login(auth: AuthFlow, parts: SessionParts) -> Self {
-        WantLogin::new(auth, parts).into()
+    fn want_login(client: muon::Client, parts: SessionParts) -> Self {
+        WantLogin::new(client, parts).into()
     }
 
     /// Create a `WantTfa` state.

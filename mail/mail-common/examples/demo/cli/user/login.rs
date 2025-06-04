@@ -4,24 +4,33 @@ use futures::TryFutureExt;
 use proton_account_api::login::LoginFlow;
 use proton_core_api::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_core_common::CoreAccountState;
-use proton_mail_common::MailContext;
+use proton_mail_common::{MailContext, MailUserContext};
 use std::sync::Arc;
 
 /// Login to an account.
 #[derive(Debug, Args)]
 pub struct Cmd {
-    username: String,
+    pub username: String,
 }
 
 impl Cmd {
     pub async fn run(self, ctx: Arc<MailContext>) -> Result<()> {
-        let mut flow = new_login_flow(&ctx, &self.username).await?;
+        let _ = Self::login(ctx, &self.username).await?;
+        Ok(())
+    }
+
+    pub async fn login(
+        ctx: Arc<MailContext>,
+        username: &str,
+    ) -> Result<(LoginFlow, Arc<MailUserContext>)> {
+        let mut flow = new_login_flow(&ctx, username).await?;
 
         if flow.is_logged_out() {
             let pass = read("password")?;
             let info = LoginExtraInfo::default();
 
-            flow.login(self.username.clone(), pass, info).await?;
+            flow.login_with_credentials(username.to_owned(), pass, info)
+                .await?;
         }
 
         if flow.is_awaiting_2fa() {
@@ -32,12 +41,12 @@ impl Cmd {
             flow.submit_mailbox_password(read("2nd password")?).await?;
         }
 
-        _ = ctx
+        let user_ctx = ctx
             .user_context_from_login_flow(&mut flow)
             .inspect_err(|err| error!("failed to create user context: {err:?}"))
             .await?;
 
-        Ok(())
+        Ok((flow, user_ctx))
     }
 }
 

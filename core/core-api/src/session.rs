@@ -146,6 +146,12 @@ impl Config {
         self.env_id = EnvId::new_custom(CustomDirectEnv::new(&self)?);
         Ok(self)
     }
+
+    /// Extracts the client id from the app version, which usually looks like "platform-app@version", eg.: android-mail@10.9
+    #[must_use]
+    pub fn get_client_id(&self) -> &str {
+        self.app_version.split('@').next().unwrap_or_default()
+    }
 }
 
 impl Default for Config {
@@ -414,6 +420,7 @@ impl Session {
 }
 
 /// The parts of a session.
+#[derive(Clone)]
 pub struct SessionParts {
     pub config: Arc<Config>,
     pub store: DynStore,

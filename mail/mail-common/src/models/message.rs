@@ -1571,7 +1571,7 @@ impl Message {
     /// Returns error if the message failed to download, the db query failed or
     /// the message body could not be written to the cache.
     ///
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    // #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub async fn fetch_message_body(
         &self,
         ctx: &MailUserContext,
@@ -1600,6 +1600,7 @@ impl Message {
             Self::sync_message_and_body(remote_id, ctx.api(), &mut tx).await?;
         trace!("Message successfully downloaded. Decrypting...");
 
+        // Some(PGPKeyAccess(NoUserSecret))
         let decrypted = Self::decrypt_message_body(
             ctx,
             &self.remote_address_id,
@@ -2474,7 +2475,7 @@ impl Message {
         tether: &Tether,
     ) -> Result<Option<String>, StashError> {
         tether
-            .query_value::<_, Option<String>>(
+            .query_value_opt::<String>(
                 indoc! {
                     "SELECT body as value FROM message_body
                         WHERE message_id = ?"
