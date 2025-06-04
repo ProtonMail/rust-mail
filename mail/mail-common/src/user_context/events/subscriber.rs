@@ -34,6 +34,10 @@ impl MailEventSubscriber {
             None => bail!("MailUserContext no longer alive"),
         }
     }
+
+    pub fn boxed(self) -> Box<Self> {
+        Box::new(self)
+    }
 }
 
 impl MailEventSubscriber {

@@ -2,7 +2,7 @@
 //! that can handle multiple event types through the [`EventPoll`] which is the main entry point to this crate.
 //!
 //! The system works with raw events that are then converted to specific event types by registered subscribers.
-//! Handling of events is delegated to [`Subscriber`]s which are wrapped in [`TypedSubscribers`] containers
+//! Handling of events is delegated to [`Subscriber`]s which are automatically wrapped in [`TypedSubscribers`] containers
 //! that implement the [`RawSubscriber`] trait.
 //!
 //! # Event Polling Architecture
@@ -14,16 +14,23 @@
 //! This design allows a single [`EventPoll`] to handle multiple event types (e.g., core events, mail events)
 //! without requiring separate polling loops.
 //!
+//! # Registration System
+//!
+//! The event poll uses a **type-based registration system**:
+//! - Subscribers are grouped by their event type (`TypeId`)
+//! - Multiple subscribers for the same event type are automatically grouped together
+//! - No need to manually manage subscriber names or collections
+//!
 //! ## Basic Usage
 //!
 //! ```ignore
-//! use proton_event_loop::{EventPoll, TypedSubscribers, Provider, Store};
-//! use proton_core_api::domain::Event;
+//! use proton_event_loop::{EventPoll, Provider, Store, Subscriber};
 //!
 //! async fn create_poll_and_run(
 //!     store: Box<dyn Store>,
 //!     provider: Box<dyn Provider>,
-//!     core_subscriber: Box<dyn Subscriber<CoreEvent>>,
+//!     core_subscriber1: Box<dyn Subscriber<CoreEvent>>,
+//!     core_subscriber2: Box<dyn Subscriber<CoreEvent>>,
 //!     mail_subscriber: Box<dyn Subscriber<MailEvent>>
 //! ) -> Result<(), EventLoopError> {
 //!     let event_poll = EventPoll::new(store, provider);
@@ -31,33 +38,28 @@
 //!     // Initialize the poll to set up the initial event ID if needed
 //!     event_poll.initialize().await?;
 //!
-//!     // Register subscribers for different event types
-//!     let core_subscribers = TypedSubscribers::<CoreEvent>::from(core_subscriber);
-//!     let mail_subscribers = TypedSubscribers::<MailEvent>::from(mail_subscriber);
-//!
-//!     event_poll.register(core_subscribers).await?;
-//!     event_poll.register(mail_subscribers).await?;
+//!     // Register subscribers - they're automatically grouped by event type
+//!     event_poll.register(core_subscriber1).await?;  // Creates TypedSubscribers<CoreEvent>
+//!     event_poll.register(core_subscriber2).await?;  // Adds to existing TypedSubscribers<CoreEvent>
+//!     event_poll.register(mail_subscriber).await?;   // Creates TypedSubscribers<MailEvent>
 //!
 //!     // Poll for events - all registered subscribers will receive appropriate events
 //!     loop {
-//!         if let Err(_) = event_poll.poll().await {
-//!             // Handle error
+//!         if let Err(e) = event_poll.poll().await {
+//!             // Handle error - detailed error information is provided
+//!             eprintln!("Event polling failed: {e}");
 //!         }
 //!     }
 //! }
 //! ```
 //!
-//! ## Multiple Subscribers per Event Type
+//! ## Key Features
 //!
-//! You can register multiple subscribers for the same event type:
-//!
-//! ```ignore
-//! let mut core_subscribers = TypedSubscribers::<CoreEvent>::new("core-events");
-//! core_subscribers.add_subscriber(first_core_subscriber);
-//! core_subscribers.add_subscriber(second_core_subscriber);
-//!
-//! event_poll.register(core_subscribers.boxed()).await?;
-//! ```
+//! - **Automatic Grouping**: Multiple subscribers for the same event type are automatically grouped
+//! - **Type Safety**: Registration is compile-time type-safe with `register<T>()`
+//! - **Error Handling**: Comprehensive error reporting with context about which subscriber failed
+//! - **FIFO Processing**: Subscribers are processed in the order they were registered
+//! - **Single Poll Loop**: One event poll can handle multiple event types efficiently
 //!
 pub mod poll;
 pub mod provider;
@@ -95,6 +97,8 @@ pub enum EventLoopError {
     Subscriber(String, SubscriberError),
     #[error("Subscriber with `{0}` name already exists")]
     Register(&'static str),
+    #[error("Failed to deserialize event: {0}")]
+    Deserialize(AnyhowError),
 }
 
 /// This represents an event returned by the API.

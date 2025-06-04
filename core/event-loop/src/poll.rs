@@ -1,10 +1,11 @@
+use std::any::TypeId;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
 use crate::provider::Provider;
 use crate::store::Store;
 use crate::subscriber::RawSubscriber;
-use crate::{Event, EventLoopError, RawEvent};
+use crate::{Event, EventLoopError, RawEvent, Subscriber, TypedSubscribers};
 use anyhow::anyhow;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::EventId;
@@ -15,7 +16,13 @@ pub struct EventPoll {
     epoll: EventPollInternal,
     store: Box<dyn Store>,
     provider: Box<dyn Provider>,
-    unique_sub: Mutex<HashMap<&'static str, usize>>,
+    unique_sub: Mutex<HashMap<TypeId, usize>>,
+    /// The subscribers are stored in a vector of boxed raw subscribers.
+    ///
+    /// The vector is used to store the subscribers in the order they were registered.
+    /// The index of the subscriber in the vector is used to identify the subscriber.
+    /// The vector was chosen to preserve the order of the subscribers to run - FIFO.
+    ///
     subscribers: Mutex<Vec<Box<dyn RawSubscriber>>>,
 }
 
@@ -41,16 +48,34 @@ impl EventPoll {
         Ok(self)
     }
 
-    pub async fn register(
+    /// Register a typed subscriber by wrapping it in `TypedSubscribers`.
+    ///
+    /// This is used to register a typed subscriber to the event loop.
+    /// The subscriber is wrapped in a `TypedSubscribers` to allow for multiple subscribers
+    /// of the same type.
+    ///
+    pub async fn register<T: Event + From<<T as Event>::Response>>(
         &self,
-        subscriber: Box<dyn RawSubscriber>,
+        subscriber: Box<dyn Subscriber<T>>,
     ) -> Result<&Self, EventLoopError> {
         let mut subscribers = self.subscribers.lock().await;
-        match self.unique_sub.lock().await.entry(subscriber.name()) {
-            Entry::Occupied(_) => return Err(EventLoopError::Register(subscriber.name())),
+        match self.unique_sub.lock().await.entry(TypeId::of::<T>()) {
+            Entry::Occupied(entry) => {
+                let index = *entry.get();
+                let raw_subscriber = subscribers.get_mut(index);
+
+                if let Some(typed_subscribers) = raw_subscriber
+                    .and_then(|s| s.as_any_mut().downcast_mut::<TypedSubscribers<T>>())
+                {
+                    typed_subscribers.add_subscriber(subscriber);
+                } else {
+                    return Err(EventLoopError::Register(subscriber.name()));
+                }
+            }
             Entry::Vacant(entry) => {
                 entry.insert(subscribers.len());
-                subscribers.push(subscriber);
+                let raw_subscriber = TypedSubscribers::<T>::new_raw(subscriber);
+                subscribers.push(raw_subscriber);
             }
         }
 
@@ -121,7 +146,7 @@ impl EventPollInternal {
 
         debug!("Last Event Id = {last_event_id}");
 
-        let mut raw_events: Vec<RawEvent> = self
+        let raw_events: Vec<RawEvent> = self
             .collect_raw_events(provider, &last_event_id)
             .await
             .map_err(|e| {
@@ -137,13 +162,13 @@ impl EventPollInternal {
         debug!("Received {} new raw events", raw_events.len());
 
         // Run 1 tx per event to avoid having long running transactions
-        for raw_event in &mut raw_events {
+        for raw_event in raw_events {
             let new_event_id = raw_event.event_id().clone();
             if raw_event.is_refresh() {
-                self.publish_raw_refresh_to_subscribers(raw_event, subscribers)
+                self.publish_raw_refresh_to_subscribers(&raw_event, subscribers)
                     .await?;
             } else {
-                self.publish_raw_events_to_subscribers(&mut [raw_event.clone()], subscribers)
+                self.publish_raw_events_to_subscribers(&mut [raw_event], subscribers)
                     .await?;
             }
 
@@ -195,13 +220,7 @@ impl EventPollInternal {
         subscribers: &[Box<dyn RawSubscriber>],
     ) -> Result<(), EventLoopError> {
         for subscriber in subscribers {
-            if let Err(e) = subscriber.on_raw_events(events).await {
-                error!(
-                    "Failed to publish raw events to '{}': {e:?}",
-                    subscriber.name()
-                );
-                return Err(EventLoopError::Subscriber(subscriber.name().into(), e));
-            }
+            subscriber.on_raw_events(events).await?;
         }
 
         Ok(())
@@ -213,13 +232,7 @@ impl EventPollInternal {
         subscribers: &[Box<dyn RawSubscriber>],
     ) -> Result<(), EventLoopError> {
         for subscriber in subscribers {
-            if let Err(e) = subscriber.on_raw_refresh(event).await {
-                error!(
-                    "Failed to process raw refresh in subscriber '{}': {e:?}",
-                    subscriber.name()
-                );
-                return Err(EventLoopError::Refresh(subscriber.name().to_owned(), e));
-            }
+            subscriber.on_raw_refresh(event).await?;
         }
 
         Ok(())
