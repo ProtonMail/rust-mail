@@ -9,7 +9,10 @@ use lightningcss::{
 };
 use smart_default::SmartDefault;
 
-use crate::transforms::styles::{Selector, StylesheetOverrides, printer_options};
+use crate::transforms::styles::{
+    Selector, StylesheetOverrides, dark_mode_visitor::declaration_block::ShouldRemoveImportant,
+    printer_options,
+};
 
 use super::declaration_block::{DeclarationBlockVisitor, ShouldStoreOverridenProps};
 
@@ -24,13 +27,16 @@ pub(crate) struct StylesheetVisitor {
 
     selector_stack: Vec<Selector>,
 
+    root_selector: String,
+
     // Because PrinterOptions do not implement Clone
     #[default(printer_options)]
     pub printer_options: fn() -> PrinterOptions<'static>,
 }
 impl StylesheetVisitor {
-    pub fn new(printer_options: fn() -> PrinterOptions<'static>) -> Self {
+    pub fn new(printer_options: fn() -> PrinterOptions<'static>, root_selector: String) -> Self {
         Self {
+            root_selector,
             printer_options,
             ..Default::default()
         }
@@ -55,8 +61,11 @@ impl Visitor<'_> for StylesheetVisitor {
         &mut self,
         decls: &mut lightningcss::declaration::DeclarationBlock<'_>,
     ) -> Result<(), Self::Error> {
-        let mut visitor =
-            DeclarationBlockVisitor::new(ShouldStoreOverridenProps::No, self.printer_options);
+        let mut visitor = DeclarationBlockVisitor::new(
+            ShouldStoreOverridenProps::No,
+            ShouldRemoveImportant::No,
+            self.printer_options,
+        );
 
         decls.visit(&mut visitor)?;
 
@@ -94,7 +103,19 @@ impl StylesheetVisitor {
     fn get_selectors(&self, rule: &CssRule<'_>) -> Option<String> {
         let printer_options = (self.printer_options)();
         match rule {
-            CssRule::Style(style) => style.selectors.to_css_string(printer_options).ok(),
+            CssRule::Style(style) => {
+                style
+                    .selectors
+                    .to_css_string(printer_options)
+                    .ok()
+                    .map(|selector| {
+                        if selector == "html" {
+                            format!("html{}", self.root_selector)
+                        } else {
+                            format!("{} {}", self.root_selector, selector)
+                        }
+                    })
+            }
             CssRule::Media(media_rule) => {
                 let query = media_rule.query.to_css_string(printer_options).ok();
 

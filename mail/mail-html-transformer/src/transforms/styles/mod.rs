@@ -50,6 +50,19 @@ pub fn dark_mode_for_plaintext(mode: ColorMode, capabilities: BrowserCapabilitie
     }
 }
 
+/// Injects the data-proton-message attrubute to the html tag.
+/// Used to create a selector with bigger specificity than any provided by the sender.
+pub fn inject_root_selector_to_html(document: &NodeRef) {
+    let Ok(html) = document.select_first("html") else {
+        tracing::warn!("Could not select <html /> tag in the message body");
+        return;
+    };
+
+    html.attributes
+        .borrow_mut()
+        .insert("data-protonmail-message", "true".to_owned());
+}
+
 /// Adjusts style of the message to the light/dark mode.
 /// In case of light mode only slight changes are applied.
 /// In case of the dark mode, this function scans all styles provided by the sender,
@@ -60,6 +73,10 @@ pub fn dark_mode_for_plaintext(mode: ColorMode, capabilities: BrowserCapabilitie
 /// * `source` - the source HTML document. Usually a message fetched from remote. Might be modified by removing `!important` flag from
 ///   styles and attributes.
 /// * `target` - the target HTML document. Stylesheets and CSS supplements are appended to the head of the document.
+/// * `root_selector` - the CSS selector of the root of message.
+///   In case of viewing message, it is usually data attribute pointing to the `html` tag.
+///   In case of composer, it is ID pointing to custom editor that wraps the message.
+///   Used to create a selector with bigger specificity than any provided by the sender.
 ///
 /// # Difference between `source` and `target`
 /// In the view mode of the message, both nodes are pointing to the same document.
@@ -70,11 +87,9 @@ pub fn inject_dark_mode(
     target: NodeRef,
     mode: ColorMode,
     capabilities: BrowserCapabilities,
+    root_selector: String,
 ) {
     // TODO(wpolak): In following MRs:
-    // * remove `!important` only from attributes.
-    //   Apparently we can override styles provided by <style> tags if we use stronger specificity.
-    //   For example if our supplement stylesheet has selector prefix of `#protonmail_editor `
     // * Make sure that `!important` removal from attributes is reversible.
     //   For example by keeping `data-proton-original-style` attribute.
     let level = DarkStyleSupportLevel::new_for_html(mode, &source, capabilities);
@@ -106,7 +121,7 @@ pub fn inject_dark_mode(
             // 1. If yes, we can keep existing color.
             // 2. If not, we shall generate a CSS override (by removing `!important` from original place and adding new rule afterwards)
             //     that would use transformed color (keeping the same hue and saturation but changed light component).
-            let maybe_supplement_css = sanitize_dark_mode(&source);
+            let maybe_supplement_css = sanitize_dark_mode(&source, root_selector);
 
             if supports_media_query {
                 inject_style(&target, include_str!("./light_and_dark.css"));
@@ -133,8 +148,9 @@ pub fn inject_dark_mode(
     }
 }
 
-fn sanitize_dark_mode(document: &NodeRef) -> Option<String> {
-    let maybe_supplement_for_stylesheets = sanitize_dark_mode_in_stylesheets(document);
+fn sanitize_dark_mode(document: &NodeRef, root_selector: String) -> Option<String> {
+    let maybe_supplement_for_stylesheets =
+        sanitize_dark_mode_in_stylesheets(document, root_selector);
     let maybe_supplement_for_inline_attributes = sanitize_dark_mode_in_inline_attributes(document);
 
     if maybe_supplement_for_stylesheets.is_none()
@@ -210,7 +226,7 @@ struct PropertyWithPurpose<'i> {
 /// If yes, it keeps the color intact.
 /// If not, it removes `!important` flag and adds the rule to overrides map
 /// Returns None if the supplement is empty
-fn sanitize_dark_mode_in_stylesheets(document: &NodeRef) -> Option<String> {
+fn sanitize_dark_mode_in_stylesheets(document: &NodeRef, root_selector: String) -> Option<String> {
     let mut overrides = BTreeMap::new();
 
     let Ok(styles) = document.select("style") else {
@@ -225,7 +241,12 @@ fn sanitize_dark_mode_in_stylesheets(document: &NodeRef) -> Option<String> {
             continue;
         };
 
-        sanitize_dark_mode_in_stylesheet(stylesheet, style, &mut overrides, printer_options);
+        sanitize_dark_mode_in_stylesheet(
+            stylesheet,
+            &mut overrides,
+            printer_options,
+            root_selector.clone(),
+        );
     }
 
     if overrides.is_empty() {
@@ -300,11 +321,11 @@ fn printer_options() -> PrinterOptions<'static> {
 
 fn sanitize_dark_mode_in_stylesheet(
     mut stylesheet: StyleSheet<'_, '_>,
-    node: NodeDataRef<ElementData>,
     overrides: &mut StylesheetOverrides,
     printer_options: fn() -> PrinterOptions<'static>,
+    root_selector: String,
 ) {
-    let mut visitor = StylesheetVisitor::new(printer_options);
+    let mut visitor = StylesheetVisitor::new(printer_options, root_selector);
     _ = stylesheet.visit(&mut visitor); // Error is infallible anyway
 
     let visitor_overrides = visitor.overrides();
@@ -312,29 +333,11 @@ fn sanitize_dark_mode_in_stylesheet(
         return;
     }
 
-    // If we found anything to change, we want to re-write the style.
-    let css = match stylesheet.to_css(printer_options()) {
-        Ok(css) => css,
-        Err(err) => {
-            tracing::error!("Could not write CSS: {err:?}");
-            return;
-        }
-    };
+    // We do not modify original stylesheet
 
     for (key, value) in visitor_overrides {
         overrides.entry(key).or_default().extend(value);
     }
-
-    let text_node = NodeRef::new(NodeData::Text(RefCell::new(css.code)));
-
-    // Clear existing text
-    let existing_children = node.as_node().children().collect::<Vec<_>>();
-    for child in existing_children {
-        child.detach();
-    }
-
-    // Then append new text
-    node.as_node().append(text_node);
 }
 
 fn sanitize_dark_mode_in_inline_attribute(
@@ -465,19 +468,26 @@ mod tests {
             .another {
                 color: #aaa;
             }
+
+            html {
+                color: #444;
+            }
         "
         );
 
         let printer_options = || PrinterOptions::default();
-        let mut visitor = StylesheetVisitor::new(printer_options);
+        let mut visitor = StylesheetVisitor::new(printer_options, "#protonmail-message".to_owned());
         let mut stylesheet = StyleSheet::parse(rule, ParserOptions::default()).unwrap();
         stylesheet.visit(&mut visitor).unwrap();
 
         let expected = velcro::btree_map! {
-            vec![".main".to_string()]: vec![
+            vec!["#protonmail-message .main".to_string()]: vec![
                 "color: #fff !important".to_string()
             ],
-            vec![".sub".to_string()]: vec![
+            vec!["#protonmail-message .sub".to_string()]: vec![
+                "color: #fff !important".to_string()
+            ],
+            vec!["html#protonmail-message".to_string()]: vec![
                 "color: #fff !important".to_string()
             ],
         };
@@ -486,11 +496,11 @@ mod tests {
 
         let stylesheet = stylesheet.to_css(printer_options()).unwrap().code;
 
-        // We not only generate override CSS but also remove `!important` from the original one
+        // Make sure we did not remove `!important` from stylesheet.
         assert_eq!(
             indoc!(
                 ".main {
-                  color: #000;
+                  color: #000 !important;
                 }
 
                 .sub {
@@ -499,6 +509,10 @@ mod tests {
 
                 .another {
                   color: #aaa;
+                }
+
+                html {
+                  color: #444;
                 }
                 "
             ),

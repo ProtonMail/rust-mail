@@ -220,6 +220,10 @@ impl Draft {
     ///
     /// **WARNING**: This function modifies the draft content by removing `!important` flag.
     ///
+    /// # Parameters
+    ///
+    /// * `editor_id` - the HTML ID of the editor that wraps the message. The same used to reference DOM in javascript.
+    ///
     /// # Returned HTML
     ///
     /// This function returns HTML that can be inserted INTO `<head>` tag.
@@ -247,13 +251,17 @@ impl Draft {
     /// ");
     ///
     /// ```
-    pub fn html_head_content_for_composer(&self, theme_opts: ThemeOpts) -> String {
+    pub fn html_head_content_for_composer(
+        &self,
+        theme_opts: ThemeOpts,
+        editor_id: String,
+    ) -> String {
         let theme_opts = theme_opts.into();
         async_runtime().block_on(async {
             self.instance
                 .write()
                 .await
-                .html_head_content_for_composer(theme_opts)
+                .html_head_content_for_composer(theme_opts, editor_id)
         })
     }
 
