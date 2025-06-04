@@ -178,7 +178,8 @@ pub fn inject_dark_mode(
 fn sanitize_dark_mode(document: &NodeRef, root_selector: String) -> Option<String> {
     let maybe_supplement_for_stylesheets =
         sanitize_dark_mode_in_stylesheets(document, &root_selector);
-    let maybe_supplement_for_inline_attributes = sanitize_dark_mode_in_inline_attributes(document, &root_selector);
+    let maybe_supplement_for_inline_attributes =
+        sanitize_dark_mode_in_inline_attributes(document, &root_selector);
     let maybe_supplement_for_deprecated_attributes =
         sanitize_dark_mode_in_deprecated_attributes(document, &root_selector);
 
@@ -307,7 +308,10 @@ fn sanitize_dark_mode_in_stylesheets(document: &NodeRef, root_selector: &str) ->
 /// If yes, it keeps the color intact.
 /// If not, it removes `!important` flag and adds the rule to overrides map
 /// Returns None if the supplement is empty
-fn sanitize_dark_mode_in_inline_attributes(document: &NodeRef, root_selector: &str) -> Option<String> {
+fn sanitize_dark_mode_in_inline_attributes(
+    document: &NodeRef,
+    root_selector: &str,
+) -> Option<String> {
     let Ok(styles) = all_with_attribute(document, "style") else {
         return None;
     };
@@ -337,7 +341,11 @@ fn sanitize_dark_mode_in_inline_attributes(document: &NodeRef, root_selector: &s
     for (tag_selector, properties) in overrides {
         let properties = properties.join(";\n");
 
-        write!(style, "{root_selector} {tag_selector} {{\n {properties}\n }}").expect("Written properties");
+        write!(
+            style,
+            "{root_selector} {tag_selector} {{\n {properties}\n }}"
+        )
+        .expect("Written properties");
     }
     Some(style)
 }
@@ -368,9 +376,12 @@ fn css_property_for_deprecated_attribute(attr: &str) -> &str {
 ///
 /// For each color it checks whether luminance provides good enough contrast in the dark mode.
 /// If yes, it keeps the color intact.
-/// If not, it removes `!important` flag and adds the rule to overrides map
+/// If not, it adds the rule to overrides map
 /// Returns None if the supplement is empty
-fn sanitize_dark_mode_in_deprecated_attributes(document: &NodeRef, root_selector: &str) -> Option<String> {
+fn sanitize_dark_mode_in_deprecated_attributes(
+    document: &NodeRef,
+    root_selector: &str,
+) -> Option<String> {
     let Ok(nodes) = all_with_any_attribute(document, DEPRECATED_ATTRIBUTES) else {
         return None;
     };
@@ -435,7 +446,11 @@ fn sanitize_dark_mode_in_deprecated_attributes(document: &NodeRef, root_selector
     for (tag_selector, properties) in overrides {
         let properties = properties.join(";\n");
 
-        write!(style, "{root_selector} {tag_selector} {{\n {properties}\n }}").expect("Write to string");
+        write!(
+            style,
+            "{root_selector} {tag_selector} {{\n {properties}\n }}"
+        )
+        .expect("Write to string");
     }
 
     Some(style)
@@ -475,7 +490,7 @@ fn tag_selector(node: &NodeDataRef<ElementData>) -> String {
     let mut tag_selector = node.name.local.to_string();
 
     if let Some(id) = node.attributes.borrow().get("id") {
-        write!(tag_selector, "#{id}").expect("Write to string");
+        write!(tag_selector, "[id=\"{id}\"]").expect("Write to string");
     }
 
     if let Some(klass) = node.attributes.borrow().get("class") {
