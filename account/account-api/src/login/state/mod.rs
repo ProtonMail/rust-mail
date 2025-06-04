@@ -1,24 +1,29 @@
+use crate::AccountApi;
 use crate::login::LoginError;
 use crate::login::state::complete::Complete;
 use crate::login::state::want_login::WantLogin;
 use crate::login::state::want_mbp::WantMbp;
 use crate::login::state::want_tfa::{TfaFlow, WantTfa};
+use crate::prelude::AuthInput;
+use crate::shared::crypto::{NewAddrKey, NewUserKey, SharedCryptoError};
 use derive_more::{Debug, From};
 use futures::TryFutureExt;
+use itertools::Itertools;
 use muon::client::flow::{AuthFlow, LoginExtraInfo, LoginFlowData};
 use proton_core_api::auth::UserKeySecret;
-use proton_core_api::services::observability::{
-    ApiServiceObservabilityResponse, ObservabilityRecorder, metrics,
-};
-use proton_core_api::services::proton::{ProtonCore, SessionId, UserId};
+use proton_core_api::services::observability::ObservabilityRecorder;
+use proton_core_api::services::proton::{Address, AddressId, ProtonCore, SessionId, User, UserId};
 use proton_core_api::session::{Session, SessionParts};
 use proton_core_api::store::UserData;
-use proton_crypto_account::keys::{LockedKey, UserKeys};
+use proton_crypto_account::keys::{LockedKey, UnlockedUserKey, UserKeys};
 use proton_crypto_account::proton_crypto;
+use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
+use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use proton_crypto_account::salts::{Salt, Salts};
 use secrecy::SecretString;
+use std::collections::HashMap;
 
-mod complete;
+pub mod complete;
 mod want_login;
 mod want_mbp;
 mod want_tfa;
@@ -233,7 +238,7 @@ impl State {
             .set_user_data(user_data)
             .await?;
 
-        Ok(Complete::new(client, data).into())
+        Ok(Complete::new(client, data, None).into())
     }
 
     /// Attempt to finalize the login flow, transitioning to the `Complete` state if successful.
@@ -246,29 +251,49 @@ impl State {
         let srp = proton_crypto::new_srp_provider();
         let pgp = proton_crypto::new_pgp_provider();
 
-        // Fetch user info to trigger HV.
-        let user = client
+        // Fetch user info.
+        let mut user = client
             .get_users()
             .map_ok(|res| res.user)
-            .inspect_err(|err| {
-                data.observability
-                    .record(metrics::SignInSubmitMailBoxPwTotal::new(
-                        metrics::MailboxPasswordMetricStatus::ApiService(err.into()),
-                    ));
-            })
             .map_err(LoginError::UserFetch)
             .await?;
+
+        // Fetch user addresses.
+        let mut addresses = ProtonCore::get_addresses(&client)
+            .map_ok(|res| res.addresses)
+            .map_err(LoginError::AddressFetch)
+            .await?;
+
+        // Does the user have an address?
+        if addresses.is_empty() {
+            Self::setup_address(&client, &user).await?;
+
+            addresses = ProtonCore::get_addresses(&client)
+                .map_ok(|res| res.addresses)
+                .map_err(LoginError::AddressFetch)
+                .await?;
+        }
+
+        // Does the user have a key?
+        if user.keys.as_ref().is_empty() {
+            Self::setup_keys(&srp, &pgp, &client, &addresses, &pass).await?;
+
+            user = client
+                .get_users()
+                .map_ok(|res| res.user)
+                .map_err(LoginError::UserFetch)
+                .await?;
+
+            addresses = ProtonCore::get_addresses(&client)
+                .map_ok(|res| res.addresses)
+                .map_err(LoginError::AddressFetch)
+                .await?;
+        }
 
         // Fetch the user's key salts.
         let salts = client
             .get_keys_salts()
             .map_ok(|res| res.key_salts)
-            .inspect_err(|err| {
-                data.observability
-                    .record(metrics::SignInSubmitMailBoxPwTotal::new(
-                        metrics::MailboxPasswordMetricStatus::ApiService(err.into()),
-                    ));
-            })
             .map_err(LoginError::KeySecretSaltFetch)
             .await?;
 
@@ -279,47 +304,187 @@ impl State {
         }));
 
         // Derive the key secret to unlock the user keys.
-        let secret = if let Some(key) = user.keys.primary() {
-            (salts.salt_for_key(&srp, &key.id, pass.as_bytes()))
-                .inspect_err(|_| {
-                    data.observability
-                        .record(metrics::SignInSubmitMailBoxPwTotal::new(
-                            metrics::MailboxPasswordMetricStatus::KeyDerivationFailed,
-                        ));
-                })
-                .map_err(LoginError::KeySecretDerivation)?
+        let user_key_pass = if let Some(key) = user.keys.primary() {
+            salts.salt_for_key(&srp, &key.id, pass.as_bytes())?
         } else {
             return Err(LoginError::MissingPrimaryKey);
         };
 
-        // Check if the key secret can unlock the user keys.
-        let secret = if user.keys.unlock(&pgp, &secret).unlocked_keys.is_empty() {
-            data.observability
-                .record(metrics::SignInSubmitMailBoxPwTotal::new(
-                    metrics::MailboxPasswordMetricStatus::KeyUnlockFailed,
-                ));
-            return Err(LoginError::KeySecretDecryption);
-        } else {
-            UserKeySecret(secret)
+        // Unlock the user keys.
+        let user_keys = match user.keys.unlock(&pgp, &user_key_pass) {
+            res if res.unlocked_keys.is_empty() => Err(LoginError::KeySecretDecryption)?,
+            res => res.unlocked_keys,
         };
 
-        // Save the derived user data in the auth store.
+        // Get the primary user key.
+        let user_key = (user.keys.primary())
+            .and_then(|key| user_keys.iter().find(|k| k.id == key.id))
+            .ok_or(LoginError::MissingPrimaryKey)?;
+
+        // Do all the user's addresses have keys?
+        if addresses.iter().any(|addr| addr.keys.as_ref().is_empty()) {
+            Self::setup_address_keys(&pgp, &client, user_key, &addresses).await?;
+
+            let _ = ProtonCore::get_addresses(&client)
+                .map_ok(|res| res.addresses)
+                .map_err(LoginError::AddressFetch)
+                .await?;
+        }
+
+        // Save user data to store
         (data.parts.store.write().await)
             .set_user_data(UserData {
-                username: user.name.unwrap_or_default(),
-                display_name: user.display_name.unwrap_or_default(),
-                primary_addr: user.email,
-                key_secret: secret,
+                username: user.name.clone().unwrap_or_default(),
+                display_name: user.display_name.clone().unwrap_or_default(),
+                primary_addr: user.email.clone(),
+                key_secret: UserKeySecret(user_key_pass.clone()),
             })
             .await?;
 
-        data.observability
-            .record(metrics::SignInSubmitMailBoxPwTotal::new(
-                metrics::MailboxPasswordMetricStatus::ApiService(
-                    ApiServiceObservabilityResponse::Success,
-                ),
-            ));
-        Ok(Complete::new(client, data).into())
+        Ok(Complete::new(client, data, Some(user)).into())
+    }
+
+    /// Set up a user key for a user that doesn't have any keys.
+    async fn setup_keys<S: SRPProvider, P: PGPProviderSync>(
+        srp: &S,
+        pgp: &P,
+        client: &muon::Client,
+        addr: &[Address],
+        pass: &str,
+    ) -> Result<(), LoginError> {
+        use crate::requests::{AddressKeyInput, AsyncUserInitialization, SetupKeysRequest};
+
+        let user_key = NewUserKey::init(srp, pgp, pass)
+            .map_err(|e| LoginError::UserKeySetup(e.to_string()))?;
+
+        let addr_keys: HashMap<AddressId, NewAddrKey> = addr
+            .iter()
+            .map(|addr| Ok((addr.id.clone(), user_key.init_addr(pgp, &addr.email)?)))
+            .try_collect()
+            .map_err(|e: SharedCryptoError| LoginError::AddressKeySetup(e.to_string()))?;
+
+        let res = (client)
+            .get_auth_modulus()
+            .await
+            .map_err(|e| LoginError::UserKeySetup(e.to_string()))?;
+
+        let ver = srp
+            .generate_client_verifier(pass, &res.modulus)
+            .map_err(|e| LoginError::UserKeySetup(e.to_string()))?;
+
+        let address_keys = addr_keys
+            .into_iter()
+            .map(|(id, key)| AddressKeyInput::new(id.as_str(), &key.key, &key.skl))
+            .collect();
+
+        let auth = AuthInput {
+            version: ver.version,
+            modulus_id: res.modulus_id,
+            salt: ver.salt,
+            verifier: ver.verifier,
+        };
+
+        let request = SetupKeysRequest {
+            auth,
+            primary_key: user_key.key.private_key.to_string(),
+            key_salt: user_key.salt.to_string(),
+            address_keys,
+            encrypted_secret: None,
+            org_primary_user_key: None,
+            org_activation_token: None,
+        };
+
+        let _ = client
+            .setup_keys(AsyncUserInitialization::CalledByClient, request)
+            .await
+            .map_err(|e| LoginError::UserKeySetup(e.to_string()))?;
+
+        Ok(())
+    }
+
+    /// Set up a new address for an external account that doesn't have any addresses.
+    async fn setup_address(client: &muon::Client, user: &User) -> Result<(), LoginError> {
+        use crate::requests::PostAddressesSetupRequest;
+
+        let domains = AccountApi::get_available_domains(client, None)
+            .map_err(|e| LoginError::AddressSetup(e.to_string()))
+            .await?
+            .domains;
+
+        let request = PostAddressesSetupRequest {
+            domain: domains.into_iter().next().unwrap_or_default(),
+            display_name: user.display_name.clone(),
+            signature: None,
+            member_id: None,
+            requester_member_id: None,
+            address_list: vec![user.email.clone()],
+        };
+
+        AccountApi::setup_address(client, request)
+            .map_err(|e| LoginError::AddressSetup(e.to_string()))
+            .await?;
+
+        Ok(())
+    }
+
+    /// Set up keys for all addresses that don't have any keys.
+    async fn setup_address_keys<P: PGPProviderSync>(
+        pgp: &P,
+        client: &muon::Client,
+        user_key: &UnlockedUserKey<P>,
+        addresses: &[Address],
+    ) -> Result<(), LoginError> {
+        for address in addresses {
+            if address.keys.as_ref().is_empty() {
+                Self::setup_address_key(pgp, client, user_key, address).await?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Set up keys for an address that doesn't have any keys.
+    async fn setup_address_key<P: PGPProviderSync>(
+        pgp: &P,
+        client: &muon::Client,
+        user_key: &UnlockedUserKey<P>,
+        address: &Address,
+    ) -> Result<(), LoginError> {
+        use crate::requests::{CreateAddressKeyRequest, SignedKeyList};
+
+        let addr_key = NewAddrKey::init(pgp, user_key, &address.email)
+            .map_err(|_| LoginError::KeySecretDecryption)?;
+
+        let token = (addr_key.key.token)
+            .map(|t| t.to_string())
+            .unwrap_or_default();
+
+        let signature = (addr_key.key.signature)
+            .map(|s| s.to_string())
+            .unwrap_or_default();
+
+        let signed_key_list = SignedKeyList {
+            data: addr_key.skl.data.to_string(),
+            signature: addr_key.skl.signature.to_string(),
+        };
+
+        // TODO: use address ID as forwarding ID?
+        let request = CreateAddressKeyRequest {
+            address_id: address.id.to_string(),
+            private_key: addr_key.key.private_key.to_string(),
+            address_forwarding_id: address.id.to_string(),
+            primary: 1,
+            token,
+            signature,
+            signed_key_list,
+        };
+
+        let _ = AccountApi::create_address_key(client, request)
+            .map_err(|e| LoginError::AddressKeySetup(e.to_string()))
+            .await?
+            .key;
+
+        Ok(())
     }
 }
 

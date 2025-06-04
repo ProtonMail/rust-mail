@@ -68,6 +68,8 @@ pub enum LoginErrorReason {
     InvalidCredentials,
     UnsupportedTfa,
     CantUnlockUserKey,
+    UserSetup,
+    AddressSetup,
 }
 
 impl From<RealLoginErrorReason> for LoginErrorReason {
@@ -75,6 +77,8 @@ impl From<RealLoginErrorReason> for LoginErrorReason {
         match reason {
             RealLoginErrorReason::InvalidCredentials => LoginErrorReason::InvalidCredentials,
             RealLoginErrorReason::CantUnlockUserKey => LoginErrorReason::CantUnlockUserKey,
+            RealLoginErrorReason::UserSetup => LoginErrorReason::UserSetup,
+            RealLoginErrorReason::AddressSetup => LoginErrorReason::AddressSetup,
         }
     }
 }

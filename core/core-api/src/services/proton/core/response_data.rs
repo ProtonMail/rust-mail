@@ -867,7 +867,7 @@ pub struct User {
 /// Represents the delinquent state of the user.
 ///
 /// This enum indicates the payment status of the user's account.
-#[derive(Clone, Debug, PartialEq, Deserialize_repr, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize_repr, Eq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
 #[serde(rename_all = "PascalCase")]
 #[repr(u32)]

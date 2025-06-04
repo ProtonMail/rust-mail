@@ -1,3 +1,4 @@
+use proton_crypto_account::keys::{LocalAddressKey, LocalSignedKeyList};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
@@ -67,7 +68,7 @@ pub struct PostAuthRequest {
 /// Represents a request to set up a new address for a non-subscriber user.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct PostSetupNewNonSubuserAddressRequest {
+pub struct PostAddressesSetupRequest {
     /// The domain part of the email address, either a custom domain or a `ProtonMail` domain.
     pub domain: String,
 
@@ -211,6 +212,26 @@ pub struct AddressKeyInput {
     pub revision: i32,
 }
 
+impl AddressKeyInput {
+    #[must_use]
+    pub fn new(addr_id: &str, addr_key: &LocalAddressKey, addr_skl: &LocalSignedKeyList) -> Self {
+        let signed_key_list = SignedKeyList {
+            data: addr_skl.data.to_string(),
+            signature: addr_skl.signature.to_string(),
+        };
+
+        Self {
+            address_id: addr_id.to_owned(),
+            private_key: addr_key.private_key.to_string(),
+            token: addr_key.token.clone().map(|t| t.to_string()),
+            signature: addr_key.signature.clone().map(|t| t.to_string()),
+            signed_key_list,
+            revision: 0,
+            primary: 1,
+        }
+    }
+}
+
 /// Represents a signed key list input for address setup.
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
@@ -256,6 +277,8 @@ impl From<AsyncUserInitialization> for i32 {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct SetupKeysRequest {
+    /// Authentication details for the setup.
+    pub auth: AuthInput,
     /// The primary key for the user.
     pub primary_key: String,
     /// A randomly generated client-side key salt.
@@ -268,8 +291,6 @@ pub struct SetupKeysRequest {
     pub org_activation_token: Option<String>,
     /// List of address keys for the account.
     pub address_keys: Vec<AddressKeyInput>,
-    /// Authentication details for the setup.
-    pub auth: AuthInput,
     /// Base64-encoded AES-GCM encrypted secret using the `DeviceSecret` as key.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub encrypted_secret: Option<String>,
@@ -287,6 +308,45 @@ pub struct ValidateEmailRequest {
 #[serde(rename_all = "PascalCase")]
 pub struct ValidatePhoneRequest {
     pub phone: String,
+}
+
+/// Represents a request to create a user key.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct CreateUserKeyRequest {
+    /// The private key for the user.
+    pub private_key: String,
+
+    /// Indicates if this is the primary key (1 for primary, 0 for non-primary).
+    pub primary: u8,
+}
+
+/// Represents a request to create an address key.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct CreateAddressKeyRequest {
+    /// The address ID.
+    #[serde(rename = "AddressID")]
+    pub address_id: String,
+
+    /// The private key for the address.
+    pub private_key: String,
+
+    /// The address forwarding ID.
+    #[serde(rename = "AddressForwardingID")]
+    pub address_forwarding_id: String,
+
+    /// Indicates if this is the primary key (1 for primary, 0 for non-primary).
+    pub primary: u8,
+
+    /// The token associated with the key.
+    pub token: String,
+
+    /// The signature of the key.
+    pub signature: String,
+
+    /// Signed key list
+    pub signed_key_list: SignedKeyList,
 }
 
 #[cfg(test)]
@@ -498,5 +558,39 @@ mod tests {
         };
         let serialized = serde_json::to_string(&request_with_type).expect("Failed to serialize");
         assert_eq!(serialized, r#"{"Phone":"+4915735774265"}"#);
+    }
+
+    #[test]
+    fn test_create_user_key_request_serialization() {
+        let request = CreateUserKeyRequest {
+            private_key:
+                "-----BEGIN PGP PRIVATE KEY BLOCK-----.*-----END PGP PRIVATE KEY BLOCK-----"
+                    .to_string(),
+            primary: 1,
+        };
+        let expected_json = r#"{"PrivateKey":"-----BEGIN PGP PRIVATE KEY BLOCK-----.*-----END PGP PRIVATE KEY BLOCK-----","Primary":1}"#;
+
+        let serialized = serde_json::to_string(&request).expect("Failed to serialize");
+        assert_eq!(serialized, expected_json);
+    }
+
+    #[test]
+    fn test_create_address_key_request_serialization() {
+        let request = CreateAddressKeyRequest {
+            address_id: "addr_id_1".to_string(),
+            private_key: "addr_private_key".to_string(),
+            address_forwarding_id: "addr_forwarding_id".to_string(),
+            primary: 1,
+            token: "addr_token".to_string(),
+            signature: "addr_signature".to_string(),
+            signed_key_list: SignedKeyList {
+                data: "data".to_string(),
+                signature: "signature".to_string(),
+            },
+        };
+        let expected_json = r#"{"AddressID":"addr_id_1","PrivateKey":"addr_private_key","AddressForwardingID":"addr_forwarding_id","Primary":1,"Token":"addr_token","Signature":"addr_signature","SignedKeyList":{"Data":"data","Signature":"signature"}}"#;
+
+        let serialized = serde_json::to_string(&request).expect("Failed to serialize");
+        assert_eq!(serialized, expected_json);
     }
 }

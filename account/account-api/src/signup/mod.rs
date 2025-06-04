@@ -1,5 +1,6 @@
 use crate::countries::{COUNTRIES, Country};
 use crate::prelude::{Address, User};
+use crate::shared::crypto::SharedCryptoError;
 use crate::signup::state::{Recovery, StateKind, Username};
 use crate::{AccountApi, ApiError};
 use proton_core_api::store::{DynStore, StoreError};
@@ -87,6 +88,17 @@ impl From<AccountCryptoError> for SignupError {
 impl From<SKLError> for SignupError {
     fn from(e: SKLError) -> Self {
         Self::Crypto(SignupCryptoError(e.to_string()))
+    }
+}
+
+impl From<SharedCryptoError> for SignupError {
+    fn from(e: SharedCryptoError) -> Self {
+        match e {
+            SharedCryptoError::Salt(e) => e.into(),
+            SharedCryptoError::Crypto(e) => e.into(),
+            SharedCryptoError::AccountCrypto(e) => e.into(),
+            SharedCryptoError::SKL(e) => e.into(),
+        }
     }
 }
 

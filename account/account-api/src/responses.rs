@@ -1,3 +1,4 @@
+use proton_core_api::services::proton::DelinquentState as CoreDelinquentState;
 use proton_crypto_account::keys::{AddressKeys, UserKeys};
 use serde::Deserialize;
 use serde_aux::field_attributes::deserialize_default_from_null;
@@ -82,7 +83,7 @@ impl From<UserType> for u8 {
 /// Represents the delinquent state of the user.
 ///
 /// This enum indicates the payment status of the user's account.
-#[derive(Clone, Debug, PartialEq, Deserialize_repr, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize_repr, Eq)]
 #[serde(rename_all = "PascalCase")]
 #[repr(u32)]
 pub enum DelinquentState {
@@ -96,6 +97,20 @@ pub enum DelinquentState {
     Delinquent = 3,
     /// The user's payment has not been received.
     NotReceived = 4,
+}
+
+// TODO move get_users api call from core to account, and use account's own
+// User type for the response, so we can get rid of this conversion
+impl From<CoreDelinquentState> for DelinquentState {
+    fn from(value: CoreDelinquentState) -> Self {
+        match value {
+            CoreDelinquentState::Paid => DelinquentState::Paid,
+            CoreDelinquentState::Available => DelinquentState::Available,
+            CoreDelinquentState::Overdue => DelinquentState::Overdue,
+            CoreDelinquentState::Delinquent => DelinquentState::Delinquent,
+            CoreDelinquentState::NotReceived => DelinquentState::NotReceived,
+        }
+    }
 }
 
 /// The response code indicating the status of the request.
@@ -114,18 +129,80 @@ pub struct ResponseCode(i32);
 /// Represents the response to a request for setting up a new non-subscriber user address.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
-pub struct PostSetupNewNonSubuserAddressResponse {
+pub struct PostAddressesSetupResponse {
     /// The response code indicating the success or failure of the request (e.g., 1000 for success).
     pub code: ResponseCode,
 
     /// The details of the newly created address.
-    pub address: SetupNewNonSubuserAddressResponseAddress,
+    pub address: PostAddressesSetupResponseAddress,
+}
+
+/// Represents the response to a request for creating a user key.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "PascalCase")]
+pub struct CreateUserKeyResponse {
+    /// The response code indicating the success or failure of the request (e.g., 1000 for success).
+    pub code: ResponseCode,
+
+    /// The unique identifier of the created key.
+    #[serde(rename = "KeyID")]
+    pub key_id: String,
+}
+
+/// Represents the response to a request for creating an address key.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "PascalCase")]
+pub struct CreateAddressKeyResponse {
+    /// The response code indicating the success or failure of the request (e.g., 1000 for success).
+    pub code: ResponseCode,
+
+    /// The details of the created key.
+    pub key: AddressKey,
+}
+
+/// Represents an address key returned in the response.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "PascalCase")]
+pub struct AddressKey {
+    /// The unique identifier of the key.
+    #[serde(rename = "ID")]
+    pub id: String,
+
+    /// The version of the key.
+    pub version: u32,
+
+    /// The flags associated with the key.
+    pub flags: u32,
+
+    /// The private key.
+    pub private_key: String,
+
+    /// The token associated with the key (can be null).
+    pub token: Option<String>,
+
+    /// The signature of the key (can be null).
+    pub signature: Option<String>,
+
+    /// The fingerprint of the key.
+    pub fingerprint: String,
+
+    /// List of fingerprints.
+    pub fingerprints: Vec<String>,
+
+    /// The activation status (can be null).
+    pub activation: Option<String>,
+
+    /// Indicates if this is the primary key.
+    pub primary: u8,
+
+    /// Indicates if the key is active.
+    pub active: u8,
 }
 
 /// Represents the details of a newly created address for a non-subscriber user.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
-pub struct SetupNewNonSubuserAddressResponseAddress {
+pub struct PostAddressesSetupResponseAddress {
     /// The unique identifier of the address.
     #[serde(rename = "ID")]
     pub id: String,
@@ -553,12 +630,12 @@ mod tests {
         }
         "#;
 
-        let response: PostSetupNewNonSubuserAddressResponse =
+        let response: PostAddressesSetupResponse =
             serde_json::from_str(json).expect("Failed to deserialize JSON");
 
-        let expected = PostSetupNewNonSubuserAddressResponse {
+        let expected = PostAddressesSetupResponse {
             code: ResponseCode(1000),
-            address: SetupNewNonSubuserAddressResponseAddress {
+            address: PostAddressesSetupResponseAddress {
                 id: "vuGSa1zsx0kV0jsfhX_xKSDQ0dvcLdMduA_c2c9fhaC1ZYCZKe8gony7nIWbnqaj8gebXLCQre1H1ZTKkhhFxA==".to_string(),
                 domain_id: "X_bSECsnvCSHHR44lXWMDOYDiZpbTUzqnQFyf_pqDq-JjXxXJCv_jQmSOLhD3e3A==".to_string(),
                 email: "me@protonmail.com".to_string(),
@@ -787,6 +864,76 @@ mod tests {
                         name: String::from("My security key"),
                     }],
                 },
+            },
+        };
+
+        assert_eq!(response, expected);
+    }
+
+    #[test]
+    fn test_create_user_key_response_deserialization() {
+        let json = r#"
+        {
+            "Code": 1000,
+            "KeyID": "G1MbEt3Ep5P_EWz8WbHVAOl_6h=="
+        }
+        "#;
+
+        let response: CreateUserKeyResponse =
+            serde_json::from_str(json).expect("Failed to deserialize JSON");
+
+        let expected = CreateUserKeyResponse {
+            code: ResponseCode(1000),
+            key_id: "G1MbEt3Ep5P_EWz8WbHVAOl_6h==".to_string(),
+        };
+
+        assert_eq!(response, expected);
+    }
+
+    #[test]
+    fn test_create_address_key_response_deserialization() {
+        let json = r#"
+        {
+            "Code": 1000,
+            "Key": {
+                "ID": "G1MbEt3Ep5P_EWz8WbHVAOl_6h==",
+                "Version": 3,
+                "Flags": 3,
+                "PrivateKey": "-----BEGIN PGP PRIVATE KEY BLOCK-----.*-----END PGP PRIVATE KEY BLOCK-----",
+                "Token": "-----BEGIN PGP MESSAGE-----.*-----END PGP MESSAGE-----",
+                "Signature": "-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----",
+                "Fingerprint": "c93f767df53b0ca8395cfde90483475164ec6353",
+                "Fingerprints": [
+                    "c93f767df53b0ca8395cfde90483475164ec6353"
+                ],
+                "Activation": null,
+                "Primary": 1,
+                "Active": 1
+            }
+        }
+        "#;
+
+        let response: CreateAddressKeyResponse =
+            serde_json::from_str(json).expect("Failed to deserialize JSON");
+
+        let expected = CreateAddressKeyResponse {
+            code: ResponseCode(1000),
+            key: AddressKey {
+                id: "G1MbEt3Ep5P_EWz8WbHVAOl_6h==".to_string(),
+                version: 3,
+                flags: 3,
+                private_key:
+                    "-----BEGIN PGP PRIVATE KEY BLOCK-----.*-----END PGP PRIVATE KEY BLOCK-----"
+                        .to_string(),
+                token: Some("-----BEGIN PGP MESSAGE-----.*-----END PGP MESSAGE-----".to_string()),
+                signature: Some(
+                    "-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----".to_string(),
+                ),
+                fingerprint: "c93f767df53b0ca8395cfde90483475164ec6353".to_string(),
+                fingerprints: vec!["c93f767df53b0ca8395cfde90483475164ec6353".to_string()],
+                activation: None,
+                primary: 1,
+                active: 1,
             },
         };
 

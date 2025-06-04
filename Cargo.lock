@@ -5377,6 +5377,7 @@ dependencies = [
  "async-trait",
  "derive_more 2.0.1",
  "futures",
+ "itertools 0.13.0",
  "muon",
  "proton-core-api",
  "proton-core-common",

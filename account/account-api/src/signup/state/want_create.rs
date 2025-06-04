@@ -4,6 +4,7 @@
 use crate::AccountApi;
 use crate::requests::*;
 use crate::responses::*;
+use crate::shared::crypto::NewUserKey;
 use crate::signup::SignupError;
 use crate::signup::state::Recovery;
 use crate::signup::state::StateResult;
@@ -21,17 +22,9 @@ use proton_core_api::store::AuthInfo;
 use proton_core_api::store::DynStore;
 use proton_core_api::store::TfaMode;
 use proton_core_api::store::UserData;
-use proton_crypto_account::keys::KeyFlag;
-use proton_crypto_account::keys::KeyId;
-use proton_crypto_account::keys::LocalAddressKey;
-use proton_crypto_account::keys::LocalSignedKeyList;
-use proton_crypto_account::keys::LocalUserKey;
-use proton_crypto_account::keys::UnlockedAddressKeys;
-use proton_crypto_account::proton_crypto::crypto::KeyGeneratorAlgorithm;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use proton_crypto_account::proton_crypto::{new_pgp_provider, new_srp_provider};
-use proton_crypto_account::salts::KeySalt;
 use proton_crypto_account::salts::KeySecret;
 
 /// Represents the state where the user can provide recovery information.
@@ -85,10 +78,7 @@ impl WantCreate {
                 let info = AuthInfo {
                     user_id: UserId::from(user.id.clone()),
                     session_id: SessionId::from(data.session_id),
-                    tfa_mode: TfaMode {
-                        totp: false,
-                        fido: false,
-                    },
+                    tfa_mode: TfaMode::none(),
                     mbp_mode: data.password_mode.into(),
                 };
 
@@ -123,7 +113,7 @@ impl WantCreate {
             .ok_or(SignupError::AddressSetupFailed)?;
 
         let (user, key_secret) = self
-            .create_keys(&srp, &pgp, &client, &auth, &user, &addr)
+            .create_keys(&srp, &pgp, &client, &auth, &addr)
             .inspect_err(|err| error!("create_keys: {err}"))
             .map_err(|_| SignupError::KeySetupFailed)
             .await?;
@@ -212,90 +202,25 @@ impl WantCreate {
         pgp: &impl PGPProviderSync,
         client: &Client,
         auth: &AuthInput,
-        user: &User,
         addr: &Address,
     ) -> Result<(User, KeySecret), SignupError> {
-        let key_salt = KeySalt::generate();
-        let key_algo = KeyGeneratorAlgorithm::default();
-        let key_pass = key_salt.salted_key_passphrase(srp, self.password.as_bytes())?;
-
-        let user_key = LocalUserKey::generate(pgp, key_algo, &key_pass)?;
-        let addr_key = create_addr_key(pgp, key_algo, &user.email, &user_key, &key_pass)?;
-        let addr_skl = create_addr_skl(pgp, &user_key, &addr_key, &key_pass)?;
+        let user_key = NewUserKey::init(srp, pgp, &self.password)?;
+        let addr_key = user_key.init_addr(pgp, &addr.email)?;
 
         let req = SetupKeysRequest {
             auth: auth.to_owned(),
-            primary_key: user_key.private_key.to_string(),
-            key_salt: key_salt.to_string(),
-            address_keys: vec![build_address_key(addr, &addr_key, &addr_skl)],
-
+            primary_key: user_key.key.private_key.to_string(),
+            key_salt: user_key.salt.to_string(),
+            address_keys: vec![AddressKeyInput::new(&addr.id, &addr_key.key, &addr_key.skl)],
             encrypted_secret: None,
             org_primary_user_key: None,
             org_activation_token: None,
         };
 
         let res = client
-            .setup_keys_for_new_account(AsyncUserInitialization::CalledByClient, req)
-            .await;
+            .setup_keys(AsyncUserInitialization::CalledByClient, req)
+            .await?;
 
-        Ok((res?.user, key_pass))
+        Ok((res.user, user_key.pass))
     }
-}
-
-fn create_addr_key(
-    pgp: &impl PGPProviderSync,
-    alg: KeyGeneratorAlgorithm,
-    email: &str,
-    user_key: &LocalUserKey,
-    key_pass: &KeySecret,
-) -> Result<LocalAddressKey, SignupError> {
-    let key_id = new_key_id();
-    let user_key = user_key.unlock_and_assign_key_id(pgp, key_id, key_pass)?;
-    let addr_key = LocalAddressKey::generate(pgp, email, alg, KeyFlag::default(), true, &user_key)?;
-
-    Ok(addr_key)
-}
-
-fn create_addr_skl(
-    pgp: &impl PGPProviderSync,
-    user_key: &LocalUserKey,
-    addr_key: &LocalAddressKey,
-    key_pass: &KeySecret,
-) -> Result<LocalSignedKeyList, SignupError> {
-    let key_id = new_key_id();
-    let user_key = user_key.unlock_and_assign_key_id(pgp, key_id.clone(), key_pass)?;
-    let addr_key = addr_key.unlock_and_assign_key_id(pgp, key_id.clone(), &user_key)?;
-    let addr_skl = LocalSignedKeyList::generate(pgp, &UnlockedAddressKeys(vec![addr_key]))?;
-
-    Ok(addr_skl)
-}
-
-fn build_address_key(
-    addr: &Address,
-    addr_key: &LocalAddressKey,
-    addr_skl: &LocalSignedKeyList,
-) -> AddressKeyInput {
-    let signed_key_list = SignedKeyList {
-        data: addr_skl.data.to_string(),
-        signature: addr_skl.signature.to_string(),
-    };
-
-    AddressKeyInput {
-        address_id: addr.id.clone(),
-        private_key: addr_key.private_key.to_string(),
-        token: addr_key.token.clone().map(|t| t.to_string()),
-        signature: addr_key.signature.clone().map(|t| t.to_string()),
-        signed_key_list,
-        revision: 0,
-        primary: 1,
-    }
-}
-
-/// Generates a dummy key ID.
-///
-/// This is a bit annoying in the current crypto APIs, you have to pass a dummy `KeyID` to use them.
-/// In theory we could introduce another model, but I think it would be an overkill.
-/// For the sign-up operations a key with a dummy key id is fine.
-fn new_key_id() -> KeyId {
-    KeyId(String::default())
 }
