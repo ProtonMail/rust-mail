@@ -71,12 +71,14 @@ pub fn parse(c: &mut Criterion) {
         c.bench_function("inject style", |b| {
             b.iter(|| {
                 let tr = tr.clone();
-                transforms::styles::transform_style(
+                transforms::styles::inject_dark_mode(
+                    tr.document(),
                     tr.document(),
                     transforms::ColorMode::LightMode,
                     BrowserCapabilities {
                         supports_dark_mode_via_media_query: true,
                     },
+                    "#protonmail-message".to_owned(),
                 );
             })
         });
@@ -125,7 +127,7 @@ pub fn all_transforms(c: &mut Criterion) {
                 t.disable_content(true, true);
                 t.inject_ios_content_size();
                 _ = t.strip_whitelist();
-                t.inject_style(
+                t.inject_dark_mode(
                     transforms::ColorMode::LightMode,
                     BrowserCapabilities {
                         supports_dark_mode_via_media_query: true,

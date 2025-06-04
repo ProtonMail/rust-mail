@@ -13,7 +13,6 @@ use super::{MessageFlags, SystemLabelId};
 /// The order of the variants is important as they are sorted.
 /// Check with product before adding new banners to check the order of the new banner.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
-#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum MessageBanner {
     /// The sender of this message is blocked.
     BlockedSender,

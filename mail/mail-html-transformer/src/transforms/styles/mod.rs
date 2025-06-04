@@ -5,7 +5,7 @@ pub use capabilities::BrowserCapabilities;
 
 use dark_mode_visitor::{StyleAttributeVisitor, StylesheetVisitor};
 use html5ever::{LocalName, QualName, namespace_url};
-use kuchikiki::{Attributes, ElementData, NodeData, NodeDataRef, NodeRef};
+use kuchikiki::{Attribute, Attributes, ElementData, NodeData, NodeDataRef, NodeRef};
 use lightningcss::{
     printer::PrinterOptions,
     properties::Property,
@@ -21,14 +21,32 @@ mod capabilities;
 mod dark_mode_visitor;
 mod support_level;
 
-/// Adjusts style of the message to the light/dark mode.
-/// In case of light mode only slight changes are applied.
-/// In case of the dark mode, this function scans all styles provided by the sender,
-/// checks whether the style is applicable in the dark mode and if not - modifies
-/// the style of the message to suit better the theme.
+/// Reverts dark mode injection in inline attributes.
+/// This function removes modified `style` attribute and restores original style from `data-proton-original-style` attribute.
+#[allow(clippy::missing_panics_doc)]
+pub fn revert_dark_mode_in_inline_attributes(document: &NodeRef) {
+    let Ok(res) = document.select("[data-proton-original-style]") else {
+        tracing::warn!("Could not select nodes with data-proton-original-style attribute");
+        return;
+    };
+
+    for element in res {
+        // SAFETY: we know that the attribute exists, because we selected it
+        let style = element
+            .attributes
+            .borrow_mut()
+            .remove("data-proton-original-style")
+            .unwrap();
+        element.attributes.borrow_mut().insert("style", style.value);
+    }
+}
+
+/// This function provides stylesheets for dark mode in plaintext messages.
+/// In plaintext we do not need to parse HTML/CSS and just need to return static
+/// stylesheets builtin in the SDK.
 ///
-pub fn transform_style(document: NodeRef, mode: ColorMode, capabilities: BrowserCapabilities) {
-    let level = DarkStyleSupportLevel::new(mode, &document, capabilities);
+pub fn dark_mode_for_plaintext(mode: ColorMode, capabilities: BrowserCapabilities) -> &'static str {
+    let level = DarkStyleSupportLevel::new_for_plaintext(mode, capabilities);
 
     let BrowserCapabilities {
         supports_dark_mode_via_media_query,
@@ -38,16 +56,79 @@ pub fn transform_style(document: NodeRef, mode: ColorMode, capabilities: Browser
         (DarkStyleSupportLevel::NoDarkMode, false) => {
             // If dark mode is currently not supported, let's just inject static css style.
             //
-            inject_style(&document, include_str!("./light.css"));
+            include_str!("./light.css")
+        }
+        (_, false) => {
+            // We detected, that the message can be safely rendered in the dark mode.
+            include_str!("./dark.css")
+        }
+        (_, true) => {
+            // Browser supports `@media (prefers-color-scheme: dark)`.
+            // So instead switching between light/dark CSS we can inject merged one
+            include_str!("./light_and_dark.css")
+        }
+    }
+}
+
+/// Injects the data-proton-message attrubute to the html tag.
+/// Used to create a selector with bigger specificity than any provided by the sender.
+pub fn inject_root_selector_to_html(document: &NodeRef) {
+    let Ok(html) = document.select_first("html") else {
+        tracing::warn!("Could not select <html /> tag in the message body");
+        return;
+    };
+
+    html.attributes
+        .borrow_mut()
+        .insert("data-protonmail-message", "true".to_owned());
+}
+
+/// Adjusts style of the message to the light/dark mode.
+/// In case of light mode only slight changes are applied.
+/// In case of the dark mode, this function scans all styles provided by the sender,
+/// checks whether the style is applicable in the dark mode and if not - modifies
+/// the style of the message to suit better the theme.
+///
+/// Parameters:
+/// * `source` - the source HTML document. Usually a message fetched from remote. Might be modified by removing `!important` flag from
+///   styles and attributes.
+/// * `target` - the target HTML document. Stylesheets and CSS supplements are appended to the head of the document.
+/// * `root_selector` - the CSS selector of the root of message.
+///   In case of viewing message, it is usually data attribute pointing to the `html` tag.
+///   In case of composer, it is ID pointing to custom editor that wraps the message.
+///   Used to create a selector with bigger specificity than any provided by the sender.
+///
+/// # Difference between `source` and `target`
+/// In the view mode of the message, both nodes are pointing to the same document.
+/// However in the composer, `source` is the message being edited, while `target` is the head of HTML editor that wraps
+/// the message. Styles appended to the `target` are not sent to the recipient.
+pub fn inject_dark_mode(
+    source: NodeRef,
+    target: NodeRef,
+    mode: ColorMode,
+    capabilities: BrowserCapabilities,
+    root_selector: String,
+) {
+    let level = DarkStyleSupportLevel::new_for_html(mode, &source, capabilities);
+
+    let BrowserCapabilities {
+        supports_dark_mode_via_media_query,
+    } = capabilities;
+
+    match (level, supports_dark_mode_via_media_query) {
+        (DarkStyleSupportLevel::NoDarkMode, false) => {
+            // If dark mode is currently not supported, let's just inject static css style.
+            //
+            inject_style(&target, include_str!("./light.css"));
         }
         (DarkStyleSupportLevel::Native, false) => {
             // We detected, that the message can be safely rendered in the dark mode.
             // We just need to inject our style.
-            inject_style(&document, include_str!("./dark.css"));
+            inject_style(&target, include_str!("./dark.css"));
         }
         (DarkStyleSupportLevel::NoDarkMode | DarkStyleSupportLevel::Native, true) => {
             // Browser supports `@media (prefers-color-scheme: dark)`. So instead switching between light/dark CSS we can inject merged one
-            inject_style(&document, include_str!("./light_and_dark.css"));
+            inject_style(&target, include_str!("./light_and_dark.css"));
         }
         (DarkStyleSupportLevel::Injected, supports_media_query) => {
             // In order to support dark mode, we need to analyze all colors used by the message.
@@ -57,14 +138,14 @@ pub fn transform_style(document: NodeRef, mode: ColorMode, capabilities: Browser
             // 1. If yes, we can keep existing color.
             // 2. If not, we shall generate a CSS override (by removing `!important` from original place and adding new rule afterwards)
             //     that would use transformed color (keeping the same hue and saturation but changed light component).
-            let maybe_supplement_css = sanitize_dark_mode(&document);
+            let maybe_supplement_css = sanitize_dark_mode(&source, root_selector);
 
             if supports_media_query {
-                inject_style(&document, include_str!("./light_and_dark.css"));
+                inject_style(&target, include_str!("./light_and_dark.css"));
 
                 if let Some(supplement_css) = maybe_supplement_css {
                     inject_style(
-                        &document,
+                        &target,
                         &format!(
                             r"
                   @media ( prefers-color-scheme: dark ) {{
@@ -75,17 +156,18 @@ pub fn transform_style(document: NodeRef, mode: ColorMode, capabilities: Browser
                     );
                 }
             } else {
-                inject_style(&document, include_str!("./dark.css"));
+                inject_style(&target, include_str!("./dark.css"));
                 if let Some(supplement_css) = maybe_supplement_css {
-                    inject_style(&document, &supplement_css);
+                    inject_style(&target, &supplement_css);
                 }
             }
         }
     }
 }
 
-fn sanitize_dark_mode(document: &NodeRef) -> Option<String> {
-    let maybe_supplement_for_stylesheets = sanitize_dark_mode_in_stylesheets(document);
+fn sanitize_dark_mode(document: &NodeRef, root_selector: String) -> Option<String> {
+    let maybe_supplement_for_stylesheets =
+        sanitize_dark_mode_in_stylesheets(document, root_selector);
     let maybe_supplement_for_inline_attributes = sanitize_dark_mode_in_inline_attributes(document);
 
     if maybe_supplement_for_stylesheets.is_none()
@@ -161,7 +243,7 @@ struct PropertyWithPurpose<'i> {
 /// If yes, it keeps the color intact.
 /// If not, it removes `!important` flag and adds the rule to overrides map
 /// Returns None if the supplement is empty
-fn sanitize_dark_mode_in_stylesheets(document: &NodeRef) -> Option<String> {
+fn sanitize_dark_mode_in_stylesheets(document: &NodeRef, root_selector: String) -> Option<String> {
     let mut overrides = BTreeMap::new();
 
     let Ok(styles) = document.select("style") else {
@@ -176,7 +258,12 @@ fn sanitize_dark_mode_in_stylesheets(document: &NodeRef) -> Option<String> {
             continue;
         };
 
-        sanitize_dark_mode_in_stylesheet(stylesheet, style, &mut overrides, printer_options);
+        sanitize_dark_mode_in_stylesheet(
+            stylesheet,
+            &mut overrides,
+            printer_options,
+            root_selector.clone(),
+        );
     }
 
     if overrides.is_empty() {
@@ -251,11 +338,11 @@ fn printer_options() -> PrinterOptions<'static> {
 
 fn sanitize_dark_mode_in_stylesheet(
     mut stylesheet: StyleSheet<'_, '_>,
-    node: NodeDataRef<ElementData>,
     overrides: &mut StylesheetOverrides,
     printer_options: fn() -> PrinterOptions<'static>,
+    root_selector: String,
 ) {
-    let mut visitor = StylesheetVisitor::new(printer_options);
+    let mut visitor = StylesheetVisitor::new(printer_options, root_selector);
     _ = stylesheet.visit(&mut visitor); // Error is infallible anyway
 
     let visitor_overrides = visitor.overrides();
@@ -263,29 +350,11 @@ fn sanitize_dark_mode_in_stylesheet(
         return;
     }
 
-    // If we found anything to change, we want to re-write the style.
-    let css = match stylesheet.to_css(printer_options()) {
-        Ok(css) => css,
-        Err(err) => {
-            tracing::error!("Could not write CSS: {err:?}");
-            return;
-        }
-    };
+    // We do not modify original stylesheet
 
     for (key, value) in visitor_overrides {
         overrides.entry(key).or_default().extend(value);
     }
-
-    let text_node = NodeRef::new(NodeData::Text(RefCell::new(css.code)));
-
-    // Clear existing text
-    let existing_children = node.as_node().children().collect::<Vec<_>>();
-    for child in existing_children {
-        child.detach();
-    }
-
-    // Then append new text
-    node.as_node().append(text_node);
 }
 
 fn sanitize_dark_mode_in_inline_attribute(
@@ -336,8 +405,21 @@ fn sanitize_dark_mode_in_inline_attribute(
         .or_default()
         .extend(property_overrides);
 
-    if let Some(style_attr) = node.attributes.borrow_mut().get_mut("style") {
-        *style_attr = style.code;
+    let original_style = node
+        .attributes
+        .borrow_mut()
+        .get_mut("style")
+        .map(move |style_attr| std::mem::replace(style_attr, style.code));
+
+    if let Some(original_style) = original_style {
+        // In case it already exists, we do not want to override it.
+        node.attributes
+            .borrow_mut()
+            .entry("data-proton-original-style")
+            .or_insert(Attribute {
+                prefix: None,
+                value: original_style,
+            });
     }
 }
 
@@ -416,19 +498,26 @@ mod tests {
             .another {
                 color: #aaa;
             }
+
+            html {
+                color: #444;
+            }
         "
         );
 
         let printer_options = || PrinterOptions::default();
-        let mut visitor = StylesheetVisitor::new(printer_options);
+        let mut visitor = StylesheetVisitor::new(printer_options, "#protonmail-message".to_owned());
         let mut stylesheet = StyleSheet::parse(rule, ParserOptions::default()).unwrap();
         stylesheet.visit(&mut visitor).unwrap();
 
         let expected = velcro::btree_map! {
-            vec![".main".to_string()]: vec![
+            vec!["#protonmail-message .main".to_string()]: vec![
                 "color: #fff !important".to_string()
             ],
-            vec![".sub".to_string()]: vec![
+            vec!["#protonmail-message .sub".to_string()]: vec![
+                "color: #fff !important".to_string()
+            ],
+            vec!["html#protonmail-message".to_string()]: vec![
                 "color: #fff !important".to_string()
             ],
         };
@@ -437,11 +526,11 @@ mod tests {
 
         let stylesheet = stylesheet.to_css(printer_options()).unwrap().code;
 
-        // We not only generate override CSS but also remove `!important` from the original one
+        // Make sure we did not remove `!important` from stylesheet.
         assert_eq!(
             indoc!(
                 ".main {
-                  color: #000;
+                  color: #000 !important;
                 }
 
                 .sub {
@@ -450,6 +539,10 @@ mod tests {
 
                 .another {
                   color: #aaa;
+                }
+
+                html {
+                  color: #444;
                 }
                 "
             ),

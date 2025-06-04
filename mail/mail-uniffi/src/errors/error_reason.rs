@@ -28,7 +28,6 @@ impl From<RealActionErrorReason> for ActionErrorReason {
     fn from(reason: RealActionErrorReason) -> Self {
         match reason {
             RealActionErrorReason::UnknownLabel => ActionErrorReason::UnknownLabel,
-            RealActionErrorReason::UnknownMessage => ActionErrorReason::UnknownMessage,
             RealActionErrorReason::UnknownContentId => ActionErrorReason::UnknownContentId,
         }
     }
@@ -41,19 +40,18 @@ impl From<RealActionErrorReason> for ActionErrorReason {
 /// information to the user. This error type in common library is named `ContextErrorReason`
 /// as context is nomenclature used in the common library.
 #[derive(Debug, UniffiEnum)]
-pub enum SessionErrorReason {
+pub enum ContextReason {
     UnknownLabel,
     DuplicateContext,
     UserContextNotInitialized,
 }
 
-impl From<RealContextErrorReason> for SessionErrorReason {
+impl From<RealContextErrorReason> for ContextReason {
     fn from(reason: RealContextErrorReason) -> Self {
         match reason {
-            RealContextErrorReason::UnknownLabel => SessionErrorReason::UnknownLabel,
-            RealContextErrorReason::DuplicateContext => SessionErrorReason::DuplicateContext,
+            RealContextErrorReason::DuplicateContext => ContextReason::DuplicateContext,
             RealContextErrorReason::UserContextNotInitialized(_) => {
-                SessionErrorReason::UserContextNotInitialized
+                ContextReason::UserContextNotInitialized
             }
         }
     }
@@ -75,7 +73,6 @@ impl From<RealLoginErrorReason> for LoginErrorReason {
     fn from(reason: RealLoginErrorReason) -> Self {
         match reason {
             RealLoginErrorReason::InvalidCredentials => LoginErrorReason::InvalidCredentials,
-            RealLoginErrorReason::UnsupportedTfa => LoginErrorReason::UnsupportedTfa,
             RealLoginErrorReason::CantUnlockUserKey => LoginErrorReason::CantUnlockUserKey,
         }
     }
@@ -102,7 +99,6 @@ pub enum DraftOpenErrorReason {
 impl From<RealDraftOpenErrorReason> for DraftOpenErrorReason {
     fn from(value: RealDraftOpenErrorReason) -> Self {
         match value {
-            RealDraftOpenErrorReason::MessageDoesNotExist => Self::MessageDoesNotExist,
             RealDraftOpenErrorReason::MessageIsNotADraft => Self::MessageIsNotADraft,
             RealDraftOpenErrorReason::ReplyOrForwardDraft => Self::ReplyOrForwardDraft,
             RealDraftOpenErrorReason::AddressNotFound => Self::AddressNotFound,
@@ -120,14 +116,10 @@ pub enum DraftSaveErrorReason {
     RecipientEmailInvalid(String),
     /// This Proton recipient does not exist.
     ProtonRecipientDoesNotExist(String),
-    /// Some other validation error occurred for this recipient
-    UnknownRecipientValidationError(String),
     /// This address is disabled and can't be used for sending
     AddressDisabled(String),
     /// Message was already sent.
     MessageAlreadySent,
-    /// This draft was already sent and can't be modified
-    AlreadySent,
     /// This message no longer exists.
     MessageDoesNotExist,
     /// Message is not a draft
@@ -145,8 +137,6 @@ pub enum DraftSendErrorReason {
     RecipientEmailInvalid(String),
     /// This Proton recipient does not exist.
     ProtonRecipientDoesNotExist(String),
-    /// Some other validation error occurred for this recipient
-    UnknownRecipientValidationError(String),
     /// This address is disabled and can't be used for sending
     AddressDisabled(String),
     /// Message was already sent.
@@ -177,12 +167,8 @@ impl From<RealDraftSaveErrorReason> for DraftSaveErrorReason {
             RealDraftSaveErrorReason::ProtonRecipientDoesNotExist(value) => {
                 Self::ProtonRecipientDoesNotExist(value)
             }
-            RealDraftSaveErrorReason::UnknownRecipientValidationError(value) => {
-                Self::UnknownRecipientValidationError(value)
-            }
             RealDraftSaveErrorReason::AddressDisabled(value) => Self::AddressDisabled(value),
             RealDraftSaveErrorReason::MessageAlreadySent => Self::MessageAlreadySent,
-            RealDraftSaveErrorReason::AlreadySent => Self::AlreadySent,
             RealDraftSaveErrorReason::MessageDoesNotExist => Self::MessageDoesNotExist,
             RealDraftSaveErrorReason::MessageIsNotADraft => Self::MessageIsNotADraft,
         }
@@ -198,9 +184,6 @@ impl From<RealDraftSendErrorReason> for DraftSendErrorReason {
             }
             RealDraftSendErrorReason::ProtonRecipientDoesNotExist(value) => {
                 Self::ProtonRecipientDoesNotExist(value)
-            }
-            RealDraftSendErrorReason::UnknownRecipientValidationError(value) => {
-                Self::UnknownRecipientValidationError(value)
             }
             RealDraftSendErrorReason::PackageError(value) => Self::PackageError(value),
             RealDraftSendErrorReason::MessageDoesNotExist => Self::MessageDoesNotExist,

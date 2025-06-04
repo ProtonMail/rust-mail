@@ -6,7 +6,7 @@ use proton_core_api::services::proton::AddressId;
 #[derive(Debug)]
 pub enum MailErrorReason {
     ActionReason(ActionErrorReason),
-    SessionReason(ContextErrorReason),
+    ContextReason(ContextErrorReason),
     LoginReason(LoginErrorReason),
     SignupReason(SignupErrorReason),
     DraftOpenReason(DraftOpenErrorReason),
@@ -15,10 +15,11 @@ pub enum MailErrorReason {
     DraftUndoSendReason(DraftUndoSendErrorReason),
     DraftDiscardReason(DraftDiscardErrorReason),
     DraftAttachmentUploadReason(DraftAttachmentUploadErrorReason),
+    DraftAttachmentRemoveReason(DraftAttachmentRemoveErrorReason),
     DraftCancelScheduleSendReason(DraftCancelScheduleSendErrorReason),
     EventReason(EventErrorReason),
-    PinSetReson(PinSetErrorReason),
-    PinAuthReson(PinAuthErrorReason),
+    PinSetReason(PinSetErrorReason),
+    PinAuthReason(PinAuthErrorReason),
     OtherReason(OtherErrorReason),
 }
 
@@ -30,7 +31,7 @@ impl From<ActionErrorReason> for MailErrorReason {
 
 impl From<ContextErrorReason> for MailErrorReason {
     fn from(reason: ContextErrorReason) -> Self {
-        Self::SessionReason(reason)
+        Self::ContextReason(reason)
     }
 }
 
@@ -72,19 +73,13 @@ impl From<DraftUndoSendErrorReason> for MailErrorReason {
 
 impl From<PinSetErrorReason> for MailErrorReason {
     fn from(reason: PinSetErrorReason) -> Self {
-        Self::PinSetReson(reason)
+        Self::PinSetReason(reason)
     }
 }
 
 impl From<PinAuthErrorReason> for MailErrorReason {
     fn from(reason: PinAuthErrorReason) -> Self {
-        Self::PinAuthReson(reason)
-    }
-}
-
-impl From<EventErrorReason> for MailErrorReason {
-    fn from(reason: EventErrorReason) -> Self {
-        Self::EventReason(reason)
+        Self::PinAuthReason(reason)
     }
 }
 
@@ -101,7 +96,6 @@ impl From<OtherErrorReason> for MailErrorReason {
 #[derive(Debug)]
 pub enum ActionErrorReason {
     UnknownLabel,
-    UnknownMessage,
     UnknownContentId,
 }
 
@@ -113,7 +107,6 @@ pub enum ActionErrorReason {
 /// as the session is nomenclature used in the client library.
 #[derive(Debug)]
 pub enum ContextErrorReason {
-    UnknownLabel,
     DuplicateContext,
     UserContextNotInitialized(String),
 }
@@ -126,7 +119,6 @@ pub enum ContextErrorReason {
 #[derive(Debug)]
 pub enum LoginErrorReason {
     InvalidCredentials,
-    UnsupportedTfa,
     CantUnlockUserKey,
 }
 
@@ -151,8 +143,6 @@ pub enum SignupErrorReason {
 /// information to the user.
 #[derive(Debug)]
 pub enum DraftOpenErrorReason {
-    /// This message no longer exists.
-    MessageDoesNotExist,
     /// This message is not a draft
     MessageIsNotADraft,
     /// Attempting to reply or forward to a draft
@@ -172,14 +162,10 @@ pub enum DraftSaveErrorReason {
     RecipientEmailInvalid(String),
     /// This Proton recipient does not exist.
     ProtonRecipientDoesNotExist(String),
-    /// Some other validation error occurred for this recipient
-    UnknownRecipientValidationError(String),
     /// This address is disabled and can't be used for sending
     AddressDisabled(String),
     /// Message was already sent.
     MessageAlreadySent,
-    /// This draft was already sent and can't be modified
-    AlreadySent,
     /// This message no longer exists.
     MessageDoesNotExist,
     /// Message is not a draft
@@ -195,8 +181,6 @@ pub enum DraftSendErrorReason {
     RecipientEmailInvalid(String),
     /// This Proton recipient does not exist.
     ProtonRecipientDoesNotExist(String),
-    /// Some other validation error occurred for this recipient
-    UnknownRecipientValidationError(String),
     /// A packaging error occurred
     PackageError(String),
     /// This message no longer exists.
@@ -243,6 +227,12 @@ pub enum DraftAttachmentUploadErrorReason {
     AttachmentTooLarge,
     /// Upload Retry in invalid state
     RetryInvalidState,
+}
+
+#[derive(Debug)]
+pub enum DraftAttachmentRemoveErrorReason {
+    /// Can't remove public key attachments when mail settings to attach public keys are active
+    AttachmentIsPublicKey,
 }
 
 /// Specific Reason when attempting to discard a draft.

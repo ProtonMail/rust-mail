@@ -5802,8 +5802,6 @@ dependencies = [
  "proton-mail-ids",
  "proton-sqlite3",
  "proton-task-service",
- "rmp",
- "rmp-serde",
  "secrecy",
  "serde",
  "serde_json",
@@ -5820,8 +5818,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "typed-builder",
- "uniffi",
- "url",
  "uuid",
  "velcro",
  "wiremock",
@@ -5902,7 +5898,7 @@ dependencies = [
 
 [[package]]
 name = "proton-mail-uniffi"
-version = "0.83.0"
+version = "0.84.0"
 dependencies = [
  "anyhow",
  "async-trait",

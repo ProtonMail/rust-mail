@@ -38,19 +38,9 @@ pub use proton_mail_api;
 use stash::stash::StashError;
 
 use datatypes::attachment::ContentId;
-use proton_action_queue::action::ActionId;
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
-use proton_mail_api::services::proton::common::{AttachmentId, MessageId};
 use proton_mail_ids::LocalConversationId;
 use thiserror::Error;
-
-// Avoid breaking back compat.
-//
-// TODO: We should probably use a better name at some point for the clients like "protonSdk" or something
-// but that would be a breaking change
-// (fixed with search and replace but something we need to coordinate.)
-#[cfg(feature = "uniffi")]
-uniffi::setup_scaffolding!();
 
 #[macro_export]
 macro_rules! find_in_query {
@@ -69,13 +59,7 @@ macro_rules! find_in_query {
 #[derive(Debug, Error)]
 pub enum AppError {
     #[error("Attachment missing in database for local_id {0}")]
-    ActionStillQueued(ActionId),
-    #[error("Attachment missing in database for local_id {0}")]
     AttachmentMissing(LocalAttachmentId),
-    #[error("Unknown attachment with remote id {0}")]
-    UnknownAttachment(AttachmentId),
-    #[error("Attachment {0} does not have a remote id")]
-    AttachmentDoesNotHaveRemoteId(LocalAttachmentId),
     #[error("Attachment decryption failed: {0}")]
     AttachmentDecryption(#[from] AttachmentDecryptionError),
     #[error("Attachment decryption failed: {0}")]
@@ -102,42 +86,24 @@ pub enum AppError {
     LabelNotFound(LocalLabelId),
     #[error("Local ID not found for {0} with remote ID {1}")]
     LocalIdNotFound(String, String),
-    #[error("MessageBodyMetadata missing in database for message {0}")]
-    MessageBodyMetadataMissing(LocalMessageId),
     #[error("The cid {0} does not exist. The available ones are: {1:#?}")]
     UnknownCid(ContentId, Vec<ContentId>),
     #[error("Message with ID {0} has no remote ID")]
     MessageHasNoRemoteId(LocalMessageId),
     #[error("Message missing in database for local_id {0}")]
     MessageMissing(LocalMessageId),
-    #[error("Message body missing for local_id {0}")]
-    MessageBodyMissing(LocalMessageId),
-    #[error("Unknown Message with remote id {0}")]
-    UnknownMessage(MessageId),
-    #[error("No conversation found in the current page which has a remote id")]
-    NoConversationWithValidRemoteIdFoundInPage,
-    #[error("No message found in the current page which has a remote id")]
-    NoMessageWithValidRemoteIdFoundInPage,
     #[error("Address {0} does not have a remote id")]
     AddressHasNoRemoteId(LocalAddressId),
     #[error("Could not find remote label {0}")]
     RemoteLabelDoesNotExist(LabelId),
-    #[error("Could not find counters for remote label {0}")]
-    RemoteLabelHasNoCounters(LabelId),
     #[error("Could not find counters for local label {0}")]
     LocalLabelHasNoCounters(LocalLabelId),
     #[error("API error: {0}")]
     API(#[from] ApiServiceError),
-    #[error("Can't deserialize from MessagePack: {0}")]
-    RmpDeserialization(#[from] rmp_serde::decode::Error),
-    #[error("Can't serialize into MessagePack: {0}")]
-    RmpSerialization(#[from] rmp_serde::encode::Error),
     #[error("IO error: {0}")]
     IO(#[from] std::io::Error),
     #[error("Stash error: {0}")]
     Stash(#[from] StashError),
-    #[error("Could not load user info")]
-    UserNotFound,
     #[error("Label error: {0}")]
     Label(#[from] LabelError),
     #[error("Attachment {0} has no address id")]

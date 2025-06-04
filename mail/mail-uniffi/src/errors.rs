@@ -94,7 +94,7 @@ export_void_result! {
     VoidEventResult(EventError),
     VoidLoginResult(MailLoginError),
     VoidProtonResult(ProtonError),
-    VoidSessionResult(UserSessionError),
+    VoidSessionResult(UserContextError),
 }
 
 export_typed_result! {

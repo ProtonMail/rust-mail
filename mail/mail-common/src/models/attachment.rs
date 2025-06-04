@@ -20,6 +20,7 @@ use proton_crypto_inbox::attachment::{
     AttachmentSignature as RealAttachmentSignature, DecryptableAttachment, EncryptableAttachment,
     EncryptedAttachment, KeyPackets as RealKeyPackets,
 };
+use proton_crypto_inbox::proton_crypto::crypto::OpenPGPFingerprint;
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::{AttachmentId, ConversationId, MessageId};
@@ -901,6 +902,112 @@ impl Attachment {
 
         Ok(new_attachment)
     }
+
+    pub async fn gen_public_key(
+        context: &MailUserContext,
+        address: &Address,
+        tether: &Tether,
+    ) -> Result<PublicKeyAttachment, MailContextError> {
+        let pgp_provider = new_pgp_provider();
+        let unlocked_address = context
+            .unlocked_address_keys(
+                &pgp_provider,
+                tether,
+                address
+                    .remote_id
+                    .as_ref()
+                    .ok_or(AppError::AddressHasNoRemoteId(address.local_id.unwrap()))?,
+            )
+            .await
+            .inspect_err(|e| error!("Failed to unlock address: {e:?}"))?;
+
+        let mail_key = unlocked_address
+            .primary_for_mail()
+            .inspect_err(|e| error!("Failed to get primary mail key: {e:?}"))
+            .map_err(|_| MailContextError::Crypto)?;
+
+        let (fingerprint, key) = mail_key
+            .export_public_key(&pgp_provider)
+            .inspect_err(|e| error!("Failed to export public key: {e:?}"))
+            .map_err(|_| MailContextError::Crypto)?;
+
+        let attachment_file_name =
+            Self::public_key_attachment_filename(&address.email, fingerprint);
+
+        Ok(PublicKeyAttachment {
+            attachment: Attachment {
+                local_id: None,
+                attachment_type: AttachmentType::Remote(None),
+                local_address_id: address.local_id,
+                remote_address_id: address.remote_id.clone(),
+                local_conversation_id: None,
+                remote_conversation_id: None,
+                local_message_id: None,
+                remote_message_id: None,
+                disposition: Disposition::Attachment,
+                enc_signature: None,
+                is_auto_forwardee: false,
+                key_packets: None,
+                mime_type: MimeType::application_pgp_keys(),
+                filename: attachment_file_name,
+                sender: None,
+                signature: None,
+                size: key.len() as u64,
+                content_id: None,
+                transfer_encoding: None,
+                image_width: None,
+                image_height: None,
+                row_id: None,
+            },
+            key,
+        })
+    }
+
+    pub async fn create_public_key(
+        context: &MailUserContext,
+        address: &Address,
+        tx: &Bond<'_>,
+    ) -> Result<Attachment, MailContextError> {
+        let attachment = Self::gen_public_key(context, address, tx).await?;
+        attachment.store(context, tx).await
+    }
+
+    pub fn public_key_attachment_filename(email: &str, fingerprint: OpenPGPFingerprint) -> String {
+        format!(
+            "publickey - {} - 0x{}.asc",
+            email,
+            fingerprint.into_inner().split_at(8).0.to_uppercase()
+        )
+    }
+
+    pub fn is_public_key_attachment_filename(name: &str) -> bool {
+        name.starts_with("publickey - ") && name.ends_with(".asc")
+    }
+
+    pub async fn filename(
+        id: LocalAttachmentId,
+        tether: &Tether,
+    ) -> Result<Option<String>, StashError> {
+        match tether
+            .query_value(
+                format!(
+                    "SELECT filename AS value FROM {} WHERE local_id=?",
+                    Self::table_name()
+                ),
+                params![id],
+            )
+            .await
+        {
+            Ok(v) => Ok(Some(v)),
+            Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
+    pub fn is_public_key_attachment(&self) -> bool {
+        self.mime_type == MimeType::application_pgp_keys()
+            && Self::is_public_key_attachment_filename(&self.filename)
+    }
 }
 
 // TODO: The use of the "Real" wrappers is because the source types don't
@@ -1018,6 +1125,30 @@ impl From<Attachment> for AttachmentMetadata {
             filename: value.filename,
             size: value.size,
         }
+    }
+}
+
+pub struct PublicKeyAttachment {
+    pub attachment: Attachment,
+    pub key: String,
+}
+
+impl PublicKeyAttachment {
+    pub async fn store(
+        mut self,
+        context: &MailUserContext,
+        tx: &Bond<'_>,
+    ) -> Result<Attachment, MailContextError> {
+        self.attachment.save(tx).await?;
+        Attachment::store_in_cache(
+            context,
+            &self.attachment.filename,
+            self.attachment.local_id.unwrap(),
+            self.key.into_bytes(),
+            tx,
+        )
+        .await?;
+        Ok(self.attachment)
     }
 }
 

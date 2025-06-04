@@ -44,10 +44,6 @@ pub enum LoginError {
     MissingPrimaryKey,
 
     /// TODO: Document this variant.
-    #[error("Failed to store the key secret in the authentication state: {0}")]
-    KeySecretAuthUpdate(String),
-
-    /// TODO: Document this variant.
     #[error("Failed to decrypt a user key with the derived client secret")]
     KeySecretDecryption,
 
@@ -66,10 +62,6 @@ pub enum LoginError {
     /// TODO: Document this variant.
     #[error("Failed to calculate SRP Proof: {0}")]
     SrpProof(String),
-
-    /// TODO: Document this variant.
-    #[error("Account 2FA method is not supported")]
-    UnsupportedTfa,
 
     /// TODO: Document this variant.
     #[error("Wrong mailbox password provided")]

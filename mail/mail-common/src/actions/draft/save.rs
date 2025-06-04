@@ -82,7 +82,7 @@ impl Save {
     /// Create a new empty draft.
     pub fn new(draft: &Draft, save_origin: DraftSendResultOrigin) -> Self {
         // Undo all transformations to the body
-        let transformed = maybe_sanitize(draft.mime_type(), draft.body().to_owned());
+        let transformed = maybe_sanitize(draft.mime_type(), draft.body());
         Self {
             metadata_id: draft.metadata_id,
             to_list: draft.to_list.clone(),
@@ -638,6 +638,7 @@ impl Save {
                                 action.metadata_id,
                                 new_attachment.local_id.unwrap(),
                                 current_display_order,
+                                false,
                             );
                             new_attachment_metadata.save(bond).await.inspect_err(|e| {
                                 error!("Failed to save new draft attachment metadata: {e:?}")

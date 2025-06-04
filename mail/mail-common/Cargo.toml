@@ -57,8 +57,6 @@ proton-event-loop = { workspace = true }
 proton-mail-html-transformer = { workspace = true }
 proton-sqlite3 = { workspace = true }
 proton-task-service = { workspace = true }
-rmp = { workspace = true }
-rmp-serde = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_with = { workspace = true }
@@ -69,11 +67,9 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 typed-builder = { workspace = true }
-url = { workspace = true }
 uuid = { workspace = true }
 sqlite-watcher = { workspace = true }
 proton-mail-ids = { workspace = true }
-uniffi = { workspace = true, optional = true }
 
 # test-util option deps
 function_name = { workspace = true, optional = true }

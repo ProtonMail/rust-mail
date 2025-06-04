@@ -56,6 +56,8 @@ pub mod transforms;
 pub mod utm;
 
 mod html2text;
+
+pub use html2text::Html2TextOptions;
 #[cfg(test)]
 #[path = "tests/lib.rs"]
 mod tests;
@@ -109,18 +111,11 @@ impl Transformer {
     /// element
     #[must_use]
     pub fn extract_body(&self) -> String {
-        use std::fmt::Write;
-
         let Ok(body) = self.document.select_first("body") else {
             return String::new();
         };
 
-        let mut result = String::new();
-        for child in body.as_node().children() {
-            write!(result, "{}", child.to_string()).expect("writing to string");
-        }
-
-        result
+        inner_html(body.as_node())
     }
 
     /// Strip HTML links of UTM tracking codes.
@@ -156,10 +151,61 @@ impl Transformer {
         sanitizer::strip_whitelist(self.document.clone())
     }
 
+    /// Reverts dark mode injection in inline attributes.
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    pub fn revert_dark_mode_in_inline_attributes(&mut self) {
+        transforms::styles::revert_dark_mode_in_inline_attributes(&self.document);
+    }
+
     /// This function adds dark mode support. This fails if the html doesn't have a head tag.
     #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
-    pub fn inject_style(&mut self, mode: ColorMode, capabilities: BrowserCapabilities) {
-        transforms::styles::transform_style(self.document.clone(), mode, capabilities);
+    pub fn inject_dark_mode(&mut self, mode: ColorMode, capabilities: BrowserCapabilities) {
+        transforms::styles::inject_root_selector_to_html(&self.document);
+        transforms::styles::inject_dark_mode(
+            self.document.clone(),
+            self.document.clone(),
+            mode,
+            capabilities,
+            "[data-protonmail-message]".to_owned(),
+        );
+    }
+
+    /// This function adds dark mode support. It does modify original body only in the context
+    /// of removing `!important` flag from styles and attributes.
+    ///
+    /// Supplement CSS are not injected, instead the function returns the head of the new document.
+    ///
+    /// * `root_selector` - the CSS selector of the root of message.
+    ///   In case of viewing message, it is usually data attribute pointing to the `html` tag.
+    ///   In case of composer, it is ID pointing to custom editor that wraps the message.
+    ///   Used to create a selector with bigger specificity than any provided by the sender.
+    pub fn inject_dark_mode_to_another_target(
+        &mut self,
+        mode: ColorMode,
+        capabilities: BrowserCapabilities,
+        root_selector: String,
+    ) -> String {
+        use html5ever::namespace_url;
+        let source = self.document.clone();
+        let target = NodeRef::new_document();
+        let head = NodeRef::new_element(
+            html5ever::QualName::new(
+                None,
+                html5ever::ns!(html),
+                html5ever::LocalName::from("head"),
+            ),
+            vec![],
+        );
+        target.append(head.clone());
+
+        transforms::styles::inject_dark_mode(
+            source,
+            target.clone(),
+            mode,
+            capabilities,
+            root_selector,
+        );
+        inner_html(&head)
     }
 
     ///
@@ -195,19 +241,35 @@ impl Transformer {
         transforms::move_styles_to_body(self.document().clone());
     }
 
-    pub fn to_plain_text(&self) -> Result<String, ::html2text::Error> {
+    pub fn to_plain_text(&self, options: Html2TextOptions) -> Result<String, ::html2text::Error> {
         let html = self.to_string();
-        Self::html2text_str(&html)
+        Self::html2text_str(&html, options)
     }
 
-    pub fn html2text(reader: impl Read) -> Result<String, ::html2text::Error> {
-        html2text::convert_html_to_text(reader, html2text::DEFAULT_COLUMN_WIDTH)
+    pub fn html2text(
+        reader: impl Read,
+        options: Html2TextOptions,
+    ) -> Result<String, ::html2text::Error> {
+        html2text::convert_html_to_text(reader, options)
     }
 
-    pub fn html2text_str(reader: &str) -> Result<String, ::html2text::Error> {
+    pub fn html2text_str(
+        reader: &str,
+        options: Html2TextOptions,
+    ) -> Result<String, ::html2text::Error> {
         let cursor = std::io::Cursor::new(reader);
-        Self::html2text(cursor)
+        Self::html2text(cursor, options)
     }
+}
+
+fn inner_html(node: &NodeRef) -> String {
+    use std::fmt::Write;
+
+    let mut result = String::new();
+    for child in node.children() {
+        write!(result, "{}", child.to_string()).expect("writing to string");
+    }
+    result
 }
 
 // WARN: This is vulnerable to malicious HTMLs with very deeply nested tags.

@@ -141,7 +141,6 @@ impl MimeType {
     }
 }
 
-#[cfg(any(test, debug_assertions))]
 impl MimeType {
     pub fn text_html() -> Self {
         MimeType {
@@ -168,6 +167,13 @@ impl MimeType {
         MimeType {
             mime: mime::APPLICATION_JSON,
             category: MimeTypeCategory::Code,
+        }
+    }
+
+    pub fn application_pgp_keys() -> Self {
+        MimeType {
+            mime: "application/pgp-keys".parse().expect("Should never fail"),
+            category: MimeTypeCategory::Key,
         }
     }
 }

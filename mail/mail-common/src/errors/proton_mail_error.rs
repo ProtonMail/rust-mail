@@ -31,8 +31,6 @@ use tracing::error;
 pub enum ProtonMailError {
     /// This error is related with the arguments (i.e. like a Message id who does not exist)
     Reason(MailErrorReason),
-    /// This error is related with the session (i.e. like a session expired)
-    SessionExpired,
     /// This error come from the Backend (i.e. like a 404 error)
     ServerError(UserApiServiceError),
     /// This error come form network (i.e. like can't connect to backend)
@@ -120,7 +118,6 @@ impl From<LoginError> for ProtonMailError {
             | LoginError::FlowFido(api_service_error)
             | LoginError::UserFetch(api_service_error) => Self::from(api_service_error),
             LoginError::MissingPrimaryKey
-            | LoginError::KeySecretAuthUpdate(_)
             | LoginError::KeySecretDecryption
             | LoginError::KeySecretDerivation(_) => {
                 Self::reason(LoginErrorReason::CantUnlockUserKey)
@@ -136,7 +133,6 @@ impl From<LoginError> for ProtonMailError {
             LoginError::ServerProof(_string) | LoginError::SrpProof(_string) => {
                 Self::reason(LoginErrorReason::InvalidCredentials)
             }
-            LoginError::UnsupportedTfa => Self::Reason(LoginErrorReason::UnsupportedTfa.into()),
             LoginError::WrongMailboxPassword => Self::Unexpected(Unexpected::Internal),
             LoginError::AuthStore(store_error) => Self::from(store_error),
         }
@@ -162,6 +158,8 @@ impl From<SignupError> for ProtonMailError {
             SignupError::SetAuthInfoFailed(_) => Self::Unexpected(Unexpected::Internal),
             SignupError::SetUserDataFailed(_) => Self::Unexpected(Unexpected::Internal),
             SignupError::InvalidState => Self::Unexpected(Unexpected::Internal),
+            SignupError::RecoveryEmailInvalid => Self::Unexpected(Unexpected::Internal),
+            SignupError::RecoveryPhoneNumberInvalid => Self::Unexpected(Unexpected::Internal),
         }
     }
 }
@@ -175,11 +173,7 @@ impl From<AppError> for ProtonMailError {
             }
             AppError::LabelNotFound(_local_label_id) => Self::Unexpected(Unexpected::Internal),
             AppError::InvalidMimeType(_string) => Self::Unexpected(Unexpected::InvalidArgument),
-            AppError::MessageBodyMetadataMissing(_local_massage_id) => {
-                Self::Unexpected(Unexpected::Internal)
-            }
             AppError::RemoteLabelDoesNotExist(_label_id) => Self::Unexpected(Unexpected::Internal),
-            AppError::RemoteLabelHasNoCounters(_label_id) => Self::Unexpected(Unexpected::Internal),
             AppError::LocalLabelHasNoCounters(_label_id) => Self::Unexpected(Unexpected::Internal),
             AppError::IO(io_error) => Self::from(io_error),
             AppError::Stash(stash_error) => Self::from(stash_error),
@@ -189,10 +183,7 @@ impl From<AppError> for ProtonMailError {
                 Self::Unexpected(Unexpected::Database)
             }
             AppError::AddressHasNoRemoteId(_) => Self::Unexpected(Unexpected::Internal),
-            AppError::ActionStillQueued(_string) => Self::Unexpected(Unexpected::Internal),
             AppError::AttachmentMissing(_string) => Self::Unexpected(Unexpected::Database),
-            AppError::UnknownAttachment(_) => Self::Unexpected(Unexpected::Unknown),
-            AppError::AttachmentDoesNotHaveRemoteId(_) => Self::Unexpected(Unexpected::Internal),
             AppError::ConversationDoesNotHaveLabel(_, _) => Self::Unexpected(Unexpected::Database),
             AppError::ConversationNotFound(_) => Self::Unexpected(Unexpected::Database),
             AppError::ConversationHasNoMessages(_) => Self::Unexpected(Unexpected::Database),
@@ -204,17 +195,6 @@ impl From<AppError> for ProtonMailError {
             AppError::InvalidMobileActions(_) => Self::reason(OtherErrorReason::InvalidParameter),
             AppError::MessageHasNoRemoteId(_local_id) => Self::Unexpected(Unexpected::Internal),
             AppError::MessageMissing(_local_id) => Self::Unexpected(Unexpected::Database),
-            AppError::UnknownMessage(_remote_id) => Self::Unexpected(Unexpected::Unknown),
-            AppError::NoConversationWithValidRemoteIdFoundInPage => {
-                Self::Unexpected(Unexpected::Database)
-            }
-            AppError::NoMessageWithValidRemoteIdFoundInPage => {
-                Self::Unexpected(Unexpected::Database)
-            }
-            AppError::UserNotFound => Self::reason(OtherErrorReason::InvalidParameter),
-            AppError::MessageBodyMissing(_) => Self::Unexpected(Unexpected::Database),
-            AppError::RmpDeserialization(_rmp_error) => Self::Unexpected(Unexpected::Internal),
-            AppError::RmpSerialization(_rmp_error) => Self::Unexpected(Unexpected::Internal),
             AppError::UnknownCid(_, _) => Self::reason(ActionErrorReason::UnknownContentId),
             AppError::AttachmentHasNoAddressId(_) => Self::Unexpected(Unexpected::Internal),
             AppError::AttachmentMissingKeyPackets(_) => Self::Unexpected(Unexpected::Internal),
@@ -288,12 +268,7 @@ impl From<DraftError> for ProtonMailError {
             DraftError::Discard(v) => v.into(),
             DraftError::Undo(v) => v.into(),
             DraftError::AttachmentUpload(v) => v.into(),
-            DraftError::AttachmentRemove(v) => match v {
-                AttachmentRemoveError::MetadataNotFound(_)
-                | AttachmentRemoveError::AttachmentMetadataNotFound(_) => {
-                    Self::Unexpected(Unexpected::Draft)
-                }
-            },
+            DraftError::AttachmentRemove(v) => v.into(),
             DraftError::CancelScheduleSend(v) => v.into(),
         }
     }
@@ -322,9 +297,9 @@ impl From<DraftOpenError> for ProtonMailError {
 impl From<DraftSendError> for ProtonMailError {
     fn from(value: DraftSendError) -> Self {
         match value {
-            DraftSendError::MessageNotADraft(_) => Self::Reason(MailErrorReason::DraftSendReason(
-                DraftSendErrorReason::MessageIsNotADraft,
-            )),
+            DraftSendError::MessageIsNotADraft(_) => Self::Reason(
+                MailErrorReason::DraftSendReason(DraftSendErrorReason::MessageIsNotADraft),
+            ),
             DraftSendError::MessageBodyMissing(_) => Self::Unexpected(Unexpected::Internal),
             DraftSendError::LocalDraftWithoutMessage => Self::Unexpected(Unexpected::Internal),
             DraftSendError::SendMessage(v) => Self::from(v),
@@ -365,7 +340,7 @@ impl From<DraftSaveError> for ProtonMailError {
             }
             DraftSaveError::LocalDraftWithoutMessage => Self::Unexpected(Unexpected::Internal),
             DraftSaveError::AlreadySent => Self::Reason(MailErrorReason::DraftSaveReason(
-                DraftSaveErrorReason::AlreadySent,
+                DraftSaveErrorReason::MessageAlreadySent,
             )),
             DraftSaveError::MetadataNotFound(_) | DraftSaveError::DraftDoesNotExistOnServer => {
                 Self::Reason(MailErrorReason::DraftSaveReason(
@@ -473,6 +448,24 @@ impl From<AttachmentUploadError> for ProtonMailError {
     }
 }
 
+impl From<AttachmentRemoveError> for ProtonMailError {
+    fn from(value: AttachmentRemoveError) -> Self {
+        match value {
+            AttachmentRemoveError::MetadataNotFound(_)
+            | AttachmentRemoveError::AttachmentNotFound(_)
+            | AttachmentRemoveError::AddressNotFound(_)
+            | AttachmentRemoveError::AttachmentMetadataNotFound(_) => {
+                Self::Unexpected(Unexpected::Draft)
+            }
+            AttachmentRemoveError::AttachmentIsPublicKey(_) => {
+                Self::Reason(MailErrorReason::DraftAttachmentRemoveReason(
+                    DraftAttachmentRemoveErrorReason::AttachmentIsPublicKey,
+                ))
+            }
+        }
+    }
+}
+
 impl From<PackageError> for ProtonMailError {
     fn from(value: PackageError) -> Self {
         let draft_reason = match value {
@@ -481,9 +474,6 @@ impl From<PackageError> for ProtonMailError {
             }
             PackageError::ProtonRecipientDoesNotExist(e) => {
                 DraftSendErrorReason::ProtonRecipientDoesNotExist(e)
-            }
-            PackageError::UnknownRecipientValidationError(e) => {
-                DraftSendErrorReason::UnknownRecipientValidationError(e)
             }
             v => DraftSendErrorReason::PackageError(v.to_string()),
         };

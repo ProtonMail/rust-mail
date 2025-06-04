@@ -13,7 +13,7 @@ use crate::mail::MailUserSession;
 use crate::mail::datatypes::MimeType;
 use crate::mail::draft::attachments::AttachmentList;
 use crate::mail::draft::observer::DraftSendResult;
-use crate::mail::messages::EmbeddedAttachmentInfo;
+use crate::mail::messages::{EmbeddedAttachmentInfo, ThemeOpts};
 use crate::mail::state::MailUserContextPtr;
 use crate::{async_runtime, uniffi_async};
 use chrono::Local;
@@ -142,7 +142,7 @@ pub async fn new_draft(
     let ptr = session.ptr();
     uniffi_async(async move {
         let draft = match create_mode {
-            DraftCreateMode::Empty => RealDraft::empty(ctx.user_stash()).await,
+            DraftCreateMode::Empty => RealDraft::empty(&ctx).await,
             DraftCreateMode::Reply(id) => {
                 RealDraft::reply(&ctx, id.into(), ReplyMode::Sender, false, None).await
             }
@@ -212,6 +212,57 @@ impl Draft {
     /// Get the draft's subject.
     pub fn subject(&self) -> String {
         async_runtime().block_on(async { self.instance.read().await.subject.clone() })
+    }
+
+    /// Get head content for the composer.
+    /// It is **NOT** a head of the message.
+    /// It contains styles for dark mode and nothing else.
+    ///
+    /// **WARNING**: This function modifies the draft content by removing `!important` flag.
+    ///
+    /// # Parameters
+    ///
+    /// * `editor_id` - the HTML ID of the editor that wraps the message. The same used to reference DOM in javascript.
+    ///
+    /// # Returned HTML
+    ///
+    /// This function returns HTML that can be inserted INTO `<head>` tag.
+    /// It does not provide `<head>` tag on its own.
+    /// Therefore, the returned HTML can be inserted alongside with other html nodes.
+    ///
+    /// ## Example of usage
+    ///
+    /// ```ignore
+    /// let head_to_inject = draft.html_head_content_for_composer(theme_opts);
+    ///
+    /// let template = format!("
+    /// <html>
+    /// <head>
+    ///
+    ///    <meta ...things set up for the composer />
+    ///    
+    ///    {head_to_inject}
+    ///
+    /// </head>
+    /// <body>
+    /// ...
+    /// </body>
+    /// </html>
+    /// ");
+    ///
+    /// ```
+    pub fn html_head_content_for_composer(
+        &self,
+        theme_opts: ThemeOpts,
+        editor_id: String,
+    ) -> String {
+        let theme_opts = theme_opts.into();
+        async_runtime().block_on(async {
+            self.instance
+                .write()
+                .await
+                .html_head_content_for_composer(theme_opts, editor_id)
+        })
     }
 
     /// Get the draft's body.

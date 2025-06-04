@@ -59,13 +59,13 @@ async fn contact_list() {
                 name: "Mr Banksy".to_string(),
                 avatar_information: AvatarInformation {
                     text: "M".to_string(),
-                    color: "#1ED19C".to_string()
+                    color: "#52CD96".to_string()
                 },
                 emails: vec![ContactEmailItem {
                     name: "Mr Banksy".into(),
                     avatar_information: AvatarInformation {
                         text: "M".to_string(),
-                        color: "#1ED19C".to_string()
+                        color: "#52CD96".to_string()
                     },
                     local_id: 1.into(),
                     email: "banksy@proton.me".to_string(),

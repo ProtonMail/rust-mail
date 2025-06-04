@@ -9,17 +9,71 @@ use include_dir::{Dir, include_dir};
 use indoc::indoc;
 use proton_sqlite3::MigratorError;
 use proton_sqlite3::file::embedded_migrations;
-use proton_sqlite3::rusqlite::ToSql;
-use stash::exports::SqliteError;
-use stash::macros::Model;
+use proton_sqlite3::rusqlite::types::ValueRef;
+use stash::exports::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput};
+use stash::exports::{SqliteError, Value};
+use stash::macros::{DbRecord, Model};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, StashError, Tether};
+use std::collections::HashSet;
+use std::hash::RandomState;
 use std::ops::Add;
 use std::time::Duration;
 use tracing::{debug, error};
 
 pub(crate) const DEFAULT_LOCK_TIMEOUT: Duration = Duration::from_secs(60);
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[repr(u8)]
+pub enum DependencyType {
+    /// Direct dependencies result in the dependee being cancelled
+    Direct = 0,
+    /// Sequential dependencies do not result in the dependee being cancelled
+    Sequential = 1,
+}
+
+impl ToSql for DependencyType {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
+    }
+}
+
+impl FromSql for DependencyType {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match u8::column_result(value)? {
+            0 => Ok(Self::Direct),
+            1 => Ok(Self::Sequential),
+            v => Err(FromSqlError::OutOfRange(v.into())),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, DbRecord)]
+pub struct ActionDependency {
+    #[DbField]
+    pub dependency_id: ActionId,
+    #[DbField]
+    pub dependency_type: DependencyType,
+}
+
+impl ActionDependency {
+    #[must_use]
+    pub fn direct(action_id: ActionId) -> Self {
+        Self {
+            dependency_id: action_id,
+            dependency_type: DependencyType::Direct,
+        }
+    }
+
+    #[must_use]
+    pub fn sequential(action_id: ActionId) -> Self {
+        Self {
+            dependency_id: action_id,
+            dependency_type: DependencyType::Sequential,
+        }
+    }
+}
 
 /// Associated action resource.
 #[derive(Debug, Eq, PartialEq, Model, Clone)]
@@ -40,7 +94,7 @@ pub struct StoredAction {
     pub debug_string: Option<String>,
 
     /// Other actions this action depends on.
-    pub dependencies: Vec<ActionId>,
+    pub dependencies: Vec<ActionDependency>,
 
     /// Time at which this action was created.
     #[DbField]
@@ -212,11 +266,12 @@ impl StoredAction {
     pub async fn on_load(&mut self, tether: &Tether) -> Result<(), StashError> {
         // Dependencies
         let dependencies = tether
-            .query_values::<_, ActionId>(
-                "SELECT DISTINCT dependency_id AS value FROM action_queue_dependencies WHERE action_id = ?",
+            .query::<_, ActionDependency>(
+                "SELECT * FROM action_queue_dependencies WHERE action_id = ?",
                 params![self.id],
             )
-            .await.inspect_err(|e| error!("failed to load action deps: {e:?}"))?;
+            .await
+            .inspect_err(|e| error!("failed to load action deps: {e:?}"))?;
         self.dependencies.extend(dependencies);
 
         // Resources
@@ -258,25 +313,28 @@ impl StoredAction {
             let parameters = self
                 .dependencies
                 .iter()
-                .map(|i| Box::new(*i) as Box<dyn ToSql + Send>)
+                .map(|i| Box::new(i.dependency_id) as Box<dyn ToSql + Send>)
                 .collect::<Vec<_>>();
             let placeholders = stash::utils::placeholders(parameters.len());
-            let dependency_ids = bond
-                .query_values::<_, ActionId>(
+            let existing_action_ids: HashSet<ActionId, RandomState> = HashSet::from_iter(
+                bond.query_values::<_, ActionId>(
                     format!(
                         "SELECT id AS value FROM {} WHERE id IN ({placeholders})",
                         Self::table_name()
                     ),
                     parameters,
                 )
-                .await?;
+                .await?,
+            );
 
-            for dep in dependency_ids {
-                bond.execute(
-                    "INSERT OR IGNORE INTO action_queue_dependencies VALUES (?,?)",
-                    params![self.id, dep],
-                )
-                .await?;
+            for dep in &self.dependencies {
+                if existing_action_ids.contains(&dep.dependency_id) {
+                    bond.execute(
+                        "INSERT OR IGNORE INTO action_queue_dependencies (action_id, dependency_id, dependency_type) VALUES (?,?, ?)",
+                        params![self.id, dep.dependency_id, dep.dependency_type],
+                    )
+                    .await?;
+                }
             }
         }
 
@@ -316,11 +374,32 @@ impl StoredAction {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn dependees(tehter: &Tether, id: ActionId) -> Result<Vec<ActionId>, StashError> {
-        tehter
-            .query_values::<_, ActionId>(
-                "SELECT DISTINCT action_id AS value FROM action_queue_dependencies WHERE dependency_id = ?",
+    pub async fn all_dependees(
+        tether: &Tether,
+        id: ActionId,
+    ) -> Result<Vec<ActionDependency>, StashError> {
+        tether
+            .query::<_, ActionDependency>(
+                "SELECT * FROM action_queue_dependencies WHERE dependency_id = ?",
                 params![id],
+            )
+            .await
+    }
+
+    /// Get all the actions which depend on the action with `id` with a given dependency type.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the query failed.
+    pub async fn dependees_of_type(
+        tether: &Tether,
+        id: ActionId,
+        dependency_type: DependencyType,
+    ) -> Result<Vec<ActionId>, StashError> {
+        tether
+            .query_values::<_, ActionId>(
+                "SELECT DISTINCT action_id AS value FROM action_queue_dependencies WHERE dependency_id = ? AND dependency_type =?",
+                params![id, dependency_type],
             )
             .await
     }
@@ -401,7 +480,7 @@ impl StoredAction {
                 self.row_id = existing.row_id;
                 // failsafe, filter out any dependencies on self.
                 // We also check this at submission time.
-                self.dependencies.retain(|v| *v != existing_id);
+                self.dependencies.retain(|v| v.dependency_id != existing_id);
             }
         }
 

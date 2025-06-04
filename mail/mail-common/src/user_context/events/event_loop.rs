@@ -130,7 +130,7 @@ impl MailUserContext {
                     .queue_action(item_rollback_action)
                     .await?
             };
-            last_action_ids.last_event_loop_action_id = Some(output.id);
+            last_action_ids.last_rollback_action_id = Some(output.id);
         }
         Ok(())
     }

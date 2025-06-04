@@ -19,6 +19,7 @@ use proton_mail_common::draft::{
 };
 use proton_mail_common::models::{Attachment, MetadataId};
 use proton_mail_common::{MailContextError, MailUserContext, Mailbox};
+use proton_mail_html_transformer::Html2TextOptions;
 use ratatui::Frame;
 use ratatui::crossterm::event::Event;
 use ratatui::layout::Rect;
@@ -58,7 +59,7 @@ impl Composer {
             Command::task(async move {
                 Command::batch([
                     Command::message(Messages::DismissBackgroundProgress),
-                    match Draft::empty(ctx.user_stash()).await {
+                    match Draft::empty(&ctx).await {
                         Ok(draft) => Composer::create(draft, None, ctx.user_stash().clone()).await,
                         Err(e) => {
                             error!("Failed to create new draft:{e:?}");
@@ -247,8 +248,11 @@ impl Composer {
         let cc_list = recipient_list_to_display_value(&draft.cc_list);
         let bcc_list = recipient_list_to_display_value(&draft.bcc_list);
         let text_area = if draft.mime_type() == MimeType::TextHtml {
-            let text = proton_mail_html_transformer::Transformer::html2text_str(draft.body())
-                .unwrap_or_else(|e| format!("Failed to parse html:{e}"));
+            let text = proton_mail_html_transformer::Transformer::html2text_str(
+                draft.body(),
+                Html2TextOptions::default(),
+            )
+            .unwrap_or_else(|e| format!("Failed to parse html:{e}"));
             TextArea::new(text.split('\n').map(str::to_owned).collect())
         } else if draft.mime_type() == MimeType::TextPlain {
             TextArea::new(draft.body().split('\n').map(str::to_owned).collect())
@@ -413,7 +417,7 @@ impl Composer {
             )),
             Command::task(async move {
                 let tether = context.user_stash().connection();
-                let cmd = if let Err(e) = action.queue(context.action_queue(), &tether).await {
+                let cmd = if let Err(e) = action.queue(&context, &tether).await {
                     Command::message(anyhow::Error::new(e).into())
                 } else {
                     Command::message(ComposerMessage::RefreshAttachmentList.into())

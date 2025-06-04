@@ -11,7 +11,6 @@ use uniffi_common::errors::UserApiServiceError;
 #[derive(Debug, From, UniffiEnum)]
 pub enum ProtonError {
     OtherReason(OtherErrorReason),
-    SessionExpired,
     ServerError(UserApiServiceError),
     Network,
     Unexpected(UnexpectedError),
@@ -21,7 +20,6 @@ impl From<RealProtonMailError> for ProtonError {
     fn from(error: RealProtonMailError) -> Self {
         error!("ProtonError from {error:?}");
         match error {
-            RealProtonMailError::SessionExpired => ProtonError::SessionExpired,
             RealProtonMailError::ServerError(err) => {
                 ProtonError::ServerError(into_uniffi_error(err))
             }

@@ -182,6 +182,20 @@ pub trait AccountApi {
     ) -> ApiServiceResult<PostSetupNewNonSubuserAddressResponse>;
 
     async fn auth_request(&self, request: PostAuthRequest) -> ApiServiceResult<AuthResponse>;
+
+    /// Checks if the provided email address is valid
+    /// [API doc](https://proton.black/api/internal/doc?page=core#tag/Validation/operation/post_core-{_version}-validate-email)
+    async fn validate_email(
+        &self,
+        request: ValidateEmailRequest,
+    ) -> ApiServiceResult<SimpleResponse>;
+
+    /// Checks if the provided phone number is valid
+    /// [API doc](https://proton.black/api/internal/doc?page=core#tag/Validation/operation/post_core-{_version}-validate-phone)
+    async fn validate_phone(
+        &self,
+        request: ValidatePhoneRequest,
+    ) -> ApiServiceResult<SimpleResponse>;
 }
 
 impl AccountApi for muon::Client {
@@ -303,6 +317,30 @@ impl AccountApi for muon::Client {
         Ok(POST!("{AUTH_V4}")
             .body_json(request)?
             .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn validate_email(
+        &self,
+        request: ValidateEmailRequest,
+    ) -> ApiServiceResult<SimpleResponse> {
+        // We need an unauth session for this call so we the request through the client send function.
+        Ok(self
+            .send(POST!("{CORE_V4}/validate/email").body_json(request)?)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn validate_phone(
+        &self,
+        request: ValidatePhoneRequest,
+    ) -> ApiServiceResult<SimpleResponse> {
+        // We need an unauth session for this call so we the request through the client send function.
+        Ok(self
+            .send(POST!("{CORE_V4}/validate/phone").body_json(request)?)
             .await?
             .ok()?
             .into_body_json()?)

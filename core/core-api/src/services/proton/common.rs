@@ -8,7 +8,7 @@
 //!
 
 use derive_more::Display;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::Value as JsonValue;
 use std::fmt::Debug;
 use std::time::Duration;
@@ -37,7 +37,7 @@ impl Timeouts {
 /// This struct provides a way to access that information.
 ///
 #[derive(Clone, Debug, Display, Default, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(any(test, debug_assertions), derive(serde::Serialize))]
 #[display("{code}: {error:?} ({details:?})")]
 #[serde(rename_all = "PascalCase")]
 pub struct ApiErrorInfo {

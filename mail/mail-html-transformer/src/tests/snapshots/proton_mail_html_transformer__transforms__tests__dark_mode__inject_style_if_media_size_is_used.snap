@@ -2,8 +2,15 @@
 source: mail/mail-html-transformer/src/tests/dark_mode.rs
 expression: html.to_string()
 ---
-<html><head>
-    <style>@media (width<=600px){body{color:#000}}</style>
+<html data-protonmail-message="true"><head>
+    <style>
+    /* https://www.w3.org/TR/mediaqueries-4/ EXAMPLE 26 */
+    @media (width <= 600px) {
+      body {
+        color: #000 !important;
+      }
+    }
+    </style>
   <style style="text/css">/*
 TODO: Introduce styles for combination of light and dark mode using @media queries
 */
@@ -317,7 +324,7 @@ img {
 </style><style style="text/css">
                   @media ( prefers-color-scheme: dark ) {
                       @media (width<=600px) {
-body {
+[data-protonmail-message] body {
 color:#fff!important
  }
  }

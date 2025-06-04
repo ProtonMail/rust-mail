@@ -120,6 +120,7 @@ impl proton_action_queue::action::Handler for AttachmentUploadHandler {
                 action.metadata_id,
                 action.attachment_id,
                 next_display_order,
+                false,
             )
         };
 

@@ -10,7 +10,11 @@ use proton_core_common::models::Address;
 use proton_crypto_inbox::message::{EncryptableDraft, EncryptedDraft};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_api::services::proton::request_data::DraftRecipient;
-use proton_mail_html_transformer::Transformer;
+use proton_mail_html_transformer::transforms::ColorMode;
+use proton_mail_html_transformer::transforms::styles::{
+    BrowserCapabilities, dark_mode_for_plaintext,
+};
+use proton_mail_html_transformer::{Html2TextOptions, Transformer};
 use std::borrow::Cow;
 use std::fmt::Display;
 use tracing::error;
@@ -28,39 +32,57 @@ pub(super) async fn patch_draft_with_reply_mode(
     reply_mode: ReplyMode,
     sender_address: &Address,
 ) {
+    let is_sent_message = source_message.is_sent();
+
     // Copy over the addresses based on reply mode
     match reply_mode {
         ReplyMode::Sender => {
-            draft.to_list = RecipientList::from_message_recipients(
-                contact_group_resolver,
-                std::iter::once(source_message.sender.clone().into()),
-            )
-            .await;
+            if is_sent_message {
+                draft.to_list = RecipientList::from_message_recipients(
+                    contact_group_resolver,
+                    source_message.to_list.value.iter().cloned(),
+                )
+                .await;
+            } else {
+                draft.to_list = RecipientList::from_message_recipients(
+                    contact_group_resolver,
+                    std::iter::once(source_message.sender.clone().into()),
+                )
+                .await;
+            }
             draft.subject = apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject);
         }
         ReplyMode::All => {
-            draft.to_list = RecipientList::from_message_recipients(
-                contact_group_resolver,
-                std::iter::once(source_message.sender.clone().into()).chain(
+            if is_sent_message {
+                draft.to_list = RecipientList::from_message_recipients(
+                    contact_group_resolver,
+                    source_message.to_list.value.iter().cloned(),
+                )
+                .await;
+            } else {
+                draft.to_list = RecipientList::from_message_recipients(
+                    contact_group_resolver,
+                    std::iter::once(source_message.sender.clone().into()).chain(
+                        source_message
+                            .to_list
+                            .value
+                            .iter()
+                            .filter(|v| v.address != sender_address.email)
+                            .cloned(),
+                    ),
+                )
+                .await;
+                draft.cc_list = RecipientList::from_message_recipients(
+                    contact_group_resolver,
                     source_message
-                        .to_list
+                        .cc_list
                         .value
                         .iter()
                         .filter(|v| v.address != sender_address.email)
                         .cloned(),
-                ),
-            )
-            .await;
-            draft.cc_list = RecipientList::from_message_recipients(
-                contact_group_resolver,
-                source_message
-                    .cc_list
-                    .value
-                    .iter()
-                    .filter(|v| v.address != sender_address.email)
-                    .cloned(),
-            )
-            .await;
+                )
+                .await;
+            }
             draft.subject = apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject);
         }
         ReplyMode::Forward => {
@@ -70,18 +92,37 @@ pub(super) async fn patch_draft_with_reply_mode(
 }
 
 /// Build signature from mail settings.
-pub(super) fn get_signature(address: &Address, mail_settings: &MailSettings) -> String {
-    let line_break = if mail_settings.draft_mime_type == MimeType::TextHtml {
+///
+/// `mime_type` is passed in explicitly since it can be overridden when reply to html content
+/// for instance.
+pub(super) fn get_signature(
+    address: &Address,
+    mail_settings: &MailSettings,
+    mime_type: MimeType,
+) -> String {
+    let line_break = if mime_type == MimeType::TextHtml {
         HTML_LINE_BREAK
     } else {
         "\n"
     };
-    let mut signature = address.signature.clone();
+    let mut signature = if mime_type == MimeType::TextPlain {
+        // convert signature from html to text, since it is possible there html content in it.
+        Transformer::html2text_str(
+            &address.signature,
+            Html2TextOptions {
+                link_foot_notes: false,
+                ..Default::default()
+            },
+        )
+        .unwrap_or(address.signature.clone())
+    } else {
+        address.signature.clone()
+    };
 
     if mail_settings.pm_signature != PmSignature::Disabled {
         signature.push_str(line_break);
         signature.push_str(line_break);
-        if mail_settings.draft_mime_type == MimeType::TextHtml {
+        if mime_type == MimeType::TextHtml {
             signature.push_str(PM_SIGNATURE_HTML);
         } else {
             signature.push_str(PM_SIGNATURE_PLAIN_TEXT);
@@ -218,7 +259,7 @@ pub fn html_to_text(input: &str) -> String {
     transformer.add_noreferrer();
     transformer.strip_utm();
     transformer.strip_whitelist();
-    match transformer.to_plain_text() {
+    match transformer.to_plain_text(Default::default()) {
         Ok(text_body) => text_body,
         Err(e) => {
             error!("Failed to convert html to text: {e:?}");
@@ -227,16 +268,57 @@ pub fn html_to_text(input: &str) -> String {
     }
 }
 
+pub struct DarkModeInjection {
+    /// Composer head. Not sent to the recipient.
+    pub head: String,
+    /// New body of the draft. Sent to the recipient.
+    /// Needs reverse operation before sending.
+    pub body: String,
+}
+
+/// This function adds dark mode support to the composer. It does modify original body only in the context
+/// of removing `!important` flag from styles and attributes.
+///
+/// Supplement CSS are not injected, instead the function returns the head in a separate string.
+///
+/// * `root_selector` - the CSS selector of the root of message.
+///   In case of viewing message, it is usually data attribute pointing to the `html` tag.
+///   In case of composer, it is ID pointing to custom editor that wraps the message.
+///   Used to create a selector with bigger specificity than any provided by the sender.
+pub fn inject_dark_mode(
+    mime_type: MimeType,
+    body: &str,
+    color_mode: ColorMode,
+    capabilities: BrowserCapabilities,
+    root_selector: String,
+) -> DarkModeInjection {
+    if mime_type == MimeType::TextPlain {
+        return DarkModeInjection {
+            head: dark_mode_for_plaintext(color_mode, capabilities).to_owned(),
+            body: body.to_owned(),
+        };
+    }
+
+    let mut transformer = Transformer::new(body);
+    let head =
+        transformer.inject_dark_mode_to_another_target(color_mode, capabilities, root_selector);
+    DarkModeInjection {
+        head,
+        body: transformer.to_string(),
+    }
+}
+
 /// Only html content is sanitized, plain text is ignored.
-pub fn maybe_sanitize(mime_type: MimeType, body: String) -> String {
+pub fn maybe_sanitize(mime_type: MimeType, body: &str) -> String {
     // There is no point in sanitizing content that is not HTML.
     if mime_type != MimeType::TextHtml {
-        return body;
+        return body.to_owned();
     }
-    let mut transformer = Transformer::new(&body);
+    let mut transformer = Transformer::new(body);
     transformer.add_noreferrer();
     transformer.strip_utm();
     transformer.strip_whitelist();
+    transformer.revert_dark_mode_in_inline_attributes();
 
     transformer.to_string()
 }
@@ -249,12 +331,7 @@ pub fn maybe_sanitize(mime_type: MimeType, body: String) -> String {
 /// * `body` - message body, containing full `<html>`
 fn sanitize_reply(body: &str) -> String {
     let mut html = Transformer::new(body);
-    // TODO(wpolak): In following MR's:
-    // * Inject dark mode
-    //     * Make sure dark mode is reversible
     html.move_styles_to_body();
-    // * Sanitize `<style>` in `<body>` so that selectors are pointing to
-    // `.protonmail_quote` (to prevent style bleeding)
     html.extract_body()
 }
 

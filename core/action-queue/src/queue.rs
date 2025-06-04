@@ -6,7 +6,9 @@ use crate::action::{
     Action, ActionGroup, ActionId, Error as ActionErrorTrait, Factory, FactoryError, FactoryResult,
     Handler, Metadata, Priority, Resources, Type, WriterGuard, WriterGuardError,
 };
-use crate::db::{self, DEFAULT_LOCK_TIMEOUT, ExecutionGuard, StoredAction};
+use crate::db::{
+    self, ActionDependency, DEFAULT_LOCK_TIMEOUT, DependencyType, ExecutionGuard, StoredAction,
+};
 use bitflags::bitflags;
 use chrono::DateTime;
 use parking_lot::RwLock;
@@ -155,7 +157,7 @@ pub struct QueuedMetadata {
     /// Other actions that this action depends on.
     ///
     /// Note that this only includes actions that have not yet executed.
-    pub dependencies: Vec<ActionId>,
+    pub dependencies: Vec<ActionDependency>,
     /// Optional debug string associated with this action.
     pub debug_string: Option<String>,
     /// Resources which were associated with this action.
@@ -1186,7 +1188,7 @@ async fn execute_action_local<T: Action>(
                 let mut pending_action_ids = vec![stored_action.id.unwrap()];
                 let mut visited = HashSet::new();
                 while let Some(action_id) = pending_action_ids.pop() {
-                    let deps = StoredAction::dependees(tx, action_id).await?;
+                    let deps = StoredAction::all_dependees(tx, action_id).await?;
                     if !visited.insert(action_id) {
                         continue;
                     }
@@ -1194,9 +1196,9 @@ async fn execute_action_local<T: Action>(
                         continue;
                     }
                     for dep in &deps {
-                        sorter.add_dependency(action_id, *dep);
+                        sorter.add_dependency(action_id, dep.dependency_id);
                     }
-                    pending_action_ids.extend(deps);
+                    pending_action_ids.extend(deps.into_iter().map(|dep| dep.dependency_id));
                 }
                 if sorter.pop().is_none() && !sorter.is_empty() {
                     return Err(Error::CyclicDependency.into());
@@ -1319,7 +1321,7 @@ async fn cancel_action_with_dependees(
     let mut sorter = TopologicalSort::<ActionId>::new();
     let mut cancelled_actions = Vec::new();
     while let Some(action_id) = remaining_actions.pop() {
-        let dependees = StoredAction::dependees(bond, action_id)
+        let dependees = StoredAction::dependees_of_type(bond, action_id, DependencyType::Direct)
             .await
             .map_err(|e| {
                 error!("Failed to load action dependees: {e:?}");

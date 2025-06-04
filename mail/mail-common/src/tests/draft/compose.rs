@@ -2,6 +2,8 @@ pub use super::*;
 use crate::datatypes::LocalAttachmentId;
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::LocalMessageId;
+use crate::datatypes::MessageFlags;
+use crate::datatypes::SystemLabelId;
 use crate::datatypes::attachment;
 use crate::datatypes::{Disposition, MessageRecipient, MessageRecipients, MessageSender};
 use crate::decrypted_message::DecryptedMessageBody;
@@ -10,6 +12,7 @@ use crate::draft::{Draft, MetadataId};
 use crate::models::{Attachment, MessageBodyMetadata};
 use crate::proton_mail_api::services::proton::prelude::ConversationId;
 use insta::assert_snapshot;
+use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::{AddressStatus, AddressType, LocalAddressId};
 use std::str::FromStr;
 
@@ -101,7 +104,7 @@ async fn forward_draft_message_creation() {
 fn message_signature_empty_without_address_or_mail_setting_signature() {
     let address = address_with_signature("");
     let mail_settings = MailSettings::default();
-    let signature = get_signature(&address, &mail_settings);
+    let signature = get_signature(&address, &mail_settings, MimeType::TextHtml);
     assert!(signature.is_empty());
 }
 
@@ -109,7 +112,7 @@ fn message_signature_empty_without_address_or_mail_setting_signature() {
 fn message_signature_with_signature_only() {
     let address = address_with_signature(ADDRESS_SIGNATURE);
     let mail_settings = MailSettings::default();
-    let signature = get_signature(&address, &mail_settings);
+    let signature = get_signature(&address, &mail_settings, MimeType::TextHtml);
     insta::assert_snapshot!(signature);
 }
 
@@ -118,7 +121,7 @@ fn message_signature_with_mail_settings_signature_only() {
     // mail settings signature should not be rendered as it is deprecated.
     let address = address_with_signature("");
     let mail_settings = mail_settings_with_signature();
-    let signature = get_signature(&address, &mail_settings);
+    let signature = get_signature(&address, &mail_settings, MimeType::TextHtml);
     insta::assert_snapshot!(signature);
 }
 
@@ -127,7 +130,7 @@ fn message_signature_with_address_and_mail_settings_signature() {
     // mail settings signature should not be rendered as it is deprecated.
     let address = address_with_signature(ADDRESS_SIGNATURE);
     let mail_settings = mail_settings_with_signature();
-    let signature = get_signature(&address, &mail_settings);
+    let signature = get_signature(&address, &mail_settings, MimeType::TextHtml);
     insta::assert_snapshot!(signature);
 }
 
@@ -136,7 +139,17 @@ fn message_signature_with_all_signatures() {
     // mail settings signature should not be rendered as it is deprecated.
     let address = address_with_signature(ADDRESS_SIGNATURE);
     let mail_settings = mail_settings_with_signature_and_pm_signautre();
-    let signature = get_signature(&address, &mail_settings);
+    let signature = get_signature(&address, &mail_settings, MimeType::TextHtml);
+    insta::assert_snapshot!(signature);
+}
+
+#[test]
+fn html_signature_converted_to_plain_text() {
+    // mail settings signature should not be rendered as it is deprecated.
+    let signature = r#"<div style="font-family: Arial, sans-serif; font-size: 14px; color: rgb(0, 0, 0); background-color: rgb(255, 255, 255);">My Default Signature<br></div>"#;
+    let address = address_with_signature(signature);
+    let mail_settings = mail_settings_with_signature();
+    let signature = get_signature(&address, &mail_settings, MimeType::TextPlain);
     insta::assert_snapshot!(signature);
 }
 
@@ -160,6 +173,36 @@ async fn sanitize_draft_reply_html() {
 
     // This should be identical before the save.
     assert_eq!(sanitized, draft.body);
+}
+
+#[tokio::test]
+#[test_case::test_case(ReplyMode::Sender; "Sender")]
+#[test_case::test_case(ReplyMode::All; "All")]
+async fn reply_to_sent_message_should_use_to_list_rather_than_sender(reply_mode: ReplyMode) {
+    let source_body_metadata = existing_message_body_metadata();
+    let mut message = existing_message();
+    let sender_address = message.sender.address.clone();
+    let to_address = "to_recipient@foo.com".to_owned();
+    message.flags |= MessageFlags::SENT;
+    message.label_ids.push(LabelId::sent());
+    message.to_list.value.push(MessageRecipient {
+        address: to_address.clone(),
+        is_proton: false,
+        name: "ToRecipient".to_owned(),
+        group: Default::default(),
+    });
+    let source_body = "Hello World".to_owned();
+    let (draft, _, _) = create_reply_with_mime_and_body_and_message(
+        reply_mode,
+        MimeType::TextPlain,
+        source_body_metadata,
+        source_body,
+        message,
+    )
+    .await;
+
+    assert!(draft.to_list.contains_email(&to_address));
+    assert!(!draft.to_list.contains_email(&sender_address));
 }
 
 fn sanitize_message_body_metadata(mime_type: MimeType) -> MessageBodyMetadata {
@@ -233,6 +276,23 @@ async fn create_reply_with_mime_and_body(
     source_body: String,
 ) -> (Draft, Message, Vec<Attachment>) {
     let source_message = existing_message();
+    create_reply_with_mime_and_body_and_message(
+        reply_mode,
+        mime_type,
+        source_body_metadata,
+        source_body,
+        source_message,
+    )
+    .await
+}
+
+async fn create_reply_with_mime_and_body_and_message(
+    reply_mode: ReplyMode,
+    mime_type: MimeType,
+    source_body_metadata: MessageBodyMetadata,
+    source_body: String,
+    source_message: Message,
+) -> (Draft, Message, Vec<Attachment>) {
     let address = address_with_signature("");
     let mail_settings = MailSettings {
         draft_mime_type: mime_type,

@@ -1,9 +1,11 @@
 ---
-source: mail/mail-html-transformer/src/tests/transforms.rs
-expression: html.to_string()
+source: mail/mail-html-transformer/src/tests/dark_mode.rs
+expression: head
 ---
-<html data-protonmail-message="true"><head>
-   <style style="text/css">article,
+<style style="text/css">/*
+TODO: Introduce styles for combination of light and dark mode using @media queries
+*/
+article,
 aside,
 details,
 dialog,
@@ -302,8 +304,21 @@ img {
         width: auto !important;
     }
 }
-</style></head>
-   <body>
-   
 
-</body></html>
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text-norm: #D1D1D4;
+    --background-norm: #1C1B24;
+    --primary: #7777F8;
+  }
+}
+</style><style style="text/css">
+                  @media ( prefers-color-scheme: dark ) {
+                      #protonmail-message .main {
+color:#fff!important
+ }html#protonmail-message {
+background-color:#1c1b24!important
+ }
+
+                  }
+                </style>

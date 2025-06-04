@@ -61,10 +61,10 @@ impl State {
         s.submit_username(username).await
     }
 
-    pub fn submit_recovery(self, recovery: Recovery) -> StateResult {
+    pub async fn submit_recovery(self, recovery: Recovery) -> StateResult {
         let s: WantRecovery = self.try_into().map_err(|_| SignupError::InvalidState)?;
 
-        Ok(s.submit_recovery(recovery))
+        s.submit_recovery(recovery).await
     }
 
     pub fn submit_password(self, password: String) -> StateResult {

@@ -10,7 +10,7 @@ fn pathologic_nested() {
     t.disable_content(true, true);
     t.inject_ios_content_size();
     _ = t.strip_whitelist();
-    t.inject_style(
+    t.inject_dark_mode(
         ColorMode::LightMode,
         BrowserCapabilities {
             supports_dark_mode_via_media_query: true,

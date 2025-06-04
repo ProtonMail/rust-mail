@@ -558,7 +558,6 @@ pub enum DraftSendFailureSend {
     NoRecipients,
     RecipientEmailInvalid(String),
     ProtonRecipientDoesNotExist(String),
-    UnknownRecipientValidationError(String),
     PackageError(String),
     MessageDoesNotExist,
     ScheduleSendExpired,
@@ -671,9 +670,6 @@ impl DraftSendFailure {
             PackageError::ProtonRecipientDoesNotExist(e) => {
                 Self::Send(DraftSendFailureSend::ProtonRecipientDoesNotExist(e.clone()))
             }
-            PackageError::UnknownRecipientValidationError(e) => Self::Send(
-                DraftSendFailureSend::UnknownRecipientValidationError(e.clone()),
-            ),
             v => Self::Send(DraftSendFailureSend::PackageError(v.to_string())),
         }
     }
@@ -719,7 +715,7 @@ impl From<DraftSendFailure> for ProtonMailError {
                     DraftSendFailureSave::AddressDoesNotHavePrimaryKey(v) => {
                         DraftSaveErrorReason::AddressDoesNotHavePrimaryKey(v)
                     }
-                    DraftSendFailureSave::AlreadySent => DraftSaveErrorReason::AlreadySent,
+                    DraftSendFailureSave::AlreadySent => DraftSaveErrorReason::MessageAlreadySent,
                     DraftSendFailureSave::MessageUpdateIsNotDraft => {
                         DraftSaveErrorReason::MessageIsNotADraft
                     }
@@ -736,9 +732,6 @@ impl From<DraftSendFailure> for ProtonMailError {
                     }
                     DraftSendFailureSend::ProtonRecipientDoesNotExist(v) => {
                         DraftSendErrorReason::ProtonRecipientDoesNotExist(v)
-                    }
-                    DraftSendFailureSend::UnknownRecipientValidationError(v) => {
-                        DraftSendErrorReason::UnknownRecipientValidationError(v)
                     }
                     DraftSendFailureSend::PackageError(v) => DraftSendErrorReason::PackageError(v),
                     DraftSendFailureSend::MessageDoesNotExist => {
@@ -838,6 +831,10 @@ pub struct DraftAttachmentMetadata {
     /// We keep it hidden until the action succeeds so we can recover.
     #[DbField]
     pub deleted: bool,
+
+    #[DbField]
+    pub is_public_key: bool,
+
     #[RowIdField]
     pub row_id: Option<u64>,
 }
@@ -848,6 +845,7 @@ impl DraftAttachmentMetadata {
         metadata_id: MetadataId,
         local_attachment_id: LocalAttachmentId,
         display_order: usize,
+        is_public_key: bool,
     ) -> Self {
         Self {
             local_attachment_id,
@@ -860,6 +858,7 @@ impl DraftAttachmentMetadata {
             display_order,
             row_id: None,
             deleted: false,
+            is_public_key,
         }
     }
 
@@ -871,6 +870,7 @@ impl DraftAttachmentMetadata {
         metadata_id: MetadataId,
         local_attachment_id: LocalAttachmentId,
         display_order: usize,
+        is_public_key: bool,
     ) -> Self {
         Self {
             local_attachment_id,
@@ -883,6 +883,7 @@ impl DraftAttachmentMetadata {
             display_order,
             row_id: None,
             deleted: false,
+            is_public_key,
         }
     }
 
@@ -906,6 +907,7 @@ impl DraftAttachmentMetadata {
             display_order,
             row_id: None,
             deleted: false,
+            is_public_key: attachment.is_public_key_attachment(),
         }
     }
 
@@ -914,6 +916,7 @@ impl DraftAttachmentMetadata {
         metadata_id: MetadataId,
         attachment_id: LocalAttachmentId,
         display_order: usize,
+        is_public_key: bool,
     ) -> Self {
         Self {
             local_attachment_id: attachment_id,
@@ -926,6 +929,7 @@ impl DraftAttachmentMetadata {
             display_order,
             row_id: None,
             deleted: false,
+            is_public_key,
         }
     }
 
@@ -1101,6 +1105,7 @@ impl DraftAttachmentMetadata {
                 display_order: order,
                 row_id: None,
                 deleted: false,
+                is_public_key: a.is_public_key_attachment(),
             })
             .collect::<Vec<_>>();
 
