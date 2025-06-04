@@ -3,7 +3,7 @@
 //! For more information, see the [`RealPaginator`] struct.
 //!
 
-use crate::errors::UserSessionError;
+use crate::errors::UserContextError;
 use crate::mail::datatypes::Conversation;
 use crate::{WatchHandle, async_runtime, uniffi_async};
 use itertools::Itertools;
@@ -82,7 +82,7 @@ impl ConversationScroller {
     ///
     /// Returns an error if the data could not be fetched from the database.
     ///
-    pub async fn all_items(self: Arc<Self>) -> Result<Vec<Conversation>, UserSessionError> {
+    pub async fn all_items(self: Arc<Self>) -> Result<Vec<Conversation>, UserContextError> {
         uniffi_async(async move {
             let mut scroller = self.scroller.lock().await;
             Result::<_, RealProtonMailError>::Ok(
@@ -90,7 +90,7 @@ impl ConversationScroller {
             )
         })
         .await
-        .map_err(UserSessionError::from)
+        .map_err(UserContextError::from)
     }
 
     /// Moves to the next page and retrieves its results.
@@ -100,7 +100,7 @@ impl ConversationScroller {
     /// Returns an error if the page after the next page could not be fetched
     /// from the API or database depending if it was already fetched.
     ///
-    pub async fn fetch_more(self: Arc<Self>) -> Result<Vec<Conversation>, UserSessionError> {
+    pub async fn fetch_more(self: Arc<Self>) -> Result<Vec<Conversation>, UserContextError> {
         uniffi_async(async move {
             let mut scroller = self.scroller.lock().await;
             Result::<_, RealProtonMailError>::Ok(
@@ -113,7 +113,7 @@ impl ConversationScroller {
             )
         })
         .await
-        .map_err(UserSessionError::from)
+        .map_err(UserContextError::from)
     }
 
     /// Retrieves the total number of records in the result set.
@@ -171,7 +171,7 @@ impl MessageScroller {
     ///
     /// Returns an error if the data could not be fetched from the database.
     ///
-    pub async fn all_items(self: Arc<Self>) -> Result<Vec<Message>, UserSessionError> {
+    pub async fn all_items(self: Arc<Self>) -> Result<Vec<Message>, UserContextError> {
         uniffi_async(async move {
             let mut scroller = self.scroller.lock().await;
             Result::<_, RealProtonMailError>::Ok(
@@ -179,7 +179,7 @@ impl MessageScroller {
             )
         })
         .await
-        .map_err(UserSessionError::from)
+        .map_err(UserContextError::from)
     }
 
     /// Moves to the next page and retrieves its results.
@@ -189,7 +189,7 @@ impl MessageScroller {
     /// Returns an error if the page after the next page could not be fetched
     /// from the API or database depending if it was already fetched.
     ///
-    pub async fn fetch_more(self: Arc<Self>) -> Result<Vec<Message>, UserSessionError> {
+    pub async fn fetch_more(self: Arc<Self>) -> Result<Vec<Message>, UserContextError> {
         uniffi_async(async move {
             let mut scroller = self.scroller.lock().await;
             Result::<_, RealProtonMailError>::Ok(
@@ -202,7 +202,7 @@ impl MessageScroller {
             )
         })
         .await
-        .map_err(UserSessionError::from)
+        .map_err(UserContextError::from)
     }
 
     /// Retrieves the total number of records in the result set.
@@ -260,7 +260,7 @@ impl SearchScroller {
     ///
     /// Returns an error if the data could not be fetched from the database.
     ///
-    pub async fn all_items(self: Arc<Self>) -> Result<Vec<Message>, UserSessionError> {
+    pub async fn all_items(self: Arc<Self>) -> Result<Vec<Message>, UserContextError> {
         uniffi_async(async move {
             let mut scroller = self.scroller.lock().await;
             Result::<_, RealProtonMailError>::Ok(
@@ -268,7 +268,7 @@ impl SearchScroller {
             )
         })
         .await
-        .map_err(UserSessionError::from)
+        .map_err(UserContextError::from)
     }
 
     /// Moves to the next page and retrieves its results.
@@ -278,7 +278,7 @@ impl SearchScroller {
     /// Returns an error if the page after the next page could not be fetched
     /// from the API or database depending if it was already fetched.
     ///
-    pub async fn fetch_more(self: Arc<Self>) -> Result<Vec<Message>, UserSessionError> {
+    pub async fn fetch_more(self: Arc<Self>) -> Result<Vec<Message>, UserContextError> {
         uniffi_async(async move {
             let mut scroller = self.scroller.lock().await;
             Result::<_, RealProtonMailError>::Ok(
@@ -291,7 +291,7 @@ impl SearchScroller {
             )
         })
         .await
-        .map_err(UserSessionError::from)
+        .map_err(UserContextError::from)
     }
 
     /// Retrieves the total number of records in the result set.

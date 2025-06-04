@@ -3,7 +3,7 @@ use std::sync::Arc;
 use proton_mail_common::errors::ProtonMailError;
 
 use crate::{
-    errors::{UserSessionError, VoidSessionResult},
+    errors::{UserContextError, VoidSessionResult},
     uniffi_async,
 };
 
@@ -19,7 +19,7 @@ use super::MailUserSession;
 ///
 #[uniffi_export]
 #[returns(VoidSessionResult)]
-pub async fn sign_out_all(session: Arc<MailUserSession>) -> Result<(), UserSessionError> {
+pub async fn sign_out_all(session: Arc<MailUserSession>) -> Result<(), UserContextError> {
     let user_context = session.ctx()?;
     uniffi_async(async move {
         user_context.sign_out_all().await?;
@@ -27,6 +27,6 @@ pub async fn sign_out_all(session: Arc<MailUserSession>) -> Result<(), UserSessi
         Result::<(), ProtonMailError>::Ok(())
     })
     .await
-    .map_err(UserSessionError::from)
+    .map_err(UserContextError::from)
     .into()
 }

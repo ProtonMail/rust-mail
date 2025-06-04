@@ -1,4 +1,4 @@
-use super::{ProtonError, SessionErrorReason};
+use super::{ContextReason, ProtonError};
 use crate::UniffiEnum;
 use derive_more::From;
 use proton_mail_common::errors::MailErrorReason as RealMailErrorReason;
@@ -6,26 +6,26 @@ use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use tracing::error;
 
 #[derive(Debug, From, UniffiEnum)]
-pub enum UserSessionError {
-    Reason(SessionErrorReason),
+pub enum UserContextError {
+    Reason(ContextReason),
     Other(ProtonError),
 }
 
-impl From<RealProtonMailError> for UserSessionError {
+impl From<RealProtonMailError> for UserContextError {
     fn from(error: RealProtonMailError) -> Self {
-        error!("UserSessionError from {error:?}");
+        error!("UserContextError from {error:?}");
         match error {
             RealProtonMailError::Reason(reason) => reason.into(),
-            mail_error => UserSessionError::Other(ProtonError::from(mail_error)),
+            mail_error => UserContextError::Other(ProtonError::from(mail_error)),
         }
     }
 }
 
-impl From<RealMailErrorReason> for UserSessionError {
+impl From<RealMailErrorReason> for UserContextError {
     fn from(reason: RealMailErrorReason) -> Self {
         match reason {
-            RealMailErrorReason::SessionReason(reason) => UserSessionError::Reason(reason.into()),
-            other_reason => UserSessionError::Other(ProtonError::from(other_reason)),
+            RealMailErrorReason::ContextReason(reason) => UserContextError::Reason(reason.into()),
+            other_reason => UserContextError::Other(ProtonError::from(other_reason)),
         }
     }
 }

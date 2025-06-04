@@ -104,7 +104,7 @@ impl From<OpenError> for MailContextError {
 #[derive(Debug, thiserror::Error)]
 pub enum SendError {
     #[error("Message {0} is not a draft")]
-    MessageNotADraft(LocalMessageId),
+    MessageIsNotADraft(LocalMessageId),
     #[error("Metadata with Id {0} does not exist")]
     MetadataNotFound(MetadataId),
     #[error("Draft has no message")]
@@ -311,8 +311,6 @@ pub enum PackageError {
     RecipientEmailInvalid(String),
     #[error("Proton Email {0} does not exist")]
     ProtonRecipientDoesNotExist(String),
-    #[error("Unknown error occurred while validating the recipient {0}")]
-    UnknownRecipientValidationError(String),
 }
 
 /// Draft reply mode.

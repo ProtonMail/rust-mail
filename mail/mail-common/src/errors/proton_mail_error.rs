@@ -31,8 +31,6 @@ use tracing::error;
 pub enum ProtonMailError {
     /// This error is related with the arguments (i.e. like a Message id who does not exist)
     Reason(MailErrorReason),
-    /// This error is related with the session (i.e. like a session expired)
-    SessionExpired,
     /// This error come from the Backend (i.e. like a 404 error)
     ServerError(UserApiServiceError),
     /// This error come form network (i.e. like can't connect to backend)
@@ -120,7 +118,6 @@ impl From<LoginError> for ProtonMailError {
             | LoginError::FlowFido(api_service_error)
             | LoginError::UserFetch(api_service_error) => Self::from(api_service_error),
             LoginError::MissingPrimaryKey
-            | LoginError::KeySecretAuthUpdate(_)
             | LoginError::KeySecretDecryption
             | LoginError::KeySecretDerivation(_) => {
                 Self::reason(LoginErrorReason::CantUnlockUserKey)
@@ -136,7 +133,6 @@ impl From<LoginError> for ProtonMailError {
             LoginError::ServerProof(_string) | LoginError::SrpProof(_string) => {
                 Self::reason(LoginErrorReason::InvalidCredentials)
             }
-            LoginError::UnsupportedTfa => Self::Reason(LoginErrorReason::UnsupportedTfa.into()),
             LoginError::WrongMailboxPassword => Self::Unexpected(Unexpected::Internal),
             LoginError::AuthStore(store_error) => Self::from(store_error),
         }
@@ -301,9 +297,9 @@ impl From<DraftOpenError> for ProtonMailError {
 impl From<DraftSendError> for ProtonMailError {
     fn from(value: DraftSendError) -> Self {
         match value {
-            DraftSendError::MessageNotADraft(_) => Self::Reason(MailErrorReason::DraftSendReason(
-                DraftSendErrorReason::MessageIsNotADraft,
-            )),
+            DraftSendError::MessageIsNotADraft(_) => Self::Reason(
+                MailErrorReason::DraftSendReason(DraftSendErrorReason::MessageIsNotADraft),
+            ),
             DraftSendError::MessageBodyMissing(_) => Self::Unexpected(Unexpected::Internal),
             DraftSendError::LocalDraftWithoutMessage => Self::Unexpected(Unexpected::Internal),
             DraftSendError::SendMessage(v) => Self::from(v),
@@ -344,7 +340,7 @@ impl From<DraftSaveError> for ProtonMailError {
             }
             DraftSaveError::LocalDraftWithoutMessage => Self::Unexpected(Unexpected::Internal),
             DraftSaveError::AlreadySent => Self::Reason(MailErrorReason::DraftSaveReason(
-                DraftSaveErrorReason::AlreadySent,
+                DraftSaveErrorReason::MessageAlreadySent,
             )),
             DraftSaveError::MetadataNotFound(_) | DraftSaveError::DraftDoesNotExistOnServer => {
                 Self::Reason(MailErrorReason::DraftSaveReason(
@@ -478,9 +474,6 @@ impl From<PackageError> for ProtonMailError {
             }
             PackageError::ProtonRecipientDoesNotExist(e) => {
                 DraftSendErrorReason::ProtonRecipientDoesNotExist(e)
-            }
-            PackageError::UnknownRecipientValidationError(e) => {
-                DraftSendErrorReason::UnknownRecipientValidationError(e)
             }
             v => DraftSendErrorReason::PackageError(v.to_string()),
         };
