@@ -1,9 +1,7 @@
 use proton_core_api::services::proton::Label as ApiLabel;
 use proton_core_api::services::proton::{LabelId, LabelType as ApiLabelType};
 use proton_mail_api::services::proton::common::MessageId;
-use proton_mail_api::services::proton::response_data::{
-    MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
-};
+use proton_mail_api::services::proton::response_data::MessageMetadata as ApiMessageMetadata;
 use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::{ContextualConversation, SystemLabelId};
 use proton_mail_common::models::Conversation;
@@ -22,16 +20,9 @@ async fn test_new_mailbox_sync_conversations() {
         .unwrap()
         .push(ApiLabel {
             id: LabelId::from("testlabel"),
-            parent_id: None,
             name: "testlabel".to_owned(),
-            path: None,
-            color: String::new(),
             label_type: ApiLabelType::Label,
-            notify: false,
-            display: false,
-            sticky: false,
-            expanded: false,
-            order: 0,
+            ..Default::default()
         });
 
     let message_id1 = MessageId::from("m1");
@@ -44,24 +35,7 @@ async fn test_new_mailbox_sync_conversations() {
             order: 0,
             address_id: params.addresses[0].id.clone(),
             label_ids: vec![LabelId::inbox()],
-            external_id: None,
-            subject: String::new(),
-            sender: Default::default(),
-            to_list: vec![],
-            cc_list: vec![],
-            bcc_list: vec![],
-            reply_tos: vec![],
-            flags: ApiMessageFlags::empty(),
-            time: 100,
-            size: 0,
-            unread: false,
-            is_replied: false,
-            is_replied_all: false,
-            is_forwarded: false,
-            expiration_time: 0,
-            snooze_time: 0,
-            num_attachments: 0,
-            attachments_metadata: vec![],
+            ..Default::default()
         },
         ApiMessageMetadata {
             id: message_id2.clone(),
@@ -69,24 +43,7 @@ async fn test_new_mailbox_sync_conversations() {
             order: 1,
             address_id: params.addresses[0].id.clone(),
             label_ids: vec![LabelId::inbox()],
-            external_id: None,
-            subject: String::new(),
-            sender: Default::default(),
-            to_list: vec![],
-            cc_list: vec![],
-            bcc_list: vec![],
-            reply_tos: vec![],
-            flags: ApiMessageFlags::empty(),
-            time: 200,
-            size: 0,
-            unread: false,
-            is_replied: false,
-            is_replied_all: false,
-            is_forwarded: false,
-            expiration_time: 0,
-            snooze_time: 0,
-            num_attachments: 0,
-            attachments_metadata: vec![],
+            ..Default::default()
         },
     ];
 

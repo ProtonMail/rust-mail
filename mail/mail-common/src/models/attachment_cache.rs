@@ -20,7 +20,7 @@ use stash::orm::Model as _;
 use stash::params;
 use stash::stash::RunTransaction;
 use stash::stash::{Bond, StashError};
-use stash::utils::placeholders;
+use stash::utils::placeholders_n;
 use std::io::Read;
 use std::os::unix::fs::MetadataExt as _;
 use std::path::{Path, PathBuf};
@@ -579,7 +579,7 @@ impl Attachment {
 
         let query = format!(
             "DELETE FROM attachment_cache WHERE attachment_id IN ({})",
-            placeholders(ids.len())
+            placeholders_n(ids.len())
         );
         tether.tx(async |tx| tx.execute(query, ids).await).await?;
 

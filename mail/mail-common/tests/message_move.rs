@@ -1,10 +1,11 @@
+use itertools::Itertools as _;
 use proton_core_api::services::proton::{
     Address as ApiAddress, DelinquentState, Flags as ApiFlags, Label as ApiLabel,
     ProductUsedSpace as ApiProductUsedSpace, User as ApiUser,
     UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
 };
 use proton_core_api::services::proton::{AddressId, LabelId, LabelType as ApiLabelType, UserId};
-use proton_core_common::models::Label;
+use proton_core_common::models::{Label, ModelExtension as _, ModelIdExtension as _};
 use proton_core_common::test_utils::addresses::ApiAddressTestUtils;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as ApiUserKeys};
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
@@ -13,11 +14,14 @@ use proton_mail_api::services::proton::response_data::{
     MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
     MimeType as ApiMimeType, ViewMode as ApiViewMode,
 };
-use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::SystemLabelId;
-use proton_mail_common::models::{ConversationCounters, Message, MessageCounters};
+use proton_mail_common::models::{Conversation, ConversationCounters, Message, MessageCounters};
 use proton_mail_common::test_utils::init::Params as TestParams;
-use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
+use proton_mail_common::test_utils::scroller::StoreLabeledModelMap as _;
+use proton_mail_common::test_utils::test_context::{
+    MailTestContext, MailUserContextTestExtension as _,
+};
+use proton_mail_common::{Mailbox, conv_id, conversation, message, msg_id};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::StashError;
@@ -93,8 +97,8 @@ async fn move_between_folders() {
         .unwrap()
         .unwrap();
 
-    let message = Message::load(1.into(), &tether).await.unwrap().unwrap();
-    assert!(message.label_ids.contains(&source_label_id));
+    let mut message = Message::load(1.into(), &tether).await.unwrap().unwrap();
+    assert_eq!(message.label_ids, vec![source_label_id]);
 
     // Action:
     // * move message in the other folder
@@ -111,13 +115,8 @@ async fn move_between_folders() {
     // Validation:
     // * the message is in the second folder
     // * the message is not in the first folder
-    let message = Message::load(1.into(), &tether)
-        .await
-        .unwrap()
-        .expect("failed to load message");
-    assert_eq!(message.label_ids.len(), 1);
-    assert!(!message.label_ids.contains(&source_label_id));
-    assert!(message.label_ids.contains(&destination_label_id));
+    message.reload(&tether).await.unwrap();
+    assert_eq!(message.label_ids, vec![destination_label_id]);
 }
 
 #[tokio::test]
@@ -169,7 +168,7 @@ async fn move_from_label_does_not_unlabel() {
         .unwrap()
         .unwrap();
 
-    let message = Message::load(1.into(), &tether).await.unwrap().unwrap();
+    let mut message = Message::load(1.into(), &tether).await.unwrap().unwrap();
     assert!(message.label_ids.contains(&source_label_id));
     assert_eq!(message.custom_labels.len(), 1);
     assert_eq!(message.custom_labels[0].name, "source");
@@ -189,13 +188,11 @@ async fn move_from_label_does_not_unlabel() {
     // Validation:
     // * the message is in the second label
     // * the message is still in the first label
-    let message = Message::load(1.into(), &tether)
-        .await
-        .unwrap()
-        .expect("failed to load message");
-    assert_eq!(message.label_ids.len(), 2);
-    assert!(message.label_ids.contains(&source_label_id));
-    assert!(message.label_ids.contains(&destination_label_id));
+    message.reload(&tether).await.unwrap();
+    assert_eq!(
+        message.label_ids,
+        vec![source_label_id, destination_label_id]
+    );
 }
 
 #[tokio::test]
@@ -251,7 +248,7 @@ async fn move_into_trash_remove_label_and_mark_read() {
         .await
         .unwrap();
 
-    let message = Message::load(1.into(), &tether).await.unwrap().unwrap();
+    let mut message = Message::load(1.into(), &tether).await.unwrap().unwrap();
     assert!(message.label_ids.contains(&custom_label_id));
     assert!(message.unread);
 
@@ -270,12 +267,11 @@ async fn move_into_trash_remove_label_and_mark_read() {
     // Validation:
     // * the message only have `all_mail` label
     // * the message is marked as read
-    let message = Message::load(1.into(), &tether)
-        .await
-        .unwrap()
-        .expect("failed to load message");
-    assert!(!message.label_ids.contains(&custom_label_id));
-    assert!(message.label_ids.contains(&LabelId::all_mail()));
+    message.reload(&tether).await.unwrap();
+    assert_eq!(
+        message.label_ids,
+        vec![LabelId::trash(), LabelId::all_mail()]
+    );
     assert!(!message.unread);
 }
 
@@ -332,7 +328,7 @@ async fn move_into_spam_remove_labels() {
         .unwrap()
         .unwrap();
 
-    let message = Message::load(1.into(), &tether).await.unwrap().unwrap();
+    let mut message = Message::load(1.into(), &tether).await.unwrap().unwrap();
     assert!(message.label_ids.contains(&custom_label_id));
 
     // Action:
@@ -348,13 +344,12 @@ async fn move_into_spam_remove_labels() {
     user_ctx.execute_single_action().await.unwrap();
 
     // Validation:
-    // * the message only have `all_mail` label
-    let message = Message::load(1.into(), &tether)
-        .await
-        .unwrap()
-        .expect("failed to load message");
-    assert!(!message.label_ids.contains(&custom_label_id));
-    assert!(message.label_ids.contains(&LabelId::all_mail()));
+    // * the message only has the `all_mail` label (and spam)
+    message.reload(&tether).await.unwrap();
+    assert_eq!(
+        message.label_ids,
+        vec![LabelId::spam(), LabelId::all_mail()]
+    );
 }
 
 #[tokio::test]
@@ -411,7 +406,7 @@ async fn move_out_of_spam_set_almost_all_mail() {
         .await
         .unwrap();
 
-    let message = Message::load(1.into(), &tether).await.unwrap().unwrap();
+    let mut message = Message::load(1.into(), &tether).await.unwrap().unwrap();
     assert_eq!(message.label_ids.len(), 1);
     assert_eq!(message.label_ids[0].as_str(), "4");
 
@@ -429,13 +424,131 @@ async fn move_out_of_spam_set_almost_all_mail() {
 
     // Validation:
     // * the message have `almost_all_mail` label
-    let message = Message::load(1.into(), &tether)
+    message.reload(&tether).await.unwrap();
+    assert_eq!(
+        message.label_ids,
+        vec![LabelId::inbox(), LabelId::almost_all_mail()]
+    );
+}
+
+#[tokio::test]
+async fn move_message_also_moves_conversation() {
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::new().await;
+    let params = TestParams::default_basic();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_label_messages(&LabelId::spam(), vec!["my_message".into()])
+        .await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+
+    let tether = &mut user_ctx.user_stash().connection();
+
+    let mut conv_data = hash_map! {
+        vec![LabelId::inbox()]: vec![conversation!(remote_id: conv_id!("my_conv"))]
+    };
+    conv_data.save_to_database(tether).await;
+
+    let conv = &conv_data.get(&vec![LabelId::inbox()]).unwrap()[0];
+
+    let mut msg_data = (
+        LabelId::inbox(),
+        vec![message!(
+                remote_id: msg_id!("my_message"),
+                local_conversation_id: conv.local_id,
+                remote_conversation_id: conv.remote_id.clone())],
+    );
+    msg_data.save_to_database(tether).await;
+
+    // ---
+    let local_inbox = Label::remote_id_counterpart(LabelId::inbox(), tether)
         .await
         .unwrap()
-        .expect("failed to load message");
-    assert_eq!(message.label_ids.len(), 2);
-    assert!(message.label_ids.contains(&LabelId::inbox()));
-    assert!(message.label_ids.contains(&LabelId::almost_all_mail()));
+        .unwrap();
+
+    let local_spam = Label::remote_id_counterpart(LabelId::spam(), tether)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let convs = Conversation::in_label(local_inbox, tether).await.unwrap();
+
+    assert_eq!(convs.len(), 1);
+
+    let conv = &convs[0];
+    assert_eq!(conv.num_messages, 1);
+    assert_eq!(conv.num_unread, 0);
+    assert!(
+        conv.labels
+            .iter()
+            .any(|l| *l.remote_label_id.as_ref().unwrap() == LabelId::inbox())
+    );
+    assert!(
+        conv.labels
+            .iter()
+            .all(|l| *l.remote_label_id.as_ref().unwrap() != LabelId::spam())
+    );
+
+    let msgs = Message::in_label(local_inbox, tether).await.unwrap();
+    assert_eq!(msgs.len(), 1);
+    let message = &msgs[0];
+    assert_eq!(message.label_ids, vec![LabelId::inbox()]);
+
+    assert_eq!(
+        message.exclusive_location.as_ref().unwrap().local_id(),
+        local_inbox
+    );
+
+    // Action:
+    // * move message in the other folder
+    Message::action_move(
+        user_ctx.action_queue(),
+        local_inbox,
+        local_spam,
+        vec![message.local_id.unwrap()],
+    )
+    .await
+    .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
+
+    // recheck but in the destination folder
+    let msgs = Message::in_label(local_spam, tether).await.unwrap();
+    let convs = Conversation::in_label(local_spam, tether).await.unwrap();
+
+    let message = &msgs[0];
+    assert_eq!(
+        message.label_ids,
+        vec![LabelId::spam(), LabelId::all_mail()]
+    );
+
+    assert_eq!(
+        message.exclusive_location.as_ref().unwrap().local_id(),
+        local_spam
+    );
+
+    assert_eq!(convs.len(), 1);
+    let conv = &convs[0];
+    assert_eq!(conv.num_messages, 1);
+    assert_eq!(conv.num_unread, 0);
+
+    let labels = conv
+        .labels
+        .iter()
+        .map(|l| l.remote_label_id.clone().unwrap())
+        .collect_vec();
+
+    assert_eq!(labels, vec![LabelId::all_mail(), LabelId::spam()]);
+    assert!(
+        conv.labels
+            .iter()
+            .any(|l| *l.remote_label_id.as_ref().unwrap() == LabelId::spam())
+    );
+    assert!(
+        conv.labels
+            .iter()
+            .all(|l| *l.remote_label_id.as_ref().unwrap() != LabelId::inbox())
+    );
 }
 
 fn test_label(label_id: &LabelId, label_type: ApiLabelType, name: &str) -> ApiLabel {

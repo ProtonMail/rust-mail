@@ -18,12 +18,11 @@ use proton_core_api::services::proton::LabelId;
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::services::proton::{PatchLabelRequest, PostLabelsRequest, PutLabelRequest};
 use sqlite_watcher::watcher::TableObserver;
-use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
-use stash::utils::placeholders;
+use stash::utils::{MapToSql as _, placeholders};
 use thiserror::Error;
 use tracing::{debug, error};
 
@@ -451,15 +450,10 @@ impl Label {
         kinds: &[LabelType],
         tether: &Tether,
     ) -> Result<Vec<Self>, StashError> {
-        let placeholders = placeholders(kinds.len());
-        let params = kinds
-            .iter()
-            .copied()
-            .map(|param| Box::new(param) as Box<dyn ToSql + Send>)
-            .collect::<Vec<_>>();
+        let placeholders = placeholders(kinds);
         Label::find(
             format!("WHERE label_type IN ({placeholders}) ORDER BY display_order ASC"),
-            params,
+            kinds.to_sql(),
             tether,
         )
         .await

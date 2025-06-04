@@ -701,6 +701,7 @@ impl Save {
                 Ok(())
             }).await
     }
+
     fn create_new_message(
         &self,
         address: &Address,
@@ -716,43 +717,23 @@ impl Save {
                 .all(|v| v.disposition == Disposition::Attachment)
         );
         Message {
-            local_id: None,
-            remote_id: None,
-            local_conversation_id: None,
-            remote_conversation_id: None,
             local_address_id: address.local_id.unwrap(),
             remote_address_id: address.remote_id.clone().unwrap(),
             attachments_metadata: attachments,
             cc_list: self.cc_list.to_message_recipients().into(),
             bcc_list: self.bcc_list.to_message_recipients().into(),
-            deleted: false,
-            exclusive_location: None,
-            expiration_time: 0.into(),
-            external_id: None,
-            flags: Default::default(),
-            is_forwarded: false,
-            is_replied: false,
-            is_replied_all: false,
-            label_ids: vec![],
             num_attachments: total_attachment_count.try_into().unwrap_or_default(),
             display_order,
-            reply_tos: Default::default(),
             sender: MessageSender {
                 address: address.email.clone(),
-                bimi_selector: None,
-                display_sender_image: false,
-                is_proton: false,
-                is_simple_login: false,
                 name: address.display_name.clone(),
+                ..Default::default()
             },
             size: body_len,
-            snooze_time: 0.into(),
             subject: self.subject.clone(),
             time,
             to_list: self.to_list.to_message_recipients().into(),
-            unread: false,
-            custom_labels: vec![],
-            row_id: None,
+            ..Default::default()
         }
     }
 

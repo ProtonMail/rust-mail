@@ -203,7 +203,7 @@ where
     ///
     /// Returns error if the query failed.
     async fn unsynced_item_ids(&self, tether: &Tether) -> Result<Vec<T::IdType>, MailActionError> {
-        let placeholders = stash::utils::placeholders(self.target_ids.len());
+        let placeholders = stash::utils::placeholders_n(self.target_ids.len());
         #[allow(trivial_casts)]
         let values = self
             .target_ids

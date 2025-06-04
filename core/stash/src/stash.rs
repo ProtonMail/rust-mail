@@ -918,18 +918,12 @@ impl Tether {
     }
 
     /// Utility function to return a single row of a singular type.
-    ///
-    /// This function is similar in nature to [`Interface::query_values()`] but
-    /// it returns only one value.
+    /// See [`Tether::query_values()`] for more information
     ///
     /// # Errors
     ///
     /// If no rows are returned, this function returns
     /// [`SqliteError::QueryReturnedNoRows`].
-    ///
-    /// # See also
-    ///
-    /// * [`Interface::query_values()`]
     ///
     pub async fn query_value<Q, T>(
         &self,
@@ -940,18 +934,29 @@ impl Tether {
         Q: Into<String> + Send,
         T: Clone + Debug + FromSql + PartialEq + Send + Sync + ToSql + 'static,
     {
-        let mut values = self.query_values::<Q, T>(query, params).await?;
-        if values.is_empty() {
-            return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
-        }
+        Self::query_value_opt(self, query, params)
+            .await?
+            .ok_or(StashError::ExecutionError(SqliteError::QueryReturnedNoRows))
+    }
 
-        if values.len() > 1 {
-            return Err(StashError::Critical(anyhow!(
+    /// Utility function to return a single row of a singular type.
+    /// See [`Tether::query_values()`] for more information
+    pub async fn query_value_opt<T>(
+        &self,
+        query: impl Into<String>,
+        params: Vec<Box<dyn ToSql + Send>>,
+    ) -> Result<Option<T>, StashError>
+    where
+        T: Clone + Debug + FromSql + PartialEq + Send + Sync + ToSql + 'static,
+    {
+        let mut values = self.query_values::<_, T>(query.into(), params).await?;
+        match values.len() {
+            0 => Ok(None),
+            1 => Ok(values.pop()),
+            _ => Err(StashError::Critical(anyhow!(
                 "Query returned multiple rows"
-            )));
+            ))),
         }
-
-        Ok(values.swap_remove(0))
     }
 
     /// Note that under the current design, transactions are not nestable, and

@@ -95,6 +95,7 @@ pub enum MessageMessage {
     LabelMessage(Box<LabelAs<LocalMessageId>>), // TODO: Handle selection
     MarkMessageRead(LocalMessageId),
     MarkMessageUnread(LocalMessageId),
+    ReportPhishing(LocalMessageId),
     StarMessage(LocalMessageId),
     UnstarMessage(LocalMessageId),
     BlockSender(String, BlockOrUnblock),

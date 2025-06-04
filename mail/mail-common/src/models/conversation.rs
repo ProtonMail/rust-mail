@@ -52,12 +52,13 @@ use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
+use stash::utils::{MapToSql as _, placeholders};
 use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::future::Future;
 use std::ops::AddAssign;
 use std::sync::Arc;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq, SmartDefault)]
 #[TableName("conversations")]
@@ -371,7 +372,7 @@ impl Conversation {
     ///
     /// * `queue`            - The action queue.
     /// * `label_id`         - The ID of the current view.
-    /// * `conversation_ids` - The IDs of the converstations to delete.
+    /// * `conversation_ids` - The IDs of the conversations to delete.
     ///
     /// # Errors
     ///
@@ -682,6 +683,17 @@ impl Conversation {
         <Self as Model>::save(self, bond).await
     }
 
+    pub async fn apply_remote_label(
+        label_id: LabelId,
+        ids: impl IntoIterator<Item = LocalConversationId>,
+        bond: &Bond<'_>,
+    ) -> Result<(), AppError> {
+        let local_label_id = Label::resolve_local_label_id(label_id, bond).await?;
+
+        Self::apply_label(local_label_id, ids, bond).await?;
+        Ok(())
+    }
+
     /// Label multiple conversations.
     ///
     /// # Parameters
@@ -702,14 +714,17 @@ impl Conversation {
         for id in ids {
             let message_ids = bond
                 .query_values::<_, LocalMessageId>(
-                    indoc::formatdoc! {"
-            WITH conv_msgs AS (
-                SELECT local_id,? AS label_id FROM messages WHERE local_conversation_id=?
-            )
-            INSERT OR IGNORE INTO
-                message_labels (local_message_id, local_label_id)
-            SELECT * FROM conv_msgs RETURNING local_message_id AS value
-"},
+                    indoc::indoc! {"
+                    WITH conv_msgs AS (
+                        SELECT local_id, ? AS label_id 
+                        FROM messages 
+                        WHERE local_conversation_id=?
+                    )
+                    INSERT OR IGNORE INTO
+                        message_labels (local_message_id, local_label_id)
+                    SELECT * FROM conv_msgs 
+                    RETURNING local_message_id AS value
+                    "},
                     params![label_id, id],
                 )
                 .await?;
@@ -1563,7 +1578,7 @@ impl Conversation {
         let labels = Label::find(
             format!(
                 "WHERE local_id IN ({}) ORDER BY display_order ASC",
-                stash::utils::placeholders(ids.len()),
+                stash::utils::placeholders_n(ids.len()),
             ),
             ids,
             tehter,
@@ -1626,7 +1641,7 @@ impl Conversation {
                     local_conversation_id = ?
                     AND remote_label_id NOT IN ({})
                 ",
-                    stash::utils::placeholders(self.labels.len()),
+                    stash::utils::placeholders_n(self.labels.len()),
                 ),
                 vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
                     .into_iter()
@@ -1673,7 +1688,7 @@ impl Conversation {
                     local_conversation_id = ?
                     AND local_attachment_id NOT IN ({})
                 ",
-                    stash::utils::placeholders(local_ids.len()),
+                    stash::utils::placeholders_n(local_ids.len()),
                 ),
                 vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
                     .into_iter()
@@ -1995,11 +2010,21 @@ impl Conversation {
     ///
     /// Returns an error if the data could not be written to the database.
     ///
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub async fn remove_label(
         label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalConversationId>,
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
+        let mut ids = ids.into_iter().peekable();
+        if ids.peek().is_none() {
+            if cfg!(debug_assertions) {
+                panic!("remove_label for no conversations")
+            } else {
+                return Ok(());
+            }
+        }
+
         let mut conv_counter = ConversationCounters::find_by_id(label_id, bond)
             .await?
             .ok_or(StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
@@ -2011,7 +2036,9 @@ impl Conversation {
                     indoc! {"
                     DELETE FROM message_labels
                     WHERE local_message_id IN (
-                        SELECT local_id FROM messages WHERE local_conversation_id=?1
+                        SELECT local_id
+                        FROM messages 
+                        WHERE local_conversation_id=?1
                     ) AND message_labels.local_label_id=?2
                     RETURNING local_message_id AS value
                     "},
@@ -2024,12 +2051,9 @@ impl Conversation {
                 let num_unread = Message::find(
                     format!(
                         "WHERE local_id IN ({})",
-                        stash::utils::placeholders(message_ids.len()),
+                        stash::utils::placeholders_n(message_ids.len()),
                     ),
-                    message_ids
-                        .iter()
-                        .map(|&v| -> Box<dyn ToSql + Send> { Box::new(v) })
-                        .collect(),
+                    message_ids.to_sql(),
                     bond,
                 )
                 .await?
@@ -2049,8 +2073,8 @@ impl Conversation {
             }
 
             // Remove conversation label
-            match bond
-                .query_value::<_, u64>(
+            if let Some(num_unread) = bond
+                .query_value_opt::<u64>(
                     indoc! {"
                     DELETE FROM conversation_labels
                     WHERE local_conversation_id=? AND local_label_id=?
@@ -2058,22 +2082,12 @@ impl Conversation {
                     "},
                     params![id, label_id],
                 )
-                .await
+                .await?
             {
-                Ok(num_unread) => {
-                    if num_unread > 0 {
-                        conv_counter.unread = conv_counter.unread.saturating_sub(1);
-                    }
-                    conv_counter.total = conv_counter.total.saturating_sub(1);
+                if num_unread > 0 {
+                    conv_counter.unread = conv_counter.unread.saturating_sub(1);
                 }
-                Err(e) => {
-                    if !matches!(
-                        e,
-                        StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
-                    ) {
-                        return Err(e);
-                    }
-                }
+                conv_counter.total = conv_counter.total.saturating_sub(1);
             }
         }
 
@@ -2306,90 +2320,104 @@ impl Conversation {
         Conversation::split_request(ids, request).await
     }
 
-    /// Remove all removable labels from given conversations.
-    ///
-    /// N.B.: `all_mail` label is the only not removable label.
-    async fn remove_all_labels(
-        conversation_ids: Vec<LocalConversationId>,
+    async fn remove_all_labels_except_all_mail(
+        ids: &[LocalConversationId],
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         let all_mail_id = Label::remote_id_counterpart(LabelId::all_mail(), bond)
             .await?
             .expect("AllMail should be set");
 
-        let (query, mut parameters) = find_in_query!(
-            "DELETE FROM conversation_labels WHERE local_conversation_id in ({}) AND local_label_id != ?",
-            conversation_ids
-        );
-        parameters.push(Box::new(all_mail_id) as Box<dyn ToSql + Send>);
+        let label_ids: Vec<LocalLabelId> = bond
+            .query_values(
+                formatdoc! {"
+                SELECT local_label_id AS value
+                FROM conversation_labels 
+                WHERE 
+                    local_conversation_id in ({})"
+                    , placeholders(ids)
+                },
+                ids.to_sql(),
+            )
+            .await?;
 
-        bond.execute(query, parameters).await?;
+        // It's a good moment to apply all mail label to messages in the case that it slipped by
+        if !label_ids.contains(&all_mail_id) {
+            Self::apply_label(all_mail_id, ids.iter().cloned(), bond).await?;
+        }
+
+        for label_id in label_ids {
+            if label_id == all_mail_id {
+                continue;
+            }
+
+            Self::remove_label(label_id, ids.iter().cloned(), bond).await?;
+        }
+
         Ok(())
     }
 
     /// Move conversations between two labels.
     ///
-    /// # Parameters
-    /// * `source_id`        - Local label id where the conversations currently are.
-    /// * `destination_id`   - Local label id where the conversations should be moved.
-    /// * `conversation_ids` - The IDs of the conversations to move.
-    /// * `interface`        - The tether to use for the database connection.
-    ///
-    /// This function returns a tuple containing the source and destination remote label ids,
-    /// respectively.
-    ///
-    /// # Remarks
-    ///
-    /// This function can only be called with an active transaction.
-    ///
-    /// # Errors
-    ///
-    /// Returns errors if the operation failed.
+    /// Note that the logic is the same as [`Message::move_messages`],
+    /// so any changes made here should be reflected there.
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub async fn move_conversations(
         source_id: LocalLabelId,
         destination_id: LocalLabelId,
         conversation_ids: Vec<LocalConversationId>,
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
-        let remote_source_id = Label::resolve_remote_label_id(source_id, bond).await?;
-        let remote_destination_id = Label::resolve_remote_label_id(destination_id, bond).await?;
+        debug_assert_ne!(source_id, destination_id);
+        if conversation_ids.is_empty() {
+            debug!("List of ids was empty");
+            return Ok(());
+        }
+        trace!("Moving {n} conversations", n = conversation_ids.len());
+
+        let spam = Label::resolve_local_label_id(LabelId::spam(), bond).await?;
+        let trash = Label::resolve_local_label_id(LabelId::trash(), bond).await?;
 
         // If moving to trash, mark conversations as read.
-        if remote_destination_id == LabelId::trash() {
-            Conversation::mark_read(conversation_ids.clone(), bond)
+        if destination_id == trash {
+            Conversation::mark_read(conversation_ids.iter().cloned(), bond)
                 .await
-                .map_err(|e| {
-                    error!("Failed to mark conversations as read when moving to trash: {e:?}");
-                    e
-                })?
+                .context("Failed to mark as read when moving to trash: {e:?}")?;
         }
+
+        let source_label = Label::load(source_id, bond).await?.context(
+            "Failed to load source label. This should never happen because we have the local id.",
+        )?;
 
         // When moving in Trash or Spam, remove all labels (but AllMail)
-        if remote_destination_id == LabelId::trash() || remote_destination_id == LabelId::spam() {
-            Conversation::remove_all_labels(conversation_ids.clone(), bond)
+        if [trash, spam].contains(&destination_id) {
+            // When moving to trash or spam we delete all labels except all mail.
+            debug!("Deleting all labels except AllMail");
+            Self::remove_all_labels_except_all_mail(&conversation_ids, bond).await?;
+        } else if source_label.is_movable_folder() {
+            Conversation::remove_label(source_id, conversation_ids.clone(), bond)
                 .await
-                .inspect_err(|e| error!("Failed to remove labels: {e:?}"))?;
-        } else if remote_source_id == LabelId::trash() || remote_source_id == LabelId::spam() {
+                .context("Failed to remove source label")?;
+        } else {
+            warn!("Source label {source_id} is not a movable folder, not removing...")
+        }
+
+        if [trash, spam].contains(&source_id) {
             // When moving out of Trash or Spam, add AlmostAllMail label
-            let almost_all_mail =
-                Label::resolve_local_label_id(LabelId::almost_all_mail(), bond).await?;
-            Conversation::apply_label(almost_all_mail, conversation_ids.clone(), bond)
-                .await
-                .inspect_err(|e| {
-                    error!(
-                        "Failed to apply almost all mail label when moving out of spam/trash:{e}"
-                    )
-                })?;
+            Conversation::apply_remote_label(
+                LabelId::almost_all_mail(),
+                conversation_ids.clone(),
+                bond,
+            )
+            .await
+            .context(
+                "Failed to add conversations to almost_all_mail when moving out of spam/trash",
+            )?;
         }
 
-        let Some(source) = Label::load(source_id, bond).await? else {
-            return Err(AppError::LabelNotFound(source_id));
-        };
-        if source.is_movable_folder() {
-            Conversation::remove_label(source_id, conversation_ids.clone(), bond).await?
-        }
-
-        Conversation::apply_label(destination_id, conversation_ids.clone(), bond).await?;
+        Conversation::apply_label(destination_id, conversation_ids.clone(), bond)
+            .await
+            .context("Failed to apply destination label")?;
 
         Ok(())
     }
@@ -2823,7 +2851,7 @@ impl Conversation {
     /// Returns error if the queries failed or if the server request failed.
     pub async fn sync_conversation_messages(
         local_conversation_id: LocalConversationId,
-        mut run_tx: impl RunTransaction,
+        run_tx: &mut impl RunTransaction,
         session: &Session,
     ) -> Result<(), AppError> {
         let Some(conversation) = Self::find_by_id(local_conversation_id, run_tx.tether()).await?
@@ -2898,7 +2926,7 @@ impl Conversation {
         tether: &Tether,
     ) -> Result<Vec<Self>, StashError> {
         Conversation::find(
-            formatdoc!(
+            indoc!(
                 "
                 JOIN conversation_labels
                     ON conversations.local_id = conversation_labels.local_conversation_id
@@ -3370,11 +3398,12 @@ impl From<ApiConversationLabel> for ConversationLabel {
 
 /// Calculates the combined information for a list of message that belong to a given
 /// conversation and a given label.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct ConversationMessageLabelStats {
     pub size: u64,
     pub time: UnixTimestamp,
     pub expiration_time: UnixTimestamp,
+    // How many messages exist
     pub count: u64,
     pub unread: u64,
     pub num_attachments: u32,
@@ -3390,18 +3419,18 @@ impl ConversationMessageLabelStats {
         message_ids: &[LocalMessageId],
         tether: &Tether,
     ) -> Result<Self, StashError> {
-        let params = [label_id.as_u64(), conversation_id.as_u64()]
-            .into_iter()
-            .chain(message_ids.iter().map(|id| id.as_u64()))
-            .map(|v| -> Box<dyn ToSql + Send> { Box::new(v) })
-            .collect();
-        let query = format!(
-            indoc! {"
-                JOIN message_labels AS ML ON ML.local_message_id = messages.local_id AND ML.local_label_id = ?
-                WHERE messages.local_conversation_id = ? AND messages.local_id IN ({})
-            "},
-            stash::utils::placeholders(message_ids.len())
-        );
+        let params = (label_id, conversation_id).to_sql_extend(message_ids);
+        let query = formatdoc! {"
+                JOIN message_labels AS ML ON
+                    ML.local_message_id = messages.local_id AND
+                    ML.local_label_id = ?
+                WHERE 
+                    messages.local_conversation_id = ? AND
+                    messages.local_id IN ({})
+            ",
+            placeholders(message_ids)
+        };
+
         let messages = Message::find(query, params, tether).await?;
 
         if messages.is_empty() {
@@ -3411,45 +3440,13 @@ impl ConversationMessageLabelStats {
         Ok(Self::from_messages(&messages))
     }
 
-    /// Get stats about for a conversation with `conversation_id` for all the
-    /// message that do not match the given `message_ids` for a label with
-    /// `label_id`.
-    pub async fn without(
-        conversation_id: LocalConversationId,
-        label_id: LocalLabelId,
-        message_ids: &[LocalMessageId],
-        tether: &Tether,
-    ) -> Result<Self, StashError> {
-        let params = [label_id.as_u64(), conversation_id.as_u64()]
-            .into_iter()
-            .chain(message_ids.iter().map(|id| id.as_u64()))
-            .map(|v| -> Box<dyn ToSql + Send> { Box::new(v) })
-            .collect();
-        let query = format!(
-            indoc! {"
-                JOIN message_labels AS ML ON ML.local_message_id = messages.local_id AND ML.local_label_id = ?
-                WHERE messages.local_conversation_id = ? AND messages.local_id NOT IN ({})
-            "},
-            stash::utils::placeholders(message_ids.len())
-        );
-        let messages = Message::find(query, params, tether).await?;
-
-        if messages.is_empty() {
-            return Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows));
-        }
-
-        Ok(Self::from_messages(&messages))
-    }
-
-    fn from_messages(messages: &[Message]) -> Self {
+    pub fn from_messages(messages: &[Message]) -> Self {
+        assert_ne!(messages.len(), 0);
         let mut stats = Self {
-            size: 0,
             time: 0.into(),
             expiration_time: 0.into(),
-            count: 0,
-            unread: 0,
-            num_attachments: 0,
             snooze_time: 0.into(),
+            ..Default::default()
         };
 
         for message in messages {

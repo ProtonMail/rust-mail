@@ -284,6 +284,7 @@ mod first_unread_message {
             .map(|label| label.remote_id.clone().unwrap())
             .collect();
 
+        // TODO: apply_labels
         Message {
             local_id: Some(id),
             unread,
@@ -2998,5 +2999,54 @@ async fn conversation_exclusive_location_on_save(
         }
     } else {
         assert_eq!(conversation.exclusive_location, None);
+    }
+}
+
+#[tokio::test]
+async fn test_conversation_move_to() {
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let mut conn = stash.connection();
+    let mut state = new_test_label_db_state();
+    prepare_db_state_core(&mut conn, &mut state.addresses).await;
+    let (state, state_map) =
+        prepare_and_patch_db_state_and_skip(&mut conn, state.clone(), true).await;
+
+    let local_conv_id = *state_map
+        .conversations
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
+        .unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+    conn.tx::<_, _, StashError>(async |tx| {
+        Conversation::apply_label(local_label_id1, vec![local_conv_id], tx)
+            .await
+            .expect("failed to label");
+        Ok(())
+    })
+    .await
+    .unwrap();
+
+    let db_conversation = ContextualConversation::load(local_conv_id, local_label_id1, &conn)
+        .await
+        .expect("failed to get conversation")
+        .expect("should have value");
+
+    // Because we have no message metadata, all these values should be empty
+    assert_eq!(db_conversation.num_unread, 0);
+    assert_eq!(db_conversation.num_messages, 0);
+    assert_eq!(db_conversation.num_attachments, 0);
+    assert_eq!(db_conversation.size, 0);
+    assert_eq!(db_conversation.time, 0.into());
+    assert_eq!(db_conversation.expiration_time, 0.into());
+    assert_eq!(db_conversation.snooze_time, 0.into());
+
+    // Check conversation counts have the new conversation.
+    {
+        let conv_counts = conv_counts_as_map(&conn).await;
+        {
+            let label_counts = conv_counts.get(&local_label_id1).unwrap();
+            // unread is 0 due to lack of messages.
+            assert_eq!(label_counts.unread, 0);
+            assert_eq!(label_counts.total, 1);
+        }
     }
 }

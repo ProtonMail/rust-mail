@@ -62,6 +62,8 @@ use stash::params;
 use stash::stash::Bond;
 use stash::stash::StashError;
 use stash::stash::Tether;
+use stash::utils::IterMapToSql as _;
+use stash::utils::MapToSql as _;
 use stash::utils::placeholders;
 
 #[allow(async_fn_in_trait)]
@@ -160,7 +162,6 @@ pub trait ModelExtension: Model {
     ) -> Result<Vec<Self>, StashError> {
         let mut ids = ids.into_iter().peekable();
         let field_name = if ids.peek().is_some() {
-            // We make the assumption that all ids are the same AgnosticId variant
             Self::id_field_name()
         } else {
             return Ok(vec![]);
@@ -169,7 +170,7 @@ pub trait ModelExtension: Model {
         let parameters = ids
             .map(|i| Box::new(i) as Box<dyn ToSql + Send>)
             .collect_vec();
-        let placeholders = placeholders(parameters.len());
+        let placeholders = placeholders(&parameters);
 
         let query = format!("WHERE {field_name} IN ({placeholders})");
         Self::find(query, parameters, tether).await
@@ -223,7 +224,7 @@ pub trait ModelExtension: Model {
             .into_iter()
             .map(|param| Box::new(param) as Box<dyn ToSql + Send>)
             .collect::<Vec<_>>();
-        let placeholders = placeholders(params.len());
+        let placeholders = placeholders(&params);
         let query = format!(
             "DELETE FROM {table} WHERE {} IN ({placeholders})",
             Self::id_field_name(),
@@ -450,20 +451,19 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
         ids: impl IntoIterator<Item = Self::RemoteId>,
         tether: &Tether,
     ) -> Result<Vec<Self>, StashError> {
-        let mut ids = ids.into_iter().peekable();
-        let field_name = if ids.peek().is_some() {
-            Self::remote_id_field_name()
-        } else {
+        let ids = ids.bridge_sql();
+        if ids.is_empty() {
             return Ok(vec![]);
-        };
-        #[allow(trivial_casts)]
-        let parameters = ids
-            .map(|i| Box::new(i) as Box<dyn ToSql + Send>)
-            .collect_vec();
-        let placeholders = placeholders(parameters.len());
+        }
+        let field_name = Self::remote_id_field_name();
+        let placeholders = placeholders(&ids);
 
-        let query = format!("WHERE {field_name} IN ({placeholders})");
-        Self::find(query, parameters, tether).await
+        Self::find(
+            format!("WHERE {field_name} IN ({placeholders})"),
+            ids,
+            tether,
+        )
+        .await
     }
 
     /// Deletes a record by its remote ID.
@@ -535,14 +535,8 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
         remote_ids: Vec<Self::RemoteId>,
         tether: &Tether,
     ) -> Result<Vec<Self::IdType>, StashError> {
-        let placeholders = placeholders(remote_ids.len());
-        #[allow(trivial_casts)]
-        let values = remote_ids
-            .into_iter()
-            .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
-            .collect();
         tether
-            .query_values::<_, Self::IdType>(
+            .query_values(
                 formatdoc!(
                     "
                             SELECT
@@ -555,9 +549,9 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
                     Self::id_field_name(),
                     Self::table_name(),
                     Self::remote_id_field_name(),
-                    placeholders,
+                    placeholders(&remote_ids),
                 ),
-                values,
+                remote_ids.to_sql(),
             )
             .await
     }
@@ -615,14 +609,8 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
         local_ids: Vec<Self::IdType>,
         tether: &Tether,
     ) -> Result<Vec<Self::RemoteId>, StashError> {
-        let placeholders = placeholders(local_ids.len());
-        #[allow(trivial_casts)]
-        let values = local_ids
-            .into_iter()
-            .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
-            .collect();
         tether
-            .query_values::<_, Self::RemoteId>(
+            .query_values(
                 formatdoc!(
                     "
                             SELECT
@@ -637,10 +625,10 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
                     Self::remote_id_field_name(),
                     Self::table_name(),
                     Self::id_field_name(),
-                    placeholders,
+                    placeholders(&local_ids),
                     Self::remote_id_field_name(),
                 ),
-                values,
+                local_ids.to_sql(),
             )
             .await
     }
