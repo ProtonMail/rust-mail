@@ -558,7 +558,6 @@ pub enum DraftSendFailureSend {
     NoRecipients,
     RecipientEmailInvalid(String),
     ProtonRecipientDoesNotExist(String),
-    UnknownRecipientValidationError(String),
     PackageError(String),
     MessageDoesNotExist,
     ScheduleSendExpired,
@@ -671,9 +670,6 @@ impl DraftSendFailure {
             PackageError::ProtonRecipientDoesNotExist(e) => {
                 Self::Send(DraftSendFailureSend::ProtonRecipientDoesNotExist(e.clone()))
             }
-            PackageError::UnknownRecipientValidationError(e) => Self::Send(
-                DraftSendFailureSend::UnknownRecipientValidationError(e.clone()),
-            ),
             v => Self::Send(DraftSendFailureSend::PackageError(v.to_string())),
         }
     }
@@ -719,7 +715,7 @@ impl From<DraftSendFailure> for ProtonMailError {
                     DraftSendFailureSave::AddressDoesNotHavePrimaryKey(v) => {
                         DraftSaveErrorReason::AddressDoesNotHavePrimaryKey(v)
                     }
-                    DraftSendFailureSave::AlreadySent => DraftSaveErrorReason::AlreadySent,
+                    DraftSendFailureSave::AlreadySent => DraftSaveErrorReason::MessageAlreadySent,
                     DraftSendFailureSave::MessageUpdateIsNotDraft => {
                         DraftSaveErrorReason::MessageIsNotADraft
                     }
@@ -736,9 +732,6 @@ impl From<DraftSendFailure> for ProtonMailError {
                     }
                     DraftSendFailureSend::ProtonRecipientDoesNotExist(v) => {
                         DraftSendErrorReason::ProtonRecipientDoesNotExist(v)
-                    }
-                    DraftSendFailureSend::UnknownRecipientValidationError(v) => {
-                        DraftSendErrorReason::UnknownRecipientValidationError(v)
                     }
                     DraftSendFailureSend::PackageError(v) => DraftSendErrorReason::PackageError(v),
                     DraftSendFailureSend::MessageDoesNotExist => {

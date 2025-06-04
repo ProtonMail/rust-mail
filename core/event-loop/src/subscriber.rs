@@ -7,7 +7,6 @@ mod tests;
 use async_trait::async_trait;
 // avoid namespace conflicts
 use crate::Event;
-use anyhow::Error as AnyhowError;
 use proton_core_api::service::ApiServiceError;
 use stash::stash::StashError;
 use thiserror::Error;
@@ -15,24 +14,25 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum SubscriberError {
     /// API error should be returned when the error resulted due to an API or Network error.
-    #[error("{0}")]
+    #[error("{0:?}")]
     Api(#[from] ApiServiceError),
-    /// Subscriber specific errors should be returned here.
-    #[error("{0}")]
-    Other(AnyhowError),
     /// Failed to send to the subscriber.
     #[error("Failed to send data to subscriber")]
     Send,
     /// Failed to receive data from subscriber.
     #[error("Failed to receive data from subscriber")]
     Receive,
-    /// Stash error, i.e. database error.
-    #[error("{0}")]
+
+    #[error("{0:?}")]
     StashError(#[from] StashError),
+
+    /// Subscriber specific errors should be returned here.
+    #[error("{0:?}")]
+    Other(anyhow::Error),
 }
 
-impl From<AnyhowError> for SubscriberError {
-    fn from(value: AnyhowError) -> Self {
+impl From<anyhow::Error> for SubscriberError {
+    fn from(value: anyhow::Error) -> Self {
         Self::Other(value)
     }
 }

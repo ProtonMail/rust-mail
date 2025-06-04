@@ -2,7 +2,7 @@ pub mod attachments;
 
 use crate::core::datatypes::Id;
 use crate::errors::unexpected::UnexpectedError;
-use crate::errors::{ProtonError, UserSessionError};
+use crate::errors::{ProtonError, UserContextError};
 use crate::mail::MailUserSession;
 use crate::mail::datatypes::{MessageRecipientDisplayMode, ViewMode};
 use crate::mail::state::MailUserContextPtr;
@@ -48,7 +48,7 @@ impl Mailbox {
 /// Callback for operations that get scheduled in the background and return no result.
 #[uniffi::export(callback_interface)]
 pub trait MailboxBackgroundResult: Send + Sync {
-    fn on_background_result(&self, error: Option<UserSessionError>);
+    fn on_background_result(&self, error: Option<UserContextError>);
 }
 
 /// Create a new mailbox for a given label id.
@@ -56,7 +56,7 @@ pub trait MailboxBackgroundResult: Send + Sync {
 pub async fn new_mailbox(
     ctx: &MailUserSession,
     label_id: Id,
-) -> Result<Arc<Mailbox>, UserSessionError> {
+) -> Result<Arc<Mailbox>, UserContextError> {
     let ptr = ctx.ptr();
     let ctx = ctx.ctx()?;
 
@@ -68,7 +68,7 @@ pub async fn new_mailbox(
         Result::<_, RealProtonMailError>::Ok(Arc::new(Mailbox { ctx: ptr, mbox }))
     })
     .await
-    .map_err(UserSessionError::from)
+    .map_err(UserContextError::from)
     .into()
 }
 
@@ -87,7 +87,7 @@ pub async fn new_mailbox(
 /// Returns an error if the mailbox could not be created or synced.
 ///
 #[uniffi_export]
-pub async fn new_inbox_mailbox(ctx: &MailUserSession) -> Result<Arc<Mailbox>, UserSessionError> {
+pub async fn new_inbox_mailbox(ctx: &MailUserSession) -> Result<Arc<Mailbox>, UserContextError> {
     let ptr = ctx.ptr();
     let ctx = ctx.ctx()?;
 
@@ -99,7 +99,7 @@ pub async fn new_inbox_mailbox(ctx: &MailUserSession) -> Result<Arc<Mailbox>, Us
         Result::<_, RealProtonMailError>::Ok(Arc::new(Mailbox { ctx: ptr, mbox }))
     })
     .await
-    .map_err(UserSessionError::from)
+    .map_err(UserContextError::from)
     .into()
 }
 
@@ -118,7 +118,7 @@ pub async fn new_inbox_mailbox(ctx: &MailUserSession) -> Result<Arc<Mailbox>, Us
 /// Returns an error if the mailbox could not be created or synced.
 ///
 #[uniffi_export]
-pub async fn new_all_mail_mailbox(ctx: &MailUserSession) -> Result<Arc<Mailbox>, UserSessionError> {
+pub async fn new_all_mail_mailbox(ctx: &MailUserSession) -> Result<Arc<Mailbox>, UserContextError> {
     let ptr = ctx.ptr();
     let ctx = ctx.ctx()?;
 
@@ -130,7 +130,7 @@ pub async fn new_all_mail_mailbox(ctx: &MailUserSession) -> Result<Arc<Mailbox>,
         Result::<_, RealProtonMailError>::Ok(Arc::new(Mailbox { ctx: ptr, mbox }))
     })
     .await
-    .map_err(UserSessionError::from)
+    .map_err(UserContextError::from)
     .into()
 }
 
@@ -157,7 +157,7 @@ impl Mailbox {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    pub async fn unread_count(&self) -> Result<u64, UserSessionError> {
+    pub async fn unread_count(&self) -> Result<u64, UserContextError> {
         let stash = self.user_stash()?;
         let mbox = self.mbox.clone();
 
@@ -168,7 +168,7 @@ impl Mailbox {
             Result::<_, RealProtonMailError>::Ok(count)
         })
         .await
-        .map_err(UserSessionError::from)
+        .map_err(UserContextError::from)
     }
 
     /// Subscribe for updates to the number of unread items in this mailbox.
@@ -180,7 +180,7 @@ impl Mailbox {
     pub async fn watch_unread_count(
         &self,
         callback: Box<dyn LiveQueryCallback>,
-    ) -> Result<Arc<WatchHandle>, UserSessionError> {
+    ) -> Result<Arc<WatchHandle>, UserContextError> {
         let ctx = self.ctx()?;
         let mbox = self.mbox.clone();
 
@@ -191,7 +191,7 @@ impl Mailbox {
             Result::<_, RealProtonMailError>::Ok(watcher)
         })
         .await
-        .map_err(UserSessionError::from)
+        .map_err(UserContextError::from)
     }
 }
 

@@ -8,7 +8,7 @@ use crate::core::datatypes::{
     UserSettings,
 };
 use crate::errors::unexpected::UnexpectedError;
-use crate::errors::{ActionError, ProtonError, UserSessionError, VoidSessionResult};
+use crate::errors::{ActionError, ProtonError, UserContextError, VoidSessionResult};
 use crate::mail::state::MailUserContextPtr;
 use crate::{LiveQueryCallback, async_runtime, spawn_async, uniffi_async};
 use futures::TryFutureExt;
@@ -86,7 +86,7 @@ impl MailUserSession {
 
     /// Log out a session and delete all user data.
     #[returns(VoidSessionResult)]
-    pub async fn logout(&self) -> Result<(), UserSessionError> {
+    pub async fn logout(&self) -> Result<(), UserContextError> {
         let ctx = self.take_ctx()?;
 
         uniffi_async(async move {
@@ -95,7 +95,7 @@ impl MailUserSession {
                 .await
         })
         .await
-        .map_err(UserSessionError::from)
+        .map_err(UserContextError::from)
         .into()
     }
 }
@@ -108,7 +108,7 @@ impl MailUserSession {
     ///
     /// Any of the [`UserSessionError`] possibilities could be returned if
     /// there is a problem with the HTTP request.
-    pub async fn session_uuid(&self) -> Result<String, UserSessionError> {
+    pub async fn session_uuid(&self) -> Result<String, UserContextError> {
         let ctx = self.ctx()?;
 
         uniffi_async(async move {
@@ -117,7 +117,7 @@ impl MailUserSession {
             Result::<_, RealProtonMailError>::Ok(res.uuid)
         })
         .await
-        .map_err(UserSessionError::from)
+        .map_err(UserContextError::from)
     }
 
     /// Fork the current session.
@@ -134,7 +134,7 @@ impl MailUserSession {
     /// Any of the [`MailSessionError::Http`] possibilities could be returned if
     /// there is a problem with the HTTP request.
     ///
-    pub async fn fork(&self) -> Result<String, UserSessionError> {
+    pub async fn fork(&self) -> Result<String, UserContextError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
             ctx.session()
@@ -143,7 +143,7 @@ impl MailUserSession {
                 .map_err(RealProtonMailError::from)
         })
         .await
-        .map_err(UserSessionError::from)
+        .map_err(UserContextError::from)
     }
 
     /// Provides a way to get the datatypes::User FFI instance.
@@ -151,14 +151,14 @@ impl MailUserSession {
     /// # Errors
     ///
     /// Either when MailSessionError::Stash occurs or somehow the user is missing.
-    pub async fn user(&self) -> Result<User, UserSessionError> {
+    pub async fn user(&self) -> Result<User, UserContextError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
             let user = ctx.user().await?;
             Result::<_, RealProtonMailError>::Ok(user.into())
         })
         .await
-        .map_err(UserSessionError::from)
+        .map_err(UserContextError::from)
     }
 
     /// Retrieves the account details for the current user session.
@@ -167,14 +167,14 @@ impl MailUserSession {
     ///
     /// # Errors
     /// - Returns `UserSessionError` if the account details cannot be retrieved.
-    pub async fn account_details(&self) -> Result<AccountDetails, UserSessionError> {
+    pub async fn account_details(&self) -> Result<AccountDetails, UserContextError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
             let account_details = ctx.account_details().await?;
             Result::<_, RealProtonMailError>::Ok(account_details.into())
         })
         .await
-        .map_err(UserSessionError::from)
+        .map_err(UserContextError::from)
     }
 
     /// Retrieves the user's settings.
@@ -182,7 +182,7 @@ impl MailUserSession {
     /// # Errors
     ///
     /// Returns an error if the database query fails.
-    pub async fn user_settings(&self) -> Result<UserSettings, UserSessionError> {
+    pub async fn user_settings(&self) -> Result<UserSettings, UserContextError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
             let settings = ctx.user_settings().ok_into().await?;
@@ -190,7 +190,7 @@ impl MailUserSession {
             Result::<_, RealProtonMailError>::Ok(settings)
         })
         .await
-        .map_err(UserSessionError::from)
+        .map_err(UserContextError::from)
     }
 
     /// Loads the metadata and file path for the given local [`attachment_id`]
@@ -238,7 +238,7 @@ impl MailUserSession {
     /// - `ConnectionStatus::Offline`: The application is offline.
     /// - `ConnectionStatus::ServerUnreachable`: The application is online but the server is unreachable.
     ///
-    pub async fn connection_status(&self) -> Result<ConnectionStatus, UserSessionError> {
+    pub async fn connection_status(&self) -> Result<ConnectionStatus, UserContextError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
             let status = ctx.connection_status().await.into();
@@ -246,7 +246,7 @@ impl MailUserSession {
             Result::<ConnectionStatus, RealProtonMailError>::Ok(status)
         })
         .await
-        .map_err(UserSessionError::from)
+        .map_err(UserContextError::from)
     }
 
     /// Execute callback when connection status is online
@@ -271,7 +271,7 @@ impl MailUserSession {
     pub async fn get_payments_plans(
         &self,
         options: GetPaymentsPlansOptions,
-    ) -> Result<PaymentsPlans, UserSessionError> {
+    ) -> Result<PaymentsPlans, UserContextError> {
         let ctx = self.ctx()?;
 
         uniffi_async(async move {
@@ -283,14 +283,14 @@ impl MailUserSession {
             })
         })
         .await
-        .map_err(UserSessionError::from)
+        .map_err(UserContextError::from)
     }
 
     /// Get the icon resource with the given name.
     pub async fn get_payments_resources_icons(
         &self,
         name: String,
-    ) -> Result<Vec<u8>, UserSessionError> {
+    ) -> Result<Vec<u8>, UserContextError> {
         let ctx = self.ctx()?;
 
         uniffi_async(async move {
@@ -299,7 +299,7 @@ impl MailUserSession {
             Result::<_, RealProtonMailError>::Ok(res.into())
         })
         .await
-        .map_err(UserSessionError::from)
+        .map_err(UserContextError::from)
     }
 
     /// Post a payment token to the server.
@@ -308,7 +308,7 @@ impl MailUserSession {
         amount: u64,
         currency: String,
         payment: PaymentReceipt,
-    ) -> Result<PaymentToken, UserSessionError> {
+    ) -> Result<PaymentToken, UserContextError> {
         let ctx = self.ctx()?;
 
         uniffi_async(async move {
@@ -323,11 +323,11 @@ impl MailUserSession {
             })
         })
         .await
-        .map_err(UserSessionError::from)
+        .map_err(UserContextError::from)
     }
 
     /// Get the current subscription of the user.
-    pub async fn get_payments_subscription(&self) -> Result<Subscriptions, UserSessionError> {
+    pub async fn get_payments_subscription(&self) -> Result<Subscriptions, UserContextError> {
         let ctx = self.ctx()?;
 
         uniffi_async(async move {
@@ -341,7 +341,7 @@ impl MailUserSession {
             })
         })
         .await
-        .map_err(UserSessionError::from)
+        .map_err(UserContextError::from)
     }
 
     /// Post a payment subscription to the server.
@@ -349,7 +349,7 @@ impl MailUserSession {
         &self,
         subscription: NewSubscription,
         new_values: NewSubscriptionValues,
-    ) -> Result<(), UserSessionError> {
+    ) -> Result<(), UserContextError> {
         let ctx = self.ctx()?;
 
         uniffi_async(async move {
@@ -360,7 +360,7 @@ impl MailUserSession {
             Result::<_, RealProtonMailError>::Ok(())
         })
         .await
-        .map_err(UserSessionError::from)
+        .map_err(UserContextError::from)
     }
 }
 

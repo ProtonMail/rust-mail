@@ -197,9 +197,6 @@ pub enum LoginError {
     MissingPrimaryKey,
 
     /// TODO: Document this variant.
-    KeySecretAuthUpdate(String),
-
-    /// TODO: Document this variant.
     KeySecretDecryption,
 
     /// TODO: Document this variant.
@@ -213,9 +210,6 @@ pub enum LoginError {
 
     /// TODO: Document this variant.
     SrpProof(String),
-
-    /// TODO: Document this variant.
-    UnsupportedTfa,
 
     /// TODO: Document this variant.
     WrongMailboxPassword,
@@ -235,7 +229,6 @@ impl From<login_api::LoginError> for LoginError {
             login_api::LoginError::FlowFido(e) => LoginError::FlowFido(e.into()),
             login_api::LoginError::UserFetch(e) => LoginError::UserFetch(e.into()),
             login_api::LoginError::MissingPrimaryKey => LoginError::MissingPrimaryKey,
-            login_api::LoginError::KeySecretAuthUpdate(s) => LoginError::KeySecretAuthUpdate(s),
             login_api::LoginError::KeySecretDecryption => LoginError::KeySecretDecryption,
             login_api::LoginError::KeySecretDerivation(salt_error) => {
                 LoginError::KeySecretDerivation(salt_error.to_string())
@@ -245,7 +238,6 @@ impl From<login_api::LoginError> for LoginError {
             }
             login_api::LoginError::ServerProof(e) => LoginError::ServerProof(e.to_string()),
             login_api::LoginError::SrpProof(e) => LoginError::SrpProof(e.to_string()),
-            login_api::LoginError::UnsupportedTfa => LoginError::UnsupportedTfa,
             login_api::LoginError::WrongMailboxPassword => LoginError::WrongMailboxPassword,
             login_api::LoginError::AuthStore(error) => LoginError::AuthStore(error.to_string()),
         }

@@ -43,18 +43,14 @@ impl From<OldDraftSendFailure> for DraftSendFailure {
             OldDraftSendFailure::ProtonRecipientDoesNotExist(v) => {
                 Self::Send(DraftSendFailureSend::ProtonRecipientDoesNotExist(v))
             }
-            OldDraftSendFailure::UnknownRecipientValidationError(e) => {
-                Self::Send(DraftSendFailureSend::UnknownRecipientValidationError(e))
-            }
             OldDraftSendFailure::AddressDisabled(v) => {
                 Self::Save(DraftSendFailureSave::AddressDisabled(v))
             }
             OldDraftSendFailure::MessageAlreadySent => {
                 Self::Save(DraftSendFailureSave::AlreadySent)
             }
-            OldDraftSendFailure::PackageError(v) => {
-                Self::Send(DraftSendFailureSend::UnknownRecipientValidationError(v))
-            }
+            OldDraftSendFailure::UnknownRecipientValidationError(_) => Self::Internal,
+            OldDraftSendFailure::PackageError(_) => Self::Internal,
             OldDraftSendFailure::MessageUpdateIsNotDraft => {
                 Self::Save(DraftSendFailureSave::MessageUpdateIsNotDraft)
             }

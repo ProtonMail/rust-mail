@@ -24,7 +24,7 @@ impl From<RealProtonMailError> for PinSetError {
 impl From<RealMailErrorReason> for PinSetError {
     fn from(reason: RealMailErrorReason) -> Self {
         match reason {
-            RealMailErrorReason::PinSetReson(reason) => PinSetError::Reason(reason.into()),
+            RealMailErrorReason::PinSetReason(reason) => PinSetError::Reason(reason.into()),
             other_reason => PinSetError::Other(ProtonError::from(other_reason)),
         }
     }
@@ -49,7 +49,7 @@ impl From<RealProtonMailError> for PinAuthError {
 impl From<RealMailErrorReason> for PinAuthError {
     fn from(reason: RealMailErrorReason) -> Self {
         match reason {
-            RealMailErrorReason::PinAuthReson(reason) => PinAuthError::Reason(reason.into()),
+            RealMailErrorReason::PinAuthReason(reason) => PinAuthError::Reason(reason.into()),
             other_reason => PinAuthError::Other(ProtonError::from(other_reason)),
         }
     }

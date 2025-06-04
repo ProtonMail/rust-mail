@@ -1,4 +1,4 @@
-use crate::errors::UserSessionError;
+use crate::errors::UserContextError;
 use crate::mail::MailUserSession;
 use crate::uniffi_async;
 use proton_core_common::datatypes::LightOrDarkMode;
@@ -32,7 +32,7 @@ impl MailUserSession {
         size: Option<u32>,
         mode: Option<String>,
         format: Option<String>,
-    ) -> Result<Option<String>, UserSessionError> {
+    ) -> Result<Option<String>, UserContextError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
             let mode = light_or_dark_mode_from_string(mode)?;
@@ -49,7 +49,7 @@ impl MailUserSession {
             )
         })
         .await
-        .map_err(UserSessionError::from)
+        .map_err(UserContextError::from)
     }
 }
 
