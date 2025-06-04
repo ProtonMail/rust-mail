@@ -1,117 +1,14 @@
 use crate::actions::rollback::RollbackAction;
+use crate::events::MailEvent;
 use crate::user_context::events::subscriber::MailEventSubscriber;
 use crate::{MailContextError, MailUserContext};
-use anyhow::{anyhow, bail};
-use async_trait::async_trait;
 use proton_action_queue::action::ActionId;
 use proton_action_queue::queue::ActionError;
-use proton_core_api::service::ApiServiceError;
-use proton_core_api::services::proton::EventId;
-use proton_core_api::services::proton::GetEventOptions;
-use proton_core_api::services::proton::ProtonCore;
-use proton_core_api::session::CoreSession;
 use proton_core_common::event_loop::EventPollMode;
-use proton_event_loop::provider::Provider;
-use proton_event_loop::store::Store;
-use proton_event_loop::{EventLoopError, RawEvent};
-use stash::exports::SqliteError;
-use stash::params;
-use stash::stash::StashError;
-use std::sync::{Arc, Weak};
+use proton_event_loop::{EventLoopError, TypedSubscribers};
+use std::sync::Weak;
 use std::time::Duration;
 use tracing::{Instrument, error, warn};
-
-const MAIL_EVENT_TYPE_ID: &str = "proton-mail-event";
-
-#[derive(Clone)]
-pub struct MailEventLoopContext(Weak<MailUserContext>);
-
-impl MailEventLoopContext {
-    pub fn inner(&self) -> Result<Arc<MailUserContext>, anyhow::Error> {
-        match self.0.upgrade() {
-            Some(ctx) => Ok(ctx),
-            None => bail!("MailUserContext no longer alive"),
-        }
-    }
-
-    pub fn boxed(&self) -> Box<Self> {
-        Box::new(self.clone())
-    }
-}
-
-impl From<Weak<MailUserContext>> for MailEventLoopContext {
-    fn from(value: Weak<MailUserContext>) -> Self {
-        Self(value)
-    }
-}
-
-#[async_trait]
-impl Store for MailEventLoopContext {
-    async fn load(&self) -> anyhow::Result<Option<EventId>> {
-        let ctx = self.inner()?;
-        let tether = ctx.user_context.stash().connection();
-        match tether
-            .query_value::<_, EventId>(
-                "SELECT value FROM event_id_store WHERE id = ?1",
-                params![MAIL_EVENT_TYPE_ID],
-            )
-            .await
-        {
-            Ok(value) => Ok(Some(value)),
-            Err(e) => {
-                if matches!(
-                    e,
-                    StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
-                ) {
-                    Ok(None)
-                } else {
-                    error!("Failed to load event id from db:{e:?}");
-                    Err(anyhow!("Failed to load event id {e}"))
-                }
-            }
-        }
-    }
-
-    async fn store(&self, id: EventId) -> anyhow::Result<()> {
-        let ctx = self.inner()?;
-        ctx.user_context
-            .stash()
-            .connection()
-            .tx(async |tx| {
-                tx.execute(
-                    "INSERT OR REPLACE INTO event_id_store (id, value) VALUES (?, ?)",
-                    params![MAIL_EVENT_TYPE_ID, id],
-                )
-                .await?;
-
-                Ok(())
-            })
-            .await
-            .map_err(|e: StashError| {
-                error!("Failed to store event id in db:{e:?}");
-                anyhow!("Failed to store event id {e}")
-            })
-    }
-}
-
-#[async_trait]
-impl Provider for MailEventLoopContext {
-    async fn get_latest_event_id(&self) -> Result<EventId, ApiServiceError> {
-        let ctx = self.inner()?;
-        Ok(ctx.api().get_events_latest().await?.event_id)
-    }
-
-    async fn get_event(&self, event_id: &EventId) -> Result<RawEvent, ApiServiceError> {
-        let ctx = self.inner()?;
-        let json_string = ctx
-            .session()
-            .api()
-            .get_event(event_id.clone(), GetEventOptions::all())
-            .await?;
-
-        Ok(RawEvent::from_json(json_string)?)
-    }
-}
 
 #[derive(Debug, Default)]
 pub(crate) struct EventLoopActionIds {
@@ -246,22 +143,10 @@ impl MailUserContext {
     ///
     pub(crate) async fn register_subscribers(&self) -> Result<(), EventLoopError> {
         let mail_subscriber = MailEventSubscriber::new(Weak::clone(&self.this));
+        let mail_subscribers = TypedSubscribers::<MailEvent>::from(Box::new(mail_subscriber));
 
-        self.event_loop.register(Box::new(mail_subscriber)).await?;
+        self.event_loop().register(mail_subscribers).await?;
 
         Ok(())
-    }
-
-    /// Perform one iteration of the event loop, which consists of retrieving the latest events,
-    /// publishing it on all the registered subscribers and storing the event id for the next
-    /// iteration.
-    ///
-    /// The execution of the loop is aborted on the first error.
-    ///
-    /// # Error
-    ///
-    /// Returns error if the event loop failed to poll.
-    pub(crate) async fn poll_event_loop_impl(&self) -> Result<(), EventLoopError> {
-        self.event_loop.poll().await
     }
 }

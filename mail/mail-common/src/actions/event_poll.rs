@@ -99,11 +99,6 @@ impl proton_action_queue::action::Handler for EventPollHandler {
             .await
             .map_err(ActionEventLoopError::from)?;
 
-        context
-            .poll_event_loop_impl()
-            .await
-            .map_err(ActionEventLoopError::from)?;
-
         Ok(())
     }
 }

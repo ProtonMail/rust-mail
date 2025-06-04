@@ -16,7 +16,7 @@ use proton_core_api::{
     session::CoreSession,
 };
 use proton_event_loop::{
-    EventLoopError, RawEvent,
+    EventLoopError, RawEvent, TypedSubscribers,
     provider::Provider,
     store::Store,
     subscriber::{Subscriber, SubscriberError},
@@ -305,8 +305,9 @@ impl UserContext {
 
     pub(crate) async fn register_subscribers(self: &Arc<Self>) -> Result<(), EventLoopError> {
         let core_subscriber = CoreEventSubscriber::from(Arc::downgrade(self));
+        let core_subscribers = TypedSubscribers::<CoreEvent>::from(core_subscriber.boxed());
 
-        self.event_loop.register(core_subscriber.boxed()).await?;
+        self.event_loop.register(core_subscribers).await?;
 
         Ok(())
     }

@@ -5510,6 +5510,7 @@ dependencies = [
  "derive_more 2.0.1",
  "flume",
  "futures",
+ "insta",
  "muon",
  "parking_lot",
  "proton-crypto-account",

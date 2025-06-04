@@ -148,7 +148,7 @@ impl Event for MailEvent {
 impl From<ApiMailEvent> for MailEvent {
     fn from(value: ApiMailEvent) -> Self {
         Self {
-            event_id: value.core_event.event_id,
+            event_id: value.event_id,
             conversation_counts: value.conversation_counts.map(|conversation_counts| {
                 conversation_counts
                     .into_iter()
@@ -161,8 +161,7 @@ impl From<ApiMailEvent> for MailEvent {
                     .map(ConversationEvent::from)
                     .collect()
             }),
-            has_more: value.core_event.has_more,
-            labels: value.core_event.labels.map(|labels| labels.map_vec()),
+            labels: value.labels.map(|labels| labels.map_vec()),
             mail_settings: value.mail_settings.map(MailSettings::from),
             message_counts: value.message_counts.map(|message_counts| {
                 message_counts
@@ -171,7 +170,8 @@ impl From<ApiMailEvent> for MailEvent {
                     .collect()
             }),
             messages: value.messages.map(|messages| messages.map_vec()),
-            refresh: value.core_event.refresh.into(),
+            refresh: value.refresh.into(),
+            has_more: value.has_more,
             incoming_defaults: value.incoming_defaults,
         }
     }

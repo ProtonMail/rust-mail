@@ -24,9 +24,8 @@
 //!
 
 use crate::services::proton::common::{AttachmentId, ConversationId, ExternalId, MessageId};
-use proton_core_api::services::proton::Action;
-use proton_core_api::services::proton::CoreEvent;
 use proton_core_api::services::proton::common::ApiErrorInfo;
+use proton_core_api::services::proton::{Action, EventId, LabelEvent};
 use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
@@ -552,8 +551,10 @@ pub struct ConversationLabel {
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct MailEvent {
-    #[serde(flatten)]
-    pub core_event: CoreEvent,
+    #[serde(rename = "EventID")]
+    pub event_id: EventId,
+
+    pub labels: Option<Vec<LabelEvent>>,
 
     pub conversation_counts: Option<Vec<ConversationCount>>,
 
@@ -566,6 +567,14 @@ pub struct MailEvent {
     pub message_counts: Option<Vec<MessageCount>>,
 
     pub messages: Option<Vec<MessageEvent>>,
+
+    /// Indicates whether to refresh.
+    pub refresh: u8,
+
+    /// Whether we need to request more events after this.
+    #[serde(rename = "More")]
+    #[serde_as(as = "BoolFromInt")]
+    pub has_more: bool,
 }
 
 /// TODO: Document this struct.

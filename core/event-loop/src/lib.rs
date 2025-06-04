@@ -42,6 +42,10 @@ pub mod subscriber;
 #[path = "tests/lib.rs"]
 mod tests;
 
+// Re-export main types
+pub use poll::EventPoll;
+pub use subscriber::{RawSubscriber, Subscriber, TypedSubscribers};
+
 use crate::subscriber::SubscriberError;
 use anyhow::Error as AnyhowError;
 use proton_core_api::service::ApiServiceError;

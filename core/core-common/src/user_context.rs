@@ -3,7 +3,6 @@ use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
 use crate::event_loop::EventPollMode;
-use crate::events::CoreEvent;
 use crate::models::{InitializationWatcher, UserSettings};
 use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse};
 use anyhow::Context as _;
@@ -12,7 +11,7 @@ use proton_action_queue::queue::Queue;
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::Session;
-use proton_event_loop::poll::EventPoll;
+use proton_event_loop::EventPoll;
 use proton_sqlite3::MigratorError;
 use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use stash::orm::Model;
@@ -62,7 +61,7 @@ pub struct UserContext {
     cancellation_token: CancellationToken,
     pub cache_path: PathBuf,
     pub initialization_watcher: Arc<InitializationWatcher>,
-    event_loop: EventPoll<CoreEvent>,
+    event_loop: EventPoll,
 }
 
 impl Debug for UserContext {
@@ -173,6 +172,12 @@ impl UserContext {
     #[must_use]
     pub fn user_id(&self) -> &UserId {
         &self.user_id
+    }
+
+    /// Get the event loop.
+    #[must_use]
+    pub fn event_loop(&self) -> &EventPoll {
+        &self.event_loop
     }
 
     /// Get the event poll mode of this context.

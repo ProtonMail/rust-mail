@@ -3,23 +3,23 @@ use std::collections::hash_map::Entry;
 
 use crate::provider::Provider;
 use crate::store::Store;
-use crate::subscriber::Subscriber;
-use crate::{Event, EventLoopError};
+use crate::subscriber::RawSubscriber;
+use crate::{Event, EventLoopError, RawEvent};
 use anyhow::anyhow;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::EventId;
 use tokio::sync::Mutex;
 use tracing::{self, Level, debug, error};
 
-pub struct EventPoll<T: Send + Sync> {
+pub struct EventPoll {
     epoll: EventPollInternal,
     store: Box<dyn Store>,
     provider: Box<dyn Provider>,
-    uniqe_sub: Mutex<HashMap<&'static str, usize>>,
-    subscribers: Mutex<Vec<Box<dyn Subscriber<T>>>>,
+    unique_sub: Mutex<HashMap<&'static str, usize>>,
+    subscribers: Mutex<Vec<Box<dyn RawSubscriber>>>,
 }
 
-impl<T: Event + From<<T as Event>::Response>> EventPoll<T> {
+impl EventPoll {
     #[must_use]
     pub fn new(store: Box<dyn Store>, provider: Box<dyn Provider>) -> Self {
         let epoll = EventPollInternal::new();
@@ -28,7 +28,7 @@ impl<T: Event + From<<T as Event>::Response>> EventPoll<T> {
             epoll,
             store,
             provider,
-            uniqe_sub: Mutex::new(HashMap::new()),
+            unique_sub: Mutex::new(HashMap::new()),
             subscribers: Mutex::new(Vec::new()),
         }
     }
@@ -43,10 +43,10 @@ impl<T: Event + From<<T as Event>::Response>> EventPoll<T> {
 
     pub async fn register(
         &self,
-        subscriber: Box<dyn Subscriber<T>>,
+        subscriber: Box<dyn RawSubscriber>,
     ) -> Result<&Self, EventLoopError> {
         let mut subscribers = self.subscribers.lock().await;
-        match self.uniqe_sub.lock().await.entry(subscriber.name()) {
+        match self.unique_sub.lock().await.entry(subscriber.name()) {
             Entry::Occupied(_) => return Err(EventLoopError::Register(subscriber.name())),
             Entry::Vacant(entry) => {
                 entry.insert(subscribers.len());
@@ -59,7 +59,7 @@ impl<T: Event + From<<T as Event>::Response>> EventPoll<T> {
 
     pub async fn poll(&self) -> Result<(), EventLoopError> {
         self.epoll
-            .poll::<T>(
+            .poll_raw(
                 self.store.as_ref(),
                 self.provider.as_ref(),
                 self.subscribers.lock().await.as_slice(),
@@ -103,16 +103,15 @@ impl EventPollInternal {
         Ok(())
     }
 
-    /// Perform one iteration of the event loop, which consists of retrieving the latest events,
-    /// publishing it all the registered subscribers and storing the event id for the next
-    /// iteration.
+    /// Perform one iteration of the event loop with RawSubscribers, which consists of retrieving the latest events,
+    /// publishing raw events to all registered subscribers and storing the event id for the next iteration.
     /// The execution of the loop is aborted on the first error.
-    #[tracing::instrument(name="event_poll",level=Level::DEBUG, skip_all)]
-    pub async fn poll<T: Event + From<<T as Event>::Response>>(
+    #[tracing::instrument(name="event_poll_raw",level=Level::DEBUG, skip_all)]
+    pub async fn poll_raw(
         &self,
         store: &dyn Store,
         provider: &dyn Provider,
-        subscribers: &[Box<dyn Subscriber<T>>],
+        subscribers: &[Box<dyn RawSubscriber>],
     ) -> Result<(), EventLoopError> {
         let Some(last_event_id) = store.load().await.map_err(EventLoopError::StoreRead)? else {
             let e = anyhow!("No EventId in store");
@@ -122,41 +121,29 @@ impl EventPollInternal {
 
         debug!("Last Event Id = {last_event_id}");
 
-        let events: Vec<T> = self
-            .collect_events(provider, &last_event_id)
+        let mut raw_events: Vec<RawEvent> = self
+            .collect_raw_events(provider, &last_event_id)
             .await
             .map_err(|e| {
                 error!("Failed to collect events: {e:?}");
                 e
             })?;
 
-        if *events
-            .last()
-            .expect("collect_events must collect at least one event")
-            .event_id()
-            == last_event_id
-        {
+        if raw_events.is_empty() {
             debug!("No new api events");
             return Ok(());
         }
 
-        debug!(
-            "Received new events: {:?}",
-            events.iter().map(Event::event_id).collect::<Vec<_>>()
-        );
+        debug!("Received {} new raw events", raw_events.len());
 
-        // Run 1 tx per event to avoid having long running transactions. Under normal circumstances
-        // this is not really an issue, but with the current iOS setup, if we enter a background
-        // state and we allow transactions to finish we can get killed by the OS. On Average
-        // the grace period seems to be around 200ms. It has been observed that on large events,
-        // the whole process can take > 200ms together.
-        for event in events {
-            let new_event_id = event.event_id().clone();
-            if event.is_refresh() {
-                self.publish_refresh_to_subscribers(&event, subscribers)
+        // Run 1 tx per event to avoid having long running transactions
+        for raw_event in &mut raw_events {
+            let new_event_id = raw_event.event_id().clone();
+            if raw_event.is_refresh() {
+                self.publish_raw_refresh_to_subscribers(raw_event, subscribers)
                     .await?;
             } else {
-                self.publish_events_to_subscribers(&mut [event], subscribers)
+                self.publish_raw_events_to_subscribers(&mut [raw_event.clone()], subscribers)
                     .await?;
             }
 
@@ -170,39 +157,47 @@ impl EventPollInternal {
         Ok(())
     }
 
-    /// Requests all events. The resulting vec is non empty.
-    async fn collect_events<T: Event + From<<T as Event>::Response>>(
+    /// Requests all raw events. The resulting vec may be empty if no new events.
+    async fn collect_raw_events(
         &self,
         provider: &dyn Provider,
-        mut last_event_id: &EventId,
-    ) -> Result<Vec<T>, ApiServiceError> {
+        last_event_id: &EventId,
+    ) -> Result<Vec<RawEvent>, ApiServiceError> {
         let mut events = Vec::with_capacity(4);
+        let mut current_event_id = last_event_id.clone();
 
         for _ in 0..MAX_EVENTS_PER_POLL {
-            let event = provider
-                .get_event(last_event_id)
-                .await?
-                .deserialize::<T>()?;
+            let event = provider.get_event(&current_event_id).await?;
             let has_more = event.has_more();
+            let new_event_id = event.event_id().clone();
+
+            // If this is the same event ID, we don't have new events
+            if new_event_id == current_event_id {
+                break;
+            }
+
             events.push(event);
             if !has_more {
                 break;
             }
 
-            last_event_id = events.last().unwrap().event_id();
+            current_event_id = new_event_id;
         }
 
         Ok(events)
     }
 
-    async fn publish_events_to_subscribers<T: Event>(
+    async fn publish_raw_events_to_subscribers(
         &self,
-        events: &mut [T],
-        subscribers: &[Box<dyn Subscriber<T>>],
+        events: &mut [RawEvent],
+        subscribers: &[Box<dyn RawSubscriber>],
     ) -> Result<(), EventLoopError> {
         for subscriber in subscribers {
-            if let Err(e) = subscriber.on_events(events).await {
-                error!("Failed to publish events to '{}': {e:?}", subscriber.name());
+            if let Err(e) = subscriber.on_raw_events(events).await {
+                error!(
+                    "Failed to publish raw events to '{}': {e:?}",
+                    subscriber.name()
+                );
                 return Err(EventLoopError::Subscriber(subscriber.name().into(), e));
             }
         }
@@ -210,15 +205,15 @@ impl EventPollInternal {
         Ok(())
     }
 
-    async fn publish_refresh_to_subscribers<T: Event>(
+    async fn publish_raw_refresh_to_subscribers(
         &self,
-        event: &T,
-        subscribers: &[Box<dyn Subscriber<T>>],
+        event: &RawEvent,
+        subscribers: &[Box<dyn RawSubscriber>],
     ) -> Result<(), EventLoopError> {
         for subscriber in subscribers {
-            if let Err(e) = subscriber.on_refresh(event).await {
+            if let Err(e) = subscriber.on_raw_refresh(event).await {
                 error!(
-                    "Failed to process refresh in subscriber '{}': {e:?}",
+                    "Failed to process raw refresh in subscriber '{}': {e:?}",
                     subscriber.name()
                 );
                 return Err(EventLoopError::Refresh(subscriber.name().to_owned(), e));
