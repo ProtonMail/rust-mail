@@ -1,36 +1,62 @@
 //! Utilities to listen to the proton event loop. This crate provides an event polling system
-//! through the parametrized [`EventPoll<T>`] which is the main entry point to this crate.
-//! Handling of events is delegated to a [`Subscriber`]. These need to be registered with the poll.
+//! that can handle multiple event types through the [`EventPoll`] which is the main entry point to this crate.
 //!
-//! # Event Polling
+//! The system works with raw events that are then converted to specific event types by registered subscribers.
+//! Handling of events is delegated to [`Subscriber`]s which are wrapped in [`TypedSubscribers`] containers
+//! that implement the [`RawSubscriber`] trait.
 //!
-//! The event polling system requires the user to poll the loop manually so that it can progress.
-//! The user is fully responsible for handling errors at the poll call site.
+//! # Event Polling Architecture
 //!
-//! ## Example
+//! The event polling system uses a two-tier approach:
+//! - **Raw Events**: Events are initially fetched as [`RawEvent`]s from the API
+//! - **Typed Events**: Each [`RawSubscriber`] deserializes raw events to specific event types
+//!
+//! This design allows a single [`EventPoll`] to handle multiple event types (e.g., core events, mail events)
+//! without requiring separate polling loops.
+//!
+//! ## Basic Usage
 //!
 //! ```ignore
-//! use proton_event_loop::{Event, EventPoll, Provider, Store, Subscriber};
+//! use proton_event_loop::{EventPoll, TypedSubscribers, Provider, Store};
+//! use proton_core_api::domain::Event;
 //!
-//! async fn create_poll_and_run<T: Event>(
+//! async fn create_poll_and_run(
 //!     store: Box<dyn Store>,
 //!     provider: Box<dyn Provider>,
-//!     subscriber: Box<dyn Subscriber<T>>
-//! ) {
+//!     core_subscriber: Box<dyn Subscriber<CoreEvent>>,
+//!     mail_subscriber: Box<dyn Subscriber<MailEvent>>
+//! ) -> Result<(), EventLoopError> {
 //!     let event_poll = EventPoll::new(store, provider);
 //!
 //!     // Initialize the poll to set up the initial event ID if needed
 //!     event_poll.initialize().await?;
 //!
-//!     // Register subscriber to handle events
-//!     event_poll.register(subscriber).await?;
+//!     // Register subscribers for different event types
+//!     let core_subscribers = TypedSubscribers::<CoreEvent>::from(core_subscriber);
+//!     let mail_subscribers = TypedSubscribers::<MailEvent>::from(mail_subscriber);
 //!
+//!     event_poll.register(core_subscribers).await?;
+//!     event_poll.register(mail_subscribers).await?;
+//!
+//!     // Poll for events - all registered subscribers will receive appropriate events
 //!     loop {
 //!         if let Err(_) = event_poll.poll().await {
 //!             // Handle error
 //!         }
 //!     }
 //! }
+//! ```
+//!
+//! ## Multiple Subscribers per Event Type
+//!
+//! You can register multiple subscribers for the same event type:
+//!
+//! ```ignore
+//! let mut core_subscribers = TypedSubscribers::<CoreEvent>::new("core-events");
+//! core_subscribers.add_subscriber(first_core_subscriber);
+//! core_subscribers.add_subscriber(second_core_subscriber);
+//!
+//! event_poll.register(core_subscribers.boxed()).await?;
 //! ```
 //!
 pub mod poll;

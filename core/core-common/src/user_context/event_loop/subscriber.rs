@@ -303,6 +303,24 @@ impl UserContext {
         Ok(())
     }
 
+    /// Register the core event subscriber.
+    ///
+    /// Whether there is a need to add a new subscriber to `CoreEvents` it should
+    /// be done here. Example how to add a new subscriber:
+    ///
+    /// ```ignore
+    /// let core_subscriber = CoreEventSubscriber::from(Arc::downgrade(self));
+    /// let new_core_subscriber = NewCoreEventSubscriber::from(Arc::downgrade(self));
+    /// let mut core_subscribers = TypedSubscribers::<CoreEvent>::from(core_subscriber.boxed());
+    /// core_subscribers.add_subscriber(new_core_subscriber);
+    ///
+    /// self.event_loop.register(core_subscribers).await?;
+    /// ```
+    ///
+    /// # Error
+    ///
+    /// Returns error if the event loop failed to register the subscriber.
+    ///
     pub(crate) async fn register_subscribers(self: &Arc<Self>) -> Result<(), EventLoopError> {
         let core_subscriber = CoreEventSubscriber::from(Arc::downgrade(self));
         let core_subscribers = TypedSubscribers::<CoreEvent>::from(core_subscriber.boxed());

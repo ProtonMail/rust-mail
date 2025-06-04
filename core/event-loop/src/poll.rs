@@ -157,7 +157,9 @@ impl EventPollInternal {
         Ok(())
     }
 
-    /// Requests all raw events. The resulting vec may be empty if no new events.
+    /// Requests all events.
+    ///
+    /// The resulting vec is non empty as it contains at least the last event id.
     async fn collect_raw_events(
         &self,
         provider: &dyn Provider,
