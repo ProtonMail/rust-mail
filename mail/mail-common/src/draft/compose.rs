@@ -10,6 +10,10 @@ use proton_core_common::models::Address;
 use proton_crypto_inbox::message::{EncryptableDraft, EncryptedDraft};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_api::services::proton::request_data::DraftRecipient;
+use proton_mail_html_transformer::transforms::ColorMode;
+use proton_mail_html_transformer::transforms::styles::{
+    BrowserCapabilities, dark_mode_for_plaintext,
+};
 use proton_mail_html_transformer::{Html2TextOptions, Transformer};
 use std::borrow::Cow;
 use std::fmt::Display;
@@ -264,13 +268,46 @@ pub fn html_to_text(input: &str) -> String {
     }
 }
 
+pub struct DarkModeInjection {
+    /// Composer head. Not sent to the recipient.
+    pub head: String,
+    /// New body of the draft. Sent to the recipient.
+    /// Needs reverse operation before sending.
+    pub body: String,
+}
+
+/// This function adds dark mode support to the composer. It does modify original body only in the context
+/// of removing `!important` flag from styles and attributes.
+///
+/// Supplement CSS are not injected, instead the function returns the head in a separate string.
+pub fn inject_dark_mode(
+    mime_type: MimeType,
+    body: &str,
+    color_mode: ColorMode,
+    capabilities: BrowserCapabilities,
+) -> DarkModeInjection {
+    if mime_type == MimeType::TextPlain {
+        return DarkModeInjection {
+            head: dark_mode_for_plaintext(color_mode, capabilities).to_owned(),
+            body: body.to_owned(),
+        };
+    }
+
+    let mut transformer = Transformer::new(body);
+    let head = transformer.inject_dark_mode_to_another_target(color_mode, capabilities);
+    DarkModeInjection {
+        head,
+        body: transformer.to_string(),
+    }
+}
+
 /// Only html content is sanitized, plain text is ignored.
-pub fn maybe_sanitize(mime_type: MimeType, body: String) -> String {
+pub fn maybe_sanitize(mime_type: MimeType, body: &str) -> String {
     // There is no point in sanitizing content that is not HTML.
     if mime_type != MimeType::TextHtml {
-        return body;
+        return body.to_owned();
     }
-    let mut transformer = Transformer::new(&body);
+    let mut transformer = Transformer::new(body);
     transformer.add_noreferrer();
     transformer.strip_utm();
     transformer.strip_whitelist();
@@ -286,12 +323,7 @@ pub fn maybe_sanitize(mime_type: MimeType, body: String) -> String {
 /// * `body` - message body, containing full `<html>`
 fn sanitize_reply(body: &str) -> String {
     let mut html = Transformer::new(body);
-    // TODO(wpolak): In following MR's:
-    // * Inject dark mode
-    //     * Make sure dark mode is reversible
     html.move_styles_to_body();
-    // * Sanitize `<style>` in `<body>` so that selectors are pointing to
-    // `.protonmail_quote` (to prevent style bleeding)
     html.extract_body()
 }
 

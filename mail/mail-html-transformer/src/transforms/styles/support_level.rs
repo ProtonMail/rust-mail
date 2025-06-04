@@ -27,7 +27,15 @@ static COLOR_SCHEME_REGEX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"color-scheme:\s?\S{0,}\s?dark").unwrap());
 
 impl DarkStyleSupportLevel {
-    pub(crate) fn new(
+    pub(crate) fn new_for_plaintext(mode: ColorMode, capabilities: BrowserCapabilities) -> Self {
+        if mode == ColorMode::LightMode && !capabilities.supports_dark_mode_via_media_query {
+            return Self::NoDarkMode;
+        }
+
+        Self::Native
+    }
+
+    pub(crate) fn new_for_html(
         mode: ColorMode,
         document: &NodeRef,
         capabilities: BrowserCapabilities,
@@ -103,6 +111,6 @@ mod tests {
     ) -> DarkStyleSupportLevel {
         let html = kuchikiki::parse_html().one(input);
 
-        DarkStyleSupportLevel::new(mode, &html, capabilities)
+        DarkStyleSupportLevel::new_for_html(mode, &html, capabilities)
     }
 }

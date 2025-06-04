@@ -21,14 +21,12 @@ mod capabilities;
 mod dark_mode_visitor;
 mod support_level;
 
-/// Adjusts style of the message to the light/dark mode.
-/// In case of light mode only slight changes are applied.
-/// In case of the dark mode, this function scans all styles provided by the sender,
-/// checks whether the style is applicable in the dark mode and if not - modifies
-/// the style of the message to suit better the theme.
+/// This function provides stylesheets for dark mode in plaintext messages.
+/// In plaintext we do not need to parse HTML/CSS and just need to return static
+/// stylesheets builtin in the SDK.
 ///
-pub fn transform_style(document: NodeRef, mode: ColorMode, capabilities: BrowserCapabilities) {
-    let level = DarkStyleSupportLevel::new(mode, &document, capabilities);
+pub fn dark_mode_for_plaintext(mode: ColorMode, capabilities: BrowserCapabilities) -> &'static str {
+    let level = DarkStyleSupportLevel::new_for_plaintext(mode, capabilities);
 
     let BrowserCapabilities {
         supports_dark_mode_via_media_query,
@@ -38,16 +36,67 @@ pub fn transform_style(document: NodeRef, mode: ColorMode, capabilities: Browser
         (DarkStyleSupportLevel::NoDarkMode, false) => {
             // If dark mode is currently not supported, let's just inject static css style.
             //
-            inject_style(&document, include_str!("./light.css"));
+            include_str!("./light.css")
+        }
+        (_, false) => {
+            // We detected, that the message can be safely rendered in the dark mode.
+            include_str!("./dark.css")
+        }
+        (_, true) => {
+            // Browser supports `@media (prefers-color-scheme: dark)`.
+            // So instead switching between light/dark CSS we can inject merged one
+            include_str!("./light_and_dark.css")
+        }
+    }
+}
+
+/// Adjusts style of the message to the light/dark mode.
+/// In case of light mode only slight changes are applied.
+/// In case of the dark mode, this function scans all styles provided by the sender,
+/// checks whether the style is applicable in the dark mode and if not - modifies
+/// the style of the message to suit better the theme.
+///
+/// Parameters:
+/// * `source` - the source HTML document. Usually a message fetched from remote. Might be modified by removing `!important` flag from
+///   styles and attributes.
+/// * `target` - the target HTML document. Stylesheets and CSS supplements are appended to the head of the document.
+///
+/// # Difference between `source` and `target`
+/// In the view mode of the message, both nodes are pointing to the same document.
+/// However in the composer, `source` is the message being edited, while `target` is the head of HTML editor that wraps
+/// the message. Styles appended to the `target` are not sent to the recipient.
+pub fn inject_dark_mode(
+    source: NodeRef,
+    target: NodeRef,
+    mode: ColorMode,
+    capabilities: BrowserCapabilities,
+) {
+    // TODO(wpolak): In following MRs:
+    // * remove `!important` only from attributes.
+    //   Apparently we can override styles provided by <style> tags if we use stronger specificity.
+    //   For example if our supplement stylesheet has selector prefix of `#protonmail_editor `
+    // * Make sure that `!important` removal from attributes is reversible.
+    //   For example by keeping `data-proton-original-style` attribute.
+    let level = DarkStyleSupportLevel::new_for_html(mode, &source, capabilities);
+
+    let BrowserCapabilities {
+        supports_dark_mode_via_media_query,
+    } = capabilities;
+
+    match (level, supports_dark_mode_via_media_query) {
+        (DarkStyleSupportLevel::NoDarkMode, false) => {
+            // If dark mode is currently not supported, let's just inject static css style.
+            //
+            inject_style(&target, include_str!("./light.css"));
         }
         (DarkStyleSupportLevel::Native, false) => {
             // We detected, that the message can be safely rendered in the dark mode.
             // We just need to inject our style.
-            inject_style(&document, include_str!("./dark.css"));
+            inject_style(&target, include_str!("./dark.css"));
         }
         (DarkStyleSupportLevel::NoDarkMode | DarkStyleSupportLevel::Native, true) => {
             // Browser supports `@media (prefers-color-scheme: dark)`. So instead switching between light/dark CSS we can inject merged one
-            inject_style(&document, include_str!("./light_and_dark.css"));
+            inject_style(&target, include_str!("./light_and_dark.css"));
         }
         (DarkStyleSupportLevel::Injected, supports_media_query) => {
             // In order to support dark mode, we need to analyze all colors used by the message.
@@ -57,14 +106,14 @@ pub fn transform_style(document: NodeRef, mode: ColorMode, capabilities: Browser
             // 1. If yes, we can keep existing color.
             // 2. If not, we shall generate a CSS override (by removing `!important` from original place and adding new rule afterwards)
             //     that would use transformed color (keeping the same hue and saturation but changed light component).
-            let maybe_supplement_css = sanitize_dark_mode(&document);
+            let maybe_supplement_css = sanitize_dark_mode(&source);
 
             if supports_media_query {
-                inject_style(&document, include_str!("./light_and_dark.css"));
+                inject_style(&target, include_str!("./light_and_dark.css"));
 
                 if let Some(supplement_css) = maybe_supplement_css {
                     inject_style(
-                        &document,
+                        &target,
                         &format!(
                             r"
                   @media ( prefers-color-scheme: dark ) {{
@@ -75,9 +124,9 @@ pub fn transform_style(document: NodeRef, mode: ColorMode, capabilities: Browser
                     );
                 }
             } else {
-                inject_style(&document, include_str!("./dark.css"));
+                inject_style(&target, include_str!("./dark.css"));
                 if let Some(supplement_css) = maybe_supplement_css {
-                    inject_style(&document, &supplement_css);
+                    inject_style(&target, &supplement_css);
                 }
             }
         }

@@ -111,18 +111,11 @@ impl Transformer {
     /// element
     #[must_use]
     pub fn extract_body(&self) -> String {
-        use std::fmt::Write;
-
         let Ok(body) = self.document.select_first("body") else {
             return String::new();
         };
 
-        let mut result = String::new();
-        for child in body.as_node().children() {
-            write!(result, "{}", child.to_string()).expect("writing to string");
-        }
-
-        result
+        inner_html(body.as_node())
     }
 
     /// Strip HTML links of UTM tracking codes.
@@ -160,8 +153,39 @@ impl Transformer {
 
     /// This function adds dark mode support. This fails if the html doesn't have a head tag.
     #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
-    pub fn inject_style(&mut self, mode: ColorMode, capabilities: BrowserCapabilities) {
-        transforms::styles::transform_style(self.document.clone(), mode, capabilities);
+    pub fn inject_dark_mode(&mut self, mode: ColorMode, capabilities: BrowserCapabilities) {
+        transforms::styles::inject_dark_mode(
+            self.document.clone(),
+            self.document.clone(),
+            mode,
+            capabilities,
+        );
+    }
+
+    /// This function adds dark mode support. It does modify original body only in the context
+    /// of removing `!important` flag from styles and attributes.
+    ///
+    /// Supplement CSS are not injected, instead the function returns the head of the new document.
+    pub fn inject_dark_mode_to_another_target(
+        &mut self,
+        mode: ColorMode,
+        capabilities: BrowserCapabilities,
+    ) -> String {
+        use html5ever::namespace_url;
+        let source = self.document.clone();
+        let target = NodeRef::new_document();
+        let head = NodeRef::new_element(
+            html5ever::QualName::new(
+                None,
+                html5ever::ns!(html),
+                html5ever::LocalName::from("head"),
+            ),
+            vec![],
+        );
+        target.append(head.clone());
+
+        transforms::styles::inject_dark_mode(source, target.clone(), mode, capabilities);
+        inner_html(&head)
     }
 
     ///
@@ -216,6 +240,16 @@ impl Transformer {
         let cursor = std::io::Cursor::new(reader);
         Self::html2text(cursor, options)
     }
+}
+
+fn inner_html(node: &NodeRef) -> String {
+    use std::fmt::Write;
+
+    let mut result = String::new();
+    for child in node.children() {
+        write!(result, "{}", child.to_string()).expect("writing to string");
+    }
+    result
 }
 
 // WARN: This is vulnerable to malicious HTMLs with very deeply nested tags.

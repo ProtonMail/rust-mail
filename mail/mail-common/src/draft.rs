@@ -4,11 +4,12 @@ use crate::actions::draft::{
 };
 use crate::datatypes::attachment::ContentId;
 use crate::datatypes::{Disposition, LocalAttachmentId, LocalMessageId, MimeType};
-use crate::decrypted_message::DecryptedMessageBody;
+
+use crate::decrypted_message::{DecryptedMessageBody, ThemeOpts};
 use crate::draft::attachments::DraftAttachment;
 use crate::draft::compose::{
-    encrypt_draft_body, get_signature, patch_draft_with_reply_mode, prepare_html_reply,
-    prepare_plain_text_reply,
+    encrypt_draft_body, get_signature, inject_dark_mode, patch_draft_with_reply_mode,
+    prepare_html_reply, prepare_plain_text_reply,
 };
 use crate::draft::recipients::{ContactGroupResolver, ProtonContactGroupResolver, RecipientList};
 use crate::models::{
@@ -37,6 +38,7 @@ use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_api::services::proton::prelude::DraftReplyOrForwardParams;
 use proton_mail_api::services::proton::request_data::{DraftAction, DraftAttachmentKeyPackets};
 use proton_mail_api::services::proton::response_data::Message as ApiMessage;
+use proton_mail_html_transformer::transforms::styles::BrowserCapabilities;
 use proton_mail_ids::LocalConversationId;
 use proton_sqlite3::rusqlite;
 use rusqlite::types::{FromSqlError, FromSqlResult, ValueRef};
@@ -44,7 +46,6 @@ use serde::{Deserialize, Serialize};
 use stash::exports::{FromSql, SqliteError, ToSql, ToSqlOutput};
 use stash::orm::Model;
 use stash::stash::{StashError, Tether};
-use std::mem;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tracing::{debug, error};
@@ -1426,6 +1427,58 @@ impl Draft {
         DraftAttachment::build_list(self.metadata_id, tether).await
     }
 
+    /// On-the-fly generated head with injected the dark mode styles.
+    /// The content of returned string depends on body and modifies it.
+    ///
+    /// # Modifications to the body
+    ///
+    /// * If the body contains `!important` flag, it will be removed.
+    ///
+    /// # Returned HTML
+    ///
+    /// This function returns HTML that can be inserted INTO `<head>` tag.
+    /// It does not provide `<head>` tag on its own.
+    /// Therefore, the returned HTML can be inserted alongside with other html nodes.
+    ///
+    /// ## Example of usage
+    ///
+    /// ```ignore
+    /// let head_to_inject = draft.html_head_content_for_composer(theme_opts);
+    ///
+    /// let template = format!("
+    /// <html>
+    /// <head>
+    ///
+    ///    <meta ...things set up for the composer />
+    ///    
+    ///    {head_to_inject}
+    ///
+    /// </head>
+    /// <body>
+    /// ...
+    /// </body>
+    /// </html>
+    /// ");
+    ///
+    /// ```
+    pub fn html_head_content_for_composer(&mut self, theme_opts: ThemeOpts) -> String {
+        let color_mode = theme_opts.color_mode();
+
+        let mime_type = self.mime_type();
+
+        let injection = inject_dark_mode(
+            mime_type,
+            &self.body,
+            color_mode,
+            BrowserCapabilities {
+                supports_dark_mode_via_media_query: theme_opts.supports_dark_mode_via_media_query,
+            },
+        );
+        self.body = injection.body;
+
+        injection.head
+    }
+
     pub fn body(&self) -> &str {
         &self.body
     }
@@ -1450,7 +1503,7 @@ impl Draft {
     }
 
     pub fn sanitize_body(&mut self) {
-        self.body = maybe_sanitize(self.mime_type(), mem::take(&mut self.body));
+        self.body = maybe_sanitize(self.mime_type(), &self.body);
     }
 
     pub async fn cancel_schedule_send(
