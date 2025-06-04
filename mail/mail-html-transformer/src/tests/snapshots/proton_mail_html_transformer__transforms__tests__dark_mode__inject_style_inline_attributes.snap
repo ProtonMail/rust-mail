@@ -323,13 +323,16 @@ div.a[style*="background-color:#fff"] {
  background-color:#1c1b24!important
  }div.a[style*="color:#000"] {
  color:#fff!important
+ }div.b[style*="color:#000"] {
+ color:#fff!important
  }
                   }
                 </style></head>
   <body>
-    <div class="a" style="background-color:#fff"></div>
+    <div class="a" style="background-color:#fff" data-proton-original-style="background-color: hsl(0, 0%, 100%);"></div>
     <div style="font-family:&quot;Google Sans&quot;,Arial,sans-serif;font-weight:400 color: red"></div>
-    <div class="a" style="color:#000">a</div>
+    <div class="a" style="color:#000" data-proton-original-style="color: black;">a</div>
+    <div class="b" style="color:#000" data-proton-original-style="color: black !important">b</div>
     <span>abc</span>
   
 

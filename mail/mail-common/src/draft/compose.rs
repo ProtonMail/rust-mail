@@ -318,6 +318,7 @@ pub fn maybe_sanitize(mime_type: MimeType, body: &str) -> String {
     transformer.add_noreferrer();
     transformer.strip_utm();
     transformer.strip_whitelist();
+    transformer.revert_dark_mode_in_inline_attributes();
 
     transformer.to_string()
 }

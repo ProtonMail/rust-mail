@@ -1,5 +1,8 @@
-<html>
-  <head>
+---
+source: mail/mail-html-transformer/src/tests/dark_mode.rs
+expression: html_after_revert
+---
+<html><head>
     <style>span{background-color: rgb(151, 202, 133);}</style>
   </head>
   <body>
@@ -8,5 +11,6 @@
     <div class="a" style="color: black;">a</div>
     <div class="b" style="color: black !important">b</div>
     <span>abc</span>
-  </body>
-</html>
+  
+
+</body></html>
