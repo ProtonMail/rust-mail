@@ -10,11 +10,11 @@ use lightningcss::{
 use smart_default::SmartDefault;
 
 use crate::transforms::styles::{
-    ColorPurpose, NewProperty, OldProperty, PropertyWithPurpose, dark_mode_background_color,
-    printer_options,
+    ColorPurpose, NewProperty, OldProperty, PropertyWithPurpose, colors::HSLExt,
+    dark_mode_background_color, printer_options,
 };
 
-use super::{colors::HSLExt, properties::PropertiesVisitor};
+use super::properties::PropertiesVisitor;
 
 /// Whether to keep serialized overriden props (as in original props before the edit)
 /// in the visitor result.
