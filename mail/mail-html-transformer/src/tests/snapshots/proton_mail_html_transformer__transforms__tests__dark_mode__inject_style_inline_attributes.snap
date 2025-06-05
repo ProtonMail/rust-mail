@@ -335,6 +335,13 @@ background-color:#3e6b2e!important
     <div class="a" style="color:#000" data-proton-original-style="color: black;">a</div>
     <div class="b" style="color:#000" data-proton-original-style="color: black !important">b</div>
     <span>abc</span>
+
+    <!-- Repeat tags multiple times with the same style  -->
+     
+    <div class="b" style="color:#000" data-proton-original-style="color: black !important">b</div>
+    <div class="b" style="color:#000" data-proton-original-style="color: black !important">b</div>
+    <div class="b" style="color:#000" data-proton-original-style="color: black !important">b</div>
+    
   
 
 </body></html>

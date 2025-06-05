@@ -334,6 +334,10 @@ background-color:#3e6b2e!important
                 Hello world!
             </font>
         </td>
+        <!-- Repeat tags multiple times with the same style  -->
+         <td bgcolor="white">1</td>
+         <td bgcolor="white">2</td>
+         <td bgcolor="white">3</td>
     </tr></tbody></table>
   
 
