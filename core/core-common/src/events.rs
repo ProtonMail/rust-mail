@@ -59,7 +59,7 @@ pub enum Action {
 }
 
 impl Action {
-    pub fn log_entry(&self, id: &impl ProtonIdMarker) {
+    pub fn log_entry(self, id: &impl ProtonIdMarker) {
         let action_str = match self {
             Action::Delete => "Deleting",
             Action::Create => "Creating",

@@ -3,11 +3,10 @@ use crate::user_context::events::subscriber::MailEventSubscriber;
 use crate::{MailContextError, MailUserContext};
 use proton_action_queue::queue::ActionError;
 use proton_core_common::actions::event_poll::EventPoll;
-use proton_core_common::event_loop::EventPollMode;
 use proton_event_loop::EventLoopError;
 use std::sync::Weak;
 use std::time::Duration;
-use tracing::{Instrument, error, warn};
+use tracing::{Instrument, error};
 
 impl MailUserContext {
     /// Setup a background task that queues the event loop action.
@@ -48,7 +47,7 @@ impl MailUserContext {
                         return;
                     };
 
-                    if let Err(e) = ctx.queue_poll_event_loop().await {
+                    if let Err(e) = ctx.force_event_loop_poll().await {
                         error!("Failed to queue poll event loop poll: {e:?}");
                     }
 
@@ -69,12 +68,10 @@ impl MailUserContext {
     /// # Errors
     ///
     /// Returns error if the action failed to be queued.
+    ///
     pub async fn poll_event_loop(&self) -> Result<(), ActionError<EventPoll>> {
-        if self.user_context().event_poll_mode() != EventPollMode::Manual {
-            warn!("Event poll mode is not configured as manual");
-            return Ok(());
-        }
-        self.queue_poll_event_loop().await
+        // Delegate to UserContext
+        self.user_context().poll_event_loop().await
     }
 
     /// Queue an action to execute the event loop as soon as possible regardless of
@@ -83,30 +80,10 @@ impl MailUserContext {
     /// # Errors
     ///
     /// Returns error if the action failed to be queued.
+    ///
     pub async fn force_event_loop_poll(&self) -> Result<(), ActionError<EventPoll>> {
-        let event_poll_action = EventPoll {};
-        self.action_queue().queue_action(event_poll_action).await?;
-        Ok(())
-    }
-
-    async fn queue_poll_event_loop(&self) -> Result<(), ActionError<EventPoll>> {
-        let mut last_action_ids = self
-            .user_context()
-            .last_event_loop_action_ids()
-            .lock()
-            .await;
-        let event_poll_action = EventPoll {};
-        {
-            let output = if let Some(last_action_id) = last_action_ids.last_event_loop_action_id {
-                self.action_queue()
-                    .replace_or_queue_action(last_action_id, event_poll_action)
-                    .await?
-            } else {
-                self.action_queue().queue_action(event_poll_action).await?
-            };
-            last_action_ids.last_event_loop_action_id = Some(output.id);
-        }
-        Ok(())
+        // Delegate to UserContext
+        self.user_context().force_event_loop_poll().await
     }
 
     async fn queue_item_rollback(&self) -> Result<(), ActionError<RollbackAction>> {
