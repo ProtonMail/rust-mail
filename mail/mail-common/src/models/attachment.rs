@@ -984,26 +984,6 @@ impl Attachment {
         name.starts_with("publickey - ") && name.ends_with(".asc")
     }
 
-    pub async fn filename(
-        id: LocalAttachmentId,
-        tether: &Tether,
-    ) -> Result<Option<String>, StashError> {
-        match tether
-            .query_value(
-                format!(
-                    "SELECT filename AS value FROM {} WHERE local_id=?",
-                    Self::table_name()
-                ),
-                params![id],
-            )
-            .await
-        {
-            Ok(v) => Ok(Some(v)),
-            Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => Ok(None),
-            Err(e) => Err(e),
-        }
-    }
-
     pub fn is_public_key_attachment(&self) -> bool {
         self.mime_type == MimeType::application_pgp_keys()
             && Self::is_public_key_attachment_filename(&self.filename)
