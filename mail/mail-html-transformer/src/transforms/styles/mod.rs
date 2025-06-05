@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Write;
 use std::{cell::RefCell, collections::BTreeMap};
 
@@ -5,7 +6,10 @@ pub use capabilities::BrowserCapabilities;
 
 use dark_mode_visitor::{StyleAttributeVisitor, StylesheetVisitor};
 use html5ever::{LocalName, QualName, namespace_url};
+use itertools::Itertools;
 use kuchikiki::{Attribute, Attributes, ElementData, NodeData, NodeDataRef, NodeRef};
+use lightningcss::traits::{Parse, ToCss};
+use lightningcss::values::color::{CssColor, HSL};
 use lightningcss::{
     printer::PrinterOptions,
     properties::Property,
@@ -15,9 +19,12 @@ use lightningcss::{
 };
 use support_level::DarkStyleSupportLevel;
 
+use crate::transforms::styles::colors::{HSLExt, hsla_for_dark_mode};
+
 use super::ColorMode;
 
 mod capabilities;
+mod colors;
 mod dark_mode_visitor;
 mod support_level;
 
@@ -115,6 +122,9 @@ pub fn inject_dark_mode(
         supports_dark_mode_via_media_query,
     } = capabilities;
 
+    tracing::debug!("Dark style support level: {level:?}");
+    tracing::debug!("Supports dark mode via media query: {supports_dark_mode_via_media_query}");
+
     match (level, supports_dark_mode_via_media_query) {
         (DarkStyleSupportLevel::NoDarkMode, false) => {
             // If dark mode is currently not supported, let's just inject static css style.
@@ -167,11 +177,15 @@ pub fn inject_dark_mode(
 
 fn sanitize_dark_mode(document: &NodeRef, root_selector: String) -> Option<String> {
     let maybe_supplement_for_stylesheets =
-        sanitize_dark_mode_in_stylesheets(document, root_selector);
-    let maybe_supplement_for_inline_attributes = sanitize_dark_mode_in_inline_attributes(document);
+        sanitize_dark_mode_in_stylesheets(document, &root_selector);
+    let maybe_supplement_for_inline_attributes =
+        sanitize_dark_mode_in_inline_attributes(document, &root_selector);
+    let maybe_supplement_for_deprecated_attributes =
+        sanitize_dark_mode_in_deprecated_attributes(document, &root_selector);
 
     if maybe_supplement_for_stylesheets.is_none()
         && maybe_supplement_for_inline_attributes.is_none()
+        && maybe_supplement_for_deprecated_attributes.is_none()
     {
         return None;
     }
@@ -179,9 +193,11 @@ fn sanitize_dark_mode(document: &NodeRef, root_selector: String) -> Option<Strin
     let supplement_for_stylesheets = maybe_supplement_for_stylesheets.unwrap_or_default();
     let supplement_for_inline_attributes =
         maybe_supplement_for_inline_attributes.unwrap_or_default();
+    let supplement_for_deprecated_attributes =
+        maybe_supplement_for_deprecated_attributes.unwrap_or_default();
 
     Some(format!(
-        "{supplement_for_stylesheets}\n{supplement_for_inline_attributes}"
+        "{supplement_for_stylesheets}\n{supplement_for_inline_attributes}\n{supplement_for_deprecated_attributes}"
     ))
 }
 
@@ -243,7 +259,7 @@ struct PropertyWithPurpose<'i> {
 /// If yes, it keeps the color intact.
 /// If not, it removes `!important` flag and adds the rule to overrides map
 /// Returns None if the supplement is empty
-fn sanitize_dark_mode_in_stylesheets(document: &NodeRef, root_selector: String) -> Option<String> {
+fn sanitize_dark_mode_in_stylesheets(document: &NodeRef, root_selector: &str) -> Option<String> {
     let mut overrides = BTreeMap::new();
 
     let Ok(styles) = document.select("style") else {
@@ -262,7 +278,7 @@ fn sanitize_dark_mode_in_stylesheets(document: &NodeRef, root_selector: String) 
             stylesheet,
             &mut overrides,
             printer_options,
-            root_selector.clone(),
+            root_selector.to_owned(),
         );
     }
 
@@ -292,8 +308,11 @@ fn sanitize_dark_mode_in_stylesheets(document: &NodeRef, root_selector: String) 
 /// If yes, it keeps the color intact.
 /// If not, it removes `!important` flag and adds the rule to overrides map
 /// Returns None if the supplement is empty
-fn sanitize_dark_mode_in_inline_attributes(document: &NodeRef) -> Option<String> {
-    let Ok(styles) = all_style_attributes(document) else {
+fn sanitize_dark_mode_in_inline_attributes(
+    document: &NodeRef,
+    root_selector: &str,
+) -> Option<String> {
+    let Ok(styles) = all_with_attribute(document, "style") else {
         return None;
     };
 
@@ -322,8 +341,118 @@ fn sanitize_dark_mode_in_inline_attributes(document: &NodeRef) -> Option<String>
     for (tag_selector, properties) in overrides {
         let properties = properties.join(";\n");
 
-        write!(style, "{tag_selector} {{\n {properties}\n }}").expect("Written properties");
+        write!(
+            style,
+            "{root_selector} {tag_selector} {{\n {properties}\n }}"
+        )
+        .expect("Written properties");
     }
+    Some(style)
+}
+
+/// List of deprecated HTML attributes that are not CSS, but are still in use in some newsletters.
+/// Those attributes contain a single color value
+/// <https://www.w3.org/TR/2014/REC-html5-20141028/obsolete.html>
+const DEPRECATED_ATTRIBUTES: &[&str] = &["bgcolor", "text", "color", "bordercolor"];
+
+fn color_purpose_for_deprecated_attribute(attr: &str) -> ColorPurpose {
+    match attr {
+        "bgcolor" | "bordercolor" => ColorPurpose::Background,
+        "text" | "color" | "alink" | "vlink" => ColorPurpose::Foreground,
+        _ => unreachable!(),
+    }
+}
+
+fn css_property_for_deprecated_attribute(attr: &str) -> &str {
+    match attr {
+        "bgcolor" => "background-color",
+        "color" | "text" => "color",
+        "bordercolor" => "border-color",
+        _ => unreachable!(),
+    }
+}
+
+/// Some email newsletters are using deprecated attributes like `bgcolor` or `text`.
+///
+/// For each color it checks whether luminance provides good enough contrast in the dark mode.
+/// If yes, it keeps the color intact.
+/// If not, it adds the rule to overrides map
+/// Returns None if the supplement is empty
+fn sanitize_dark_mode_in_deprecated_attributes(
+    document: &NodeRef,
+    root_selector: &str,
+) -> Option<String> {
+    let Ok(nodes) = all_with_any_attribute(document, DEPRECATED_ATTRIBUTES) else {
+        return None;
+    };
+
+    let mut overrides: InlineStyleOverrides = BTreeMap::new();
+
+    for node in nodes {
+        let attributes = DEPRECATED_ATTRIBUTES
+            .iter()
+            .filter_map(|attr| {
+                node.attributes
+                    .borrow()
+                    .get(*attr)
+                    .map(|value| (*attr, value.to_string()))
+            })
+            .collect::<HashMap<_, _>>();
+
+        for (attr, original_attr) in attributes {
+            let Ok(color) = CssColor::parse_string(&original_attr) else {
+                tracing::warn!("Could not parse color from deprecated attribute. Skipping...");
+                continue;
+            };
+            let Ok(color) = HSL::try_from(color) else {
+                tracing::warn!(
+                    "Could not convert color from deprecated attribute to HSL. Skipping..."
+                );
+                continue;
+            };
+
+            if color.is_transparent() {
+                continue;
+            }
+
+            let purpose = color_purpose_for_deprecated_attribute(attr);
+            let property = css_property_for_deprecated_attribute(attr);
+
+            // It is a bit simplified approach - we are not calculating the proper contrast ratio here.
+            let hsla = hsla_for_dark_mode(purpose, color);
+
+            let new_color = CssColor::RGBA(hsla);
+            let Ok(new_color) = new_color.to_css_string(printer_options()) else {
+                tracing::warn!("Could not convert color to CSS string. Skipping...");
+                continue;
+            };
+
+            let mut node_selector = tag_selector(&node);
+            write!(node_selector, r#"[{attr}="{original_attr}"]"#).expect("Write to string");
+
+            overrides
+                .entry(node_selector)
+                .or_default()
+                .push(format!("{property}: {new_color};"));
+        }
+    }
+
+    if overrides.is_empty() {
+        return None;
+    }
+
+    let mut style = String::new();
+
+    for (tag_selector, properties) in overrides {
+        let properties = properties.join(";\n");
+
+        write!(
+            style,
+            "{root_selector} {tag_selector} {{\n {properties}\n }}"
+        )
+        .expect("Write to string");
+    }
+
     Some(style)
 }
 
@@ -357,6 +486,20 @@ fn sanitize_dark_mode_in_stylesheet(
     }
 }
 
+fn tag_selector(node: &NodeDataRef<ElementData>) -> String {
+    let mut tag_selector = node.name.local.to_string();
+
+    if let Some(id) = node.attributes.borrow().get("id") {
+        write!(tag_selector, "[id=\"{id}\"]").expect("Write to string");
+    }
+
+    if let Some(klass) = node.attributes.borrow().get("class") {
+        write!(tag_selector, ".{klass}").expect("Write to string");
+    }
+
+    tag_selector
+}
+
 fn sanitize_dark_mode_in_inline_attribute(
     mut style_attribute: StyleAttribute<'_>,
     node: NodeDataRef<ElementData>,
@@ -380,15 +523,7 @@ fn sanitize_dark_mode_in_inline_attribute(
         }
     };
 
-    let mut tag_selector = node.name.local.to_string();
-
-    if let Some(id) = node.attributes.borrow().get("id") {
-        write!(tag_selector, "#{id}").expect("Write to string");
-    }
-
-    if let Some(klass) = node.attributes.borrow().get("class") {
-        write!(tag_selector, ".{klass}").expect("Write to string");
-    }
+    let mut tag_selector = tag_selector(&node);
 
     // Joining is an equivalent of AND condition
     // a[style*="color: black"][style*="background-color: red"]
@@ -461,19 +596,42 @@ fn inject_style(document: &NodeRef, style_text: &str) {
 type InlineSelector = String;
 
 /// Content of the style attribute. From `style="color: #fff"` is the `color: #fff`
-type StyleContent = String;
+type AttributeContent = String;
 
-fn all_style_attributes(
+fn all_with_attribute(
     document: &NodeRef,
-) -> Result<impl Iterator<Item = (NodeDataRef<ElementData>, StyleContent)>, ()> {
-    let res = document.select("[style]").inspect_err(|()| {
-        tracing::error!("Could not select nodes with style attribute");
-    })?;
-    Ok(res.map(|element| {
-        // SAFETY: unwrap is fine, the `.select()` ensures that the style exists
-        let style = element.attributes.borrow().get("style").unwrap().into();
-        (element, style)
+    attribute_name: &str,
+) -> Result<impl Iterator<Item = (NodeDataRef<ElementData>, AttributeContent)>, ()> {
+    let res = document
+        .select(&format!("[{attribute_name}]"))
+        .inspect_err(|()| {
+            tracing::error!("Could not select nodes with {attribute_name} attribute");
+        })?;
+
+    Ok(res.map(move |element| {
+        // SAFETY: unwrap is fine, the `.select()` ensures that the attribute exists
+        let attribute = element
+            .attributes
+            .borrow()
+            .get(attribute_name)
+            .unwrap()
+            .into();
+        (element, attribute)
     }))
+}
+
+fn all_with_any_attribute(
+    document: &NodeRef,
+    attribute_names: &[&str],
+) -> Result<impl Iterator<Item = NodeDataRef<ElementData>>, ()> {
+    let selector = attribute_names
+        .iter()
+        .map(|attr| format!("[{attr}]"))
+        .join(",");
+
+    document.select(&selector).inspect_err(|()| {
+        tracing::error!("Could not select nodes with any of the attributes");
+    })
 }
 
 #[cfg(test)]
@@ -593,7 +751,7 @@ mod tests {
 
         let document = kuchikiki::parse_html().one(html);
 
-        let result = all_style_attributes(&document)
+        let result = all_with_attribute(&document, "style")
             .unwrap()
             .map(|(tag, style)| (tag.name.local.to_string(), style))
             .collect::<Vec<_>>();
@@ -606,6 +764,37 @@ mod tests {
                     "background-color: yellow; color: black".to_string()
                 )
             ],
+            result
+        );
+    }
+
+    #[test]
+    fn fetching_all_deprecated_attributes() {
+        let html = r#"
+            <html>
+            <head>
+            </head>
+            <body style="color: red">
+                <div>
+                    <span>
+                        <a bgcolor="yellow"></a>
+                        <span text="black"></span>
+                        <marquee bgcolor="red" text="white"></marquee>
+                    </span>
+                </div>
+            </body>
+            </html>
+        "#;
+
+        let document = kuchikiki::parse_html().one(html);
+
+        let result = all_with_any_attribute(&document, &["bgcolor", "text"])
+            .unwrap()
+            .map(|tag| tag.name.local.to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            vec!["a".to_string(), "span".to_string(), "marquee".to_string(),],
             result
         );
     }
