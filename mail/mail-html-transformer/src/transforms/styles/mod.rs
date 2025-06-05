@@ -494,7 +494,7 @@ fn tag_selector(node: &NodeDataRef<ElementData>) -> String {
     }
 
     if let Some(klass) = node.attributes.borrow().get("class") {
-        write!(tag_selector, ".{klass}").expect("Write to string");
+        write!(tag_selector, "[class=\"{klass}\"]").expect("Write to string");
     }
 
     tag_selector

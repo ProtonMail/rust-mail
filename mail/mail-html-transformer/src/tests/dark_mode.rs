@@ -163,3 +163,24 @@ fn inject_style_to_another_target_twice() {
     assert_eq!(head_after_first_pass, head_after_second_pass);
     assert_eq!(html_after_first_pass, html_after_second_pass);
 }
+
+mod regressions {
+    use crate::{
+        Transformer,
+        transforms::{ColorMode, styles::BrowserCapabilities},
+    };
+
+    // Bugs caught live
+    #[test]
+    fn table_bgcolor() {
+        let html = include_str!("../../tests/htmls/styles/regressions/table-bgcolor.html");
+        let mut html = Transformer::new(html);
+        html.inject_dark_mode(
+            ColorMode::DarkMode,
+            BrowserCapabilities {
+                supports_dark_mode_via_media_query: true,
+            },
+        );
+        insta::assert_snapshot!(html.to_string());
+    }
+}
