@@ -62,21 +62,19 @@ pub trait Subscriber<T: Event>: Send + Sync {
 /// converted them to a concrete type and pass them to the subscribers.
 ///
 #[async_trait]
-pub trait RawSubscriber: Any + Send + Sync {
+pub(crate) trait RawSubscriber: Any + Send + Sync {
     /// Handle incoming events.
     async fn on_raw_events(&self, events: &mut [RawEvent]) -> Result<(), EventLoopError>;
 
     /// Handle refresh event
     async fn on_raw_refresh(&self, event: &RawEvent) -> Result<(), EventLoopError>;
 
-    fn as_any(&self) -> &dyn Any;
-
     /// Get mutable reference to self as Any for downcasting
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 /// A collection of subscribers that handle events of a specific type.
-pub struct TypedSubscribers<T: Event> {
+pub(crate) struct TypedSubscribers<T: Event> {
     subscribers: Vec<Box<dyn Subscriber<T>>>,
 }
 
@@ -146,10 +144,6 @@ where
         }
 
         Ok(())
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {

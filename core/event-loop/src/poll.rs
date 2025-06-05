@@ -1,12 +1,10 @@
 use std::any::TypeId;
-use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 
-use crate::provider::Provider;
 use crate::store::Store;
-use crate::subscriber::RawSubscriber;
-use crate::{Event, EventLoopError, RawEvent, Subscriber, TypedSubscribers};
+use crate::subscriber::{RawSubscriber, TypedSubscribers};
+use crate::{Event, EventLoopError, Provider, RawEvent, Subscriber};
 use anyhow::anyhow;
+use indexmap::{IndexMap, map::Entry};
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::EventId;
 use tokio::sync::Mutex;
@@ -16,14 +14,11 @@ pub struct EventPoll {
     epoll: EventPollInternal,
     store: Box<dyn Store>,
     provider: Box<dyn Provider>,
-    unique_sub: Mutex<HashMap<TypeId, usize>>,
-    /// The subscribers are stored in a vector of boxed raw subscribers.
-    ///
-    /// The vector is used to store the subscribers in the order they were registered.
-    /// The index of the subscriber in the vector is used to identify the subscriber.
-    /// The vector was chosen to preserve the order of the subscribers to run - FIFO.
-    ///
-    subscribers: Mutex<Vec<Box<dyn RawSubscriber>>>,
+    /// The subscribers are stored in a indexmap of boxed raw subscribers.
+    /// The indexmap was chosen to preserve the order of the subscribers to run - FIFO.
+    /// The indexmap stores the type id of the subscriber to allow for multiple subscribers
+    /// of the same type to prevent double deserialization of the same event.
+    subscribers: Mutex<IndexMap<TypeId, Box<dyn RawSubscriber>>>,
 }
 
 impl EventPoll {
@@ -35,8 +30,7 @@ impl EventPoll {
             epoll,
             store,
             provider,
-            unique_sub: Mutex::new(HashMap::new()),
-            subscribers: Mutex::new(Vec::new()),
+            subscribers: Mutex::new(IndexMap::new()),
         }
     }
 
@@ -59,23 +53,23 @@ impl EventPoll {
         subscriber: Box<dyn Subscriber<T>>,
     ) -> Result<&Self, EventLoopError> {
         let mut subscribers = self.subscribers.lock().await;
-        match self.unique_sub.lock().await.entry(TypeId::of::<T>()) {
-            Entry::Occupied(entry) => {
-                let index = *entry.get();
-                let raw_subscriber = subscribers.get_mut(index);
-
-                if let Some(typed_subscribers) = raw_subscriber
-                    .and_then(|s| s.as_any_mut().downcast_mut::<TypedSubscribers<T>>())
+        match subscribers.entry(TypeId::of::<T>()) {
+            Entry::Occupied(mut entry) => {
+                if let Some(typed_subscribers) = entry
+                    .get_mut()
+                    .as_any_mut()
+                    .downcast_mut::<TypedSubscribers<T>>()
                 {
                     typed_subscribers.add_subscriber(subscriber);
                 } else {
+                    // This should never happen, as the raw subscriber is already registered
+                    error!("Subscriber could not be downcast to TypedSubscribers<T>");
                     return Err(EventLoopError::Register(subscriber.name()));
                 }
             }
-            Entry::Vacant(entry) => {
-                entry.insert(subscribers.len());
+            Entry::Vacant(_) => {
                 let raw_subscriber = TypedSubscribers::<T>::new_raw(subscriber);
-                subscribers.push(raw_subscriber);
+                subscribers.insert(TypeId::of::<T>(), raw_subscriber);
             }
         }
 
@@ -87,7 +81,7 @@ impl EventPoll {
             .poll_raw(
                 self.store.as_ref(),
                 self.provider.as_ref(),
-                self.subscribers.lock().await.as_slice(),
+                &*self.subscribers.lock().await,
             )
             .await
     }
@@ -136,7 +130,7 @@ impl EventPollInternal {
         &self,
         store: &dyn Store,
         provider: &dyn Provider,
-        subscribers: &[Box<dyn RawSubscriber>],
+        subscribers: &IndexMap<TypeId, Box<dyn RawSubscriber>>,
     ) -> Result<(), EventLoopError> {
         let Some(last_event_id) = store.load().await.map_err(EventLoopError::StoreRead)? else {
             let e = anyhow!("No EventId in store");
@@ -165,10 +159,10 @@ impl EventPollInternal {
         for raw_event in raw_events {
             let new_event_id = raw_event.event_id().clone();
             if raw_event.is_refresh() {
-                self.publish_raw_refresh_to_subscribers(&raw_event, subscribers)
+                self.publish_raw_refresh_to_subscribers(&raw_event, subscribers.values())
                     .await?;
             } else {
-                self.publish_raw_events_to_subscribers(&mut [raw_event], subscribers)
+                self.publish_raw_events_to_subscribers(&mut [raw_event], subscribers.values())
                     .await?;
             }
 
@@ -217,7 +211,7 @@ impl EventPollInternal {
     async fn publish_raw_events_to_subscribers(
         &self,
         events: &mut [RawEvent],
-        subscribers: &[Box<dyn RawSubscriber>],
+        subscribers: impl Iterator<Item = &Box<dyn RawSubscriber>>,
     ) -> Result<(), EventLoopError> {
         for subscriber in subscribers {
             subscriber.on_raw_events(events).await?;
@@ -229,7 +223,7 @@ impl EventPollInternal {
     async fn publish_raw_refresh_to_subscribers(
         &self,
         event: &RawEvent,
-        subscribers: &[Box<dyn RawSubscriber>],
+        subscribers: impl Iterator<Item = &Box<dyn RawSubscriber>>,
     ) -> Result<(), EventLoopError> {
         for subscriber in subscribers {
             subscriber.on_raw_refresh(event).await?;

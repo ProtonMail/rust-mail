@@ -72,7 +72,8 @@ mod tests;
 
 // Re-export main types
 pub use poll::EventPoll;
-pub use subscriber::{RawSubscriber, Subscriber, TypedSubscribers};
+pub use provider::Provider;
+pub use subscriber::Subscriber;
 
 use crate::subscriber::SubscriberError;
 use anyhow::Error as AnyhowError;
