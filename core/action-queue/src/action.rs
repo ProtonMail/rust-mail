@@ -165,6 +165,83 @@ impl<T: Action> VersionConverter for DefaultVersionConverter<T> {
     }
 }
 
+/// A dependency key is automatic dependency tracking key which will be used to assign
+/// dependencies to this action when it is saved.
+///
+/// This aims to reduce the burden on the users to remember when what the last action id of
+/// an action they queued to specify a dependency.
+///
+/// For instances, imagine whe have the following sequence of actions.
+///
+/// * Create Resource A -> Id1
+/// * Do something which depends on Resource A to Resource B -> Id2
+/// * Do something else with Resource B that depends on the previous action (Id2) -> Id3
+///
+/// Without dependency keys, we would need to store Id1, Id2 and Id3 somewhere and specify the
+/// dependencies at creation time.
+///
+/// With dependency keys, each action can specify a key which other actions can automatically
+/// depend on them if they specify the same key. Using the same example above in order:
+///
+/// * Id1 creates dependency key: `Key-Resource1`
+/// * Id2 specifies a dependency on `Key-Resource1` and `Key-Resource2`
+/// * Id3 specifies a dependency on `Key-Resource2`
+///
+/// When these actions are saved, we will save the action id of the current action with this
+/// resource key and add the existing value to the action's dependency.
+///
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct ActionDependencyKey(String);
+
+impl ActionDependencyKey {
+    #[must_use]
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl<T: Into<String>> From<T> for ActionDependencyKey {
+    fn from(value: T) -> Self {
+        Self(value.into())
+    }
+}
+
+impl Display for ActionDependencyKey {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl ToSql for ActionDependencyKey {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        self.0.to_sql()
+    }
+}
+
+impl FromSql for ActionDependencyKey {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        String::column_result(value).map(Self)
+    }
+}
+
+#[derive(Debug, Default, Clone, Eq, PartialEq)]
+pub struct ActionDependencyKeys {
+    /// Direct dependency keys that this action would like to depended on. Direct dependencies
+    /// will cause revert on failure.
+    pub direct: Vec<ActionDependencyKey>,
+    /// Sequential keys that this action would like to depend on. Does not cause revert if the
+    /// dependency fails to execute.
+    pub sequential: Vec<ActionDependencyKey>,
+    /// Record extra dependency keys for this action. Keys specified here do not introduce
+    /// any dependencies, but can be used by other actions.
+    pub record: Vec<ActionDependencyKey>,
+}
+
 /// Required metadata to define an action.
 ///
 /// An Action is an operation in the system that is applied opportunistically to the local data set
@@ -237,6 +314,10 @@ pub trait Action: Serialize + DeserializeOwned + 'static + Send {
     /// Action priority.
     fn priority(&self) -> Priority {
         Self::PRIORITY
+    }
+
+    fn dependency_keys(&self) -> ActionDependencyKeys {
+        ActionDependencyKeys::default()
     }
 }
 

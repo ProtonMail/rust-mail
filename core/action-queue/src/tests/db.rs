@@ -14,6 +14,8 @@ use stash::{orm::Model, stash::Stash};
 struct TestAction {
     bar: u32,
     foo: String,
+    #[serde(skip)]
+    dependency_keys: ActionDependencyKeys,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -56,6 +58,10 @@ impl Action for TestAction {
     type Error = Error;
 
     type Context = ();
+
+    fn dependency_keys(&self) -> ActionDependencyKeys {
+        self.dependency_keys.clone()
+    }
 }
 #[tokio::test]
 async fn db_migration() {
@@ -67,6 +73,7 @@ async fn action_store_and_retrieve() {
     let state = TestAction {
         foo: "foo".to_string(),
         bar: 2048,
+        dependency_keys: ActionDependencyKeys::default(),
     };
 
     let stash = new_test_connection().await;
@@ -111,6 +118,7 @@ async fn action_store_with_non_existent_action_dependency_is_accepted() {
     let state = TestAction {
         foo: "foo".to_string(),
         bar: 2048,
+        dependency_keys: ActionDependencyKeys::default(),
     };
 
     let stash = new_test_connection().await;
@@ -133,6 +141,7 @@ async fn action_execution_lock() {
     let state = TestAction {
         foo: "foo".to_string(),
         bar: 2048,
+        dependency_keys: ActionDependencyKeys::default(),
     };
 
     let stash = new_test_connection().await;
@@ -268,6 +277,7 @@ async fn leftover_execution_lock() {
     let state = TestAction {
         foo: "foo".to_string(),
         bar: 2048,
+        dependency_keys: ActionDependencyKeys::default(),
     };
 
     let stash = new_test_connection().await;
@@ -308,6 +318,7 @@ async fn action_execution_group_selection() {
     let state = TestAction {
         foo: "foo".to_string(),
         bar: 2048,
+        dependency_keys: ActionDependencyKeys::default(),
     };
 
     let stash = new_test_connection().await;
@@ -356,6 +367,7 @@ async fn action_replace_or_queue() {
     let state = TestAction {
         foo: "foo".to_string(),
         bar: 2048,
+        dependency_keys: ActionDependencyKeys::default(),
     };
 
     let stash = new_test_connection().await;
@@ -392,6 +404,111 @@ async fn action_replace_or_queue() {
         .await
         .unwrap();
     assert_ne!(stored.id, updated.id);
+}
+#[tokio::test]
+async fn action_store_creates_and_updates_direct_dependency_keys() {
+    let direct_dep_key = ActionDependencyKey::from("direct");
+    let sequential_dep_key = ActionDependencyKey::from("sequential");
+
+    let create_direct_key_action = TestAction {
+        foo: "foo".to_string(),
+        bar: 2048,
+        dependency_keys: ActionDependencyKeys {
+            direct: vec![direct_dep_key.clone()],
+            sequential: vec![],
+            record: vec![],
+        },
+    };
+
+    let use_direct_key_action = TestAction {
+        foo: "foo".to_string(),
+        bar: 3000,
+        dependency_keys: ActionDependencyKeys {
+            direct: vec![direct_dep_key.clone()],
+            sequential: vec![sequential_dep_key.clone()],
+            record: vec![],
+        },
+    };
+
+    let use_sequential_key_action = TestAction {
+        foo: "foo".to_string(),
+        bar: 5000,
+        dependency_keys: ActionDependencyKeys {
+            direct: vec![],
+            sequential: vec![direct_dep_key.clone()],
+            record: vec![sequential_dep_key.clone()],
+        },
+    };
+
+    let stash = new_test_connection().await;
+    let mut conn = stash.connection();
+
+    // Create first action, which registers the first dependency key
+    let mut stored =
+        StoredAction::new::<TestAction>(&create_direct_key_action, Metadata::default()).unwrap();
+    conn.tx(async |tx| stored.save(tx).await).await.unwrap();
+
+    let first_action_id = stored.id.unwrap();
+
+    // Check no dependency was created, since the key does not exist
+    let deps = StoredAction::all_dependencies(&conn, first_action_id)
+        .await
+        .unwrap();
+    assert!(deps.is_empty());
+    // Key should been created.
+    let action_ids =
+        ActionDependencyKeysTable::resolve_dependency_keys(vec![direct_dep_key.clone()], &conn)
+            .await
+            .unwrap();
+    assert_eq!(&action_ids, &[first_action_id]);
+
+    // Store second action which depends on direct key and an optional after key that does
+    // not exist.
+    let mut stored =
+        StoredAction::new::<TestAction>(&use_direct_key_action, Metadata::default()).unwrap();
+    conn.tx(async |tx| stored.save(tx).await).await.unwrap();
+
+    let second_action_id = stored.id.unwrap();
+
+    // Check that this action depends on the first action.
+    let deps = StoredAction::all_dependencies(&conn, second_action_id)
+        .await
+        .unwrap();
+    assert_eq!(deps, vec![ActionDependency::direct(first_action_id)]);
+
+    // Key should have been updated.
+    let action_ids =
+        ActionDependencyKeysTable::resolve_dependency_keys(vec![direct_dep_key.clone()], &conn)
+            .await
+            .unwrap();
+    assert_eq!(&action_ids, &[second_action_id]);
+
+    // Store third action which depends sequentially on second action, does not override
+    // any keys.
+    let mut stored =
+        StoredAction::new::<TestAction>(&use_sequential_key_action, Metadata::default()).unwrap();
+    conn.tx(async |tx| stored.save(tx).await).await.unwrap();
+
+    let third_action_id = stored.id.unwrap();
+
+    let deps = StoredAction::all_dependencies(&conn, third_action_id)
+        .await
+        .unwrap();
+    assert_eq!(deps, vec![ActionDependency::sequential(second_action_id)]);
+
+    // Key should not have been updated.
+    let action_ids =
+        ActionDependencyKeysTable::resolve_dependency_keys(vec![direct_dep_key.clone()], &conn)
+            .await
+            .unwrap();
+    assert_eq!(&action_ids, &[second_action_id]);
+
+    // New key should have been recorded
+    let action_ids =
+        ActionDependencyKeysTable::resolve_dependency_keys(vec![sequential_dep_key.clone()], &conn)
+            .await
+            .unwrap();
+    assert_eq!(&action_ids, &[third_action_id]);
 }
 
 async fn new_test_connection() -> Stash {
