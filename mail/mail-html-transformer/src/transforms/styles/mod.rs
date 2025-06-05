@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::fmt::Write;
 use std::{cell::RefCell, collections::BTreeMap};
 
@@ -237,8 +237,8 @@ type NewProperty = String;
 /// Old value of the property. Used to select nodes with inline styles.
 type OldProperty = String;
 
-type StylesheetOverrides = BTreeMap<Selectors, Vec<NewProperty>>;
-type InlineStyleOverrides = BTreeMap<InlineSelector, Vec<NewProperty>>;
+type StylesheetOverrides = BTreeMap<Selectors, BTreeSet<NewProperty>>;
+type InlineStyleOverrides = BTreeMap<InlineSelector, BTreeSet<NewProperty>>;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum ColorPurpose {
@@ -287,7 +287,7 @@ fn sanitize_dark_mode_in_stylesheets(document: &NodeRef, root_selector: &str) ->
     }
     let mut style = String::new();
     for (selectors, properties) in overrides {
-        let mut style_for_rule = properties.join(";\n");
+        let mut style_for_rule = properties.into_iter().join(";\n");
 
         // In reverse.
         // If we got ["@media(...)", ".foo"] then we basically want to wrap our properties first in
@@ -339,7 +339,7 @@ fn sanitize_dark_mode_in_inline_attributes(
 
     let mut style = String::new();
     for (tag_selector, properties) in overrides {
-        let properties = properties.join(";\n");
+        let properties = properties.into_iter().join(";\n");
 
         write!(
             style,
@@ -433,7 +433,7 @@ fn sanitize_dark_mode_in_deprecated_attributes(
             overrides
                 .entry(node_selector)
                 .or_default()
-                .push(format!("{property}: {new_color};"));
+                .insert(format!("{property}: {new_color};"));
         }
     }
 
@@ -444,7 +444,7 @@ fn sanitize_dark_mode_in_deprecated_attributes(
     let mut style = String::new();
 
     for (tag_selector, properties) in overrides {
-        let properties = properties.join(";\n");
+        let properties = properties.into_iter().join(";\n");
 
         write!(
             style,
@@ -494,7 +494,7 @@ fn tag_selector(node: &NodeDataRef<ElementData>) -> String {
     }
 
     if let Some(klass) = node.attributes.borrow().get("class") {
-        write!(tag_selector, ".{klass}").expect("Write to string");
+        write!(tag_selector, "[class=\"{klass}\"]").expect("Write to string");
     }
 
     tag_selector
@@ -640,6 +640,7 @@ mod tests {
     use html5ever::tendril::TendrilSink;
     use indoc::indoc;
     use pretty_assertions::assert_eq;
+    use velcro::{btree_map, btree_set};
 
     #[test]
     fn visit_stylesheet() {
@@ -668,14 +669,14 @@ mod tests {
         let mut stylesheet = StyleSheet::parse(rule, ParserOptions::default()).unwrap();
         stylesheet.visit(&mut visitor).unwrap();
 
-        let expected = velcro::btree_map! {
-            vec!["#protonmail-message .main".to_string()]: vec![
+        let expected = btree_map! {
+            vec!["#protonmail-message .main".to_string()]: btree_set![
                 "color: #fff !important".to_string()
             ],
-            vec!["#protonmail-message .sub".to_string()]: vec![
+            vec!["#protonmail-message .sub".to_string()]: btree_set![
                 "color: #fff !important".to_string()
             ],
-            vec!["html#protonmail-message".to_string()]: vec![
+            vec!["html#protonmail-message".to_string()]: btree_set![
                 "color: #fff !important".to_string()
             ],
         };

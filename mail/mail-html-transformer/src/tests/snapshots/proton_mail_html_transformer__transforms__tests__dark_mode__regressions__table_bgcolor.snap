@@ -3,8 +3,8 @@ source: mail/mail-html-transformer/src/tests/dark_mode.rs
 expression: html.to_string()
 ---
 <html data-protonmail-message="true"><head>
-    <style>span{background-color: rgb(151, 202, 133);}</style>
-  <style style="text/css">/*
+    
+<style style="text/css">/*
 TODO: Introduce styles for combination of light and dark mode using @media queries
 */
 article,
@@ -316,29 +316,18 @@ img {
 }
 </style><style style="text/css">
                   @media ( prefers-color-scheme: dark ) {
-                      [data-protonmail-message] span {
-background-color:#3e6b2e!important
+                      
+[data-protonmail-message] table[class="container float-center"][style*="background:#fff"] {
+ background:#1c1b24!important
  }
 
-[data-protonmail-message] font[color="black"] {
- color: #fff;
- }[data-protonmail-message] td[bgcolor="white"] {
- background-color: #1c1b24;
- }
                   }
                 </style></head>
-  <body>
-    <table>
-        <tbody><tr><td bgcolor="white">
-            <font color="black">
-                Hello world!
-            </font>
-        </td>
-        <!-- Repeat tags multiple times with the same style  -->
-         <td bgcolor="white">1</td>
-         <td bgcolor="white">2</td>
-         <td bgcolor="white">3</td>
-    </tr></tbody></table>
-  
+<body>
+
+<table align="center" class="container float-center" role="presentation" style="margin:0 auto;background:#fff;border-collapse:collapse;border-spacing:0;float:none;margin:0 auto;margin-left:auto;margin-right:auto;padding:0;text-align:center;vertical-align:top;width:700px" data-proton-original-style="Margin:0 auto;background:#fff;border-collapse:collapse;border-spacing:0;float:none;margin:0 auto;margin-left:auto;margin-right:auto;padding:0;text-align:center;vertical-align:top;width:700px">
+    <tbody><tr><td>Hi</td>
+</tr></tbody></table>
+
 
 </body></html>
