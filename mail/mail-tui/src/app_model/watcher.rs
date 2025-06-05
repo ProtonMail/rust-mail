@@ -3,13 +3,14 @@ use crate::messages::Messages;
 use futures::FutureExt;
 use futures::future::BoxFuture;
 use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
+use stash::stash::WatcherHandle;
 use tracing::error;
 
 /// Handle which on drop terminates the observation of database changes.
-pub struct WatchHandle {
+pub struct TuiWatchHandle {
     _handle: DropRemoveTableObserverHandle,
 }
-impl WatchHandle {
+impl TuiWatchHandle {
     /// Create a new watcher which is not dampened.
     pub fn new<T: Send + 'static>(
         receiver: flume::Receiver<T>,
@@ -34,5 +35,14 @@ impl WatchHandle {
             .boxed()
         });
         (Self { _handle: handle }, command)
+    }
+
+    /// Create a new watcher which is not dampened.
+    pub fn from_watcher_handle(
+        watcher_handle: WatcherHandle,
+        converter: impl Fn() -> BoxFuture<'static, Option<Messages>> + Send + 'static,
+    ) -> (Self, Command<Messages>) {
+        let converter = move |()| converter();
+        Self::new(watcher_handle.receiver, watcher_handle.handle, converter)
     }
 }

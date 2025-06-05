@@ -1,9 +1,8 @@
-use crate::app_model::APP_ID;
+:se crate::app_model::APP_ID;
 use anyhow::anyhow;
 use proton_core_common::os::{KeyChain, KeyChainEntryKind, KeyChainError, KeyChainExt};
 use proton_mail_common::proton_core_common::db::account::SessionEncryptionKey;
 use secrecy::{ExposeSecret, SecretString};
-use std::error::Error;
 use std::sync::Arc;
 
 pub struct AppKeyChain {
@@ -12,7 +11,7 @@ pub struct AppKeyChain {
 }
 
 impl AppKeyChain {
-    pub fn new() -> Result<Self, Box<dyn Error>> {
+    pub fn new() -> anyhow::Result<Self> {
         let session_key = keyring::Entry::new(APP_ID, "session_key")?;
         let device_key = keyring::Entry::new(APP_ID, "device_key")?;
         Ok(Self {
@@ -21,7 +20,7 @@ impl AppKeyChain {
         })
     }
 
-    pub fn init(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn init(&mut self) -> anyhow::Result<()> {
         let v = self.load::<SessionEncryptionKey>()?;
         if v.is_none() {
             let key = SessionEncryptionKey::random();

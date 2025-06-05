@@ -1,18 +1,16 @@
 use crate::app::Command;
-use crate::app_model::watcher::WatchHandle;
+use crate::app_model::watcher::TuiWatchHandle;
 use crate::messages::Messages;
 use futures::FutureExt;
-use futures::future::BoxFuture;
 use proton_mail_common::MailContextError;
 use proton_mail_common::mail_scroller::{MailScroller, MailScrollerSource};
-use stash::stash::WatcherHandle;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// Paginator adapter.
 pub struct Paginator<T: MailScrollerSource + 'static> {
     paginator: Arc<Mutex<MailScroller<T>>>,
-    _watch_handle: WatchHandle,
+    _watch_handle: TuiWatchHandle,
 }
 
 impl<T: MailScrollerSource> Paginator<T> {
@@ -25,22 +23,20 @@ impl<T: MailScrollerSource> Paginator<T> {
     ///
     /// Creates a paginator and watcher.
     pub async fn new(
-        create_paginator: impl FnOnce() -> BoxFuture<'static, Result<MailScroller<T>, MailContextError>>,
+        mut paginator: MailScroller<T>,
         to_message: impl Fn(Result<Vec<T::Item>, MailContextError>) -> Messages + Send + Sync + 'static,
     ) -> Result<(Self, Command<Messages>), MailContextError> {
-        let to_message = Arc::new(to_message);
-        let paginator = Arc::new(Mutex::new(create_paginator().await?));
-        let mut guard = paginator.lock().await;
-        let WatcherHandle {
-            handle, receiver, ..
-        } = guard.watch().await?;
-        drop(guard);
+        let handle = paginator.watch().await?;
+        let paginator = Arc::new(Mutex::new(paginator));
+
         let paginator_cloned = Arc::clone(&paginator);
-        let (watcher, background_command) = WatchHandle::new(receiver, handle, move |()| {
-            let paginator = Arc::clone(&paginator_cloned);
-            let to_message = Arc::clone(&to_message);
-            async move { Some(to_message(paginator.lock().await.all_items().await)) }.boxed()
-        });
+        let to_message = Arc::new(to_message);
+        let (watcher, background_command) =
+            TuiWatchHandle::from_watcher_handle(handle, move || {
+                let paginator = Arc::clone(&paginator_cloned);
+                let to_message = Arc::clone(&to_message);
+                async move { Some(to_message(paginator.lock().await.all_items().await)) }.boxed()
+            });
         Ok((
             Self {
                 paginator,

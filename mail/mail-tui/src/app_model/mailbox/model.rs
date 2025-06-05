@@ -5,7 +5,7 @@ use crate::app_model::mailbox::conversations::ConversationsState;
 use crate::app_model::mailbox::messages::MessagesState;
 use crate::app_model::mailbox::popups::{LabelItemPopup, LabelSelectPopup, MoveItemPopup};
 use crate::app_model::mailbox::{Item, Message};
-use crate::app_model::watcher::WatchHandle;
+use crate::app_model::watcher::TuiWatchHandle;
 use crate::app_model::{AppState, AppStateHandler, YesNoPopup};
 use crate::messages::Messages;
 use crate::widgets::CenteredThrobber;
@@ -33,7 +33,6 @@ use proton_mail_common::{
 use ratatui::crossterm::event::Event;
 use ratatui::layout::{Flex, Rect};
 use ratatui::prelude::*;
-use stash::stash::WatcherHandle;
 use std::sync::Arc;
 use throbber_widgets_tui::ThrobberState;
 use tokio::select;
@@ -56,7 +55,7 @@ pub struct MailboxModel {
     ctx: Arc<MailUserContext>,
     mailbox: Mailbox,
     label: LabelWithCounters,
-    label_watcher: Option<WatchHandle>,
+    label_watcher: Option<TuiWatchHandle>,
     state: State,
     cancel_token: CancellationToken,
     composer: Option<Composer>,
@@ -154,11 +153,8 @@ impl MailboxModel {
             match label_and_recevier {
                 Ok((label, handle)) => {
                     if let Some(label) = label {
-                        let WatcherHandle {
-                            handle, receiver, ..
-                        } = handle;
                         let (watcher, background_command) =
-                            WatchHandle::new(receiver, handle, move |()| {
+                            TuiWatchHandle::from_watcher_handle(handle, move || {
                                 let tether = stash.connection();
                                 async move {
                                     let label_id = label.local_id.unwrap();

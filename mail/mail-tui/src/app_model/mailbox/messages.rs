@@ -6,7 +6,7 @@ use crate::app_model::YesNoPopup;
 use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::paginator::Paginator;
 use crate::app_model::mailbox::{ConversationMessage, ITEM_LIMIT, Item, Message, MessageMessage};
-use crate::app_model::watcher::WatchHandle;
+use crate::app_model::watcher::TuiWatchHandle;
 use crate::messages::Messages;
 use crate::widgets::utils::{date_from_timestamp, format_recipients, format_sender};
 use crate::widgets::{
@@ -42,6 +42,7 @@ use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Cell, List, ListItem, Paragraph, Row, Table};
 use stash::orm::Model;
 use stash::stash::{Tether, WatcherHandle};
+use stash::stash::{Tether, WatcherHandle};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::{iter, thread};
@@ -63,7 +64,7 @@ pub struct MessagesState {
 enum Mode {
     Label(Paginator<DataScrollerSource<MessageScrollData>>),
     Search(Paginator<SearchScrollerSource>),
-    Conversation(WatchHandle),
+    Conversation(TuiWatchHandle),
 }
 
 const MESSAGE_DISPLAY_SIZE: u16 = 100;
@@ -93,23 +94,15 @@ impl MessagesState {
         filter: ReadFilter,
         recipient_display_mode: MessageRecipientDisplayMode,
     ) -> MailContextResult<(Self, Command<Messages>)> {
-        let context = ctx.clone();
-        let (paginator, command) = Paginator::new(
-            || {
-                async move {
-                    MailScroller::messages(context.as_weak(), label_id, filter, ITEM_LIMIT).await
-                }
-                .boxed()
-            },
-            |result| match result {
-                Ok(messages) => MessageMessage::Refreshed(messages).into(),
-                Err(e) => {
-                    let e = anyhow!("Message Reload Query error: {e}");
-                    tracing::error!("{e:?}");
-                    e.into()
-                }
-            },
-        )
+        let paginator = MailScroller::messages(ctx.as_weak(), label_id, filter, ITEM_LIMIT).await?;
+        let (paginator, command) = Paginator::new(paginator, |result| match result {
+            Ok(messages) => MessageMessage::Refreshed(messages).into(),
+            Err(e) => {
+                let e = anyhow!("Message Reload Query error: {e}");
+                tracing::error!("{e:?}");
+                e.into()
+            }
+        })
         .await?;
 
         let messages = paginator.fetch_more().await?;
@@ -146,29 +139,21 @@ impl MessagesState {
         ctx: Arc<MailUserContext>,
         search_phrase: String,
     ) -> MailContextResult<(Self, Command<Messages>)> {
-        let context = ctx.clone();
-        let search_phrase_clone = search_phrase.clone();
-        let (paginator, command) = Paginator::new(
-            || {
-                async move {
-                    MailScroller::search(
-                        context.as_weak(),
-                        SearchOptions::from(search_phrase_clone),
-                        ITEM_LIMIT,
-                    )
-                    .await
-                }
-                .boxed()
-            },
-            |result| match result {
-                Ok(messages) => MessageMessage::Refreshed(messages).into(),
-                Err(e) => {
-                    let e = anyhow!("Message Reload Query error: {e}");
-                    tracing::error!("{e:?}");
-                    e.into()
-                }
-            },
+        let paginator = MailScroller::search(
+            ctx.as_weak(),
+            SearchOptions::from(search_phrase.clone()),
+            ITEM_LIMIT,
         )
+        .await?;
+
+        let (paginator, command) = Paginator::new(paginator, |result| match result {
+            Ok(messages) => MessageMessage::Refreshed(messages).into(),
+            Err(e) => {
+                let e = anyhow!("Message Reload Query error: {e}");
+                tracing::error!("{e:?}");
+                e.into()
+            }
+        })
         .await?;
 
         let messages = paginator.fetch_more().await?;
@@ -233,25 +218,24 @@ impl MessagesState {
             return Err(AppError::ConversationNotFound(conversation_id).into());
         };
 
-        let WatcherHandle {
-            handle, receiver, ..
-        } = ContextualConversation::watch(ctx.user_stash())?;
-        let (watcher, background_command) = WatchHandle::new(receiver, handle, move |()| {
-            let tether = ctx.user_stash().connection();
-            async move {
-                Some(
-                    match MailMessage::in_conversation(conversation_id, &tether).await {
-                        Ok(m) => MessageMessage::Refreshed(m).into(),
-                        Err(e) => {
-                            let e = anyhow!("Message list Query error: {e}");
-                            tracing::error!("{e:?}");
-                            e.into()
-                        }
-                    },
-                )
-            }
-            .boxed()
-        });
+        let handle = ContextualConversation::watch(ctx.user_stash())?;
+        let (watcher, background_command) =
+            TuiWatchHandle::from_watcher_handle(handle, move || {
+                let tether = ctx.user_stash().connection();
+                async move {
+                    Some(
+                        match MailMessage::in_conversation(conversation_id, &tether).await {
+                            Ok(m) => MessageMessage::Refreshed(m).into(),
+                            Err(e) => {
+                                let e = anyhow!("Message list Query error: {e}");
+                                tracing::error!("{e:?}");
+                                e.into()
+                            }
+                        },
+                    )
+                }
+                .boxed()
+            });
 
         let index = conv_and_messages
             .messages

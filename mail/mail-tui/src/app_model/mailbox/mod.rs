@@ -9,7 +9,7 @@ mod search;
 use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::conversations::ConversationsState;
 use crate::app_model::mailbox::messages::{DecryptedMessage, MessagesState};
-use crate::app_model::watcher::WatchHandle;
+use crate::app_model::watcher::TuiWatchHandle;
 use crate::messages::Messages;
 use chrono::{DateTime, Local};
 use messages::BlockOrUnblock;
@@ -43,7 +43,7 @@ pub enum Message {
     MessageState(MessageMessage),
     OpenComposer(Composer),
     CloseComposer,
-    NewLabelWatcher(WatchHandle),
+    NewLabelWatcher(TuiWatchHandle),
     Composer(ComposerMessage),
     SearchSubmit(String),
     SearchPopup(Search),
