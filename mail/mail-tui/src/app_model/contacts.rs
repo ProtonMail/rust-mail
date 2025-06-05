@@ -1,9 +1,9 @@
-use crossterm::event::{Event, KeyCode};
+use crossterm::event::{Event, KeyCode, KeyModifiers};
 use futures::FutureExt;
 use itertools::Itertools;
 use proton_core_common::{
     datatypes::{
-        ContactGroupItem, ContactItem, ContactItemType, GroupedContacts, LocalContactId, Refresh,
+        ContactGroupItem, ContactItem, ContactItemType, GroupedContacts, LocalContactId,
         contact_details::{
             ContactDetailAddress, ContactDetailsEmail, ContactField, ExtendedName,
             InspectableContactDetails, Telephone, VCardUrl,
@@ -27,6 +27,7 @@ use tracing::error;
 
 use crate::{
     app::Command,
+    app_model::mailbox::{poll_event_loop, refresh},
     messages::Messages,
     widgets::{ScrollableList, ScrollableListState},
 };
@@ -495,24 +496,10 @@ impl AppStateHandler for ContactsModel {
                     ])
                 }
             }
-            KeyCode::F(5) => {
-                let ctx = self.ctx.as_arc();
-                Command::batch([
-                    Command::message(Messages::DisplayInfo(
-                        Some("Event Loop referesh".to_owned()),
-                        "Refresh event running...".to_owned(),
-                    )),
-                    Command::task(async move {
-                        match ctx.refresh_action(Refresh::All).await {
-                            Ok(_) => Command::None,
-                            Err(e) => Command::message(Messages::DisplayError(
-                                Some("Event Loop referesh".to_owned()),
-                                anyhow::anyhow!("{e}"),
-                            )),
-                        }
-                    }),
-                ])
+            KeyCode::F(5) if key.modifiers.contains(KeyModifiers::SHIFT) => {
+                refresh(self.ctx.as_arc())
             }
+            KeyCode::F(5) => poll_event_loop(self.ctx.as_arc()),
             _ => Command::None,
         }
     }
@@ -624,7 +611,8 @@ impl AppStateHandler for ContactsModel {
             ("j, ▼", "Go down"),
             ("enter", "See details for a contact"),
             ("esc", "Close the contact"),
-            ("F5", "Reload (Force event loop poll)"),
+            ("Shift+F5", "Reload all data from server"),
+            ("F5", "Refresh (Force event loop poll)"),
         ]
     }
 

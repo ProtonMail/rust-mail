@@ -4,7 +4,7 @@ use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::conversations::ConversationsState;
 use crate::app_model::mailbox::messages::MessagesState;
 use crate::app_model::mailbox::popups::{LabelItemPopup, LabelSelectPopup, MoveItemPopup};
-use crate::app_model::mailbox::{Item, Message};
+use crate::app_model::mailbox::{Item, Message, poll_event_loop, refresh};
 use crate::app_model::watcher::TuiWatchHandle;
 use crate::app_model::{AppState, AppStateHandler, YesNoPopup};
 use crate::messages::Messages;
@@ -18,7 +18,7 @@ use crate::widgets::utils::date_from_timestamp;
 use proton_action_queue::observers::{ActionFailureObserver, ActionFailureReason};
 use proton_action_queue::queue::{ActionError, AsActionError};
 use proton_core_common::actions::event_poll::EventPoll;
-use proton_core_common::datatypes::{LocalLabelId, Refresh};
+use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelExtension};
 use proton_mail_common::datatypes::{ReadFilter, SystemLabelId, ViewMode};
 use proton_mail_common::draft::Draft;
@@ -362,23 +362,11 @@ impl AppStateHandler for MailboxModel {
                         ),
                     )));
                 }
+                KeyCode::F(5) if key.modifiers.contains(KeyModifiers::SHIFT) => {
+                    return refresh(self.ctx.as_arc());
+                }
                 KeyCode::F(5) => {
-                    let ctx = self.ctx.as_arc();
-                    return Command::batch([
-                        Command::message(Messages::DisplayInfo(
-                            Some("Event Loop referesh".to_owned()),
-                            "Refresh event running...".to_owned(),
-                        )),
-                        Command::task(async move {
-                            match ctx.refresh_action(Refresh::All).await {
-                                Ok(_) => Command::None,
-                                Err(e) => Command::message(Messages::DisplayError(
-                                    Some("Event Loop referesh".to_owned()),
-                                    anyhow!("{e}"),
-                                )),
-                            }
-                        }),
-                    ]);
+                    return poll_event_loop(self.ctx.as_arc());
                 }
                 _ => (),
             }
@@ -502,7 +490,8 @@ impl AppStateHandler for MailboxModel {
             ("/", "Open the search bar"),
             ("C", "Show the contact list"),
             ("f/F", "Star/Unstar the selected item"),
-            ("F5", "Reload (Force event loop poll)"),
+            ("Shift+F5", "Reload all data from server"),
+            ("F5", "Refresh (Force event loop poll)"),
             ("F8", "[DEBUG]: Put app in background"),
             ("h", "[DEBUG]: has more?"),
         ];

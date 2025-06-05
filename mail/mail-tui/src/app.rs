@@ -92,7 +92,7 @@ impl<M: Model<Message> + Sized, Message: Send + 'static> App<M, Message> {
                 msg = self.bg_receiver.recv_async() => {msg?}
 
                 // This is here to make sure the animations like throbbers can progress if there no inputs or actions.
-                _ = tokio::time::sleep(Duration::from_millis(250)) => {
+                () = tokio::time::sleep(Duration::from_millis(250)) => {
                     continue;
                 }
             };
