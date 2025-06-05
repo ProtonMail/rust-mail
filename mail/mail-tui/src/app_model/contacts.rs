@@ -3,7 +3,7 @@ use futures::FutureExt;
 use itertools::Itertools;
 use proton_core_common::{
     datatypes::{
-        ContactGroupItem, ContactItem, ContactItemType, GroupedContacts, LocalContactId,
+        ContactGroupItem, ContactItem, ContactItemType, GroupedContacts, LocalContactId, Refresh,
         contact_details::{
             ContactDetailAddress, ContactDetailsEmail, ContactField, ExtendedName,
             InspectableContactDetails, Telephone, VCardUrl,
@@ -495,6 +495,24 @@ impl AppStateHandler for ContactsModel {
                     ])
                 }
             }
+            KeyCode::F(5) => {
+                let ctx = self.ctx.as_arc();
+                Command::batch([
+                    Command::message(Messages::DisplayInfo(
+                        Some("Event Loop referesh".to_owned()),
+                        "Refresh event running...".to_owned(),
+                    )),
+                    Command::task(async move {
+                        match ctx.refresh_action(Refresh::All).await {
+                            Ok(_) => Command::None,
+                            Err(e) => Command::message(Messages::DisplayError(
+                                Some("Event Loop referesh".to_owned()),
+                                anyhow::anyhow!("{e}"),
+                            )),
+                        }
+                    }),
+                ])
+            }
             _ => Command::None,
         }
     }
@@ -606,6 +624,7 @@ impl AppStateHandler for ContactsModel {
             ("j, ▼", "Go down"),
             ("enter", "See details for a contact"),
             ("esc", "Close the contact"),
+            ("F5", "Reload (Force event loop poll)"),
         ]
     }
 

@@ -18,7 +18,6 @@ use ratatui::backend::CrosstermBackend;
 use std::io::{Stdout, stdout};
 use std::path::PathBuf;
 use std::sync::LazyLock;
-use tokio::runtime::Runtime;
 
 pub type TerminalType = Terminal<CrosstermBackend<Stdout>>;
 
@@ -79,16 +78,20 @@ impl CliArgs {
 
 static CLI_ARGS: LazyLock<CliArgs> = LazyLock::new(CliArgs::parse);
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     initialize_panic_handler();
-    let runtime = Runtime::new()?;
-    let state = AppModel::new(&runtime)?;
-    let mut app = App::new(runtime, state);
+
     stdout().execute(EnterAlternateScreen)?;
     enable_raw_mode()?;
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
     terminal.clear()?;
-    let result = app.run(terminal);
+
+    let state = AppModel::new().await?;
+    let mut app = App::new(state);
+    // Main loop happens here.
+    let result = app.run(terminal).await;
+
     stdout().execute(LeaveAlternateScreen)?;
     disable_raw_mode()?;
     result

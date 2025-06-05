@@ -502,6 +502,8 @@ impl AppStateHandler for MailboxModel {
             ("/", "Open the search bar"),
             ("C", "Show the contact list"),
             ("f/F", "Star/Unstar the selected item"),
+            ("F5", "Reload (Force event loop poll)"),
+            ("F8", "[DEBUG]: Put app in background"),
             ("h", "[DEBUG]: has more?"),
         ];
 
