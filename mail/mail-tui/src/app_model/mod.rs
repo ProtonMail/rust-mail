@@ -10,7 +10,13 @@ mod watcher;
 
 use crate::CLI_ARGS;
 use crate::app::{Command, Model};
+use crate::app_model::background::BackgroundModel;
+use crate::app_model::contacts::ContactsModel;
+use crate::app_model::context_init::ContextInitModel;
+use crate::app_model::login::LoginModel;
+use crate::app_model::mailbox::MailboxModel;
 use crate::app_model::path_select_popup::PathSelectPopup;
+use crate::app_model::twofa::TwoFaModel;
 use crate::keychain::AppKeyChain;
 use crate::messages::Messages;
 use crate::widgets::ScrollableListState;
@@ -49,17 +55,17 @@ pub enum AppState {
     /// There are existing sessions available, allow user to select one.
     SessionSelect(SessionSelectModel),
     /// Log into a new account.
-    Login(login::LoginModel),
+    Login(LoginModel),
     /// Submit 2FA code.
-    TwoFA(twofa::TwoFaModel),
+    TwoFA(TwoFaModel),
     /// Initialize the user context.
-    ContextInit(context_init::ContextInitModel),
+    ContextInit(ContextInitModel),
     /// Display conversation/messages.
-    Mailbox(mailbox::MailboxModel),
+    Mailbox(MailboxModel),
     /// Display contacts and groups
-    Contacts(contacts::ContactsModel),
+    Contacts(ContactsModel),
     /// Background Execution Simulator
-    Background(background::BackgroundModel),
+    Background(BackgroundModel),
 }
 
 /// Trait to enforce behavior on each of the app states.
