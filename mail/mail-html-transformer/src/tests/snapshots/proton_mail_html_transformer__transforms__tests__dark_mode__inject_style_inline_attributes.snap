@@ -319,11 +319,11 @@ img {
                       [data-protonmail-message] span {
 background-color:#3e6b2e!important
  }
-div.a[style*="background-color:#fff"] {
+[data-protonmail-message] div.a[style*="background-color:#fff"] {
  background-color:#1c1b24!important
- }div.a[style*="color:#000"] {
+ }[data-protonmail-message] div.a[style*="color:#000"] {
  color:#fff!important
- }div.b[style*="color:#000"] {
+ }[data-protonmail-message] div.b[style*="color:#000"] {
  color:#fff!important
  }
 

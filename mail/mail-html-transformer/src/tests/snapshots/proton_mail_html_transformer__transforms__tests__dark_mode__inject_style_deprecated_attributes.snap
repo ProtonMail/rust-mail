@@ -320,9 +320,9 @@ img {
 background-color:#3e6b2e!important
  }
 
-font[color="black"] {
+[data-protonmail-message] font[color="black"] {
  color: #fff;
- }td[bgcolor="white"] {
+ }[data-protonmail-message] td[bgcolor="white"] {
  background-color: #1c1b24;
  }
                   }
