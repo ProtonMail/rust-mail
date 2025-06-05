@@ -1,19 +1,12 @@
 use crate::actions::rollback::RollbackAction;
 use crate::user_context::events::subscriber::MailEventSubscriber;
 use crate::{MailContextError, MailUserContext};
-use proton_action_queue::action::ActionId;
 use proton_action_queue::queue::ActionError;
 use proton_core_common::event_loop::EventPollMode;
 use proton_event_loop::EventLoopError;
 use std::sync::Weak;
 use std::time::Duration;
 use tracing::{Instrument, error, warn};
-
-#[derive(Debug, Default)]
-pub(crate) struct EventLoopActionIds {
-    last_event_loop_action_id: Option<ActionId>,
-    last_rollback_action_id: Option<ActionId>,
-}
 
 impl MailUserContext {
     /// Setup a background task that queues the event loop action.
@@ -102,7 +95,11 @@ impl MailUserContext {
     async fn queue_poll_event_loop(
         &self,
     ) -> Result<(), ActionError<crate::actions::event_poll::EventPoll>> {
-        let mut last_action_ids = self.last_event_loop_action_ids.lock().await;
+        let mut last_action_ids = self
+            .user_context()
+            .last_event_loop_action_ids()
+            .lock()
+            .await;
         let event_poll_action = crate::actions::event_poll::EventPoll {};
         {
             let output = if let Some(last_action_id) = last_action_ids.last_event_loop_action_id {
@@ -118,7 +115,11 @@ impl MailUserContext {
     }
 
     async fn queue_item_rollback(&self) -> Result<(), ActionError<RollbackAction>> {
-        let mut last_action_ids = self.last_event_loop_action_ids.lock().await;
+        let mut last_action_ids = self
+            .user_context()
+            .last_event_loop_action_ids()
+            .lock()
+            .await;
         {
             let item_rollback_action = RollbackAction {};
             let output = if let Some(last_action_id) = last_action_ids.last_rollback_action_id {

@@ -2,7 +2,7 @@ pub use self::keys::*;
 use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
-use crate::event_loop::EventPollMode;
+use crate::event_loop::{EventLoopActionIds, EventPollMode};
 use crate::models::{InitializationWatcher, UserSettings};
 use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse};
 use anyhow::Context as _;
@@ -22,6 +22,7 @@ use std::future::Future;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
+use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, warn};
@@ -62,6 +63,7 @@ pub struct UserContext {
     pub cache_path: PathBuf,
     pub initialization_watcher: Arc<InitializationWatcher>,
     event_loop: EventPoll,
+    last_event_loop_action_ids: Arc<Mutex<EventLoopActionIds>>,
 }
 
 impl Debug for UserContext {
@@ -102,6 +104,7 @@ impl UserContext {
                 cancellation_token,
                 initialization_watcher,
                 event_loop: EventPoll::new(event_ctx.boxed(), event_ctx.boxed()),
+                last_event_loop_action_ids: Arc::new(Mutex::new(EventLoopActionIds::default())),
             }
         });
         let this_weak = Arc::downgrade(&this);
@@ -183,6 +186,12 @@ impl UserContext {
     /// Get the event poll mode of this context.
     pub fn event_poll_mode(&self) -> EventPollMode {
         self.context.event_poll_mode
+    }
+
+    /// Get last event loop action ids.
+    #[must_use]
+    pub fn last_event_loop_action_ids(&self) -> &Arc<Mutex<EventLoopActionIds>> {
+        &self.last_event_loop_action_ids
     }
 
     /// Get path to the log file.

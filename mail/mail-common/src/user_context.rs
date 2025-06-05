@@ -36,7 +36,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, OnceLock, Weak};
 use std::time::Duration;
 use tokio::join;
-use tokio::sync::{Mutex, watch};
+use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tracing::error;
 
@@ -50,8 +50,6 @@ pub struct MailUserContext {
     default_queue_executor: QueueAutoExecutor,
     send_queue_executors: QueueAutoExecutorPool,
     prefetch: PrefetchNotify,
-    /// Last id of the event loop action.
-    last_event_loop_action_ids: Mutex<events::EventLoopActionIds>,
     initialization_mediator: InitializationMediator,
     pub is_cleanup_cache_running: Arc<AtomicBool>,
 }
@@ -90,7 +88,6 @@ impl MailUserContext {
             prefetch: OnceLock::new(),
             default_queue_executor,
             send_queue_executors,
-            last_event_loop_action_ids: Mutex::new(Default::default()),
             initialization_mediator,
             is_cleanup_cache_running: Default::default(),
         });
