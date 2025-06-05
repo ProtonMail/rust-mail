@@ -269,9 +269,14 @@ fn sanitize_dark_mode_in_stylesheets(document: &NodeRef, root_selector: &str) ->
 
     for style in styles {
         let text_content = style.text_contents();
-        let Ok(stylesheet) = StyleSheet::parse(&text_content, ParserOptions::default()) else {
-            tracing::warn!("Could not parse stylesheet content. Skipping...");
-            continue;
+        let stylesheet = match StyleSheet::parse(&text_content, ParserOptions::default()) {
+            Ok(stylesheet) => stylesheet,
+            Err(err) => {
+                tracing::warn!("Could not parse stylesheet content");
+                tracing::warn!("Error: {err:?}");
+                tracing::warn!("Skipping...");
+                continue;
+            }
         };
 
         sanitize_dark_mode_in_stylesheet(
@@ -319,10 +324,15 @@ fn sanitize_dark_mode_in_inline_attributes(
     let mut overrides = BTreeMap::new();
 
     for (tag, style) in styles {
-        let Ok(style_attribute) = StyleAttribute::parse(&style, ParserOptions::default()) else {
-            let tag = tag.name.local.to_string();
-            tracing::warn!("Could not parse style attribute of tag `{tag}`. Skipping...");
-            continue;
+        let style_attribute = match StyleAttribute::parse(&style, ParserOptions::default()) {
+            Ok(style_attribute) => style_attribute,
+            Err(err) => {
+                let tag = tag.name.local.to_string();
+                tracing::warn!("Could not parse style attribute of tag `{tag}`");
+                tracing::warn!("Error: {err:?}");
+                tracing::warn!("Skipping...");
+                continue;
+            }
         };
 
         sanitize_dark_mode_in_inline_attribute(
