@@ -1,4 +1,5 @@
 pub use self::keys::*;
+use crate::actions::register_core_actions;
 use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
@@ -87,6 +88,10 @@ impl UserContext {
         let user_stash = Self::new_user_db(user_stash_path, db_initializers).await?;
         let cancellation_token = context.new_child_cancellation_token();
         let queue = Queue::new(user_stash.clone()).await?;
+
+        // Register core actions
+        register_core_actions(&queue);
+
         let initialization_watcher = InitializationWatcher::new(&user_stash)?;
 
         let this = Arc::new_cyclic(|this| {

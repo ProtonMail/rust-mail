@@ -2,6 +2,7 @@ use crate::actions::rollback::RollbackAction;
 use crate::user_context::events::subscriber::MailEventSubscriber;
 use crate::{MailContextError, MailUserContext};
 use proton_action_queue::queue::ActionError;
+use proton_core_common::actions::event_poll::EventPoll;
 use proton_core_common::event_loop::EventPollMode;
 use proton_event_loop::EventLoopError;
 use std::sync::Weak;
@@ -68,9 +69,7 @@ impl MailUserContext {
     /// # Errors
     ///
     /// Returns error if the action failed to be queued.
-    pub async fn poll_event_loop(
-        &self,
-    ) -> Result<(), ActionError<crate::actions::event_poll::EventPoll>> {
+    pub async fn poll_event_loop(&self) -> Result<(), ActionError<EventPoll>> {
         if self.user_context().event_poll_mode() != EventPollMode::Manual {
             warn!("Event poll mode is not configured as manual");
             return Ok(());
@@ -84,23 +83,19 @@ impl MailUserContext {
     /// # Errors
     ///
     /// Returns error if the action failed to be queued.
-    pub async fn force_event_loop_poll(
-        &self,
-    ) -> Result<(), ActionError<crate::actions::event_poll::EventPoll>> {
-        let event_poll_action = crate::actions::event_poll::EventPoll {};
+    pub async fn force_event_loop_poll(&self) -> Result<(), ActionError<EventPoll>> {
+        let event_poll_action = EventPoll {};
         self.action_queue().queue_action(event_poll_action).await?;
         Ok(())
     }
 
-    async fn queue_poll_event_loop(
-        &self,
-    ) -> Result<(), ActionError<crate::actions::event_poll::EventPoll>> {
+    async fn queue_poll_event_loop(&self) -> Result<(), ActionError<EventPoll>> {
         let mut last_action_ids = self
             .user_context()
             .last_event_loop_action_ids()
             .lock()
             .await;
-        let event_poll_action = crate::actions::event_poll::EventPoll {};
+        let event_poll_action = EventPoll {};
         {
             let output = if let Some(last_action_id) = last_action_ids.last_event_loop_action_id {
                 self.action_queue()

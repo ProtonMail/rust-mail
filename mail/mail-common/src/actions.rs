@@ -2,7 +2,6 @@ pub mod addresses;
 mod available_action;
 pub mod conversations;
 pub mod draft;
-pub mod event_poll;
 pub mod labels;
 pub mod messages;
 pub mod notifications_quick_actions;
@@ -136,12 +135,10 @@ pub(crate) fn register_mail_actions(queue: &Queue) {
     register_action::<labels::Expand>(queue);
     register_action::<messages::label_as::LabelAs>(queue);
     register_action::<conversations::label_as::LabelAs>(queue);
-    register_action::<proton_core_common::actions::contacts::Delete>(queue);
     register_action::<draft::Discard>(queue);
     register_action::<draft::UndoSend>(queue);
     register_action::<draft::AttachmentUpload>(queue);
     register_action::<draft::AttachmentRemove>(queue);
-    register_action::<event_poll::EventPoll>(queue);
     register_action::<refresh::ActionRefresh>(queue);
     register_action::<rollback::RollbackAction>(queue);
 }
