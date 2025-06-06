@@ -177,7 +177,10 @@ impl PinCode {
     ///
     pub async fn delete_pin(ctx: Arc<Context>, pin: Vec<u32>) -> Result<(), PinError> {
         Self::validate_pin(ctx.clone(), pin).await?;
+        Self::delete_app_protection(ctx).await
+    }
 
+    pub(crate) async fn delete_app_protection(ctx: Arc<Context>) -> Result<(), PinError> {
         let mut tether = ctx.account_stash().connection();
         let mut app_settings = AppSettings::get_or_default(&tether).await;
         let pin_protection = PinProtection::get(&tether).await?;

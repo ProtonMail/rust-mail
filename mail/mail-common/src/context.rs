@@ -470,22 +470,14 @@ impl MailContext {
     pub async fn get_all_logged_in_user_ctx(
         self: &Arc<Self>,
     ) -> MailContextResult<Vec<Arc<MailUserContext>>> {
-        let sessions = self.get_sessions().await?;
-        let mut ctxs = Vec::with_capacity(sessions.len());
+        let sessions = self.get_authenticated_sessions().await?;
+        let mut ctxs = Vec::new();
 
         for session in sessions {
-            if let CoreSessionState::Authenticated = CoreSessionState::of(&session) {
-                ctxs.push(
-                    self.user_context_from_session(
-                        &session,
-                        None,
-                        ShouldInitializeMailUserContext::No,
-                    )
+            ctxs.push(
+                self.user_context_from_session(&session, None, ShouldInitializeMailUserContext::No)
                     .await?,
-                );
-            } else {
-                tracing::warn!("Found unauthenticated session");
-            }
+            );
         }
 
         Ok(ctxs)
@@ -504,25 +496,14 @@ impl MailContext {
         self: &Arc<Self>,
         current_session_id: &SessionId,
     ) -> MailContextResult<Vec<Arc<MailUserContext>>> {
-        let sessions = self.get_sessions().await?;
-        let mut ctxs = Vec::with_capacity(sessions.len());
+        let sessions = self.get_authenticated_sessions().await?;
+        let mut ctxs = Vec::new();
 
-        for session in sessions
-            .into_iter()
-            .filter(|s| &s.remote_id != current_session_id)
-        {
-            if let CoreSessionState::Authenticated = CoreSessionState::of(&session) {
-                ctxs.push(
-                    self.user_context_from_session(
-                        &session,
-                        None,
-                        ShouldInitializeMailUserContext::No,
-                    )
+        for session in sessions.filter(|s| &s.remote_id != current_session_id) {
+            ctxs.push(
+                self.user_context_from_session(&session, None, ShouldInitializeMailUserContext::No)
                     .await?,
-                );
-            } else {
-                tracing::warn!("Found unauthenticated session");
-            }
+            );
         }
 
         Ok(ctxs)
@@ -567,6 +548,17 @@ impl MailContext {
     /// Returns an error if we fail to retrieve the sessions from the db.
     pub async fn get_sessions(&self) -> MailContextResult<Vec<CoreSession>> {
         Ok(self.core_context.get_sessions().await?)
+    }
+
+    /// Get all authenticated API sessions.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if we fail to retrieve the sessions from the db.
+    pub async fn get_authenticated_sessions(
+        &self,
+    ) -> MailContextResult<impl Iterator<Item = CoreSession>> {
+        Ok(self.core_context.get_authenticated_sessions().await?)
     }
 
     /// Watch the API sessions for changes.
@@ -834,26 +826,22 @@ impl MailContext {
     pub async fn get_all_logged_in_and_initialized_user_contexts(
         self: &Arc<Self>,
     ) -> MailContextResult<Vec<Arc<MailUserContext>>> {
-        let sessions = self.get_sessions().await?;
-        let mut ctxs = Vec::with_capacity(sessions.len());
+        let sessions = self.get_authenticated_sessions().await?;
+        let mut ctxs = Vec::new();
 
         for session in sessions {
-            if let CoreSessionState::Authenticated = CoreSessionState::of(&session) {
-                match self
-                    .initialized_user_context_from_session(&session, None)
-                    .await
-                {
-                    Ok(Some(user_context)) => ctxs.push(user_context),
-                    Ok(None) => {
-                        tracing::debug!("{} has non-initialized context", session.account_id);
-                    }
-                    Err(MailContextError::DuplicateContext(user_id)) => {
-                        tracing::warn!("Duplicate context detected for {user_id}, skipping");
-                    }
-                    Err(e) => return Err(e),
+            match self
+                .initialized_user_context_from_session(&session, None)
+                .await
+            {
+                Ok(Some(user_context)) => ctxs.push(user_context),
+                Ok(None) => {
+                    tracing::debug!("{} has non-initialized context", session.account_id);
                 }
-            } else {
-                tracing::warn!("Found unauthenticated session");
+                Err(MailContextError::DuplicateContext(user_id)) => {
+                    tracing::warn!("Duplicate context detected for {user_id}, skipping");
+                }
+                Err(e) => return Err(e),
             }
         }
 

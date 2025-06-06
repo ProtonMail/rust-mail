@@ -356,6 +356,24 @@ impl Context {
         Ok(ctx)
     }
 
+    /// Get the current Arc instance for this context.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the context is not alive. In practice, this should never happen
+    /// as calls to this method have to be made on the Context object itself.
+    ///
+    #[must_use]
+    pub fn as_arc(&self) -> Arc<Self> {
+        self.this.upgrade().expect("Should never fail")
+    }
+
+    /// Get a weak reference to this context.
+    #[must_use]
+    pub fn as_weak(&self) -> Weak<Self> {
+        Weak::clone(&self.this)
+    }
+
     /// Get all available accounts.
     ///
     /// An account is an entity representing a Proton account known to the system.
@@ -402,25 +420,37 @@ impl Context {
         Ok(CoreSession::all(&tether).await?)
     }
 
-    /// Get all authenticated Core User Contexts.
+    /// Get all authenticated API sessions.
     ///
-    /// The method is suppose to be able to grab all users data in one call.
-    /// The purpose is that there are few features which relay on being able to access
-    /// All logged in accounts such as `background execution` & `pin verifcation`.
+    /// # Errors
     ///
-    pub async fn get_all_logged_in_user_ctx(&self) -> CoreContextResult<Vec<Arc<UserContext>>> {
+    /// Returns an error if we fail to retrieve the sessions from the db.
+    ///
+    /// # Returns
+    ///
+    /// Returns an iterator of authenticated sessions.
+    ///
+    /// More details on authenticated sessions can be found in the
+    /// [`get_sessions`] documentation.
+    ///
+    pub async fn get_authenticated_sessions(
+        &self,
+    ) -> CoreContextResult<impl Iterator<Item = CoreSession>> {
         let sessions = self.get_sessions().await?;
-        let mut ctxs = Vec::with_capacity(sessions.len());
+        Ok(sessions
+            .into_iter()
+            .filter(|s| CoreSessionState::of(s) == CoreSessionState::Authenticated))
+    }
 
-        for session in sessions {
-            if let CoreSessionState::Authenticated = CoreSessionState::of(&session) {
-                ctxs.push(self.user_context_from_session(&session, None).await?);
-            } else {
-                tracing::warn!("Found unauthenticated session");
-            }
-        }
-
-        Ok(ctxs)
+    /// Check if any account is logged in.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if we fail to retrieve the sessions from the db.
+    ///
+    pub async fn any_logged_in_account(&self) -> CoreContextResult<bool> {
+        let sessions = self.get_authenticated_sessions().await?;
+        Ok(sessions.count() > 0)
     }
 
     /// Get path of the core cache in filesystem.
@@ -656,11 +686,23 @@ impl Context {
             info!("logged out session {}", session.remote_id);
         }
 
-        for session in self.get_account_sessions(user_id.clone()).await? {
-            warn!("Orphan session found in database: {}", session.remote_id);
+        let orphaned_sessions = self
+            .get_account_sessions(user_id.clone())
+            .await?
+            .into_iter()
+            .map(|s| s.remote_id)
+            .collect::<Vec<_>>();
+
+        if !orphaned_sessions.is_empty() {
+            warn!(
+                "Orphaned sessions found in database: {:?}",
+                orphaned_sessions
+            );
 
             let mut tether = self.account_stash().connection();
-            tether.tx(async |tx| session.delete(tx).await).await?;
+            tether
+                .tx(async |tx| CoreSession::delete_by_ids(orphaned_sessions, tx).await)
+                .await?;
         }
 
         info!("logged out all sessions for account {user_id}");
