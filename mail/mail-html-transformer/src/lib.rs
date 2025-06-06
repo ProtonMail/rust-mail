@@ -170,7 +170,7 @@ impl Transformer {
     ) {
         transforms::styles::inject_root_selector_to_html(&self.document);
         transforms::styles::inject_dark_mode(
-            sender,
+            Some(sender),
             self.document.clone(),
             self.document.clone(),
             mode,
@@ -186,13 +186,14 @@ impl Transformer {
     ///
     /// # Parameters
     /// * `sender` - the email address of the sender. Example: `test@pm.me`
+    ///   If `None` the sender is considered trusted.
     /// * `root_selector` - the CSS selector of the root of message.
     ///   In case of viewing message, it is usually data attribute pointing to the `html` tag.
     ///   In case of composer, it is ID pointing to custom editor that wraps the message.
     ///   Used to create a selector with bigger specificity than any provided by the sender.
     pub fn inject_dark_mode_to_another_target(
         &mut self,
-        sender: &str,
+        sender: Option<&str>,
         mode: ColorMode,
         capabilities: BrowserCapabilities,
         root_selector: String,

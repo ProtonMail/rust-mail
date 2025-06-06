@@ -62,14 +62,16 @@ impl DarkStyleSupportLevel {
     }
 
     /// If the sender is in the exception list, we will override dark mode for them.
-    fn is_sender_untrusted(sender: &str) -> bool {
+    fn is_sender_untrusted(sender: Option<&str>) -> bool {
+        let Some(sender) = sender else { return false };
+
         let hash = hash_sender(sender);
         LIST_OF_UNTRUSTED_SENDERS.contains(&hash)
     }
 
     /// * `sender` is the email address of the sender. Example: `test@pm.me`
     pub(crate) fn new_for_html(
-        sender: &str,
+        sender: Option<&str>,
         mode: ColorMode,
         document: &NodeRef,
         capabilities: BrowserCapabilities,
@@ -135,17 +137,17 @@ mod tests {
         supports_dark_mode_via_media_query: false,
     };
 
-    #[test_case("", r#"<html><head> <meta name="supported-color-schemes" content="[light? || dark? || <ident>?]* || only?"></head><body></body></html>"#, ColorMode::DarkMode, SUPPORTS_MEDIA => DarkStyleSupportLevel::Native ; "case 1")]
-    #[test_case("", r#"<html><head> <meta name="color-scheme" content="[light? || dark? || <ident>?]* || only?"></head><body></body></html>"#, ColorMode::DarkMode, SUPPORTS_MEDIA => DarkStyleSupportLevel::Native ; "case 2")]
-    #[test_case("", "<html><head> <style>:root{color-scheme: light dark;}</style></head><body></body></html>", ColorMode::DarkMode, SUPPORTS_MEDIA => DarkStyleSupportLevel::Native ; "case 3")]
-    #[test_case("", "<html><head></head><body> <table> </table></body></html>", ColorMode::DarkMode, SUPPORTS_MEDIA => DarkStyleSupportLevel::Injected ; "case 4")]
-    #[test_case("", "<html><head></head><body> <div> <div> <div> <div> <div> <div> <div> <div> <div> <div> <div> <div> <div> <div> hi </div></div></div></div></div></div></div></div></div></div></div></div></div></div></body></html>", ColorMode::DarkMode, SUPPORTS_MEDIA => DarkStyleSupportLevel::Injected ; "case 5")]
-    #[test_case("", "<html><head></head><body> <span> a</span></body></html>", ColorMode::DarkMode, SUPPORTS_MEDIA => DarkStyleSupportLevel::Injected ; "case 6")]
-    #[test_case("", "", ColorMode::LightMode, DOESNT_SUPPORT_MEDIA => DarkStyleSupportLevel::NoDarkMode ; "case 7")]
-    #[test_case("", "", ColorMode::LightMode, SUPPORTS_MEDIA => DarkStyleSupportLevel::Injected ; "case 8")]
-    #[test_case("test@pm.me", r#"<html><head> <meta name="supported-color-schemes" content="[light? || dark? || <ident>?]* || only?"></head><body></body></html>"#, ColorMode::DarkMode, SUPPORTS_MEDIA => DarkStyleSupportLevel::Injected ; "case 9")]
+    #[test_case(None, r#"<html><head> <meta name="supported-color-schemes" content="[light? || dark? || <ident>?]* || only?"></head><body></body></html>"#, ColorMode::DarkMode, SUPPORTS_MEDIA => DarkStyleSupportLevel::Native ; "case 1")]
+    #[test_case(None, r#"<html><head> <meta name="color-scheme" content="[light? || dark? || <ident>?]* || only?"></head><body></body></html>"#, ColorMode::DarkMode, SUPPORTS_MEDIA => DarkStyleSupportLevel::Native ; "case 2")]
+    #[test_case(None, "<html><head> <style>:root{color-scheme: light dark;}</style></head><body></body></html>", ColorMode::DarkMode, SUPPORTS_MEDIA => DarkStyleSupportLevel::Native ; "case 3")]
+    #[test_case(None, "<html><head></head><body> <table> </table></body></html>", ColorMode::DarkMode, SUPPORTS_MEDIA => DarkStyleSupportLevel::Injected ; "case 4")]
+    #[test_case(None, "<html><head></head><body> <div> <div> <div> <div> <div> <div> <div> <div> <div> <div> <div> <div> <div> <div> hi </div></div></div></div></div></div></div></div></div></div></div></div></div></div></body></html>", ColorMode::DarkMode, SUPPORTS_MEDIA => DarkStyleSupportLevel::Injected ; "case 5")]
+    #[test_case(None, "<html><head></head><body> <span> a</span></body></html>", ColorMode::DarkMode, SUPPORTS_MEDIA => DarkStyleSupportLevel::Injected ; "case 6")]
+    #[test_case(None, "", ColorMode::LightMode, DOESNT_SUPPORT_MEDIA => DarkStyleSupportLevel::NoDarkMode ; "case 7")]
+    #[test_case(None, "", ColorMode::LightMode, SUPPORTS_MEDIA => DarkStyleSupportLevel::Injected ; "case 8")]
+    #[test_case(Some("test@pm.me"), r#"<html><head> <meta name="supported-color-schemes" content="[light? || dark? || <ident>?]* || only?"></head><body></body></html>"#, ColorMode::DarkMode, SUPPORTS_MEDIA => DarkStyleSupportLevel::Injected ; "case 9")]
     fn test_support_level(
-        sender: &str,
+        sender: Option<&str>,
         input: &str,
         mode: ColorMode,
         capabilities: BrowserCapabilities,

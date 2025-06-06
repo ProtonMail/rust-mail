@@ -300,12 +300,13 @@ pub fn inject_dark_mode(
     }
 
     let mut transformer = Transformer::new(body);
-    // TODO(wpolak): In case of reply chain
-    // What should be a sender email? Just the last sender? Or should we pass the list of all senders (somehow).
-    // Or should we ALWAYS assume that the sender is on the exception list and inject dark mode?
-    // For now let's pass empty string which is equal to always trusting the sender.
-    let head =
-        transformer.inject_dark_mode_to_another_target("", color_mode, capabilities, root_selector);
+    // For now we set sender to None which means that we trust the sender.
+    let head = transformer.inject_dark_mode_to_another_target(
+        None,
+        color_mode,
+        capabilities,
+        root_selector,
+    );
     DarkModeInjection {
         head,
         body: transformer.to_string(),

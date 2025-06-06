@@ -94,7 +94,7 @@ fn revert_dark_mode_in_inline_attributes() {
     let mut html = Transformer::new(original_html);
     // But we are not interested in HEAD, just the changes that could end up in sent message.
     html.inject_dark_mode_to_another_target(
-        "",
+        None,
         ColorMode::DarkMode,
         BrowserCapabilities {
             supports_dark_mode_via_media_query: true,
@@ -132,7 +132,7 @@ fn inject_style_to_another_target() {
     let html = include_str!("../../tests/htmls/styles/with_text_color_in_stylesheet.html");
     let mut html = Transformer::new(html);
     let head = html.inject_dark_mode_to_another_target(
-        "",
+        None,
         ColorMode::DarkMode,
         BrowserCapabilities {
             supports_dark_mode_via_media_query: true,
@@ -153,7 +153,7 @@ fn inject_style_to_another_target_twice() {
     let html = include_str!("../../tests/htmls/styles/with_text_color_in_stylesheet.html");
     let mut html = Transformer::new(html);
     let head_after_first_pass = html.inject_dark_mode_to_another_target(
-        "",
+        None,
         ColorMode::DarkMode,
         capabilities,
         "#protonmail-message".to_owned(),
@@ -163,7 +163,7 @@ fn inject_style_to_another_target_twice() {
     // Second pass
     let mut html = Transformer::new(&html_after_first_pass);
     let head_after_second_pass = html.inject_dark_mode_to_another_target(
-        "",
+        None,
         ColorMode::DarkMode,
         capabilities,
         "#protonmail-message".to_owned(),

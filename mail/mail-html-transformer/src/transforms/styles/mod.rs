@@ -111,7 +111,7 @@ pub fn inject_root_selector_to_html(document: &NodeRef) {
 /// However in the composer, `source` is the message being edited, while `target` is the head of HTML editor that wraps
 /// the message. Styles appended to the `target` are not sent to the recipient.
 pub fn inject_dark_mode(
-    sender: &str,
+    sender: Option<&str>,
     source: NodeRef,
     target: NodeRef,
     mode: ColorMode,

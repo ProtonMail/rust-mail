@@ -72,7 +72,7 @@ pub fn parse(c: &mut Criterion) {
             b.iter(|| {
                 let tr = tr.clone();
                 transforms::styles::inject_dark_mode(
-                    "test@pm.me",
+                    Some("test@pm.me"),
                     tr.document(),
                     tr.document(),
                     transforms::ColorMode::LightMode,
