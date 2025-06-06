@@ -430,7 +430,7 @@ impl Draft {
         }
 
         let metadata = if let Some(metadata) =
-            DraftMetadata::find_by_message_id(message.local_id.unwrap(), tether)
+            DraftMetadata::find_by_message_id(message.id(), tether)
                 .await
                 .inspect_err(|e| error!("Failed to load draft metadata: {e:?}"))?
         {
@@ -440,7 +440,7 @@ impl Draft {
             debug!("No metadata found, creating new entry");
             let mut metadata = DraftMetadata {
                 id: None,
-                local_message_id: Some(message.local_id.unwrap()),
+                local_message_id: Some(message.id()),
                 local_conversation_id: Some(message.local_conversation_id.unwrap()),
                 local_parent_id: None,
                 reply_mode: None,
@@ -512,20 +512,17 @@ impl Draft {
             Some(d) => d,
             None => {
                 debug!("Failed to sync draft from server, attempting to load from cache.");
-                let Some(d) =
-                    Message::load_decrypted_message_from_cache(message.local_id.unwrap(), tether)
-                        .await
-                        .inspect_err(|e| {
-                            error!("Failed to load decrypted data from cache: {e:?}")
-                        })?
+                let Some(d) = Message::load_decrypted_message_from_cache(message.id(), tether)
+                    .await
+                    .inspect_err(|e| error!("Failed to load decrypted data from cache: {e:?}"))?
                 else {
-                    return Err(OpenError::MessageBodyMissing(message.local_id.unwrap()).into());
+                    return Err(OpenError::MessageBodyMissing(message.id()).into());
                 };
                 d
             }
         };
 
-        let send_result = DraftSendResult::find_by_id(message.local_id.unwrap(), tether)
+        let send_result = DraftSendResult::find_by_id(message.id(), tether)
             .await
             .inspect_err(|e| error!("Failed to load send result: {e:?}"))?;
 
@@ -590,7 +587,7 @@ impl Draft {
 
                     DraftAttachmentMetadata::pending(
                         metadata.id.unwrap(),
-                        public_key_attachment.local_id.unwrap(),
+                        public_key_attachment.id(),
                         0,
                         true,
                     )
@@ -688,7 +685,7 @@ impl Draft {
             .tx(async |tx| {
                 let metadata = DraftMetadata::reply(
                     reply_mode,
-                    source_message.local_id.unwrap(),
+                    source_message.id(),
                     source_message.local_conversation_id.unwrap(),
                     tx,
                 )
@@ -728,7 +725,7 @@ impl Draft {
                         let attachment = public_key_attachment.store(context, tx).await?;
                         DraftAttachmentMetadata::pending(
                             metadata.id.unwrap(),
-                            attachment.local_id.unwrap(),
+                            attachment.id(),
                             0,
                             true,
                         )
@@ -741,7 +738,7 @@ impl Draft {
                     let mut attachment_metadata =
                         if matches!(attachment.attachment_type, AttachmentType::Pgp) {
                             // PGP attachments need to be cloned and uploaded to the server so it can be sent.
-                            debug!("Cloning PGP attachment {} ", attachment.local_id.unwrap());
+                            debug!("Cloning PGP attachment {} ", attachment.id());
                             let new_attachment = Attachment::clone_attachment(
                                 context,
                                 address.remote_id.clone().unwrap(),
@@ -750,13 +747,10 @@ impl Draft {
                             )
                             .await
                             .inspect_err(|e| error!("Failed to clone pgp attachment: {e:?}",))?;
-                            debug!(
-                                "PGP attachment cloned as {} ",
-                                new_attachment.local_id.unwrap()
-                            );
+                            debug!("PGP attachment cloned as {} ", new_attachment.id());
                             DraftAttachmentMetadata::pending(
                                 metadata.id.unwrap(),
-                                new_attachment.local_id.unwrap(),
+                                new_attachment.id(),
                                 order,
                                 false,
                             )
@@ -905,15 +899,12 @@ impl Draft {
                 // also requires all attachments to be uploaded this will correct itself.
                 tracing::warn!(
                     "Attachment {} does not have a remote id, skipping",
-                    attachment.local_id.unwrap()
+                    attachment.id()
                 );
                 continue;
             };
             let Some(key_packets) = attachment.key_packets.clone() else {
-                return Err(SaveError::AttachmentDoesNotHaveKeyPackets(
-                    attachment.local_id.unwrap(),
-                )
-                .into());
+                return Err(SaveError::AttachmentDoesNotHaveKeyPackets(attachment.id()).into());
             };
             attachment_key_packets.insert(remote_id, key_packets.value.clone());
         }
@@ -968,15 +959,12 @@ impl Draft {
                 // also requires all attachments to be uploaded this will correct itself.
                 tracing::warn!(
                     "Attachment {} does not have a remote id, skipping",
-                    attachment.local_id.unwrap()
+                    attachment.id()
                 );
                 continue;
             };
             let Some(key_packets) = attachment.key_packets.clone() else {
-                return Err(SaveError::AttachmentDoesNotHaveKeyPackets(
-                    attachment.local_id.unwrap(),
-                )
-                .into());
+                return Err(SaveError::AttachmentDoesNotHaveKeyPackets(attachment.id()).into());
             };
             attachment_key_packets.insert(remote_id, key_packets.value.clone());
         }
@@ -1292,7 +1280,7 @@ impl Draft {
     pub fn to_add_attachment_action(&self, attachment: Attachment) -> DraftAttachmentUploadQueuer {
         // create save action before the attachment is registered as we need a message to upload.
         let save_action = self.to_save_action();
-        let attachment_id = attachment.local_id.unwrap();
+        let attachment_id = attachment.id();
 
         DraftAttachmentUploadQueuer::new(
             self.metadata_id,

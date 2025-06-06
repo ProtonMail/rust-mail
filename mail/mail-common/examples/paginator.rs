@@ -10,6 +10,7 @@ use proton_mail_common::MailContext;
 use proton_mail_common::context::EventPollMode;
 use proton_mail_common::datatypes::{ReadFilter, SystemLabelId};
 use proton_mail_common::mail_scroller::{MailScroller, MailScrollerSource};
+use stash::orm::Model;
 use std::fmt::Debug;
 use std::sync::Arc;
 use tempdir::TempDir;
@@ -87,14 +88,10 @@ async fn main() {
     let page_count = 50_u32;
 
     let filter = ReadFilter::Unread;
-    let mut paginator = MailScroller::conversations(
-        user_ctx.as_weak(),
-        label.local_id.unwrap(),
-        filter,
-        page_count as usize,
-    )
-    .await
-    .unwrap();
+    let mut paginator =
+        MailScroller::conversations(user_ctx.as_weak(), label.id(), filter, page_count as usize)
+            .await
+            .unwrap();
 
     paginate_mail(&mut paginator, |v1, v2| {
         // We can only guarantee this for when no filter is applied.
@@ -117,7 +114,7 @@ async fn main() {
             .unwrap();
         let paginator = Message::paginate_in_label(
             &user_ctx,
-            label.local_id.unwrap(),
+            label.id(),
             page_count,
             PaginatorFilter::default(),
             PaginatorSearchOptions::default(),
@@ -133,7 +130,7 @@ async fn main() {
             .unwrap();
         let paginator = Conversation::paginate_in_label(
             &user_ctx,
-            label.local_id.unwrap(),
+            label.id(),
             page_count,
             PaginatorFilter::default(),
             true,

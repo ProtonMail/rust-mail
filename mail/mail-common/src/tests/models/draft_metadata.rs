@@ -25,7 +25,7 @@ async fn test_messages_with_pending_send() {
                 remote_id: msg_id!(1),
                 local_conversation_id: conversation.local_id,
                 remote_conversation_id: conv_id!(1),
-                local_address_id: address.local_id.unwrap(),
+                local_address_id: address.id(),
                 remote_address_id: address.remote_id.clone().unwrap()
             )
             .with_save(bond)
@@ -35,7 +35,7 @@ async fn test_messages_with_pending_send() {
                 remote_id: msg_id!(2),
                 local_conversation_id: conversation.local_id,
                 remote_conversation_id: conv_id!(1),
-                local_address_id: address.local_id.unwrap(),
+                local_address_id: address.id(),
                 remote_address_id: address.remote_id.unwrap()
             )
             .with_save(bond)
@@ -57,7 +57,7 @@ async fn test_messages_with_pending_send() {
                 .unwrap();
 
             DraftMetadata::builder()
-                .local_message_id(message_1.local_id.unwrap())
+                .local_message_id(message_1.id())
                 .build()
                 .with_save(bond)
                 .await
@@ -72,7 +72,7 @@ async fn test_messages_with_pending_send() {
 
             // Only this one should be returned in `messages_with_pending_send`
             DraftMetadata::builder()
-                .local_message_id(message_2.local_id.unwrap())
+                .local_message_id(message_2.id())
                 .send_action_id(action_2.id.unwrap())
                 .build()
                 .with_save(bond)
@@ -84,7 +84,7 @@ async fn test_messages_with_pending_send() {
                 DraftMetadata::messages_with_pending_send(bond)
                     .await
                     .unwrap(),
-                vec![message_2.local_id.unwrap()]
+                vec![message_2.id()]
             );
             Ok(())
         })

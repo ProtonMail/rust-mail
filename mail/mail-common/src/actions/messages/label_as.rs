@@ -45,10 +45,7 @@ impl LabelAs {
     /// Memorize the data before applying LabelAs action so we can revert modifications later
     async fn memorize_original_data(&mut self, tether: &Tether) -> Result<(), MailActionError> {
         let all_labels = Label::find_by_kind(LabelType::Label, tether).await?;
-        self.data.local_all_label_ids = all_labels
-            .iter()
-            .map(|l| l.local_id.expect("Should be set"))
-            .collect();
+        self.data.local_all_label_ids = all_labels.iter().map(Model::id).collect();
 
         self.save_modifications(tether).await?;
 

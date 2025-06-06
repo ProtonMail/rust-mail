@@ -1,3 +1,4 @@
+use stash::orm::Model;
 mod drafts_common;
 use drafts_common::*;
 use proton_core_api::consts::{General, Mail};
@@ -149,7 +150,7 @@ async fn discard_draft_after_save_marks_message_deleted() {
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
-    Draft::open(&user_ctx, message.local_id.unwrap())
+    Draft::open(&user_ctx, message.id())
         .await
         .expect_err("Should not work");
 }
@@ -236,7 +237,7 @@ async fn discard_draft_by_message_id() {
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
-    Draft::open(&user_ctx, message.local_id.unwrap())
+    Draft::open(&user_ctx, message.id())
         .await
         .expect_err("Should not work");
 }
@@ -435,20 +436,14 @@ async fn discard_reply_draft_after_cancelled_or_failed_save_action_only_deletes_
     let existing_message = existing_message;
 
     // Get the message body - required to reply to draft.
-    Message::message_body(&user_ctx, existing_message.local_id.unwrap())
+    Message::message_body(&user_ctx, existing_message.id())
         .await
         .unwrap();
 
     // Create draft.
-    let mut draft = Draft::reply(
-        &user_ctx,
-        existing_message.local_id.unwrap(),
-        ReplyMode::All,
-        true,
-        None,
-    )
-    .await
-    .unwrap();
+    let mut draft = Draft::reply(&user_ctx, existing_message.id(), ReplyMode::All, true, None)
+        .await
+        .unwrap();
     let action_id = draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -544,20 +539,14 @@ async fn delete_reply_draft_after_cancelled_or_failed_save_action_only_deletes_m
     let existing_message = existing_message;
 
     // Get the message body - required to reply to draft.
-    Message::message_body(&user_ctx, existing_message.local_id.unwrap())
+    Message::message_body(&user_ctx, existing_message.id())
         .await
         .unwrap();
 
     // Create draft.
-    let mut draft = Draft::reply(
-        &user_ctx,
-        existing_message.local_id.unwrap(),
-        ReplyMode::All,
-        true,
-        None,
-    )
-    .await
-    .unwrap();
+    let mut draft = Draft::reply(&user_ctx, existing_message.id(), ReplyMode::All, true, None)
+        .await
+        .unwrap();
     let action_id = draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await

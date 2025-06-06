@@ -1096,10 +1096,7 @@ impl Message {
                     "WHERE local_conversation_id=? AND deleted=0 AND local_label_id IN ({})",
                     label_ids
                 );
-                params.insert(
-                    0,
-                    Box::new(conversation.local_id.unwrap()) as Box<dyn ToSql + Send>,
-                );
+                params.insert(0, Box::new(conversation.id()) as Box<dyn ToSql + Send>);
 
                 let conv_labels = ConversationLabel::find(query, params, bond).await?;
                 let all_mail_stats = SystemLabel::AllMail
@@ -1181,10 +1178,7 @@ impl Message {
                     "WHERE local_conversation_id=? AND deleted=0 AND local_label_id IN ({})",
                     label_ids
                 );
-                params.insert(
-                    0,
-                    Box::new(conversation.local_id.unwrap()) as Box<dyn ToSql + Send>,
-                );
+                params.insert(0, Box::new(conversation.id()) as Box<dyn ToSql + Send>);
 
                 let conv_labels = ConversationLabel::find(query, params, bond).await?;
                 let all_mail_stats = SystemLabel::AllMail
@@ -1273,7 +1267,7 @@ impl Message {
     ///
     async fn on_load(&mut self, tether: &Tether) -> Result<(), StashError> {
         self.attachments_metadata =
-            Attachment::load_message_attachment_metadata(self.local_id.unwrap(), tether).await?;
+            Attachment::load_message_attachment_metadata(self.id(), tether).await?;
 
         let labels = self.all_message_labels(tether).await?;
 
@@ -1320,7 +1314,7 @@ impl Message {
                 ",
                     stash::utils::placeholders(&self.label_ids),
                 ),
-                [self.local_id.unwrap()].to_sql_extend(&*self.label_ids),
+                [self.id()].to_sql_extend(&*self.label_ids),
             )
             .await?;
         } else {
@@ -1363,7 +1357,7 @@ impl Message {
             for id in &local_ids {
                 bond.execute(
                     "INSERT OR IGNORE INTO message_attachments VALUES (?,?)",
-                    params![self.local_id.unwrap(), *id],
+                    params![self.id(), *id],
                 )
                 .await?;
             }
@@ -1827,7 +1821,7 @@ impl Message {
         mut run_tx: impl RunTransaction,
     ) -> Result<DecryptedMessageBody, MailContextError> {
         if let Some(decrypted) =
-            Self::load_decrypted_message_from_cache(self.local_id.unwrap(), run_tx.tether()).await?
+            Self::load_decrypted_message_from_cache(self.id(), run_tx.tether()).await?
         {
             debug!("Found message body in cache.");
             return Ok(decrypted);
@@ -1835,7 +1829,7 @@ impl Message {
         trace!("Message body not in cache. Fetching...");
 
         let Some(remote_id) = self.remote_id.clone() else {
-            return Err(AppError::MessageHasNoRemoteId(self.local_id.unwrap()).into());
+            return Err(AppError::MessageHasNoRemoteId(self.id()).into());
         };
 
         if ctx.session().status().await.is_offline() {
@@ -1861,12 +1855,7 @@ impl Message {
 
         run_tx
             .run_tx(async |tx| {
-                Self::store_decrypted_message_body(
-                    self.local_id.unwrap(),
-                    decrypted.body.clone(),
-                    tx,
-                )
-                .await?;
+                Self::store_decrypted_message_body(self.id(), decrypted.body.clone(), tx).await?;
 
                 Ok(())
             })
@@ -1954,7 +1943,7 @@ impl Message {
                 message.unread = !mark_read;
                 message.save(bond).await?;
                 updated.push(IdPair {
-                    local_message_id: message.local_id.unwrap(),
+                    local_message_id: message.id(),
                     local_conversation_id: message.local_conversation_id.unwrap(),
                 });
                 *conversation_count_changed
@@ -2630,12 +2619,7 @@ impl Message {
 
         tether
             .tx(async |tx| {
-                Self::store_decrypted_message_body(
-                    message.local_id.unwrap(),
-                    decrypted.body.clone(),
-                    tx,
-                )
-                .await
+                Self::store_decrypted_message_body(message.id(), decrypted.body.clone(), tx).await
             })
             .await?;
         Ok((message, decrypted))
@@ -2821,10 +2805,10 @@ impl Message {
     ) -> MailContextResult<LocalMessageId> {
         let tether = &ctx.user_stash().connection();
         if let Some(message) = Self::find_by_remote_id(remote_id.clone(), tether).await? {
-            return Ok(message.local_id.expect("Local ID"));
+            return Ok(message.id());
         }
         let (message, _) = Self::force_sync_message_and_body(ctx, remote_id, false).await?;
-        Ok(message.local_id.expect("Local ID"))
+        Ok(message.id())
     }
 
     /// Set the flags without loading the whole model
@@ -3226,7 +3210,7 @@ impl MessageBodyMetadata {
             bond
                 .execute(
                     "INSERT OR IGNORE INTO message_attachments (local_attachment_id, local_message_id) VALUES (?,?)",
-                    params![attachment.local_id.unwrap(), self.local_message_id],
+                    params![attachment.id(), self.local_message_id],
                 )
                 .await?;
         }
@@ -3340,7 +3324,7 @@ impl MessageLabelStats {
             let label_ids = tether
                 .query_values::<_, LocalLabelId>(
                     "SELECT local_label_id AS value FROM message_labels WHERE local_message_id=?",
-                    params![message.local_id.unwrap()],
+                    params![message.id()],
                 )
                 .await?;
             for label_id in label_ids {

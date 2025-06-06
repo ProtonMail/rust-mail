@@ -4,6 +4,7 @@ use proton_core_common::{
     datatypes::LocalLabelId,
     models::{Label, ModelExtension},
 };
+use stash::orm::Model;
 use stash::stash::Tether;
 use tracing::{debug, trace};
 
@@ -227,7 +228,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
 
         // No entry exist, which means we have not synced this label yet.
         debug!("Paginating for the first time, getting first page");
-        let local_label_id = label.local_id.unwrap();
+        let local_label_id = label.id();
         let remote_label_id = label.remote_id.clone().unwrap();
         let page_size = self.page_size;
 

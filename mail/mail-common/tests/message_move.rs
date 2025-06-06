@@ -78,10 +78,10 @@ async fn move_between_folders() {
         .unwrap()
         .unwrap();
 
-    let mut source_conv = ConversationCounters::new(source.local_id.expect("Local ID"));
+    let mut source_conv = ConversationCounters::new(source.id());
     source_conv.total = 1;
 
-    let mut source_msg = MessageCounters::new(source.local_id.expect("Local ID"));
+    let mut source_msg = MessageCounters::new(source.id());
     source_msg.total = 1;
     tether
         .tx::<_, _, StashError>(async |tx| {
@@ -104,9 +104,9 @@ async fn move_between_folders() {
     // * move message in the other folder
     Message::action_move(
         user_ctx.action_queue(),
-        source.local_id.unwrap(),
-        destination.local_id.unwrap(),
-        vec![message.local_id.unwrap()],
+        source.id(),
+        destination.id(),
+        vec![message.id()],
     )
     .await
     .unwrap();
@@ -177,9 +177,9 @@ async fn move_from_label_does_not_unlabel() {
     // * move message in the other label
     Message::action_move(
         user_ctx.action_queue(),
-        source.local_id.unwrap(),
-        destination.local_id.unwrap(),
-        vec![message.local_id.unwrap()],
+        source.id(),
+        destination.id(),
+        vec![message.id()],
     )
     .await
     .unwrap();
@@ -366,10 +366,10 @@ async fn move_out_of_spam_set_almost_all_mail() {
         .unwrap()
         .unwrap();
 
-    let mut spam_conv = ConversationCounters::new(spam.local_id.expect("Local ID"));
+    let mut spam_conv = ConversationCounters::new(spam.id());
     spam_conv.total = 1;
 
-    let mut spam_msg = MessageCounters::new(spam.local_id.expect("Local ID"));
+    let mut spam_msg = MessageCounters::new(spam.id());
     spam_msg.total = 1;
     tether
         .tx::<_, _, StashError>(async |tx| {
@@ -506,7 +506,7 @@ async fn move_message_also_moves_conversation() {
         user_ctx.action_queue(),
         local_inbox,
         local_spam,
-        vec![message.local_id.unwrap()],
+        vec![message.id()],
     )
     .await
     .unwrap();

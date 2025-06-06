@@ -598,7 +598,7 @@ async fn has_conversation(mailbox: &Mailbox, local_conversation_id: LocalConvers
     let conversations = Conversation::find_first("", vec![], &tether).await.unwrap();
     conversations
         .iter()
-        .any(|c| c.local_id.unwrap() == local_conversation_id)
+        .any(|c| c.id() == local_conversation_id)
 }
 
 fn test_init_params_conversation(

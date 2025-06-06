@@ -897,7 +897,7 @@ impl DraftAttachmentMetadata {
         display_order: usize,
     ) -> Self {
         Self {
-            local_attachment_id: attachment.local_id.unwrap(),
+            local_attachment_id: attachment.id(),
             metadata_id,
             timestamp: Utc::now().timestamp(),
             action_id: None,
@@ -1095,7 +1095,7 @@ impl DraftAttachmentMetadata {
             .iter()
             .enumerate()
             .map(|(order, a)| DraftAttachmentMetadata {
-                local_attachment_id: a.local_id.unwrap(),
+                local_attachment_id: a.id(),
                 metadata_id,
                 timestamp: Utc::now().timestamp(),
                 state: DraftAttachmentUploadState::Uploaded,

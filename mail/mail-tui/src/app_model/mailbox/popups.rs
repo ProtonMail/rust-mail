@@ -13,6 +13,7 @@ use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::text::Span;
 use ratatui::widgets::{Block, Borders, List, ListItem, Tabs};
 use ratatui::{Frame, symbols};
+use stash::orm::Model;
 use std::sync::Arc;
 
 use super::LabelAs;
@@ -40,7 +41,7 @@ impl MoveItemPopup {
     }
     fn selected_label_id(&self) -> Option<LocalLabelId> {
         let index = self.list_state.selected()?;
-        self.folders.get(index).map(|v| v.local_id.unwrap())
+        self.folders.get(index).map(Model::id)
     }
 }
 
@@ -347,7 +348,7 @@ impl crate::app_model::Popup for LabelSelectPopup {
 
                 Command::batch([
                     Command::message(Messages::DismissPopup),
-                    Command::message(Message::SelectLabel(label.label().local_id.unwrap()).into()),
+                    Command::message(Message::SelectLabel(label.label().id()).into()),
                 ])
             }
 

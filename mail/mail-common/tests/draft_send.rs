@@ -794,7 +794,7 @@ async fn cancel_schedule_send_on_non_scheduled_message() {
         .await
         .unwrap();
 
-    let err = Draft::cancel_schedule_send(&user_ctx, message.local_id.unwrap())
+    let err = Draft::cancel_schedule_send(&user_ctx, message.id())
         .await
         .unwrap_err();
     matches!(
@@ -932,13 +932,10 @@ async fn cancel_schedule_send_after_api_request_succeeded() {
         .await
         .unwrap();
 
-    let previous_send_time = Draft::cancel_schedule_send(&user_ctx, message.local_id.unwrap())
+    let previous_send_time = Draft::cancel_schedule_send(&user_ctx, message.id())
         .await
         .unwrap();
-    let message = Message::load(message.local_id.unwrap(), &tether)
-        .await
-        .unwrap()
-        .unwrap();
+    let message = Message::load(message.id(), &tether).await.unwrap().unwrap();
     assert!(message.label_ids.contains(&LabelId::drafts()));
     assert!(message.label_ids.contains(&LabelId::all_drafts()));
     assert!(!message.label_ids.contains(&LabelId::all_scheduled()));
@@ -984,7 +981,7 @@ async fn cancel_schedule_send_on_already_sent_message() {
         .await
         .unwrap();
 
-    let err = Draft::cancel_schedule_send(&user_ctx, message.local_id.unwrap())
+    let err = Draft::cancel_schedule_send(&user_ctx, message.id())
         .await
         .unwrap_err();
     matches!(

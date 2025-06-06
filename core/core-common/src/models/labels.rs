@@ -305,7 +305,7 @@ impl Label {
         let mut label_ids = Vec::with_capacity(labels.len());
         for mut label in labels {
             label.save(tx).await?;
-            let local_id = label.local_id.unwrap();
+            let local_id = label.id();
             label_ids.push(local_id);
         }
 

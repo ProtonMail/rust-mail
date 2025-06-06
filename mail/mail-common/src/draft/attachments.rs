@@ -5,6 +5,7 @@ use crate::models::{
     MetadataId,
 };
 use proton_mail_ids::LocalAttachmentId;
+use stash::orm::Model;
 use stash::stash::{StashError, Tether};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -78,20 +79,20 @@ impl DraftAttachment {
         Ok(attachments
             .into_iter()
             .filter_map(|attachment| {
-                let (state, timestamp) =
-                    if let Some(metadata) = metadata_map.get(&attachment.local_id.unwrap()) {
-                        if metadata.deleted {
-                            return None;
-                        }
-                        (
-                            DraftAttachmentState::from_draft_attachment_metadata(metadata),
-                            metadata.state_timestamp(),
-                        )
-                    } else {
-                        // If there is no metadata entry, it means there are no changes for this attachment
-                        // or it was inherited from a reply/forward.
-                        (DraftAttachmentState::Uploaded, 0)
-                    };
+                let (state, timestamp) = if let Some(metadata) = metadata_map.get(&attachment.id())
+                {
+                    if metadata.deleted {
+                        return None;
+                    }
+                    (
+                        DraftAttachmentState::from_draft_attachment_metadata(metadata),
+                        metadata.state_timestamp(),
+                    )
+                } else {
+                    // If there is no metadata entry, it means there are no changes for this attachment
+                    // or it was inherited from a reply/forward.
+                    (DraftAttachmentState::Uploaded, 0)
+                };
                 Some(DraftAttachment {
                     state,
                     metadata: AttachmentMetadata::from(attachment),

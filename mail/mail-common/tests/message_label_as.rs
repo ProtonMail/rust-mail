@@ -111,30 +111,30 @@ async fn label_as_without_archive() {
                 .await
                 .unwrap()
                 .unwrap();
-            let mut msg_counters1 = MessageCounters::new(label1.local_id.expect("Local ID"));
+            let mut msg_counters1 = MessageCounters::new(label1.id());
             msg_counters1.total = 2;
             msg_counters1.save(tx).await.unwrap();
-            let mut conv_counters1 = ConversationCounters::new(label1.local_id.expect("Local ID"));
+            let mut conv_counters1 = ConversationCounters::new(label1.id());
             conv_counters1.total = 1;
             conv_counters1.save(tx).await.unwrap();
             let label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], tx)
                 .await
                 .unwrap()
                 .unwrap();
-            let mut msg_counters2 = MessageCounters::new(label2.local_id.expect("Local ID"));
+            let mut msg_counters2 = MessageCounters::new(label2.id());
             msg_counters2.total = 2;
             msg_counters2.save(tx).await.unwrap();
-            let mut conv_counters2 = ConversationCounters::new(label2.local_id.expect("Local ID"));
+            let mut conv_counters2 = ConversationCounters::new(label2.id());
             conv_counters2.total = 1;
             conv_counters2.save(tx).await.unwrap();
             let label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], tx)
                 .await
                 .unwrap()
                 .unwrap();
-            let mut msg_counters3 = MessageCounters::new(label3.local_id.expect("Local ID"));
+            let mut msg_counters3 = MessageCounters::new(label3.id());
             msg_counters3.total = 3;
             msg_counters3.save(tx).await.unwrap();
-            let mut conv_counters3 = ConversationCounters::new(label3.local_id.expect("Local ID"));
+            let mut conv_counters3 = ConversationCounters::new(label3.id());
             conv_counters3.total = 1;
             conv_counters3.save(tx).await.unwrap();
             Ok((label1, label2))
@@ -157,15 +157,10 @@ async fn label_as_without_archive() {
     // Action:
     let action_result = Message::action_label_as(
         user_ctx.action_queue(),
-        inbox.local_id.unwrap(),
-        vec![
-            message1.local_id.unwrap(),
-            message2.local_id.unwrap(),
-            message3.local_id.unwrap(),
-            message4.local_id.unwrap(),
-        ],
-        vec![label1.local_id.unwrap()],
-        vec![label2.local_id.unwrap()],
+        inbox.id(),
+        vec![message1.id(), message2.id(), message3.id(), message4.id()],
+        vec![label1.id()],
+        vec![label2.id()],
         false,
     )
     .await
@@ -282,30 +277,30 @@ async fn label_as_with_archive() {
                 .await
                 .unwrap()
                 .unwrap();
-            let mut msg_counters1 = MessageCounters::new(label1.local_id.expect("Local ID"));
+            let mut msg_counters1 = MessageCounters::new(label1.id());
             msg_counters1.total = 1;
             msg_counters1.save(tx).await.unwrap();
-            let mut conv_counters1 = ConversationCounters::new(label1.local_id.expect("Local ID"));
+            let mut conv_counters1 = ConversationCounters::new(label1.id());
             conv_counters1.total = 1;
             conv_counters1.save(tx).await.unwrap();
             let label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], tx)
                 .await
                 .unwrap()
                 .unwrap();
-            let mut msg_counters2 = MessageCounters::new(label2.local_id.expect("Local ID"));
+            let mut msg_counters2 = MessageCounters::new(label2.id());
             msg_counters2.total = 1;
             msg_counters2.save(tx).await.unwrap();
-            let mut conv_counters2 = ConversationCounters::new(label2.local_id.expect("Local ID"));
+            let mut conv_counters2 = ConversationCounters::new(label2.id());
             conv_counters2.total = 1;
             conv_counters2.save(tx).await.unwrap();
             let label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], tx)
                 .await
                 .unwrap()
                 .unwrap();
-            let mut msg_counters3 = MessageCounters::new(label3.local_id.expect("Local ID"));
+            let mut msg_counters3 = MessageCounters::new(label3.id());
             msg_counters3.total = 1;
             msg_counters3.save(tx).await.unwrap();
-            let mut conv_counters3 = ConversationCounters::new(label3.local_id.expect("Local ID"));
+            let mut conv_counters3 = ConversationCounters::new(label3.id());
             conv_counters3.total = 1;
             conv_counters3.save(tx).await.unwrap();
             Ok((label1, label2))
@@ -323,10 +318,10 @@ async fn label_as_with_archive() {
     // Action:
     let action_result = Message::action_label_as(
         user_ctx.action_queue(),
-        inbox.local_id.unwrap(),
-        vec![message1.local_id.unwrap(), message2.local_id.unwrap()],
-        vec![label1.local_id.unwrap()],
-        vec![label2.local_id.unwrap()],
+        inbox.id(),
+        vec![message1.id(), message2.id()],
+        vec![label1.id()],
+        vec![label2.id()],
         true,
     )
     .await
@@ -473,7 +468,7 @@ fn test_mail_settings() -> ApiMailSettings {
 }
 
 async fn msg_counter_for(label: &Label, tx: &Tether) -> MessageCounters {
-    MessageCounters::find_by_id(label.local_id.expect("Local ID"), tx)
+    MessageCounters::find_by_id(label.id(), tx)
         .await
         .expect("failed to load")
         .expect("value not found")

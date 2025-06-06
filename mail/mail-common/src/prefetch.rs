@@ -1,3 +1,4 @@
+use stash::orm::Model;
 use std::{
     sync::{Arc, OnceLock},
     time::Duration,
@@ -221,7 +222,7 @@ impl Prefetch {
         let items = scroller.fetch_more().await?;
 
         for item in items.into_iter().take(PREFETCH_COUNT) {
-            let local_id = item.local_id.unwrap();
+            let local_id = item.id();
             let action = messages::Prefetch::new(local_id);
             if let Err(error) = queue.queue_action(action).await {
                 tracing::error!("Failed to prefetch message {local_id}, {error}",);

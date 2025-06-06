@@ -98,6 +98,7 @@ use proton_mail_common::models::{
     Conversation as RealConversation, MailSettings as RealMailSettings, Message as RealMessage,
 };
 use smart_default::SmartDefault;
+use stash::orm::Model;
 use stash::stash::{StashError, Tether};
 use std::fmt::{Display, Formatter};
 pub use system_label::*;
@@ -1552,7 +1553,7 @@ impl From<RealMessage> for Message {
         let avatar = RealAvatarInformation::from(&value.sender);
         let is_draft = value.is_draft();
         Message {
-            id: value.local_id.unwrap().into(),
+            id: value.id().into(),
             conversation_id: value.local_conversation_id.unwrap().into(),
             address_id: value.local_address_id.into(),
             attachments_metadata: value.get_attachment_metadata().map_vec(),

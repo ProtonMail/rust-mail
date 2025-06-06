@@ -18,7 +18,7 @@ async fn test_address_create() {
     conn.tx::<_, _, StashError>(async |tx| {
         let mut address = create_test_address();
         address.save(tx).await.expect("failed to create address");
-        let db_address = Address::load(address.local_id.unwrap(), tx)
+        let db_address = Address::load(address.id(), tx)
             .await
             .expect("failed to get address")
             .expect("should exist");
@@ -37,7 +37,7 @@ async fn test_address_update() {
         address.save(tx).await.expect("failed to create address");
         let mut address2 = create_test_address_updated();
         address2.save(tx).await.expect("failed to create duplicate");
-        let db_address = Address::load(address.local_id.unwrap(), tx)
+        let db_address = Address::load(address.id(), tx)
             .await
             .expect("failed to get address")
             .expect("should exist");
@@ -60,7 +60,7 @@ async fn test_address_delete() {
         )
         .await
         .expect("failed to delete address");
-        let db_address = Address::load(address.local_id.unwrap(), tx)
+        let db_address = Address::load(address.id(), tx)
             .await
             .expect("failed to get address");
         assert_eq!(db_address, None);

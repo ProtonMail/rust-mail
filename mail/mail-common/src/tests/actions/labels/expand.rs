@@ -24,7 +24,7 @@ async fn test(expand: bool, expanded: bool) -> TestCase {
 
     label.save(&stash).await.expect("failed to save label");
 
-    let local_id = label.local_id.expect("local_id should be set");
+    let local_id = label.id();
     let action = if expand {
         Expand::expand(local_id)
     } else {

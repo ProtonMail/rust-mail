@@ -86,11 +86,8 @@ impl Attachment {
         ctx: &MailUserContext,
         into_transaction: &mut impl RunTransaction,
     ) -> MailContextResult<PathBuf> {
-        if let Some(path) = Self::path_from_cache_and_update_metadata_atomic(
-            self.local_id.unwrap(),
-            into_transaction,
-        )
-        .await?
+        if let Some(path) =
+            Self::path_from_cache_and_update_metadata_atomic(self.id(), into_transaction).await?
         {
             return Ok(path);
         };
@@ -102,17 +99,13 @@ impl Attachment {
         // TODO(orion): Replace this
         into_transaction
             .run_tx(async |tx| {
-                if let Some(path) =
-                    Self::path_from_cache_and_update_metadata(self.local_id.unwrap(), tx).await?
+                if let Some(path) = Self::path_from_cache_and_update_metadata(self.id(), tx).await?
                 {
                     debug!("Someone else won the race");
                     return Ok(path);
                 };
 
-                Ok(
-                    Self::store_in_cache(ctx, &self.filename, self.local_id.unwrap(), data, tx)
-                        .await?,
-                )
+                Ok(Self::store_in_cache(ctx, &self.filename, self.id(), data, tx).await?)
             })
             .await
             .map_err(MailContextError::IntoTransactionError)
@@ -131,11 +124,8 @@ impl Attachment {
         ctx: &MailUserContext,
         into_transaction: &mut impl RunTransaction,
     ) -> MailContextResult<Vec<u8>> {
-        if let Some(path) = Self::path_from_cache_and_update_metadata_atomic(
-            self.local_id.unwrap(),
-            into_transaction,
-        )
-        .await?
+        if let Some(path) =
+            Self::path_from_cache_and_update_metadata_atomic(self.id(), into_transaction).await?
         {
             return Ok(fs::read(path).await?);
         };
@@ -147,20 +137,13 @@ impl Attachment {
         // TODO(orion): Replace this
         into_transaction
             .run_tx(async |tx| {
-                if let Some(path) =
-                    Self::path_from_cache_and_update_metadata(self.local_id.unwrap(), tx).await?
+                if let Some(path) = Self::path_from_cache_and_update_metadata(self.id(), tx).await?
                 {
                     return Ok(fs::read(path).await?);
                 };
 
-                if let Err(e) = Self::store_in_cache(
-                    ctx,
-                    &self.filename,
-                    self.local_id.unwrap(),
-                    data.clone(),
-                    tx,
-                )
-                .await
+                if let Err(e) =
+                    Self::store_in_cache(ctx, &self.filename, self.id(), data.clone(), tx).await
                 {
                     error!("Could not save attachment to disk/database, but will continue: {e:?}");
                 }
@@ -380,7 +363,7 @@ impl Attachment {
 
     /// Fetches and decrypts an attachment from the API.
     pub async fn fetch_data(&self, ctx: &MailUserContext) -> MailContextResult<Vec<u8>> {
-        let attachment_id = self.local_id.expect("Should be set");
+        let attachment_id = self.id();
         let pgp_provider = new_pgp_provider();
         let remote_attachment_id = match &self.attachment_type {
             crate::models::AttachmentType::Remote(Some(id)) => id,
@@ -448,13 +431,13 @@ impl Attachment {
     ) -> MailContextResult<(Vec<u8>, VerificationResult)> {
         // Can't decrypt with the remote address id.
         let Some(remote_address_id) = &self.remote_address_id else {
-            return Err(AppError::AttachmentHasNoAddressId(self.local_id.unwrap()).into());
+            return Err(AppError::AttachmentHasNoAddressId(self.id()).into());
         };
 
         // Sanity check that the key packets are set, there is an expect() in the decryption
         // code that can trigger application crashes.
         if self.key_packets.is_none() {
-            return Err(AppError::AttachmentMissingKeyPackets(self.local_id.unwrap()).into());
+            return Err(AppError::AttachmentMissingKeyPackets(self.id()).into());
         }
 
         let mut result_buffer: Vec<u8> =
