@@ -40,7 +40,7 @@ impl HSLExt for HSL {
             return false;
         }
 
-        if !eq_with_tolerance(l, 1.0) {
+        if !eq_with_tolerance(l, 100.0) {
             return false;
         }
 
@@ -52,14 +52,14 @@ impl HSLExt for HSL {
     }
 
     fn is_achromatic(&self) -> IsColorAchromatic {
-        if self.s <= 0.05 {
+        if self.s <= 5.0 {
             IsColorAchromatic::Achromatic
         } 
-        else if self.l <= 0.01 {
+        else if self.l <= 1.0 {
             // We want to treat very dark colors as achromatic.
             IsColorAchromatic::Achromatic
         }
-        else if self.l >= 0.95 {
+        else if self.l >= 95.0 {
             // We want to treat very light colors as achromatic.
             IsColorAchromatic::Achromatic
         }
@@ -105,7 +105,7 @@ pub fn hsla_for_dark_mode(purpose: ColorPurpose, mut color: HSL) -> RGBA {
             return HSL {
                 h: 0.0,
                 s: 0.0,
-                l: 1.0,
+                l: 100.0,
                 alpha: color.alpha,
             }
             .into();
@@ -113,17 +113,17 @@ pub fn hsla_for_dark_mode(purpose: ColorPurpose, mut color: HSL) -> RGBA {
         (ColorPurpose::Background, Achromatic) => {
             return HSL {
                 h: 230.0,
-                s: 0.12,
-                l: 0.1,
+                s: 12.0,
+                l: 10.0,
                 alpha: color.alpha,
             }
             .into();
         }
         (ColorPurpose::Foreground, Colorful) => {
-            color.l = color.l.max(0.9);
+            color.l = color.l.max(90.0);
         }
         (ColorPurpose::Background, Colorful) => {
-            color.l = color.l.min(0.3);
+            color.l = color.l.min(30.0);
         }
     }
 
