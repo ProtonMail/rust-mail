@@ -9,6 +9,7 @@ use stash::stash::StashError;
 use thiserror::Error;
 use tokio::task::JoinError;
 
+use crate::datatypes::UnixTimestamp;
 use crate::models::{AppProtection, AppSettings, ModelExtension, PinProtection};
 use crate::os::{KeyChainError, StoreInKeyChain};
 use crate::{Context, CoreContextError};
@@ -91,6 +92,7 @@ impl PinCode {
         let mut app_settings = AppSettings::get_or_default(&tether).await;
 
         app_settings.protection = AppProtection::Pin;
+        app_settings.lock_accessed_unixepoch = UnixTimestamp::now();
 
         tether
             .tx(async |bond| -> Result<(), StashError> {

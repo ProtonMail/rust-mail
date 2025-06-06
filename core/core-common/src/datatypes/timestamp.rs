@@ -49,6 +49,16 @@ impl UnixTimestamp {
             MappedLocalTime::Ambiguous(_, _) => unreachable!(),
         }
     }
+
+    #[must_use]
+    pub fn saturating_add(self, rhs: u64) -> Self {
+        Self(self.0.saturating_add(rhs))
+    }
+
+    #[must_use]
+    pub fn saturating_sub(self, rhs: u64) -> Self {
+        Self(self.0.saturating_sub(rhs))
+    }
 }
 
 impl std::fmt::Display for UnixTimestamp {

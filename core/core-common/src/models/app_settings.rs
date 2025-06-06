@@ -63,6 +63,7 @@ impl AppSettings {
     pub fn set_biometrics(&mut self) {
         if let AppProtection::None = self.protection {
             self.protection = AppProtection::Biometrics;
+            self.lock_accessed_unixepoch = UnixTimestamp::now();
         }
     }
 
@@ -113,7 +114,7 @@ impl AppSettings {
     /// Returns an error if the query fails
     ///
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        // // Make sure there will be only one row.
+        // Make sure there will be only one row.
         if let Some(existing) = Self::get(bond).await? {
             self.row_id = existing.row_id;
             self.local_id = SingleEntryId;
@@ -196,12 +197,17 @@ impl ToSql for AppProtection {
 /// How much time till app in the background will require
 /// authentication when going to foreground.
 ///
-#[derive(Debug, Copy, Clone, PartialEq, Default)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ProtectionAutoLock {
-    #[default]
     Always,
     Minutes(u8),
     Never,
+}
+
+impl Default for ProtectionAutoLock {
+    fn default() -> Self {
+        Self::Minutes(15)
+    }
 }
 
 impl ProtectionAutoLock {
@@ -454,8 +460,8 @@ mod tests {
             .await
             .unwrap();
 
-        // Last lock defaults to 0, so it will return `true`
-        assert!(app_settings.should_auto_lock(&mut tether).await.unwrap());
+        // Last lock defaults no longer defaults to 0, so it will return `false`
+        assert!(!app_settings.should_auto_lock(&mut tether).await.unwrap());
         let last_lock_1 = app_settings.lock_accessed_unixepoch;
         // Last lock was updated in last call, it will return `false`
         assert!(!app_settings.should_auto_lock(&mut tether).await.unwrap());
@@ -464,5 +470,21 @@ mod tests {
         let last_lock_2 = app_settings.lock_accessed_unixepoch;
 
         assert_eq!(last_lock_1, last_lock_2);
+
+        // After 10 minutes, it will return `true`
+        // We need to subtract 10 minutes from the last lock time
+        // as we cannot move time backwards
+        app_settings.lock_accessed_unixepoch = last_lock_2.saturating_sub(10 * 60 + 1);
+
+        tether
+            .tx(async |tx| {
+                app_settings.save(tx).await?;
+                Result::<(), StashError>::Ok(())
+            })
+            .await
+            .unwrap();
+
+        // After 10 minutes, it will return `true`
+        assert!(app_settings.should_auto_lock(&mut tether).await.unwrap());
     }
 }
