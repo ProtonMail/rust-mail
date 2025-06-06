@@ -48,11 +48,10 @@ impl Visitor<'_> for ColorVisitor {
 
 #[cfg(test)]
 mod tests {
+    use crate::transforms::styles::colors::parse_css_color;
+
     use super::*;
-    use lightningcss::{
-        printer::PrinterOptions,
-        traits::{Parse, ToCss},
-    };
+    use lightningcss::{printer::PrinterOptions, traits::ToCss};
     use pretty_assertions::assert_eq;
     use test_case::test_case;
 
@@ -101,7 +100,7 @@ mod tests {
         "case 7"
     )]
     fn hsla_for_dark_mode(input: &'static str, purpose: ColorPurpose, expected: &'static str) {
-        let color = CssColor::parse_string(input).unwrap();
+        let color = parse_css_color(input).unwrap();
         let hsl = HSL::try_from(color).unwrap();
 
         let new_rgba = super::hsla_for_dark_mode(purpose, hsl);

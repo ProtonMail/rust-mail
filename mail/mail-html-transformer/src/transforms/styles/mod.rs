@@ -8,7 +8,7 @@ use dark_mode_visitor::{StyleAttributeVisitor, StylesheetVisitor};
 use html5ever::{LocalName, QualName, namespace_url};
 use itertools::Itertools;
 use kuchikiki::{Attribute, Attributes, ElementData, NodeData, NodeDataRef, NodeRef};
-use lightningcss::traits::{Parse, ToCss};
+use lightningcss::traits::ToCss;
 use lightningcss::values::color::{CssColor, HSL};
 use lightningcss::{
     printer::PrinterOptions,
@@ -19,7 +19,7 @@ use lightningcss::{
 };
 use support_level::DarkStyleSupportLevel;
 
-use crate::transforms::styles::colors::{HSLExt, hsla_for_dark_mode};
+use crate::transforms::styles::colors::{HSLExt, hsla_for_dark_mode, parse_css_color};
 
 use super::ColorMode;
 
@@ -410,8 +410,8 @@ fn sanitize_dark_mode_in_deprecated_attributes(
             .collect::<HashMap<_, _>>();
 
         for (attr, original_attr) in attributes {
-            let Ok(color) = CssColor::parse_string(&original_attr) else {
-                tracing::warn!("Could not parse color from deprecated attribute. Skipping...");
+            let Some(color) = parse_css_color(&original_attr) else {
+                tracing::warn!("Skipping...");
                 continue;
             };
             let Ok(color) = HSL::try_from(color) else {

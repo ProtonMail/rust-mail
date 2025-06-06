@@ -322,6 +322,8 @@ background-color:#3e6b2e!important
 
 [data-protonmail-message] font[color="black"] {
  color: #fff;
+ }[data-protonmail-message] table[bgcolor="ffffff"] {
+ background-color: #1c1b24;
  }[data-protonmail-message] td[bgcolor="white"] {
  background-color: #1c1b24;
  }
@@ -339,6 +341,8 @@ background-color:#3e6b2e!important
          <td bgcolor="white">2</td>
          <td bgcolor="white">3</td>
     </tr></tbody></table>
+   <!-- A case where the hex color representation lacks `#` prefix but the browser still understands it -->
+    <table bgcolor="ffffff"><tbody><tr><td>4</td></tr></tbody></table>
   
 
 </body></html>
