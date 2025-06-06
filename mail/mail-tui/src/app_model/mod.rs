@@ -10,7 +10,13 @@ mod watcher;
 
 use crate::CLI_ARGS;
 use crate::app::{Command, Model};
+use crate::app_model::background::BackgroundModel;
+use crate::app_model::contacts::ContactsModel;
+use crate::app_model::context_init::ContextInitModel;
+use crate::app_model::login::LoginModel;
+use crate::app_model::mailbox::MailboxModel;
 use crate::app_model::path_select_popup::PathSelectPopup;
+use crate::app_model::twofa::TwoFaModel;
 use crate::keychain::AppKeyChain;
 use crate::messages::Messages;
 use crate::widgets::ScrollableListState;
@@ -25,14 +31,12 @@ use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, Paragraph, Row, Table, Wrap};
 use session_select::SessionSelectModel;
 use std::backtrace::Backtrace;
-use std::error::Error;
 use std::fs::{File, read_to_string};
 use std::panic::{set_hook, take_hook};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use throbber_widgets_tui::ThrobberState;
-use tokio::runtime::Runtime;
 use tracing::error;
 use tracing::level_filters::LevelFilter;
 use tracing_appender::non_blocking;
@@ -49,17 +53,17 @@ pub enum AppState {
     /// There are existing sessions available, allow user to select one.
     SessionSelect(SessionSelectModel),
     /// Log into a new account.
-    Login(login::LoginModel),
+    Login(LoginModel),
     /// Submit 2FA code.
-    TwoFA(twofa::TwoFaModel),
+    TwoFA(TwoFaModel),
     /// Initialize the user context.
-    ContextInit(context_init::ContextInitModel),
+    ContextInit(ContextInitModel),
     /// Display conversation/messages.
-    Mailbox(mailbox::MailboxModel),
+    Mailbox(MailboxModel),
     /// Display contacts and groups
-    Contacts(contacts::ContactsModel),
+    Contacts(ContactsModel),
     /// Background Execution Simulator
-    Background(background::BackgroundModel),
+    Background(BackgroundModel),
 }
 
 /// Trait to enforce behavior on each of the app states.
@@ -123,7 +127,7 @@ pub struct AppModel {
 }
 
 impl AppModel {
-    pub fn new(runtime: &Runtime) -> Result<Self, Box<dyn Error>> {
+    pub async fn new() -> anyhow::Result<Self> {
         let app_config = &CLI_ARGS;
         let cache_dir = dirs::cache_dir()
             .ok_or(anyhow!("Failed to get cache dir"))?
@@ -151,36 +155,32 @@ impl AppModel {
         tracing::info!("Creating Async Runtime...");
         let mut keychain = AppKeyChain::new()?;
         keychain.init()?;
-        runtime.block_on(async move {
-            let context = MailContext::new(
-                data_dir,
-                user_db_path,
-                core_cache_dir,
-                mail_cache_dir,
-                1 << 25, // 32MiB
-                None,
-                Arc::new(keychain),
-                app_config.api_config(),
-                None, // TODO(jhoulahan): Support HV challenge (at least sms/email)
-                None, // TODO: Add DeviceInfoProvider support for mail-tui.
-                Some(log_file),
-                EventPollMode::Automatic(Duration::from_secs(
-                    CLI_ARGS.event_loop_time.unwrap_or(15),
-                )),
-            )
-            .await?;
+        let context = MailContext::new(
+            data_dir,
+            user_db_path,
+            core_cache_dir,
+            mail_cache_dir,
+            1 << 25, // 32MiB
+            None,
+            Arc::new(keychain),
+            app_config.api_config(),
+            None, // TODO(jhoulahan): Support HV challenge (at least sms/email)
+            None, // TODO: Add DeviceInfoProvider support for mail-tui.
+            Some(log_file),
+            EventPollMode::Automatic(Duration::from_secs(CLI_ARGS.event_loop_time.unwrap_or(15))),
+        )
+        .await?;
 
-            let sessions_model = SessionSelectModel::new(&context).await?;
-            Ok(Self {
-                context,
-                state: AppState::SessionSelect(sessions_model),
-                popup: None,
-                bg_progress: None,
-                tui_logger_state: TuiWidgetState::new(),
-                display_log: false,
-                _log_guard: log_guard,
-                pending_popups: vec![],
-            })
+        let sessions_model = SessionSelectModel::new(&context).await?;
+        Ok(Self {
+            context,
+            state: AppState::SessionSelect(sessions_model),
+            popup: None,
+            bg_progress: None,
+            tui_logger_state: TuiWidgetState::new(),
+            display_log: false,
+            _log_guard: log_guard,
+            pending_popups: vec![],
         })
     }
 
@@ -524,7 +524,7 @@ fn app_tracing_env_filter() -> EnvFilter {
         .expect("Error parsing tracing directives")
 }
 
-fn init_log(log_path: impl AsRef<Path>) -> Result<WorkerGuard, Box<dyn Error>> {
+fn init_log(log_path: impl AsRef<Path>) -> anyhow::Result<WorkerGuard> {
     let log_file = File::create(log_path)?;
     let (appender, guard) = non_blocking(log_file);
     let file_subscriber = tracing_subscriber::fmt::layer()

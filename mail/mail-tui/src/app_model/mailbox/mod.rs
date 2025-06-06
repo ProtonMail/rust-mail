@@ -6,16 +6,17 @@ mod paginator;
 mod popups;
 mod search;
 
+use crate::app::Command;
 use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::conversations::ConversationsState;
 use crate::app_model::mailbox::messages::{DecryptedMessage, MessagesState};
-use crate::app_model::watcher::WatchHandle;
+use crate::app_model::watcher::TuiWatchHandle;
 use crate::messages::Messages;
+use anyhow::Context;
 use chrono::{DateTime, Local};
 use messages::BlockOrUnblock;
 pub use model::MailboxModel;
-use proton_core_common::datatypes::{LocalIdMarker, LocalLabelId};
-use proton_mail_common::Mailbox;
+use proton_core_common::datatypes::{LocalIdMarker, LocalLabelId, Refresh};
 use proton_mail_common::datatypes::{
     ContextualConversation, LocalAttachmentId, LocalConversationId, LocalMessageId,
 };
@@ -23,8 +24,10 @@ use proton_mail_common::draft::attachments::DraftAttachment;
 use proton_mail_common::draft::compose::DraftAddressChangeOutput;
 use proton_mail_common::models::{Attachment, LabelWithCounters, Message as MailMessage};
 use proton_mail_common::proton_mail_api::proton_core_api::services::proton::AddressId;
+use proton_mail_common::{MailUserContext, Mailbox};
 use search::{Search, SearchStatusBar};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 const ITEM_LIMIT: usize = 50;
 
@@ -43,7 +46,7 @@ pub enum Message {
     MessageState(MessageMessage),
     OpenComposer(Composer),
     CloseComposer,
-    NewLabelWatcher(WatchHandle),
+    NewLabelWatcher(TuiWatchHandle),
     Composer(ComposerMessage),
     SearchSubmit(String),
     SearchPopup(Search),
@@ -143,4 +146,31 @@ impl From<Message> for Messages {
     fn from(value: Message) -> Self {
         Self::Mailbox(value)
     }
+}
+
+pub fn refresh(ctx: Arc<MailUserContext>) -> Command<Messages> {
+    Command::batch([
+        Command::message(Messages::DisplayInfo(
+            Some("Event Loop referesh".to_owned()),
+            "Starting full refresh...".to_owned(),
+        )),
+        Command::from_future(async move {
+            ctx.refresh_action(Refresh::All)
+                .await
+                .context("Event loop refresh")?;
+            Ok(())
+        }),
+    ])
+}
+
+pub fn poll_event_loop(ctx: Arc<MailUserContext>) -> Command<Messages> {
+    Command::batch([
+        Command::message(Messages::DisplayInfo(
+            Some("Event Loop poll".to_owned()),
+            "Polling event loop".to_owned(),
+        )),
+        Command::from_future(async move {
+            ctx.force_event_loop_poll().await.context("Event loop poll")
+        }),
+    ])
 }

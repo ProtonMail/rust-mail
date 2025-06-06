@@ -6,7 +6,6 @@ use crate::app_model::mailbox::{ConversationMessage, ITEM_LIMIT, Item, Message};
 use crate::messages::Messages;
 use crate::widgets::{AsTable, CenteredThrobber, ScrollableTable, ScrollableTableState};
 use anyhow::anyhow;
-use futures::FutureExt;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_mail_common::datatypes::folder_banner::{AutoDeleteBanner, AutoDeleteState};
 use proton_mail_common::datatypes::{ContextualConversation, LocalConversationId, ReadFilter};
@@ -60,24 +59,16 @@ impl ConversationsState {
         label_id: LocalLabelId,
         filter: ReadFilter,
     ) -> MailContextResult<(Self, Command<Messages>)> {
-        let context = ctx.clone();
-        let (paginator, command) = Paginator::new(
-            || {
-                async move {
-                    MailScroller::conversations(context.as_weak(), label_id, filter, ITEM_LIMIT)
-                        .await
-                }
-                .boxed()
-            },
-            move |result| match result {
-                Ok(conversation) => ConversationMessage::Refreshed(conversation).into(),
-                Err(e) => {
-                    let e = anyhow!("Conversation Reload Query error: {e}");
-                    tracing::error!("{e:?}");
-                    e.into()
-                }
-            },
-        )
+        let paginator =
+            MailScroller::conversations(ctx.as_weak(), label_id, filter, ITEM_LIMIT).await?;
+        let (paginator, command) = Paginator::new(paginator, |result| match result {
+            Ok(conversation) => ConversationMessage::Refreshed(conversation).into(),
+            Err(e) => {
+                let e = anyhow!("Conversation Reload Query error: {e}");
+                tracing::error!("{e:?}");
+                e.into()
+            }
+        })
         .await?;
 
         let autodelete_banner = ContextualConversation::auto_delete_banner(label_id, &ctx).await?;

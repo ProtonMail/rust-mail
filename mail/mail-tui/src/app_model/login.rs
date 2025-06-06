@@ -1,6 +1,7 @@
 use crate::CLI_ARGS;
 use crate::app::Command;
-use crate::app_model::{AppState, AppStateHandler, context_init, twofa};
+use crate::app_model::twofa::TwoFaModel;
+use crate::app_model::{AppState, AppStateHandler, context_init};
 use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
 use anyhow::anyhow;
@@ -139,9 +140,7 @@ impl AppStateHandler for LoginModel {
             }
             Message::LoginSuccess(mut flow) => {
                 if flow.is_awaiting_2fa() {
-                    Command::message(Messages::SwitchAppState(
-                        twofa::TwoFaModel::new(flow).into(),
-                    ))
+                    Command::message(Messages::SwitchAppState(TwoFaModel::new(flow).into()))
                 } else {
                     let ctx = Arc::clone(ctx);
                     Command::task(async move {

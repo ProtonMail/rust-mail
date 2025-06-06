@@ -1,6 +1,7 @@
 use crate::CLI_ARGS;
 use crate::app::Command;
-use crate::app_model::{AppState, AppStateHandler, YesNoPopup, login, mailbox};
+use crate::app_model::login::LoginModel;
+use crate::app_model::{AppState, AppStateHandler, YesNoPopup, mailbox};
 use crate::messages::Messages;
 use crate::widgets::{ScrollableList, ScrollableListState};
 use anyhow::{Context as _, anyhow};
@@ -190,8 +191,7 @@ impl AppStateHandler for SessionSelectModel {
                                     account.remote_id
                                 );
                                 Command::message(Messages::SwitchAppState(
-                                    login::LoginModel::with_email(account.name_or_addr.clone())
-                                        .into(),
+                                    LoginModel::with_email(account.name_or_addr.clone()).into(),
                                 ))
                             }
                             Some(sess) => {
@@ -230,11 +230,11 @@ impl AppStateHandler for SessionSelectModel {
                 })
             }
             Message::NewAccount => {
-                Command::message(Messages::SwitchAppState(login::LoginModel::new().into()))
+                Command::message(Messages::SwitchAppState(LoginModel::new().into()))
             }
             Message::Init => {
                 if self.accounts.is_empty() {
-                    Command::message(Messages::SwitchAppState(login::LoginModel::new().into()))
+                    Command::message(Messages::SwitchAppState(LoginModel::new().into()))
                 } else {
                     Command::None
                 }

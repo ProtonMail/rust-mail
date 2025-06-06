@@ -7,7 +7,7 @@ edition.workspace = true
 anyhow = { workspace = true }
 chrono = { workspace = true }
 clap = { workspace = true }
-crossterm = "0.28.1"
+crossterm = { version = "0.28.1", features = ["event-stream"] }
 dirs = "5"
 flume = { workspace = true }
 futures = { workspace = true }

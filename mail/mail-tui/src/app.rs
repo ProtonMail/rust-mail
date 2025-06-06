@@ -1,12 +1,16 @@
 use crate::TerminalType;
 use crate::messages::Messages;
+use anyhow::bail;
+use crossterm::event::{Event, EventStream};
 use flume::{Receiver, Sender};
 use futures::future::BoxFuture;
-use ratatui::crossterm::event;
+use futures::{FutureExt as _, StreamExt as _};
 use ratatui::crossterm::event::{KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::prelude::*;
 use std::future::Future;
+use std::time::Duration;
 use tokio::runtime::Runtime;
+use tokio::select;
 use tracing::error;
 
 /// Behavior specification for the model.
@@ -18,7 +22,7 @@ pub trait Model<Message> {
     /// Called when there is an event.
     ///
     /// This method is called once per tick.
-    fn handle_event(&mut self, event: event::Event) -> Command<Message>;
+    fn handle_event(&mut self, event: Event) -> Command<Message>;
     /// Called when a message has been received.
     ///
     /// If a [`Command`] is returned, [`update`] will be called until no more messages are returned.
@@ -32,12 +36,11 @@ pub struct App<M: Model<Message>, Message: Send + 'static> {
     model: M,
     bg_receiver: Receiver<Command<Message>>,
     bg_sender: Sender<Command<Message>>,
-    runtime: Runtime,
     quit: bool,
 }
 
 impl<M: Model<Message> + Sized, Message: Send + 'static> App<M, Message> {
-    pub fn new(runtime: Runtime, model: M) -> Self {
+    pub fn new(model: M) -> Self {
         let (sender, receiver) = flume::unbounded();
 
         Self {
@@ -45,34 +48,85 @@ impl<M: Model<Message> + Sized, Message: Send + 'static> App<M, Message> {
             quit: false,
             bg_receiver: receiver,
             bg_sender: sender,
-            runtime,
         }
     }
 
-    pub fn run(&mut self, mut terminal: TerminalType) -> Result<(), Box<dyn std::error::Error>> {
+    fn handle_event(
+        &mut self,
+        event: Option<Result<Event, impl std::error::Error>>,
+    ) -> anyhow::Result<Command<Message>> {
+        match event {
+            Some(Ok(Event::Key(key)))
+                if (key.kind == KeyEventKind::Press
+                    && key.code == KeyCode::Char('c')
+                    && key.modifiers == KeyModifiers::CONTROL) =>
+            {
+                tracing::info!("Ctrl + C received, exiting...");
+                self.quit();
+                Ok(Command::None)
+            }
+            Some(Ok(event)) => Ok(self.model.handle_event(event)),
+            Some(Err(e)) => {
+                tracing::error!("crossterm error: {e:?}");
+                Ok(Command::None)
+            }
+            None => bail!("crossterm stopped emitting events"),
+        }
+    }
+
+    pub fn run(&mut self, mut terminal: TerminalType, runtime: &Runtime) -> anyhow::Result<()> {
         // Initialize.
         {
             // handle init.
             let message = self.model.on_ready();
-            self.handle_command(message);
+            self.handle_command(message, runtime);
+        }
+
+        let mut reader = EventStream::new();
+
+        // We do it like this to avoid being in a tokio context when handling events or commands.
+        // We want this to make `tokio::spawn` panic
+        // The main idea about having everything sync is to compare the integration of our code
+        // with other tech stacks that are not async.
+        //
+        // This could be simplified if we run this fully async, but we don't want to do that for now.
+        #[allow(clippy::items_after_statements)]
+        enum DoOutsideAsync<Message> {
+            None,
+            HandleEvent(Option<Result<Event, std::io::Error>>),
+            HandleCommand(Command<Message>),
         }
 
         while !self.quit {
-            // draw frame.
             terminal.draw(|frame| self.model.view(frame))?;
+            let msg = runtime.block_on(async {
+                let msg = select! {
+                    event = reader.next().fuse() => {
+                        DoOutsideAsync::HandleEvent(event)
+                    }
+                    msg = self.bg_receiver.recv_async() => {
+                            DoOutsideAsync::HandleCommand(msg?)
+                        }
 
-            // Handle background issued messages.
-            while let Ok(message) = self.bg_receiver.try_recv() {
-                self.handle_command(message);
+                    // This is here to make sure the animations like throbbers can progress if there no inputs or actions.
+                    () = tokio::time::sleep(Duration::from_millis(250)) => {
+                        DoOutsideAsync::None
+                    }
+                };
+                Ok::<_, anyhow::Error>(msg)
+            })?;
+
+            match msg {
+                DoOutsideAsync::None => (),
+                DoOutsideAsync::HandleEvent(event) => {
+                    let command = self.handle_event(event)?;
+                    self.handle_command(command, runtime);
+                }
+                DoOutsideAsync::HandleCommand(command) => {
+                    self.handle_command(command, runtime);
+                }
             }
-
-            // handle input
-            let message = self.poll_events()?;
-
-            // Apply updates from input.
-            self.handle_command(message);
         }
-
         Ok(())
     }
 
@@ -81,36 +135,23 @@ impl<M: Model<Message> + Sized, Message: Send + 'static> App<M, Message> {
         self.quit = true;
     }
 
-    fn poll_events(&mut self) -> Result<Command<Message>, Box<dyn std::error::Error>> {
-        if event::poll(std::time::Duration::from_millis(250))? {
-            let event = event::read()?;
+    fn handle_command(&mut self, command: Command<Message>, runtime: &Runtime) {
+        if command.is_none() {
+            // skip allocation just below
+            return;
+        };
 
-            if let event::Event::Key(key) = &event {
-                if key.kind == KeyEventKind::Press
-                    && key.code == KeyCode::Char('c')
-                    && key.modifiers == KeyModifiers::CONTROL
-                {
-                    self.quit();
-                }
-            }
-
-            return Ok(self.model.handle_event(event));
-        }
-        Ok(Command::None)
-    }
-
-    fn handle_command(&mut self, command: Command<Message>) {
         let mut pending = Vec::with_capacity(4);
         pending.push(command);
         while let Some(command) = pending.pop() {
             match command {
-                Command::None => {}
+                Command::None => (),
                 Command::Message(message) => {
                     pending.push(self.model.update(message));
                 }
                 Command::Task(future) => {
                     let sender = self.bg_sender.clone();
-                    self.runtime.spawn(async move {
+                    runtime.spawn(async move {
                         let command = future.await;
                         if sender.send_async(command).await.is_err() {
                             error!("Failed to send background command");
@@ -119,7 +160,7 @@ impl<M: Model<Message> + Sized, Message: Send + 'static> App<M, Message> {
                 }
                 Command::BackgroundTask(closure) => {
                     let sender = self.bg_sender.clone();
-                    self.runtime.spawn(closure(sender));
+                    runtime.spawn(closure(sender));
                 }
                 Command::Batch(commands) => pending.extend(commands.into_iter().rev()),
             }

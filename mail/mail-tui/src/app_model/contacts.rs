@@ -1,4 +1,4 @@
-use crossterm::event::{Event, KeyCode};
+use crossterm::event::{Event, KeyCode, KeyModifiers};
 use futures::FutureExt;
 use itertools::Itertools;
 use proton_core_common::{
@@ -20,18 +20,19 @@ use ratatui::{
     text::{Line, Span, Text},
     widgets::{Block, Borders, Cell, List, ListItem, Row, Table},
 };
-use stash::stash::{Tether, WatcherHandle};
+use stash::stash::Tether;
 use std::sync::Arc;
 use std::{fmt::Write as _, mem};
 use tracing::error;
 
 use crate::{
     app::Command,
+    app_model::mailbox::{poll_event_loop, refresh},
     messages::Messages,
     widgets::{ScrollableList, ScrollableListState},
 };
 
-use super::{AppState, AppStateHandler, watcher::WatchHandle};
+use super::{AppState, AppStateHandler, watcher::TuiWatchHandle};
 
 const CONTACT_DISPLAY_SIZE: u16 = 100;
 const MIN_LIST_DISPLAY_SIZE: u16 = 20;
@@ -323,7 +324,7 @@ pub struct ContactsModel {
     contacts: Vec<FlatContact>,
     open_contact: OpenedContactState,
     list_state: ScrollableListState,
-    watcher: Option<WatchHandle>,
+    watcher: Option<TuiWatchHandle>,
 }
 
 impl ContactsModel {
@@ -420,25 +421,26 @@ impl ContactsModel {
     ///
     /// Might result an error if it was unable to subscribe to the database
     ///
-    fn init_watch(ctx: Arc<MailUserContext>) -> anyhow::Result<(WatchHandle, Command<Messages>)> {
+    fn init_watch(
+        ctx: Arc<MailUserContext>,
+    ) -> anyhow::Result<(TuiWatchHandle, Command<Messages>)> {
         let stash = ctx.user_stash();
-        let WatcherHandle {
-            handle, receiver, ..
-        } = stash.subscribe_to(|sender| Box::new(ContactListWatcher::new(sender)))?;
-        let (watcher, background_command) = WatchHandle::new(receiver, handle, move |()| {
-            let tether = ctx.user_stash().connection();
-            async move {
-                Some(match Self::load_contacts(&tether).await {
-                    Ok(list) => Message::LoadContacts(list).into(),
-                    Err(e) => {
-                        let e = anyhow::anyhow!("Contact list query error: {e}");
-                        error!("{e:?}");
-                        e.into()
-                    }
-                })
-            }
-            .boxed()
-        });
+        let handle = stash.subscribe_to(|sender| Box::new(ContactListWatcher::new(sender)))?;
+        let (watcher, background_command) =
+            TuiWatchHandle::from_watcher_handle(handle, move || {
+                let tether = ctx.user_stash().connection();
+                async move {
+                    Some(match Self::load_contacts(&tether).await {
+                        Ok(list) => Message::LoadContacts(list).into(),
+                        Err(e) => {
+                            let e = anyhow::anyhow!("Contact list query error: {e}");
+                            error!("{e:?}");
+                            e.into()
+                        }
+                    })
+                }
+                .boxed()
+            });
 
         Ok((watcher, background_command))
     }
@@ -494,6 +496,10 @@ impl AppStateHandler for ContactsModel {
                     ])
                 }
             }
+            KeyCode::F(5) if key.modifiers.contains(KeyModifiers::SHIFT) => {
+                refresh(self.ctx.as_arc())
+            }
+            KeyCode::F(5) => poll_event_loop(self.ctx.as_arc()),
             _ => Command::None,
         }
     }
@@ -605,6 +611,8 @@ impl AppStateHandler for ContactsModel {
             ("j, ▼", "Go down"),
             ("enter", "See details for a contact"),
             ("esc", "Close the contact"),
+            ("Shift+F5", "Reload all data from server"),
+            ("F5", "Refresh (Force event loop poll)"),
         ]
     }
 
