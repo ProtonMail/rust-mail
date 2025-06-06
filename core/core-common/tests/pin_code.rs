@@ -116,8 +116,8 @@ async fn validation_max_attempts() {
 
     assert_eq!(pin_metadata.attempts, 0);
 
-    // Lets pretend we reached the limit
-    pin_metadata.attempts = PinCode::MAX_ATTEMPTS;
+    // Lets pretend we have one attempt left
+    pin_metadata.attempts = PinCode::MAX_ATTEMPTS - 1;
     pin_metadata.last_access_unixepoch = 0;
 
     tether
@@ -133,7 +133,7 @@ async fn validation_max_attempts() {
 
     let mut pin_metadata = PinProtection::get(&tether).await.unwrap().unwrap();
 
-    assert_eq!(pin_metadata.attempts, 11);
+    assert_eq!(pin_metadata.attempts, 10);
 
     pin_metadata.last_access_reset(&mut tether).await.unwrap();
 
@@ -148,7 +148,7 @@ async fn validation_max_attempts() {
 
     let pin_metadata = PinProtection::get(&tether).await.unwrap().unwrap();
 
-    assert_eq!(pin_metadata.attempts, 12);
+    assert_eq!(pin_metadata.attempts, 11);
 }
 
 trait PinProtectionExt {
