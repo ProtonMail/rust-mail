@@ -15,6 +15,7 @@ mod user_context;
 pub mod utils;
 pub mod watch_handle;
 
+pub mod device;
 #[cfg(test)]
 mod tests;
 pub mod validation;

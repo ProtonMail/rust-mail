@@ -1,4 +1,5 @@
 use crate::core::datatypes::{ApiConfig, AppProtection, AppSettings, AppSettingsDiff, Id};
+use crate::core::device::{DeviceInfoProviderWrap, DynDeviceInfoProvider};
 use crate::core::verification::{ChallengeNotifierWrap, DynChallengeNotifier};
 use crate::core::{FFIKeyChain, StoredAccountState, StoredSession, StoredSessionState};
 use crate::core::{OSKeyChain, StoredAccount};
@@ -87,11 +88,13 @@ pub fn create_mail_session(
     params: MailSessionParams,
     key_chain: Box<dyn OSKeyChain>,
     hv_notifier: Option<DynChallengeNotifier>,
+    device_info_provider: Option<DynDeviceInfoProvider>,
 ) -> Result<Arc<MailSession>, UserContextError> {
     async_runtime()
-        .block_on(
-            async move { create_mail_session_inner(params, None, key_chain, hv_notifier).await },
-        )
+        .block_on(async move {
+            create_mail_session_inner(params, None, key_chain, hv_notifier, device_info_provider)
+                .await
+        })
         .map_err(UserContextError::from)
 }
 
@@ -126,7 +129,9 @@ pub fn create_mail_ios_extension_session(
 ) -> Result<Arc<MailSession>, UserContextError> {
     // This number is arbitrary
     async_runtime_slim()
-        .block_on(async move { create_mail_session_inner(params, Some(4), key_chain, None).await })
+        .block_on(
+            async move { create_mail_session_inner(params, Some(4), key_chain, None, None).await },
+        )
         .map_err(UserContextError::from)
 }
 
@@ -152,6 +157,7 @@ async fn create_mail_session_inner(
     connection_pool_size: Option<u32>,
     key_chain: Box<dyn OSKeyChain>,
     hv_notifier: Option<DynChallengeNotifier>,
+    device_info_provider: Option<DynDeviceInfoProvider>,
 ) -> Result<Arc<MailSession>, RealProtonMailError> {
     let mut log_path = PathBuf::from(params.log_dir);
     std::fs::create_dir_all(&log_path)?;
@@ -196,6 +202,7 @@ async fn create_mail_session_inner(
         .map_err(|_| Unexpected::Config)?;
 
     let hv_notifier = hv_notifier.map(ChallengeNotifierWrap::wrap);
+    let device_info_provider = device_info_provider.map(DeviceInfoProviderWrap::wrap);
 
     debug!("Creating Context");
     let mail_ctx = MailContext::new(
@@ -208,6 +215,7 @@ async fn create_mail_session_inner(
         Arc::new(key_chain),
         api_env_config,
         hv_notifier,
+        device_info_provider,
         Some(log_path),
         EventPollMode::Automatic(Duration::from_secs(30)),
     )
