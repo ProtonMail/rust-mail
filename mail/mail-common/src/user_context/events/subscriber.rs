@@ -18,6 +18,7 @@ use proton_action_queue::queue::{ActionError as QueueActionError, QueuedActionOu
 use proton_core_common::datatypes::{Refresh, SystemLabel};
 use proton_core_common::models::{Label, ModelExtension};
 use proton_event_loop::subscriber::{Subscriber, SubscriberError};
+use stash::orm::Model;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use tracing::{debug, error, info, warn};
