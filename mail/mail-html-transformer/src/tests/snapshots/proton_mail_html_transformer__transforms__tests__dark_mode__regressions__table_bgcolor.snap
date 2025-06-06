@@ -317,15 +317,15 @@ img {
 </style><style style="text/css">
                   @media ( prefers-color-scheme: dark ) {
                       
-[data-protonmail-message] table[class="container float-center"][style*="background:#fff"] {
- background:#1c1b24!important
+[data-protonmail-message] table[class="container float-center"][style*="background: #fff"] {
+ background: #1c1b24 !important
  }
 
                   }
                 </style></head>
 <body>
 
-<table align="center" class="container float-center" role="presentation" style="margin:0 auto;background:#fff;border-collapse:collapse;border-spacing:0;float:none;margin:0 auto;margin-left:auto;margin-right:auto;padding:0;text-align:center;vertical-align:top;width:700px" data-proton-original-style="Margin:0 auto;background:#fff;border-collapse:collapse;border-spacing:0;float:none;margin:0 auto;margin-left:auto;margin-right:auto;padding:0;text-align:center;vertical-align:top;width:700px">
+<table align="center" class="container float-center" role="presentation" style="margin: 0 auto; background: #fff; border-collapse: collapse; border-spacing: 0; float: none; margin: 0 auto; margin-left: auto; margin-right: auto; padding: 0; text-align: center; vertical-align: top; width: 700px" data-proton-original-style="Margin:0 auto;background:#fff;border-collapse:collapse;border-spacing:0;float:none;margin:0 auto;margin-left:auto;margin-right:auto;padding:0;text-align:center;vertical-align:top;width:700px">
     <tbody><tr><td>Hi</td>
 </tr></tbody></table>
 

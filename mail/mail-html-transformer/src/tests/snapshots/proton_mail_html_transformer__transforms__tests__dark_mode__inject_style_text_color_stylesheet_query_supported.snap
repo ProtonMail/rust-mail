@@ -324,9 +324,9 @@ img {
 </style><style style="text/css">
                   @media ( prefers-color-scheme: dark ) {
                       [data-protonmail-message] .main {
-color:#fff!important
+color: #fff !important
  }html[data-protonmail-message] {
-background-color:#1c1b24!important
+background-color: #1c1b24 !important
  }
 
 

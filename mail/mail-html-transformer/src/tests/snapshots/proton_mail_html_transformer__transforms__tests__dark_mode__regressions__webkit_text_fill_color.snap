@@ -321,7 +321,7 @@ img {
 </style><style style="text/css">
                   @media ( prefers-color-scheme: dark ) {
                       [data-protonmail-message] h1 {
--webkit-text-fill-color:#fff!important
+-webkit-text-fill-color: #fff !important
  }
 
 

@@ -1,6 +1,4 @@
-use lightningcss::{
-    values::color::{HSL, RGBA, SRGBLinear, XYZd65},
-};
+use lightningcss::values::color::{HSL, RGBA, SRGBLinear, XYZd65};
 
 use crate::transforms::styles::{ColorPurpose, DARK_MODE_BACKGROUND_COLOR};
 
@@ -53,16 +51,13 @@ impl HSLExt for HSL {
     fn is_achromatic(&self) -> IsColorAchromatic {
         if self.s <= 5.0 {
             IsColorAchromatic::Achromatic
-        } 
-        else if self.l <= 1.0 {
+        } else if self.l <= 1.0 {
             // We want to treat very dark colors as achromatic.
             IsColorAchromatic::Achromatic
-        }
-        else if self.l >= 95.0 {
+        } else if self.l >= 95.0 {
             // We want to treat very light colors as achromatic.
             IsColorAchromatic::Achromatic
-        }
-        else {
+        } else {
             IsColorAchromatic::Colorful
         }
     }
@@ -132,7 +127,11 @@ pub fn hsla_for_dark_mode(purpose: ColorPurpose, mut color: HSL) -> RGBA {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lightningcss::{printer::PrinterOptions, traits::{Parse, ToCss}, values::color::CssColor};
+    use lightningcss::{
+        printer::PrinterOptions,
+        traits::{Parse, ToCss},
+        values::color::CssColor,
+    };
     use pretty_assertions::assert_eq;
     use test_case::test_case;
 

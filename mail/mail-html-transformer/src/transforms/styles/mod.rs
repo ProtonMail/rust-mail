@@ -282,12 +282,7 @@ fn sanitize_dark_mode_in_stylesheets(document: &NodeRef, root_selector: &str) ->
             }
         };
 
-        sanitize_dark_mode_in_stylesheet(
-            stylesheet,
-            &mut overrides,
-            printer_options(),
-            root_selector.to_owned(),
-        );
+        sanitize_dark_mode_in_stylesheet(stylesheet, &mut overrides, root_selector.to_owned());
     }
 
     if overrides.is_empty() {
@@ -338,12 +333,7 @@ fn sanitize_dark_mode_in_inline_attributes(
             }
         };
 
-        sanitize_dark_mode_in_inline_attribute(
-            style_attribute,
-            tag,
-            &mut overrides,
-            printer_options(),
-        );
+        sanitize_dark_mode_in_inline_attribute(style_attribute, tag, &mut overrides);
     }
 
     if overrides.is_empty() {
@@ -439,7 +429,7 @@ fn sanitize_dark_mode_in_deprecated_attributes(
             let hsla = hsla_for_dark_mode(purpose, color);
 
             let new_color = CssColor::RGBA(hsla);
-            let Ok(new_color) = new_color.to_css_string(printer_options()) else {
+            let Ok(new_color) = new_color.to_css_string(PrinterOptions::default()) else {
                 tracing::warn!("Could not convert color to CSS string. Skipping...");
                 continue;
             };
@@ -473,20 +463,12 @@ fn sanitize_dark_mode_in_deprecated_attributes(
     Some(style)
 }
 
-fn printer_options() -> PrinterOptions<'static> {
-    PrinterOptions {
-        minify: true,
-        ..Default::default()
-    }
-}
-
 fn sanitize_dark_mode_in_stylesheet(
     mut stylesheet: StyleSheet<'_, '_>,
     overrides: &mut StylesheetOverrides,
-    printer_options: PrinterOptions<'static>,
     root_selector: String,
 ) {
-    let mut visitor = StylesheetVisitor::new(printer_options, root_selector);
+    let mut visitor = StylesheetVisitor::new(root_selector);
     _ = stylesheet.visit(&mut visitor); // Error is infallible anyway
 
     let visitor_overrides = visitor.overrides();
@@ -519,9 +501,8 @@ fn sanitize_dark_mode_in_inline_attribute(
     mut style_attribute: StyleAttribute<'_>,
     node: NodeDataRef<ElementData>,
     overrides: &mut InlineStyleOverrides,
-    printer_options: PrinterOptions<'static>,
 ) {
-    let mut visitor = StyleAttributeVisitor::new(printer_options);
+    let mut visitor = StyleAttributeVisitor::default();
 
     _ = style_attribute.visit(&mut visitor);
 
@@ -530,7 +511,7 @@ fn sanitize_dark_mode_in_inline_attribute(
         return;
     }
 
-    let style = match style_attribute.to_css(printer_options) {
+    let style = match style_attribute.to_css(PrinterOptions::default()) {
         Ok(style) => style,
         Err(err) => {
             tracing::error!("Could not write style attribute: {err:?}");
@@ -679,8 +660,7 @@ mod tests {
         "
         );
 
-        let printer_options = PrinterOptions::default();
-        let mut visitor = StylesheetVisitor::new(printer_options, "#protonmail-message".to_owned());
+        let mut visitor = StylesheetVisitor::new("#protonmail-message".to_owned());
         let mut stylesheet = StyleSheet::parse(rule, ParserOptions::default()).unwrap();
         stylesheet.visit(&mut visitor).unwrap();
 
@@ -698,7 +678,7 @@ mod tests {
 
         assert_eq!(expected, visitor.overrides());
 
-        let stylesheet = stylesheet.to_css(printer_options).unwrap().code;
+        let stylesheet = stylesheet.to_css(PrinterOptions::default()).unwrap().code;
 
         // Make sure we did not remove `!important` from stylesheet.
         assert_eq!(
@@ -820,7 +800,7 @@ mod tests {
         let rule = "color: black !important; background-color: white";
 
         let printer_options = PrinterOptions::default();
-        let mut visitor = StyleAttributeVisitor::new(printer_options);
+        let mut visitor = StyleAttributeVisitor::default();
         let mut attribute = StyleAttribute::parse(rule, ParserOptions::default()).unwrap();
         attribute.visit(&mut visitor).unwrap();
 

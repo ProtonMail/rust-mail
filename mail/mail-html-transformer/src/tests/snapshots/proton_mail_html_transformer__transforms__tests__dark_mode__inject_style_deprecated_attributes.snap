@@ -317,7 +317,7 @@ img {
 </style><style style="text/css">
                   @media ( prefers-color-scheme: dark ) {
                       [data-protonmail-message] span {
-background-color:#3e6b2e!important
+background-color: #3e6b2e !important
  }
 
 [data-protonmail-message] font[color="black"] {

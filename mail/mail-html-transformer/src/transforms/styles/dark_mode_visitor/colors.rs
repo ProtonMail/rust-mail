@@ -45,4 +45,3 @@ impl Visitor<'_> for ColorVisitor {
         Ok(())
     }
 }
-

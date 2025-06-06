@@ -7,11 +7,9 @@ use lightningcss::{
     visit_types,
     visitor::{Visit, Visitor},
 };
-use smart_default::SmartDefault;
 
 use crate::transforms::styles::{
     Selector, StylesheetOverrides, dark_mode_visitor::declaration_block::ShouldRemoveImportant,
-    printer_options,
 };
 
 use super::declaration_block::{DeclarationBlockVisitor, ShouldStoreOverridenProps};
@@ -21,7 +19,7 @@ use super::declaration_block::{DeclarationBlockVisitor, ShouldStoreOverridenProp
 /// It modifies original stylesheet by removing `!important` flag if necessary.
 /// The result of the dark-mode theming is available under [`StylesheetVisitor::overrides`] method.
 ///
-#[derive(SmartDefault, Clone, Debug)]
+#[derive(Default, Clone, Debug)]
 pub(crate) struct StylesheetVisitor {
     overrides: StylesheetOverrides,
 
@@ -29,14 +27,12 @@ pub(crate) struct StylesheetVisitor {
 
     root_selector: String,
 
-    #[default(printer_options())]
     pub printer_options: PrinterOptions<'static>,
 }
 impl StylesheetVisitor {
-    pub fn new(printer_options: PrinterOptions<'static>, root_selector: String) -> Self {
+    pub fn new(root_selector: String) -> Self {
         Self {
             root_selector,
-            printer_options,
             ..Default::default()
         }
     }

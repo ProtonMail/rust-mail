@@ -7,10 +7,10 @@ use lightningcss::{
     visit_types,
     visitor::{Visit, Visitor},
 };
-use smart_default::SmartDefault;
 
 use crate::transforms::styles::{
-    colors::HSLExt, printer_options, ColorPurpose, NewProperty, OldProperty, PropertyWithPurpose, DARK_MODE_BACKGROUND_COLOR
+    ColorPurpose, DARK_MODE_BACKGROUND_COLOR, NewProperty, OldProperty, PropertyWithPurpose,
+    colors::HSLExt,
 };
 
 use super::properties::PropertiesVisitor;
@@ -45,7 +45,7 @@ pub enum ShouldRemoveImportant {
 /// It modifies original stylesheet by removing `!important` flag if necessary.
 /// The result of the dark-mode theming is available under [`StylesheetVisitor::overrides`] method.
 ///
-#[derive(SmartDefault, Clone, Debug)]
+#[derive(Default, Clone, Debug)]
 pub(crate) struct DeclarationBlockVisitor {
     overriden: Vec<OldProperty>,
 
@@ -55,7 +55,6 @@ pub(crate) struct DeclarationBlockVisitor {
 
     should_remove_important: ShouldRemoveImportant,
 
-    #[default(printer_options())]
     pub printer_options: PrinterOptions<'static>,
 }
 
@@ -198,8 +197,7 @@ impl DeclarationBlockVisitor {
 
     fn has_good_contrast_against_background(bg: &Property<'_>, fg: &Property<'_>) -> bool {
         Self::has_good_contrast_against_color(
-            Self::extract_color_from_prop(bg)
-                .unwrap_or_else(|| DARK_MODE_BACKGROUND_COLOR.into()),
+            Self::extract_color_from_prop(bg).unwrap_or_else(|| DARK_MODE_BACKGROUND_COLOR.into()),
             fg,
         )
     }

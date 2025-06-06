@@ -323,9 +323,9 @@ img {
 }
 </style><style style="text/css">
                   @media ( prefers-color-scheme: dark ) {
-                      @media (width<=600px) {
+                      @media (width <= 600px) {
 [data-protonmail-message] body {
-color:#fff!important
+color: #fff !important
  }
  }
 
