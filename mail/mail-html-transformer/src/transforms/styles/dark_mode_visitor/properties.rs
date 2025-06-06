@@ -46,6 +46,7 @@ const FOREGROUND_COLOR_RELATED_PROPERTIES: &[PropertyId] = &[
     PropertyId::TextDecorationColor(VendorPrefix::all()),
     PropertyId::TextEmphasis(VendorPrefix::all()), // Shorthand
     PropertyId::TextEmphasisColor(VendorPrefix::all()),
+    PropertyId::WebKitTextFillColor(VendorPrefix::WebKit),
 ];
 
 /// Goes through the list of properties, checks if the color is matching color scheme.

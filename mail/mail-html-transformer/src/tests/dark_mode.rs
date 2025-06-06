@@ -225,4 +225,18 @@ mod regressions {
         );
         insta::assert_snapshot!(html.to_string());
     }
+
+    #[test]
+    fn webkit_text_fill_color() {
+        let html = include_str!("../../tests/htmls/styles/regressions/webkit-text-fill-color.html");
+        let mut html = Transformer::new(html);
+        html.inject_dark_mode(
+            "",
+            ColorMode::DarkMode,
+            BrowserCapabilities {
+                supports_dark_mode_via_media_query: true,
+            },
+        );
+        insta::assert_snapshot!(html.to_string());
+    }
 }
