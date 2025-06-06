@@ -1,6 +1,6 @@
 use crate as proton_mail_common;
 use crate::models::DraftMetadata;
-use proton_action_queue::action::{Action, DefaultVersionConverter, Type};
+use proton_action_queue::action::{Action, ActionDependencyKeys, DefaultVersionConverter, Type};
 use proton_action_queue::db::StoredAction;
 use proton_action_queue::tests::common::{DefaultError, NoopActionHandler};
 use proton_core_common::models::ModelExtension;
@@ -41,14 +41,20 @@ async fn test_messages_with_pending_send() {
             .with_save(bond)
             .await
             .unwrap();
-            let action_1 = StoredAction::without_state::<SuccessAction>(Default::default())
-                .with_save(bond)
-                .await
-                .unwrap();
-            let action_2 = StoredAction::without_state::<SuccessAction>(Default::default())
-                .with_save(bond)
-                .await
-                .unwrap();
+            let action_1 = StoredAction::without_state::<SuccessAction>(
+                ActionDependencyKeys::default(),
+                Default::default(),
+            )
+            .with_save(bond)
+            .await
+            .unwrap();
+            let action_2 = StoredAction::without_state::<SuccessAction>(
+                ActionDependencyKeys::default(),
+                Default::default(),
+            )
+            .with_save(bond)
+            .await
+            .unwrap();
 
             DraftMetadata::builder()
                 .build()

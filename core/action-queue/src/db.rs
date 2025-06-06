@@ -3,7 +3,10 @@
 mod tests;
 
 use crate::action;
-use crate::action::{Action, ActionId, Metadata, Priority, Resources, WriterGuardError};
+use crate::action::{
+    Action, ActionDependencyKey, ActionDependencyKeys, ActionId, Metadata, Priority, Resources,
+    WriterGuardError,
+};
 use chrono::{DateTime, Utc};
 use include_dir::{Dir, include_dir};
 use indoc::indoc;
@@ -25,7 +28,7 @@ use tracing::{debug, error};
 
 pub(crate) const DEFAULT_LOCK_TIMEOUT: Duration = Duration::from_secs(60);
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 #[repr(u8)]
 pub enum DependencyType {
     /// Direct dependencies result in the dependee being cancelled
@@ -50,7 +53,7 @@ impl FromSql for DependencyType {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, DbRecord)]
+#[derive(Debug, Clone, Eq, PartialEq, DbRecord, Hash)]
 pub struct ActionDependency {
     #[DbField]
     pub dependency_id: ActionId,
@@ -123,6 +126,9 @@ pub struct StoredAction {
     #[DbField]
     pub version: u32,
 
+    // Note this field is only used for storage into the db.
+    pub dependency_keys: ActionDependencyKeys,
+
     #[allow(clippy::doc_markdown)]
     /// The internal row ID of the record in the database. This is assigned by
     /// SQLite, and is used as a consistent identifier for records when
@@ -139,16 +145,27 @@ impl StoredAction {
         metadata: Metadata,
     ) -> Result<Self, rmp_serde::encode::Error> {
         let serialized_state = action::serialize(action)?;
-        Ok(Self::new_impl::<T>(serialized_state, metadata))
+        Ok(Self::new_impl::<T>(
+            serialized_state,
+            action.dependency_keys(),
+            metadata,
+        ))
     }
 
     #[must_use]
     /// Create a stored action without any state and the given `metadata`.
-    pub fn without_state<T: Action>(metadata: Metadata) -> Self {
-        Self::new_impl::<T>(vec![], metadata)
+    pub fn without_state<T: Action>(
+        dependency_keys: ActionDependencyKeys,
+        metadata: Metadata,
+    ) -> Self {
+        Self::new_impl::<T>(vec![], dependency_keys, metadata)
     }
 
-    fn new_impl<T: Action>(state: Vec<u8>, metadata: Metadata) -> Self {
+    fn new_impl<T: Action>(
+        state: Vec<u8>,
+        dependency_keys: ActionDependencyKeys,
+        metadata: Metadata,
+    ) -> Self {
         let delayed = metadata
             .delay
             .map_or(metadata.created, |delay| metadata.created.add(delay));
@@ -164,6 +181,7 @@ impl StoredAction {
             state,
             version: T::VERSION,
             action_group: metadata.group_override.unwrap_or(T::GROUP).to_string(),
+            dependency_keys,
             row_id: None,
         }
     }
@@ -304,15 +322,40 @@ impl StoredAction {
     ///
     /// See [`Model::save()`].
     ///
+    #[allow(clippy::missing_panics_doc)]
     pub async fn on_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        // Create dependencies.
+        // Resolve dependencies from keys
+        let direct_dependencies = ActionDependencyKeysTable::resolve_dependency_keys(
+            self.dependency_keys.direct.clone(),
+            bond,
+        )
+        .await?
+        .into_iter()
+        .map(ActionDependency::direct)
+        .collect::<Vec<_>>();
+        let sequential_dependencies = ActionDependencyKeysTable::resolve_dependency_keys(
+            self.dependency_keys.sequential.clone(),
+            bond,
+        )
+        .await?
+        .into_iter()
+        .map(ActionDependency::sequential)
+        .collect::<Vec<_>>();
 
-        if !self.dependencies.is_empty() {
+        let dependency_set: HashSet<ActionDependency> = self
+            .dependencies
+            .iter()
+            .chain(sequential_dependencies.iter())
+            .chain(direct_dependencies.iter())
+            .cloned()
+            .collect();
+
+        // Create dependencies.
+        if !dependency_set.is_empty() {
             // Insert or ignore doesn't take into account that the foreign key does not exist.
             // This is an SQLite limitation. So we need to manually check this before inserts.
             #[allow(trivial_casts)]
-            let parameters = self
-                .dependencies
+            let parameters = dependency_set
                 .iter()
                 .map(|dep| dep.dependency_id)
                 .bridge_sql();
@@ -328,7 +371,7 @@ impl StoredAction {
                 .await?,
             );
 
-            for dep in &self.dependencies {
+            for dep in dependency_set {
                 if existing_action_ids.contains(&dep.dependency_id) {
                     bond.execute(
                         "INSERT OR IGNORE INTO action_queue_dependencies (action_id, dependency_id, dependency_type) VALUES (?,?, ?)",
@@ -343,6 +386,19 @@ impl StoredAction {
         bond.execute(
             "INSERT OR REPLACE INTO action_queue_resources VALUES (?,?)",
             params![self.id, self.resources.clone()],
+        )
+        .await?;
+
+        // Update direct dependency keys
+        ActionDependencyKeysTable::store_dependency_keys(
+            self.dependency_keys
+                .direct
+                .iter()
+                .chain(self.dependency_keys.record.iter())
+                .cloned()
+                .collect(),
+            self.id(),
+            bond,
         )
         .await?;
 
@@ -382,6 +438,18 @@ impl StoredAction {
         tether
             .query::<_, ActionDependency>(
                 "SELECT * FROM action_queue_dependencies WHERE dependency_id = ?",
+                params![id],
+            )
+            .await
+    }
+
+    pub async fn all_dependencies(
+        tether: &Tether,
+        id: ActionId,
+    ) -> Result<Vec<ActionDependency>, StashError> {
+        tether
+            .query::<_, ActionDependency>(
+                "SELECT * FROM action_queue_dependencies WHERE action_id = ?",
                 params![id],
             )
             .await
@@ -722,3 +790,46 @@ pub async fn create_tables(conn: &mut Tether) -> Result<(), MigratorError> {
 }
 
 const ACTION_VERSION_TABLE_NAME: &str = "action_queue_version";
+
+pub struct ActionDependencyKeysTable {}
+
+const KEY_DEPENDENCIES_TABLE_NAME: &str = "action_queue_key_deps";
+impl ActionDependencyKeysTable {
+    pub async fn resolve_dependency_keys(
+        keys: Vec<ActionDependencyKey>,
+        tether: &Tether,
+    ) -> Result<Vec<ActionId>, StashError> {
+        let parameters = keys.into_iter().bridge_sql();
+        if parameters.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let placeholders = placeholders(&parameters);
+        tether
+            .query_values::<_, ActionId>(
+                format!(
+                    "SELECT DISTINCT action_id AS value FROM {KEY_DEPENDENCIES_TABLE_NAME} WHERE key_id IN ({placeholders})",
+                ),
+                parameters,
+            )
+            .await
+    }
+
+    pub async fn store_dependency_keys(
+        keys: Vec<ActionDependencyKey>,
+        action_id: ActionId,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        for key in keys {
+            bond.execute(
+                format!(
+                    "INSERT OR REPLACE INTO {KEY_DEPENDENCIES_TABLE_NAME} (key_id, action_id) VALUES (?,?)",
+                ),
+                params![key, action_id],
+            )
+            .await?;
+        }
+
+        Ok(())
+    }
+}

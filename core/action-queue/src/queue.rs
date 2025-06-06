@@ -1166,7 +1166,8 @@ async fn execute_action_local<T: Action>(
     let mut tether = shared.stash.connection();
     tether
         .tx::<_, _, ActionError<T>>(async |tx| {
-            let mut stored_action = StoredAction::without_state::<T>(metadata);
+            let mut stored_action =
+                StoredAction::without_state::<T>(action.dependency_keys(), metadata);
             if let Some(exising_id) = existing_id {
                 stored_action
                     .create_or_update(exising_id, tx)
@@ -1188,7 +1189,7 @@ async fn execute_action_local<T: Action>(
                 let mut pending_action_ids = vec![stored_action.id.unwrap()];
                 let mut visited = HashSet::new();
                 while let Some(action_id) = pending_action_ids.pop() {
-                    let deps = StoredAction::all_dependees(tx, action_id).await?;
+                    let deps = StoredAction::all_dependencies(tx, action_id).await?;
                     if !visited.insert(action_id) {
                         continue;
                     }
