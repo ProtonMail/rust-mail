@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
+- [ET-3178] Sanitize deprecated html attributes for dark mode
+- [ET-3090] Autolock defaults to 15 minutes and is respected on first lock
+- [ET-1410] Sender address change
+
+### Fixes
+
+- Report phishing moves the conversation too
+- Several bugfixes to move-to and label-as.
+- [ET-3178] Use different selector for ids that works with spaces
+- [ET-2568] Removing public keys is not considered an error
+- [ET-3178] Multiple tags do not duplicate style overrides
+- [ET-3178] Fix a case where there are multiple classes in one tag
+- Remove attachment should not be cancelled if upload failed
+
+
+## [mail-uniffi-v0.84.0] - 2025-06-04
+
+### Features
+
 - [ET-2568] Attach public key to messages
 - [ET-2568] Removing public keys is considered an error
 - Et-3080 add email and phone validation
