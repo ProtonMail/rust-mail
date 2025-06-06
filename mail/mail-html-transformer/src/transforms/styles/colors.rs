@@ -52,7 +52,7 @@ impl HSLExt for HSL {
     }
 
     fn is_achromatic(&self) -> IsColorAchromatic {
-        if self.s <= 0.05 {
+        if self.s <= 0.06 {
             IsColorAchromatic::Achromatic
         } else {
             IsColorAchromatic::Colorful

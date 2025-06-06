@@ -158,10 +158,19 @@ impl Transformer {
     }
 
     /// This function adds dark mode support. This fails if the html doesn't have a head tag.
+    ///
+    /// # Parameters
+    /// * `sender` - the email address of the sender. Example: `test@pm.me`
     #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
-    pub fn inject_dark_mode(&mut self, mode: ColorMode, capabilities: BrowserCapabilities) {
+    pub fn inject_dark_mode(
+        &mut self,
+        sender: &str,
+        mode: ColorMode,
+        capabilities: BrowserCapabilities,
+    ) {
         transforms::styles::inject_root_selector_to_html(&self.document);
         transforms::styles::inject_dark_mode(
+            sender,
             self.document.clone(),
             self.document.clone(),
             mode,
@@ -175,12 +184,15 @@ impl Transformer {
     ///
     /// Supplement CSS are not injected, instead the function returns the head of the new document.
     ///
+    /// # Parameters
+    /// * `sender` - the email address of the sender. Example: `test@pm.me`
     /// * `root_selector` - the CSS selector of the root of message.
     ///   In case of viewing message, it is usually data attribute pointing to the `html` tag.
     ///   In case of composer, it is ID pointing to custom editor that wraps the message.
     ///   Used to create a selector with bigger specificity than any provided by the sender.
     pub fn inject_dark_mode_to_another_target(
         &mut self,
+        sender: &str,
         mode: ColorMode,
         capabilities: BrowserCapabilities,
         root_selector: String,
@@ -199,6 +211,7 @@ impl Transformer {
         target.append(head.clone());
 
         transforms::styles::inject_dark_mode(
+            sender,
             source,
             target.clone(),
             mode,

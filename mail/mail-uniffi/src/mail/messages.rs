@@ -48,6 +48,8 @@ use tokio::sync::Mutex;
 #[derive(uniffi::Object)]
 pub struct DecryptedMessage {
     pub(crate) ctx: MailUserContextPtr,
+    /// The email address of the sender. Example: `test@pm.me`
+    pub(crate) sender: String,
     pub(crate) body: DecryptedMessageBody,
 }
 
@@ -78,7 +80,12 @@ impl DecryptedMessage {
     pub async fn body(self: Arc<Self>, opts: TransformOpts) -> Result<BodyOutput, ProtonError> {
         uniffi_async(async move {
             let tether = self.ctx()?.user_stash().connection();
-            Ok::<_, RealProtonMailError>(self.body.transformed(opts.into(), &tether).await.into())
+            Ok::<_, RealProtonMailError>(
+                self.body
+                    .transformed(&self.sender, opts.into(), &tether)
+                    .await
+                    .into(),
+            )
         })
         .await
         .map_err(ProtonError::from)
@@ -824,8 +831,9 @@ pub async fn get_message_body(
     // to avoid memory leak
     let strong_ctx = mbox.ctx()?;
     uniffi_async(async move {
-        let body = models::Message::message_body(&strong_ctx, id.into()).await?;
-        Ok::<_, RealProtonMailError>(Arc::new(DecryptedMessage { ctx, body }))
+        let (sender, body) =
+            models::Message::message_body_with_sender(&strong_ctx, id.into()).await?;
+        Ok::<_, RealProtonMailError>(Arc::new(DecryptedMessage { ctx, sender, body }))
     })
     .await
     .map_err(ActionError::from)

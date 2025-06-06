@@ -72,6 +72,7 @@ pub fn parse(c: &mut Criterion) {
             b.iter(|| {
                 let tr = tr.clone();
                 transforms::styles::inject_dark_mode(
+                    "test@pm.me",
                     tr.document(),
                     tr.document(),
                     transforms::ColorMode::LightMode,
@@ -128,6 +129,7 @@ pub fn all_transforms(c: &mut Criterion) {
                 t.inject_ios_content_size();
                 _ = t.strip_whitelist();
                 t.inject_dark_mode(
+                    "test@pm.me",
                     transforms::ColorMode::LightMode,
                     BrowserCapabilities {
                         supports_dark_mode_via_media_query: true,
