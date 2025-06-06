@@ -9,9 +9,13 @@ use proton_core_api::services::proton::{
     UserMnemonicStatus as ApiUserMnemonicStatus, UserType as ApiUserType,
 };
 use proton_core_api::services::proton::{AddressId, LabelId, UserId};
-use proton_crypto_account::keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature};
+use proton_crypto_account::keys::{
+    ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature, LocalAddressKey, LocalSignedKeyList,
+    LocalUserKey, UnlockedAddressKeys,
+};
 use proton_crypto_account::salts::KeySalt;
-use proton_crypto_inbox::proton_crypto::new_srp_provider;
+use proton_crypto_inbox::proton_crypto::crypto::KeyGeneratorAlgorithm;
+use proton_crypto_inbox::proton_crypto::{new_pgp_provider, new_srp_provider};
 use proton_crypto_inbox::proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, KeyFlag, KeyId, LockedKey, UserKeys as ApiUserKeys,
 };
@@ -264,4 +268,83 @@ pub fn message_body_test_user_secret() -> UserKeySecret {
         .salt_for_key(&srp_provider, &locked_key.id, TEST_USER_PASSWORD.as_bytes())
         .map(UserKeySecret)
         .unwrap()
+}
+/// # Panics
+pub fn generate_new_api_address(
+    address_id: AddressId,
+    address_email: &str,
+    key_id: &str,
+) -> ApiAddress {
+    let provider = new_pgp_provider();
+    let key_secret = message_body_test_user_secret();
+    let user_key_message = message_body_test_user_key();
+
+    let local_user_key = LocalUserKey {
+        private_key: user_key_message.private_key,
+    };
+    let unlocked_user_key = local_user_key
+        .unlock_and_assign_key_id(&provider, KeyId(String::default()), &key_secret.0)
+        .expect("unlock should succeed");
+
+    let fresh_address_key = LocalAddressKey::generate(
+        &provider,
+        address_email,
+        KeyGeneratorAlgorithm::default(),
+        KeyFlag::default(),
+        true,
+        &unlocked_user_key,
+    )
+    .expect("ok");
+
+    let unlocked = fresh_address_key
+        .unlock_and_assign_key_id(&provider, KeyId(String::from(key_id)), &unlocked_user_key)
+        .expect("unlock should not fail");
+
+    let list = UnlockedAddressKeys::from(unlocked);
+    let skl = LocalSignedKeyList::generate(&provider, &list).unwrap();
+
+    let address_key = fresh_address_key.private_key;
+    let address_key_token = fresh_address_key.token.unwrap();
+    let address_key_signature = fresh_address_key.signature.unwrap();
+
+    let skl_data = skl.data;
+    let skl_signature = skl.signature;
+
+    ApiAddress {
+        id: address_id,
+        email: address_email.to_owned(),
+        send: true,
+        receive: true,
+        status: ApiAddressStatus::Enabled,
+        domain_id: None,
+        address_type: ApiAddressType::Original,
+        order: 0,
+        display_name: address_email.to_owned(),
+        signature: String::new(),
+        keys: ApiAddressKeys(vec![LockedKey {
+            id: KeyId::from(key_id),
+            version: 3,
+            private_key: address_key,
+            token: Some(address_key_token),
+            signature: Some(address_key_signature),
+            activation: None,
+            primary: true,
+            active: true,
+            flags: Some(fresh_address_key.flags),
+            recovery_secret: None,
+            recovery_secret_signature: None,
+            address_forwarding_id: None,
+        }]),
+        catch_all: false,
+        proton_mx: true,
+        signed_key_list: ApiAddressSignedKeyList {
+            min_epoch_id: Some(3),
+            max_epoch_id: Some(66),
+            expected_min_epoch_id: None,
+            data: Some(skl_data.0),
+            obsolescence_token: None,
+            signature: Some(skl_signature.0),
+            revision: 1,
+        },
+    }
 }

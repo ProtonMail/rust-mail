@@ -16,6 +16,7 @@ pub enum MailErrorReason {
     DraftDiscardReason(DraftDiscardErrorReason),
     DraftAttachmentUploadReason(DraftAttachmentUploadErrorReason),
     DraftCancelScheduleSendReason(DraftCancelScheduleSendErrorReason),
+    DraftSenderAddressChangeReason(DraftSenderAddressChangeErrorReason),
     EventReason(EventErrorReason),
     PinSetReason(PinSetErrorReason),
     PinAuthReason(PinAuthErrorReason),
@@ -246,6 +247,13 @@ pub enum DraftCancelScheduleSendErrorReason {
     MessageDoesNotExist,
     MessageNotScheduled,
     MessageAlreadySent,
+}
+
+#[derive(Debug)]
+pub enum DraftSenderAddressChangeErrorReason {
+    AddressNotSendEnabled,
+    AddressDisabled,
+    AddressWithEmailNotFound(String),
 }
 
 /// Specific Reason for error occurrence within Event Loop.

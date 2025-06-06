@@ -2,6 +2,7 @@ use super::mail_error_reason::*;
 use crate::actions::MailActionError;
 use crate::draft::{
     AttachmentRemoveError, AttachmentUploadError, CancelScheduleSendError, PackageError,
+    SenderAddressChangeError,
 };
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
@@ -275,6 +276,7 @@ impl From<DraftError> for ProtonMailError {
                 }
             },
             DraftError::CancelScheduleSend(v) => v.into(),
+            DraftError::SenderAddressChange(v) => v.into(),
         }
     }
 }
@@ -488,6 +490,33 @@ impl From<CancelScheduleSendError> for ProtonMailError {
             CancelScheduleSendError::AlreadySent(_) => {
                 Self::Reason(MailErrorReason::DraftCancelScheduleSendReason(
                     DraftCancelScheduleSendErrorReason::MessageAlreadySent,
+                ))
+            }
+        }
+    }
+}
+
+impl From<SenderAddressChangeError> for ProtonMailError {
+    fn from(value: SenderAddressChangeError) -> Self {
+        match value {
+            SenderAddressChangeError::AddressNotFound(_)
+            | SenderAddressChangeError::MetadataNotFound(_) => {
+                Self::Unexpected(Unexpected::Internal)
+            }
+            SenderAddressChangeError::AddressHasNoRemoteId(_)
+            | SenderAddressChangeError::AddressNotSendEnabled(_) => {
+                Self::Reason(MailErrorReason::DraftSenderAddressChangeReason(
+                    DraftSenderAddressChangeErrorReason::AddressNotSendEnabled,
+                ))
+            }
+            SenderAddressChangeError::AddressDisabled(_) => {
+                Self::Reason(MailErrorReason::DraftSenderAddressChangeReason(
+                    DraftSenderAddressChangeErrorReason::AddressDisabled,
+                ))
+            }
+            SenderAddressChangeError::AddressEmailNotFound(v) => {
+                Self::Reason(MailErrorReason::DraftSenderAddressChangeReason(
+                    DraftSenderAddressChangeErrorReason::AddressWithEmailNotFound(v),
                 ))
             }
         }

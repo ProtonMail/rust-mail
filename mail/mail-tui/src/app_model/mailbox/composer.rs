@@ -1,7 +1,9 @@
+mod address_list;
 mod schedule_send;
 
 use crate::app::Command;
 use crate::app_model::YesNoPopup;
+use crate::app_model::mailbox::composer::address_list::AddressListPopup;
 use crate::app_model::mailbox::composer::schedule_send::ScheduleSendPopup;
 use crate::app_model::mailbox::{ComposerMessage, Message};
 use crate::messages::Messages;
@@ -12,12 +14,14 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use futures::FutureExt;
 use proton_mail_common::datatypes::{Disposition, LocalAttachmentId, LocalMessageId, MimeType};
 use proton_mail_common::draft::attachments::{DraftAttachment, DraftAttachmentState};
+use proton_mail_common::draft::compose::DraftAddressChangeOutput;
 use proton_mail_common::draft::observers::DraftAttachmentObserver;
 use proton_mail_common::draft::recipients::MaybeEmptyString;
 use proton_mail_common::draft::{
     Draft, DraftSaveActionQueuer, DraftSyncStatus, ReplyMode, recipients,
 };
 use proton_mail_common::models::{Attachment, MetadataId};
+use proton_mail_common::proton_mail_api::proton_core_api::services::proton::AddressId;
 use proton_mail_common::{MailContextError, MailUserContext, Mailbox};
 use proton_mail_html_transformer::Html2TextOptions;
 use ratatui::Frame;
@@ -439,6 +443,48 @@ impl Composer {
             }
         })
     }
+
+    fn start_sender_address_change(
+        &mut self,
+        context: Arc<MailUserContext>,
+        address_id: AddressId,
+    ) -> Command<Messages> {
+        let address_change_request = self.draft.new_change_sender_address_request();
+        let task = Command::task(async move {
+            let mut tether = context.user_stash().connection();
+            let cmd = match address_change_request
+                .apply(&context, address_id, &mut tether)
+                .await
+            {
+                Ok(output) => output.map_or(Command::none(), |output| {
+                    Command::message(ComposerMessage::FinishChangeAddress(output).into())
+                }),
+                Err(e) => Command::message(Messages::DisplayError(
+                    Some("Failed to change address".to_owned()),
+                    anyhow::Error::new(e),
+                )),
+            };
+
+            Command::batch([Command::message(Messages::DismissBackgroundProgress), cmd])
+        });
+        Command::batch([
+            Command::message(Messages::DisplayBackgroundProgress(
+                "Changing address".into(),
+            )),
+            task,
+        ])
+    }
+
+    fn finish_sender_address_change(
+        &mut self,
+        context: Arc<MailUserContext>,
+        output: DraftAddressChangeOutput,
+    ) -> Command<Messages> {
+        self.draft.finalize_sender_address_change_request(output);
+        self.sender_input_state = TextInputState::with_value(self.draft.sender.clone());
+        self.text_area = TextArea::new(self.draft.body().split('\n').map(str::to_owned).collect());
+        self.refresh_attachment_list(context)
+    }
 }
 
 struct AttachmentInfo {
@@ -612,6 +658,10 @@ impl Composer {
             Span::from("Send"),
             Span::from(" Ctrl+a: ").bold(),
             Span::from("Add Attachment"),
+            Span::from(" Ctrl+j: ").bold(),
+            Span::from("Schedule"),
+            Span::from(" Ctrl+k: ").bold(),
+            Span::from("Change Address"),
         ];
         frame.render_widget(Block::new().style(Style::new().reversed()), footer);
         frame.render_widget(Line::from(help_text), footer);
@@ -707,6 +757,12 @@ impl Composer {
                         return Command::message(ComposerMessage::Discard.into());
                     }
                 }
+                KeyCode::Char('k') => {
+                    if key.modifiers.contains(KeyModifiers::CONTROL) {
+                        let ctx = ctx.clone();
+                        return AddressListPopup::open(ctx);
+                    }
+                }
                 _ => {}
             }
         }
@@ -775,6 +831,12 @@ impl Composer {
             }
             ComposerMessage::RemoveAttachment(id) => {
                 self.remove_attachment(user_ctx.to_owned(), id)
+            }
+            ComposerMessage::StartChangeAddress(address_id) => {
+                self.start_sender_address_change(user_ctx.to_owned(), address_id)
+            }
+            ComposerMessage::FinishChangeAddress(output) => {
+                self.finish_sender_address_change(user_ctx.to_owned(), output)
             }
         }
     }

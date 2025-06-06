@@ -981,6 +981,30 @@ impl Attachment {
         self.mime_type == MimeType::application_pgp_keys()
             && Self::is_public_key_attachment_filename(&self.filename)
     }
+
+    pub async fn update_after_draft_address_change(&self, tx: &Bond<'_>) -> Result<(), StashError> {
+        tx.execute(
+            formatdoc!(
+                "
+            UPDATE {} SET
+                key_packets=?,
+                local_address_id=?,
+                remote_address_id=?,
+                signature = NULL,
+                enc_signature= NULL
+            WHERE local_id =?",
+                Self::table_name()
+            ),
+            params![
+                self.key_packets.clone(),
+                self.local_address_id,
+                self.remote_address_id.clone(),
+                self.local_id.unwrap()
+            ],
+        )
+        .await?;
+        Ok(())
+    }
 }
 
 // TODO: The use of the "Real" wrappers is because the source types don't

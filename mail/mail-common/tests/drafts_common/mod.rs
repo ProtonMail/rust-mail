@@ -44,6 +44,8 @@ pub fn draft_test_params_impl(mime_type: Option<MimeType>) -> TestParams {
         ..Default::default()
     };
 
+    params.addresses[0].signature = "Sent from rust rest".to_owned();
+
     // Add another address to check if the empty draft grabs the
     // correct primary address. Using this key will result in a crypto
     // error.

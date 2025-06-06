@@ -1,12 +1,15 @@
 use crate::datatypes::{MessageRecipient, MessageSender, MimeType, PmSignature};
 use crate::draft::recipients::{ContactGroupResolver, RecipientList};
-use crate::draft::{Draft, ReplyMode, SaveError};
-use crate::models::{MailSettings, Message};
-use crate::{MailContextError, MailUserContext};
+use crate::draft::{
+    AttachmentRemovalId, Draft, DraftAttachmentRemovalQueuer, Error, ReplyMode, SaveError,
+    SenderAddressChangeError,
+};
+use crate::models::{Attachment, DraftAttachmentMetadata, MailSettings, Message, MetadataId};
+use crate::{MailContextError, MailContextResult, MailUserContext};
 use chrono::DateTime;
 use proton_core_api::services::proton::AddressId;
-use proton_core_common::datatypes::UnixTimestamp;
-use proton_core_common::models::Address;
+use proton_core_common::datatypes::{AddressStatus, UnixTimestamp};
+use proton_core_common::models::{Address, ModelIdExtension};
 use proton_crypto_inbox::message::{EncryptableDraft, EncryptedDraft};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_api::services::proton::request_data::DraftRecipient;
@@ -15,6 +18,7 @@ use proton_mail_html_transformer::transforms::styles::{
     BrowserCapabilities, dark_mode_for_plaintext,
 };
 use proton_mail_html_transformer::{Html2TextOptions, Transformer};
+use stash::stash::Tether;
 use std::borrow::Cow;
 use std::fmt::Display;
 use tracing::error;
@@ -107,14 +111,12 @@ pub(super) fn get_signature(
     };
     let mut signature = if mime_type == MimeType::TextPlain {
         // convert signature from html to text, since it is possible there html content in it.
-        Transformer::html2text_str(
-            &address.signature,
-            Html2TextOptions {
+        Transformer::new_text_plain(&address.signature)
+            .to_plain_text(Html2TextOptions {
                 link_foot_notes: false,
                 ..Default::default()
-            },
-        )
-        .unwrap_or(address.signature.clone())
+            })
+            .unwrap_or(address.signature.clone())
     } else {
         address.signature.clone()
     };
@@ -395,5 +397,133 @@ fn apply_prefix_to_subject(prefix: &str, subject: &str) -> String {
         trimmed_subject.to_string()
     } else {
         format!("{prefix} {trimmed_subject}")
+    }
+}
+
+pub struct DraftAddressChangeRequest {
+    current_address_id: AddressId,
+    metadata_id: MetadataId,
+    mime_type: MimeType,
+}
+
+// Note: this type is currently separate from the draft implementation so that it can be executed
+// in locations where the draft type is not safely shared (e.g.: TUI). A refactor is planned
+// to make this work seamlessly.
+pub struct DraftAddressChangeOutput {
+    pub(super) old_signature: String,
+    pub(super) new_signature: String,
+    pub(super) address_id: AddressId,
+    pub(super) sender: String,
+}
+
+impl DraftAddressChangeRequest {
+    pub(super) fn new(
+        metadata_id: MetadataId,
+        current_address_id: AddressId,
+        mime_type: MimeType,
+    ) -> Self {
+        Self {
+            current_address_id,
+            metadata_id,
+            mime_type,
+        }
+    }
+
+    #[tracing::instrument(level = "debug", skip(self, context, tether))]
+    pub async fn apply(
+        self,
+        context: &MailUserContext,
+        address_id: AddressId,
+        tether: &mut Tether,
+    ) -> MailContextResult<Option<DraftAddressChangeOutput>> {
+        tracing::info!("Updating sender address");
+        if address_id == self.current_address_id {
+            // Nothing to do
+            return Ok(None);
+        }
+        let address = Address::find_by_remote_id(address_id.clone(), tether)
+            .await?
+            .ok_or(SenderAddressChangeError::AddressNotFound(
+                address_id.clone(),
+            ))?;
+
+        let old_address = Address::find_by_remote_id(self.current_address_id.clone(), tether)
+            .await?
+            .ok_or(SenderAddressChangeError::AddressNotFound(
+                self.current_address_id.clone(),
+            ))?;
+
+        if address.status != AddressStatus::Enabled {
+            return Err(
+                Error::SenderAddressChange(SenderAddressChangeError::AddressDisabled(
+                    address_id.clone(),
+                ))
+                .into(),
+            );
+        }
+
+        if !address.send {
+            return Err(Error::SenderAddressChange(
+                SenderAddressChangeError::AddressNotSendEnabled(address_id.clone()),
+            )
+            .into());
+        }
+
+        let mail_settings = MailSettings::get_or_default(tether).await;
+        if mail_settings.attach_public_key {
+            let old_public_key_attachment =
+                Attachment::gen_public_key(context, &old_address, tether).await?;
+            let public_key_attachment =
+                Attachment::gen_public_key(context, &address, tether).await?;
+            let draft_attachments =
+                DraftAttachmentMetadata::public_key_attachments(self.metadata_id, tether).await?;
+
+            if let Some(attachment) = draft_attachments.iter().find(|attachment| {
+                attachment.filename == old_public_key_attachment.attachment.filename
+            }) {
+                tracing::info!(
+                    "Removing public key for old address ({})",
+                    attachment.local_id.unwrap()
+                );
+                DraftAttachmentRemovalQueuer::new(
+                    self.metadata_id,
+                    AttachmentRemovalId::Local(attachment.local_id.unwrap()),
+                )
+                .queue(context.action_queue(), tether)
+                .await
+                .inspect_err(|e| error!("Failed to remove old public key attachment: {e:?}"))?;
+            }
+
+            if !draft_attachments.iter().any(|attachment| {
+                attachment.is_public_key_attachment()
+                    && attachment.filename == public_key_attachment.attachment.filename
+            }) {
+                tracing::info!("Public key for new address is not present, attaching");
+                tether
+                    .tx::<_, _, MailContextError>(async |tx| {
+                        let attachment = public_key_attachment.store(context, tx).await?;
+                        DraftAttachmentMetadata::pending(
+                            self.metadata_id,
+                            attachment.local_id.unwrap(),
+                            0,
+                            true,
+                        )
+                        .save(tx)
+                        .await?;
+                        Ok(())
+                    })
+                    .await?;
+            }
+        };
+
+        let new_signature = get_signature(&address, &mail_settings, self.mime_type);
+        let old_signature = get_signature(&old_address, &mail_settings, self.mime_type);
+
+        Ok(Some(DraftAddressChangeOutput {
+            old_signature,
+            new_signature,
+            address_id: address.remote_id.expect("Should be valid"),
+            sender: address.email,
+        }))
     }
 }

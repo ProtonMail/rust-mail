@@ -1059,6 +1059,22 @@ impl DraftAttachmentMetadata {
             .await
     }
 
+    pub async fn public_key_attachments(
+        metadata_id: MetadataId,
+        tether: &Tether,
+    ) -> Result<Vec<Attachment>, StashError> {
+        Attachment::find(
+            formatdoc! {"
+              JOIN {} ON {}.local_attachment_id = {}.local_id AND {}.is_public_key = 1
+              WHERE {}.metadata_id = ?
+              ORDER BY {}.display_order ASC
+        ", Self::table_name(), Self::table_name(), Attachment::table_name(), Self::table_name(), Self::table_name(), Self::table_name()},
+            params![metadata_id],
+            tether,
+        )
+            .await
+    }
+
     /// Find the metadata for an attachment with a given `content_id`.
     ///
     /// # Errors

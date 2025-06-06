@@ -3,6 +3,9 @@ source: mail/mail-common/tests/draft_save.rs
 expression: draft_body.body
 snapshot_kind: text
 ---
+Sent from rust rest
+
+
 -------- Original Message --------
 On Thursday, 05/16/24 at 12:45 me@proton.me wrote:
 This is a test body.

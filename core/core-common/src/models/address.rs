@@ -203,6 +203,15 @@ impl Address {
     pub async fn by_email(email: &str, tether: &Tether) -> Result<Option<Address>, StashError> {
         Self::find_first("WHERE email = ?", params![email.to_owned()], tether).await
     }
+
+    pub async fn all_send_enabled(tether: &Tether) -> Result<Vec<Address>, StashError> {
+        Address::find(
+            "WHERE send=? AND status = ? ORDER BY display_order ASC",
+            params![true, AddressStatus::Enabled],
+            tether,
+        )
+        .await
+    }
 }
 
 impl From<ApiAddress> for Address {

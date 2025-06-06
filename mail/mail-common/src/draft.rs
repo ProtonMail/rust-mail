@@ -6,11 +6,7 @@ use crate::datatypes::attachment::ContentId;
 use crate::datatypes::{Disposition, LocalAttachmentId, LocalMessageId, MimeType};
 
 use crate::decrypted_message::{DecryptedMessageBody, ThemeOpts};
-use crate::draft::attachments::DraftAttachment;
-use crate::draft::compose::{
-    encrypt_draft_body, get_signature, inject_dark_mode, patch_draft_with_reply_mode,
-    prepare_html_reply, prepare_plain_text_reply,
-};
+use crate::draft::attachments::{DraftAttachment, build_attachment_key_packets};
 use crate::draft::recipients::{ContactGroupResolver, ProtonContactGroupResolver, RecipientList};
 use crate::models::{
     Attachment, AttachmentType, DraftAttachmentMetadata, DraftAttachmentUploadState, DraftMetadata,
@@ -29,6 +25,7 @@ use proton_core_api::consts::Mail;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::AddressId;
 use proton_core_api::session::{CoreSession, Session};
+use proton_core_common::datatypes::LocalAddressId;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::attachment::{AttachmentDecryptionError, AttachmentEncryptionError};
 use proton_crypto_inbox::keys::{PackageCryptoType, SessionKeyError};
@@ -36,7 +33,7 @@ use proton_crypto_inbox::message::MessageError;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_api::services::proton::prelude::DraftReplyOrForwardParams;
-use proton_mail_api::services::proton::request_data::{DraftAction, DraftAttachmentKeyPackets};
+use proton_mail_api::services::proton::request_data::DraftAction;
 use proton_mail_api::services::proton::response_data::Message as ApiMessage;
 use proton_mail_html_transformer::transforms::styles::BrowserCapabilities;
 use proton_mail_ids::LocalConversationId;
@@ -56,6 +53,10 @@ pub mod observers;
 pub mod recipients;
 pub(crate) mod send;
 
+use crate::draft::compose::{
+    DraftAddressChangeOutput, DraftAddressChangeRequest, encrypt_draft_body, get_signature,
+    inject_dark_mode, patch_draft_with_reply_mode, prepare_html_reply, prepare_plain_text_reply,
+};
 pub use send::ScheduleSendOptions;
 
 /// Potential draft specific errors.
@@ -77,6 +78,8 @@ pub enum Error {
     AttachmentRemove(#[from] AttachmentRemoveError),
     #[error(transparent)]
     CancelScheduleSend(#[from] CancelScheduleSendError),
+    #[error(transparent)]
+    SenderAddressChange(#[from] SenderAddressChangeError),
 }
 
 /// Errors that occur during draft creation or opening an existing draft.
@@ -285,6 +288,8 @@ pub enum PackageError {
     AttachmentLoad(Box<MailContextError>),
     #[error("Failed to get attachment remote id")]
     AttachmentNoRemoteId,
+    #[error("Failed to get attachment address key {0}")]
+    AttachmentAddressKeyMissing(AddressId),
     #[error("Failed to write mime body to buffer: {0}")]
     MimeBodyBuild(String),
     #[error("Failed to extract attachment info for address: {0}")]
@@ -305,6 +310,28 @@ pub enum PackageError {
     RecipientEmailInvalid(String),
     #[error("Proton Email {0} does not exist")]
     ProtonRecipientDoesNotExist(String),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum SenderAddressChangeError {
+    #[error("Draft metadata not found")]
+    MetadataNotFound(MetadataId),
+    #[error("Address with email '{0}' not found")]
+    AddressEmailNotFound(String),
+    #[error("Address with id {0} not found")]
+    AddressNotFound(AddressId),
+    #[error("Can not send from address {0}")]
+    AddressNotSendEnabled(AddressId),
+    #[error("Address {0} is disabled")]
+    AddressDisabled(AddressId),
+    #[error("Address '{0}' has no remote id")]
+    AddressHasNoRemoteId(LocalAddressId),
+}
+
+impl From<SenderAddressChangeError> for MailContextError {
+    fn from(value: SenderAddressChangeError) -> Self {
+        MailContextError::Draft(Error::SenderAddressChange(value))
+    }
 }
 
 /// Draft reply mode.
@@ -393,6 +420,9 @@ pub enum DraftSyncStatus {
 }
 
 impl Draft {
+    pub async fn sender_addresses(tether: &Tether) -> Result<Vec<Address>, StashError> {
+        Address::all_send_enabled(tether).await
+    }
     pub async fn schedule_send_options(
         ctx: &MailUserContext,
     ) -> MailContextResult<ScheduleSendOptions<Local>> {
@@ -430,7 +460,7 @@ impl Draft {
         }
 
         let metadata = if let Some(metadata) =
-            DraftMetadata::find_by_message_id(message.id(), tether)
+            DraftMetadata::find_by_message_id(message.local_id.unwrap(), tether)
                 .await
                 .inspect_err(|e| error!("Failed to load draft metadata: {e:?}"))?
         {
@@ -440,7 +470,7 @@ impl Draft {
             debug!("No metadata found, creating new entry");
             let mut metadata = DraftMetadata {
                 id: None,
-                local_message_id: Some(message.id()),
+                local_message_id: Some(message.local_id.unwrap()),
                 local_conversation_id: Some(message.local_conversation_id.unwrap()),
                 local_parent_id: None,
                 reply_mode: None,
@@ -512,17 +542,20 @@ impl Draft {
             Some(d) => d,
             None => {
                 debug!("Failed to sync draft from server, attempting to load from cache.");
-                let Some(d) = Message::load_decrypted_message_from_cache(message.id(), tether)
-                    .await
-                    .inspect_err(|e| error!("Failed to load decrypted data from cache: {e:?}"))?
+                let Some(d) =
+                    Message::load_decrypted_message_from_cache(message.local_id.unwrap(), tether)
+                        .await
+                        .inspect_err(|e| {
+                            error!("Failed to load decrypted data from cache: {e:?}")
+                        })?
                 else {
-                    return Err(OpenError::MessageBodyMissing(message.id()).into());
+                    return Err(OpenError::MessageBodyMissing(message.local_id.unwrap()).into());
                 };
                 d
             }
         };
 
-        let send_result = DraftSendResult::find_by_id(message.id(), tether)
+        let send_result = DraftSendResult::find_by_id(message.local_id.unwrap(), tether)
             .await
             .inspect_err(|e| error!("Failed to load send result: {e:?}"))?;
 
@@ -587,7 +620,7 @@ impl Draft {
 
                     DraftAttachmentMetadata::pending(
                         metadata.id.unwrap(),
-                        public_key_attachment.id(),
+                        public_key_attachment.local_id.unwrap(),
                         0,
                         true,
                     )
@@ -685,7 +718,7 @@ impl Draft {
             .tx(async |tx| {
                 let metadata = DraftMetadata::reply(
                     reply_mode,
-                    source_message.id(),
+                    source_message.local_id.unwrap(),
                     source_message.local_conversation_id.unwrap(),
                     tx,
                 )
@@ -725,7 +758,7 @@ impl Draft {
                         let attachment = public_key_attachment.store(context, tx).await?;
                         DraftAttachmentMetadata::pending(
                             metadata.id.unwrap(),
-                            attachment.id(),
+                            attachment.local_id.unwrap(),
                             0,
                             true,
                         )
@@ -738,7 +771,7 @@ impl Draft {
                     let mut attachment_metadata =
                         if matches!(attachment.attachment_type, AttachmentType::Pgp) {
                             // PGP attachments need to be cloned and uploaded to the server so it can be sent.
-                            debug!("Cloning PGP attachment {} ", attachment.id());
+                            debug!("Cloning PGP attachment {} ", attachment.local_id.unwrap());
                             let new_attachment = Attachment::clone_attachment(
                                 context,
                                 address.remote_id.clone().unwrap(),
@@ -747,10 +780,13 @@ impl Draft {
                             )
                             .await
                             .inspect_err(|e| error!("Failed to clone pgp attachment: {e:?}",))?;
-                            debug!("PGP attachment cloned as {} ", new_attachment.id());
+                            debug!(
+                                "PGP attachment cloned as {} ",
+                                new_attachment.local_id.unwrap()
+                            );
                             DraftAttachmentMetadata::pending(
                                 metadata.id.unwrap(),
-                                new_attachment.id(),
+                                new_attachment.local_id.unwrap(),
                                 order,
                                 false,
                             )
@@ -885,29 +921,14 @@ impl Draft {
         attachments: &[Attachment],
         message_body: &str,
         draft_reply_or_forward_params: Option<DraftReplyOrForwardParams>,
+        tether: &Tether,
     ) -> Result<ApiMessage, MailContextError> {
         let encrypted = encrypt_draft_body(context, &address_id, message_body).await?;
         let params = save_action.crate_draft_params(encrypted);
 
-        let mut attachment_key_packets = DraftAttachmentKeyPackets::new();
         debug!("Draft create with {} attachments", attachments.len());
-        for attachment in attachments {
-            let Some(remote_id) = attachment.remote_id().clone() else {
-                // When adding new attachment to a draft, we reflect the state correctly offline
-                // but we can not attach an attachment until it has a remote id. We skip attachments
-                // that still does not have a remote id. Since we always save before send and send
-                // also requires all attachments to be uploaded this will correct itself.
-                tracing::warn!(
-                    "Attachment {} does not have a remote id, skipping",
-                    attachment.id()
-                );
-                continue;
-            };
-            let Some(key_packets) = attachment.key_packets.clone() else {
-                return Err(SaveError::AttachmentDoesNotHaveKeyPackets(attachment.id()).into());
-            };
-            attachment_key_packets.insert(remote_id, key_packets.value.clone());
-        }
+        let attachment_key_packets =
+            build_attachment_key_packets(context, &address_id, attachments, tether).await?;
 
         let response = session
             .api()
@@ -945,29 +966,14 @@ impl Draft {
         save_action: &Save,
         attachments: &[Attachment],
         message_body: &str,
+        tether: &Tether,
     ) -> Result<ApiMessage, MailContextError> {
         let encrypted = encrypt_draft_body(context, &address_id, message_body).await?;
         let params = save_action.crate_draft_params(encrypted);
 
-        let mut attachment_key_packets = DraftAttachmentKeyPackets::new();
         debug!("Draft update with {} attachments", attachments.len());
-        for attachment in attachments {
-            let Some(remote_id) = attachment.remote_id().clone() else {
-                // When adding new attachment to a draft, we reflect the state correctly offline
-                // but we can not attach an attachment until it has a remote id. We skip attachments
-                // that still does not have a remote id. Since we always save before send and send
-                // also requires all attachments to be uploaded this will correct itself.
-                tracing::warn!(
-                    "Attachment {} does not have a remote id, skipping",
-                    attachment.id()
-                );
-                continue;
-            };
-            let Some(key_packets) = attachment.key_packets.clone() else {
-                return Err(SaveError::AttachmentDoesNotHaveKeyPackets(attachment.id()).into());
-            };
-            attachment_key_packets.insert(remote_id, key_packets.value.clone());
-        }
+        let attachment_key_packets =
+            build_attachment_key_packets(context, &address_id, attachments, tether).await?;
 
         match session
             .api()
@@ -1280,7 +1286,7 @@ impl Draft {
     pub fn to_add_attachment_action(&self, attachment: Attachment) -> DraftAttachmentUploadQueuer {
         // create save action before the attachment is registered as we need a message to upload.
         let save_action = self.to_save_action();
-        let attachment_id = attachment.id();
+        let attachment_id = attachment.local_id.unwrap();
 
         DraftAttachmentUploadQueuer::new(
             self.metadata_id,
@@ -1501,6 +1507,73 @@ impl Draft {
         let timeout = Duration::from_secs(15);
         let session = ctx.session();
         send::cancel_schedule_send(message_id, &mut tether, queue, session, timeout).await
+    }
+
+    // Note: this type is currently separate from the draft implementation so that it can be executed
+    // in locations where the draft type is not safely shared (e.g.: TUI). A refactor is planned
+    // to make this work seamlessly.
+    pub fn new_change_sender_address_request(&self) -> DraftAddressChangeRequest {
+        DraftAddressChangeRequest::new(self.metadata_id, self.address_id.clone(), self.mime_type)
+    }
+
+    // Note: this type is currently separate from the draft implementation so that it can be executed
+    // in locations where the draft type is not safely shared (e.g.: TUI). A refactor is planned
+    // to make this work seamlessly.
+    pub fn finalize_sender_address_change_request(&mut self, output: DraftAddressChangeOutput) {
+        self.address_id = output.address_id;
+        self.sender = output.sender;
+        // we can only replace the signature if it wasn't empty and the original signature
+        // remains intact.
+        if !output.old_signature.is_empty() {
+            self.body = self
+                .body
+                .replace(&output.old_signature, &output.new_signature)
+        }
+    }
+
+    pub async fn change_sender_address_by_email(
+        &mut self,
+        ctx: &MailUserContext,
+        email: &str,
+    ) -> Result<(), MailContextError> {
+        let mut tether = ctx.user_stash().connection();
+        let address = Address::by_email(email, &tether)
+            .await?
+            .ok_or(SenderAddressChangeError::AddressEmailNotFound(email.into()))?;
+        let address_id =
+            address
+                .remote_id
+                .ok_or(SenderAddressChangeError::AddressHasNoRemoteId(
+                    address.local_id.unwrap(),
+                ))?;
+        self.change_sender_address_impl(ctx, address_id, &mut tether)
+            .await
+    }
+
+    pub async fn change_sender_address_by_id(
+        &mut self,
+        ctx: &MailUserContext,
+        address_id: AddressId,
+    ) -> Result<(), MailContextError> {
+        let mut tether = ctx.user_stash().connection();
+        self.change_sender_address_impl(ctx, address_id, &mut tether)
+            .await
+    }
+
+    async fn change_sender_address_impl(
+        &mut self,
+        ctx: &MailUserContext,
+        address_id: AddressId,
+        tether: &mut Tether,
+    ) -> Result<(), MailContextError> {
+        if let Some(output) = self
+            .new_change_sender_address_request()
+            .apply(ctx, address_id, tether)
+            .await?
+        {
+            self.finalize_sender_address_change_request(output)
+        }
+        Ok(())
     }
 }
 
@@ -1805,7 +1878,7 @@ impl DraftAttachmentRemovalQueuer {
                     e => return Err(e.into()),
                 }
             }
-            metadata = metadata.with_sequential_dependency(action_id);
+            metadata = metadata.with_dependency(action_id);
         };
 
         Ok(queue

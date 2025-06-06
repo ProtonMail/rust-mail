@@ -20,7 +20,9 @@ use proton_mail_common::datatypes::{
     ContextualConversation, LocalAttachmentId, LocalConversationId, LocalMessageId,
 };
 use proton_mail_common::draft::attachments::DraftAttachment;
+use proton_mail_common::draft::compose::DraftAddressChangeOutput;
 use proton_mail_common::models::{Attachment, LabelWithCounters, Message as MailMessage};
+use proton_mail_common::proton_mail_api::proton_core_api::services::proton::AddressId;
 use search::{Search, SearchStatusBar};
 use std::path::PathBuf;
 
@@ -120,6 +122,8 @@ pub enum ComposerMessage {
     RefreshAttachmentList,
     AttachmentListRefreshed(Vec<DraftAttachment>),
     ScheduleSend(DateTime<Local>),
+    StartChangeAddress(AddressId),
+    FinishChangeAddress(DraftAddressChangeOutput),
 }
 
 impl From<ComposerMessage> for Messages {

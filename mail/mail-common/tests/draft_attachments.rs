@@ -15,6 +15,7 @@ use proton_mail_api::services::proton::prelude::{
     NewAttachmentDisposition, NewAttachmentResponse, PostAttachmentResponse,
 };
 use proton_mail_api::services::proton::request_data::NewAttachmentParams;
+use proton_mail_api::services::proton::response_data::MessageAttachment;
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::{Disposition, MimeType};
 use proton_mail_common::draft::attachments::DraftAttachmentState;
@@ -525,7 +526,7 @@ async fn draft_reply_or_forward_creates_new_attachments() {
             },
             Ok(PostAttachmentResponse {
                 attachment: NewAttachmentResponse {
-                    id,
+                    id:id.clone(),
                     file_name: attachment.filename.clone(),
                     file_size: attachment.size,
                     disposition: match attachment.disposition {
@@ -536,7 +537,7 @@ async fn draft_reply_or_forward_creates_new_attachments() {
                             proton_mail_api::services::proton::response_data::Disposition::Inline
                         }
                     },
-                    key_packets: new_key_packets,
+                    key_packets: new_key_packets.clone(),
                     signature: None,
                     enc_signature: None,
                     headers: MessageAttachmentHeaders {
@@ -550,6 +551,23 @@ async fn draft_reply_or_forward_creates_new_attachments() {
             }),
         )
         .await;
+        message.body.attachments.push(MessageAttachment {
+            id,
+            disposition: proton_mail_api::services::proton::response_data::Disposition::Attachment,
+            enc_signature: None,
+            headers: MessageAttachmentHeaders {
+                content_disposition: "".to_string(),
+                content_id: None,
+                content_transfer_encoding: None,
+                image_height: None,
+                image_width: None,
+            },
+            key_packets: new_key_packets.clone(),
+            mime_type: "plain/text".to_string(),
+            name: attachment.filename.clone(),
+            size: attachment.size,
+            signature: None,
+        });
     }
     ctx.mock_update_draft(
         message.metadata.id.clone(),
