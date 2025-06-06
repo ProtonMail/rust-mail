@@ -9,6 +9,7 @@ use ratatui::crossterm::event::{KeyCode, KeyEventKind, KeyModifiers};
 use ratatui::prelude::*;
 use std::future::Future;
 use std::time::Duration;
+use tokio::runtime::Runtime;
 use tokio::select;
 use tracing::error;
 
@@ -73,31 +74,58 @@ impl<M: Model<Message> + Sized, Message: Send + 'static> App<M, Message> {
         }
     }
 
-    pub async fn run(&mut self, mut terminal: TerminalType) -> anyhow::Result<()> {
+    pub fn run(&mut self, mut terminal: TerminalType, runtime: &Runtime) -> anyhow::Result<()> {
         // Initialize.
         {
             // handle init.
             let message = self.model.on_ready();
-            self.handle_command(message);
+            self.handle_command(message, runtime);
         }
 
         let mut reader = EventStream::new();
 
+        // We do it like this to avoid being in a tokio context when handling events or commands.
+        // We want this to make `tokio::spawn` panic
+        // The main idea about having everything sync is to compare the integration of our code
+        // with other tech stacks that are not async.
+        //
+        // This could be simplified if we run this fully async, but we don't want to do that for now.
+        #[allow(clippy::items_after_statements)]
+        enum DoOutsideAsync<Message> {
+            None,
+            HandleEvent(Option<Result<Event, std::io::Error>>),
+            HandleCommand(Command<Message>),
+        }
+
         while !self.quit {
             terminal.draw(|frame| self.model.view(frame))?;
-            let msg = select! {
-                event = reader.next().fuse() => {
-                    self.handle_event(event)?
-                }
-                msg = self.bg_receiver.recv_async() => {msg?}
+            let msg = runtime.block_on(async {
+                let msg = select! {
+                    event = reader.next().fuse() => {
+                        DoOutsideAsync::HandleEvent(event)
+                    }
+                    msg = self.bg_receiver.recv_async() => {
+                            DoOutsideAsync::HandleCommand(msg?)
+                        }
 
-                // This is here to make sure the animations like throbbers can progress if there no inputs or actions.
-                () = tokio::time::sleep(Duration::from_millis(250)) => {
-                    continue;
+                    // This is here to make sure the animations like throbbers can progress if there no inputs or actions.
+                    () = tokio::time::sleep(Duration::from_millis(250)) => {
+                        DoOutsideAsync::None
+                    }
+                };
+                Ok::<_, anyhow::Error>(msg)
+            })?;
+
+            match msg {
+                DoOutsideAsync::None => (),
+                DoOutsideAsync::HandleEvent(event) => {
+                    let command = self.handle_event(event)?;
+                    self.handle_command(command, runtime);
                 }
-            };
-            // Apply updates from input.
-            self.handle_command(msg);
+                DoOutsideAsync::HandleCommand(command) => {
+                    self.handle_command(command, runtime);
+                }
+            }
         }
         Ok(())
     }
@@ -107,18 +135,23 @@ impl<M: Model<Message> + Sized, Message: Send + 'static> App<M, Message> {
         self.quit = true;
     }
 
-    fn handle_command(&mut self, command: Command<Message>) {
+    fn handle_command(&mut self, command: Command<Message>, runtime: &Runtime) {
+        if command.is_none() {
+            // skip allocation just below
+            return;
+        };
+
         let mut pending = Vec::with_capacity(4);
         pending.push(command);
         while let Some(command) = pending.pop() {
             match command {
-                Command::None => {}
+                Command::None => (),
                 Command::Message(message) => {
                     pending.push(self.model.update(message));
                 }
                 Command::Task(future) => {
                     let sender = self.bg_sender.clone();
-                    tokio::spawn(async move {
+                    runtime.spawn(async move {
                         let command = future.await;
                         if sender.send_async(command).await.is_err() {
                             error!("Failed to send background command");
@@ -127,7 +160,7 @@ impl<M: Model<Message> + Sized, Message: Send + 'static> App<M, Message> {
                 }
                 Command::BackgroundTask(closure) => {
                     let sender = self.bg_sender.clone();
-                    tokio::spawn(closure(sender));
+                    runtime.spawn(closure(sender));
                 }
                 Command::Batch(commands) => pending.extend(commands.into_iter().rev()),
             }
