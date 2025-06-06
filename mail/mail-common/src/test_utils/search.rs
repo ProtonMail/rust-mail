@@ -15,6 +15,7 @@ use proton_mail_api::services::proton::response_data::{
     AttachmentMetadata, Conversation as ApiConversation, ConversationLabel as ApiConversationLabel,
     MessageMetadata, MessageRecipient as ApiMessageRecipient, MessageSender as ApiMessageSender,
 };
+use stash::orm::Model;
 use stash::stash::{StashError, Tether};
 use std::collections::BTreeMap;
 use std::sync::LazyLock;
@@ -284,7 +285,7 @@ pub async fn create_labels(tether: &mut Tether) -> Vec<LocalLabelId> {
         .await
         .expect("failed to commit transaction");
 
-    labels.into_iter().map(|l| l.local_id.unwrap()).collect()
+    labels.into_iter().map(|l| l.id()).collect()
 }
 
 #[must_use]

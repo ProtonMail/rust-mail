@@ -116,7 +116,7 @@ impl ContextualConversation {
         let attachments_metadata = conversation.get_attachment_metadata();
 
         Some(Self {
-            local_id: conversation.local_id.expect("Should be set"),
+            local_id: conversation.id(),
             remote_id: conversation.remote_id,
             attachments_metadata,
             custom_labels: conversation.custom_labels,

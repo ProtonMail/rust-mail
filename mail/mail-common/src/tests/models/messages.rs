@@ -12,7 +12,7 @@ use crate::datatypes::{
     MovableSystemFolder, SystemLabelId, attachment,
 };
 use crate::label;
-use crate::models::{Attachment, Conversation, MailSettings, Message, MessageBodyMetadata};
+use crate::models::{Conversation, MailSettings, Message, MessageBodyMetadata};
 use crate::test_utils::db::new_test_connection_file;
 use crate::test_utils::db_states::{
     new_test_delete_db_state, new_test_label_db_state, new_test_unread_db_state,
@@ -329,18 +329,18 @@ mod available_actions {
                 mut message,
                 labels,
             } = test_case.message.clone();
-            message.local_address_id = address.local_id.unwrap();
+            message.local_address_id = address.id();
             message.remote_address_id = address.remote_id.clone().unwrap();
             message.local_conversation_id = conversation.local_id;
             message.remote_conversation_id = conversation.remote_id.clone();
 
             message.save(tx).await.expect("failed to create message");
 
-            message_id = Some(message.local_id.unwrap());
+            message_id = Some(message.id());
 
             for mut label in labels {
                 label.save(tx).await.expect("failed to create label");
-                let local_id = label.local_id.expect("Local ID");
+                let local_id = label.id();
                 ConversationCounters::new(local_id)
                     .save(tx)
                     .await
@@ -350,8 +350,8 @@ mod available_actions {
                     .await
                     .expect("Failed to create counters");
 
-                let label_id = label.local_id.unwrap();
-                let ids = vec![message.local_id.unwrap()];
+                let label_id = label.id();
+                let ids = vec![message.id()];
 
                 Message::apply_label(label_id, ids, tx).await.unwrap();
             }
@@ -494,7 +494,7 @@ mod available_label_as_actions {
 
             for mut label in labels {
                 label.save(tx).await.expect("failed to create label");
-                MessageCounters::new(label.local_id.unwrap())
+                MessageCounters::new(label.id())
                     .save(tx)
                     .await
                     .expect("failed to create message counters");
@@ -505,18 +505,18 @@ mod available_label_as_actions {
                 labels: message_labels,
             } in messages
             {
-                message.local_address_id = address.local_id.unwrap();
+                message.local_address_id = address.id();
                 message.remote_address_id = address.remote_id.clone().unwrap();
                 message.local_conversation_id = conversation.local_id;
                 message.remote_conversation_id = conversation.remote_id.clone();
 
                 message.save(tx).await.expect("failed to create message");
 
-                message_ids.push(message.local_id.unwrap());
+                message_ids.push(message.id());
 
                 for mut label in message_labels {
                     label.save(tx).await.expect("failed to create label");
-                    let label_id = label.local_id.unwrap();
+                    let label_id = label.id();
                     ConversationCounters::new(label_id)
                         .save(tx)
                         .await
@@ -526,7 +526,7 @@ mod available_label_as_actions {
                         .await
                         .expect("failed to create message counters");
 
-                    let ids = vec![message.local_id.unwrap()];
+                    let ids = vec![message.id()];
 
                     Message::apply_label(label_id, ids, tx).await.unwrap();
                 }
@@ -879,7 +879,7 @@ mod available_move_to_actions {
 
             for mut label in labels {
                 label.save(tx).await.expect("failed to create label");
-                MessageCounters::new(label.local_id.expect("Local ID"))
+                MessageCounters::new(label.id())
                     .save(tx)
                     .await
                     .expect("failed to create message counters");
@@ -890,18 +890,18 @@ mod available_move_to_actions {
                 labels: message_labels,
             } in messages
             {
-                message.local_address_id = address.local_id.unwrap();
+                message.local_address_id = address.id();
                 message.remote_address_id = address.remote_id.clone().unwrap();
                 message.local_conversation_id = conversation.local_id;
                 message.remote_conversation_id = conversation.remote_id.clone();
 
                 message.save(tx).await.expect("failed to create message");
 
-                message_ids.push(message.local_id.unwrap());
+                message_ids.push(message.id());
 
                 for mut label in message_labels {
                     label.save(tx).await.expect("failed to create label");
-                    let label_id = label.local_id.unwrap();
+                    let label_id = label.id();
                     ConversationCounters::new(label_id)
                         .save(tx)
                         .await
@@ -911,7 +911,7 @@ mod available_move_to_actions {
                         .await
                         .expect("failed to create message counters");
 
-                    let ids = vec![message.local_id.unwrap()];
+                    let ids = vec![message.id()];
 
                     Message::apply_label(label_id, ids, tx).await.unwrap();
                 }
@@ -988,7 +988,7 @@ async fn test_create_message() {
             .unwrap(),
     );
     expected.custom_labels = vec![CustomLabel {
-        local_id: label.local_id.unwrap(),
+        local_id: label.id(),
         name: label.name,
         color: label.color,
     }];
@@ -1056,7 +1056,7 @@ async fn test_create_message_without_synced_conversation() {
         .await
         .unwrap();
 
-    let conv = Conversation::find_by_id(conversation.local_id.unwrap(), &tether)
+    let conv = Conversation::find_by_id(conversation.id(), &tether)
         .await
         .unwrap()
         .unwrap();
@@ -1240,7 +1240,7 @@ async fn test_update_message() {
         .unwrap();
     resolve_local_ids(&tether, &mut expected).await;
     expected.custom_labels = vec![CustomLabel {
-        local_id: label.local_id.unwrap(),
+        local_id: label.id(),
         name: label.name,
         color: label.color,
     }];
@@ -1710,17 +1710,14 @@ async fn test_create_message_and_body() {
     })
     .await
     .unwrap();
-    let db_message = Message::load(metadata.local_id.unwrap(), &conn)
+    let db_message = Message::load(metadata.id(), &conn)
         .await
         .expect("failed to get message")
         .expect("must have a value");
 
-    assert_eq!(
-        metadata.local_id.unwrap(),
-        body_metadata.local_message_id.unwrap()
-    );
+    assert_eq!(metadata.id(), body_metadata.local_message_id.unwrap());
 
-    let db_message_body = MessageBodyMetadata::load(metadata.local_id.unwrap(), &conn)
+    let db_message_body = MessageBodyMetadata::load(metadata.id(), &conn)
         .await
         .expect("failed to get message body")
         .expect("must have a value");
@@ -1777,7 +1774,7 @@ async fn test_update_message_and_body() {
     })
     .await
     .unwrap();
-    let id = metadata.local_id.unwrap();
+    let id = metadata.id();
 
     let db_message = Message::load(id, &conn)
         .await
@@ -1882,7 +1879,7 @@ async fn test_create_message_and_body_with_attachments() {
     .await
     .unwrap();
 
-    let id = metadata.local_id.unwrap();
+    let id = metadata.id();
 
     let db_message = Message::load(id, &conn)
         .await
@@ -2006,7 +2003,7 @@ async fn message_metadata_update_does_not_purge_inline_attachments() {
     .await
     .unwrap();
 
-    let id = metadata.local_id.unwrap();
+    let id = metadata.id();
 
     let db_message = Message::load(id, &conn)
         .await
@@ -2024,7 +2021,7 @@ async fn message_metadata_update_does_not_purge_inline_attachments() {
         Disposition::Attachment
     );
 
-    let db_body_metadata = MessageBodyMetadata::for_message(db_message.local_id.unwrap(), &conn)
+    let db_body_metadata = MessageBodyMetadata::for_message(db_message.id(), &conn)
         .await
         .unwrap()
         .unwrap();
@@ -2039,7 +2036,7 @@ async fn message_metadata_update_does_not_purge_inline_attachments() {
     .unwrap();
 
     // Inline attachment should not go missing.
-    let db_body_metadata = MessageBodyMetadata::for_message(db_message.local_id.unwrap(), &conn)
+    let db_body_metadata = MessageBodyMetadata::for_message(db_message.id(), &conn)
         .await
         .unwrap()
         .unwrap();
@@ -2506,163 +2503,149 @@ async fn label_messages() {
 async fn unlabel_messages() {
     // assign a label to messages and progressively remove it.
     let (stash, _db_dir) = new_test_connection_file().await;
-    let mut conn = stash.connection();
+    let mut tether = stash.connection();
     let mut state = new_test_label_db_state();
-    prepare_db_state_core(&mut conn, &mut state.addresses).await;
-    let (state, state_map) = prepare_and_patch_db_state(&mut conn, state.clone()).await;
+    prepare_db_state_core(&mut tether, &mut state.addresses).await;
+    let (state, state_map) = prepare_and_patch_db_state(&mut tether, state.clone()).await;
 
-    let local_conv_id = *state_map
+    let conv = *state_map
         .conversations
         .get(state.conversations[0].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_msg_id1 = *state_map
+    let msg1 = *state_map
         .messages
         .get(state.messages[0].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_msg_id2 = *state_map
+    let msg2 = *state_map
         .messages
         .get(state.messages[1].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_msg_id3 = *state_map
+    let msg3 = *state_map
         .messages
         .get(state.messages[2].remote_id.as_ref().unwrap())
         .unwrap();
-    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+    let label = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
 
-    conn.tx::<_, _, StashError>(async |tx| {
-        Message::apply_label(
-            local_label_id1,
-            [local_msg_id1, local_msg_id2, local_msg_id3],
-            tx,
-        )
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            Message::apply_label(label, [msg1, msg2, msg3], tx)
+                .await
+                .expect("failed to label");
+
+            // unlabel first message.
+            Message::remove_label(label, [msg1], tx).await.unwrap();
+            Ok(())
+        })
         .await
-        .expect("failed to label");
+        .unwrap();
+    let msg1_remote = state.messages[0].remote_id.clone().unwrap();
 
-        // unlabel first message.
-        Message::remove_label(local_label_id1, std::iter::once(local_msg_id1), tx)
-            .await
-            .unwrap();
-        Ok(())
-    })
-    .await
-    .unwrap();
-    let remote_msg_id1 = state.messages[0].remote_id.clone().unwrap();
-
-    let db_conversation = ContextualConversation::load(local_conv_id, local_label_id1, &conn)
+    let db_conversation = ContextualConversation::load(conv, label, &tether)
         .await
         .expect("failed to get conversation")
         .unwrap();
 
+    let curr_msgs = state
+        .messages
+        .iter()
+        .filter(|m| m.remote_id.as_ref() != Some(&msg1_remote));
+
     // Check conversation status.
     assert_eq!(db_conversation.num_unread, 1);
     assert_eq!(db_conversation.num_messages, 2);
+    assert_eq!(
+        db_conversation.num_messages,
+        curr_msgs.clone().count() as u64
+    );
+    assert_eq!(
+        db_conversation.num_unread,
+        curr_msgs.clone().filter(|m| m.unread).count() as u64
+    );
     assert_eq!(db_conversation.num_attachments, 0);
     assert_eq!(
         db_conversation.size,
-        state
-            .messages
-            .iter()
-            .filter(|m| m.remote_id.as_ref() != Some(&remote_msg_id1))
-            .fold(0, |x, m| x + m.size)
+        curr_msgs.clone().map(|m| m.size).sum::<u64>()
     );
     assert_eq!(
         db_conversation.time,
-        state
-            .messages
-            .iter()
-            .filter(|m| m.remote_id.as_ref() != Some(&remote_msg_id1))
-            .fold(UnixTimestamp::new(0), |x, m| x.max(m.time))
+        curr_msgs.clone().map(|m| m.time).max().unwrap()
     );
     assert_eq!(
         db_conversation.expiration_time,
-        state
-            .messages
-            .iter()
-            .filter(|m| m.remote_id.as_ref() != Some(&remote_msg_id1))
-            .fold(UnixTimestamp::new(0), |x, m| x.max(m.expiration_time))
+        curr_msgs.clone().map(|m| m.expiration_time).max().unwrap()
     );
     assert_eq!(
         db_conversation.snooze_time,
-        state
-            .messages
-            .iter()
-            .filter(|m| m.remote_id.as_ref() != Some(&remote_msg_id1))
-            .fold(UnixTimestamp::new(0), |x, m| x.max(m.snooze_time))
+        curr_msgs.clone().map(|m| m.snooze_time).max().unwrap()
     );
 
     // Check conversation counts have the new conversation.
     {
-        let conv_counts = conv_counts_as_map(&conn).await;
-        let label_counts = conv_counts.get(&local_label_id1).unwrap();
+        let conv_counts = conv_counts_as_map(&tether).await;
+        let label_counts = conv_counts.get(&label).unwrap();
         assert_eq!(label_counts.unread, 1);
         assert_eq!(label_counts.total, 1);
     }
 
     // Check message counts.
     {
-        let message_counts = msg_counts_as_map(&conn).await;
-        let label_counts = message_counts.get(&local_label_id1).unwrap();
+        let message_counts = msg_counts_as_map(&tether).await;
+        let label_counts = message_counts.get(&label).unwrap();
         assert_eq!(label_counts.unread, 1);
         assert_eq!(label_counts.total, 2);
     }
 
-    let check_final_conv_state = |stash: &Stash| -> BoxFuture<'_, ()> {
-        let tether = stash.connection();
-        async move {
-            // Conversation should no longer have the label
-            assert!(
-                ContextualConversation::load(local_conv_id, local_label_id1, &tether)
-                    .await
-                    .expect("failed to get conversation")
-                    .is_none()
-            );
+    let check_final_conv_state = async |tether: &Tether| {
+        assert_eq!(
+            ContextualConversation::load(conv, label, tether)
+                .await
+                .unwrap(),
+            None,
+            "Conversation should no longer have the label"
+        );
 
-            // Check conversation counts.
-            {
-                let conv_counts = conv_counts_as_map(&tether).await;
-                let label_counts = conv_counts.get(&local_label_id1).unwrap();
-                assert_eq!(label_counts.unread, 0);
-                assert_eq!(label_counts.total, 0);
-            }
-
-            // Check message counts.
-            {
-                let message_counts = msg_counts_as_map(&tether).await;
-                let label_counts = message_counts.get(&local_label_id1).unwrap();
-                assert_eq!(label_counts.unread, 0);
-                assert_eq!(label_counts.total, 0);
-            }
+        // Check conversation counts.
+        {
+            let conv_counts = conv_counts_as_map(tether).await;
+            let label_counts = conv_counts.get(&label).unwrap();
+            assert_eq!(label_counts.unread, 0);
+            assert_eq!(label_counts.total, 0);
         }
-        .boxed()
+
+        // Check message counts.
+        {
+            let message_counts = msg_counts_as_map(tether).await;
+            let label_counts = message_counts.get(&label).unwrap();
+            assert_eq!(label_counts.unread, 0);
+            assert_eq!(label_counts.total, 0);
+        }
     };
 
-    // Label remaining messages.
-    conn.tx::<_, _, StashError>(async |tx| {
-        Message::remove_label(local_label_id1, [local_msg_id2, local_msg_id3], tx)
-            .await
-            .unwrap();
-        Ok(())
-    })
-    .await
-    .unwrap();
-
-    check_final_conv_state(&stash).await;
-
-    // Apply again, should be noop.
-    conn.tx::<_, _, StashError>(async |tx| {
-        Message::remove_label(
-            local_label_id1,
-            [local_msg_id1, local_msg_id2, local_msg_id3],
-            tx,
-        )
+    // remove labels
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            Message::remove_label(label, [msg2, msg3], tx)
+                .await
+                .unwrap();
+            Ok(())
+        })
         .await
         .unwrap();
-        Ok(())
-    })
-    .await
-    .unwrap();
 
-    check_final_conv_state(&stash).await;
+    check_final_conv_state(&tether).await;
+
+    // Apply again, should be noop.
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            Message::remove_label(label, [msg1, msg2, msg3], tx)
+                .await
+                .unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    check_final_conv_state(&tether).await;
 }
 
 pub(super) static MY_MESSAGE_ID: LazyLock<MessageId> =
@@ -2761,7 +2744,7 @@ async fn message_exclusive_location_on_save(
 
             let mut message = Message {
                 local_conversation_id: conversation.local_id,
-                local_address_id: address.local_id.unwrap(),
+                local_address_id: address.id(),
                 label_ids: labels
                     .iter()
                     .map(|l| l.remote_id.clone().unwrap())
@@ -2822,7 +2805,7 @@ async fn test_create_message_dependencies(tether: &mut Tether) -> LocalConversat
         .await
         .unwrap();
 
-    conversation.local_id.unwrap()
+    conversation.id()
 }
 
 fn test_message_metadata(
@@ -2988,12 +2971,12 @@ async fn test_deleting_address_will_trigger_message_deletion() {
                 remote_id: msg_id!("my_msg"),
                 local_conversation_id: conv.local_id,
                 remote_conversation_id: conv.remote_id.clone(),
-                local_address_id: address.local_id.unwrap(),
+                local_address_id: address.id(),
                 remote_address_id: address.remote_id.clone().unwrap()
             );
             msg.save(tx).await?;
 
-            Ok(msg.local_id.unwrap())
+            Ok(msg.id())
         })
         .await
         .unwrap();

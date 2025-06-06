@@ -243,7 +243,7 @@ async fn get_unregistered_sessions(
     CoreSession::find(
         format!(
             "WHERE remote_id NOT IN ({})",
-            stash::utils::placeholders(params.len())
+            stash::utils::placeholders_n(params.len())
         ),
         params,
         tether,

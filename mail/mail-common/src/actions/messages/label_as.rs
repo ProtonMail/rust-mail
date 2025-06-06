@@ -1,5 +1,5 @@
 use crate::actions::{LabelAsData, MailActionError, filter_responses};
-use crate::datatypes::{ExclusiveLocation, LocalMessageId, RollbackItemType, SystemLabelId};
+use crate::datatypes::{LocalMessageId, RollbackItemType, SystemLabelId};
 use crate::models::{Message, MessageCounters};
 use crate::{AppError, MailUserContext};
 use itertools::Itertools;
@@ -45,10 +45,7 @@ impl LabelAs {
     /// Memorize the data before applying LabelAs action so we can revert modifications later
     async fn memorize_original_data(&mut self, tether: &Tether) -> Result<(), MailActionError> {
         let all_labels = Label::find_by_kind(LabelType::Label, tether).await?;
-        self.data.local_all_label_ids = all_labels
-            .iter()
-            .map(|l| l.local_id.expect("Should be set"))
-            .collect();
+        self.data.local_all_label_ids = all_labels.iter().map(Model::id).collect();
 
         self.save_modifications(tether).await?;
 
@@ -110,28 +107,15 @@ impl Handler {
         message_id: LocalMessageId,
         added_labels: HashSet<LocalLabelId>,
         removed_labels: HashSet<LocalLabelId>,
-        original_locations: Option<Option<ExclusiveLocation>>,
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
-        let Some(mut message) = Message::load(message_id, bond).await? else {
-            warn!("While reverting locally, could not find message with local_id: {message_id:?}");
-            return Ok(());
-        };
-
-        let current_labels = message.label_ids.iter().cloned().collect_vec();
-        let current_labels: HashSet<_> = HashSet::from_iter(current_labels);
-        let removed_labels =
-            Label::local_ids_counterpart(Vec::from_iter(removed_labels), bond).await?;
-        let removed_labels = HashSet::from_iter(removed_labels);
-        let added_labels = Label::local_ids_counterpart(Vec::from_iter(added_labels), bond).await?;
-        let added_labels = HashSet::from_iter(added_labels);
-        let new_labels = &(&current_labels - &removed_labels) | &added_labels;
-        message.label_ids = new_labels.into_iter().map_into().collect();
-
-        if let Some(location) = original_locations {
-            message.exclusive_location = location;
+        for l in removed_labels {
+            Message::apply_label(l, [message_id], bond).await?;
         }
-        message.save(bond).await?;
+
+        for l in added_labels {
+            Message::remove_label(l, [message_id], bond).await?;
+        }
 
         Ok(())
     }
@@ -182,16 +166,23 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Message::undo_label_as(
-            action.data.local_ids.clone(),
-            action.data.source_label_id,
-            action.data.added_labels.clone(),
-            action.data.removed_labels.clone(),
-            action.data.original_location.clone(),
-            action.data.must_archive,
-            tx,
-        )
-        .await?;
+        for &message_id in &action.data.local_ids {
+            Self::revert_one_locally(
+                message_id,
+                action
+                    .data
+                    .added_labels
+                    .remove(&message_id)
+                    .unwrap_or_default(),
+                action
+                    .data
+                    .removed_labels
+                    .remove(&message_id)
+                    .unwrap_or_default(),
+                tx,
+            )
+            .await?;
+        }
 
         action
             .data
@@ -237,7 +228,6 @@ impl ActionHandler for Handler {
                                 .removed_labels
                                 .remove(&message_id)
                                 .unwrap_or_default(),
-                            action.data.original_location.remove(&message_id),
                             tx,
                         )
                         .await?;

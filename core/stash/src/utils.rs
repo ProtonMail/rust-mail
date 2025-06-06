@@ -4,8 +4,8 @@
 //!
 
 use core::str::from_utf8;
-use rusqlite::Error as SqliteError;
 use rusqlite::types::{FromSqlError, ToSqlOutput, ValueRef};
+use rusqlite::{Error as SqliteError, ToSql};
 use serde::{Deserialize, Serialize};
 use serde_json::{from_str as from_json, to_string as to_json};
 use std::borrow::Cow;
@@ -23,6 +23,103 @@ macro_rules! params {
     ($($param:expr),+) => {
         vec![$(Box::new($param) as _),+]
     };
+}
+
+fn boxed(x: impl ToSql + Send + 'static) -> Box<dyn ToSql + Send> {
+    Box::new(x)
+}
+
+pub trait IterMapToSql
+where
+    Self: Sized,
+{
+    fn bridge_sql(self) -> Vec<Box<dyn ToSql + Send>> {
+        self.bridge_sql_iter().collect()
+    }
+
+    fn bridge_sql_extend_iter(
+        self,
+        other: impl IterMapToSql,
+    ) -> impl Iterator<Item = Box<dyn ToSql + Send>> {
+        self.bridge_sql_iter().chain(other.bridge_sql_iter())
+    }
+
+    fn bridge_sql_extend(
+        self,
+        other: impl IterMapToSql,
+    ) -> impl Iterator<Item = Box<dyn ToSql + Send>> {
+        self.bridge_sql_iter().chain(other.bridge_sql_iter())
+    }
+
+    fn bridge_sql_iter(self) -> impl Iterator<Item = Box<dyn ToSql + Send>>;
+}
+
+impl<T: ToSql + Send + 'static, I: IntoIterator<Item = T>> IterMapToSql for I {
+    fn bridge_sql_iter(self) -> impl Iterator<Item = Box<dyn ToSql + Send>> {
+        self.into_iter().map(boxed)
+    }
+}
+
+pub trait MapToSql
+where
+    Self: Sized,
+{
+    fn to_iter_map_to_sql(self) -> impl IterMapToSql;
+
+    fn to_sql_iter(self) -> impl Iterator<Item = Box<dyn ToSql + Send>> {
+        self.to_iter_map_to_sql().bridge_sql_iter()
+    }
+
+    fn to_sql(self) -> Vec<Box<dyn ToSql + Send>> {
+        self.to_iter_map_to_sql().bridge_sql_iter().collect()
+    }
+
+    fn to_sql_extend_iter(
+        self,
+        other: impl MapToSql,
+    ) -> impl Iterator<Item = Box<dyn ToSql + Send>> {
+        self.to_sql_iter().chain(other.to_sql_iter())
+    }
+
+    fn to_sql_extend(self, other: impl MapToSql) -> Vec<Box<dyn ToSql + Send>> {
+        self.to_sql_extend_iter(other).collect()
+    }
+}
+
+impl<T: Clone + ToSql + Send + 'static> MapToSql for &[T] {
+    fn to_iter_map_to_sql(self) -> impl IterMapToSql {
+        self.iter().cloned()
+    }
+}
+
+impl<T1> MapToSql for (T1,)
+where
+    T1: ToSql + Send + 'static,
+{
+    fn to_iter_map_to_sql(self) -> impl IterMapToSql {
+        [boxed(self.0)].into_iter()
+    }
+}
+
+impl<T1, T2> MapToSql for (T1, T2)
+where
+    T1: ToSql + Send + 'static,
+    T2: ToSql + Send + 'static,
+{
+    fn to_iter_map_to_sql(self) -> impl IterMapToSql {
+        [boxed(self.0), boxed(self.1)].into_iter()
+    }
+}
+
+impl<T1, T2, T3> MapToSql for (T1, T2, T3)
+where
+    T1: ToSql + Send + 'static,
+    T2: ToSql + Send + 'static,
+    T3: ToSql + Send + 'static,
+{
+    fn to_iter_map_to_sql(self) -> impl IterMapToSql {
+        [boxed(self.0), boxed(self.1), boxed(self.2)].into_iter()
+    }
 }
 
 pub use params;
@@ -112,10 +209,15 @@ pub fn from_sql_using_deserialize<T: for<'de> Deserialize<'de>>(
     }
 }
 
+#[must_use]
+pub fn placeholders<_T>(input: &[_T]) -> Cow<'static, str> {
+    placeholders_n(input.len())
+}
+
 /// Use this when you need to create a string with a known number of placeholders in the form
 /// "?,?,?,?"
 #[must_use]
-pub fn placeholders(n: usize) -> Cow<'static, str> {
+pub fn placeholders_n(n: usize) -> Cow<'static, str> {
     /// This has 100 placeholders
     static PLACEHOLDERS: &str = "?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?";
     if n < 100 {

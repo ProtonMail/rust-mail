@@ -1,37 +1,26 @@
 use itertools::Itertools;
 use proton_core_common::{
     datatypes::SystemLabel,
-    models::{Address, Label, ModelExtension, ModelIdExtension},
+    models::{Address, Label, ModelIdExtension},
 };
 use proton_mail_api::services::proton::{
     common::MessageId, prelude::GetMessagesResponse,
     response_data::MessageMetadata as ApiMessageMetadata,
 };
-use proton_mail_common::api_message_meta;
 use proton_mail_common::test_utils::{init::Params as TestParams, test_context::MailTestContext};
+use proton_mail_common::{api_message_meta, test_utils::scroller::save_single_message};
 use proton_mail_common::{
-    datatypes::SearchOptions,
-    mail_scroller::MailScroller,
-    models::{Conversation, Message},
+    datatypes::SearchOptions, mail_scroller::MailScroller, models::Conversation,
 };
 use proton_mail_common::{message, msg_id};
 
 use stash::stash::StashError;
-use stash::{
-    orm::Model,
-    stash::{Bond, WatcherHandle},
-};
+use stash::{orm::Model, stash::WatcherHandle};
 use std::vec;
 use wiremock::{
     Mock, ResponseTemplate,
     matchers::{method, path, query_param_contains},
 };
-
-async fn save_single_message(label: &Label, message: &mut Message, bond: &Bond<'_>) {
-    message.label_ids = vec![label.remote_id.clone().unwrap()];
-    message.save(bond).await.unwrap();
-    message.reload(bond).await.unwrap();
-}
 
 #[tokio::test]
 async fn test_search_mail_scroller_reads_one_item_from_online_scroll_data() {
@@ -294,7 +283,7 @@ async fn test_search_mail_scroller_notificate_about_changes() {
         remote_id: msg_id!("mymsg_100"),
         local_conversation_id: conversation.local_id,
         remote_conversation_id: conversation.remote_id,
-        local_address_id: address.local_id.unwrap(),
+        local_address_id: address.id(),
         remote_address_id: address.remote_id.unwrap(),
         label_ids: vec![SystemLabel::Inbox.remote_id()],
         display_order: 100,
@@ -304,7 +293,7 @@ async fn test_search_mail_scroller_notificate_about_changes() {
     tether
         .tx::<_, _, StashError>(async |bond| {
             let label = Label::load(local_label_id, bond).await.unwrap().unwrap();
-            save_single_message(&label, &mut test_message.clone(), bond).await;
+            save_single_message(&[label], &mut test_message.clone(), bond).await;
             Ok(())
         })
         .await

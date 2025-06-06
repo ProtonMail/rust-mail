@@ -24,9 +24,9 @@ use std::sync::Arc;
 
 macro_rules! prune_email {
     ($email:expr) => {{
-        $email.set_id(None);
+        $email.local_id = None;
         $email.local_contact_id = None;
-        $email.set_row_id(None);
+        $email.row_id = None;
     }};
 }
 
@@ -40,9 +40,9 @@ macro_rules! prune_emails {
 
 macro_rules! prune_card {
     ($card:expr) => {{
-        $card.set_id(None);
+        $card.local_id = None;
         $card.local_contact_id = None;
-        $card.set_row_id(None);
+        $card.row_id = None;
     }};
 }
 
@@ -56,8 +56,8 @@ macro_rules! prune_cards {
 
 macro_rules! prune_contact {
     ($contact:expr) => {{
-        $contact.set_id(None);
-        $contact.set_row_id(None);
+        $contact.local_id = None;
+        $contact.row_id = None;
 
         prune_emails!(&mut $contact.contact_emails);
         prune_cards!(&mut $contact.cards);

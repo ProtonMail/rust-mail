@@ -345,7 +345,7 @@ async fn test_on_refresh_leaves_messages_without_remote_id_untouched() {
         .unwrap();
     assert_eq!(msg.remote_conversation_id, Some("".into()));
     // Local message load
-    let msg = Message::load(local_msg.local_id.unwrap(), &tether)
+    let msg = Message::load(local_msg.id(), &tether)
         .await
         .unwrap()
         .unwrap();

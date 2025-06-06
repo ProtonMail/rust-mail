@@ -254,6 +254,13 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     } else {
         quote! { #id_type }
     };
+
+    let fn_id_impl = if is_optional {
+        quote! { self.#id_field.clone().expect("called `id()` on a model that hasn't been saved yet") }
+    } else {
+        quote! { self.#id_field.clone() }
+    };
+
     let db_fields_impl = generate_db_field_values_impl(&db_fields, &via_attrs);
     let db_fields_without_id_impl =
         generate_db_field_values_impl(&db_fields_without_id, &via_attrs_without_id);
@@ -356,8 +363,8 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
                 #fn_field_values_without_id_impl
             }
 
-            fn id(&self) -> Self::Id {
-                self.#id_field.clone()
+            fn id(&self) -> Self::IdType {
+                #fn_id_impl
             }
 
             fn id_field_name() -> &'static str {
@@ -378,10 +385,6 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
 
             fn row_id(&self) -> Option<u64> {
                 self.#row_id_field
-            }
-
-            fn set_id(&mut self, id: Self::Id) {
-                self.#id_field = id;
             }
 
             fn set_id_value(&mut self, id: Self::IdType) {

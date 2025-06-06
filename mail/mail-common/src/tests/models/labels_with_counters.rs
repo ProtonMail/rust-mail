@@ -10,6 +10,7 @@ use proton_core_api::services::proton::LabelId;
 use proton_core_api::services::proton::LabelType as ApiLabelType;
 use proton_core_common::models::Label;
 use proton_mail_common::test_utils::db::new_test_connection;
+use stash::orm::Model;
 use stash::stash::StashError;
 
 #[tokio::test]
@@ -60,7 +61,7 @@ async fn label_with_counts() {
             )
             .await
             .unwrap();
-            Ok(local_label.local_id.unwrap())
+            Ok(local_label.id())
         })
         .await
         .unwrap();

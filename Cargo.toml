@@ -348,6 +348,7 @@ opt-level = "s"      # We might want to experiment with "z" instead.
 # At the time of writing, this reduces the size of the binary by 9MB.
 split-debuginfo = "packed"
 lto = true                 # "Fat" LTO
+incremental = false
 # panic = 'abort' We might want to enable this
 
 [patch."crates-io"]

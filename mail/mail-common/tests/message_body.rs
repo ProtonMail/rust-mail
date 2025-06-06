@@ -74,7 +74,7 @@ async fn mailbox_message_body_simple() {
             SELECT body as value FROM message_body WHERE
                 message_id = {}
     ",
-                saved_message.local_id.unwrap()
+                saved_message.id()
             ),
             vec![],
         )

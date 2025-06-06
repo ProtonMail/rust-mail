@@ -36,12 +36,11 @@ impl<T: MailScrollerSource> Paginator<T> {
         } = guard.watch().await?;
         drop(guard);
         let paginator_cloned = Arc::clone(&paginator);
-        let (watcher, background_command) =
-            WatchHandle::new_dampened(receiver, handle, move || {
-                let paginator = Arc::clone(&paginator_cloned);
-                let to_message = Arc::clone(&to_message);
-                async move { Some(to_message(paginator.lock().await.all_items().await)) }.boxed()
-            });
+        let (watcher, background_command) = WatchHandle::new(receiver, handle, move |()| {
+            let paginator = Arc::clone(&paginator_cloned);
+            let to_message = Arc::clone(&to_message);
+            async move { Some(to_message(paginator.lock().await.all_items().await)) }.boxed()
+        });
         Ok((
             Self {
                 paginator,

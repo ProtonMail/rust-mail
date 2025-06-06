@@ -3,18 +3,10 @@ source: mail/mail-html-transformer/src/tests/dark_mode.rs
 expression: html.to_string()
 ---
 <html data-protonmail-message="true"><head>
-    <style>
-    .main {
-      color: #000 !important;
-    }
-    html {
-      background-color: #fff !important;
-    }
-    </style>
+    <style>span{background-color: rgb(151, 202, 133);}</style>
   <style style="text/css">/*
-TODO: Introduce styles for dark mode
+TODO: Introduce styles for combination of light and dark mode using @media queries
 */
-
 article,
 aside,
 details,
@@ -261,9 +253,7 @@ blockquote blockquote blockquote blockquote blockquote blockquote{
 	--text-norm: #262a33;
     */
 
-  --text-norm: #D1D1D4;
-  --background-norm: #1C1B24;
-  --primary: #7777F8;
+    --primary: #8A6EFF; 
 
 	padding: 1rem; /* to check if still useful */
 }
@@ -317,15 +307,38 @@ img {
     }
 }
 
-
-</style><style style="text/css">[data-protonmail-message] .main {
-color:#fff!important
- }html[data-protonmail-message] {
-background-color:#1c1b24!important
+@media (prefers-color-scheme: dark) {
+  :root {
+    --text-norm: #D1D1D4;
+    --background-norm: #1C1B24;
+    --primary: #7777F8;
+  }
+}
+</style><style style="text/css">
+                  @media ( prefers-color-scheme: dark ) {
+                      [data-protonmail-message] span {
+background-color:#3e6b2e!important
  }
 
-</style></head>
+[data-protonmail-message] font[color="black"] {
+ color: #fff;
+ }[data-protonmail-message] td[bgcolor="white"] {
+ background-color: #1c1b24;
+ }
+                  }
+                </style></head>
   <body>
+    <table>
+        <tbody><tr><td bgcolor="white">
+            <font color="black">
+                Hello world!
+            </font>
+        </td>
+        <!-- Repeat tags multiple times with the same style  -->
+         <td bgcolor="white">1</td>
+         <td bgcolor="white">2</td>
+         <td bgcolor="white">3</td>
+    </tr></tbody></table>
   
 
 </body></html>

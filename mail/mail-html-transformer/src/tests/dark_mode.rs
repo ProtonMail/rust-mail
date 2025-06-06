@@ -69,6 +69,19 @@ fn inject_style_inline_attributes() {
 }
 
 #[test]
+fn inject_style_deprecated_attributes() {
+    let html = include_str!("../../tests/htmls/styles/deprecated_attributes.html");
+    let mut html = Transformer::new(html);
+    html.inject_dark_mode(
+        ColorMode::DarkMode,
+        BrowserCapabilities {
+            supports_dark_mode_via_media_query: true,
+        },
+    );
+    insta::assert_snapshot!(html.to_string());
+}
+
+#[test]
 fn revert_dark_mode_in_inline_attributes() {
     let original_html = include_str!("../../tests/htmls/styles/inline_attributes.html");
     // First, inject dark mode - just a copy of previous test
@@ -149,4 +162,25 @@ fn inject_style_to_another_target_twice() {
     // It should not affect it anymore
     assert_eq!(head_after_first_pass, head_after_second_pass);
     assert_eq!(html_after_first_pass, html_after_second_pass);
+}
+
+mod regressions {
+    use crate::{
+        Transformer,
+        transforms::{ColorMode, styles::BrowserCapabilities},
+    };
+
+    // Bugs caught live
+    #[test]
+    fn table_bgcolor() {
+        let html = include_str!("../../tests/htmls/styles/regressions/table-bgcolor.html");
+        let mut html = Transformer::new(html);
+        html.inject_dark_mode(
+            ColorMode::DarkMode,
+            BrowserCapabilities {
+                supports_dark_mode_via_media_query: true,
+            },
+        );
+        insta::assert_snapshot!(html.to_string());
+    }
 }

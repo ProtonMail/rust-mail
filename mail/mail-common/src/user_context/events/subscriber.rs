@@ -279,7 +279,7 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
     match all_mail.view_mode(&tether).await? {
         ViewMode::Conversations => {
             let mut conv_scroll_cursor = CachedScrollData::<ConversationScrollData>::all(
-                all_mail.local_id.unwrap(),
+                all_mail.id(),
                 ReadFilter::All,
                 page_size,
             );
@@ -300,7 +300,7 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
         }
         ViewMode::Messages => {
             let mut msg_scroll_cursor = CachedScrollData::<MessageScrollData>::all(
-                all_mail.local_id.unwrap(),
+                all_mail.id(),
                 ReadFilter::All,
                 page_size,
             );

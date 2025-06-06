@@ -28,18 +28,15 @@ async fn test_attachment_create_without_metadata() {
     let api_attachment = test_attachment();
     let mut attachment = Attachment::from(api_attachment.clone());
     conn.tx(async |tx| attachment.save(tx).await).await.unwrap();
-    let local_id = attachment.local_id;
+    let local_id = attachment.id();
     assert!(attachment.has_complete_metadata());
     let mut expected = Attachment::from(api_attachment);
     expected.local_address_id = Some(1.into());
-    expected.local_id = local_id;
+    expected.local_id = Some(local_id);
     expected.row_id = attachment.row_id;
     expected.local_message_id = Some(1.into());
     expected.local_conversation_id = Some(1.into());
-    let db_attachment = Attachment::load(local_id.unwrap(), &conn)
-        .await
-        .unwrap()
-        .unwrap();
+    let db_attachment = Attachment::load(local_id, &conn).await.unwrap().unwrap();
     assert_eq!(expected, db_attachment);
 }
 

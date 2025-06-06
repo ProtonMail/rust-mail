@@ -40,6 +40,7 @@ use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Cell, List, ListItem, Paragraph, Row, Table};
+use stash::orm::Model;
 use stash::stash::{Tether, WatcherHandle};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -235,28 +236,27 @@ impl MessagesState {
         let WatcherHandle {
             handle, receiver, ..
         } = ContextualConversation::watch(ctx.user_stash())?;
-        let (watcher, background_command) =
-            WatchHandle::new_dampened(receiver, handle, move || {
-                let tether = ctx.user_stash().connection();
-                async move {
-                    Some(
-                        match MailMessage::in_conversation(conversation_id, &tether).await {
-                            Ok(m) => MessageMessage::Refreshed(m).into(),
-                            Err(e) => {
-                                let e = anyhow!("Message list Query error: {e}");
-                                tracing::error!("{e:?}");
-                                e.into()
-                            }
-                        },
-                    )
-                }
-                .boxed()
-            });
+        let (watcher, background_command) = WatchHandle::new(receiver, handle, move |()| {
+            let tether = ctx.user_stash().connection();
+            async move {
+                Some(
+                    match MailMessage::in_conversation(conversation_id, &tether).await {
+                        Ok(m) => MessageMessage::Refreshed(m).into(),
+                        Err(e) => {
+                            let e = anyhow!("Message list Query error: {e}");
+                            tracing::error!("{e:?}");
+                            e.into()
+                        }
+                    },
+                )
+            }
+            .boxed()
+        });
 
         let index = conv_and_messages
             .messages
             .iter()
-            .position(|m| m.local_id.unwrap() == conv_and_messages.message_id_to_open)
+            .position(|m| m.id() == conv_and_messages.message_id_to_open)
             .unwrap_or(0);
 
         Ok((
@@ -284,7 +284,7 @@ impl MessagesState {
             let c: Result<_> = (|| async move {
                 let stash = ctx.user_stash();
                 let mut tether = stash.connection();
-                let local_id = metadata.local_id.unwrap();
+                let local_id = metadata.id();
 
                 let decrypted = MailMessage::message_body(&ctx, local_id)
                     .await
@@ -322,7 +322,7 @@ impl MessagesState {
 
     fn selected_message_id(&self) -> Option<LocalMessageId> {
         let index = self.table_state.selected()?;
-        self.messages.get(index).map(|c| c.local_id.unwrap())
+        self.messages.get(index).map(Model::id)
     }
 
     fn selected_email(&self) -> Option<String> {
@@ -543,6 +543,11 @@ impl MessagesState {
                 .selected_message_id()
                 .map(|id| Command::message(MessageMessage::CancelScheduleSend(id).into()))
                 .unwrap_or_default(),
+            KeyCode::Char('p') => self
+                .selected_message_id()
+                .map(|id| Command::message(MessageMessage::ReportPhishing(id).into()))
+                .unwrap_or_default(),
+
             _ => Command::None,
         }
     }
@@ -591,6 +596,19 @@ impl MessagesState {
             }
             MessageMessage::UnstarMessage(id) => {
                 return unstar_message(user_ctx.to_owned(), id);
+            }
+            MessageMessage::ReportPhishing(id) => {
+                let ctx = user_ctx.to_owned();
+                let popup = YesNoPopup::new(
+                    "Confirm phishing report",
+                    "Reporting a message as a phishing atempt will send the message to us, so we can analyze it and improve our filters. This means that we will be able to see the contents of the message in full.",
+                )
+                .on_accept(Command::from_future(async move {
+                    MailMessage::action_report_phishing(ctx.action_queue(), id, &ctx.user_stash().connection())
+                        .await
+                        .context("Failed to star message")
+                }));
+                return Command::message(Messages::raise_popup(popup));
             }
             MessageMessage::NextPage(messages) => {
                 self.messages.extend(messages);

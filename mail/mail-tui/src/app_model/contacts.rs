@@ -425,21 +425,20 @@ impl ContactsModel {
         let WatcherHandle {
             handle, receiver, ..
         } = stash.subscribe_to(|sender| Box::new(ContactListWatcher::new(sender)))?;
-        let (watcher, background_command) =
-            WatchHandle::new_dampened(receiver, handle, move || {
-                let tether = ctx.user_stash().connection();
-                async move {
-                    Some(match Self::load_contacts(&tether).await {
-                        Ok(list) => Message::LoadContacts(list).into(),
-                        Err(e) => {
-                            let e = anyhow::anyhow!("Contact list query error: {e}");
-                            error!("{e:?}");
-                            e.into()
-                        }
-                    })
-                }
-                .boxed()
-            });
+        let (watcher, background_command) = WatchHandle::new(receiver, handle, move |()| {
+            let tether = ctx.user_stash().connection();
+            async move {
+                Some(match Self::load_contacts(&tether).await {
+                    Ok(list) => Message::LoadContacts(list).into(),
+                    Err(e) => {
+                        let e = anyhow::anyhow!("Contact list query error: {e}");
+                        error!("{e:?}");
+                        e.into()
+                    }
+                })
+            }
+            .boxed()
+        });
 
         Ok((watcher, background_command))
     }

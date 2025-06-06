@@ -461,6 +461,7 @@ impl Attachment {
         bond: &Bond<'_>,
     ) -> Result<Vec<LocalAttachmentId>, StashError> {
         let mut result = Vec::with_capacity(message.attachments_metadata.len());
+        let message_id = message.id();
         for metadata in &mut message.attachments_metadata {
             // Handle case where we have local not uploaded attachments.
             let maybe_existing_attachment = if let Some(local_id) = metadata.local_id {
@@ -483,14 +484,14 @@ impl Attachment {
                     params![
                         message.local_address_id,
                         message.remote_address_id.clone(),
-                        message.local_id.unwrap(),
+                        message_id,
                         message.remote_id.clone(),
-                        attachment.local_id.unwrap()
+                        attachment.id()
                     ],
                 )
                 .await
                 .inspect_err(|e| error!("Failed to update attachment from message: {}", e))?;
-                result.push(attachment.local_id.unwrap())
+                result.push(attachment.id())
             } else {
                 let mut attachment = Attachment::from(metadata.clone());
                 // This attachment does not exist, we need to create it.
@@ -502,7 +503,7 @@ impl Attachment {
                     .save(bond)
                     .await
                     .inspect_err(|e| error!("Failed to save attachment from message: {e:?}"))?;
-                result.push(attachment.local_id.unwrap())
+                result.push(attachment.id())
             }
         }
         Ok(result)
@@ -518,6 +519,7 @@ impl Attachment {
         conversation: &mut Conversation,
         bond: &Bond<'_>,
     ) -> Result<Vec<LocalAttachmentId>, StashError> {
+        let conversation_id = conversation.id();
         let mut result = Vec::with_capacity(conversation.attachments_metadata.len());
         for metadata in &mut conversation.attachments_metadata {
             // Handle case where we have local not uploaded attachments.
@@ -537,23 +539,23 @@ impl Attachment {
                     WHERE local_id = ?
                 ", Self::table_name()},
                     params![
-                        conversation.local_id.unwrap(),
+                        conversation_id,
                         conversation.remote_id.clone(),
-                        attachment.local_id.unwrap()
+                        attachment.id()
                     ],
                 )
                 .await
                 .inspect_err(|e| error!("Failed to update attachment from conversation: {}", e))?;
-                result.push(attachment.local_id.unwrap());
+                result.push(attachment.id());
             } else {
                 let mut attachment = Attachment::from(metadata.clone());
                 // This attachment does not exist, we need to create it.
-                attachment.local_conversation_id = Some(conversation.local_id.unwrap());
+                attachment.local_conversation_id = Some(conversation_id);
                 attachment.remote_conversation_id = conversation.remote_id.clone();
                 attachment.save(bond).await.inspect_err(|e| {
                     error!("Failed to save attachment from conversation: {e:?}")
                 })?;
-                result.push(attachment.local_id.unwrap());
+                result.push(attachment.id());
             }
         }
 
@@ -582,7 +584,7 @@ impl Attachment {
         Attachment::find(
             format!(
                 "WHERE local_id IN ({})",
-                stash::utils::placeholders(params.len())
+                stash::utils::placeholders_n(params.len())
             ),
             params,
             tether,
@@ -732,21 +734,12 @@ impl Attachment {
                 debug!("Storing attachment in cache");
 
                 let data = tokio::fs::read(path).await?;
-                Attachment::store_in_cache(
-                    ctx,
-                    &attachment.filename,
-                    attachment.local_id.unwrap(),
-                    data,
-                    tx,
-                )
-                .await
+                Attachment::store_in_cache(ctx, &attachment.filename, attachment.id(), data, tx)
+                    .await
             })
             .await?;
 
-        info!(
-            "Attachment created with id {}",
-            attachment.local_id.unwrap()
-        );
+        info!("Attachment created with id {}", attachment.id());
         Ok(attachment)
     }
 
@@ -865,7 +858,7 @@ impl Attachment {
         bond: &Bond<'_>,
     ) -> Result<Attachment, MailContextError> {
         let mut new_attachment = attachment;
-        let attachment_id = new_attachment.local_id.unwrap();
+        let attachment_id = new_attachment.id();
 
         let Some(current_path) =
             Attachment::path_from_cache_and_update_metadata(attachment_id, bond).await?
@@ -893,7 +886,7 @@ impl Attachment {
         Self::copy_attachment_to_cache(
             ctx,
             &new_attachment.filename,
-            new_attachment.local_id.unwrap(),
+            new_attachment.id(),
             &current_path,
             bond,
         )
@@ -916,7 +909,7 @@ impl Attachment {
                 address
                     .remote_id
                     .as_ref()
-                    .ok_or(AppError::AddressHasNoRemoteId(address.local_id.unwrap()))?,
+                    .ok_or(AppError::AddressHasNoRemoteId(address.id()))?,
             )
             .await
             .inspect_err(|e| error!("Failed to unlock address: {e:?}"))?;
@@ -982,26 +975,6 @@ impl Attachment {
 
     pub fn is_public_key_attachment_filename(name: &str) -> bool {
         name.starts_with("publickey - ") && name.ends_with(".asc")
-    }
-
-    pub async fn filename(
-        id: LocalAttachmentId,
-        tether: &Tether,
-    ) -> Result<Option<String>, StashError> {
-        match tether
-            .query_value(
-                format!(
-                    "SELECT filename AS value FROM {} WHERE local_id=?",
-                    Self::table_name()
-                ),
-                params![id],
-            )
-            .await
-        {
-            Ok(v) => Ok(Some(v)),
-            Err(StashError::ExecutionError(SqliteError::QueryReturnedNoRows)) => Ok(None),
-            Err(e) => Err(e),
-        }
     }
 
     pub fn is_public_key_attachment(&self) -> bool {
@@ -1143,7 +1116,7 @@ impl PublicKeyAttachment {
         Attachment::store_in_cache(
             context,
             &self.attachment.filename,
-            self.attachment.local_id.unwrap(),
+            self.attachment.id(),
             self.key.into_bytes(),
             tx,
         )

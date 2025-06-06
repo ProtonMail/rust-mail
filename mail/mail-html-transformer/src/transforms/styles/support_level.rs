@@ -56,6 +56,7 @@ impl DarkStyleSupportLevel {
         if let Ok(meta) = document.select_first(r#"meta[name="color-scheme"]"#) {
             if let Some(content) = meta.attributes.borrow().get(local_name!("content")) {
                 if content.contains("dark") {
+                    tracing::debug!("Message contains color-scheme meta tag with dark content");
                     return Self::Native;
                 }
             }
@@ -64,6 +65,9 @@ impl DarkStyleSupportLevel {
         if let Ok(meta) = document.select_first(r#"meta[name="supported-color-schemes"]"#) {
             if let Some(content) = meta.attributes.borrow().get(local_name!("content")) {
                 if content.contains("dark") {
+                    tracing::debug!(
+                        "Message contains supported-color-schemes meta tag with dark content"
+                    );
                     return Self::Native;
                 }
             }
@@ -73,6 +77,7 @@ impl DarkStyleSupportLevel {
             let content = style.map(|el| el.text_contents()).join("\n");
             // Message contains media query that suggests it can handle dark mode natively
             if COLOR_SCHEME_REGEX.is_match(&content) {
+                tracing::debug!("Message contains color-scheme meta tag with dark content");
                 return Self::Native;
             }
         }

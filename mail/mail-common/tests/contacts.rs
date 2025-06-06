@@ -8,6 +8,7 @@ use proton_core_common::datatypes::{
 use proton_core_common::models::{Contact, ModelIdExtension};
 use proton_mail_common::test_utils::init::Params as TestParams;
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
+use stash::orm::Model;
 
 #[tokio::test]
 async fn contact_list() {
@@ -123,7 +124,7 @@ async fn delete_contacts() {
 
     assert!(!contact.deleted);
 
-    Contact::action_delete(user_ctx.action_queue(), vec![contact.local_id.unwrap()])
+    Contact::action_delete(user_ctx.action_queue(), vec![contact.id()])
         .await
         .unwrap();
     user_ctx.execute_single_action().await.unwrap();

@@ -241,7 +241,7 @@ impl SearchScrollerSource {
                 for message in messages.iter_mut() {
                     message.create_or_get_local(tx).await?;
                     SearchScrollData::builder()
-                        .local_message_id(message.local_id.unwrap())
+                        .local_message_id(message.id())
                         .display_order(display_order)
                         .build()
                         .with_save(tx)

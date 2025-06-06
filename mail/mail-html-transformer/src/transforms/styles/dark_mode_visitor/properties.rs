@@ -17,11 +17,6 @@ const BACKGROUND_COLOR_RELATED_PROPERTIES: &[PropertyId] = &[
     PropertyId::BackgroundColor,
     PropertyId::TextShadow,
     PropertyId::BoxShadow(VendorPrefix::all()),
-];
-
-/// All properties that might contain color. Including all shorthands
-const FOREGROUND_COLOR_RELATED_PROPERTIES: &[PropertyId] = &[
-    PropertyId::Color,
     PropertyId::Border, // Shorthand
     PropertyId::BorderColor,
     PropertyId::BorderTop, // Shorthand
@@ -40,6 +35,11 @@ const FOREGROUND_COLOR_RELATED_PROPERTIES: &[PropertyId] = &[
     PropertyId::BorderInlineStartColor,
     PropertyId::BorderInlineEnd, // Shorthand
     PropertyId::BorderInlineEndColor,
+];
+
+/// All properties that might contain color. Including all shorthands
+const FOREGROUND_COLOR_RELATED_PROPERTIES: &[PropertyId] = &[
+    PropertyId::Color,
     PropertyId::Outline, // Shorthand
     PropertyId::OutlineColor,
     PropertyId::TextDecoration(VendorPrefix::all()), // Shorthand

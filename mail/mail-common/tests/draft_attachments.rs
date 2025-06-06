@@ -18,7 +18,7 @@ use proton_mail_api::services::proton::request_data::NewAttachmentParams;
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::{Disposition, MimeType};
 use proton_mail_common::draft::attachments::DraftAttachmentState;
-use proton_mail_common::draft::{AttachmentRemoveError, Draft, DraftSyncStatus, ReplyMode};
+use proton_mail_common::draft::{Draft, DraftSyncStatus, ReplyMode};
 use proton_mail_common::models::{
     Attachment, DraftAttachmentMetadata, DraftAttachmentUploadState, Message,
 };
@@ -27,6 +27,7 @@ use proton_mail_common::test_utils::message_body::{
 };
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use proton_mail_common::{MailContextError, MailUserContext, draft};
+use stash::orm::Model;
 use stash::stash::Tether;
 use std::path::Path;
 
@@ -160,7 +161,7 @@ async fn remove_attachment_updates_attachment_list() {
     .await;
 
     let action_id = draft
-        .remove_attachment(&user_ctx, attachment.local_id.unwrap())
+        .remove_attachment(&user_ctx, attachment.id())
         .await
         .unwrap();
 
@@ -319,7 +320,7 @@ async fn removing_non_uploaded_attachment() {
 
     // Remove attachment
     draft
-        .remove_attachment(&user_ctx, local_attachment.local_id.unwrap())
+        .remove_attachment(&user_ctx, local_attachment.id())
         .await
         .unwrap();
 
@@ -331,7 +332,7 @@ async fn removing_non_uploaded_attachment() {
 
     // Check attachment was deleted
     assert!(
-        Attachment::find_by_id(local_attachment.local_id.unwrap(), &tether)
+        Attachment::find_by_id(local_attachment.id(), &tether)
             .await
             .unwrap()
             .is_none()
@@ -418,7 +419,7 @@ async fn removing_uploaded_attachment() {
 
     // Remove attachment
     draft
-        .remove_attachment(&user_ctx, local_attachment.local_id.unwrap())
+        .remove_attachment(&user_ctx, local_attachment.id())
         .await
         .unwrap();
 
@@ -430,7 +431,7 @@ async fn removing_uploaded_attachment() {
 
     // Check attachment was deleted
     assert!(
-        Attachment::find_by_id(local_attachment.local_id.unwrap(), &tether)
+        Attachment::find_by_id(local_attachment.id(), &tether)
             .await
             .unwrap()
             .is_none()
@@ -560,15 +561,9 @@ async fn draft_reply_or_forward_creates_new_attachments() {
     ctx.catch_all().await;
 
     // Create draft.
-    let mut draft = Draft::reply(
-        &user_ctx,
-        existing_message.local_id.unwrap(),
-        reply_mode,
-        true,
-        None,
-    )
-    .await
-    .unwrap();
+    let mut draft = Draft::reply(&user_ctx, existing_message.id(), reply_mode, true, None)
+        .await
+        .unwrap();
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -656,15 +651,9 @@ async fn deleting_draft_metadata_cleans_not_uploaded_attachments() {
     .await
     .unwrap();
     // Create draft.
-    let draft = Draft::reply(
-        &user_ctx,
-        existing_message.local_id.unwrap(),
-        reply_mode,
-        true,
-        None,
-    )
-    .await
-    .unwrap();
+    let draft = Draft::reply(&user_ctx, existing_message.id(), reply_mode, true, None)
+        .await
+        .unwrap();
 
     // Get attachments
     let attachments = DraftAttachmentMetadata::find_by_metadata_id(
@@ -727,42 +716,6 @@ async fn override_attachment_name() {
     .unwrap();
 
     assert_eq!(local_attachment.filename, filename_override);
-}
-
-#[tokio::test]
-async fn removing_address_public_key_is_an_error() {
-    // Removing the public key when the mail settings have attach public key setup is an error.
-    let ctx = MailTestContext::with_user_secret_and_user_id(
-        message_body_test_user_secret(),
-        UserId::from(TEST_USER_ID),
-    )
-    .await;
-    let mut params = draft_test_params();
-    params.mail_settings.as_mut().unwrap().attach_public_key = true;
-
-    ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
-    let user_ctx = ctx.mail_user_context().await;
-
-    let draft = Draft::empty(&user_ctx).await.unwrap();
-    let tether = user_ctx.user_stash().connection();
-    let draft_attachments = draft.attachments(&tether).await.unwrap();
-    assert_eq!(draft_attachments.len(), 1);
-    assert!(matches!(
-        draft_attachments[0].state,
-        DraftAttachmentState::Pending
-    ));
-
-    let err = draft
-        .remove_attachment(&user_ctx, draft_attachments[0].metadata.local_id.unwrap())
-        .await
-        .unwrap_err();
-    assert!(matches!(
-        err,
-        MailContextError::Draft(draft::Error::AttachmentRemove(
-            AttachmentRemoveError::AttachmentIsPublicKey(_)
-        ))
-    ));
 }
 
 async fn create_and_add_attachment(

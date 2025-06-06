@@ -15,6 +15,7 @@ use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Address, Label, ModelExtension, ModelIdExtension};
 use proton_crypto_account::keys::AddressKeys as ApiAddressKeys;
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
+use stash::orm::Model;
 use stash::stash::{StashError, Tether};
 use std::collections::{BTreeMap, HashMap};
 
@@ -83,13 +84,12 @@ pub async fn prepare_and_patch_db_state_and_skip(
                     label.save(tx).await.expect("failed to create label");
                     label
                 };
-                local_label_ids.push(the_label.local_id);
+                local_label_ids.push(the_label.id());
             }
             for (idx, local_id) in local_label_ids.into_iter().enumerate() {
-                result.labels.insert(
-                    env.labels[idx].clone().remote_id.unwrap(),
-                    local_id.unwrap(),
-                );
+                result
+                    .labels
+                    .insert(env.labels[idx].clone().remote_id.unwrap(), local_id);
                 result.conversation_counts.insert(
                     env.labels[idx].clone().remote_id.unwrap(),
                     ConversationLabelsCount {
@@ -239,10 +239,9 @@ pub async fn prepare_and_patch_db_state_and_skip(
                 for message in &mut env.messages {
                     message.save(tx).await.expect("failed to create message");
                     local_message_ids.push(message.local_id);
-                    result.messages.insert(
-                        message.remote_id.clone().unwrap(),
-                        message.local_id.unwrap(),
-                    );
+                    result
+                        .messages
+                        .insert(message.remote_id.clone().unwrap(), message.id());
 
                     for label_id in &message.label_ids {
                         let counts = result.message_counts.get_mut(label_id).unwrap();

@@ -683,7 +683,7 @@ async fn test_cashed_scroller_correctly_reads_empty_conversations_from_the_trash
     let unread = ReadFilter::All;
 
     let mut scroller = ConversationScrollData::builder()
-        .local_label_id(trash.local_id.unwrap())
+        .local_label_id(trash.id())
         .unread(unread)
         .remote_conversation_id("conv_1".into())
         .conversation_time(1.into())
@@ -696,15 +696,11 @@ async fn test_cashed_scroller_correctly_reads_empty_conversations_from_the_trash
         .unwrap();
 
     let page_size = 4;
-    let mut cached_scroller = CachedScrollData::<ConversationScrollData>::new(
-        trash.local_id.unwrap(),
-        unread,
-        page_size,
-        &tether,
-    )
-    .await
-    .unwrap()
-    .unwrap();
+    let mut cached_scroller =
+        CachedScrollData::<ConversationScrollData>::new(trash.id(), unread, page_size, &tether)
+            .await
+            .unwrap()
+            .unwrap();
     let items = cached_scroller
         .visible_element_count(&tether)
         .await

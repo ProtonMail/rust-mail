@@ -1197,13 +1197,16 @@ pub async fn unblock_address(mailbox: Arc<Mailbox>, email: String) -> Result<(),
 #[returns(VoidActionResult)]
 pub async fn report_phishing(mailbox: Arc<Mailbox>, message_id: Id) -> Result<(), ActionError> {
     let ctx = mailbox.ctx()?;
-    let label = mailbox.mbox().label_id();
 
     uniffi_async(async move {
-        RealMessage::action_report_phishing(ctx.action_queue(), label, message_id.into())
-            .await
-            .map(|_| ())
-            .map_err(RealProtonMailError::from)
+        RealMessage::action_report_phishing(
+            ctx.action_queue(),
+            message_id.into(),
+            &ctx.user_stash().connection(),
+        )
+        .await
+        .map(|()| ())
+        .map_err(RealProtonMailError::from)
     })
     .await
     .map_err(ActionError::from)

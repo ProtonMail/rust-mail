@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use stash::orm::Model;
 use std::collections::{HashMap, HashSet};
 
 use crate::AppError;
@@ -162,7 +163,7 @@ async fn refresh_conversation_messages(
     ctx: &MailUserContext,
     guard: &mut WriterGuard<'_>,
 ) -> Result<(), MailActionError> {
-    let local_id = conversation.local_id.unwrap();
+    let local_id = conversation.id();
     let conv_count = Conversation::message_count(local_id, guard.tether()).await?;
     if conv_count > 0 {
         let api = ctx.api().clone();

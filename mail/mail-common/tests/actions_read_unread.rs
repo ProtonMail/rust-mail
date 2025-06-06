@@ -143,7 +143,7 @@ async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize
         .await
         .unwrap()
         .unwrap();
-    let mut counters = ConversationCounters::find_by_id(inbox.local_id.unwrap(), &tether)
+    let mut counters = ConversationCounters::find_by_id(inbox.id(), &tether)
         .await
         .unwrap()
         .unwrap();
@@ -153,13 +153,9 @@ async fn mark_conversation_read(conversations: &[TestItem], expected_read: usize
     let conversation_ids = Conversation::remote_ids_counterpart(to_mark, &tether)
         .await
         .unwrap();
-    Conversation::action_mark_read(
-        user_ctx.action_queue(),
-        inbox.local_id.unwrap(),
-        conversation_ids,
-    )
-    .await
-    .unwrap();
+    Conversation::action_mark_read(user_ctx.action_queue(), inbox.id(), conversation_ids)
+        .await
+        .unwrap();
     user_ctx.execute_single_action().await.unwrap();
 
     // Validation
@@ -217,7 +213,7 @@ async fn mark_conversation_unread(conversations: &[TestItem], expected_read: usi
         .await
         .unwrap()
         .unwrap();
-    let mut counters = ConversationCounters::find_by_id(inbox.local_id.unwrap(), &tether)
+    let mut counters = ConversationCounters::find_by_id(inbox.id(), &tether)
         .await
         .unwrap()
         .unwrap();
@@ -227,13 +223,9 @@ async fn mark_conversation_unread(conversations: &[TestItem], expected_read: usi
     let conversation_ids = Conversation::remote_ids_counterpart(to_mark, &tether)
         .await
         .unwrap();
-    Conversation::action_mark_unread(
-        user_ctx.action_queue(),
-        inbox.local_id.unwrap(),
-        conversation_ids,
-    )
-    .await
-    .unwrap();
+    Conversation::action_mark_unread(user_ctx.action_queue(), inbox.id(), conversation_ids)
+        .await
+        .unwrap();
     user_ctx.execute_single_action().await.unwrap();
 
     // Validation

@@ -27,9 +27,6 @@ pub async fn safe_write_async<C: AsRef<[u8]> + Send + 'static>(
     let path: PathBuf = path.into();
     match spawn_blocking(move || safe_write(path, contents)).await {
         Ok(res) => res,
-        Err(_) => Err(io::Error::new(
-            io::ErrorKind::Other,
-            "background task panicked",
-        )),
+        Err(_) => Err(io::Error::other("background task panicked")),
     }
 }

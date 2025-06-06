@@ -11,6 +11,13 @@ expression: html_after_revert
     <div class="a" style="color: black;">a</div>
     <div class="b" style="color: black !important">b</div>
     <span>abc</span>
+
+    <!-- Repeat tags multiple times with the same style  -->
+     
+    <div class="b" style="color: black !important">b</div>
+    <div class="b" style="color: black !important">b</div>
+    <div class="b" style="color: black !important">b</div>
+    
   
 
 </body></html>

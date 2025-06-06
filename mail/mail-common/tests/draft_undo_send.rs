@@ -14,6 +14,7 @@ use proton_mail_common::test_utils::message_body::{
     message_body_test_user_secret,
 };
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
+use stash::orm::Model;
 
 #[tokio::test]
 async fn draft_undo_send() {
@@ -62,11 +63,11 @@ async fn draft_undo_send() {
     // want to check intermediate state here.
     user_ctx
         .action_queue()
-        .queue_action(UndoSend::new(local_sent_message.local_id.unwrap()))
+        .queue_action(UndoSend::new(local_sent_message.id()))
         .await
         .unwrap();
 
-    let updated_local_message = Message::find_by_id(local_sent_message.local_id.unwrap(), &tether)
+    let updated_local_message = Message::find_by_id(local_sent_message.id(), &tether)
         .await
         .unwrap()
         .unwrap();
@@ -129,16 +130,13 @@ async fn draft_undo_send_failure() {
         .unwrap();
 
     // Que undo send action
-    Draft::action_undo_send(
-        user_ctx.action_queue(),
-        local_sent_message.local_id.unwrap(),
-    )
-    .await
-    .unwrap();
+    Draft::action_undo_send(user_ctx.action_queue(), local_sent_message.id())
+        .await
+        .unwrap();
 
     let err = user_ctx.execute_single_send_action().await.unwrap_err();
 
-    let updated_local_message = Message::find_by_id(local_sent_message.local_id.unwrap(), &tether)
+    let updated_local_message = Message::find_by_id(local_sent_message.id(), &tether)
         .await
         .unwrap()
         .unwrap();

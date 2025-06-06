@@ -94,21 +94,21 @@ async fn action_label_as_without_archive() {
                 .await
                 .unwrap()
                 .unwrap();
-            let mut counters1 = ConversationCounters::new(label1.local_id.unwrap());
+            let mut counters1 = ConversationCounters::new(label1.id());
             counters1.total = 2;
             counters1.save(tx).await.unwrap();
             let label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], tx)
                 .await
                 .unwrap()
                 .unwrap();
-            let mut counters2 = ConversationCounters::new(label2.local_id.unwrap());
+            let mut counters2 = ConversationCounters::new(label2.id());
             counters2.total = 2;
             counters2.save(tx).await.unwrap();
             let label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], tx)
                 .await
                 .unwrap()
                 .unwrap();
-            let mut counters3 = ConversationCounters::new(label3.local_id.unwrap());
+            let mut counters3 = ConversationCounters::new(label3.id());
             counters3.total = 3;
             counters3.save(tx).await.unwrap();
             Ok((label1, label2))
@@ -140,15 +140,15 @@ async fn action_label_as_without_archive() {
     // Action
     Conversation::action_label_as(
         user_ctx.action_queue(),
-        inbox_label.local_id.unwrap(),
+        inbox_label.id(),
         vec![
-            conversation1.local_id.unwrap(),
-            conversation2.local_id.unwrap(),
-            conversation3.local_id.unwrap(),
-            conversation4.local_id.unwrap(),
+            conversation1.id(),
+            conversation2.id(),
+            conversation3.id(),
+            conversation4.id(),
         ],
-        vec![label1.local_id.unwrap()],
-        vec![label2.local_id.unwrap()],
+        vec![label1.id()],
+        vec![label2.id()],
         false,
     )
     .await
@@ -167,7 +167,7 @@ async fn action_label_as_without_archive() {
         .iter()
         .map(|l| l.local_label_id.unwrap())
         .collect();
-    assert_eq!(ids, hash_set![label1.local_id.unwrap()]);
+    assert_eq!(ids, hash_set![label1.id()]);
     let conversation2 = Conversation::load(2.into(), &tether)
         .await
         .unwrap()
@@ -178,10 +178,7 @@ async fn action_label_as_without_archive() {
         .iter()
         .map(|l| l.local_label_id.unwrap())
         .collect();
-    assert_eq!(
-        ids,
-        hash_set![label1.local_id.unwrap(), label2.local_id.unwrap(),]
-    );
+    assert_eq!(ids, hash_set![label1.id(), label2.id(),]);
     let conversation3 = Conversation::load(3.into(), &tether)
         .await
         .unwrap()
@@ -192,7 +189,7 @@ async fn action_label_as_without_archive() {
         .iter()
         .map(|l| l.local_label_id.unwrap())
         .collect();
-    assert_eq!(ids, hash_set![label1.local_id.unwrap(),]);
+    assert_eq!(ids, hash_set![label1.id(),]);
     let conversation4 = Conversation::load(4.into(), &tether)
         .await
         .unwrap()
@@ -203,10 +200,7 @@ async fn action_label_as_without_archive() {
         .iter()
         .map(|l| l.local_label_id.unwrap())
         .collect();
-    assert_eq!(
-        ids,
-        hash_set![label1.local_id.unwrap(), label2.local_id.unwrap(),]
-    );
+    assert_eq!(ids, hash_set![label1.id(), label2.id(),]);
 
     let label1 = LabelWithCounters::find_first("WHERE remote_id = ?", params!["selected"], &tether)
         .await
@@ -286,21 +280,21 @@ async fn action_label_as_with_archive() {
                 .await
                 .unwrap()
                 .unwrap();
-            let mut counters1 = ConversationCounters::new(label1.local_id.unwrap());
+            let mut counters1 = ConversationCounters::new(label1.id());
             counters1.total = 1;
             counters1.save(tx).await.unwrap();
             let label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], tx)
                 .await
                 .unwrap()
                 .unwrap();
-            let mut counters2 = ConversationCounters::new(label2.local_id.unwrap());
+            let mut counters2 = ConversationCounters::new(label2.id());
             counters2.total = 1;
             counters2.save(tx).await.unwrap();
             let label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], tx)
                 .await
                 .unwrap()
                 .unwrap();
-            let mut counters3 = ConversationCounters::new(label3.local_id.unwrap());
+            let mut counters3 = ConversationCounters::new(label3.id());
             counters3.total = 1;
             counters3.save(tx).await.unwrap();
             Ok((label1, label2))
@@ -322,13 +316,10 @@ async fn action_label_as_with_archive() {
     // Action
     Conversation::action_label_as(
         user_ctx.action_queue(),
-        inbox_label.local_id.unwrap(),
-        vec![
-            conversation1.local_id.unwrap(),
-            conversation2.local_id.unwrap(),
-        ],
-        vec![label1.local_id.unwrap()],
-        vec![label2.local_id.unwrap()],
+        inbox_label.id(),
+        vec![conversation1.id(), conversation2.id()],
+        vec![label1.id()],
+        vec![label2.id()],
         true,
     )
     .await
@@ -351,7 +342,7 @@ async fn action_label_as_with_archive() {
         .iter()
         .map(|l| l.local_label_id.unwrap())
         .collect();
-    assert_eq!(ids, hash_set![label1.local_id.unwrap(), archive_id]);
+    assert_eq!(ids, hash_set![label1.id(), archive_id]);
     assert_eq!(
         conversation1.exclusive_location,
         Some(ExclusiveLocation::System {
@@ -369,14 +360,7 @@ async fn action_label_as_with_archive() {
         .iter()
         .map(|l| l.local_label_id.unwrap())
         .collect();
-    assert_eq!(
-        ids,
-        hash_set![
-            label1.local_id.unwrap(),
-            label2.local_id.unwrap(),
-            archive_id
-        ]
-    );
+    assert_eq!(ids, hash_set![label1.id(), label2.id(), archive_id]);
     assert_eq!(
         conversation2.exclusive_location,
         Some(ExclusiveLocation::System {

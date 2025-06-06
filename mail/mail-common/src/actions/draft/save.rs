@@ -193,10 +193,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
             .inspect_err(|e| error!("Failed to load attachments: {e:?}"))?;
         debug!("Draft has {} attachments", attachments.len());
         let attachment_metadata = Save::attachment_metadata(&attachments);
-        let attachment_ids = attachments
-            .iter()
-            .map(|a| a.local_id.unwrap())
-            .collect::<Vec<_>>();
+        let attachment_ids = attachments.iter().map(|a| a.id()).collect::<Vec<_>>();
 
         let conversation_id = if let Some(id) = metadata.local_conversation_id {
             id
@@ -217,8 +214,8 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 .save(bond)
                 .await
                 .inspect_err(|e| error!("Failed to create new conversation: {e:?}"))?;
-            metadata.local_conversation_id = Some(conversation.local_id.unwrap());
-            conversation.local_id.unwrap()
+            metadata.local_conversation_id = Some(conversation.id());
+            conversation.id()
         };
 
         let time = draft::compose::create_timestamp();
@@ -287,7 +284,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 .inspect_err(|e| error!("Failed to save message: {e:?}"))?;
 
             let mut message_body_metadata = MessageBodyMetadata {
-                local_message_id: Some(message.local_id.unwrap()),
+                local_message_id: Some(message.id()),
                 remote_message_id: None,
                 header: "".to_string(),
                 mime_type: action.mime_type,
@@ -301,46 +298,34 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 .await
                 .inspect_err(|e| error!("Failed to save message body metadata: {e:?}"))?;
 
-            Message::apply_label(
-                local_draft_id,
-                std::iter::once(message.local_id.unwrap()),
-                bond,
-            )
-            .await
-            .inspect_err(|e| {
-                error!("Failed to apply draft label to new message: {e:?}");
-            })?;
+            Message::apply_label(local_draft_id, std::iter::once(message.id()), bond)
+                .await
+                .inspect_err(|e| {
+                    error!("Failed to apply draft label to new message: {e:?}");
+                })?;
 
-            Message::apply_label(
-                local_all_draft_id,
-                std::iter::once(message.local_id.unwrap()),
-                bond,
-            )
-            .await
-            .inspect_err(|e| {
-                error!("Failed to apply all_draft label to new message: {e:?}");
-            })?;
+            Message::apply_label(local_all_draft_id, std::iter::once(message.id()), bond)
+                .await
+                .inspect_err(|e| {
+                    error!("Failed to apply all_draft label to new message: {e:?}");
+                })?;
 
-            Message::apply_label(
-                local_all_mail_id,
-                std::iter::once(message.local_id.unwrap()),
-                bond,
-            )
-            .await
-            .inspect_err(|e| {
-                error!("Failed to apply all_mail label to new message: {e:?}");
-            })?;
+            Message::apply_label(local_all_mail_id, std::iter::once(message.id()), bond)
+                .await
+                .inspect_err(|e| {
+                    error!("Failed to apply all_mail label to new message: {e:?}");
+                })?;
 
             message
         };
 
-        Message::store_decrypted_message_body(message.local_id.unwrap(), action.body.clone(), bond)
+        Message::store_decrypted_message_body(message.id(), action.body.clone(), bond)
             .await
             .inspect_err(|e| {
                 error!("Failed to store draft body in cache :{e:?}");
             })?;
 
-        metadata.local_message_id = Some(message.local_id.unwrap());
+        metadata.local_message_id = Some(message.id());
         metadata.save_action_id = Some(action_id);
         metadata.save(bond).await.inspect_err(|e| {
             error!("Failed to save draft metadata: {e:?}");
@@ -587,14 +572,14 @@ impl Save {
                             continue;
                         };
                         let Some(attachment_metadata) = DraftAttachmentMetadata::find_by_id(
-                            original_attachment.local_id.unwrap(),
+                            original_attachment.id(),
                             bond,
                         )
                             .await?
                         else {
                             warn!(
                             "Could not find attachment with id {}",
-                            original_attachment.local_id.unwrap()
+                            original_attachment.id()
                         );
                             continue;
                         };
@@ -612,13 +597,13 @@ impl Save {
                             //Inherited attachment will be removed and replaced by a new id.
                             debug!(
                             "Removing inherited attachment {}: {}",
-                            original_attachment.local_id.unwrap(),
+                            original_attachment.id(),
                             &remote_id,
                         );
                             // Unlink previous attachment.
                             bond.execute(indoc! {
                             "DELETE FROM message_attachments WHERE local_message_id=? AND local_attachment_id = ?",
-                        }, params![local_message_id, original_attachment.local_id.unwrap()]).await.inspect_err(|e|
+                        }, params![local_message_id, original_attachment.id()]).await.inspect_err(|e|
                                 error!("Failed to unlink attachment from message: {e:?}"))?;
                             // Remove attachment metadata
                             let current_display_order = attachment_metadata.display_order;
@@ -632,11 +617,11 @@ impl Save {
                                 .await
                                 .inspect_err(|e| error!("Failed to save attachment: {e}"))?;
                             // Create link
-                            bond.execute("INSERT INTO message_attachments (local_message_id, local_attachment_id) VALUES (?,?)", params![local_message_id, new_attachment.local_id.unwrap()]).await.inspect_err(|e| error!("Failed to link new attachment: {e:?}"))?;
+                            bond.execute("INSERT INTO message_attachments (local_message_id, local_attachment_id) VALUES (?,?)", params![local_message_id, new_attachment.id()]).await.inspect_err(|e| error!("Failed to link new attachment: {e:?}"))?;
                             // Creat new metadata entry
                             let mut new_attachment_metadata = DraftAttachmentMetadata::owned_and_uploaded(
                                 action.metadata_id,
-                                new_attachment.local_id.unwrap(),
+                                new_attachment.id(),
                                 current_display_order,
                                 false,
                             );
@@ -648,7 +633,7 @@ impl Save {
                             // for sending to external (non-proton) addresses. However, it is possible
                             // the attachment has not been synced, so we can only do this if we have the
                             // data.
-                            let original_attachment_id = original_attachment.local_id.unwrap();
+                            let original_attachment_id = original_attachment.id();
                             if let Some(path) = Attachment::path_from_cache_and_update_metadata(
                                 original_attachment_id,
                                 bond,
@@ -659,7 +644,7 @@ impl Save {
                                 Attachment::copy_attachment_to_cache(
                                     ctx,
                                     &new_attachment.filename,
-                                    new_attachment.local_id.unwrap(),
+                                    new_attachment.id(),
                                     &path,
                                     bond,
                                 )
@@ -701,6 +686,7 @@ impl Save {
                 Ok(())
             }).await
     }
+
     fn create_new_message(
         &self,
         address: &Address,
@@ -716,43 +702,23 @@ impl Save {
                 .all(|v| v.disposition == Disposition::Attachment)
         );
         Message {
-            local_id: None,
-            remote_id: None,
-            local_conversation_id: None,
-            remote_conversation_id: None,
-            local_address_id: address.local_id.unwrap(),
+            local_address_id: address.id(),
             remote_address_id: address.remote_id.clone().unwrap(),
             attachments_metadata: attachments,
             cc_list: self.cc_list.to_message_recipients().into(),
             bcc_list: self.bcc_list.to_message_recipients().into(),
-            deleted: false,
-            exclusive_location: None,
-            expiration_time: 0.into(),
-            external_id: None,
-            flags: Default::default(),
-            is_forwarded: false,
-            is_replied: false,
-            is_replied_all: false,
-            label_ids: vec![],
             num_attachments: total_attachment_count.try_into().unwrap_or_default(),
             display_order,
-            reply_tos: Default::default(),
             sender: MessageSender {
                 address: address.email.clone(),
-                bimi_selector: None,
-                display_sender_image: false,
-                is_proton: false,
-                is_simple_login: false,
                 name: address.display_name.clone(),
+                ..Default::default()
             },
             size: body_len,
-            snooze_time: 0.into(),
             subject: self.subject.clone(),
             time,
             to_list: self.to_list.to_message_recipients().into(),
-            unread: false,
-            custom_labels: vec![],
-            row_id: None,
+            ..Default::default()
         }
     }
 
@@ -765,7 +731,7 @@ impl Save {
         body_len: u64,
         time: UnixTimestamp,
     ) {
-        message.local_address_id = address.local_id.unwrap();
+        message.local_address_id = address.id();
         message.remote_address_id = address.remote_id.clone().unwrap();
         message.attachments_metadata = attachments;
         message.to_list = self.to_list.to_message_recipients().into();

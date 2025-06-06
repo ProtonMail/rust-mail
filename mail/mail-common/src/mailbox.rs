@@ -52,7 +52,7 @@ impl Mailbox {
             .await?
             .expect("Label not found");
 
-        let label_id = label.local_id.expect("Label has no local id");
+        let label_id = label.id();
         let view_mode = label.view_mode(tether).await?;
         debug!("Creating Mailbox ({}, view_mode={:?})", label_id, view_mode);
 

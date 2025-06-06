@@ -16,6 +16,7 @@ use stash::macros::{DbRecord, Model};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, StashError, Tether};
+use stash::utils::{IterMapToSql, placeholders};
 use std::collections::HashSet;
 use std::hash::RandomState;
 use std::ops::Add;
@@ -313,9 +314,9 @@ impl StoredAction {
             let parameters = self
                 .dependencies
                 .iter()
-                .map(|i| Box::new(i.dependency_id) as Box<dyn ToSql + Send>)
-                .collect::<Vec<_>>();
-            let placeholders = stash::utils::placeholders(parameters.len());
+                .map(|dep| dep.dependency_id)
+                .bridge_sql();
+            let placeholders = placeholders(&parameters);
             let existing_action_ids: HashSet<ActionId, RandomState> = HashSet::from_iter(
                 bond.query_values::<_, ActionId>(
                     format!(
