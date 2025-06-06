@@ -8,7 +8,7 @@ use dark_mode_visitor::{StyleAttributeVisitor, StylesheetVisitor};
 use html5ever::{LocalName, QualName, namespace_url};
 use itertools::Itertools;
 use kuchikiki::{Attribute, Attributes, ElementData, NodeData, NodeDataRef, NodeRef};
-use lightningcss::traits::{Parse, ToCss};
+use lightningcss::traits::ToCss;
 use lightningcss::values::color::{CssColor, HSL};
 use lightningcss::{
     printer::PrinterOptions,
@@ -19,7 +19,7 @@ use lightningcss::{
 };
 use support_level::DarkStyleSupportLevel;
 
-use crate::transforms::styles::colors::{HSLExt, hsla_for_dark_mode};
+use crate::transforms::styles::colors::{HSLExt, hsla_for_dark_mode, parse_css_color};
 
 use super::ColorMode;
 
@@ -269,9 +269,14 @@ fn sanitize_dark_mode_in_stylesheets(document: &NodeRef, root_selector: &str) ->
 
     for style in styles {
         let text_content = style.text_contents();
-        let Ok(stylesheet) = StyleSheet::parse(&text_content, ParserOptions::default()) else {
-            tracing::warn!("Could not parse stylesheet content. Skipping...");
-            continue;
+        let stylesheet = match StyleSheet::parse(&text_content, ParserOptions::default()) {
+            Ok(stylesheet) => stylesheet,
+            Err(err) => {
+                tracing::warn!("Could not parse stylesheet content");
+                tracing::warn!("Error: {err:?}");
+                tracing::warn!("Skipping...");
+                continue;
+            }
         };
 
         sanitize_dark_mode_in_stylesheet(
@@ -319,10 +324,15 @@ fn sanitize_dark_mode_in_inline_attributes(
     let mut overrides = BTreeMap::new();
 
     for (tag, style) in styles {
-        let Ok(style_attribute) = StyleAttribute::parse(&style, ParserOptions::default()) else {
-            let tag = tag.name.local.to_string();
-            tracing::warn!("Could not parse style attribute of tag `{tag}`. Skipping...");
-            continue;
+        let style_attribute = match StyleAttribute::parse(&style, ParserOptions::default()) {
+            Ok(style_attribute) => style_attribute,
+            Err(err) => {
+                let tag = tag.name.local.to_string();
+                tracing::warn!("Could not parse style attribute of tag `{tag}`");
+                tracing::warn!("Error: {err:?}");
+                tracing::warn!("Skipping...");
+                continue;
+            }
         };
 
         sanitize_dark_mode_in_inline_attribute(
@@ -400,8 +410,8 @@ fn sanitize_dark_mode_in_deprecated_attributes(
             .collect::<HashMap<_, _>>();
 
         for (attr, original_attr) in attributes {
-            let Ok(color) = CssColor::parse_string(&original_attr) else {
-                tracing::warn!("Could not parse color from deprecated attribute. Skipping...");
+            let Some(color) = parse_css_color(&original_attr) else {
+                tracing::warn!("Skipping...");
                 continue;
             };
             let Ok(color) = HSL::try_from(color) else {

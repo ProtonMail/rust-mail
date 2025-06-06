@@ -1,4 +1,7 @@
-use lightningcss::values::color::{HSL, RGBA, SRGBLinear, XYZd65};
+use lightningcss::{
+    traits::Parse,
+    values::color::{CssColor, HSL, RGBA, SRGBLinear, XYZd65},
+};
 
 use crate::transforms::styles::{ColorPurpose, dark_mode_background_color};
 
@@ -116,4 +119,22 @@ pub fn hsla_for_dark_mode(purpose: ColorPurpose, mut color: HSL) -> RGBA {
     }
 
     color.into()
+}
+
+pub fn parse_css_color(color: &str) -> Option<CssColor> {
+    // TODO(wpolak): Create an issue in lightningcss to support hex colors without `#` prefix
+    match CssColor::parse_string(color) {
+        Ok(color) => Some(color),
+        Err(err) => {
+            // Lightningcss does not support hex colors without `#` prefix
+            // Let's try to add it manually, if it works, we return the color
+            let new_color = format!("#{color}");
+            CssColor::parse_string(&new_color)
+                .inspect_err(|_| {
+                    // Let's display the original error message.
+                    tracing::warn!("Could not parse color: {color}. Error: {err:?}");
+                })
+                .ok()
+        }
+    }
 }
