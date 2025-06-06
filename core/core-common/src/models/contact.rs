@@ -742,7 +742,7 @@ impl SyncedContacts {
         let t1 = Instant::now();
         for mut cont in contacts {
             cont.save(tx).await?;
-            id_map.insert(cont.remote_id.clone().unwrap(), cont.local_id.unwrap());
+            id_map.insert(cont.remote_id.clone().unwrap(), cont.id());
         }
         debug!(
             "Stored {} contacts to the db in {:?}",

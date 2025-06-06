@@ -98,7 +98,7 @@ async fn create_empty_draft() {
     );
 
     // Loading the message body should not trigger any network requests.
-    let message_body_metadata = Message::message_body(&user_ctx, draft_message.local_id.unwrap())
+    let message_body_metadata = Message::message_body(&user_ctx, draft_message.id())
         .await
         .unwrap();
 
@@ -304,7 +304,7 @@ async fn create_draft_reply_without_body_is_error() {
     // Create draft.
     let result = Draft::reply(
         &user_ctx,
-        existing_message.local_id.unwrap(),
+        existing_message.id(),
         ReplyMode::Sender,
         true,
         None,
@@ -353,7 +353,7 @@ async fn create_draft_reply_should_fail_for_drafts() {
     // Create draft.
     let result = Draft::reply(
         &user_ctx,
-        existing_message.local_id.unwrap(),
+        existing_message.id(),
         ReplyMode::Sender,
         true,
         None,
@@ -398,18 +398,16 @@ async fn metadata_is_create_for_existing_not_opened_draft() {
     tether.tx(async |tx| message.save(tx).await).await.unwrap();
 
     assert!(
-        DraftMetadata::find_by_message_id(message.local_id.unwrap(), &tether)
+        DraftMetadata::find_by_message_id(message.id(), &tether)
             .await
             .unwrap()
             .is_none()
     );
 
     // Create draft.
-    let (draft, _) = Draft::open(&user_ctx, message.local_id.unwrap())
-        .await
-        .unwrap();
+    let (draft, _) = Draft::open(&user_ctx, message.id()).await.unwrap();
 
-    let draft_by_message_id = DraftMetadata::find_by_message_id(message.local_id.unwrap(), &tether)
+    let draft_by_message_id = DraftMetadata::find_by_message_id(message.id(), &tether)
         .await
         .unwrap()
         .unwrap();
@@ -417,9 +415,7 @@ async fn metadata_is_create_for_existing_not_opened_draft() {
     drop(draft);
 
     // Opening this draft again should not create new metadata;
-    let (draft, _) = Draft::open(&user_ctx, message.local_id.unwrap())
-        .await
-        .unwrap();
+    let (draft, _) = Draft::open(&user_ctx, message.id()).await.unwrap();
 
     assert_eq!(draft.metadata_id, draft_by_message_id.id.unwrap());
 }
@@ -734,7 +730,7 @@ async fn create_draft_reply_with_override_impl(
     assert!(draft_message.label_ids.contains(&LabelId::drafts()));
 
     // Loading the message body should not trigger any network requests.
-    let draft_body = Message::message_body(&user_ctx, draft_message.local_id.unwrap())
+    let draft_body = Message::message_body(&user_ctx, draft_message.id())
         .await
         .unwrap();
 
@@ -961,7 +957,7 @@ async fn new_draft_conversation_remote_id_updated_externally() {
         .await
         .unwrap();
 
-    assert_ne!(fetched_conv.local_id.unwrap(), draft_conversation_id);
+    assert_ne!(fetched_conv.id(), draft_conversation_id);
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
@@ -1123,7 +1119,7 @@ async fn attach_public_key_reply_draft() {
             Disposition::Attachment.into()
         );
         let attachment_metadata =
-            DraftAttachmentMetadata::find_by_id(draft_attachments[0].local_id.unwrap(), tether)
+            DraftAttachmentMetadata::find_by_id(draft_attachments[0].id(), tether)
                 .await
                 .unwrap()
                 .unwrap();
@@ -1153,7 +1149,7 @@ async fn attach_public_key_reply_draft_does_not_duplicate_if_already_there() {
             Disposition::Attachment.into()
         );
         let attachment_metadata =
-            DraftAttachmentMetadata::find_by_id(draft_attachments[0].local_id.unwrap(), tether)
+            DraftAttachmentMetadata::find_by_id(draft_attachments[0].id(), tether)
                 .await
                 .unwrap()
                 .unwrap();

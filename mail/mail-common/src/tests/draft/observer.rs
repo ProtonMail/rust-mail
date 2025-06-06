@@ -355,7 +355,7 @@ async fn draft_attachment_observer_updates_when_attachment_is_removed() {
         .unwrap();
 
     let mut attachment_metadata =
-        DraftAttachmentMetadata::new(metadata.id.unwrap(), attachment.local_id.unwrap(), 0, false);
+        DraftAttachmentMetadata::new(metadata.id.unwrap(), attachment.id(), 0, false);
     // Create metadata.
     conn.tx::<_, _, StashError>(async |tx| {
         attachment_metadata.save(tx).await.unwrap();
@@ -416,7 +416,7 @@ async fn create_test_messages(count: usize, bond: &Bond<'_>) {
             remote_id: Some(MessageId::from(format!("msg-{i}"))),
             local_conversation_id: conversation.local_id,
             remote_conversation_id: conversation.remote_id.clone(),
-            local_address_id: address.local_id.unwrap(),
+            local_address_id: address.id(),
             ..Default::default()
         };
         message.save(bond).await.unwrap();

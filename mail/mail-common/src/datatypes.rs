@@ -50,6 +50,7 @@ mod rollback_item_type;
 mod search_options;
 mod system_folder;
 pub mod theme;
+use stash::orm::Model;
 
 use anyhow::Context;
 pub use assigned_actions::*;
@@ -1059,14 +1060,8 @@ impl EncryptedMessageBody {
                     .tx::<_, _, MailContextError>(async |tx| {
                         for (mut att, data) in model_attachments {
                             att.save(tx).await?;
-                            Attachment::store_in_cache(
-                                &ctx,
-                                &att.filename,
-                                att.local_id.unwrap(),
-                                data,
-                                tx,
-                            )
-                            .await?;
+                            Attachment::store_in_cache(&ctx, &att.filename, att.id(), data, tx)
+                                .await?;
                             self.metadata.attachments.push(att);
                         }
                         Ok(self.metadata.save(tx).await?)
@@ -2033,7 +2028,7 @@ impl CustomLabel {
     /// Create a new instance from a `label`
     pub fn new(label: &Label) -> Self {
         Self {
-            local_id: label.local_id.expect("Should be set"),
+            local_id: label.id(),
             name: label.name.clone(),
             color: label.color.clone(),
         }
@@ -2043,7 +2038,7 @@ impl CustomLabel {
 impl From<Label> for CustomLabel {
     fn from(value: Label) -> Self {
         Self {
-            local_id: value.local_id.expect("Should be set"),
+            local_id: value.id(),
             name: value.name,
             color: value.color,
         }

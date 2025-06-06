@@ -3,6 +3,7 @@ use crate::datatypes::LabelDescription;
 use crate::datatypes::labels::messages_counts;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label;
+use stash::orm::Model;
 use stash::stash::Tether;
 
 /// Representation of a `Label` defined by the system
@@ -50,7 +51,7 @@ impl SystemLabel {
         let (unread, total) = messages_counts(label, tether).await?;
         let label_description = LabelDescription::new(label);
         Ok(Self {
-            local_id: label.local_id.expect("Should be set"),
+            local_id: label.id(),
             display: label.display,
             description: label_description,
             name: label.name.clone(),

@@ -29,7 +29,7 @@ async fn test_mark_labels_as_initialized() {
                 row_id: None,
             };
             new_label.save(tx).await.expect("failed to create label");
-            let new_label_id = new_label.local_id.expect("Local ID");
+            let new_label_id = new_label.id();
 
             let mut mailbox_label = MailboxLabels::load(new_label_id, tx)
                 .await

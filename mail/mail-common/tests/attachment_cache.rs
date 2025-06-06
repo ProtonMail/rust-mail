@@ -292,7 +292,7 @@ async fn integration() -> anyhow::Result<()> {
                 let (mut at_cache, mut at, mut msg) = var.unpack(now);
                 msg.local_conversation_id = conv.local_id;
                 msg.remote_conversation_id = conv.remote_id.clone();
-                msg.local_address_id = addr.local_id.unwrap();
+                msg.local_address_id = addr.id();
                 msg.remote_address_id = addr.remote_id.clone().unwrap();
                 msg.save(tx).await?;
 
@@ -305,14 +305,14 @@ async fn integration() -> anyhow::Result<()> {
                 let path = Attachment::store_in_cache(
                     &user_ctx,
                     &at.filename,
-                    at.local_id.unwrap(),
+                    at.id(),
                     vec![0; at_cache.size.try_into().unwrap()],
                     tx,
                 )
                 .await?;
 
                 // Then override locally ;)
-                at_cache.attachment_id = at.local_id.unwrap();
+                at_cache.attachment_id = at.id();
                 at_cache.path = path.into_os_string().into_string().unwrap();
                 at_cache.row_id = Some(n.try_into().unwrap()); // Evil rowid hack
                 at_cache.save(tx).await?;

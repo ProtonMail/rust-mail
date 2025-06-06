@@ -3,6 +3,7 @@ use crate::datatypes::labels::{color_to_display, messages_counts};
 use crate::datatypes::{LabelColor, LabelDescription};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label;
+use stash::orm::Model;
 use stash::stash::Tether;
 
 /// Contextual representation of a `Label` when it is opened for display.
@@ -72,7 +73,7 @@ impl CustomFolder {
     ) -> Result<Self, AppError> {
         let label_description = LabelDescription::new(label);
         Ok(Self {
-            local_id: label.local_id.expect("Should be set"),
+            local_id: label.id(),
             parent_id: label.local_parent_id,
             children: vec![],
             color,

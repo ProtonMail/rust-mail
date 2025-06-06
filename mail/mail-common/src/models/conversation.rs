@@ -438,7 +438,7 @@ impl Conversation {
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         for label in Label::find_by_kind(LabelType::Label, bond).await? {
-            let label_id = label.local_id.expect("Should be set");
+            let label_id = label.id();
             if selected_label_ids.contains(&label_id) {
                 Self::apply_label(label_id, conversation_ids.clone(), bond).await?
             } else if !partially_selected_label_ids.contains(&label_id) {
@@ -852,7 +852,7 @@ impl Conversation {
 
         for mut conv in conversations {
             Self::save(&mut conv, bond).await?;
-            ids.push(conv.local_id.unwrap());
+            ids.push(conv.id());
         }
 
         Ok(ids)
@@ -970,7 +970,7 @@ impl Conversation {
     ) -> Result<(), AppError> {
         let conv_labels = ConversationLabel::find(
             "WHERE local_conversation_id=? AND deleted=0",
-            params![self.local_id.unwrap()],
+            params![self.id()],
             bond,
         )
         .await?;
@@ -1080,7 +1080,7 @@ impl Conversation {
     ) -> Result<(), AppError> {
         let conv_label = ConversationLabel::find_first(
             "WHERE local_conversation_id=? AND deleted=0 AND local_label_id=?",
-            params![self.local_id.unwrap(), label_id],
+            params![self.id(), label_id],
             bond,
         )
         .await?;
@@ -1225,7 +1225,7 @@ impl Conversation {
     ) -> Result<(), AppError> {
         let conv_labels = ConversationLabel::find(
             "WHERE local_conversation_id=? AND deleted=1",
-            params![self.local_id.unwrap()],
+            params![self.id()],
             bond,
         )
         .await?;
@@ -1333,7 +1333,7 @@ impl Conversation {
     ) -> Result<(), AppError> {
         let conv_label = ConversationLabel::find_first(
             "WHERE local_conversation_id=? AND deleted=1 AND local_label_id=?",
-            params![self.local_id.unwrap(), label_id],
+            params![self.id(), label_id],
             bond,
         )
         .await?;
@@ -1494,8 +1494,7 @@ impl Conversation {
             return Err(AppError::ConversationHasNoMessages(local_id));
         }
         // If we fail to find any message, return the last message in the list.
-        Ok(Self::first_unread_message(label, messages)
-            .unwrap_or(messages.last().unwrap().local_id.unwrap()))
+        Ok(Self::first_unread_message(label, messages).unwrap_or(messages.last().unwrap().id()))
     }
 
     /// Retrieve in the first order the first unread message that should be displayed to the user
@@ -1604,8 +1603,7 @@ impl Conversation {
         let labels = self.load_labels(tether).await?;
         self.exclusive_location = ExclusiveLocation::from_labels(&labels);
         self.attachments_metadata =
-            Attachment::load_conversation_attachment_metadata(self.local_id.unwrap(), tether)
-                .await?;
+            Attachment::load_conversation_attachment_metadata(self.id(), tether).await?;
         self.custom_labels = labels
             .into_iter()
             .filter(|l| l.label_type == LabelType::Label)
@@ -1673,7 +1671,7 @@ impl Conversation {
             for id in &local_ids {
                 bond.execute(
                     "INSERT OR IGNORE INTO conversation_attachments VALUES (?,?)",
-                    params![self.local_id.unwrap(), *id],
+                    params![self.id(), *id],
                 )
                 .await?;
             }
@@ -1811,7 +1809,7 @@ impl Conversation {
             .await?;
 
             for mut message in messages {
-                let local_message_id = message.local_id.unwrap();
+                let local_message_id = message.id();
                 message.unread = false;
                 message.save(bond).await?;
 
@@ -2611,7 +2609,7 @@ impl Conversation {
                 Ok(())
             } else {
                 Err(AppError::ConversationDoesNotHaveLabel(
-                    conversation.local_id.unwrap(),
+                    conversation.id(),
                     view.name.clone(),
                 ))
             }
@@ -2645,7 +2643,7 @@ impl Conversation {
     pub async fn load_messages(&self, tether: &Tether) -> Result<Vec<Message>, StashError> {
         Message::find(
             "WHERE local_conversation_id == ? ORDER BY time ASC, display_order ASC",
-            params![self.local_id.unwrap()],
+            params![self.id()],
             tether,
         )
         .await
@@ -3007,7 +3005,7 @@ impl Conversation {
         label_local_id: LocalLabelId,
         tether: &Tether,
     ) -> Result<bool, StashError> {
-        let local_conversation_id = self.id().unwrap();
+        let local_conversation_id = self.id();
 
         // Find the first matching label
         let label = ConversationLabel::find_first(
@@ -3262,10 +3260,7 @@ impl ConversationLabel {
 
         if let Some(label) = ConversationLabel::find_first(
             "WHERE local_label_id=? AND local_conversation_id=?",
-            params![
-                local_label.local_id.expect("Should be set"),
-                local_conversation_id
-            ],
+            params![local_label.id(), local_conversation_id],
             bond,
         )
         .await?

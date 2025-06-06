@@ -26,7 +26,6 @@
 //! types to the internal types are provided, but not vice versa unless there is
 //! a specific need.
 //!
-
 mod attachment;
 pub mod attachment_cache;
 mod conversation;

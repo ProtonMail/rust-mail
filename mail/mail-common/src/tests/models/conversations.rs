@@ -547,18 +547,18 @@ mod available_actions {
                         .await
                         .expect("failed to create conversation");
 
-                    conversation_ids.push(conversation.local_id.unwrap());
+                    conversation_ids.push(conversation.id());
 
                     for mut label in labels {
                         label.save(tx).await.expect("failed to create label");
 
-                        let label_id = label.local_id.unwrap();
+                        let label_id = label.id();
                         ConversationCounters::new(label_id)
                             .save(tx)
                             .await
                             .expect("failed to create conversation counters");
 
-                        let ids = vec![conversation.local_id.unwrap()];
+                        let ids = vec![conversation.id()];
 
                         Conversation::apply_label(label_id, ids, tx).await.unwrap();
                     }
@@ -918,19 +918,19 @@ mod available_move_to_actions {
                     .await
                     .expect("failed to create conversation");
 
-                conversation_ids.push(conversation.local_id.unwrap());
+                conversation_ids.push(conversation.id());
 
                 for mut label in message_labels {
                     label.save(tx).await.expect("failed to create label");
 
-                    let label_id = label.local_id.unwrap();
+                    let label_id = label.id();
 
                     ConversationCounters::new(label_id)
                         .save(tx)
                         .await
                         .expect("Failed to create counters");
 
-                    let ids = vec![conversation.local_id.unwrap()];
+                    let ids = vec![conversation.id()];
 
                     Conversation::apply_label(label_id, ids, tx).await.unwrap();
                 }
@@ -1023,7 +1023,7 @@ async fn test_conversation_create_no_labels() {
         })
         .await
         .unwrap();
-    let id = local_conversation.local_id.unwrap();
+    let id = local_conversation.id();
 
     let db_conversation = Conversation::load(id, &tether)
         .await
@@ -1051,7 +1051,7 @@ async fn test_conversation_has_messages_flag() {
         .await
         .unwrap();
 
-    let db_conv = Conversation::load(local_conversation.local_id.unwrap(), &tether)
+    let db_conv = Conversation::load(local_conversation.id(), &tether)
         .await
         .expect("failed to get conversation")
         .expect("should have value");
@@ -1110,7 +1110,7 @@ async fn test_conversation_create_starred() {
         })
         .await
         .unwrap();
-    let id = local_conversation.local_id.unwrap();
+    let id = local_conversation.id();
 
     {
         let db_conversation = Conversation::load(id, &tether)
@@ -1185,7 +1185,7 @@ async fn test_conversation_create_starred() {
         })
         .await
         .unwrap();
-    let id = local_conversation.local_id.unwrap();
+    let id = local_conversation.id();
     {
         let db_conversation = Conversation::load(id, &tether)
             .await
@@ -1254,7 +1254,7 @@ async fn test_conversation_create_with_labels() {
         })
         .await
         .unwrap();
-    let id = local_conversation.local_id.unwrap();
+    let id = local_conversation.id();
 
     let db_conversation = Conversation::load(id, &tether)
         .await
@@ -1290,7 +1290,7 @@ async fn test_conversation_create_with_attachment() {
         })
         .await
         .unwrap();
-    let id = local_conversation.local_id.unwrap();
+    let id = local_conversation.id();
 
     assert_eq!(local_conversation.attachments_metadata.len(), 1);
 
@@ -1348,7 +1348,7 @@ async fn test_conversation_create_with_attachment_and_label() {
         })
         .await
         .unwrap();
-    let id = local_conversation.local_id.unwrap();
+    let id = local_conversation.id();
 
     assert_eq!(local_conversation.attachments_metadata.len(), 1);
 
@@ -1470,7 +1470,7 @@ async fn test_conversation_update() {
         })
         .await
         .unwrap();
-    let id = local_conversation2.local_id.unwrap();
+    let id = local_conversation2.id();
 
     assert_eq!(local_conversation2.attachments_metadata.len(), 1);
     // Patch local id.
@@ -1688,7 +1688,7 @@ async fn test_conversation_delete_all_mail() {
 
     for count in Label::all(&tether).await.unwrap() {
         tracing::error!("Count {count:?}");
-        let counters = LabelWithCounters::load(count.local_id.unwrap(), &tether)
+        let counters = LabelWithCounters::load(count.id(), &tether)
             .await
             .expect("no error")
             .expect("counter assigned to the label");

@@ -19,6 +19,7 @@ use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_api::services::proton::prelude::{NewAttachmentDisposition, NewAttachmentParams};
 use proton_mail_ids::{LocalAttachmentId, LocalMessageId};
 use serde::{Deserialize, Serialize};
+use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, Tether};
 use tracing::{debug, error};
@@ -280,7 +281,7 @@ impl AttachmentUpload {
     }
 }
 
-#[tracing::instrument(level=tracing::Level::DEBUG, skip_all, fields(attachment_id = %attachment.local_id.unwrap()))]
+#[tracing::instrument(level=tracing::Level::DEBUG, skip_all, fields(attachment_id = %attachment.id()))]
 async fn encrypt_and_upload_attachment(
     ctx: &MailUserContext,
     address_id: &AddressId,
@@ -294,9 +295,7 @@ async fn encrypt_and_upload_attachment(
         Disposition::Attachment => NewAttachmentDisposition::Attachment,
         Disposition::Inline => {
             let Some(content_id) = &attachment.content_id else {
-                return Err(
-                    AttachmentUploadError::MissingContentId(attachment.local_id.unwrap()).into(),
-                );
+                return Err(AttachmentUploadError::MissingContentId(attachment.id()).into());
             };
             NewAttachmentDisposition::Inline(content_id.clone().into_inner())
         }
@@ -307,9 +306,7 @@ async fn encrypt_and_upload_attachment(
         Ok(data) => data,
         Err(err) => {
             error!("{err}");
-            return Err(
-                AttachmentUploadError::AttachmentDataMissing(attachment.local_id.unwrap()).into(),
-            );
+            return Err(AttachmentUploadError::AttachmentDataMissing(attachment.id()).into());
         }
     };
 
@@ -366,12 +363,11 @@ async fn encrypt_and_upload_attachment(
         .tx::<_, _, MailContextError>(async |tx: &Bond<'_>| {
             // Mark attachment as uploaded.
             let Some(mut draft_attachment_metadata) =
-                DraftAttachmentMetadata::find_by_id(attachment.local_id.unwrap(), tx).await?
+                DraftAttachmentMetadata::find_by_id(attachment.id(), tx).await?
             else {
-                return Err(AttachmentUploadError::AttachmentMetadataNotFound(
-                    attachment.local_id.unwrap(),
-                )
-                .into());
+                return Err(
+                    AttachmentUploadError::AttachmentMetadataNotFound(attachment.id()).into(),
+                );
             };
             draft_attachment_metadata.set_uploaded_state();
             draft_attachment_metadata

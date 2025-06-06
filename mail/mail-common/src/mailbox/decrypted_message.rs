@@ -204,7 +204,7 @@ impl DecryptedMessageBody {
             })
             .cloned()
             .map(|att| {
-                let id = att.id().unwrap();
+                let id = att.id();
                 let ctx_clone = ctx.clone();
                 let fut = ctx.spawn(async move {
                     let tether = &mut ctx_clone.user_stash().connection();
@@ -287,7 +287,7 @@ impl DecryptedMessageBody {
 
         let data = {
             // We first remove the task from the mutex to avoid locking other threads.
-            let task_handle = { self.in_flight.lock().remove(&att.id().unwrap()) };
+            let task_handle = { self.in_flight.lock().remove(&att.id()) };
             match task_handle {
                 Some(p) => match p.await? {
                     AsyncTaskResult::Completed(Ok(data)) => data,

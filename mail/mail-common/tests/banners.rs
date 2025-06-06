@@ -12,6 +12,7 @@ use proton_mail_common::models::MailSettings;
 use proton_mail_common::models::MessageBodyMetadata;
 use proton_mail_common::models::default_location::IncomingDefaultLocation;
 use proton_mail_common::test_utils::init::Params;
+use stash::orm::Model;
 use stash::stash::Tether;
 use test_case::test_case;
 
@@ -87,7 +88,7 @@ async fn banners() {
         local_conversation_id: conv.local_id,
         label_ids: vec![LabelId::inbox()],
         remote_conversation_id: conv.remote_id.clone(),
-        local_address_id: addr.local_id.unwrap(),
+        local_address_id: addr.id(),
         remote_address_id: addr.remote_id.clone().unwrap(),
         remote_id: Some(message_id),
         sender: proton_mail_common::datatypes::MessageSender {
@@ -191,7 +192,7 @@ async fn banners() {
             .await
             .unwrap();
             Message::store_decrypted_message_body(
-                msg_normal.local_id.unwrap(),
+                msg_normal.id(),
                 "im a nigerian prince, click this link".into(),
                 tx,
             )
@@ -208,14 +209,11 @@ async fn banners() {
     IncomingDefaultLocation::action_unblock(ctx.action_queue(), "blocked@email".to_string())
         .await
         .unwrap();
-    Message::action_ham(
-        ctx.action_queue(),
-        vec![msg_spam.local_id.unwrap(), msg_phishing.local_id.unwrap()],
-    )
-    .await
-    .unwrap();
+    Message::action_ham(ctx.action_queue(), vec![msg_spam.id(), msg_phishing.id()])
+        .await
+        .unwrap();
 
-    Message::action_report_phishing(ctx.action_queue(), msg_normal.local_id.unwrap(), tether)
+    Message::action_report_phishing(ctx.action_queue(), msg_normal.id(), tether)
         .await
         .unwrap();
 
@@ -251,7 +249,7 @@ async fn banners() {
         .await
         .unwrap();
 
-    Message::action_ham(ctx.action_queue(), vec![msg_normal.local_id.unwrap()])
+    Message::action_ham(ctx.action_queue(), vec![msg_normal.id()])
         .await
         .unwrap();
 

@@ -3,6 +3,7 @@ use crate::datatypes::labels::messages_counts;
 use crate::datatypes::{LabelColor, LabelDescription};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label;
+use stash::orm::Model;
 use stash::stash::Tether;
 
 /// Represent a `Label` defined by End User
@@ -53,7 +54,7 @@ impl CustomLabel {
         let label_description = LabelDescription::new(label);
         let (unread, total) = messages_counts(label, tether).await?;
         Ok(Self {
-            local_id: label.local_id.expect("Should be set"),
+            local_id: label.id(),
             color: label.color.clone(),
             display: label.display,
             description: label_description,

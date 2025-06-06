@@ -6,6 +6,7 @@ use crate::models::{Contact, ContactEmail, Label};
 use crate::utils::MapVec as _;
 use itertools::Itertools;
 use proton_core_api::services::proton::LabelId;
+use stash::orm::Model;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::mem;
@@ -53,10 +54,11 @@ impl GroupedContacts {
             .filter(|group| !cfg!(debug_assertions) || group.remote_id.is_some())
             .filter(|group| group.label_type == LabelType::ContactGroup)
             .map(|group| {
+                let local_id = group.id();
                 (
                     group.remote_id.unwrap().clone(),
                     ContactGroupItem {
-                        local_id: group.local_id.unwrap(),
+                        local_id,
                         name: group.name.clone(),
                         avatar_information: AvatarInformation::from(&group.name),
                         contacts: vec![],
@@ -147,7 +149,7 @@ pub struct ContactItem {
 impl From<Contact> for ContactItem {
     fn from(value: Contact) -> Self {
         Self {
-            local_id: value.local_id.unwrap(),
+            local_id: value.id(),
             avatar_information: AvatarInformation::from(&value.name)
                 .or_else(
                     value
@@ -186,6 +188,7 @@ pub struct ContactEmailItem {
 
 impl From<ContactEmail> for ContactEmailItem {
     fn from(value: ContactEmail) -> Self {
+        let local_id = value.id();
         let name = if value.name.is_empty() {
             value.email.clone()
         } else {
@@ -193,7 +196,7 @@ impl From<ContactEmail> for ContactEmailItem {
         };
 
         Self {
-            local_id: value.local_id.unwrap(),
+            local_id,
             email: value.email,
             is_proton: value.is_proton,
             last_used_time: value.last_used_time,
@@ -281,10 +284,11 @@ impl ContactSuggestions {
             // This is to ensure the offline mode works with contacts and contact groups not synced with API
             .filter(|group| label_ids.contains(group.remote_id.as_ref().unwrap()))
             .map(|group| {
+                let local_id = group.id();
                 (
                     group.remote_id.unwrap(),
                     ContactGroup {
-                        key: format!("group/{}", group.local_id.unwrap()),
+                        key: format!("group/{local_id}"),
                         name: group.name.clone(),
                         emails: vec![],
                     },

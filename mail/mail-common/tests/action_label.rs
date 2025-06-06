@@ -82,12 +82,12 @@ async fn test_labeling_conversation_with_custom_label() {
             .await
             .expect("failed to create mailbox");
     let custom_label_local_label = custom_label_mailbox.get_local_label(&tether).await;
-    let local_conversation_id = local_conversation.id().unwrap();
+    let local_conversation_id = local_conversation.id();
 
     // Apply label action
     Conversation::action_apply_label(
         user_ctx.action_queue(),
-        custom_label_local_label.local_id.unwrap(),
+        custom_label_local_label.id(),
         vec![local_conversation_id],
     )
     .await
@@ -98,7 +98,7 @@ async fn test_labeling_conversation_with_custom_label() {
     // Verify that inbox mailbox contains conversation.
     assert!(
         local_conversation
-            .has_label(inbox_local_label.local_id.unwrap(), &tether)
+            .has_label(inbox_local_label.id(), &tether)
             .await
             .expect("Error while checking label presence"),
         "Conversation with ID '{}' should be present in '{}' label, but it isn't.",
@@ -108,19 +108,19 @@ async fn test_labeling_conversation_with_custom_label() {
     // Verify that custom label mailbox contains conversation.
     assert!(
         local_conversation
-            .has_label(custom_label_local_label.local_id.unwrap(), &tether)
+            .has_label(custom_label_local_label.id(), &tether)
             .await
             .expect("Error while checking label presence"),
         "Conversation with ID '{}' should be present in '{}' label, but it isn't.",
-        local_conversation.id().unwrap(),
+        local_conversation.id(),
         remote_label_name
     );
 
     // Apply unlabel action
     Conversation::action_remove_label(
         user_ctx.action_queue(),
-        custom_label_local_label.local_id.unwrap(),
-        vec![local_conversation.id().unwrap()],
+        custom_label_local_label.id(),
+        vec![local_conversation.id()],
     )
     .await
     .unwrap();
@@ -130,21 +130,21 @@ async fn test_labeling_conversation_with_custom_label() {
     // Verify that inbox mailbox contains conversation.
     assert!(
         local_conversation
-            .has_label(inbox_local_label.local_id.unwrap(), &tether)
+            .has_label(inbox_local_label.id(), &tether)
             .await
             .expect("Error while checking label presence"),
         "Conversation with ID '{}' should be present in '{}' label, but it isn't.",
-        local_conversation.id().unwrap(),
+        local_conversation.id(),
         inbox_local_label.name
     );
     // Verify that custom label mailbox does NOT contain conversation.
     assert!(
         !local_conversation
-            .has_label(custom_label_local_label.local_id.unwrap(), &tether)
+            .has_label(custom_label_local_label.id(), &tether)
             .await
             .expect("Error while checking label presence"),
         "Conversation with ID '{}' should NOT be present in '{}' label, but it is.",
-        local_conversation.id().unwrap(),
+        local_conversation.id(),
         remote_label_name
     );
 }
@@ -210,8 +210,8 @@ async fn test_labeling_conversation_with_starred_label() {
     // Apply label action
     Conversation::action_apply_label(
         user_ctx.action_queue(),
-        starred_local_label.local_id.unwrap(),
-        vec![local_conversation.id().unwrap()],
+        starred_local_label.id(),
+        vec![local_conversation.id()],
     )
     .await
     .unwrap();
@@ -220,29 +220,29 @@ async fn test_labeling_conversation_with_starred_label() {
     // Verify that inbox mailbox contains conversation.
     assert!(
         local_conversation
-            .has_label(inbox_local_label.local_id.unwrap(), &tether)
+            .has_label(inbox_local_label.id(), &tether)
             .await
             .expect("Error while checking label presence"),
         "Conversation with ID '{}' should be present in '{}' label, but it isn't.",
-        local_conversation.id().unwrap(),
+        local_conversation.id(),
         inbox_local_label.clone().name
     );
     // Verify that starred mailbox contains conversation.
     assert!(
         local_conversation
-            .has_label(starred_local_label.local_id.unwrap(), &tether)
+            .has_label(starred_local_label.id(), &tether)
             .await
             .expect("Error while checking label presence"),
         "Conversation with ID '{}' should be present in '{}' label, but it isn't.",
-        local_conversation.id().unwrap(),
+        local_conversation.id(),
         starred_local_label.clone().name
     );
 
     // Apply unlabel action
     Conversation::action_remove_label(
         user_ctx.action_queue(),
-        starred_local_label.clone().local_id.unwrap(),
-        vec![local_conversation.id().unwrap()],
+        starred_local_label.clone().id(),
+        vec![local_conversation.id()],
     )
     .await
     .unwrap();
@@ -252,20 +252,20 @@ async fn test_labeling_conversation_with_starred_label() {
     // Verify that conversation contains label.
     assert!(
         local_conversation
-            .has_label(inbox_local_label.local_id.unwrap(), &tether)
+            .has_label(inbox_local_label.id(), &tether)
             .await
             .expect("Error while checking label presence"),
         "Conversation with ID '{}' should be present in '{}' label, but it isn't.",
-        local_conversation.id().unwrap(),
+        local_conversation.id(),
         inbox_local_label.clone().name
     );
     assert!(
         !local_conversation
-            .has_label(starred_local_label.local_id.unwrap(), &tether)
+            .has_label(starred_local_label.id(), &tether)
             .await
             .expect("Error while checking label presence"),
         "Conversation with ID '{}' should NOT be present in '{}' label, but it is.",
-        local_conversation.id().unwrap(),
+        local_conversation.id(),
         starred_local_label.clone().name
     );
 }

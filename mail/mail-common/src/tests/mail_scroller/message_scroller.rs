@@ -41,7 +41,7 @@ async fn save_to_database(data: &mut BTreeMap<&str, Vec<Message>>, tether: &mut 
                 let mut label = label!(remote_id: lbl_id!(label_rid));
                 label.save(bond).await.unwrap();
                 for message in messages.iter_mut() {
-                    message.local_address_id = address.local_id.unwrap();
+                    message.local_address_id = address.id();
                     message.remote_address_id = address.remote_id.clone().unwrap();
                     message.local_conversation_id = conv.local_id;
                     message.remote_conversation_id = conv.remote_id.clone();

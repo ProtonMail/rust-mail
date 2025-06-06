@@ -336,13 +336,10 @@ impl Send {
             .unwrap_or_default();
 
         // Load body - it is not encrypted.
-        let Some(stored_message_body) = Message::load_decrypted_message_body(
-            message_metadata.local_id.unwrap(),
-            guard.tether(),
-        )
-        .await?
+        let Some(stored_message_body) =
+            Message::load_decrypted_message_body(message_metadata.id(), guard.tether()).await?
         else {
-            return Err(SendError::MessageBodyMissing(message_metadata.local_id.unwrap()).into());
+            return Err(SendError::MessageBodyMissing(message_metadata.id()).into());
         };
 
         let pgp_provider = new_pgp_provider();

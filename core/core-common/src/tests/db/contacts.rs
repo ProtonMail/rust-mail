@@ -20,7 +20,7 @@ async fn test_full_contact() {
                 .await
                 .expect("failed to create contact");
             let id = full_contact.row_id.expect("failed to get contact id");
-            let local_id = full_contact.local_id.expect("failed to get contact id");
+            let local_id = full_contact.id();
             full_contact
                 .save(tx)
                 .await
@@ -106,7 +106,7 @@ async fn test_partial_contact() {
     );
 
     // Query specific contact.
-    let mut contact_single = Contact::load(contact.local_id.unwrap(), &tether)
+    let mut contact_single = Contact::load(contact.id(), &tether)
         .await
         .expect("failed to query contacts")
         .expect("expected to find contact");

@@ -173,7 +173,7 @@ async fn create_local_label() {
                     row_id: None,
                 };
                 new_label.save(tx).await.expect("failed to create label");
-                let db_label = Label::load(new_label.local_id.unwrap(), tx)
+                let db_label = Label::load(new_label.id(), tx)
                     .await
                     .expect("failed to load label")
                     .expect("should have a value");
@@ -209,7 +209,7 @@ async fn create_local_label_1_char_long_name() {
                     row_id: None,
                 };
                 new_label.save(tx).await.expect("failed to create label");
-                let db_label = Label::load(new_label.local_id.unwrap(), tx)
+                let db_label = Label::load(new_label.id(), tx)
                     .await
                     .expect("failed to load label")
                     .expect("should have a value");
@@ -245,7 +245,7 @@ async fn create_local_label_100_char_long_name() {
                     row_id: None,
                 };
                 new_label.save(tx).await.expect("failed to create label");
-                let db_label = Label::load(new_label.local_id.unwrap(), tx)
+                let db_label = Label::load(new_label.id(), tx)
                     .await
                     .expect("failed to load label")
                     .expect("should have a value");
@@ -358,7 +358,7 @@ async fn update_local_label() {
 
             new_label.color = LabelColor::black();
             new_label.save(tx).await.expect("failed to save label");
-            compare_db_label(tx, new_label.local_id.unwrap(), |l| {
+            compare_db_label(tx, new_label.id(), |l| {
                 assert_eq!(l.color, LabelColor::black());
             })
             .await;
@@ -366,7 +366,7 @@ async fn update_local_label() {
             new_label.name = "NewName".to_owned();
             new_label.save(tx).await.expect("failed to save label");
 
-            compare_db_label(tx, new_label.local_id.unwrap(), |l| {
+            compare_db_label(tx, new_label.id(), |l| {
                 assert_eq!(l.name, "NewName");
             })
             .await;
@@ -375,7 +375,7 @@ async fn update_local_label() {
             new_label.path = Some("MyLabel/NewName".into());
             new_label.save(tx).await.expect("failed to save label");
 
-            compare_db_label(tx, new_label.local_id.unwrap(), |l| {
+            compare_db_label(tx, new_label.id(), |l| {
                 assert_eq!(l.remote_parent_id, new_label2.remote_id);
                 assert_eq!(l.path, Some("MyLabel/NewName".into()));
             })
@@ -421,10 +421,7 @@ async fn test_watch_label() {
         .await
         .unwrap();
 
-    let db_label = Label::load(label.local_id.unwrap(), &tether)
-        .await
-        .unwrap()
-        .unwrap();
+    let db_label = Label::load(label.id(), &tether).await.unwrap().unwrap();
     let handle = Label::watch(&stash).unwrap();
     let watcher = &handle.receiver;
 

@@ -61,6 +61,7 @@ pub use issue_report::*;
 use itertools::Itertools;
 use proton_core_api::services::proton::muon::error::ParseEndpointErr;
 use proton_mail_api::services::proton::common::MessageId;
+use stash::orm::Model;
 use stash::stash::Tether;
 pub use timestamp::*;
 use tracing::error;
@@ -693,7 +694,7 @@ pub struct Address {
 impl From<RealAddress> for Address {
     fn from(address: RealAddress) -> Self {
         Self {
-            id: address.local_id.unwrap().into(),
+            id: address.id().into(),
             address_type: address.address_type.into(),
             catch_all: address.catch_all,
             display_name: address.display_name,
@@ -932,7 +933,7 @@ pub struct ContactCard {
 impl From<RealContactCard> for ContactCard {
     fn from(card: RealContactCard) -> Self {
         Self {
-            id: card.local_id.unwrap().into(),
+            id: card.id().into(),
             card_type: card.card_type.into(),
             data: card.data,
             signature: card.signature,

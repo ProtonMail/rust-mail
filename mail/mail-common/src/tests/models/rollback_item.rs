@@ -218,7 +218,7 @@ async fn messages(
         .map(|item| {
             message!(
                 remote_id: Some(item.remote_id.into()),
-                local_address_id: address.local_id.unwrap(),
+                local_address_id: address.id(),
                 remote_address_id: address.remote_id.clone().unwrap(),
                 local_conversation_id,
                 remote_conversation_id: remote_conversation_id.clone()

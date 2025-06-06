@@ -5,6 +5,7 @@ use proton_core_api::services::proton::LabelId;
 use proton_core_common::models::{Label, ModelIdExtension};
 use proton_mail_common::test_utils::db::new_test_connection;
 use proton_mail_common::test_utils::utils::create_address;
+use stash::orm::Model;
 use std::borrow::ToOwned;
 use std::sync::LazyLock;
 
@@ -393,7 +394,7 @@ mod message {
 
                 let mut messages = test_case.items.clone();
                 for message in &mut messages {
-                    message.local_address_id = address.local_id.unwrap();
+                    message.local_address_id = address.id();
                     message.local_conversation_id = conversation.local_id;
                     message.save(tx).await.unwrap();
                 }
@@ -409,7 +410,7 @@ mod message {
         // Action
         let result = Message::all_available_bottom_bar_actions_for_messages(
             current_local,
-            messages.iter().map(|m| m.local_id.unwrap()).collect(),
+            messages.iter().map(|m| m.id()).collect(),
             &tether,
         )
         .await
@@ -827,7 +828,7 @@ mod conversation {
         // Action
         let result = ContextualConversation::all_available_bottom_bar_actions_for_conversations(
             current_local,
-            conversations.iter().map(|m| m.local_id.unwrap()).collect(),
+            conversations.iter().map(|m| m.id()).collect(),
             &tether,
         )
         .await

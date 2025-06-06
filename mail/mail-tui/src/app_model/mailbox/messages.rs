@@ -40,6 +40,7 @@ use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Cell, List, ListItem, Paragraph, Row, Table};
+use stash::orm::Model;
 use stash::stash::{Tether, WatcherHandle};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -255,7 +256,7 @@ impl MessagesState {
         let index = conv_and_messages
             .messages
             .iter()
-            .position(|m| m.local_id.unwrap() == conv_and_messages.message_id_to_open)
+            .position(|m| m.id() == conv_and_messages.message_id_to_open)
             .unwrap_or(0);
 
         Ok((
@@ -283,7 +284,7 @@ impl MessagesState {
             let c: Result<_> = (|| async move {
                 let stash = ctx.user_stash();
                 let mut tether = stash.connection();
-                let local_id = metadata.local_id.unwrap();
+                let local_id = metadata.id();
 
                 let decrypted = MailMessage::message_body(&ctx, local_id)
                     .await
@@ -321,7 +322,7 @@ impl MessagesState {
 
     fn selected_message_id(&self) -> Option<LocalMessageId> {
         let index = self.table_state.selected()?;
-        self.messages.get(index).map(|c| c.local_id.unwrap())
+        self.messages.get(index).map(Model::id)
     }
 
     fn selected_email(&self) -> Option<String> {

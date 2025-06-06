@@ -75,7 +75,7 @@ async fn test_new_mailbox_sync_conversations() {
     // Get the message for a conversation.
 
     let result = ContextualConversation::conversation_and_messages(
-        conversation.local_id.unwrap(),
+        conversation.id(),
         mailbox.label_id(),
         user_ctx.user_stash(),
         user_ctx.session(),
@@ -90,7 +90,7 @@ async fn test_new_mailbox_sync_conversations() {
 
     // Get messages again, but should not fire request.
     let _ = ContextualConversation::conversation_and_messages(
-        conversation.local_id.unwrap(),
+        conversation.id(),
         mailbox.label_id(),
         user_ctx.user_stash(),
         user_ctx.session(),

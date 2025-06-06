@@ -188,21 +188,6 @@ where
     /// for non-optional IDs, it is the same as [`Self::Id`].
     type IdType: Clone + Debug + FromSql + PartialEq + ToSql + Send + Sync;
 
-    /// Gets a list of field names for the record type, excluding the ID field.
-    fn field_names_without_id() -> Vec<&'static str>;
-
-    /// Gets a list of field values for the record, excluding the ID field.
-    ///
-    /// The field values are returned in a form that is compatible with
-    /// conversion to SQL type, but pre-conversion. The ID field is excluded
-    /// from the list.
-    ///
-    /// Note: Any fields using an intermediary type (i.e. specified with the
-    /// `via` attribute argument) will be converted to that type before being
-    /// returned.
-    ///
-    fn field_values_without_id(&self) -> Vec<Box<dyn ToSql + Send>>;
-
     /// Finds records in the database using specific query logic.
     ///
     /// This function bridges the gap between ORM-level handling of formalised
@@ -297,18 +282,6 @@ where
     ///   provided, the function will listen for changes to the
     ///   result set and send them to the queue. This is useful
     ///   for live updates.
-    ///
-    /// # Errors
-    ///
-    /// See [`Stash::query()`].
-    ///
-    /// # See also
-    ///
-    /// * [`Model::find_first()`]
-    /// * [`Model::load()`]
-    /// * [`Stash::query()`]
-    /// * [`params!`](crate::utils::params)
-    ///
     fn find<Q>(
         query_logic: Q,
         params: Vec<Box<dyn ToSql + Send>>,
@@ -379,77 +352,20 @@ where
         }
     }
 
-    /// Gets the record's unique ID.
+    /// Gets the record's local id.
     ///
-    /// This is the primary key for the record as defined when creating the
-    /// table. It may or may not be the same as the internal "row ID" used by
-    /// SQLite.
+    /// # Panics
     ///
-    /// Note that in order to support auto-incrementing primary keys, this
-    /// function will return an [`Option`] if the `IdField` attribute has been
-    /// configured with either the `autoincrement` or `optional` parameters. If
-    /// the ID is set manually then this will simply return the defined type.
-    ///
-    /// # See also
-    ///
-    /// * [`Model::id_field_name()`]
-    /// * [`Model::id_value()`]
-    /// * [`Model::row_id()`]
-    ///
-    fn id(&self) -> Self::Id;
+    /// This function will panic if the local id has not been set.
+    /// Normally you set it by calling
+    /// [`Model::save`]
+    fn id(&self) -> Self::IdType;
 
     /// Gets the name of the ID field for the record type.
     ///
     /// This is the primary key column name for the record as defined when
     /// creating the table.
-    ///
-    /// # See also
-    ///
-    /// * [`Model::id()`]
-    /// * [`Model::row_id()`]
-    ///
     fn id_field_name() -> &'static str;
-
-    /// Whether the record's ID field is auto-incrementing.
-    ///
-    /// If the record's ID field is auto-incrementing, then it will be set by
-    /// the database. In this situation the ID field will not be included in
-    /// `INSERT` or `UPDATE` queries, and the defined ID field type will need to
-    /// be wrapped in an [`Option`].
-    ///
-    fn id_is_autoincrementing() -> bool;
-
-    /// Whether the record's ID field is optional.
-    ///
-    /// If the record's ID field is optional, then the defined ID field type
-    /// will need to be wrapped in an [`Option`]. Whether the ID field is
-    /// included in `INSERT` or `UPDATE` queries will depend on whether it is
-    /// set as auto-incrementing — auto-incrementing means that it is optional,
-    /// but being optional does not necessarily mean auto-incrementing.
-    ///
-    fn id_is_optional() -> bool;
-
-    /// Gets the record's unique ID value.
-    ///
-    /// This is the primary key value for the record as defined when creating
-    /// the table. It may or may not be the same as the internal "row ID" used
-    /// by SQLite.
-    ///
-    /// Note that this function will always return the actual ID value, even if
-    /// defined as an [`Option`]. If the ID is not set, i.e. is [`None`], then
-    /// this will generate an error.
-    ///
-    /// # Errors
-    ///
-    /// * [`StashError::IdNotSet`]
-    ///
-    /// # See also
-    ///
-    /// * [`Model::id()`]
-    /// * [`Model::id_field_name()`]
-    /// * [`Model::row_id()`]
-    ///
-    fn id_value(&self) -> Result<Self::IdType, StashError>;
 
     /// Loads a record from the database by ID.
     ///
@@ -484,22 +400,6 @@ where
     async fn load(id: Self::IdType, tether: &Tether) -> Result<Option<Self>, StashError> {
         perform_load(id, tether).await
     }
-
-    /// Gets the record's unique row ID.
-    ///
-    /// This is the internal "row ID" used by SQLite. It may or may not be the
-    /// same as the primary key for the record as defined when creating the
-    /// table.
-    ///
-    /// If the record has not been saved to the database, this will return
-    /// [`None`].
-    ///
-    /// # See also
-    ///
-    /// * [`Model::id()`]
-    /// * [`Model::id_field_name()`]
-    ///
-    fn row_id(&self) -> Option<u64>;
 
     /// Saves a record to the database, using a specific connection.
     ///
@@ -561,40 +461,6 @@ where
         perform_save(self, bond).await
     }
 
-    /// Sets the record's unique primary ID field value.
-    ///
-    /// # Parameters
-    ///
-    /// * `id` - The row id to set for the record. If the ID is wrapped in an
-    ///   [`Option`], the [`Option`] should be included.
-    ///
-    /// # See also
-    ///
-    /// * [`Model::set_id_value()`]
-    ///
-    fn set_id(&mut self, id: Self::Id);
-
-    /// Sets the record's unique primary ID field's true value.
-    ///
-    /// # Parameters
-    ///
-    /// * `id` - The row id to set for the record, as a bare type without being
-    ///   wrapped in an [`Option`].
-    ///
-    /// # See also
-    ///
-    /// * [`Model::set_id()`]
-    ///
-    fn set_id_value(&mut self, id: Self::IdType);
-
-    /// Sets the record's unique row ID.
-    ///
-    /// # Parameters
-    ///
-    /// * `id` - The row id to set for the record.
-    ///
-    fn set_row_id(&mut self, id: Option<u64>);
-
     /// Gets the name of the table for the record type.
     fn table_name() -> &'static str;
 
@@ -639,6 +505,17 @@ where
                 .await
         }
     }
+
+    // The following methods are intended to be used within the ORM, generated from the proc macro.
+
+    fn field_names_without_id() -> Vec<&'static str>;
+    fn field_values_without_id(&self) -> Vec<Box<dyn ToSql + Send>>;
+    fn id_is_autoincrementing() -> bool;
+    fn id_is_optional() -> bool;
+    fn id_value(&self) -> Result<Self::IdType, StashError>;
+    fn row_id(&self) -> Option<u64>;
+    fn set_id_value(&mut self, id: Self::IdType);
+    fn set_row_id(&mut self, id: Option<u64>);
 }
 
 /// A collection of database records.

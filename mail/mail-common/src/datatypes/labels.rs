@@ -23,13 +23,12 @@ pub mod system_labels;
 pub async fn messages_counts(label: &Label, tether: &Tether) -> Result<(u64, u64), AppError> {
     match label.view_mode(tether).await? {
         ViewMode::Conversations => {
-            let counters =
-                ConversationCounters::find_by_id(label.local_id.unwrap(), tether).await?;
+            let counters = ConversationCounters::find_by_id(label.id(), tether).await?;
             let (unread, total) = counters.map(|c| c.counters()).unwrap_or_default();
             Ok((unread, total))
         }
         ViewMode::Messages => {
-            let counters = MessageCounters::find_by_id(label.local_id.unwrap(), tether).await?;
+            let counters = MessageCounters::find_by_id(label.id(), tether).await?;
             let (unread, total) = counters.map(|c| c.counters()).unwrap_or_default();
             Ok((unread, total))
         }
