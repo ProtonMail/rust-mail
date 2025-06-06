@@ -1,9 +1,8 @@
 use lightningcss::{
-    traits::Parse,
-    values::color::{CssColor, HSL, RGBA, SRGBLinear, XYZd65},
+    values::color::{HSL, RGBA, SRGBLinear, XYZd65},
 };
 
-use crate::transforms::styles::{ColorPurpose, dark_mode_background_color};
+use crate::transforms::styles::{ColorPurpose, DARK_MODE_BACKGROUND_COLOR};
 
 pub trait HSLExt {
     /// We want to see if our color is equivalent to `#FF_FF_FF_FF`
@@ -97,7 +96,7 @@ pub fn hsla_for_dark_mode(purpose: ColorPurpose, mut color: HSL) -> RGBA {
 
     // Special case: For full white background we return our Dark Mode background color (#1C1B24)
     if purpose == ColorPurpose::Background && color.is_full_white() {
-        return dark_mode_background_color();
+        return DARK_MODE_BACKGROUND_COLOR;
     }
 
     match (purpose, color.is_achromatic()) {
@@ -130,28 +129,10 @@ pub fn hsla_for_dark_mode(purpose: ColorPurpose, mut color: HSL) -> RGBA {
     color.into()
 }
 
-pub fn parse_css_color(color: &str) -> Option<CssColor> {
-    // TODO(wpolak): Create an issue in lightningcss to support hex colors without `#` prefix
-    match CssColor::parse_string(color) {
-        Ok(color) => Some(color),
-        Err(err) => {
-            // Lightningcss does not support hex colors without `#` prefix
-            // Let's try to add it manually, if it works, we return the color
-            let new_color = format!("#{color}");
-            CssColor::parse_string(&new_color)
-                .inspect_err(|_| {
-                    // Let's display the original error message.
-                    tracing::warn!("Could not parse color: {color}. Error: {err:?}");
-                })
-                .ok()
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use lightningcss::{printer::PrinterOptions, traits::ToCss};
+    use lightningcss::{printer::PrinterOptions, traits::{Parse, ToCss}, values::color::CssColor};
     use pretty_assertions::assert_eq;
     use test_case::test_case;
 
@@ -206,7 +187,7 @@ mod tests {
         "case 8"
     )]
     fn hsla_for_dark_mode(input: &'static str, purpose: ColorPurpose, expected: &'static str) {
-        let color = parse_css_color(input).unwrap();
+        let color = CssColor::parse_string(input).unwrap();
         let hsl = HSL::try_from(color).unwrap();
 
         let new_rgba = super::hsla_for_dark_mode(purpose, hsl);

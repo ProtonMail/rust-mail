@@ -10,8 +10,7 @@ use lightningcss::{
 use smart_default::SmartDefault;
 
 use crate::transforms::styles::{
-    ColorPurpose, NewProperty, OldProperty, PropertyWithPurpose, colors::HSLExt,
-    dark_mode_background_color, printer_options,
+    colors::HSLExt, printer_options, ColorPurpose, NewProperty, OldProperty, PropertyWithPurpose, DARK_MODE_BACKGROUND_COLOR
 };
 
 use super::properties::PropertiesVisitor;
@@ -177,7 +176,7 @@ impl DeclarationBlockVisitor {
         fg: &Property<'_>,
     ) -> bool {
         if bgs.is_empty() {
-            return Self::has_good_contrast_against_color(dark_mode_background_color().into(), fg);
+            return Self::has_good_contrast_against_color(DARK_MODE_BACKGROUND_COLOR.into(), fg);
         }
 
         bgs.iter()
@@ -201,7 +200,7 @@ impl DeclarationBlockVisitor {
     fn has_good_contrast_against_background(bg: &Property<'_>, fg: &Property<'_>) -> bool {
         Self::has_good_contrast_against_color(
             Self::extract_color_from_prop(bg)
-                .unwrap_or_else(|| dark_mode_background_color().into()),
+                .unwrap_or_else(|| DARK_MODE_BACKGROUND_COLOR.into()),
             fg,
         )
     }

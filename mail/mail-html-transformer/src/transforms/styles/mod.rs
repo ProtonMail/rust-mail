@@ -8,7 +8,7 @@ use dark_mode_visitor::{StyleAttributeVisitor, StylesheetVisitor};
 use html5ever::{LocalName, QualName, namespace_url};
 use itertools::Itertools;
 use kuchikiki::{Attribute, Attributes, ElementData, NodeData, NodeDataRef, NodeRef};
-use lightningcss::traits::ToCss;
+use lightningcss::traits::{Parse, ToCss};
 use lightningcss::values::color::{CssColor, HSL};
 use lightningcss::{
     printer::PrinterOptions,
@@ -19,7 +19,7 @@ use lightningcss::{
 };
 use support_level::DarkStyleSupportLevel;
 
-use crate::transforms::styles::colors::{HSLExt, hsla_for_dark_mode, parse_css_color};
+use crate::transforms::styles::colors::{HSLExt, hsla_for_dark_mode};
 
 use super::ColorMode;
 
@@ -203,13 +203,14 @@ fn sanitize_dark_mode(document: &NodeRef, root_selector: String) -> Option<Strin
     ))
 }
 
-// TODO: replace with proper constant after `RGBA` gets const constructor.
-//
-/// Returns our constant color for background color.
+// Not using `RGBA::new` because it contains clamping which is not const-friendly.
 /// Hex representation: #1C1B24
-pub fn dark_mode_background_color() -> RGBA {
-    RGBA::new(28, 27, 36, 1.0)
-}
+pub const DARK_MODE_BACKGROUND_COLOR: RGBA = RGBA {
+    red: 0x1C,
+    green: 0x1B,
+    blue: 0x24,
+    alpha: 0xFF,
+};
 
 type Selector = String;
 
@@ -412,9 +413,13 @@ fn sanitize_dark_mode_in_deprecated_attributes(
             .collect::<HashMap<_, _>>();
 
         for (attr, original_attr) in attributes {
-            let Some(color) = parse_css_color(&original_attr) else {
-                tracing::warn!("Skipping...");
-                continue;
+            let color = match CssColor::parse_string(&original_attr) {
+                Ok(color) => color,
+                Err(err) => {
+                    tracing::warn!("Could not parse color: {original_attr}. Error: {err:?}");
+                    tracing::warn!("Skipping...");
+                    continue;
+                }
             };
             let Ok(color) = HSL::try_from(color) else {
                 tracing::warn!(
