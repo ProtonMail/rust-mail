@@ -55,16 +55,15 @@ pub(crate) struct DeclarationBlockVisitor {
 
     should_remove_important: ShouldRemoveImportant,
 
-    // Because PrinterOptions do not implement Clone
-    #[default(printer_options)]
-    pub printer_options: fn() -> PrinterOptions<'static>,
+    #[default(printer_options())]
+    pub printer_options: PrinterOptions<'static>,
 }
 
 impl DeclarationBlockVisitor {
     pub fn new(
         should_store_overriden_props: ShouldStoreOverridenProps,
         should_remove_important: ShouldRemoveImportant,
-        printer_options: fn() -> PrinterOptions<'static>,
+        printer_options: PrinterOptions<'static>,
     ) -> Self {
         Self {
             should_store_overriden_props,
@@ -131,7 +130,7 @@ impl Visitor<'_> for DeclarationBlockVisitor {
                 .chain(fg_overrides)
                 .filter_map(|prop| {
                     prop.property
-                        .to_css_string(true, (self.printer_options)())
+                        .to_css_string(true, self.printer_options)
                         .inspect_err(|err| {
                             tracing::error!("Could not print CSS: {err:?}. Skipping it");
                         })
@@ -147,7 +146,7 @@ impl Visitor<'_> for DeclarationBlockVisitor {
                     self.should_store_overriden_props,
                     ShouldStoreOverridenProps::Yes
                 ) {
-                    match prop.to_css_string(false, (self.printer_options)()) {
+                    match prop.to_css_string(false, self.printer_options) {
                         Ok(overriden_prop) => {
                             self.overriden.push(overriden_prop);
                         }

@@ -24,12 +24,11 @@ pub(crate) struct StyleAttributeVisitor {
     overriden: Vec<OldProperty>,
     overrides: Vec<NewProperty>,
 
-    // Because PrinterOptions do not implement Clone
-    #[default(printer_options)]
-    pub printer_options: fn() -> PrinterOptions<'static>,
+    #[default(printer_options())]
+    pub printer_options: PrinterOptions<'static>,
 }
 impl StyleAttributeVisitor {
-    pub fn new(printer_options: fn() -> PrinterOptions<'static>) -> Self {
+    pub fn new(printer_options: PrinterOptions<'static>) -> Self {
         Self {
             printer_options,
             ..Default::default()

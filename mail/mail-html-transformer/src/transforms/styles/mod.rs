@@ -285,7 +285,7 @@ fn sanitize_dark_mode_in_stylesheets(document: &NodeRef, root_selector: &str) ->
         sanitize_dark_mode_in_stylesheet(
             stylesheet,
             &mut overrides,
-            printer_options,
+            printer_options(),
             root_selector.to_owned(),
         );
     }
@@ -342,7 +342,7 @@ fn sanitize_dark_mode_in_inline_attributes(
             style_attribute,
             tag,
             &mut overrides,
-            printer_options,
+            printer_options(),
         );
     }
 
@@ -473,8 +473,6 @@ fn sanitize_dark_mode_in_deprecated_attributes(
     Some(style)
 }
 
-// Because PrinterOptions are not clonable
-// TODO: Make PR to lightningCSS
 fn printer_options() -> PrinterOptions<'static> {
     PrinterOptions {
         minify: true,
@@ -485,7 +483,7 @@ fn printer_options() -> PrinterOptions<'static> {
 fn sanitize_dark_mode_in_stylesheet(
     mut stylesheet: StyleSheet<'_, '_>,
     overrides: &mut StylesheetOverrides,
-    printer_options: fn() -> PrinterOptions<'static>,
+    printer_options: PrinterOptions<'static>,
     root_selector: String,
 ) {
     let mut visitor = StylesheetVisitor::new(printer_options, root_selector);
@@ -521,7 +519,7 @@ fn sanitize_dark_mode_in_inline_attribute(
     mut style_attribute: StyleAttribute<'_>,
     node: NodeDataRef<ElementData>,
     overrides: &mut InlineStyleOverrides,
-    printer_options: fn() -> PrinterOptions<'static>,
+    printer_options: PrinterOptions<'static>,
 ) {
     let mut visitor = StyleAttributeVisitor::new(printer_options);
 
@@ -532,7 +530,7 @@ fn sanitize_dark_mode_in_inline_attribute(
         return;
     }
 
-    let style = match style_attribute.to_css(printer_options()) {
+    let style = match style_attribute.to_css(printer_options) {
         Ok(style) => style,
         Err(err) => {
             tracing::error!("Could not write style attribute: {err:?}");
@@ -681,7 +679,7 @@ mod tests {
         "
         );
 
-        let printer_options = || PrinterOptions::default();
+        let printer_options = PrinterOptions::default();
         let mut visitor = StylesheetVisitor::new(printer_options, "#protonmail-message".to_owned());
         let mut stylesheet = StyleSheet::parse(rule, ParserOptions::default()).unwrap();
         stylesheet.visit(&mut visitor).unwrap();
@@ -700,7 +698,7 @@ mod tests {
 
         assert_eq!(expected, visitor.overrides());
 
-        let stylesheet = stylesheet.to_css(printer_options()).unwrap().code;
+        let stylesheet = stylesheet.to_css(printer_options).unwrap().code;
 
         // Make sure we did not remove `!important` from stylesheet.
         assert_eq!(
@@ -821,7 +819,7 @@ mod tests {
     fn visit_style_attribute() {
         let rule = "color: black !important; background-color: white";
 
-        let printer_options = || PrinterOptions::default();
+        let printer_options = PrinterOptions::default();
         let mut visitor = StyleAttributeVisitor::new(printer_options);
         let mut attribute = StyleAttribute::parse(rule, ParserOptions::default()).unwrap();
         attribute.visit(&mut visitor).unwrap();
@@ -841,7 +839,7 @@ mod tests {
 
         assert_eq!(expected, visitor.overrides());
 
-        let attribute = attribute.to_css(printer_options()).unwrap().code;
+        let attribute = attribute.to_css(printer_options).unwrap().code;
 
         // We not only generate override CSS but also remove `!important` from the original one
         assert_eq!("background-color: #fff; color: #000", attribute);
