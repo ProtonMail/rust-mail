@@ -151,6 +151,36 @@ async fn validation_max_attempts() {
     assert_eq!(pin_metadata.attempts, 11);
 }
 
+#[tokio::test]
+async fn deleting_not_existing_pin_multiple_times_should_succeed() {
+    let test_ctx = TestContext::new().await;
+    let core_ctx = test_ctx.core_context();
+
+    let mut tether = core_ctx.account_stash().connection();
+    let mut app_settings = AppSettings::get_or_default(&tether).await;
+    app_settings.set_biometrics();
+    tether
+        .tx(async |tx| app_settings.save(tx).await)
+        .await
+        .unwrap();
+
+    assert!(PinProtection::get(&tether).await.unwrap().is_none());
+    assert_eq!(
+        AppSettings::get_or_default(&tether).await.protection,
+        AppProtection::Biometrics
+    );
+
+    assert!(PinCode::delete_pin(core_ctx.clone(), vec![]).await.is_ok());
+    assert!(PinCode::delete_pin(core_ctx.clone(), vec![]).await.is_ok());
+    assert!(PinCode::delete_pin(core_ctx.clone(), vec![]).await.is_ok());
+
+    assert!(PinProtection::get(&tether).await.unwrap().is_none());
+    assert_eq!(
+        AppSettings::get_or_default(&tether).await.protection,
+        AppProtection::None
+    );
+}
+
 trait PinProtectionExt {
     fn last_access_reset(
         &mut self,

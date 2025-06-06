@@ -17,7 +17,7 @@ use crate::nuke_utils::{
     drop_all_tables_in_database, remove_or_clear_dir_safe, rename_database_files,
 };
 use crate::os::{KeyChain, KeyChainError, KeyChainExt, StoreInKeyChain};
-use crate::pin_code::PinHash;
+use crate::pin_code::{PinCode, PinHash};
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{Error as AnyhowError, anyhow};
 use futures::TryFutureExt;
@@ -703,6 +703,13 @@ impl Context {
             tether
                 .tx(async |tx| CoreSession::delete_by_ids(orphaned_sessions, tx).await)
                 .await?;
+        }
+
+        if let Ok(false) = self.any_logged_in_account().await {
+            tracing::debug!("Remove any remaining app protection settings");
+            PinCode::delete_app_protection(self.as_arc())
+                .await
+                .map_err(|e| anyhow!("Could not remove PIN, details: `{e}`"))?;
         }
 
         info!("logged out all sessions for account {user_id}");
