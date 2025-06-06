@@ -1,6 +1,5 @@
 //! Mapping of Mail domain into a Sqlite Database.
 
-pub mod json;
 pub mod migrations;
 
 pub type DBMigrationError = MigratorError;
