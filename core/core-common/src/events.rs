@@ -30,12 +30,16 @@
 //! way.
 //!
 
-use crate::models::{Address, Contact, ContactEmail};
+use crate::datatypes::{ProductUsedSpace, Refresh};
+use crate::models::{Address, Contact, ContactEmail, User, UserSettings};
+use crate::utils::MapVec;
 use proton_core_api::services::proton::{
     Action as ApiAction, AddressEvent as ApiAddressEvent,
-    ContactEmailEvent as ApiContactEmailEvent, ContactEvent as ApiContactEvent, ProtonIdMarker,
+    ContactEmailEvent as ApiContactEmailEvent, ContactEvent as ApiContactEvent,
+    CoreEvent as ApiCoreEvent, EventId, ProtonIdMarker,
 };
 use proton_core_api::services::proton::{AddressId, ContactEmailId, ContactId};
+use proton_event_loop::Event;
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -55,7 +59,7 @@ pub enum Action {
 }
 
 impl Action {
-    pub fn log_entry(&self, id: &impl ProtonIdMarker) {
+    pub fn log_entry(self, id: &impl ProtonIdMarker) {
         let action_str = match self {
             Action::Delete => "Deleting",
             Action::Create => "Creating",
@@ -77,15 +81,16 @@ impl From<ApiAction> for Action {
     }
 }
 
-/// TODO: Document this struct.
+/// An event related to a [`ContactEmail`] record.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContactEmailEvent {
+    /// The remote ID of the contact email.
     pub remote_id: ContactEmailId,
 
-    /// TODO: Document this field.
+    /// The action that was taken on the contact email.
     pub action: Action,
 
-    /// TODO: Document this field.
+    /// The contact email metadata.
     pub contact_email: Option<ContactEmail>,
 }
 
@@ -99,15 +104,16 @@ impl From<ApiContactEmailEvent> for ContactEmailEvent {
     }
 }
 
-/// TODO: Document this struct.
+/// An event related to a [`Contact`] record.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContactEvent {
+    /// The remote ID of the contact.
     pub remote_id: ContactId,
 
-    /// TODO: Document this field.
+    /// The action that was taken on the contact.
     pub action: Action,
 
-    /// TODO: Document this field.
+    /// The contact metadata.
     pub contact: Option<Contact>,
 }
 
@@ -140,6 +146,92 @@ impl From<ApiAddressEvent> for AddressEvent {
             remote_id: value.id,
             action: value.action.into(),
             address: value.address.map(Address::from),
+        }
+    }
+}
+
+/// Core event data structure that contains only the core fields from events.
+/// This is identical to `MailEvent` but contains only the core-related fields.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CoreEvent {
+    /// The event unique ID.
+    pub event_id: EventId,
+
+    /// The addresses events.
+    pub addresses: Option<Vec<AddressEvent>>,
+
+    /// Whether there are more events to fetch.
+    pub has_more: bool,
+
+    /// The product used space (for example the space used for user's mail).
+    pub product_used_space: Option<ProductUsedSpace>,
+
+    /// The used space (amount of space used by the user as a whole).
+    pub used_space: Option<i64>,
+
+    /// The user data events.
+    pub user: Option<User>,
+
+    /// The user settings events.
+    pub user_settings: Option<UserSettings>,
+
+    /// The contacts events.
+    pub contacts: Option<Vec<ContactEvent>>,
+
+    /// The contact emails events.
+    pub contact_emails: Option<Vec<ContactEmailEvent>>,
+
+    /// Indicates whether we should refresh our data.
+    pub refresh: Refresh,
+}
+
+impl Event for CoreEvent {
+    type Response = ApiCoreEvent;
+
+    fn event_id(&self) -> &EventId {
+        &self.event_id
+    }
+
+    fn has_more(&self) -> bool {
+        self.has_more
+    }
+
+    fn is_refresh(&self) -> bool {
+        self.refresh.is_refresh()
+    }
+}
+
+impl From<ApiCoreEvent> for CoreEvent {
+    fn from(value: ApiCoreEvent) -> Self {
+        Self {
+            event_id: value.event_id,
+            addresses: value.addresses.map(MapVec::map_vec),
+            has_more: value.has_more,
+            product_used_space: value.product_used_space.map(ProductUsedSpace::from),
+            used_space: value.used_space,
+            user: value.user.map(User::from),
+            user_settings: value.user_settings.map(UserSettings::from),
+            contacts: value.contacts.map(MapVec::map_vec),
+            contact_emails: value.contact_emails.map(MapVec::map_vec),
+            refresh: value.refresh.into(),
+        }
+    }
+}
+
+#[cfg(any(test, feature = "test-utils"))]
+impl Default for CoreEvent {
+    fn default() -> Self {
+        Self {
+            event_id: EventId::from("default"),
+            addresses: None,
+            has_more: false,
+            product_used_space: None,
+            used_space: None,
+            user: None,
+            user_settings: None,
+            contacts: None,
+            contact_emails: None,
+            refresh: Refresh::None,
         }
     }
 }

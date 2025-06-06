@@ -1,15 +1,13 @@
 use crate::MailUserContext;
-use anyhow::anyhow;
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
 };
+use proton_core_common::actions::event_poll::ActionEventLoopError;
 use proton_core_common::datatypes::Refresh;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 
-use super::MailActionError;
-
-/// Action which runs whole refresh symulating Subscriber::on_refresh for Resync of eventloop
+/// Action which runs whole refresh simulating Subscriber::on_refresh for Resync of eventloop.
 ///
 #[derive(Serialize, Deserialize)]
 pub struct ActionRefresh {
@@ -30,7 +28,7 @@ impl Action for ActionRefresh {
     type Handler = RefreshHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
-    type Error = MailActionError;
+    type Error = ActionEventLoopError;
     type Context = MailUserContext;
 }
 
@@ -71,10 +69,10 @@ impl proton_action_queue::action::Handler for RefreshHandler {
         _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         context
-            .as_arc()
+            .user_context_arc()
             .on_refresh_impl(action.refresh)
-            .await
-            .map_err(|e| MailActionError::Other(anyhow!("{e}")))?;
+            .await?;
+        context.as_arc().on_refresh_impl(action.refresh).await?;
 
         Ok(())
     }

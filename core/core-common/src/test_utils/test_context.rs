@@ -1,30 +1,19 @@
-use crate::datatypes::ProductUsedSpace;
 use crate::db::account::{CoreAccount, CoreSession};
-use crate::events::{Action, AddressEvent, ContactEmailEvent, ContactEvent};
-use crate::models::{ModelExtension, User, UserSettings};
+use crate::event_loop::EventPollMode;
+use crate::models::ModelExtension;
 use crate::test_utils::account::{TEST_USER_ID, TEST_USER_MAIL, testdata_user_secret};
 use crate::test_utils::utils::catch_all;
-use crate::utils::MapVec;
 use crate::{
-    Context, CoreEvent, CoreEventSubscriberConnectionProvider, UserContext,
-    UserDatabaseInitializer,
+    Context, UserContext, UserDatabaseInitializer,
     db::account::SessionEncryptionKey,
     os::{InMemoryKeyChain, KeyChain, KeyChainExt},
 };
-use async_trait::async_trait;
 use proton_core_api::auth::{Tokens, UserKeySecret};
-use proton_core_api::services::proton::{
-    Action as ApiAction, AddressEvent as ApiAddressEvent,
-    ContactEmailEvent as ApiContactEmailEvent, ContactEvent as ApiContactEvent, User as ApiUser,
-    UserSettings as ApiUserSettings,
-};
-use proton_core_api::services::proton::{EventId, SessionId, UserId};
+use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::{Config, Endpoint, EnvId};
 use proton_core_api::status_observer::StatusObserver;
 use proton_core_api::status_watcher::StatusWatcher;
-use proton_event_loop::Event;
 use proton_sqlite3::MigratorError;
-use serde::Deserialize;
 use stash::stash::{Stash, StashError};
 use std::io::stdout;
 use std::sync::Arc;
@@ -200,6 +189,7 @@ impl TestContext {
             tmp_dir.path().join("core-cache"),
             None,
             Some(tmp_dir.path().join("logs")),
+            EventPollMode::Manual,
         )
         .await
         .expect("failed to create core context");
@@ -314,131 +304,7 @@ impl TestContext {
     /// # Panics
     ///
     pub async fn catch_all(&self) {
-        catch_all(self.mock_server()).await;
-    }
-}
-
-#[async_trait]
-impl CoreEventSubscriberConnectionProvider for TestContext {
-    async fn get_user_id_and_db_connection(&self) -> anyhow::Result<(UserId, Stash)> {
-        let user_ctx = self.user_context().await;
-
-        Ok((user_ctx.user_id().clone(), user_ctx.stash().clone()))
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-pub struct TestApiCoreEvent {
-    pub event_id: EventId,
-    pub action: ApiAction,
-    pub address: Option<Vec<ApiAddressEvent>>,
-    pub contact_emails: Option<Vec<ApiContactEmailEvent>>,
-    pub contacts: Option<Vec<ApiContactEvent>>,
-    pub has_more: bool,
-    pub user: Option<ApiUser>,
-    pub user_settings: Option<ApiUserSettings>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TestCoreEvent {
-    pub event_id: EventId,
-    pub action: Action,
-    pub address: Option<Vec<AddressEvent>>,
-    pub contact_emails: Option<Vec<ContactEmailEvent>>,
-    pub contacts: Option<Vec<ContactEvent>>,
-    pub has_more: bool,
-    pub user: Option<User>,
-    pub user_settings: Option<UserSettings>,
-}
-
-impl Event for TestCoreEvent {
-    type Response = TestApiCoreEvent;
-
-    fn event_id(&self) -> &EventId {
-        &self.event_id
-    }
-
-    fn has_more(&self) -> bool {
-        false
-    }
-
-    fn is_refresh(&self) -> bool {
-        false
-    }
-}
-
-impl From<TestApiCoreEvent> for TestCoreEvent {
-    fn from(value: TestApiCoreEvent) -> Self {
-        Self {
-            event_id: value.event_id,
-            action: value.action.into(),
-            address: value.address.map_vec(),
-            contact_emails: value.contact_emails.map_vec(),
-            contacts: value.contacts.map_vec(),
-            has_more: value.has_more,
-            user: value.user.map(User::from),
-            user_settings: value.user_settings.map(UserSettings::from),
-        }
-    }
-}
-
-impl CoreEvent for TestCoreEvent {
-    fn get_core_event_user(&self) -> Option<&User> {
-        self.user.as_ref()
-    }
-    fn get_core_event_user_mut(&mut self) -> Option<&mut User> {
-        self.user.as_mut()
-    }
-
-    fn get_core_event_user_settings(&self) -> Option<&UserSettings> {
-        self.user_settings.as_ref()
-    }
-    fn get_core_event_user_settings_mut(&mut self) -> Option<&mut UserSettings> {
-        self.user_settings.as_mut()
-    }
-
-    fn get_core_event_addresses(&self) -> Option<&[AddressEvent]> {
-        self.address.as_deref()
-    }
-    fn get_core_event_addresses_mut(&mut self) -> Option<&mut [AddressEvent]> {
-        self.address.as_deref_mut()
-    }
-
-    fn get_core_event_used_space(&self) -> Option<i64> {
-        None
-    }
-
-    fn get_core_event_used_product_space(&self) -> Option<&ProductUsedSpace> {
-        None
-    }
-
-    fn get_core_event_contacts(&self) -> Option<&[ContactEvent]> {
-        self.contacts.as_deref()
-    }
-    fn get_core_event_contacts_mut(&mut self) -> Option<&mut [ContactEvent]> {
-        self.contacts.as_deref_mut()
-    }
-
-    fn get_core_event_contact_emails(&self) -> Option<&[ContactEmailEvent]> {
-        self.contact_emails.as_deref()
-    }
-    fn get_core_event_contact_emails_mut(&mut self) -> Option<&mut [ContactEmailEvent]> {
-        self.contact_emails.as_deref_mut()
-    }
-}
-
-impl Default for TestCoreEvent {
-    fn default() -> Self {
-        Self {
-            event_id: EventId::from("test_event"),
-            action: Action::Create,
-            address: None,
-            contact_emails: None,
-            contacts: None,
-            has_more: false,
-            user: None,
-            user_settings: None,
-        }
+        catch_all(&self.mock_web_server).await;
     }
 }
 

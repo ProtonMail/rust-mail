@@ -1,14 +1,18 @@
 pub use self::keys::*;
+use crate::actions::register_core_actions;
 use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
+use crate::event_loop::{EventLoopActionIds, EventPollMode};
 use crate::models::{InitializationWatcher, UserSettings};
 use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse};
 use anyhow::Context as _;
+pub use event_loop::subscriber::CoreEventLoopContext;
 use proton_action_queue::queue::Queue;
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::Session;
+use proton_event_loop::EventPoll;
 use proton_sqlite3::MigratorError;
 use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use stash::orm::Model;
@@ -18,12 +22,14 @@ use std::fs::{self};
 use std::future::Future;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
+use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, warn};
 
 pub mod action_queue;
+pub mod event_loop;
 pub mod images_logo;
 mod keys;
 pub mod nuke_utils;
@@ -57,6 +63,8 @@ pub struct UserContext {
     cancellation_token: CancellationToken,
     pub cache_path: PathBuf,
     pub initialization_watcher: Arc<InitializationWatcher>,
+    event_loop: EventPoll,
+    last_event_loop_action_ids: Arc<Mutex<EventLoopActionIds>>,
 }
 
 impl Debug for UserContext {
@@ -80,18 +88,29 @@ impl UserContext {
         let user_stash = Self::new_user_db(user_stash_path, db_initializers).await?;
         let cancellation_token = context.new_child_cancellation_token();
         let queue = Queue::new(user_stash.clone()).await?;
+
+        // Register core actions
+        register_core_actions(&queue);
+
         let initialization_watcher = InitializationWatcher::new(&user_stash)?;
-        let this = Arc::new(Self {
-            session,
-            context,
-            user_stash,
-            queue,
-            user_id,
-            session_id,
-            key_manager: Arc::new(CryptoKeyManager::new()),
-            cache_path,
-            cancellation_token,
-            initialization_watcher,
+
+        let this = Arc::new_cyclic(|this| {
+            let event_ctx = CoreEventLoopContext::from(Weak::clone(this));
+
+            Self {
+                session,
+                context,
+                user_stash,
+                queue,
+                user_id,
+                session_id,
+                key_manager: Arc::new(CryptoKeyManager::new()),
+                cache_path,
+                cancellation_token,
+                initialization_watcher,
+                event_loop: EventPoll::new(event_ctx.boxed(), event_ctx.boxed()),
+                last_event_loop_action_ids: Arc::new(Mutex::new(EventLoopActionIds::default())),
+            }
         });
         let this_weak = Arc::downgrade(&this);
 
@@ -127,6 +146,9 @@ impl UserContext {
             }
         });
 
+        // Register the core event subscribers.
+        this.register_subscribers().await?;
+
         Ok(this)
     }
 
@@ -158,6 +180,23 @@ impl UserContext {
     #[must_use]
     pub fn user_id(&self) -> &UserId {
         &self.user_id
+    }
+
+    /// Get the event loop.
+    #[must_use]
+    pub fn event_loop(&self) -> &EventPoll {
+        &self.event_loop
+    }
+
+    /// Get the event poll mode of this context.
+    pub fn event_poll_mode(&self) -> EventPollMode {
+        self.context.event_poll_mode
+    }
+
+    /// Get last event loop action ids.
+    #[must_use]
+    pub fn last_event_loop_action_ids(&self) -> &Arc<Mutex<EventLoopActionIds>> {
+        &self.last_event_loop_action_ids
     }
 
     /// Get path to the log file.
@@ -337,7 +376,7 @@ fn remove_files(path: &Path) -> io::Result<()> {
     Ok(())
 }
 
-/// The errors tha can happen when deleting files
+/// The errors that can happen when deleting files
 #[derive(Debug)]
 pub enum DeleteFilesSafeError {
     /// Could not delete some of the files, maybe try again?

@@ -1,124 +1,12 @@
 use crate::actions::rollback::RollbackAction;
-use crate::context::EventPollMode;
 use crate::user_context::events::subscriber::MailEventSubscriber;
 use crate::{MailContextError, MailUserContext};
-use anyhow::{anyhow, bail};
-use async_trait::async_trait;
-use proton_action_queue::action::ActionId;
 use proton_action_queue::queue::ActionError;
-use proton_core_api::service::ApiServiceError;
-use proton_core_api::services::proton::EventId;
-use proton_core_api::services::proton::GetEventOptions;
-use proton_core_api::services::proton::ProtonCore;
-use proton_core_api::session::CoreSession;
-use proton_core_common::CoreEventSubscriber;
-use proton_event_loop::provider::Provider;
-use proton_event_loop::store::Store;
-use proton_event_loop::{EventLoopError, RawEvent};
-use stash::exports::SqliteError;
-use stash::params;
-use stash::stash::StashError;
-use std::sync::{Arc, Weak};
+use proton_core_common::actions::event_poll::EventPoll;
+use proton_event_loop::EventLoopError;
+use std::sync::Weak;
 use std::time::Duration;
-use tracing::{Instrument, error, warn};
-
-const MAIL_EVENT_TYPE_ID: &str = "proton-mail-event";
-
-#[derive(Clone)]
-pub struct MailEventLoopContext(Weak<MailUserContext>);
-
-impl MailEventLoopContext {
-    pub fn inner(&self) -> Result<Arc<MailUserContext>, anyhow::Error> {
-        match self.0.upgrade() {
-            Some(ctx) => Ok(ctx),
-            None => bail!("MailUserContext no longer alive"),
-        }
-    }
-
-    pub fn boxed(&self) -> Box<Self> {
-        Box::new(self.clone())
-    }
-}
-
-impl From<Weak<MailUserContext>> for MailEventLoopContext {
-    fn from(value: Weak<MailUserContext>) -> Self {
-        Self(value)
-    }
-}
-
-#[async_trait]
-impl Store for MailEventLoopContext {
-    async fn load(&self) -> anyhow::Result<Option<EventId>> {
-        let ctx = self.inner()?;
-        let tether = ctx.user_context.stash().connection();
-        match tether
-            .query_value::<_, EventId>(
-                "SELECT value FROM event_id_store WHERE id = ?1",
-                params![MAIL_EVENT_TYPE_ID],
-            )
-            .await
-        {
-            Ok(value) => Ok(Some(value)),
-            Err(e) => {
-                if matches!(
-                    e,
-                    StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
-                ) {
-                    Ok(None)
-                } else {
-                    error!("Failed to load event id from db:{e:?}");
-                    Err(anyhow!("Failed to load event id {e}"))
-                }
-            }
-        }
-    }
-
-    async fn store(&self, id: EventId) -> anyhow::Result<()> {
-        let ctx = self.inner()?;
-        ctx.user_context
-            .stash()
-            .connection()
-            .tx(async |tx| {
-                tx.execute(
-                    "INSERT OR REPLACE INTO event_id_store (id, value) VALUES (?, ?)",
-                    params![MAIL_EVENT_TYPE_ID, id],
-                )
-                .await?;
-
-                Ok(())
-            })
-            .await
-            .map_err(|e: StashError| {
-                error!("Failed to store event id in db:{e:?}");
-                anyhow!("Failed to store event id {e}")
-            })
-    }
-}
-
-#[async_trait]
-impl Provider for MailEventLoopContext {
-    async fn get_latest_event_id(&self) -> Result<EventId, ApiServiceError> {
-        let ctx = self.inner()?;
-        Ok(ctx.api().get_events_latest().await?.event_id)
-    }
-
-    async fn get_event(&self, event_id: &EventId) -> Result<RawEvent, ApiServiceError> {
-        let ctx = self.inner()?;
-        let json_string = ctx
-            .session()
-            .api()
-            .get_event(event_id.clone(), GetEventOptions::all())
-            .await?;
-
-        Ok(RawEvent::from_json(json_string)?)
-    }
-}
-
-#[derive(Debug, Default)]
-pub(crate) struct EventLoopActionIds {
-    last_event_loop_action_id: Option<ActionId>,
-    last_rollback_action_id: Option<ActionId>,
-}
+use tracing::{Instrument, error};
 
 impl MailUserContext {
     /// Setup a background task that queues the event loop action.
@@ -159,7 +47,7 @@ impl MailUserContext {
                         return;
                     };
 
-                    if let Err(e) = ctx.queue_poll_event_loop().await {
+                    if let Err(e) = ctx.force_event_loop_poll().await {
                         error!("Failed to queue poll event loop poll: {e:?}");
                     }
 
@@ -180,14 +68,10 @@ impl MailUserContext {
     /// # Errors
     ///
     /// Returns error if the action failed to be queued.
-    pub async fn poll_event_loop(
-        &self,
-    ) -> Result<(), ActionError<crate::actions::event_poll::EventPoll>> {
-        if self.mail_context.event_poll_mode != EventPollMode::Manual {
-            warn!("Event poll mode is not configured as manual");
-            return Ok(());
-        }
-        self.queue_poll_event_loop().await
+    ///
+    pub async fn poll_event_loop(&self) -> Result<(), ActionError<EventPoll>> {
+        // Delegate to UserContext
+        self.user_context().poll_event_loop().await
     }
 
     /// Queue an action to execute the event loop as soon as possible regardless of
@@ -196,34 +80,18 @@ impl MailUserContext {
     /// # Errors
     ///
     /// Returns error if the action failed to be queued.
-    pub async fn force_event_loop_poll(
-        &self,
-    ) -> Result<(), ActionError<crate::actions::event_poll::EventPoll>> {
-        let event_poll_action = crate::actions::event_poll::EventPoll {};
-        self.action_queue().queue_action(event_poll_action).await?;
-        Ok(())
-    }
-
-    async fn queue_poll_event_loop(
-        &self,
-    ) -> Result<(), ActionError<crate::actions::event_poll::EventPoll>> {
-        let mut last_action_ids = self.last_event_loop_action_ids.lock().await;
-        let event_poll_action = crate::actions::event_poll::EventPoll {};
-        {
-            let output = if let Some(last_action_id) = last_action_ids.last_event_loop_action_id {
-                self.action_queue()
-                    .replace_or_queue_action(last_action_id, event_poll_action)
-                    .await?
-            } else {
-                self.action_queue().queue_action(event_poll_action).await?
-            };
-            last_action_ids.last_event_loop_action_id = Some(output.id);
-        }
-        Ok(())
+    ///
+    pub async fn force_event_loop_poll(&self) -> Result<(), ActionError<EventPoll>> {
+        // Delegate to UserContext
+        self.user_context().force_event_loop_poll().await
     }
 
     async fn queue_item_rollback(&self) -> Result<(), ActionError<RollbackAction>> {
-        let mut last_action_ids = self.last_event_loop_action_ids.lock().await;
+        let mut last_action_ids = self
+            .user_context()
+            .last_event_loop_action_ids()
+            .lock()
+            .await;
         {
             let item_rollback_action = RollbackAction {};
             let output = if let Some(last_action_id) = last_action_ids.last_rollback_action_id {
@@ -246,28 +114,10 @@ impl MailUserContext {
     /// it does not hurt to leave them here as for now.
     ///
     pub(crate) async fn register_subscribers(&self) -> Result<(), EventLoopError> {
-        let core_subscriber = CoreEventSubscriber::new(Weak::clone(&self.this));
         let mail_subscriber = MailEventSubscriber::new(Weak::clone(&self.this));
 
-        self.event_loop
-            .register(Box::new(core_subscriber))
-            .await?
-            .register(Box::new(mail_subscriber))
-            .await?;
+        self.event_loop().register(mail_subscriber.boxed()).await?;
 
         Ok(())
-    }
-
-    /// Perform one iteration of the event loop, which consists of retrieving the latest events,
-    /// publishing it on all the registered subscribers and storing the event id for the next
-    /// iteration.
-    ///
-    /// The execution of the loop is aborted on the first error.
-    ///
-    /// # Error
-    ///
-    /// Returns error if the event loop failed to poll.
-    pub(crate) async fn poll_event_loop_impl(&self) -> Result<(), EventLoopError> {
-        self.event_loop.poll().await
     }
 }

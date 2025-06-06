@@ -3,12 +3,9 @@ mod events;
 mod images;
 mod initialization;
 
-use self::events::MailEventLoopContext;
 use crate::actions::draft::SEND_ACTION_GROUP;
 use crate::actions::register_mail_actions;
-use crate::context::EventPollMode;
 use crate::draft::attachments::DraftStagingAreaCleaner;
-use crate::events::MailEvent;
 use crate::models::{Conversation, Message};
 use crate::prefetch::{Prefetch, PrefetchJob, PrefetchNotify};
 use crate::user_context::initialization::InitializationMediator;
@@ -21,13 +18,14 @@ use proton_core_api::services::proton::{AddressId, SessionId, UserId};
 use proton_core_api::services::proton::{Proton, ProtonCore};
 use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::datatypes::{AccountDetails, LocalAddressId};
+use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::{Address, User, UserSettings};
 use proton_core_common::{ContactError, CoreContextError, UserContext};
 use proton_crypto_inbox::keys::{ComposerPreference, CryptoMailSettings, SendPreferences};
 use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
-use proton_event_loop::foreground_loop::EventLoop;
+use proton_event_loop::EventPoll;
 use proton_task_service::{AsyncTaskResult, TaskService, TaskSpawner};
 use stash::orm::Model;
 use stash::stash::{RunTransaction, Stash, Tether};
@@ -38,7 +36,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, OnceLock, Weak};
 use std::time::Duration;
 use tokio::join;
-use tokio::sync::{Mutex, watch};
+use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tracing::error;
 
@@ -49,12 +47,9 @@ pub struct MailUserContext {
     this: Weak<Self>,
     mail_context: Arc<MailContext>,
     user_context: Arc<UserContext>,
-    event_loop: EventLoop<MailEvent>,
     default_queue_executor: QueueAutoExecutor,
     send_queue_executors: QueueAutoExecutorPool,
     prefetch: PrefetchNotify,
-    /// Last id of the event loop action.
-    last_event_loop_action_ids: Mutex<events::EventLoopActionIds>,
     initialization_mediator: InitializationMediator,
     pub is_cleanup_cache_running: Arc<AtomicBool>,
 }
@@ -86,21 +81,15 @@ impl MailUserContext {
 
         let initialization_mediator = InitializationMediator::new(task_service);
 
-        let this = Arc::new_cyclic(|this| {
-            let event_ctx = MailEventLoopContext::from(Weak::clone(this));
-
-            Self {
-                this: Weak::clone(this),
-                mail_context,
-                user_context,
-                event_loop: EventLoop::new(event_ctx.boxed(), event_ctx.boxed()),
-                prefetch: OnceLock::new(),
-                default_queue_executor,
-                send_queue_executors,
-                last_event_loop_action_ids: Mutex::new(Default::default()),
-                initialization_mediator,
-                is_cleanup_cache_running: Default::default(),
-            }
+        let this = Arc::new_cyclic(|this| Self {
+            this: Weak::clone(this),
+            mail_context,
+            user_context,
+            prefetch: OnceLock::new(),
+            default_queue_executor,
+            send_queue_executors,
+            initialization_mediator,
+            is_cleanup_cache_running: Default::default(),
         });
 
         // Start draft staging area cleaner.
@@ -112,7 +101,7 @@ impl MailUserContext {
         this.init_expiration_loop();
         this.register_subscribers().await?;
 
-        if let EventPollMode::Automatic(interval) = this.mail_context.event_poll_mode {
+        if let EventPollMode::Automatic(interval) = this.user_context().event_poll_mode() {
             this.init_event_loop_poll(interval)
                 .await
                 .inspect_err(|e| error!("Failed to init event loop task: {e:?}"))?;
@@ -219,6 +208,12 @@ impl MailUserContext {
         self.user_context.stash()
     }
 
+    /// Get the event loop.
+    #[must_use]
+    pub fn event_loop(&self) -> &EventPoll {
+        self.user_context.event_loop()
+    }
+
     /// Get the mail context within which this user context resides.
     pub fn mail_context(&self) -> &MailContext {
         &self.mail_context
@@ -226,6 +221,11 @@ impl MailUserContext {
 
     /// Get the inner core context which this context wraps.
     pub fn user_context(&self) -> &UserContext {
+        &self.user_context
+    }
+
+    /// Get the inner core context which this context wraps as an Arc.
+    pub fn user_context_arc(&self) -> &Arc<UserContext> {
         &self.user_context
     }
 

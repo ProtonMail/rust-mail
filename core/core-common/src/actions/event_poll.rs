@@ -1,4 +1,4 @@
-use crate::MailUserContext;
+use crate::UserContext;
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard, WriterGuardError,
 };
@@ -23,7 +23,7 @@ impl Action for EventPoll {
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = ActionEventLoopError;
-    type Context = MailUserContext;
+    type Context = UserContext;
 }
 
 /// Wrapper type for [`EventLoopError`].
@@ -32,16 +32,19 @@ pub enum ActionEventLoopError {
     #[error(transparent)]
     EventLoop(#[from] EventLoopError),
     #[error(transparent)]
+    Subscriber(#[from] SubscriberError),
+    #[error(transparent)]
     WriterGuard(#[from] WriterGuardError),
 }
 
 impl proton_action_queue::action::Error for ActionEventLoopError {
     fn is_network_failure(&self) -> bool {
-        if let ActionEventLoopError::EventLoop(EventLoopError::Provider(e))
-        | ActionEventLoopError::EventLoop(EventLoopError::Subscriber(
-            _,
-            SubscriberError::Api(e),
-        )) = &self
+        if let ActionEventLoopError::EventLoop(
+            EventLoopError::Provider(e)
+            | EventLoopError::Subscriber(_, SubscriberError::Api(e))
+            | EventLoopError::Refresh(_, SubscriberError::Api(e)),
+        )
+        | ActionEventLoopError::Subscriber(SubscriberError::Api(e)) = &self
         {
             return e.is_network_failure();
         }
@@ -59,7 +62,7 @@ pub struct EventPollHandler;
 
 impl proton_action_queue::action::Handler for EventPollHandler {
     type Action = EventPoll;
-    type Context = MailUserContext;
+    type Context = UserContext;
 
     async fn apply_local(
         &self,
@@ -94,6 +97,7 @@ impl proton_action_queue::action::Handler for EventPollHandler {
             .poll_event_loop_impl()
             .await
             .map_err(ActionEventLoopError::from)?;
+
         Ok(())
     }
 }

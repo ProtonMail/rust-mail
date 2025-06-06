@@ -5,10 +5,11 @@ use proton_core_api::services::proton::muon::client::flow::{LoginExtraInfo, Logi
 use proton_core_api::session::{Config, CoreSession as _};
 use proton_core_api::store::UserData;
 use proton_core_common::db::account::SessionEncryptionKey;
+use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::Label;
 use proton_core_common::os::{InMemoryKeyChain, KeyChain, KeyChainExt};
 use proton_mail_common::MailContext;
-use proton_mail_common::context::{EventPollMode, ShouldInitializeMailUserContext};
+use proton_mail_common::context::ShouldInitializeMailUserContext;
 use secrecy::SecretString;
 use tempdir::TempDir;
 use tracing::level_filters::LevelFilter;
