@@ -156,7 +156,7 @@ impl PinCode {
 
             if success {
                 Ok(())
-            } else if pin_protection.attempts >= Self::MAX_ATTEMPTS {
+            } else if pin_protection.remaining_attempts() == 0 {
                 tracing::error!("All attemps to validate PIN have been used");
 
                 Err(PinError::TooManyAttempts)

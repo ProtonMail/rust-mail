@@ -308,17 +308,9 @@ impl PinProtection {
 
     /// Return remaining attempts to verify PIN code.
     ///
-    /// The reason behaind returning always 1 when attempts are greater than
-    /// the allowed number of attempts is that when you would have gone done to zero
-    /// your database is already cleared.
-    ///
-    /// So in theory there is no real life scenarion in which the number returned should be
-    /// lower than 1. There is also no real life reason to force the number one as the min
-    /// value BUT it has benefits when it would come to reducing number of allowed attempts.
-    ///
     #[must_use]
     pub fn remaining_attempts(&self) -> u32 {
-        u32::from(PinCode::MAX_ATTEMPTS.saturating_sub(self.attempts).max(1))
+        u32::from(PinCode::MAX_ATTEMPTS.saturating_sub(self.attempts))
     }
 
     /// Save or update a pin protection;
@@ -407,11 +399,18 @@ mod tests {
         assert_eq!(u8::from(val), expected);
     }
 
-    #[test_case(0 => 10; "TEST0: No attempts have been made")]
-    #[test_case(1 => 9; "TEST1: One attempt has been made")]
-    #[test_case(9 => 1; "TEST2: Nine attempts have been made")]
-    #[test_case(10 => 1; "TEST3: Ten attempts have been made - Equal to allowed")]
-    #[test_case(11 => 1; "TEST4: Eleven attempts have been made - More than allowed")]
+    #[test_case(0 => 10; "TEST0: 1st attempt is allowed")]
+    #[test_case(1 => 9; "TEST1: 2nd attempt is allowed")]
+    #[test_case(2 => 8; "TEST2: 3rd attempt is allowed")]
+    #[test_case(3 => 7; "TEST3: 4th attempt is allowed")]
+    #[test_case(4 => 6; "TEST4: 5th attempt is allowed")]
+    #[test_case(5 => 5; "TEST5: 6th attempt is allowed")]
+    #[test_case(6 => 4; "TEST6: 7th attempt is allowed")]
+    #[test_case(7 => 3; "TEST7: 8th attempt is allowed")]
+    #[test_case(8 => 2; "TEST8: 9th attempt is allowed")]
+    #[test_case(9 => 1; "TEST9: 10th attempt is allowed")]
+    #[test_case(10 => 0; "TEST10: 11th attempt is not allowed")]
+    #[test_case(11 => 0; "TEST11: 12th attempt is not allowed")]
     fn remaining_attempts(attempts: u8) -> u32 {
         let pinpro = PinProtection {
             local_id: SingleEntryId,
@@ -477,10 +476,7 @@ mod tests {
         app_settings.lock_accessed_unixepoch = last_lock_2.saturating_sub(10 * 60 + 1);
 
         tether
-            .tx(async |tx| {
-                app_settings.save(tx).await?;
-                Result::<(), StashError>::Ok(())
-            })
+            .tx(async |tx| app_settings.save(tx).await)
             .await
             .unwrap();
 
