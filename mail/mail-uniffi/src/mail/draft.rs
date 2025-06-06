@@ -6,8 +6,9 @@ use crate::core::datatypes::{Id, UnixTimestamp};
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{
     DraftCancelScheduleSendError, DraftDiscardError, DraftOpenError, DraftSaveError,
-    DraftSendError, DraftUndoSendError, EmbeddedAttachmentInfoResult, ProtonError,
-    VoidDraftDiscardResult, VoidDraftSaveResult, VoidDraftSendResult, VoidDraftUndoSendResult,
+    DraftSendError, DraftSenderAddressChangeError, DraftUndoSendError,
+    EmbeddedAttachmentInfoResult, ProtonError, VoidDraftDiscardResult, VoidDraftSaveResult,
+    VoidDraftSendResult, VoidDraftUndoSendResult,
 };
 use crate::mail::MailUserSession;
 use crate::mail::datatypes::MimeType;
@@ -125,6 +126,15 @@ impl From<RealDraftSyncStatus> for DraftSyncStatus {
             RealDraftSyncStatus::Cached => Self::Cached,
         }
     }
+}
+
+#[derive(uniffi::Record)]
+pub struct DraftSenderAddressList {
+    /// All available addresses which can be used for sending, also includes the
+    /// `active` address.
+    pub available: Vec<String>,
+    /// The current active address.
+    pub active: String,
 }
 
 /// Create a new draft with the given `create_mode`.
@@ -398,6 +408,49 @@ impl Draft {
     /// Get the attachment list.
     pub fn attachment_list(&self) -> Arc<AttachmentList> {
         Arc::clone(&self.attachment_list)
+    }
+
+    /// Change the sender address for this draft to the given `email` address.
+    pub async fn change_sender_address(
+        self: Arc<Self>,
+        email: String,
+    ) -> Result<(), DraftSenderAddressChangeError> {
+        let Some(ctx) = self.ctx.upgrade() else {
+            return Err(ProtonError::Unexpected(UnexpectedError::Internal).into());
+        };
+        uniffi_async::<_, RealProtonMailError, _>(async move {
+            Ok(self
+                .instance
+                .write()
+                .await
+                .change_sender_address_by_email(&ctx, &email)
+                .await?)
+        })
+        .await
+        .map_err(DraftSenderAddressChangeError::from)
+    }
+
+    pub async fn list_sender_addresses(
+        self: Arc<Self>,
+    ) -> Result<DraftSenderAddressList, ProtonError> {
+        let Some(ctx) = self.ctx.upgrade() else {
+            return Err(ProtonError::Unexpected(UnexpectedError::Internal));
+        };
+
+        Ok(uniffi_async::<_, RealProtonMailError, _>(async move {
+            let tether = ctx.user_stash().connection();
+            let addresses = RealDraft::sender_addresses(&tether)
+                .await?
+                .into_iter()
+                .map(|v| v.email)
+                .collect::<Vec<_>>();
+            let current = self.instance.read().await.sender.clone();
+            Ok(DraftSenderAddressList {
+                available: addresses,
+                active: current,
+            })
+        })
+        .await?)
     }
 }
 

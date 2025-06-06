@@ -15,7 +15,7 @@ use crate::models::{
     MetadataId, RollbackItem,
 };
 use crate::{AppError, MailContextError, MailUserContext, draft};
-use indoc::{formatdoc, indoc};
+use indoc::indoc;
 use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
     WriterGuardError,
@@ -435,7 +435,7 @@ impl Save {
         }
 
         // Reload attachments if they don't have remote id or key packets.
-        let attachments =
+        let mut attachments =
             Attachment::find_by_ids(action.attachment_ids.iter().cloned(), guard.tether())
                 .await
                 .inspect_err(|e| error!("Failed to load attachments: {e:?}"))?;
@@ -451,6 +451,7 @@ impl Save {
                 action,
                 &attachments,
                 &action.body,
+                guard.tether(),
             )
             .await
             .inspect_err(|e| {
@@ -503,6 +504,7 @@ impl Save {
                 &attachments,
                 &action.body,
                 draft_reply_or_forward_params,
+                guard.tether(),
             )
             .await
             .inspect_err(|e| {
@@ -552,6 +554,19 @@ impl Save {
                             error!("Failed to convert api message: {e:?}");
                         })?;
 
+                // Do not override all the data as it may override local data that we modified
+                // but is out of date when we are making this request. The only value we should
+                // care about is the display order. Everything else we control.
+                Message::update_ids_and_display_order(
+                    local_message_id,
+                    new_local_message.display_order,
+                    new_local_message.remote_id.expect("Should be set after api fetc"),
+                    new_local_message.remote_conversation_id.expect("Should be set after api fetch"),
+                    bond
+                )
+                    .await
+                    .inspect_err(|e| error!("Failed to update the message: {e:?}"))?;
+
                 if remote_message_id.is_none() {
                     // When we create a draft on the server, all inherited attachments get a new remote
                     // id. We need to remove and update those items for things to work correctly
@@ -563,7 +578,7 @@ impl Save {
                     );
 
                     for (index, original_attachment) in attachments
-                        .iter()
+                        .iter_mut()
                         .enumerate()
                         .filter(|(_, a)| a.remote_id().is_some())
                     {
@@ -623,7 +638,7 @@ impl Save {
                                 action.metadata_id,
                                 new_attachment.id(),
                                 current_display_order,
-                                false,
+                                original_attachment.is_public_key_attachment(),
                             );
                             new_attachment_metadata.save(bond).await.inspect_err(|e| {
                                 error!("Failed to save new draft attachment metadata: {e:?}")
@@ -650,30 +665,30 @@ impl Save {
                                 )
                                     .await?;
                             }
+
+                            // Update the original attachment to make sure the next
+                            // check is accurate and to avoid duplicate updates.
+                            *original_attachment = new_attachment.clone()
                         }
                     }
                 }
 
-                // Do not override all the data as it may override local data that we modified
-                // but is out of date when we are making this request. The only value we should
-                // care about is the display order. Everything else we control.
-                bond.execute(
-                    formatdoc! {"
-            UPDATE {} SET
-                display_order = ?,
-                remote_id =?,
-                remote_conversation_id =?
-            WHERE local_id = ?
-        ", Message::table_name()},
-                    params![
-                    new_local_message.display_order,
-                    new_local_message.remote_id,
-                    new_local_message.remote_conversation_id,
-                    local_message_id
-                ],
-                )
-                    .await
-                    .inspect_err(|e| error!("Failed to update the message: {e:?}"))?;
+                // If address changed saving the attachments are upload with new key packets
+                // which will reset their data. We need to check if this occurred here and
+                // reset the signatures and update the key packets so that send works correctly.
+                for (index, original_attachment) in attachments
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, a)| a.remote_id().is_some()) {
+                    let new_attachment = &mut new_message_body_metadata.attachments[index];
+                    if original_attachment.remote_address_id != new_attachment.remote_address_id || original_attachment.key_packets!= new_attachment.key_packets {
+                        tracing::info!("Detected address change on attachment ({}/{})", original_attachment.local_id.unwrap(), original_attachment.remote_id().as_ref().unwrap());
+                        new_attachment.local_id = original_attachment.local_id;
+                        new_attachment.row_id = original_attachment.row_id;
+                        new_attachment.attachment_type = original_attachment.attachment_type.clone();
+                        new_attachment.update_after_draft_address_change(bond).await?;
+                    }
+                }
 
                 // Update only the headers that are produced by the api.
                 new_message_body_metadata.local_message_id = Some(local_message_id);

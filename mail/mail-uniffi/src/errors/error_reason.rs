@@ -7,6 +7,7 @@ use proton_mail_common::errors::{
     DraftOpenErrorReason as RealDraftOpenErrorReason,
     DraftSaveErrorReason as RealDraftSaveErrorReason,
     DraftSendErrorReason as RealDraftSendErrorReason,
+    DraftSenderAddressChangeErrorReason as RealDraftSenderAddressChangeErrorReason,
     DraftUndoSendErrorReason as RealDraftUndoSendErrorReason,
     EventErrorReason as RealEventErrorReason, LoginErrorReason as RealLoginErrorReason,
     OtherErrorReason as RealOtherErrorReason, PinAuthErrorReason as RealPinAuthErrorReason,
@@ -295,6 +296,27 @@ impl From<RealDraftCancelScheduleSendErrorReason> for DraftCancelScheduleSendErr
                 Self::MessageNotScheduled
             }
             RealDraftCancelScheduleSendErrorReason::MessageAlreadySent => Self::MessageAlreadySent,
+        }
+    }
+}
+
+#[derive(Debug, UniffiEnum)]
+pub enum DraftSenderAddressChangeErrorReason {
+    AddressEmailNotFound(String),
+    AddressNotSendEnabled,
+    AddressDisabled,
+}
+
+impl From<RealDraftSenderAddressChangeErrorReason> for DraftSenderAddressChangeErrorReason {
+    fn from(value: RealDraftSenderAddressChangeErrorReason) -> Self {
+        match value {
+            RealDraftSenderAddressChangeErrorReason::AddressNotSendEnabled => {
+                Self::AddressNotSendEnabled
+            }
+            RealDraftSenderAddressChangeErrorReason::AddressDisabled => Self::AddressDisabled,
+            RealDraftSenderAddressChangeErrorReason::AddressWithEmailNotFound(v) => {
+                Self::AddressEmailNotFound(v)
+            }
         }
     }
 }

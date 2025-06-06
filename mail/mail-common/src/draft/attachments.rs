@@ -1,9 +1,15 @@
-use crate::MailUserContext;
 use crate::datatypes::AttachmentMetadata;
+use crate::draft::SaveError;
 use crate::models::{
-    DraftAttachmentMetadata, DraftAttachmentUploadError, DraftAttachmentUploadState, DraftMetadata,
-    MetadataId,
+    Attachment, DraftAttachmentMetadata, DraftAttachmentUploadError, DraftAttachmentUploadState,
+    DraftMetadata, MetadataId,
 };
+use crate::{MailContextError, MailContextResult, MailUserContext};
+use proton_core_api::services::proton::AddressId;
+use proton_crypto_inbox::attachment::{DecryptableAttachment, KeyPackets};
+use proton_crypto_inbox::proton_crypto::crypto::AsPublicKeyRef;
+use proton_crypto_inbox::proton_crypto::new_pgp_provider;
+use proton_mail_api::services::proton::prelude::DraftAttachmentKeyPackets;
 use proton_mail_ids::LocalAttachmentId;
 use stash::orm::Model;
 use stash::stash::{StashError, Tether};
@@ -209,6 +215,88 @@ impl DraftStagingAreaCleaner {
             }
         }
     }
+}
+
+pub async fn build_attachment_key_packets(
+    ctx: &MailUserContext,
+    address_id: &AddressId,
+    attachments: &[Attachment],
+    tether: &Tether,
+) -> MailContextResult<DraftAttachmentKeyPackets> {
+    let mut attachment_key_packets = DraftAttachmentKeyPackets::new();
+    let pgp_provider = new_pgp_provider();
+
+    for attachment in attachments {
+        let Some(remote_id) = attachment.remote_id().clone() else {
+            // When adding new attachment to a draft, we reflect the state correctly offline
+            // but we can not attach an attachment until it has a remote id. We skip attachments
+            // that still does not have a remote id. Since we always save before send and send
+            // also requires all attachments to be uploaded this will correct itself.
+            tracing::warn!(
+                "Attachment {} does not have a remote id, skipping",
+                attachment.local_id.unwrap()
+            );
+            continue;
+        };
+
+        let attachment_address_id = attachment.remote_address_id.as_ref().unwrap();
+        // If the address of the sender changed we need to regenerate the key packets for this
+        // attachment, this required decrypting the current key packets and re-encrypting them
+        // with the new address key.
+        if *attachment_address_id != *address_id {
+            tracing::info!(
+                "Address id has changed, re-encrypting attachment {} key packets",
+                attachment.local_id.unwrap()
+            );
+            let unlocked_attachment_keys = ctx
+                .unlocked_address_keys(&pgp_provider, tether, attachment_address_id)
+                .await
+                .inspect_err(|e| {
+                    error!("Failed to unlock attachment address {address_id} keys:{e:?}")
+                })?;
+            let unlocked_addr_keys = ctx
+                .unlocked_address_keys(&pgp_provider, tether, address_id)
+                .await
+                .inspect_err(|e| error!("Failed to unlock address {address_id} keys:{e:?}"))?
+                .primary_for_mail()
+                .map_err(|e| {
+                    error!("Failed get primary key for {address_id}:{e:?}");
+                    MailContextError::Crypto
+                })?;
+            // Decrypt attachment information using sender's keys
+            let attachment_info = attachment
+                .decrypt_attachment_info(&pgp_provider, &unlocked_attachment_keys)
+                .map_err(|e| {
+                    error!("Failed to decrypt attachment key packets: {e:?}");
+                    MailContextError::Crypto
+                })?;
+            // Encrypt the attachment session key to the new sender
+            let new_attachment_key_packet = attachment_info
+                .encrypt_session_key_to_recipient(
+                    &pgp_provider,
+                    unlocked_addr_keys.for_encryption().as_public_key(),
+                )
+                .map_err(|e| {
+                    error!("Failed to encrypt attachment key packets: {e:?}");
+                    MailContextError::Crypto
+                })?;
+            attachment_key_packets.insert(
+                remote_id,
+                KeyPackets::from_vec(vec![new_attachment_key_packet]),
+            );
+        } else {
+            let Some(key_packets) = attachment.key_packets.clone() else {
+                return Err(SaveError::AttachmentDoesNotHaveKeyPackets(
+                    attachment.local_id.unwrap(),
+                )
+                .into());
+            };
+
+            attachment_key_packets.insert(remote_id, key_packets.value.clone());
+        }
+    }
+
+    Ok(attachment_key_packets)
 }
 
 #[cfg(test)]
