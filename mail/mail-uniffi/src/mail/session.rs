@@ -813,11 +813,20 @@ impl MailSession {
     ///
     pub async fn delete_pin_code(&self, pin: Vec<u32>) -> Result<(), PinAuthError> {
         let ctx = self.mail_ctx.core_context().clone();
+        let mail_ctx = self.mail_ctx.clone();
 
         uniffi_async(async move {
-            PinCode::delete_pin(ctx, pin).await?;
+            match PinCode::delete_pin(ctx, pin).await {
+                Err(PinError::TooManyAttempts) => {
+                    let mut user_ctxs = mail_ctx.get_all_logged_in_user_ctx().await?;
+                    if let Some(ctx) = user_ctxs.pop() {
+                        ctx.sign_out_all().await?;
+                    }
 
-            Result::<_, RealProtonMailError>::Ok(())
+                    Err(RealProtonMailError::from(PinError::TooManyAttempts))
+                }
+                otherwise => Result::<_, RealProtonMailError>::Ok(otherwise?),
+            }
         })
         .await
         .map_err(PinAuthError::from)
