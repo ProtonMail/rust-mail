@@ -14,7 +14,7 @@ use crate::device::DynDeviceInfoProvider;
 use crate::event_loop::EventPollMode;
 use crate::models::{AppSettings, ModelExtension};
 use crate::nuke_utils::{
-    clear_dir_safe, drop_all_tables_in_database, remove_in_background, remove_or_clear_dir_safe,
+    drop_all_tables_in_database, remove_in_background, remove_or_clear_dir_safe,
     rename_database_files,
 };
 use crate::os::{KeyChain, KeyChainError, KeyChainExt, StoreInKeyChain};
@@ -756,7 +756,7 @@ impl Context {
 
         tracing::info!("Clear user associated caches");
         for cache_path in caches {
-            clear_dir_safe(cache_path).await;
+            remove_or_clear_dir_safe(cache_path).await;
         }
         Ok(())
     }
