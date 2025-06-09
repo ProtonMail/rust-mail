@@ -5,7 +5,12 @@ mod profiler;
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 
 use proton_mail_html_transformer::{
-    message_detector, remote_content, sanitizer, transforms::{self, styles::{BrowserCapabilities, IncludeFullStaticCss}}, utm, Transformer
+    Transformer, message_detector, remote_content, sanitizer,
+    transforms::{
+        self,
+        styles::{BrowserCapabilities, IncludeFullStaticCss},
+    },
+    utm,
 };
 
 static AMOS_HTTP: &str = include_str!("./amos_http.html");

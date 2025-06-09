@@ -52,10 +52,20 @@ impl HSLExt for HSL {
         if self.s <= 5.0 {
             IsColorAchromatic::Achromatic
         } else if self.l <= 1.0 {
+            // We keep 1% as a threshold for dark colors in order to pass Test Case 5 (ported from legacy app).
+            //
             // We want to treat very dark colors as achromatic.
             IsColorAchromatic::Achromatic
         } else if self.l >= 95.0 {
+            // At the same time we are not using 99% as a threshold for light colors because
+            // we found some background colors in the wild that for a human eye are light gray,
+            // but in HSL representation are colorful.
+            // For example:
+            // * #FFFFFE - looks like white but HSL is (60, 100%, 100%) - without that if branch
+            // we would transform it to ugly mustard color ( #999900 ).
             // We want to treat very light colors as achromatic.
+            // * #FAF7F2 - looks like white but HSL is (38, 44%, 96%) - if we used 99% as a threshold
+            // we would transform it to ugly orange color ( #705527 ).
             IsColorAchromatic::Achromatic
         } else {
             IsColorAchromatic::Colorful

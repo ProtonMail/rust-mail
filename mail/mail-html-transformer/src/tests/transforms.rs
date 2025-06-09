@@ -2,7 +2,11 @@
 #![allow(clippy::needless_raw_string_hashes)]
 
 use crate::{
-    transforms::{styles::{BrowserCapabilities, IncludeFullStaticCss}, ColorMode}, InsertLinkToken, Transformer
+    InsertLinkToken, Transformer,
+    transforms::{
+        ColorMode,
+        styles::{BrowserCapabilities, IncludeFullStaticCss},
+    },
 };
 #[test]
 fn inject_style() {

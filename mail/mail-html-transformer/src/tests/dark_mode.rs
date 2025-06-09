@@ -1,5 +1,9 @@
 use crate::{
-    transforms::{styles::{BrowserCapabilities, IncludeFullStaticCss}, ColorMode}, Transformer
+    Transformer,
+    transforms::{
+        ColorMode,
+        styles::{BrowserCapabilities, IncludeFullStaticCss},
+    },
 };
 
 #[test]
@@ -219,7 +223,11 @@ fn inject_style_for_message_that_handles_dark_mode_natively_but_sender_is_untrus
 
 mod regressions {
     use crate::{
-        transforms::{styles::{BrowserCapabilities, IncludeFullStaticCss}, ColorMode}, Transformer
+        Transformer,
+        transforms::{
+            ColorMode,
+            styles::{BrowserCapabilities, IncludeFullStaticCss},
+        },
     };
 
     // Bugs caught live
