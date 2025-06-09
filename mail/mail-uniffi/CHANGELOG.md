@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [mail-uniffi-v0.86.0] - 2025-06-09
+
+### Features
+
+- [ET-3178] List of untrusted_senders
+- Action queue auto dependency keys
+- Added deviceinfoprovider foreign trait.
+
+### Fixes
+
+- [ET-3178] Fix some ugly colors by also taking lightness into the consideration when calculating achromatic colors
+- [ET-3178] Support for -webkit-text-fill-color
+- [ET-3178] Fix a case where color is not recognized by css parser
+- Obey remaining attempts on pin validation
+- [ET-3093] Sign out all accounts on delete pin when max attempts is reached
+- [ET-3096] Clear app protection on last account log out
+- [ET-3259] Remove innerhtml on certain tags
+
+
+## [mail-uniffi-v0.85.0] - 2025-06-06
+
 ### Features
 
 - [ET-3178] Sanitize deprecated html attributes for dark mode
@@ -34,8 +55,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Et-3080 fix build errors
 - Et-3080 fixes
 - Et-3080 run cargo fmt
-- [ET-3101] Do not remove !important flag from stylesheets
 - Et-3080 fix clippy issues
+- [ET-3101] Do not remove !important flag from stylesheets
 - [ET-3101] Insert extra id to the html root
 - [ET-3101] Expose `html_head_content_for_composer()` method in drafts
 - [ET-3101] Removing !important from style attributes is reversible
