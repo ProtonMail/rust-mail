@@ -17,6 +17,7 @@ use proton_core_common::auth_store::DecryptExt;
 use proton_core_common::db::account::{CoreAccount, CoreSession};
 use proton_core_common::models::{LabelError, ModelExtension};
 use proton_core_common::os::{KeyChain, KeyChainError};
+use proton_core_common::pin_code::{PinCode, PinError};
 use proton_core_common::{
     ContactError, Context, CoreAccountState, CoreContextError, CoreSessionState, KeyHandlingError,
     UserContext,
@@ -96,6 +97,8 @@ pub enum MailContextError {
     Login(#[from] LoginError),
     #[error("Signup Error: {0}")]
     Signup(#[from] SignupError),
+    #[error("Pin Error: {0}")]
+    Pin(#[from] PinError),
     #[error("API Error: {0}")]
     Api(#[from] ApiServiceError),
     #[error("Problem with loading contact: {0}")]
@@ -397,6 +400,43 @@ impl MailContext {
 
         // Create a new signup flow
         Ok(SignupFlow::new(client, store).await?)
+    }
+
+    /// Verify the PIN code.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the PIN code is incorrect.
+    pub async fn verify_pin_code(self: &Arc<Self>, pin: Vec<u32>) -> MailContextResult<()> {
+        self.handle_pin_code_action(pin, PinCode::validate_pin)
+            .await
+    }
+
+    /// Delete the PIN code.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the PIN code is incorrect.
+    pub async fn delete_pin_code(self: &Arc<Self>, pin: Vec<u32>) -> MailContextResult<()> {
+        self.handle_pin_code_action(pin, PinCode::delete_pin).await
+    }
+
+    async fn handle_pin_code_action<F: Future<Output = Result<(), PinError>>>(
+        self: &Arc<Self>,
+        pin: Vec<u32>,
+        action: impl FnOnce(Arc<Context>, Vec<u32>) -> F,
+    ) -> MailContextResult<()> {
+        let ctx = self.core_context.clone();
+        match action(ctx, pin).await {
+            Err(PinError::TooManyAttempts) => {
+                let mut user_ctxs = self.get_all_logged_in_user_ctx().await?;
+                if let Some(ctx) = user_ctxs.pop() {
+                    ctx.sign_out_all().await?;
+                }
+                Err(MailContextError::Pin(PinError::TooManyAttempts))
+            }
+            otherwise => Ok(otherwise?),
+        }
     }
 
     /// Create a new context from a login flow.
