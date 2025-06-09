@@ -707,6 +707,32 @@ impl MailSession {
         .map_err(UserContextError::from)
     }
 
+    /// Sing out from all accounts.
+    ///
+    /// This method is going to remove all user data & account data
+    /// associated with the mail application.
+    ///
+    /// This method is meant to be used when someone decides to sign out on
+    /// authentication screen such as PIN or Biometrics verification.
+    ///
+    pub async fn sign_out_all(&self) -> Result<(), UserContextError> {
+        let Some(user_context) = self.user_ctx.first() else {
+            tracing::debug!("No user context found, skipping sign out all");
+            return Ok(());
+        };
+        let map = self.user_ctx.clone();
+
+        uniffi_async(async move {
+            user_context.sign_out_all().await?;
+            map.clear();
+
+            Result::<(), RealProtonMailError>::Ok(())
+        })
+        .await
+        .map_err(UserContextError::from)
+        .into()
+    }
+
     /// Check if any message for all logged in accounts is still pending to send
     ///
     pub async fn all_messages_were_sent(&self) -> Result<bool, UserContextError> {

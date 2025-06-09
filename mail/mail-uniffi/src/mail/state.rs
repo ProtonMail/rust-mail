@@ -43,6 +43,18 @@ impl MailUserContextMap {
         self.map.write().remove(user_id)
     }
 
+    /// Clear the map.
+    ///
+    /// This is used to clear the map when the all sessions are deleted.
+    ///
+    pub fn clear(&self) {
+        self.map.write().clear();
+    }
+
+    pub fn first(&self) -> Option<Arc<MailUserContext>> {
+        self.map.read().values().next().cloned()
+    }
+
     fn get(&self, user_id: &UserId) -> Option<Arc<MailUserContext>> {
         self.map.read().get(user_id).map(Arc::clone)
     }
