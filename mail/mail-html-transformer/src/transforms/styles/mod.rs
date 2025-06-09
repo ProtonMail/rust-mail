@@ -48,11 +48,24 @@ pub fn revert_dark_mode_in_inline_attributes(document: &NodeRef) {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IncludeFullStaticCss {
+    /// Should include full `./light.css`, `./dark.css` etc.
+    Yes,
+    /// Should include only a comment with a name of the file.
+    /// Used in tests to avoid including full CSS files.
+    No,
+}
+
 /// This function provides stylesheets for dark mode in plaintext messages.
 /// In plaintext we do not need to parse HTML/CSS and just need to return static
 /// stylesheets builtin in the SDK.
 ///
-pub fn dark_mode_for_plaintext(mode: ColorMode, capabilities: BrowserCapabilities) -> &'static str {
+pub fn dark_mode_for_plaintext(
+    mode: ColorMode,
+    capabilities: BrowserCapabilities,
+    include_full_static_css: IncludeFullStaticCss,
+) -> &'static str {
     let level = DarkStyleSupportLevel::new_for_plaintext(mode, capabilities);
 
     let BrowserCapabilities {
@@ -63,16 +76,28 @@ pub fn dark_mode_for_plaintext(mode: ColorMode, capabilities: BrowserCapabilitie
         (DarkStyleSupportLevel::NoDarkMode, false) => {
             // If dark mode is currently not supported, let's just inject static css style.
             //
-            include_str!("./light.css")
+            if matches!(include_full_static_css, IncludeFullStaticCss::Yes) {
+                include_str!("./light.css")
+            } else {
+                "/* <light_css> */"
+            }
         }
         (_, false) => {
             // We detected, that the message can be safely rendered in the dark mode.
-            include_str!("./dark.css")
+            if matches!(include_full_static_css, IncludeFullStaticCss::Yes) {
+                include_str!("./dark.css")
+            } else {
+                "/* <dark_css> */"
+            }
         }
         (_, true) => {
             // Browser supports `@media (prefers-color-scheme: dark)`.
             // So instead switching between light/dark CSS we can inject merged one
-            include_str!("./light_and_dark.css")
+            if matches!(include_full_static_css, IncludeFullStaticCss::Yes) {
+                include_str!("./light_and_dark.css")
+            } else {
+                "/* <light_and_dark_css> */"
+            }
         }
     }
 }
@@ -117,6 +142,7 @@ pub fn inject_dark_mode(
     mode: ColorMode,
     capabilities: BrowserCapabilities,
     root_selector: String,
+    include_full_static_css: IncludeFullStaticCss,
 ) {
     let level = DarkStyleSupportLevel::new_for_html(sender, mode, &source, capabilities);
 
@@ -131,16 +157,28 @@ pub fn inject_dark_mode(
         (DarkStyleSupportLevel::NoDarkMode, false) => {
             // If dark mode is currently not supported, let's just inject static css style.
             //
-            inject_style(&target, include_str!("./light.css"));
+            if matches!(include_full_static_css, IncludeFullStaticCss::Yes) {
+                inject_style(&target, include_str!("./light.css"));
+            } else {
+                inject_style(&target, "/* <light_css> */");
+            }
         }
         (DarkStyleSupportLevel::Native, false) => {
             // We detected, that the message can be safely rendered in the dark mode.
             // We just need to inject our style.
-            inject_style(&target, include_str!("./dark.css"));
+            if matches!(include_full_static_css, IncludeFullStaticCss::Yes) {
+                inject_style(&target, include_str!("./dark.css"));
+            } else {
+                inject_style(&target, "/* <dark_css> */");
+            }
         }
         (DarkStyleSupportLevel::NoDarkMode | DarkStyleSupportLevel::Native, true) => {
             // Browser supports `@media (prefers-color-scheme: dark)`. So instead switching between light/dark CSS we can inject merged one
-            inject_style(&target, include_str!("./light_and_dark.css"));
+            if matches!(include_full_static_css, IncludeFullStaticCss::Yes) {
+                inject_style(&target, include_str!("./light_and_dark.css"));
+            } else {
+                inject_style(&target, "/* <light_and_dark_css> */");
+            }
         }
         (DarkStyleSupportLevel::Injected, supports_media_query) => {
             // In order to support dark mode, we need to analyze all colors used by the message.
@@ -153,7 +191,11 @@ pub fn inject_dark_mode(
             let maybe_supplement_css = sanitize_dark_mode(&source, root_selector);
 
             if supports_media_query {
-                inject_style(&target, include_str!("./light_and_dark.css"));
+                if matches!(include_full_static_css, IncludeFullStaticCss::Yes) {
+                    inject_style(&target, include_str!("./light_and_dark.css"));
+                } else {
+                    inject_style(&target, "/* <light_and_dark_css> */");
+                }
 
                 if let Some(supplement_css) = maybe_supplement_css {
                     inject_style(
@@ -168,7 +210,12 @@ pub fn inject_dark_mode(
                     );
                 }
             } else {
-                inject_style(&target, include_str!("./dark.css"));
+                if matches!(include_full_static_css, IncludeFullStaticCss::Yes) {
+                    inject_style(&target, include_str!("./dark.css"));
+                } else {
+                    inject_style(&target, "/* <dark_css> */");
+                }
+
                 if let Some(supplement_css) = maybe_supplement_css {
                     inject_style(&target, &supplement_css);
                 }

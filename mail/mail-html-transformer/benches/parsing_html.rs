@@ -5,9 +5,7 @@ mod profiler;
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 
 use proton_mail_html_transformer::{
-    Transformer, message_detector, remote_content, sanitizer,
-    transforms::{self, styles::BrowserCapabilities},
-    utm,
+    message_detector, remote_content, sanitizer, transforms::{self, styles::{BrowserCapabilities, IncludeFullStaticCss}}, utm, Transformer
 };
 
 static AMOS_HTTP: &str = include_str!("./amos_http.html");
@@ -80,6 +78,7 @@ pub fn parse(c: &mut Criterion) {
                         supports_dark_mode_via_media_query: true,
                     },
                     "#protonmail-message".to_owned(),
+                    IncludeFullStaticCss::No,
                 );
             })
         });
@@ -134,6 +133,7 @@ pub fn all_transforms(c: &mut Criterion) {
                     BrowserCapabilities {
                         supports_dark_mode_via_media_query: true,
                     },
+                    IncludeFullStaticCss::No,
                 );
                 _ = t.strip_blockquote();
                 let tok = t.add_noreferrer();

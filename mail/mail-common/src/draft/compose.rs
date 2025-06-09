@@ -12,7 +12,7 @@ use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_api::services::proton::request_data::DraftRecipient;
 use proton_mail_html_transformer::transforms::ColorMode;
 use proton_mail_html_transformer::transforms::styles::{
-    BrowserCapabilities, dark_mode_for_plaintext,
+    dark_mode_for_plaintext, BrowserCapabilities, IncludeFullStaticCss
 };
 use proton_mail_html_transformer::{Html2TextOptions, Transformer};
 use std::borrow::Cow;
@@ -294,7 +294,7 @@ pub fn inject_dark_mode(
 ) -> DarkModeInjection {
     if mime_type == MimeType::TextPlain {
         return DarkModeInjection {
-            head: dark_mode_for_plaintext(color_mode, capabilities).to_owned(),
+            head: dark_mode_for_plaintext(color_mode, capabilities, IncludeFullStaticCss::Yes).to_owned(),
             body: body.to_owned(),
         };
     }
@@ -306,6 +306,7 @@ pub fn inject_dark_mode(
         color_mode,
         capabilities,
         root_selector,
+        IncludeFullStaticCss::Yes,
     );
     DarkModeInjection {
         head,
