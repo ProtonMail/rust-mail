@@ -11,6 +11,7 @@ fn pathologic_nested() {
     t.inject_ios_content_size();
     _ = t.strip_whitelist();
     t.inject_dark_mode(
+        "",
         ColorMode::LightMode,
         BrowserCapabilities {
             supports_dark_mode_via_media_query: true,

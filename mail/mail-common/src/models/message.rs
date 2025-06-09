@@ -1795,6 +1795,24 @@ impl Message {
         saved_message.fetch_message_body(user_context, tether).await
     }
 
+    #[tracing::instrument(level=tracing::Level::DEBUG,skip(user_context))]
+    pub async fn message_body_with_sender(
+        user_context: &MailUserContext,
+        id: LocalMessageId,
+    ) -> MailContextResult<(String, DecryptedMessageBody)> {
+        let tether = &mut user_context.user_stash().connection();
+        let saved_message = Message::load(id, tether)
+            .await?
+            .ok_or(AppError::MessageMissing(id))?;
+
+        let sender = saved_message.sender.address.clone();
+        let body = saved_message
+            .fetch_message_body(user_context, tether)
+            .await?;
+
+        Ok((sender, body))
+    }
+
     /// Get the message's body.
     ///
     /// This will attempt to fetch the message data from the servers if it has

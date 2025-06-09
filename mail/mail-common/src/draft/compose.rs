@@ -302,8 +302,13 @@ pub fn inject_dark_mode(
     }
 
     let mut transformer = Transformer::new(body);
-    let head =
-        transformer.inject_dark_mode_to_another_target(color_mode, capabilities, root_selector);
+    // For now we set sender to None which means that we trust the sender.
+    let head = transformer.inject_dark_mode_to_another_target(
+        None,
+        color_mode,
+        capabilities,
+        root_selector,
+    );
     DarkModeInjection {
         head,
         body: transformer.to_string(),

@@ -97,6 +97,7 @@ pub fn inject_root_selector_to_html(document: &NodeRef) {
 /// the style of the message to suit better the theme.
 ///
 /// Parameters:
+/// * `sender` - the email address of the sender. Example: `test@pm.me`
 /// * `source` - the source HTML document. Usually a message fetched from remote. Might be modified by removing `!important` flag from
 ///   styles and attributes.
 /// * `target` - the target HTML document. Stylesheets and CSS supplements are appended to the head of the document.
@@ -110,13 +111,14 @@ pub fn inject_root_selector_to_html(document: &NodeRef) {
 /// However in the composer, `source` is the message being edited, while `target` is the head of HTML editor that wraps
 /// the message. Styles appended to the `target` are not sent to the recipient.
 pub fn inject_dark_mode(
+    sender: Option<&str>,
     source: NodeRef,
     target: NodeRef,
     mode: ColorMode,
     capabilities: BrowserCapabilities,
     root_selector: String,
 ) {
-    let level = DarkStyleSupportLevel::new_for_html(mode, &source, capabilities);
+    let level = DarkStyleSupportLevel::new_for_html(sender, mode, &source, capabilities);
 
     let BrowserCapabilities {
         supports_dark_mode_via_media_query,

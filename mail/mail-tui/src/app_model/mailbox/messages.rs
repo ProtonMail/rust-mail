@@ -733,7 +733,10 @@ impl DecryptedMessage {
         ctx: &MailUserContext,
         tether: &mut Tether,
     ) -> Result<Self> {
-        let body_output = body.transformed(TransformOpts::default(), tether).await;
+        let sender = metadata.sender.address.clone();
+        let body_output = body
+            .transformed(&sender, TransformOpts::default(), tether)
+            .await;
 
         if let Some(cmd_name) = CLI_ARGS.browser.as_deref() {
             let cmd_name = if !cmd_name.is_empty() {

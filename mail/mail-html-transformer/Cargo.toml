@@ -19,6 +19,7 @@ lightningcss = { version = "1.0.0-alpha.65", features = [
 ], default-features = false }
 smart-default = { workspace = true }
 html2text = { workspace = true }
+sha1-checked = "0.10.0"
 
 [lints]
 workspace = true

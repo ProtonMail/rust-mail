@@ -5845,6 +5845,7 @@ dependencies = [
  "pprof",
  "pretty_assertions",
  "regex",
+ "sha1-checked",
  "smart-default",
  "test-case",
  "thiserror 1.0.69",

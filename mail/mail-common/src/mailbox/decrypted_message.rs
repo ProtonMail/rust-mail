@@ -342,6 +342,7 @@ impl DecryptedMessageBody {
     ///
     /// # Parameters
     ///
+    /// * `sender`         - the email address of the sender. Example: `test@pm.me`
     /// * `opts`           - Transform Options.
     /// * `tether`         - database connection.
     ///
@@ -350,7 +351,12 @@ impl DecryptedMessageBody {
     /// Returns an error if the network request, the database query, reading/writing
     /// the body to the cache, or decrypting the body fails,
     /// or if the message doesn't exist.
-    pub async fn transformed(&self, opts: TransformOpts, tether: &Tether) -> BodyOutput {
+    pub async fn transformed(
+        &self,
+        sender: &str,
+        opts: TransformOpts,
+        tether: &Tether,
+    ) -> BodyOutput {
         // FIXME:(perf) settings get loaded twice.
         let resolved = opts.resolve(tether).await;
 
@@ -364,7 +370,13 @@ impl DecryptedMessageBody {
             vec![]
         };
 
-        transform_html_with_banners(&self.body, resolved, self.metadata.mime_type, banners)
+        transform_html_with_banners(
+            sender,
+            &self.body,
+            resolved,
+            self.metadata.mime_type,
+            banners,
+        )
     }
 }
 
@@ -399,12 +411,22 @@ pub struct BodyOutput {
     pub body_banners: Vec<MessageBanner>,
 }
 
-pub fn transform_html(html: &str, opts: TransformOptsResolved, mime_type: MimeType) -> BodyOutput {
-    transform_html_with_banners(html, opts, mime_type, vec![])
+/// # Parameters
+/// * `sender` - the email address of the sender. Example: `test@pm.me`
+pub fn transform_html(
+    sender: &str,
+    html: &str,
+    opts: TransformOptsResolved,
+    mime_type: MimeType,
+) -> BodyOutput {
+    transform_html_with_banners(sender, html, opts, mime_type, vec![])
 }
 
+/// # Parameters
+/// * `sender` - the email address of the sender. Example: `test@pm.me`
 #[tracing::instrument(skip_all)]
 pub fn transform_html_with_banners(
+    sender: &str,
     html: &str,
     opts: TransformOptsResolved,
     mime_type: MimeType,
@@ -454,6 +476,7 @@ mime_type: {mime_type:?}"
     }
 
     transformer.inject_dark_mode(
+        sender,
         theme.color_mode(),
         BrowserCapabilities {
             supports_dark_mode_via_media_query: theme.supports_dark_mode_via_media_query,
