@@ -229,6 +229,7 @@ mod regressions {
             styles::{BrowserCapabilities, IncludeFullStaticCss},
         },
     };
+    use test_case::test_case;
 
     // Bugs caught live
     #[test]
@@ -259,5 +260,32 @@ mod regressions {
             IncludeFullStaticCss::No,
         );
         insta::assert_snapshot!(html.to_string());
+    }
+
+    #[test_case(ColorMode::LightMode ; "when android is in light mode")]
+    #[test_case(ColorMode::DarkMode ; "when android is in dark mode")]
+    fn dark_mode_on_android(color_mode: ColorMode) {
+        let html = include_str!("../../tests/htmls/styles/regressions/dark_mode_on_android.html");
+        let mut html = Transformer::new(html);
+        html.inject_dark_mode(
+            "",
+            color_mode,
+            BrowserCapabilities {
+                // Android does not suport media query.
+                // Or to be more precise - it supports the stylesheet ruleset but
+                // developers cannot enforce light mode when the theme is dark.
+                // Therefore instead of providing one stylesheet that works for both themes,
+                // we have to return different HTML content depending on the color_mode.
+                //
+                // iOS does support both (css rule & enforcing light mode in webkit).
+                supports_dark_mode_via_media_query: false,
+            },
+            // For the sake of copy-pasting the snapshot into the browser to see if the color is really correct.
+            IncludeFullStaticCss::Yes,
+        );
+        insta::assert_snapshot!(
+            format!("dark_mode_on_android_{:?}", color_mode),
+            html.to_string(),
+        );
     }
 }
