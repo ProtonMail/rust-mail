@@ -15,7 +15,6 @@ pub mod prefetch;
 mod session;
 mod settings;
 mod sidebar;
-mod sign_out;
 mod state;
 mod user_session;
 

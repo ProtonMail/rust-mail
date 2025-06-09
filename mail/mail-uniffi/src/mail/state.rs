@@ -45,12 +45,16 @@ impl MailUserContextMap {
 
     /// Clear the map.
     ///
-    /// This is used to clear the map when the all sessions are deleted.
+    /// This is used to clear the map when all sessions are deleted.
     ///
     pub fn clear(&self) {
         self.map.write().clear();
     }
 
+    /// Get the first user context in the map.
+    ///
+    /// Helpful when we want whatever user context from the map.
+    ///
     pub fn first(&self) -> Option<Arc<MailUserContext>> {
         self.map.read().values().next().cloned()
     }
