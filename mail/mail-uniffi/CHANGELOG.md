@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [mail-uniffi-v0.87.0] - 2025-06-09
+
+### Fixes
+
+- [ET-3092] Add new non-crashing `sign_out_all` method on `mailsession`
+- [ET-3092] Remove old standalone `sign_out_all` function
+- [ET-3092] Clear rust logfiles on `sign_out_all`
+- [ET-3261] Make sure light mode on android works as expected
+
+
 ## [mail-uniffi-v0.86.0] - 2025-06-09
 
 ### Features
