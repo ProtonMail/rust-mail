@@ -1,7 +1,6 @@
 ---
 source: mail/mail-html-transformer/src/tests/sanitizer.rs
 expression: html
-snapshot_kind: text
 ---
 <html><head>
    </head>
@@ -10,6 +9,12 @@ snapshot_kind: text
          <a>foo</a>
          <base target="_blank">bar
       </div>
+
+      
+
+      <style>
+         body {color: red;}
+      </style>
 
       
          <div>baz</div>

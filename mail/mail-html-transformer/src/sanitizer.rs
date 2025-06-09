@@ -247,6 +247,13 @@ static ATTR_SET: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
     }
 });
 
+/// Tags that should be removed with their inner HTML.
+static TAGS_TO_REMOVE_WITH_INNER_HTML: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
+    hash_set! {
+        "script"
+    }
+});
+
 #[must_use]
 /// This function removes the tags and attributes defined in this file
 ///
@@ -267,7 +274,9 @@ pub fn strip_whitelist(doc: NodeRef) -> u64 {
             NodeData::Element(e) => {
                 let tag_name: &str = &e.name.local;
                 if !TAG_SET.contains(tag_name) {
-                    return Some(node_ref);
+                    let should_remove_inner_html =
+                        TAGS_TO_REMOVE_WITH_INNER_HTML.contains(tag_name);
+                    return Some((node_ref, should_remove_inner_html));
                 }
 
                 let mut attrs = e.attributes.borrow_mut();
@@ -279,9 +288,11 @@ pub fn strip_whitelist(doc: NodeRef) -> u64 {
         .collect::<Vec<_>>();
 
     let total = rem.len();
-    for node in rem {
-        for child in node.children() {
-            node.insert_before(child);
+    for (node, should_remove_inner_html) in rem {
+        if !should_remove_inner_html {
+            for child in node.children() {
+                node.insert_before(child);
+            }
         }
         node.detach();
     }
