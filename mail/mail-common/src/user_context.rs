@@ -20,7 +20,7 @@ use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::datatypes::{AccountDetails, LocalAddressId};
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::{Address, User, UserSettings};
-use proton_core_common::{ContactError, CoreContextError, UserContext};
+use proton_core_common::{ContactError, Context as CoreContext, CoreContextError, UserContext};
 use proton_crypto_inbox::keys::{ComposerPreference, CryptoMailSettings, SendPreferences};
 use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
@@ -217,6 +217,16 @@ impl MailUserContext {
     /// Get the mail context within which this user context resides.
     pub fn mail_context(&self) -> &MailContext {
         &self.mail_context
+    }
+
+    /// Get the mail context within which this user context resides.
+    pub fn mail_context_arc(&self) -> &Arc<MailContext> {
+        &self.mail_context
+    }
+
+    /// Get the core context within which this user context resides.
+    pub fn core_context(&self) -> &Arc<CoreContext> {
+        self.mail_context.core_context()
     }
 
     /// Get the inner core context which this context wraps.

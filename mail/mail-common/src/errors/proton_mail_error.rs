@@ -218,6 +218,7 @@ impl From<MailContextError> for ProtonMailError {
             }
             MailContextError::Login(login_error) => Self::from(login_error),
             MailContextError::Signup(signup_error) => Self::from(signup_error),
+            MailContextError::Pin(pin_error) => Self::from(pin_error),
             MailContextError::KeyChain(key_chain_error) => Self::from(key_chain_error),
             MailContextError::IO(io_error) => Self::from(io_error),
             MailContextError::DBMigration(migrator_error) => Self::from(migrator_error),
