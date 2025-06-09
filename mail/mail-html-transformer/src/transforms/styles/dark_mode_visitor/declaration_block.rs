@@ -7,11 +7,10 @@ use lightningcss::{
     visit_types,
     visitor::{Visit, Visitor},
 };
-use smart_default::SmartDefault;
 
 use crate::transforms::styles::{
-    ColorPurpose, NewProperty, OldProperty, PropertyWithPurpose, colors::HSLExt,
-    dark_mode_background_color, printer_options,
+    ColorPurpose, DARK_MODE_BACKGROUND_COLOR, NewProperty, OldProperty, PropertyWithPurpose,
+    colors::HSLExt,
 };
 
 use super::properties::PropertiesVisitor;
@@ -46,7 +45,7 @@ pub enum ShouldRemoveImportant {
 /// It modifies original stylesheet by removing `!important` flag if necessary.
 /// The result of the dark-mode theming is available under [`StylesheetVisitor::overrides`] method.
 ///
-#[derive(SmartDefault, Clone, Debug)]
+#[derive(Default, Clone, Debug)]
 pub(crate) struct DeclarationBlockVisitor {
     overriden: Vec<OldProperty>,
 
@@ -56,16 +55,14 @@ pub(crate) struct DeclarationBlockVisitor {
 
     should_remove_important: ShouldRemoveImportant,
 
-    // Because PrinterOptions do not implement Clone
-    #[default(printer_options)]
-    pub printer_options: fn() -> PrinterOptions<'static>,
+    pub printer_options: PrinterOptions<'static>,
 }
 
 impl DeclarationBlockVisitor {
     pub fn new(
         should_store_overriden_props: ShouldStoreOverridenProps,
         should_remove_important: ShouldRemoveImportant,
-        printer_options: fn() -> PrinterOptions<'static>,
+        printer_options: PrinterOptions<'static>,
     ) -> Self {
         Self {
             should_store_overriden_props,
@@ -132,7 +129,7 @@ impl Visitor<'_> for DeclarationBlockVisitor {
                 .chain(fg_overrides)
                 .filter_map(|prop| {
                     prop.property
-                        .to_css_string(true, (self.printer_options)())
+                        .to_css_string(true, self.printer_options)
                         .inspect_err(|err| {
                             tracing::error!("Could not print CSS: {err:?}. Skipping it");
                         })
@@ -148,7 +145,7 @@ impl Visitor<'_> for DeclarationBlockVisitor {
                     self.should_store_overriden_props,
                     ShouldStoreOverridenProps::Yes
                 ) {
-                    match prop.to_css_string(false, (self.printer_options)()) {
+                    match prop.to_css_string(false, self.printer_options) {
                         Ok(overriden_prop) => {
                             self.overriden.push(overriden_prop);
                         }
@@ -177,7 +174,7 @@ impl DeclarationBlockVisitor {
         fg: &Property<'_>,
     ) -> bool {
         if bgs.is_empty() {
-            return Self::has_good_contrast_against_color(dark_mode_background_color().into(), fg);
+            return Self::has_good_contrast_against_color(DARK_MODE_BACKGROUND_COLOR.into(), fg);
         }
 
         bgs.iter()
@@ -200,8 +197,7 @@ impl DeclarationBlockVisitor {
 
     fn has_good_contrast_against_background(bg: &Property<'_>, fg: &Property<'_>) -> bool {
         Self::has_good_contrast_against_color(
-            Self::extract_color_from_prop(bg)
-                .unwrap_or_else(|| dark_mode_background_color().into()),
+            Self::extract_color_from_prop(bg).unwrap_or_else(|| DARK_MODE_BACKGROUND_COLOR.into()),
             fg,
         )
     }

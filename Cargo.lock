@@ -547,7 +547,7 @@ dependencies = [
  "bitflags 2.9.1",
  "cexpr",
  "clang-sys",
- "itertools 0.10.5",
+ "itertools 0.13.0",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -566,7 +566,7 @@ dependencies = [
  "bitflags 2.9.1",
  "cexpr",
  "clang-sys",
- "itertools 0.10.5",
+ "itertools 0.13.0",
  "log",
  "prettyplease",
  "proc-macro2",
@@ -3734,7 +3734,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a793df0d7afeac54f95b471d3af7f0d4fb975699f972341a4b76988d49cdf0c"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.53.0",
 ]
 
 [[package]]
@@ -3767,9 +3767,8 @@ dependencies = [
 
 [[package]]
 name = "lightningcss"
-version = "1.0.0-alpha.65"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c84f971730745f4aaac013b6cf4328baf1548efc973c0d95cfd843a3c1ca07af"
+version = "1.0.0-alpha.66"
+source = "git+https://github.com/frondeus/lightningcss?rev=b9dc136b0b43220381965e5806903e7c31a3ca12#b9dc136b0b43220381965e5806903e7c31a3ca12"
 dependencies = [
  "ahash",
  "bitflags 2.9.1",
@@ -3791,8 +3790,7 @@ dependencies = [
 [[package]]
 name = "lightningcss-derive"
 version = "1.0.0-alpha.43"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84c12744d1279367caed41739ef094c325d53fb0ffcd4f9b84a368796f870252"
+source = "git+https://github.com/frondeus/lightningcss?rev=b9dc136b0b43220381965e5806903e7c31a3ca12#b9dc136b0b43220381965e5806903e7c31a3ca12"
 dependencies = [
  "convert_case 0.6.0",
  "proc-macro2",
@@ -4383,7 +4381,7 @@ version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af1844ef2428cc3e1cb900be36181049ef3d3193c63e43026cfe202983b27a56"
 dependencies = [
- "proc-macro-crate 1.3.1",
+ "proc-macro-crate 2.0.2",
  "proc-macro2",
  "quote",
  "syn 2.0.101",
@@ -4677,8 +4675,7 @@ dependencies = [
 [[package]]
 name = "parcel_selectors"
 version = "0.28.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54fd03f1ad26cb6b3ec1b7414fa78a3bd639e7dbb421b1a60513c96ce886a196"
+source = "git+https://github.com/frondeus/lightningcss?rev=b9dc136b0b43220381965e5806903e7c31a3ca12#b9dc136b0b43220381965e5806903e7c31a3ca12"
 dependencies = [
  "bitflags 2.9.1",
  "cssparser 0.33.0",

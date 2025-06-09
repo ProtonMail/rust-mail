@@ -5,11 +5,9 @@ use lightningcss::{
     visit_types,
     visitor::{Visit, Visitor},
 };
-use smart_default::SmartDefault;
 
 use crate::transforms::styles::{
     NewProperty, OldProperty, dark_mode_visitor::declaration_block::ShouldRemoveImportant,
-    printer_options,
 };
 
 use super::declaration_block::{DeclarationBlockVisitor, ShouldStoreOverridenProps};
@@ -19,23 +17,14 @@ use super::declaration_block::{DeclarationBlockVisitor, ShouldStoreOverridenProp
 /// It modifies original stylesheet by removing `!important` flag if necessary.
 /// The result of the dark-mode theming is available under [`StyleAttributeVisitor::overrides`] method.
 ///
-#[derive(SmartDefault, Clone, Debug)]
+#[derive(Default, Clone, Debug)]
 pub(crate) struct StyleAttributeVisitor {
     overriden: Vec<OldProperty>,
     overrides: Vec<NewProperty>,
 
-    // Because PrinterOptions do not implement Clone
-    #[default(printer_options)]
-    pub printer_options: fn() -> PrinterOptions<'static>,
+    pub printer_options: PrinterOptions<'static>,
 }
 impl StyleAttributeVisitor {
-    pub fn new(printer_options: fn() -> PrinterOptions<'static>) -> Self {
-        Self {
-            printer_options,
-            ..Default::default()
-        }
-    }
-
     pub fn overrides(self) -> (Vec<OldProperty>, Vec<NewProperty>) {
         (self.overriden, self.overrides)
     }

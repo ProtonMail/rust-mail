@@ -12,7 +12,7 @@ use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use parking_lot::Mutex;
 use proton_mail_html_transformer::Transformer;
 use proton_mail_html_transformer::transforms::ColorMode;
-use proton_mail_html_transformer::transforms::styles::BrowserCapabilities;
+use proton_mail_html_transformer::transforms::styles::{BrowserCapabilities, IncludeFullStaticCss};
 use proton_task_service::AsyncTaskResult;
 use serde_json::Value;
 use stash::orm::Model;
@@ -481,6 +481,7 @@ mime_type: {mime_type:?}"
         BrowserCapabilities {
             supports_dark_mode_via_media_query: theme.supports_dark_mode_via_media_query,
         },
+        IncludeFullStaticCss::Yes,
     );
 
     if opts.hide_remote_images && remote_images_count > 0 {

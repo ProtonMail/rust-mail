@@ -1,9 +1,6 @@
-use lightningcss::{
-    traits::Parse,
-    values::color::{CssColor, HSL, RGBA, SRGBLinear, XYZd65},
-};
+use lightningcss::values::color::{HSL, RGBA, SRGBLinear, XYZd65};
 
-use crate::transforms::styles::{ColorPurpose, dark_mode_background_color};
+use crate::transforms::styles::{ColorPurpose, DARK_MODE_BACKGROUND_COLOR};
 
 pub trait HSLExt {
     /// We want to see if our color is equivalent to `#FF_FF_FF_FF`
@@ -40,7 +37,7 @@ impl HSLExt for HSL {
             return false;
         }
 
-        if !eq_with_tolerance(l, 1.0) {
+        if !eq_with_tolerance(l, 100.0) {
             return false;
         }
 
@@ -52,7 +49,23 @@ impl HSLExt for HSL {
     }
 
     fn is_achromatic(&self) -> IsColorAchromatic {
-        if self.s <= 0.06 {
+        if self.s <= 5.0 {
+            IsColorAchromatic::Achromatic
+        } else if self.l <= 1.0 {
+            // We keep 1% as a threshold for dark colors in order to pass Test Case 5 (ported from legacy app).
+            //
+            // We want to treat very dark colors as achromatic.
+            IsColorAchromatic::Achromatic
+        } else if self.l >= 95.0 {
+            // At the same time we are not using 99% as a threshold for light colors because
+            // we found some background colors in the wild that for a human eye are light gray,
+            // but in HSL representation are colorful.
+            // For example:
+            // * #FFFFFE - looks like white but HSL is (60, 100%, 100%) - without that if branch
+            // we would transform it to ugly mustard color ( #999900 ).
+            // We want to treat very light colors as achromatic.
+            // * #FAF7F2 - looks like white but HSL is (38, 44%, 96%) - if we used 99% as a threshold
+            // we would transform it to ugly orange color ( #705527 ).
             IsColorAchromatic::Achromatic
         } else {
             IsColorAchromatic::Colorful
@@ -88,7 +101,7 @@ pub fn hsla_for_dark_mode(purpose: ColorPurpose, mut color: HSL) -> RGBA {
 
     // Special case: For full white background we return our Dark Mode background color (#1C1B24)
     if purpose == ColorPurpose::Background && color.is_full_white() {
-        return dark_mode_background_color();
+        return DARK_MODE_BACKGROUND_COLOR;
     }
 
     match (purpose, color.is_achromatic()) {
@@ -96,7 +109,7 @@ pub fn hsla_for_dark_mode(purpose: ColorPurpose, mut color: HSL) -> RGBA {
             return HSL {
                 h: 0.0,
                 s: 0.0,
-                l: 1.0,
+                l: 100.0,
                 alpha: color.alpha,
             }
             .into();
@@ -104,37 +117,98 @@ pub fn hsla_for_dark_mode(purpose: ColorPurpose, mut color: HSL) -> RGBA {
         (ColorPurpose::Background, Achromatic) => {
             return HSL {
                 h: 230.0,
-                s: 0.12,
-                l: 0.1,
+                s: 12.0,
+                l: 10.0,
                 alpha: color.alpha,
             }
             .into();
         }
         (ColorPurpose::Foreground, Colorful) => {
-            color.l = color.l.max(0.9);
+            color.l = color.l.max(90.0);
         }
         (ColorPurpose::Background, Colorful) => {
-            color.l = color.l.min(0.3);
+            color.l = color.l.min(30.0);
         }
     }
 
     color.into()
 }
 
-pub fn parse_css_color(color: &str) -> Option<CssColor> {
-    // TODO(wpolak): Create an issue in lightningcss to support hex colors without `#` prefix
-    match CssColor::parse_string(color) {
-        Ok(color) => Some(color),
-        Err(err) => {
-            // Lightningcss does not support hex colors without `#` prefix
-            // Let's try to add it manually, if it works, we return the color
-            let new_color = format!("#{color}");
-            CssColor::parse_string(&new_color)
-                .inspect_err(|_| {
-                    // Let's display the original error message.
-                    tracing::warn!("Could not parse color: {color}. Error: {err:?}");
-                })
-                .ok()
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use lightningcss::{
+        printer::PrinterOptions,
+        traits::{Parse, ToCss},
+        values::color::CssColor,
+    };
+    use pretty_assertions::assert_eq;
+    use test_case::test_case;
+
+    // Test cases taken from ios Legacy:
+    // https://gitlab.protontech.ch/ProtonMail/protonmail-ios/-/blob/995cc63d5d689cf120fca42139fd36dfd9fad975/ProtonMail/ProtonMailTests/ProtonMail/Utilities/DarkModeHelper/CSSMagicTest.swift#L556
+    #[test_case(
+        "hsla(0, 0%, 50%, 0.8)",
+        ColorPurpose::Foreground,
+        "#fffc"; // hsla(0, 0%, 100%, .8)
+        "case 1"
+    )]
+    #[test_case(
+        "hsla(0, 0%, 50%, 0.7)",
+        ColorPurpose::Background,
+        "#16171db3"; // hsla(230, 12%, 10%, .7)
+        "case 2"
+    )]
+    #[test_case(
+        "hsla(20, 50%, 70%, 1.0)",
+        ColorPurpose::Foreground,
+        "#f2e1d9"; // hsla(20, 50%, 90%, 1)
+        "case 3"
+    )]
+    #[test_case(
+        "hsla(20, 50%, 30%, 1.0)",
+        ColorPurpose::Foreground,
+        "#f2e1d9"; // hsla(20, 50%, 90%, 1)
+        "case 4"
+    )]
+    #[test_case(
+        "hsla(20, 50%, 3%, 1.0)",
+        ColorPurpose::Background,
+        "#0b0604"; // hsla(20, 50%, 3%, 1)
+        "case 5"
+    )]
+    #[test_case(
+        "hsla(20, 50%, 93%, 1.0)",
+        ColorPurpose::Background,
+        "#734026"; // hsla(20, 50%, 30%, 1)
+        "case 6"
+    )]
+    #[test_case(
+        "hsla(0, 0%, 100%, 1.0)",
+        ColorPurpose::Background,
+        "#1c1b24"; // Our Dark mode background color. Hardcoded value
+        "case 7"
+    )]
+    #[test_case(
+        "#fffffe",
+        ColorPurpose::Background,
+        "#16171d";
+        "case 8"
+    )]
+    fn hsla_for_dark_mode(input: &'static str, purpose: ColorPurpose, expected: &'static str) {
+        let color = CssColor::parse_string(input).unwrap();
+        let hsl = HSL::try_from(color).unwrap();
+
+        let new_rgba = super::hsla_for_dark_mode(purpose, hsl);
+
+        // LightningCSS rightfully converts HSLA format to RGBA.
+        // Those two color spaces are equivalent without loss of information
+        // and RGBA is shorter.
+        // We took original expected values, converted them manually to RGBA and expect exactly that
+
+        let new_color = CssColor::RGBA(new_rgba)
+            .to_css_string(PrinterOptions::default())
+            .unwrap();
+        assert_eq!(expected, new_color);
     }
 }

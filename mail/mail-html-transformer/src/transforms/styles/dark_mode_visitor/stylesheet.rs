@@ -7,11 +7,9 @@ use lightningcss::{
     visit_types,
     visitor::{Visit, Visitor},
 };
-use smart_default::SmartDefault;
 
 use crate::transforms::styles::{
     Selector, StylesheetOverrides, dark_mode_visitor::declaration_block::ShouldRemoveImportant,
-    printer_options,
 };
 
 use super::declaration_block::{DeclarationBlockVisitor, ShouldStoreOverridenProps};
@@ -21,7 +19,7 @@ use super::declaration_block::{DeclarationBlockVisitor, ShouldStoreOverridenProp
 /// It modifies original stylesheet by removing `!important` flag if necessary.
 /// The result of the dark-mode theming is available under [`StylesheetVisitor::overrides`] method.
 ///
-#[derive(SmartDefault, Clone, Debug)]
+#[derive(Default, Clone, Debug)]
 pub(crate) struct StylesheetVisitor {
     overrides: StylesheetOverrides,
 
@@ -29,15 +27,12 @@ pub(crate) struct StylesheetVisitor {
 
     root_selector: String,
 
-    // Because PrinterOptions do not implement Clone
-    #[default(printer_options)]
-    pub printer_options: fn() -> PrinterOptions<'static>,
+    pub printer_options: PrinterOptions<'static>,
 }
 impl StylesheetVisitor {
-    pub fn new(printer_options: fn() -> PrinterOptions<'static>, root_selector: String) -> Self {
+    pub fn new(root_selector: String) -> Self {
         Self {
             root_selector,
-            printer_options,
             ..Default::default()
         }
     }
@@ -101,7 +96,7 @@ impl Visitor<'_> for StylesheetVisitor {
 
 impl StylesheetVisitor {
     fn get_selectors(&self, rule: &CssRule<'_>) -> Option<String> {
-        let printer_options = (self.printer_options)();
+        let printer_options = self.printer_options;
         match rule {
             CssRule::Style(style) => {
                 style
@@ -120,7 +115,7 @@ impl StylesheetVisitor {
                 let query = media_rule.query.to_css_string(printer_options).ok();
 
                 // If the media query always matches, we can just skip this selector.
-                if (self.printer_options)().minify && media_rule.query.always_matches() {
+                if printer_options.minify && media_rule.query.always_matches() {
                     return None;
                 }
 

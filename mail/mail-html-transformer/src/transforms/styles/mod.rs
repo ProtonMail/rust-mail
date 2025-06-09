@@ -8,7 +8,7 @@ use dark_mode_visitor::{StyleAttributeVisitor, StylesheetVisitor};
 use html5ever::{LocalName, QualName, namespace_url};
 use itertools::Itertools;
 use kuchikiki::{Attribute, Attributes, ElementData, NodeData, NodeDataRef, NodeRef};
-use lightningcss::traits::ToCss;
+use lightningcss::traits::{Parse, ToCss};
 use lightningcss::values::color::{CssColor, HSL};
 use lightningcss::{
     printer::PrinterOptions,
@@ -19,7 +19,7 @@ use lightningcss::{
 };
 use support_level::DarkStyleSupportLevel;
 
-use crate::transforms::styles::colors::{HSLExt, hsla_for_dark_mode, parse_css_color};
+use crate::transforms::styles::colors::{HSLExt, hsla_for_dark_mode};
 
 use super::ColorMode;
 
@@ -48,11 +48,24 @@ pub fn revert_dark_mode_in_inline_attributes(document: &NodeRef) {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IncludeFullStaticCss {
+    /// Should include full `./light.css`, `./dark.css` etc.
+    Yes,
+    /// Should include only a comment with a name of the file.
+    /// Used in tests to avoid including full CSS files.
+    No,
+}
+
 /// This function provides stylesheets for dark mode in plaintext messages.
 /// In plaintext we do not need to parse HTML/CSS and just need to return static
 /// stylesheets builtin in the SDK.
 ///
-pub fn dark_mode_for_plaintext(mode: ColorMode, capabilities: BrowserCapabilities) -> &'static str {
+pub fn dark_mode_for_plaintext(
+    mode: ColorMode,
+    capabilities: BrowserCapabilities,
+    include_full_static_css: IncludeFullStaticCss,
+) -> &'static str {
     let level = DarkStyleSupportLevel::new_for_plaintext(mode, capabilities);
 
     let BrowserCapabilities {
@@ -63,16 +76,28 @@ pub fn dark_mode_for_plaintext(mode: ColorMode, capabilities: BrowserCapabilitie
         (DarkStyleSupportLevel::NoDarkMode, false) => {
             // If dark mode is currently not supported, let's just inject static css style.
             //
-            include_str!("./light.css")
+            if matches!(include_full_static_css, IncludeFullStaticCss::Yes) {
+                include_str!("./light.css")
+            } else {
+                "/* <light_css> */"
+            }
         }
         (_, false) => {
             // We detected, that the message can be safely rendered in the dark mode.
-            include_str!("./dark.css")
+            if matches!(include_full_static_css, IncludeFullStaticCss::Yes) {
+                include_str!("./dark.css")
+            } else {
+                "/* <dark_css> */"
+            }
         }
         (_, true) => {
             // Browser supports `@media (prefers-color-scheme: dark)`.
             // So instead switching between light/dark CSS we can inject merged one
-            include_str!("./light_and_dark.css")
+            if matches!(include_full_static_css, IncludeFullStaticCss::Yes) {
+                include_str!("./light_and_dark.css")
+            } else {
+                "/* <light_and_dark_css> */"
+            }
         }
     }
 }
@@ -117,6 +142,7 @@ pub fn inject_dark_mode(
     mode: ColorMode,
     capabilities: BrowserCapabilities,
     root_selector: String,
+    include_full_static_css: IncludeFullStaticCss,
 ) {
     let level = DarkStyleSupportLevel::new_for_html(sender, mode, &source, capabilities);
 
@@ -131,16 +157,28 @@ pub fn inject_dark_mode(
         (DarkStyleSupportLevel::NoDarkMode, false) => {
             // If dark mode is currently not supported, let's just inject static css style.
             //
-            inject_style(&target, include_str!("./light.css"));
+            if matches!(include_full_static_css, IncludeFullStaticCss::Yes) {
+                inject_style(&target, include_str!("./light.css"));
+            } else {
+                inject_style(&target, "/* <light_css> */");
+            }
         }
         (DarkStyleSupportLevel::Native, false) => {
             // We detected, that the message can be safely rendered in the dark mode.
             // We just need to inject our style.
-            inject_style(&target, include_str!("./dark.css"));
+            if matches!(include_full_static_css, IncludeFullStaticCss::Yes) {
+                inject_style(&target, include_str!("./dark.css"));
+            } else {
+                inject_style(&target, "/* <dark_css> */");
+            }
         }
         (DarkStyleSupportLevel::NoDarkMode | DarkStyleSupportLevel::Native, true) => {
             // Browser supports `@media (prefers-color-scheme: dark)`. So instead switching between light/dark CSS we can inject merged one
-            inject_style(&target, include_str!("./light_and_dark.css"));
+            if matches!(include_full_static_css, IncludeFullStaticCss::Yes) {
+                inject_style(&target, include_str!("./light_and_dark.css"));
+            } else {
+                inject_style(&target, "/* <light_and_dark_css> */");
+            }
         }
         (DarkStyleSupportLevel::Injected, supports_media_query) => {
             // In order to support dark mode, we need to analyze all colors used by the message.
@@ -153,7 +191,11 @@ pub fn inject_dark_mode(
             let maybe_supplement_css = sanitize_dark_mode(&source, root_selector);
 
             if supports_media_query {
-                inject_style(&target, include_str!("./light_and_dark.css"));
+                if matches!(include_full_static_css, IncludeFullStaticCss::Yes) {
+                    inject_style(&target, include_str!("./light_and_dark.css"));
+                } else {
+                    inject_style(&target, "/* <light_and_dark_css> */");
+                }
 
                 if let Some(supplement_css) = maybe_supplement_css {
                     inject_style(
@@ -168,7 +210,12 @@ pub fn inject_dark_mode(
                     );
                 }
             } else {
-                inject_style(&target, include_str!("./dark.css"));
+                if matches!(include_full_static_css, IncludeFullStaticCss::Yes) {
+                    inject_style(&target, include_str!("./dark.css"));
+                } else {
+                    inject_style(&target, "/* <dark_css> */");
+                }
+
                 if let Some(supplement_css) = maybe_supplement_css {
                     inject_style(&target, &supplement_css);
                 }
@@ -203,13 +250,14 @@ fn sanitize_dark_mode(document: &NodeRef, root_selector: String) -> Option<Strin
     ))
 }
 
-// TODO: replace with proper constant after `RGBA` gets const constructor.
-//
-/// Returns our constant color for background color.
+// Not using `RGBA::new` because it contains clamping which is not const-friendly.
 /// Hex representation: #1C1B24
-pub fn dark_mode_background_color() -> RGBA {
-    RGBA::new(28, 27, 36, 1.0)
-}
+pub const DARK_MODE_BACKGROUND_COLOR: RGBA = RGBA {
+    red: 0x1C,
+    green: 0x1B,
+    blue: 0x24,
+    alpha: 0xFF,
+};
 
 type Selector = String;
 
@@ -281,12 +329,7 @@ fn sanitize_dark_mode_in_stylesheets(document: &NodeRef, root_selector: &str) ->
             }
         };
 
-        sanitize_dark_mode_in_stylesheet(
-            stylesheet,
-            &mut overrides,
-            printer_options,
-            root_selector.to_owned(),
-        );
+        sanitize_dark_mode_in_stylesheet(stylesheet, &mut overrides, root_selector.to_owned());
     }
 
     if overrides.is_empty() {
@@ -337,12 +380,7 @@ fn sanitize_dark_mode_in_inline_attributes(
             }
         };
 
-        sanitize_dark_mode_in_inline_attribute(
-            style_attribute,
-            tag,
-            &mut overrides,
-            printer_options,
-        );
+        sanitize_dark_mode_in_inline_attribute(style_attribute, tag, &mut overrides);
     }
 
     if overrides.is_empty() {
@@ -412,9 +450,13 @@ fn sanitize_dark_mode_in_deprecated_attributes(
             .collect::<HashMap<_, _>>();
 
         for (attr, original_attr) in attributes {
-            let Some(color) = parse_css_color(&original_attr) else {
-                tracing::warn!("Skipping...");
-                continue;
+            let color = match CssColor::parse_string(&original_attr) {
+                Ok(color) => color,
+                Err(err) => {
+                    tracing::warn!("Could not parse color: {original_attr}. Error: {err:?}");
+                    tracing::warn!("Skipping...");
+                    continue;
+                }
             };
             let Ok(color) = HSL::try_from(color) else {
                 tracing::warn!(
@@ -434,7 +476,7 @@ fn sanitize_dark_mode_in_deprecated_attributes(
             let hsla = hsla_for_dark_mode(purpose, color);
 
             let new_color = CssColor::RGBA(hsla);
-            let Ok(new_color) = new_color.to_css_string(printer_options()) else {
+            let Ok(new_color) = new_color.to_css_string(PrinterOptions::default()) else {
                 tracing::warn!("Could not convert color to CSS string. Skipping...");
                 continue;
             };
@@ -468,22 +510,12 @@ fn sanitize_dark_mode_in_deprecated_attributes(
     Some(style)
 }
 
-// Because PrinterOptions are not clonable
-// TODO: Make PR to lightningCSS
-fn printer_options() -> PrinterOptions<'static> {
-    PrinterOptions {
-        minify: true,
-        ..Default::default()
-    }
-}
-
 fn sanitize_dark_mode_in_stylesheet(
     mut stylesheet: StyleSheet<'_, '_>,
     overrides: &mut StylesheetOverrides,
-    printer_options: fn() -> PrinterOptions<'static>,
     root_selector: String,
 ) {
-    let mut visitor = StylesheetVisitor::new(printer_options, root_selector);
+    let mut visitor = StylesheetVisitor::new(root_selector);
     _ = stylesheet.visit(&mut visitor); // Error is infallible anyway
 
     let visitor_overrides = visitor.overrides();
@@ -516,9 +548,8 @@ fn sanitize_dark_mode_in_inline_attribute(
     mut style_attribute: StyleAttribute<'_>,
     node: NodeDataRef<ElementData>,
     overrides: &mut InlineStyleOverrides,
-    printer_options: fn() -> PrinterOptions<'static>,
 ) {
-    let mut visitor = StyleAttributeVisitor::new(printer_options);
+    let mut visitor = StyleAttributeVisitor::default();
 
     _ = style_attribute.visit(&mut visitor);
 
@@ -527,7 +558,7 @@ fn sanitize_dark_mode_in_inline_attribute(
         return;
     }
 
-    let style = match style_attribute.to_css(printer_options()) {
+    let style = match style_attribute.to_css(PrinterOptions::default()) {
         Ok(style) => style,
         Err(err) => {
             tracing::error!("Could not write style attribute: {err:?}");
@@ -676,8 +707,7 @@ mod tests {
         "
         );
 
-        let printer_options = || PrinterOptions::default();
-        let mut visitor = StylesheetVisitor::new(printer_options, "#protonmail-message".to_owned());
+        let mut visitor = StylesheetVisitor::new("#protonmail-message".to_owned());
         let mut stylesheet = StyleSheet::parse(rule, ParserOptions::default()).unwrap();
         stylesheet.visit(&mut visitor).unwrap();
 
@@ -695,7 +725,7 @@ mod tests {
 
         assert_eq!(expected, visitor.overrides());
 
-        let stylesheet = stylesheet.to_css(printer_options()).unwrap().code;
+        let stylesheet = stylesheet.to_css(PrinterOptions::default()).unwrap().code;
 
         // Make sure we did not remove `!important` from stylesheet.
         assert_eq!(
@@ -816,8 +846,8 @@ mod tests {
     fn visit_style_attribute() {
         let rule = "color: black !important; background-color: white";
 
-        let printer_options = || PrinterOptions::default();
-        let mut visitor = StyleAttributeVisitor::new(printer_options);
+        let printer_options = PrinterOptions::default();
+        let mut visitor = StyleAttributeVisitor::default();
         let mut attribute = StyleAttribute::parse(rule, ParserOptions::default()).unwrap();
         attribute.visit(&mut visitor).unwrap();
 
@@ -836,7 +866,7 @@ mod tests {
 
         assert_eq!(expected, visitor.overrides());
 
-        let attribute = attribute.to_css(printer_options()).unwrap().code;
+        let attribute = attribute.to_css(printer_options).unwrap().code;
 
         // We not only generate override CSS but also remove `!important` from the original one
         assert_eq!("background-color: #fff; color: #000", attribute);

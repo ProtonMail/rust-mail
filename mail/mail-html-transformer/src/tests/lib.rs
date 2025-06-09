@@ -16,6 +16,7 @@ fn pathologic_nested() {
         BrowserCapabilities {
             supports_dark_mode_via_media_query: true,
         },
+        IncludeFullStaticCss::No,
     );
     _ = t.strip_blockquote();
     let tok = t.add_noreferrer();

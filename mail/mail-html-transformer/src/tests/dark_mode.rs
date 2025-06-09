@@ -1,6 +1,9 @@
 use crate::{
     Transformer,
-    transforms::{ColorMode, styles::BrowserCapabilities},
+    transforms::{
+        ColorMode,
+        styles::{BrowserCapabilities, IncludeFullStaticCss},
+    },
 };
 
 #[test]
@@ -13,6 +16,7 @@ fn inject_style_text_color_stylesheet_query_supported() {
         BrowserCapabilities {
             supports_dark_mode_via_media_query: true,
         },
+        IncludeFullStaticCss::No,
     );
     insta::assert_snapshot!(html.to_string());
 }
@@ -27,6 +31,7 @@ fn inject_style_text_color_stylesheet_query_not_supported() {
         BrowserCapabilities {
             supports_dark_mode_via_media_query: false,
         },
+        IncludeFullStaticCss::No,
     );
     insta::assert_snapshot!(html.to_string());
 }
@@ -41,6 +46,7 @@ fn inject_style_if_media_size_is_used() {
         BrowserCapabilities {
             supports_dark_mode_via_media_query: true,
         },
+        IncludeFullStaticCss::No,
     );
     insta::assert_snapshot!(html.to_string());
 }
@@ -55,6 +61,7 @@ fn inject_style_check_contrast() {
         BrowserCapabilities {
             supports_dark_mode_via_media_query: true,
         },
+        IncludeFullStaticCss::No,
     );
     insta::assert_snapshot!(html.to_string());
 }
@@ -69,6 +76,7 @@ fn inject_style_inline_attributes() {
         BrowserCapabilities {
             supports_dark_mode_via_media_query: true,
         },
+        IncludeFullStaticCss::No,
     );
     insta::assert_snapshot!(html.to_string());
 }
@@ -83,6 +91,7 @@ fn inject_style_deprecated_attributes() {
         BrowserCapabilities {
             supports_dark_mode_via_media_query: true,
         },
+        IncludeFullStaticCss::No,
     );
     insta::assert_snapshot!(html.to_string());
 }
@@ -100,6 +109,7 @@ fn revert_dark_mode_in_inline_attributes() {
             supports_dark_mode_via_media_query: true,
         },
         "#protonmail-message".to_owned(),
+        IncludeFullStaticCss::No,
     );
 
     let html = html.to_string();
@@ -123,6 +133,7 @@ fn inject_style_transparency_handling() {
         BrowserCapabilities {
             supports_dark_mode_via_media_query: true,
         },
+        IncludeFullStaticCss::No,
     );
     insta::assert_snapshot!(html.to_string());
 }
@@ -138,6 +149,7 @@ fn inject_style_to_another_target() {
             supports_dark_mode_via_media_query: true,
         },
         "#protonmail-message".to_owned(),
+        IncludeFullStaticCss::No,
     );
     insta::assert_snapshot!(html.to_string());
     insta::assert_snapshot!(head);
@@ -157,6 +169,7 @@ fn inject_style_to_another_target_twice() {
         ColorMode::DarkMode,
         capabilities,
         "#protonmail-message".to_owned(),
+        IncludeFullStaticCss::No,
     );
     let html_after_first_pass = html.to_string();
 
@@ -167,6 +180,7 @@ fn inject_style_to_another_target_twice() {
         ColorMode::DarkMode,
         capabilities,
         "#protonmail-message".to_owned(),
+        IncludeFullStaticCss::No,
     );
     let html_after_second_pass = html.to_string();
 
@@ -186,6 +200,7 @@ fn doesnt_inject_style_for_message_that_handles_dark_mode_natively() {
         BrowserCapabilities {
             supports_dark_mode_via_media_query: true,
         },
+        IncludeFullStaticCss::No,
     );
     insta::assert_snapshot!(html.to_string());
 }
@@ -201,6 +216,7 @@ fn inject_style_for_message_that_handles_dark_mode_natively_but_sender_is_untrus
         BrowserCapabilities {
             supports_dark_mode_via_media_query: true,
         },
+        IncludeFullStaticCss::No,
     );
     insta::assert_snapshot!(html.to_string());
 }
@@ -208,7 +224,10 @@ fn inject_style_for_message_that_handles_dark_mode_natively_but_sender_is_untrus
 mod regressions {
     use crate::{
         Transformer,
-        transforms::{ColorMode, styles::BrowserCapabilities},
+        transforms::{
+            ColorMode,
+            styles::{BrowserCapabilities, IncludeFullStaticCss},
+        },
     };
 
     // Bugs caught live
@@ -222,6 +241,22 @@ mod regressions {
             BrowserCapabilities {
                 supports_dark_mode_via_media_query: true,
             },
+            IncludeFullStaticCss::No,
+        );
+        insta::assert_snapshot!(html.to_string());
+    }
+
+    #[test]
+    fn webkit_text_fill_color() {
+        let html = include_str!("../../tests/htmls/styles/regressions/webkit-text-fill-color.html");
+        let mut html = Transformer::new(html);
+        html.inject_dark_mode(
+            "",
+            ColorMode::DarkMode,
+            BrowserCapabilities {
+                supports_dark_mode_via_media_query: true,
+            },
+            IncludeFullStaticCss::No,
         );
         insta::assert_snapshot!(html.to_string());
     }

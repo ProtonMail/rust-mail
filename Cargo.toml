@@ -360,3 +360,9 @@ hyper = { git = "https://github.com/hyperium/hyper", rev = "436cadd1ac08a9508a46
 # TODO https://github.com/rust-lang/rust-bindgen/issues/3199
 # TODO https://protonmail.slack.com/archives/C07FCLA1RQW/p1747302410720299
 bindgen = { git = "https://github.com/rust-lang/rust-bindgen", rev = "97ab9152b5edb1fda1ced9bc1604f5e4dc9cfaa9" }
+
+# TODO(wpolak) Introduce a proper PR to the upstream with all the changes.
+# * -webkit-text-fill-color support
+# * parsing HEX colors without leading `#`
+# * `Debug`, `Clone` and `Copy` for `PrinterOptions`
+lightningcss = { git = "https://github.com/frondeus/lightningcss", rev = "b9dc136b0b43220381965e5806903e7c31a3ca12" }

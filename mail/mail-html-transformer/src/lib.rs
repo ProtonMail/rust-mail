@@ -58,6 +58,8 @@ pub mod utm;
 mod html2text;
 
 pub use html2text::Html2TextOptions;
+
+use crate::transforms::styles::IncludeFullStaticCss;
 #[cfg(test)]
 #[path = "tests/lib.rs"]
 mod tests;
@@ -167,6 +169,7 @@ impl Transformer {
         sender: &str,
         mode: ColorMode,
         capabilities: BrowserCapabilities,
+        include_full_static_css: IncludeFullStaticCss,
     ) {
         transforms::styles::inject_root_selector_to_html(&self.document);
         transforms::styles::inject_dark_mode(
@@ -176,6 +179,7 @@ impl Transformer {
             mode,
             capabilities,
             "[data-protonmail-message]".to_owned(),
+            include_full_static_css,
         );
     }
 
@@ -197,6 +201,7 @@ impl Transformer {
         mode: ColorMode,
         capabilities: BrowserCapabilities,
         root_selector: String,
+        include_full_static_css: IncludeFullStaticCss,
     ) -> String {
         use html5ever::namespace_url;
         let source = self.document.clone();
@@ -218,6 +223,7 @@ impl Transformer {
             mode,
             capabilities,
             root_selector,
+            include_full_static_css,
         );
         inner_html(&head)
     }

@@ -3,7 +3,10 @@
 
 use crate::{
     InsertLinkToken, Transformer,
-    transforms::{ColorMode, styles::BrowserCapabilities},
+    transforms::{
+        ColorMode,
+        styles::{BrowserCapabilities, IncludeFullStaticCss},
+    },
 };
 #[test]
 fn inject_style() {
@@ -15,6 +18,7 @@ fn inject_style() {
         BrowserCapabilities {
             supports_dark_mode_via_media_query: false,
         },
+        IncludeFullStaticCss::No,
     );
     insta::assert_snapshot!(html.to_string());
 }
@@ -34,6 +38,7 @@ fn inject_style_no_head() {
         BrowserCapabilities {
             supports_dark_mode_via_media_query: false,
         },
+        IncludeFullStaticCss::No,
     );
     insta::assert_snapshot!(html.to_string());
 }
