@@ -31,6 +31,7 @@ use stash::stash::{Stash, WatcherHandle};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Mutex;
 use tracing::{debug, error};
 use tracing_appender::non_blocking::WorkerGuard;
 
@@ -44,8 +45,9 @@ use tracing_appender::non_blocking::WorkerGuard;
 pub struct MailSession {
     mail_ctx: Arc<MailContext>,
     user_ctx: Arc<MailUserContextMap>,
+    params: MailSessionParams,
     /// This is an Option because it compiles to `None` for iOS.
-    _log_guard: Option<WorkerGuard>,
+    log_guard: Arc<Mutex<Option<WorkerGuard>>>,
 }
 
 /// Configuration parameters for the [`MailSession`]
@@ -159,15 +161,15 @@ async fn create_mail_session_inner(
     hv_notifier: Option<DynChallengeNotifier>,
     device_info_provider: Option<DynDeviceInfoProvider>,
 ) -> Result<Arc<MailSession>, RealProtonMailError> {
-    let mut log_path = PathBuf::from(params.log_dir);
+    let mut log_path = PathBuf::from(&params.log_dir);
     std::fs::create_dir_all(&log_path)?;
     log_path.push("proton-mail-uniffi.log");
 
     let maybe_log_guard = init_log(&log_path, params.log_debug)?;
 
-    let session_path = PathBuf::from(params.session_dir);
-    let user_path = PathBuf::from(params.user_dir);
-    let cache_path = PathBuf::from(params.mail_cache_dir);
+    let session_path = PathBuf::from(&params.session_dir);
+    let user_path = PathBuf::from(&params.user_dir);
+    let cache_path = PathBuf::from(&params.mail_cache_dir);
     let mail_cache_path = cache_path.join("mail-cache");
     let core_cache_path = cache_path.join("core-cache");
 
@@ -196,6 +198,7 @@ async fn create_mail_session_inner(
 
     let api_env_config = params
         .api_env_config
+        .clone()
         .unwrap_or_default()
         .try_into()
         .inspect_err(|e| error!("{e:?}"))
@@ -243,7 +246,8 @@ async fn create_mail_session_inner(
     Ok(Arc::new(MailSession {
         mail_ctx,
         user_ctx: user_ctx_map,
-        _log_guard: maybe_log_guard,
+        params,
+        log_guard: Arc::new(Mutex::new(maybe_log_guard)),
     }))
 }
 
@@ -715,16 +719,26 @@ impl MailSession {
     /// This method is meant to be used when someone decides to sign out on
     /// authentication screen such as PIN or Biometrics verification.
     ///
+    /// This method will recover an empty state of the mail application ready to
+    /// log user back in.
+    ///
     pub async fn sign_out_all(&self) -> Result<(), UserContextError> {
         let Some(user_context) = self.user_ctx.first() else {
             tracing::debug!("No user context found, skipping sign out all");
             return Ok(());
         };
         let map = self.user_ctx.clone();
+        let guard = self.log_guard.clone();
+        let log_debug = self.params.log_debug;
 
         uniffi_async(async move {
             user_context.sign_out_all().await?;
             map.clear();
+            let maybe_log_guard = init_log(
+                user_context.core_context().get_log_path().unwrap(),
+                log_debug,
+            )?;
+            *guard.lock().await = maybe_log_guard;
 
             Result::<(), RealProtonMailError>::Ok(())
         })

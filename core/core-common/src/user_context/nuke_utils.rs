@@ -6,7 +6,10 @@ use std::{
 
 use itertools::Itertools;
 use stash::stash::{StashError, Tether};
-use tokio::{fs, task};
+use tokio::{
+    fs,
+    task::{self, JoinHandle},
+};
 use walkdir::WalkDir;
 
 pub const DB_EXTENSIONS: &[&str] = &["db", "db-wal", "db-shm"];
@@ -107,15 +110,18 @@ pub async fn clear_dir_safe(path: impl AsRef<Path>) {
     };
 
     let failed = remove_files(&all_files).await;
+    remove_in_background(&failed).await;
+}
 
-    if !failed.is_empty() {
+pub async fn remove_in_background(paths: &[PathBuf]) -> Option<JoinHandle<()>> {
+    if !paths.is_empty() {
+        let mut failed = paths.to_vec();
         // We have still some files not removed
         // lets derefer this to the background
-        task::spawn(async move {
+        let handle = task::spawn(async move {
             let max_wait: Duration = Duration::from_secs(5);
             let retry_interval: Duration = Duration::from_millis(100);
             let start = Instant::now();
-            let mut failed = failed;
             loop {
                 tokio::time::sleep(retry_interval).await;
                 failed = remove_files(&failed).await;
@@ -129,7 +135,11 @@ pub async fn clear_dir_safe(path: impl AsRef<Path>) {
                 }
             }
         });
+
+        return Some(handle);
     }
+
+    None
 }
 
 async fn remove_files(paths: &[PathBuf]) -> Vec<PathBuf> {
