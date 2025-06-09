@@ -480,8 +480,6 @@ impl MailUserContext {
     /// This method will perform:
     /// * Each user logout
     /// * Clear all user data
-    /// * Clear keychains
-    /// * Remove all account data & caches
     ///
     /// There are sevral layers to this function in which most of them
     /// are non failing and retrying in cases where we could fail.
@@ -512,7 +510,7 @@ impl MailUserContext {
                 .inspect_err(|e| tracing::error!("Could not remove account, `{e}`"));
         }
 
-        self.mail_context().core_context().tear_down().await;
+        self.core_context().tear_down().await;
 
         Ok(())
     }

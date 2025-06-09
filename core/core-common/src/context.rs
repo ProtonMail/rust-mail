@@ -14,10 +14,11 @@ use crate::device::DynDeviceInfoProvider;
 use crate::event_loop::EventPollMode;
 use crate::models::{AppSettings, ModelExtension};
 use crate::nuke_utils::{
-    drop_all_tables_in_database, remove_or_clear_dir_safe, rename_database_files,
+    drop_all_tables_in_database, remove_in_background, remove_or_clear_dir_safe,
+    rename_database_files,
 };
 use crate::os::{KeyChain, KeyChainError, KeyChainExt, StoreInKeyChain};
-use crate::pin_code::{PinCode, PinHash};
+use crate::pin_code::PinCode;
 use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{Error as AnyhowError, anyhow};
 use futures::TryFutureExt;
@@ -44,6 +45,7 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 use thiserror::Error;
+use tokio::fs;
 use tokio::sync::{Mutex, broadcast};
 use tokio::task::{JoinError, JoinHandle};
 use tokio_util::sync::CancellationToken;
@@ -453,20 +455,6 @@ impl Context {
         Ok(sessions.count() > 0)
     }
 
-    /// Get path of the core cache in filesystem.
-    ///
-    #[must_use]
-    pub(crate) fn get_cache_location(&self) -> &Path {
-        self.cache_path.as_path()
-    }
-
-    /// Get path of account's database parent directory location
-    ///
-    #[must_use]
-    pub(crate) fn get_account_db_location(&self) -> &Path {
-        self.account_db_path.as_path()
-    }
-
     /// Watch the API sessions for changes.
     ///
     /// # Returns
@@ -820,29 +808,27 @@ impl Context {
         self.cancel_all_tasks();
         tracing::warn!("Remove all users from active_contexts");
         self.active_user_contexts.lock().await.clear();
-        tracing::warn!("Remove all accounts data");
-        let tether = self.account_stash().connection();
-        let _ = drop_all_tables_in_database(tether).await.inspect_err(|e| {
-            tracing::error!(
-                "Could not drop database tables: `{e}`, will try to remove files anyway"
-            );
-        });
-        tracing::warn!("Archive & remove account database");
-        let account_db_location = self.get_account_db_location();
-        rename_database_files(account_db_location).await;
-        remove_or_clear_dir_safe(account_db_location).await;
-        tracing::warn!("Clear cache");
-        remove_or_clear_dir_safe(self.get_cache_location()).await;
-
-        let _ = self
-            .delete_secret::<SessionEncryptionKey>()
-            .inspect_err(|e| tracing::error!("Could not remove session key: `{e}`"));
-        let _ = self
-            .delete_secret::<PinHash>()
-            .inspect_err(|e| tracing::error!("Could not remove pin hash: `{e}`"));
-        let _ = self
-            .delete_secret::<StoredDevicePrivateKey>()
-            .inspect_err(|e| tracing::error!("Could not remove device key: `{e}`"));
+        tracing::warn!("Remove all accounts");
+        let mut tether = self.account_stash().connection();
+        let _ = tether
+            .tx(async |tx| {
+                CoreAccount::delete_all(tx)
+                    .await
+                    .inspect_err(|e| tracing::error!("Failed to delete accounts from db: {e:?}"))
+            })
+            .await;
+        if let Some(log_path) = &self.log_path {
+            let log_path_to_nuke = log_path.with_extension("nuked");
+            if let Err(e) = fs::rename(log_path, &log_path_to_nuke).await {
+                tracing::error!("Failed to rename log file: {e:?}");
+                return;
+            }
+            if let Err(e) = fs::File::create(log_path).await {
+                tracing::error!("Failed to create log file: {e:?}");
+                return;
+            }
+            remove_in_background(&[log_path_to_nuke]).await;
+        }
     }
 
     #[tracing::instrument(err, skip(self))]

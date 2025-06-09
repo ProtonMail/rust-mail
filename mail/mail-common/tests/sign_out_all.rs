@@ -1,4 +1,5 @@
 use proton_core_common::datatypes::{LocalLabelId, SystemLabel};
+use proton_core_common::models::{AppProtection, AppSettings, PinProtection};
 use proton_mail_common::test_utils::init::Params as TestParams;
 use proton_mail_common::test_utils::test_context::MailTestContext;
 
@@ -52,12 +53,14 @@ async fn sign_out_all() {
 
         assert!(error.contains("no such table: labels"));
 
-        // And account databse
         let error = user_ctx.user().await.unwrap_err().to_string();
         assert!(error.contains("no such table: users"));
 
+        // And account databse should not be dropped.
+        // User is no longer logged in, so we should get an error.
         let error = user_ctx.account_details().await.unwrap_err().to_string();
-        assert!(error.contains("no such table: core_accounts"));
+        assert!(error.contains("Account with user id"));
+        assert!(error.contains("is missing in the DB"));
 
         // And that cache is empty
         let mail_ctx = user_ctx.mail_context();
@@ -70,7 +73,15 @@ async fn sign_out_all() {
         let core_cache = &core_user_ctx.cache_path;
         let user_db_path = core_user_ctx.get_user_db_path();
 
-        assert!(!core_cache.exists());
+        assert!(core_cache.exists());
         assert!(!user_db_path.exists());
     }
+
+    // Check that app settings and pin protection are reset
+    let tether = user_ctx.core_context().account_stash().connection();
+    let app_settings = AppSettings::get_or_default(&tether).await;
+    assert_eq!(app_settings.protection, AppProtection::None);
+
+    let pin_metadata = PinProtection::get(&tether).await.unwrap();
+    assert!(pin_metadata.is_none());
 }
