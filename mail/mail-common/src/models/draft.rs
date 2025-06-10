@@ -632,7 +632,7 @@ impl DraftSendFailure {
                     Self::from_draft_package_error(package_error)
                 }
                 SendError::NoRecipients => Self::Send(DraftSendFailureSend::NoRecipients),
-                SendError::SechduleSendExpired => {
+                SendError::ScheduleSendExpired => {
                     Self::Send(DraftSendFailureSend::ScheduleSendExpired)
                 }
                 _ => Self::Internal,

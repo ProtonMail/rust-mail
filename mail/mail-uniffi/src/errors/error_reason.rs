@@ -154,6 +154,8 @@ pub enum DraftSendErrorReason {
     MissingAttachmentUploads,
     /// Time at which the message was scheduled to send has already expired
     ScheduleSendExpired,
+    /// The maximum number of scheduled send messages has been reached.
+    ScheduleSendMessageLimitExceeded,
 }
 
 impl From<RealDraftSaveErrorReason> for DraftSaveErrorReason {
@@ -191,6 +193,9 @@ impl From<RealDraftSendErrorReason> for DraftSendErrorReason {
             RealDraftSendErrorReason::MessageIsNotADraft => Self::MessageIsNotADraft,
             RealDraftSendErrorReason::MissingAttachmentUploads => Self::MissingAttachmentUploads,
             RealDraftSendErrorReason::ScheduleSendExpired => Self::ScheduleSendExpired,
+            RealDraftSendErrorReason::ScheduleSendMessageLimitExceeded => {
+                Self::ScheduleSendMessageLimitExceeded
+            }
         }
     }
 }

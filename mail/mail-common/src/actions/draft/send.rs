@@ -8,7 +8,7 @@ use crate::draft::send::{build_packages, load_send_preferences_for_recipients};
 use crate::draft::{Draft, ReplyMode, SendError, draft_attachment_staging_path};
 use crate::models::{
     Conversation, DraftAttachmentMetadata, DraftMetadata, DraftSendFailure, DraftSendResult,
-    DraftSendResultOrigin, MailSettings, Message, MetadataId, RollbackItem,
+    DraftSendResultOrigin, MailSettings, Message, MessageCounters, MetadataId, RollbackItem,
 };
 use crate::{AppError, MailContextError, MailUserContext};
 use chrono::{DateTime, Local};
@@ -130,6 +130,8 @@ impl VersionConverter for SendVersionConverter {
     }
 }
 
+const MAX_SCHEDULED_SEND_COUNT: u64 = 100;
+
 #[derive(Default)]
 pub struct SendHandler;
 
@@ -154,6 +156,16 @@ impl proton_action_queue::action::Handler for SendHandler {
         let local_outbox_label_id = local_outbox_label_id(tx).await?;
         let local_all_draft_label_id = local_all_draft_label_id(tx).await?;
         let local_all_scheduled_label_id = local_all_scheduled_label_id(tx).await?;
+
+        if action.is_scheduled() {
+            if let Some(counters) =
+                MessageCounters::find_by_id(local_all_scheduled_label_id, tx).await?
+            {
+                if counters.total >= MAX_SCHEDULED_SEND_COUNT {
+                    return Err(SendError::ScheduleSendMessageLimitExceeded.into());
+                }
+            }
+        }
 
         let Some(mut metadata) = DraftMetadata::find_by_id(action.metadata_id, tx)
             .await
@@ -293,7 +305,7 @@ impl Send {
                 error!(
                     "Unable to schedule sending of message {local_message_id}: schedule date is past"
                 );
-                return Err(SendError::SechduleSendExpired.into());
+                return Err(SendError::ScheduleSendExpired.into());
             }
         }
 

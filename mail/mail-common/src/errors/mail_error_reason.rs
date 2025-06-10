@@ -191,6 +191,8 @@ pub enum DraftSendErrorReason {
     MissingAttachmentUploads,
     /// Time at which the message was scheduled to send has already expired
     ScheduleSendExpired,
+    /// The maximum number of scheduled send messages has been reached.
+    ScheduleSendMessageLimitExceeded,
 }
 
 /// Specific Reason when attempting to cancel sending of an already sent draft.

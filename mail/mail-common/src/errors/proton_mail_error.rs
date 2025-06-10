@@ -322,9 +322,14 @@ impl From<DraftSendError> for ProtonMailError {
             DraftSendError::MissingAttachmentUploads => Self::Reason(
                 MailErrorReason::DraftSendReason(DraftSendErrorReason::MissingAttachmentUploads),
             ),
-            DraftSendError::SechduleSendExpired => Self::Reason(MailErrorReason::DraftSendReason(
+            DraftSendError::ScheduleSendExpired => Self::Reason(MailErrorReason::DraftSendReason(
                 DraftSendErrorReason::ScheduleSendExpired,
             )),
+            DraftSendError::ScheduleSendMessageLimitExceeded => {
+                Self::Reason(MailErrorReason::DraftSendReason(
+                    DraftSendErrorReason::ScheduleSendMessageLimitExceeded,
+                ))
+            }
         }
     }
 }
