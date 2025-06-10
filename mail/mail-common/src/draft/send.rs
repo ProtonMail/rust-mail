@@ -9,6 +9,7 @@ use proton_action_queue::action::WriterGuard;
 use proton_action_queue::observers::ActionAwaiter;
 use proton_action_queue::queue::{BroadcastMessage, Queue, QueuedError};
 use proton_core_api::consts::Mail;
+use proton_core_api::service::ApiServiceError;
 use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::models::{ModelExtension, PaidSubscription};
 use proton_crypto_account::keys::{
@@ -593,6 +594,14 @@ pub async fn cancel_schedule_send(
     if !message.is_scheduled_for_send() {
         return Err(CancelScheduleSendError::MessageIsNotScheduled(message_id).into());
     }
+
+    // Pre-check we are offline before proceeding to avoid long stalls during api requests.
+    if session.status().await.is_offline() {
+        return Err(MailContextError::Api(ApiServiceError::NetworkError(
+            "Offline".into(),
+        )));
+    }
+
     let original_dt: DateTime<Local> = message
         .time
         .to_date_time()
