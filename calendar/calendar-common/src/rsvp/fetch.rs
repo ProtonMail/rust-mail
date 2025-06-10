@@ -4,7 +4,7 @@ use crate::{
 };
 use chrono::DateTime;
 use proton_calendar_api::{
-    CalendarAttendeeStatus, CalendarBootstrap, CalendarEvent, ProtonCalendar,
+    CalendarAttendeeId, CalendarAttendeeStatus, CalendarBootstrap, CalendarEvent, ProtonCalendar,
 };
 use proton_core_api::services::proton::Proton;
 use proton_crypto::crypto::PGPProviderSync;
@@ -153,7 +153,7 @@ where
     let attendees: HashMap<_, _> = event
         .attendees
         .iter()
-        .map(|att| (att.token.as_str(), att.status))
+        .map(|att| (att.token.as_str(), (&att.id, att.status)))
         .collect();
 
     let event = event.attendees_event().decrypt_and_parse(pgp, decryptor)?;
@@ -171,7 +171,7 @@ where
 }
 
 fn extract_attendee(
-    attendees: &HashMap<&str, CalendarAttendeeStatus>,
+    attendees: &HashMap<&str, (&CalendarAttendeeId, CalendarAttendeeStatus)>,
     attendee: ical::Attendee,
 ) -> RsvpResult<RsvpAttendee> {
     #[allow(clippy::match_wildcard_for_single_variants)]
@@ -187,11 +187,16 @@ fn extract_attendee(
         .ok_or(RsvpError::AttendeeHasNoXPmToken)?
         .into_string();
 
-    let status = *attendees
+    let (id, status) = attendees
         .get(&token.as_str())
-        .ok_or(RsvpError::AttendeeHasUnknownStatus)?;
+        .ok_or(RsvpError::AttendeeIsNotKnown)?;
 
-    Ok(RsvpAttendee { email, status })
+    Ok(RsvpAttendee {
+        id: (*id).clone(),
+        email,
+        status: *status,
+        token: token.into(),
+    })
 }
 
 fn extract_organizer(event: &CalendarEvent) -> RsvpResult<RsvpOrganizer> {

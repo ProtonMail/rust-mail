@@ -197,7 +197,7 @@ async fn err_unknown_attendee_status() {
 
     // Attendee `zar@localhost` is not present in the `CalendarEvent`
     assert_eq!(
-        RsvpError::AttendeeHasUnknownStatus.to_string(),
+        RsvpError::AttendeeIsNotKnown.to_string(),
         actual.to_string()
     );
 }
@@ -448,10 +448,14 @@ fn expected_event() -> RsvpEvent {
         },
         attendees: vec![
             RsvpAttendee {
+                id: "V3FdcecX".into(),
+                token: "245902dc".into(),
                 email: "foo@localhost".into(),
                 status: CalendarAttendeeStatus::Maybe,
             },
             RsvpAttendee {
+                id: "gWfsHvDg".into(),
+                token: "d15cf90c".into(),
                 email: "bar@localhost".into(),
                 status: CalendarAttendeeStatus::Unanswered,
             },

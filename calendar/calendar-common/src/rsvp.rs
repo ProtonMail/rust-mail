@@ -2,7 +2,8 @@ mod fetch;
 
 use chrono::{DateTime, NaiveDate, Utc};
 use proton_calendar_api::{
-    CalendarAttendeeStatus, CalendarColor, CalendarEventId, CalendarEventRecurrenceId,
+    CalendarAttendeeId, CalendarAttendeeStatus, CalendarAttendeeToken, CalendarColor,
+    CalendarEventId, CalendarEventRecurrenceId,
 };
 use proton_core_api::{service::ApiServiceError, services::proton::Proton};
 use proton_crypto::crypto::PGPProviderSync;
@@ -134,6 +135,8 @@ pub enum RsvpOccurrence {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RsvpAttendee {
+    pub id: CalendarAttendeeId,
+    pub token: CalendarAttendeeToken,
     pub email: String,
     pub status: CalendarAttendeeStatus,
 }
@@ -193,8 +196,8 @@ pub enum RsvpError {
     #[error("Attendee has no X-PM-TOKEN")]
     AttendeeHasNoXPmToken,
 
-    #[error("Attendee has unknown status")]
-    AttendeeHasUnknownStatus,
+    #[error("Attendee is not known")]
+    AttendeeIsNotKnown,
 
     #[error("Organizer is not known")]
     OrganizerIsNotKnown,
