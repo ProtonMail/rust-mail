@@ -29,9 +29,6 @@ pub struct ContactCard {
 
     #[DbField]
     pub signature: Option<String>,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl DecryptableVerifiableCard for ContactCard {
@@ -61,7 +58,6 @@ impl From<ApiContactCard> for ContactCard {
             card_type: value.card_type,
             data: value.data,
             signature: value.signature,
-            row_id: None,
         }
     }
 }

@@ -12,8 +12,9 @@
 //! with types that are saved to the database.
 //!
 
-use crate::datatypes::QueryResultIdPair;
 use crate::stash::{Bond, StashError, Tether};
+use crate::utils::IterMapToSql;
+use anyhow::Context;
 use core::any::Any;
 use core::fmt::{Debug, Display};
 use core::future::Future;
@@ -267,16 +268,23 @@ where
     ///   required. It can be empty. Note that each part of the
     ///   logic is optional — so if conditions are passed, for
     ///   instance, the `WHERE` keyword needs to be included.
-    ///
-    fn find<Q>(
-        query_logic: Q,
+    fn find(
+        query_logic: impl AsRef<str>,
         params: Vec<Box<dyn ToSql + Send>>,
         tether: &Tether,
-    ) -> impl Future<Output = Result<Vec<Self>, StashError>> + Send
-    where
-        Q: Into<String> + Send,
-    {
-        async move { perform_find(query_logic, params, tether).await }
+    ) -> impl Future<Output = Result<Vec<Self>, StashError>> + Send {
+        let query = format!(
+            "SELECT * FROM {table} {query_logic}",
+            query_logic = query_logic.as_ref(),
+            table = Self::table_name(),
+        );
+        async move {
+            let mut records: Vec<Self> = tether.query(query, params).await?;
+            for record in &mut records {
+                record.do_on_load(tether).await?;
+            }
+            Ok(records)
+        }
     }
 
     /// Finds the first record in a result set using specific query logic.
@@ -304,33 +312,14 @@ where
     ///   logic is optional — so if conditions are passed, for
     ///   instance, the `WHERE` keyword needs to be included.
     ///
-    /// # Errors
-    ///
-    /// See [`Stash::query()`].
-    ///
-    /// # See also
-    ///
-    /// * [`Model::find()`]
-    /// * [`Model::load()`]
-    /// * [`Stash::query()`]
-    /// * [`params!`](crate::utils::params)
-    ///
-    fn find_first<Q>(
-        query_logic: Q,
+    fn find_first(
+        query_logic: impl AsRef<str>,
         params: Vec<Box<dyn ToSql + Send>>,
         tether: &Tether,
-    ) -> impl Future<Output = Result<Option<Self>, StashError>> + Send
-    where
-        Q: Into<String> + Send,
-    {
-        async move {
-            Ok(
-                perform_find(format!("{} LIMIT 1", query_logic.into()), params, tether)
-                    .await?
-                    .into_iter()
-                    .next(),
-            )
-        }
+    ) -> impl Future<Output = Result<Option<Self>, StashError>> + Send {
+        let query = format!("{query_logic} LIMIT 1", query_logic = query_logic.as_ref());
+
+        async move { Ok(Self::find(&query, params, tether).await?.into_iter().next()) }
     }
 
     /// Gets the record's local id.
@@ -355,83 +344,107 @@ where
     ///
     /// If no results are found, [`None`] will be returned. Having no results is
     /// not considered to be an error case.
-    ///
-    /// After loading, the [`Stash`] will be set against the record instance, so
-    /// that instance-based operations have the correct context.
-    ///
-    /// # Errors
-    ///
-    /// See [`Stash::query()`] for a list of possible errors that can occur when
-    /// using this function.
-    ///
-    /// # See also
-    ///
-    /// * [`Stash::load()`]
-    /// * [`Tether::load()`]
-    ///
     #[must_use]
     async fn load(id: Self::IdType, tether: &Tether) -> Result<Option<Self>, StashError> {
-        perform_load(id, tether).await
+        let query = formatdoc! {"
+            SELECT * FROM {table}
+            WHERE
+                {id} = ?
+            LIMIT
+                1
+            ",
+            table = Self::table_name(),
+            id = Self::id_field_name(),
+        };
+        #[allow(trivial_casts)]
+        Ok(tether
+            .query::<_, Self>(&query, vec![Box::new(id) as Box<dyn ToSql + Send>])
+            .await?
+            .into_iter()
+            .next())
     }
 
-    /// Saves a record to the database, using a specific connection.
-    ///
-    /// This function saves a single record to the database by its unique ID. It
-    /// is a convenience method for calling [`Stash::execute()`] and passing in
-    /// the data.
-    ///
-    /// There are one prerequisite for calling this function:
-    ///
-    ///   1. The record must have a unique ID. This needs to have been set on
-    ///      the record instance, or an error will occur.
-    ///
-    /// # Logic
-    ///
-    /// There are a number of factors that determine the approach taken to
-    /// saving a record. The decisions to make are firstly whether to perform an
-    /// `INSERT` or an `UPDATE`, and secondly whether to include the ID field in
-    /// the query.
-    ///
-    /// The factors influencing the decision are: whether the row ID is set,
-    /// whether the ID field is set, and whether the ID field has been
-    /// configured as optional or auto-incrementing.
-    ///
-    /// If the ID field is auto-incrementing (optional and database-managed):
-    ///
-    ///   - Row ID set, ID field set: `UPDATE`
-    ///   - Row ID set, ID field not set: [`StashError::InvalidIdState`]
-    ///   - Row ID not set, ID field set: [`StashError::InvalidIdState`]
-    ///   - Row ID not set, ID field not set: `INSERT`
-    ///
-    /// If the ID field is optional (but not auto-incrementing, i.e. manual):
-    ///
-    ///   - Row ID set, ID field set: `UPDATE`
-    ///   - Row ID set, ID field not set: [`StashError::InvalidIdState`]
-    ///   - Row ID not set, ID field set: `INSERT`
-    ///   - Row ID not set, ID field not set: [`StashError::IdNotSet`]
-    ///
-    /// If the ID field is fully manual:
-    ///
-    ///   - Row ID set: `UPDATE`
-    ///   - Row ID not set: `INSERT`
-    ///
-    /// Note: If the ID field is set to optional or auto-incrementing, then the
-    /// [`id_value()`](Model::id_value()) function will return an error if it is
-    /// not set, which is how we can determine this.
-    ///
-    /// # Errors
-    ///
-    /// See [`Stash::query()`] for a list of possible general query-related
-    /// errors that can occur when using this function. In addition, the
-    /// following may occur:
-    ///
-    /// * [`StashError::IdNotSet`]
-    /// * [`StashError::InvalidIdState`]
-    /// * [`StashError::NoRowIdReturned`]
-    /// * [`StashError::NoRowsUpdated`]
+    /// Saves a record to the database.
+    /// If it has a local id it will update the record, otherwise it will insert it.
     ///
     async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        perform_save(self, bond).await
+        // If the ID field is auto-incrementing then it is fully managed by the
+        // database, and we exclude it from the list here.
+        let (fields, values) = if Self::id_is_autoincrementing() {
+            (
+                Self::field_names_without_id(),
+                Self::field_values_without_id(self),
+            )
+        } else {
+            (Self::field_names(), Self::field_values(self))
+        };
+
+        match self.id_value() {
+            // ID is set: update
+            Ok(id) => {
+                let update_fields = fields.iter().map(|field| format!("{field} = ?")).join(", ");
+                let query = formatdoc!(
+                    "
+                UPDATE
+                    {}
+                SET
+                    {}
+                WHERE
+                    {} = ?
+            ",
+                    Self::table_name(),
+                    update_fields,
+                    Self::id_field_name(),
+                );
+                #[allow(trivial_casts)]
+                let field_values: Vec<Box<dyn ToSql + Send>> = values
+                    .into_iter()
+                    .chain(once(Box::new(id) as Box<dyn ToSql + Send>))
+                    .collect();
+                #[allow(clippy::shadow_reuse)]
+                let affected: usize = bond.execute(&query, field_values).await?;
+
+                if affected == 0 {
+                    return Err(StashError::NoRowsUpdated);
+                }
+            }
+            // ID is not set: insert
+            Err(_) => {
+                if Self::id_is_autoincrementing() && self.id_value().is_ok() {
+                    // If the ID field is configured as auto-incrementing and is set, but the
+                    // row ID is not set, then the state is invalid, because it should have been
+                    // loaded from the database.
+                    return Err(StashError::InvalidIdState);
+                }
+                if Self::id_is_optional()
+                    && !Self::id_is_autoincrementing()
+                    && self.id_value().is_err()
+                {
+                    // If the ID field is configured as optional but NOT auto-incrementing, and
+                    // is not set, then the state is invalid, because it is under manual control
+                    // and needs to be set before saving.
+                    return Err(StashError::IdNotSet);
+                }
+                let placeholders = crate::utils::placeholders(&fields);
+                let query = formatdoc! {"
+                    INSERT INTO {table} ({fields})
+                    VALUES ({placeholders})
+                    RETURNING {id} AS value
+                    ",
+                    table = Self::table_name(),
+                    fields = fields.join(", "),
+                    id = Self::id_field_name(),
+                };
+
+                let id = bond
+                    .query_value_opt::<Self::IdType>(query, values.bridge_sql())
+                    .await?
+                    .context("Insert did not return an id")?;
+
+                self.set_id_value(id);
+            }
+        };
+        Ok(())
     }
 
     /// Gets the name of the table for the record type.
@@ -476,14 +489,22 @@ where
 
     // The following methods are intended to be used within the ORM, generated from the proc macro.
 
+    // This gets overridden by the `on_save` in the struct impl
+    fn do_on_load(&mut self, _: &Tether) -> impl Future<Output = Result<(), StashError>> + Send {
+        async { Ok(()) }
+    }
+
+    // This gets overridden by the `on_save` in the struct impl
+    fn do_on_save(&mut self, _: &Bond<'_>) -> impl Future<Output = Result<(), StashError>> + Send {
+        async { Ok(()) }
+    }
+
     fn field_names_without_id() -> Vec<&'static str>;
     fn field_values_without_id(&self) -> Vec<Box<dyn ToSql + Send>>;
     fn id_is_autoincrementing() -> bool;
     fn id_is_optional() -> bool;
     fn id_value(&self) -> Result<Self::IdType, StashError>;
-    fn row_id(&self) -> Option<u64>;
     fn set_id_value(&mut self, id: Self::IdType);
-    fn set_row_id(&mut self, id: Option<u64>);
 }
 
 /// A collection of database records.
@@ -559,216 +580,4 @@ pub fn from_rows<T: DbRecord>(mut rows: Rows<'_>) -> Result<Vec<T>, ConversionEr
         results.push(T::from_row(row, &columns)?);
     }
     Ok(results)
-}
-
-/// Finds records in the database using specific query logic.
-///
-/// This function carries out the actual finding logic, allowing the
-/// [`Model::find()`] and [`Model::find_first()`] functions to call it, along
-/// with any `on_load()` custom logic that may be required.
-///
-/// For full usage details, see [`Model::find()`].
-///
-/// # Parameters
-///
-/// * `query_logic` - The query logic to use for finding the records. This
-///   should be a string that represents the conditions,
-///   ordering, offset, and limit for the query, as may be
-///   required. It can be empty. Note that each part of the
-///   logic is optional — so if conditions are passed, for
-///   instance, the `WHERE` keyword needs to be included.
-///
-/// # Errors
-///
-/// See [`Stash::query()`].
-///
-/// # See also
-///
-/// * [`Model::find()`]
-/// * [`Model::find_first()`]
-/// * [`Model::load()`]
-/// * [`Stash::query()`]
-/// * [`params!`](crate::utils::params)
-///
-pub async fn perform_find<Q, T>(
-    query_logic: Q,
-    params: Vec<Box<dyn ToSql + Send>>,
-    tether: &Tether,
-) -> Result<Vec<T>, StashError>
-where
-    Q: Into<String> + Send,
-    T: Model,
-{
-    let query = formatdoc!(
-        "
-            SELECT
-                {}.rowid AS rowid, *
-            FROM
-                {}
-            {}
-        ",
-        T::table_name(),
-        T::table_name(),
-        query_logic.into(),
-    );
-    let records = tether.query(query, params).await?;
-
-    Ok(records)
-}
-
-/// Loads a record from the database by ID.
-///
-/// This function retrieves a single record from the database by its unique ID,
-/// as an instance of the specified type `T`, where `T` is any concrete type
-/// implementing the [`Model`] trait. It is the internal function that actually
-/// does the loading for the public interface methods [`Model::load()`],
-/// [`Stash::load()`] and [`Tether::load()`].
-///
-/// For full usage details, see [`Model::load()`].
-///
-/// # Errors
-///
-/// See [`Model::load()`].
-///
-/// # See also
-///
-/// * [`Model::load()`]
-/// * [`Stash::load()`]
-/// * [`Tether::load()`]
-///
-pub async fn perform_load<T, I>(id: I, tether: &Tether) -> Result<Option<T>, StashError>
-where
-    T: Model,
-    I: ToSql + Send + 'static,
-{
-    let query = formatdoc!(
-        "
-        SELECT
-            {}.rowid AS rowid, *
-        FROM
-            {}
-        WHERE
-            {} = ?
-        LIMIT
-            1
-    ",
-        T::table_name(),
-        T::table_name(),
-        T::id_field_name(),
-    );
-    #[allow(trivial_casts)]
-    Ok(tether
-        .query::<_, T>(&query, vec![Box::new(id) as Box<dyn ToSql + Send>])
-        .await?
-        .into_iter()
-        .next())
-}
-
-/// Saves a record to the database.
-///
-/// This function saves a single record to the database by its unique ID, either
-/// ad-hoc or using a specific [`Tether`], i.e. connection. It is the internal
-/// function that actually does the saving for the public interface method
-/// [`save()`](Model::save())
-///
-/// For full usage details, see [`save()`](Model::save()).
-///
-/// # Errors
-///
-/// See [`Model::save()`].
-///
-/// # See also
-///
-/// * [`Model::save()`]
-///
-#[allow(clippy::too_many_lines)]
-pub async fn perform_save<M: Model>(model: &mut M, bond: &Bond<'_>) -> Result<(), StashError> {
-    // If the ID field is auto-incrementing then it is fully managed by the
-    // database, and we exclude it from the list here.
-    let (fields, values) = if M::id_is_autoincrementing() {
-        (
-            M::field_names_without_id(),
-            M::field_values_without_id(model),
-        )
-    } else {
-        (M::field_names(), M::field_values(model))
-    };
-
-    match (model.row_id(), model.id_value()) {
-        // The row ID is set, but the optional ID field is not - invalid state.
-        (Some(_), Err(_)) => {
-            return Err(StashError::InvalidIdState);
-        }
-        // The row ID and the ID field are both set - perform an update.
-        (Some(_), Ok(id)) => {
-            let update_fields = fields.iter().map(|field| format!("{field} = ?")).join(", ");
-            let query = formatdoc!(
-                "
-                UPDATE
-                    {}
-                SET
-                    {}
-                WHERE
-                    {} = ?
-            ",
-                M::table_name(),
-                update_fields,
-                M::id_field_name(),
-            );
-            #[allow(trivial_casts)]
-            let field_values: Vec<Box<dyn ToSql + Send>> = values
-                .into_iter()
-                .chain(once(Box::new(id) as Box<dyn ToSql + Send>))
-                .collect();
-            #[allow(clippy::shadow_reuse)]
-            let affected: usize = bond.execute(&query, field_values).await?;
-
-            if affected == 0 {
-                return Err(StashError::NoRowsUpdated);
-            }
-        }
-        // The row ID is not set (the ID field may or may not be set) - new record.
-        (None, _) => {
-            if M::id_is_autoincrementing() && model.id_value().is_ok() {
-                // If the ID field is configured as auto-incrementing and is set, but the
-                // row ID is not set, then the state is invalid, because it should have been
-                // loaded from the database.
-                return Err(StashError::InvalidIdState);
-            }
-            if M::id_is_optional() && !M::id_is_autoincrementing() && model.id_value().is_err() {
-                // If the ID field is configured as optional but NOT auto-incrementing, and
-                // is not set, then the state is invalid, because it is under manual control
-                // and needs to be set before saving.
-                return Err(StashError::IdNotSet);
-            }
-            let placeholders = crate::utils::placeholders(&fields);
-            let query = formatdoc!(
-                "
-                INSERT INTO
-                    {} ({})
-                VALUES
-                    ({})
-                RETURNING
-                    {}.rowid AS rowid, {} AS id
-            ",
-                M::table_name(),
-                fields.join(", "),
-                placeholders,
-                M::table_name(),
-                M::id_field_name(),
-            );
-            let field_values: Vec<Box<dyn ToSql + Send>> = values.into_iter().collect();
-            #[allow(clippy::shadow_reuse)]
-            let rows = bond
-                .query::<_, QueryResultIdPair<M::IdType>>(&query, field_values)
-                .await?;
-            if let Some(row) = rows.into_iter().next() {
-                model.set_id_value(row.id);
-                model.set_row_id(Some(row.rowid));
-            } else {
-                return Err(StashError::NoRowIdReturned);
-            }
-        }
-    };
-    Ok(())
 }

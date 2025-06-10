@@ -114,10 +114,6 @@ pub struct MessageScrollData {
 
     #[DbField]
     pub scroll_order: LabelScrollOrder,
-
-    #[RowIdField]
-    #[builder(default, setter(strip_option))]
-    pub row_id: Option<u64>,
 }
 
 impl MessageScrollData {
@@ -125,13 +121,12 @@ impl MessageScrollData {
         // NOTE: save should always update existing records.
         // But as long as we have no support for multiple records as a key
         // we have to first delete the record and then save it.
+        // TODO: let chains
         if let Some(existing) =
             Self::find_with_key(self.local_label_id, self.unread, self.scroll_order, tx).await?
         {
-            self.row_id = existing.row_id;
             if self != &existing {
                 existing.delete(tx).await?;
-                self.row_id = None;
                 <Self as Model>::save(self, tx).await?;
             }
         } else {
@@ -308,10 +303,6 @@ pub struct ConversationScrollData {
 
     #[DbField]
     pub scroll_order: LabelScrollOrder,
-
-    #[RowIdField]
-    #[builder(default, setter(strip_option))]
-    pub row_id: Option<u64>,
 }
 
 impl ConversationScrollData {
@@ -319,13 +310,12 @@ impl ConversationScrollData {
         // NOTE: save should always update existing records.
         // But as long as we have no support for multiple records as a key
         // we have to first delete the record and then save it.
+        // TODO: let chains
         if let Some(existing) =
             Self::find_with_key(self.local_label_id, self.unread, self.scroll_order, tx).await?
         {
-            self.row_id = existing.row_id;
             if self != &existing {
                 existing.delete(tx).await?;
-                self.row_id = None;
                 <Self as Model>::save(self, tx).await?;
             }
         } else {
@@ -905,10 +895,6 @@ pub struct SearchScrollData {
 
     #[DbField]
     pub display_order: u64,
-
-    #[RowIdField]
-    #[builder(default, setter(strip_option))]
-    pub row_id: Option<u64>,
 }
 
 impl SearchScrollData {

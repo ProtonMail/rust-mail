@@ -7,14 +7,9 @@ mod mailbox_labels;
 
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::LabelType;
-use proton_core_common::models::ModelExtension;
 use proton_core_common::{datatypes::LocalLabelId, models::Label};
 use stash::stash::Tether;
-use stash::{
-    macros::Model,
-    orm::Model,
-    stash::{Bond, StashError},
-};
+use stash::{macros::Model, stash::StashError};
 
 use crate::datatypes::{MessageRecipientDisplayMode, SystemLabelId, ViewMode};
 
@@ -30,9 +25,6 @@ pub struct MailboxLabels {
 
     #[DbField]
     pub initialized: bool,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl MailboxLabels {
@@ -41,25 +33,7 @@ impl MailboxLabels {
         Self {
             local_label_id,
             initialized: false,
-            row_id: Default::default(),
         }
-    }
-
-    /// Save mailbox labels to the database.
-    ///
-    /// It's imperative that you use this method over [`Model::save()`] to ensure
-    /// that if the mailbox label already exists it is updated, and not inserted with a conflict.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the query fails.
-    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if self.row_id.is_none() {
-            if let Some(existing) = Self::find_by_id(self.local_label_id, bond).await? {
-                self.row_id = existing.row_id;
-            }
-        }
-        <Self as Model>::save(self, bond).await
     }
 }
 

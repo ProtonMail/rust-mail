@@ -485,7 +485,6 @@ impl Draft {
                 reply_mode: None,
                 send_action_id: None,
                 save_action_id: None,
-                row_id: None,
             };
             tether
                 .tx::<_, _, MailContextError>(async |tx| {

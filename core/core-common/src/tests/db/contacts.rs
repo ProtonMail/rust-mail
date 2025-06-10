@@ -19,14 +19,14 @@ async fn test_full_contact() {
                 .save(tx)
                 .await
                 .expect("failed to create contact");
-            let id = full_contact.row_id.expect("failed to get contact id");
+            let id = full_contact.local_id.expect("failed to get contact id");
             let local_id = full_contact.id();
             full_contact
                 .save(tx)
                 .await
                 .expect("failed to overwrite contact");
-            let id_second = full_contact.row_id.expect("failed to get contact id");
-            assert_eq!(id, 1);
+            let id_second = full_contact.local_id.expect("failed to get contact id");
+            assert_eq!(id, 1.into());
             assert_eq!(id, id_second);
 
             Ok(local_id)
@@ -71,8 +71,11 @@ async fn test_partial_contact() {
         .await
         .unwrap();
 
-    assert_eq!(partial_contacts.first().unwrap().row_id.unwrap(), 1);
-    assert_eq!(contact_emails.first().unwrap().row_id.unwrap(), 1);
+    assert_eq!(
+        partial_contacts.first().unwrap().local_id.unwrap(),
+        1.into()
+    );
+    assert_eq!(contact_emails.first().unwrap().local_id.unwrap(), 1.into());
 
     // Query specific contact mail.
     let mail = ContactEmail::find_first(
@@ -144,7 +147,6 @@ fn create_test_full_contact() -> Contact {
                 card_type: ContactCardType::Signed,
                 data: r"    BEGIN:VCARD\n    VERSION:4.0\n    FN:ProtonMail Features\n    UID:proton-legacy-139892c2-f691-4118-8c29-061196013e04\n    item1.EMAIL;TYPE=work;PREF=1:features@protonmail.black\n    item2.EMAIL;TYPE=home;PREF=2:features@protonmail.ch\n    END:VCARD".to_owned(),
                 signature: Some("-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----".to_owned()),
-                row_id: None,
             },
             ContactCard {
                 local_id: None,
@@ -153,10 +155,8 @@ fn create_test_full_contact() -> Contact {
                 card_type: ContactCardType::EncryptedAndSigned,
                 data: "-----BEGIN PGP MESSAGE-----.*-----END PGP MESSAGE-----".to_owned(),
                 signature: Some("-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----".to_owned()),
-                row_id: None,
             }
         ],
-        row_id: None,
     }
 }
 
@@ -176,7 +176,6 @@ fn create_test_contact_emails() -> Vec<ContactEmail> {
             canonical_email: "contact_email_1@contact.test".into(),
             last_used_time: 0.into(),
             is_proton: true,
-            row_id: None,
         },
         ContactEmail {
             local_id: None,
@@ -192,7 +191,6 @@ fn create_test_contact_emails() -> Vec<ContactEmail> {
             canonical_email: "contact_email_2@contact.test".into(),
             last_used_time: 0.into(),
             is_proton: true,
-            row_id: None,
         },
     ]
 }
@@ -210,6 +208,5 @@ fn create_test_partial_contacts() -> Vec<Contact> {
         label_ids: Labels::new(vec![LabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
         cards: vec![],
         deleted: false,
-        row_id: None,
     }]
 }

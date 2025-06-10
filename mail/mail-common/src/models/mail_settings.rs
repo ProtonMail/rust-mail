@@ -161,9 +161,6 @@ pub struct MailSettings {
 
     #[DbField]
     pub view_mode: ViewMode,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl MailSettings {
@@ -230,8 +227,7 @@ impl MailSettings {
     ///
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         // // Make sure there will be only one row.
-        if let Some(existing) = Self::get(bond).await? {
-            self.row_id = existing.row_id;
+        if let Some(_) = Self::get(bond).await? {
             self.local_id = MailSettingsId;
         }
 
@@ -327,7 +323,6 @@ impl From<ApiMailSettings> for MailSettings {
             theme: value.theme,
             view_layout: value.view_layout.into(),
             view_mode: value.view_mode.into(),
-            row_id: None,
         }
     }
 }

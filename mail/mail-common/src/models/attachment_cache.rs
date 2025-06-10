@@ -64,9 +64,6 @@ pub struct AttachmentCacheMetadata {
     /// The size of the attachment in bytes
     #[DbField]
     pub size: u64,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl Attachment {
@@ -740,7 +737,6 @@ mod test {
                 hit_count: self.hit_count,
                 size: self.size,
                 path: String::from(self.attachment_name),
-                row_id: Default::default(),
                 ctime: Default::default(),
             };
             let attachment = Attachment {

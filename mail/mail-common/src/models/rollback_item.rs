@@ -31,9 +31,6 @@ pub struct RollbackItem {
 
     #[DbField]
     pub item_type: RollbackItemType,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl RollbackItem {
@@ -41,7 +38,6 @@ impl RollbackItem {
         Self {
             remote_id,
             item_type,
-            row_id: Default::default(),
         }
     }
 
@@ -385,7 +381,6 @@ mod test_utils {
             Self {
                 remote_id: label.remote_id.clone().unwrap().into_inner(),
                 item_type: RollbackItemType::Label,
-                row_id: None,
             }
         }
     }
@@ -401,7 +396,6 @@ mod test_utils {
             Self {
                 remote_id: message.remote_id.clone().unwrap().into_inner(),
                 item_type: RollbackItemType::Message,
-                row_id: None,
             }
         }
     }
@@ -417,7 +411,6 @@ mod test_utils {
             Self {
                 remote_id: conversation.remote_id.clone().unwrap().into_inner(),
                 item_type: RollbackItemType::Conversation,
-                row_id: None,
             }
         }
     }

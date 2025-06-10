@@ -82,9 +82,6 @@ pub struct Label {
 
     #[DbField]
     pub sticky: bool,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl ModelIdExtension for Label {
@@ -118,7 +115,6 @@ impl Label {
             {
                 self.local_parent_id = label.local_parent_id;
                 self.local_id = label.local_id;
-                self.row_id = label.row_id;
             }
         }
 
@@ -471,7 +467,6 @@ impl From<ApiLabel> for Label {
             notify: value.notify,
             path: value.path,
             sticky: value.sticky,
-            row_id: None,
         }
     }
 }
@@ -492,7 +487,6 @@ impl Default for Label {
             display_order: Default::default(),
             path: Option::default(),
             sticky: Default::default(),
-            row_id: Option::default(),
         }
     }
 }

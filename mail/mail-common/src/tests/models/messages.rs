@@ -1033,7 +1033,6 @@ async fn test_create_message() {
         .unwrap();
     resolve_local_ids(&tether, &mut expected).await;
     expected.local_id = Some(1.into());
-    expected.row_id = Some(1_u64);
     expected.exclusive_location = ExclusiveLocation::new(
         &Label::find_by_remote_id(LabelId::inbox(), &tether)
             .await
@@ -1298,7 +1297,6 @@ async fn test_update_message() {
         color: label.color,
     }];
     expected.local_id = Some(1.into());
-    expected.row_id = Some(1);
     assert_eq!(db_message, expected);
     assert!(db_message.is_starred());
     assert_eq!(db_message.label_ids.len(), 3);
@@ -1874,7 +1872,6 @@ async fn test_create_message_and_body() {
         attachments: vec![],
         reply_to: Default::default(),
         reply_tos: vec![],
-        row_id: Some(1),
     };
 
     assert_eq!(db_message_body, expected);
@@ -1991,7 +1988,6 @@ async fn test_update_message_and_body() {
             name: "bar".into(),
             ..Default::default()
         }],
-        row_id: Some(1),
         attachments: vec![],
     };
 

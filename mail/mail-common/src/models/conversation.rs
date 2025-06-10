@@ -138,9 +138,6 @@ pub struct Conversation {
     /// Whether the conversation has synced its messages.
     #[DbField]
     pub has_messages: bool,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl ModelIdExtension for Conversation {
@@ -520,7 +517,6 @@ impl Conversation {
             subject: "".to_string(),
             is_known: false,
             custom_labels: vec![],
-            row_id: None,
             has_messages: false,
         }
     }
@@ -539,7 +535,6 @@ impl Conversation {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
                 self.local_id = existing.local_id;
-                self.row_id = existing.row_id;
                 // We want to preserve this to prevent unnecessary resyncing of conversations
                 // messages if we update something.
                 self.has_messages = self.has_messages || existing.has_messages;
@@ -652,7 +647,6 @@ impl Conversation {
                         context_snooze_time: 0.into(),
                         context_time: 0.into(),
                         deleted: false,
-                        row_id: None,
                     };
                     let conversation_labels =
                         ConversationLabel::find("WHERE local_conversation_id=?", params![id], bond)
@@ -2526,7 +2520,6 @@ impl Conversation {
                 context_snooze_time: stats.snooze_time,
                 context_time: stats.time,
                 deleted: false,
-                row_id: None,
             }
         };
 
@@ -2628,7 +2621,6 @@ impl Conversation {
                         conversation_response.conversation.into();
 
                     new_conversation.local_id = conversation.local_id;
-                    new_conversation.row_id = conversation.row_id;
                     new_conversation.has_messages = true;
 
                     new_conversation.save(tx).await.map_err(|e| {
@@ -2829,7 +2821,6 @@ impl From<ApiConversation> for Conversation {
             custom_labels: vec![],
             size: value.size,
             subject: value.subject,
-            row_id: None,
             is_known: true,
             has_messages: false,
         }
@@ -2911,9 +2902,6 @@ pub struct ConversationLabel {
 
     #[DbField]
     pub deleted: bool,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl ConversationLabel {
@@ -2997,7 +2985,6 @@ impl ConversationLabel {
         .await?
         {
             self.local_id = label.local_id;
-            self.row_id = label.row_id;
         }
 
         <Self as Model>::save(self, bond).await
@@ -3153,7 +3140,6 @@ impl From<ApiConversationLabel> for ConversationLabel {
             context_snooze_time: value.context_snooze_time.into(),
             context_time: value.context_time.into(),
             deleted: false,
-            row_id: None,
         }
     }
 }
@@ -3269,9 +3255,6 @@ pub struct ConversationCounters {
 
     #[DbField]
     pub unread: u64,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl ConversationCounters {
@@ -3282,25 +3265,7 @@ impl ConversationCounters {
             local_label_id,
             total: Default::default(),
             unread: Default::default(),
-            row_id: Default::default(),
         }
-    }
-
-    /// Save conversation counters to the database.
-    ///
-    /// It's imperative that you use this method over [`Model::save()`] to ensure
-    /// that if the counter already exists it is updated, and not inserted with a conflict.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the query fails.
-    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if self.row_id.is_none() {
-            if let Some(existing) = Self::find_by_id(self.local_label_id, bond).await? {
-                self.row_id = existing.row_id;
-            }
-        }
-        <Self as Model>::save(self, bond).await
     }
 
     /// Get all conversation counters linked to labels with given kind

@@ -15,9 +15,6 @@ pub struct Foo {
     pub id: u64,
     #[DbField]
     pub bar: u64,
-    #[RowIdField]
-    #[serde(skip)]
-    row_id: Option<u64>,
 }
 
 struct FooWatcher {

@@ -461,7 +461,6 @@ fn address_with_signature(signature: impl Into<String>) -> Address {
         signature: signature.into(),
         signed_key_list: Default::default(),
         status: AddressStatus::Disabled,
-        row_id: None,
     }
 }
 
@@ -531,7 +530,6 @@ fn existing_message() -> Message {
         to_list: Default::default(),
         unread: false,
         custom_labels: vec![],
-        row_id: None,
     }
 }
 
@@ -543,7 +541,6 @@ fn existing_message_body_metadata() -> MessageBodyMetadata {
         mime_type: Default::default(),
         parsed_headers: Default::default(),
         attachments: vec![inline_attachment(), normal_attachment()],
-        row_id: None,
         reply_to: MessageReplyTo {
             address: "sender@void.org".into(),
             bimi_selector: None,

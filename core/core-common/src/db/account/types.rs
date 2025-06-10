@@ -25,7 +25,7 @@ use sqlite_watcher::watcher::TableObserver;
 use stash::exports::{FromSql, FromSqlResult, SqliteError, ToSql, ToSqlOutput, ValueRef};
 use stash::macros::Model;
 use stash::orm::Model;
-use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
+use stash::stash::{Stash, StashError, Tether, WatcherHandle};
 use stash::{params, sql_using_serde};
 use std::collections::{BTreeSet, HashSet};
 use std::ops::Deref;
@@ -65,9 +65,6 @@ pub struct CoreAccount {
 
     #[DbField]
     pub is_ready: bool,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl CoreAccount {
@@ -87,7 +84,6 @@ impl CoreAccount {
             second_factor_mode: None,
             password_mode: None,
             primary_at: None,
-            row_id: None,
         }
     }
 
@@ -216,24 +212,6 @@ impl CoreAccount {
         }
     }
 
-    /// Save a account to the database.
-    ///
-    /// It's imperative that you use this method over [`Model::save()`] to
-    /// ensure that existing accounts are updated.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the local conversation id is not set or the query
-    /// failed.
-    ///
-    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(existing) = Self::find_by_id(self.remote_id.clone(), bond).await? {
-            self.row_id = existing.row_id;
-        }
-
-        <Self as Model>::save(self, bond).await
-    }
-
     pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
         stash.subscribe_to(|sender| Box::new(CoreAccountWatcher { sender }))
     }
@@ -310,9 +288,6 @@ pub struct CoreSession {
 
     #[DbField]
     pub key_secret: Option<EncryptedKeySecret>,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 #[derive(Debug, Error)]
@@ -364,7 +339,6 @@ impl CoreSession {
 
             // --- Optional fields ---
             key_secret: None,
-            row_id: None,
         })
     }
 

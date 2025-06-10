@@ -419,7 +419,6 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
         .tx::<_, _, StashError>(async |bond| {
             for conv in convs.iter_mut().rev().take(page_size * 4) {
                 conv.local_id = None;
-                conv.row_id = None;
                 let mut labels = vec![];
                 std::mem::swap(&mut conv.labels, &mut labels);
 
@@ -427,7 +426,6 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
 
                 for label in labels.iter_mut() {
                     label.local_id = None;
-                    label.row_id = None;
                     label.local_conversation_id = conv.local_id;
                     label.save(bond).await.unwrap();
                 }

@@ -60,7 +60,6 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
     // Extract attributes
     let fields = extract_fields(&input, "DbRecord");
     let db_fields = extract_db_fields(&fields, false);
-    let internal_fields = None;
     let via_attrs = extract_via_attrs(&fields, false);
 
     // Generate trait implementation
@@ -69,8 +68,7 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
     let from_row_values_impl = generate_from_row_values_impl(&db_fields, &via_attrs);
     let fn_field_names_impl = generate_fn_field_names_impl(&db_fields);
     let fn_field_values_impl = generate_fn_field_values_impl(&db_field_values_impl);
-    let fn_from_row_impl =
-        generate_fn_from_row_impl(&db_fields, &fields, internal_fields, &from_row_values_impl);
+    let fn_from_row_impl = generate_fn_from_row_impl(&db_fields, &fields, &from_row_values_impl);
 
     (quote! {
         impl #impl_generics stash::orm::DbRecord for #name #ty_generics #where_clause {
@@ -99,11 +97,6 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///   - `#[TableName("table_name")]`: The name of the table in the database.
 ///     Notably, this is applied as a struct-level annotation, rather than being
 ///     applied to a struct field.
-///   - `#[RowIdField]`: The field that contains the associated internal SQLite
-///     row ID (a [`u64`] value) for the record. Note that it is important to
-///     apply `#[serde(skip)]` to this field to avoid it being included in the
-///     serialisation requirements. It is a special internal field, and not
-///     included in the list of database fields.
 ///   - `#[IdField]`: The field that contains the primary key for the record.
 ///     This can be any type, as defined by the associated type [`Model::Id`].
 ///     If the field is `optional` or `autoincrement` then it will need to be
@@ -164,10 +157,6 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///
 ///     #[DbField]
 ///     value: i32,
-///
-///     #[RowIdField]
-///     #[serde(skip)]
-///     row_id: Option<u64>,
 /// }
 /// ```
 ///
@@ -191,10 +180,6 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///
 ///     #[DbField]
 ///     value: i32,
-///
-///     #[RowIdField]
-///     #[serde(skip)]
-///     row_id: Option<u64>,
 /// }
 /// ```
 ///
@@ -217,13 +202,7 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///     name: String,
 ///
 ///     #[DbField]
-///     value: i32,
-///
-///
-///     #[RowIdField]
-///     #[serde(skip)]
-///     row_id: Option<u64>,
-/// }
+///     value: i32, }
 /// ```
 ///
 #[proc_macro_derive(
@@ -238,13 +217,10 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
 
     // Extract attributes
     let table_name = extract_table_name(&input);
-    let (has_on_load, has_on_save) = extract_model_actions(&input);
     let fields = extract_fields(&input, "Model");
     let (id_field, id_type, is_optional, is_autoincrement) = extract_id_field(&fields);
-    let row_id_field = extract_row_id_field(&fields);
     let db_fields = extract_db_fields(&fields, true);
     let db_fields_without_id = extract_db_fields(&fields, false);
-    let internal_fields = Some(&row_id_field);
     let via_attrs = extract_via_attrs(&fields, true);
     let via_attrs_without_id = extract_via_attrs(&fields, false);
 
@@ -272,71 +248,29 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     let fn_field_names_without_id_impl = generate_fn_field_names_impl(&db_fields_without_id);
     let fn_field_values_without_id_impl =
         generate_fn_field_values_impl(&db_field_values_without_id_impl);
-    let fn_from_row_impl =
-        generate_fn_from_row_impl(&db_fields, &fields, internal_fields, &from_row_values_impl);
+    let fn_from_row_impl = generate_fn_from_row_impl(&db_fields, &fields, &from_row_values_impl);
     let fn_id_value_impl = generate_fn_id_value_impl(&id_field, is_optional);
     let fn_set_id_value_impl = generate_fn_set_id_value_impl(&id_field, is_optional);
 
     // Generation custom action code
-    let on_load_impl = if has_on_load {
+    // This is a hack, this should be a trait.
+
+    let (has_on_load, has_on_save) = extract_model_actions(&input);
+    let on_load_impl = has_on_load.then(||
         quote! {
-            async fn find<Q>(
-                query_logic: Q,
-                params: Vec<Box<dyn stash::exports::ToSql + Send>>,
-                tether: &stash::stash::Tether,
-            ) -> Result<Vec<Self>, stash::stash::StashError>
-            where
-                Q: Into<String> + Send,
-            {
-                let mut instances = stash::orm::perform_find::<_, Self>(query_logic, params, tether).await?;
-                for instance in instances.iter_mut() {
-                    instance.on_load(tether).await?;
-                }
-                Ok(instances)
-            }
-            async fn find_first<Q>(
-                query_logic: Q,
-                params: Vec<Box<dyn stash::exports::ToSql + Send>>,
-                tether: &stash::stash::Tether,
-            ) -> Result<Option<Self>, stash::stash::StashError>
-            where
-                Q: Into<String> + Send,
-            {
-                let mut instance: Option<Self> = stash::orm::perform_find::<_, Self>(query_logic, params, &tether).await?.into_iter().next();
-                match instance {
-                    Some(mut i) => {
-                        i.on_load(tether).await?;
-                        Ok(Some(i))
-                    },
-                    None => Ok(None),
-                }
-            }
-            async fn load(id: Self::IdType, tether: &stash::stash::Tether) -> Result<Option<Self>, stash::stash::StashError>
-            {
-                let mut instance: Option<Self> = stash::orm::perform_load(id, &tether).await?;
-                match instance {
-                    Some(mut i) => {
-                        i.on_load(&tether).await?;
-                        Ok(Some(i))
-                    },
-                    None => Ok(None),
-                }
+            fn do_on_load(&mut self, tether: &Tether) -> impl Future<Output = Result<(), StashError>> + Send {
+                self.on_load(tether)
             }
         }
-    } else {
-        quote! {}
-    };
-    let on_save_impl = if has_on_save {
+    );
+
+    let on_save_impl = has_on_save.then(||
         quote! {
-            async fn save(&mut self, bond: &stash::stash::Bond<'_>) -> Result<(), stash::stash::StashError>
-            {
-                stash::orm::perform_save(self, &bond).await?;
-                self.on_save(&bond).await
+            fn do_on_save(&mut self, bond: &Bond<'_>) -> impl Future<Output = Result<(), StashError>> + Send {
+                self.on_save(bond)
             }
         }
-    } else {
-        quote! {}
-    };
+    );
 
     (quote! {
         impl #impl_generics stash::orm::DbRecord for #name #ty_generics #where_clause {
@@ -383,16 +317,8 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
                 #fn_id_value_impl
             }
 
-            fn row_id(&self) -> Option<u64> {
-                self.#row_id_field
-            }
-
             fn set_id_value(&mut self, id: Self::IdType) {
                 #fn_set_id_value_impl
-            }
-
-            fn set_row_id(&mut self, id: Option<u64>) {
-                self.#row_id_field = id;
             }
 
             fn table_name() -> &'static str {
@@ -594,30 +520,6 @@ fn extract_model_actions(input: &DeriveInput) -> (bool, bool) {
 
     (on_load, on_save)
 }
-/// Extract the field that is marked as the `row_id` field.
-///
-/// This function extracts the field that is marked as the `row_id` field from
-/// the struct fields. It is expected that there is exactly one field marked
-/// with the `RowIdField` attribute.
-///
-/// The `row_id` field is the field that contains the associated internal SQLite
-/// row ID (a [`u64`]) for the record. This is not the same as the primary key
-/// field represented by the `IdField` attribute.
-///
-fn extract_row_id_field(fields: &[&Field]) -> Ident {
-    fields
-        .iter()
-        .find(|field| {
-            field
-                .attrs
-                .iter()
-                .any(|attr| attr.path().is_ident("RowIdField"))
-        })
-        .expect("RowIdField attribute is missing")
-        .ident
-        .clone()
-        .expect("RowIdField must have an identifier")
-}
 
 /// Extract the table name from the struct attributes.
 ///
@@ -755,37 +657,17 @@ fn generate_fn_field_values_impl(db_field_values_impl: &[TokenStream2]) -> Token
 fn generate_fn_from_row_impl(
     db_fields: &[Ident],
     all_fields: &[&Field],
-    internal_fields: Option<&Ident>,
     from_row_values_impl: &[TokenStream2],
 ) -> TokenStream2 {
-    let internal_fields_gen = if let Some(row_id_field) = internal_fields {
-        quote! {
-            #row_id_field: Some(row.get(
-                columns.iter().position(|c| c == "rowid")
-                    .ok_or_else(|| stash::orm::ConversionError::MissingColumn("rowid".to_owned()))?
-            )?),
-        }
-    } else {
-        quote! {}
-    };
-
-    let default_fields: Vec<TokenStream2> = all_fields
+    let default_fields = all_fields
         .iter()
-        .filter(|field| {
-            !db_fields.contains(field.ident.as_ref().unwrap())
-                && !matches!(
-                    internal_fields,
-                    Some(row_id_field)
-                    if field.ident.as_ref() == Some(row_id_field)
-                )
-        })
+        .filter(|field| !db_fields.contains(field.ident.as_ref().unwrap()))
         .map(|field| {
             let field_ident = field.ident.as_ref().unwrap();
             quote! {
                 #field_ident: Default::default(),
             }
-        })
-        .collect();
+        });
 
     quote! {
         fn from_row(row: &stash::exports::Row, columns: &[String]) -> Result<Self, stash::orm::ConversionError> {
@@ -794,7 +676,6 @@ fn generate_fn_from_row_impl(
                     #db_fields: #from_row_values_impl,
                 )*
                 #(#default_fields)*
-                #internal_fields_gen
             })
         }
     }

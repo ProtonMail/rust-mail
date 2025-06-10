@@ -68,9 +68,6 @@ pub struct Address {
 
     #[DbField]
     pub status: AddressStatus,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl ModelIdExtension for Address {
@@ -95,7 +92,6 @@ impl Address {
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
-                self.row_id = existing.row_id;
                 self.local_id = existing.local_id;
             }
         }
@@ -192,7 +188,6 @@ impl From<ApiAddress> for Address {
             signature: value.signature,
             signed_key_list: value.signed_key_list.into(),
             status: value.status.into(),
-            row_id: None,
         }
     }
 }

@@ -20,6 +20,7 @@ use proton_mail_html_transformer::transforms::styles::{
     BrowserCapabilities, IncludeFullStaticCss, InjectDarkModeOptions, dark_mode_for_plaintext,
 };
 use proton_mail_html_transformer::{Html2TextOptions, Transformer};
+use stash::orm::Model as _;
 use stash::stash::Tether;
 use std::borrow::Cow;
 use std::fmt::Display;

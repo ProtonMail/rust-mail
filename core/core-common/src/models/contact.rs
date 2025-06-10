@@ -79,9 +79,6 @@ pub struct Contact {
     /// by event loop update.
     #[DbField]
     pub deleted: bool,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl ModelIdExtension for Contact {
@@ -105,12 +102,10 @@ impl Contact {
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
-                self.row_id = existing.row_id;
                 self.local_id = existing.local_id;
             }
         } else if let Some(local_id) = self.local_id {
             if let Some(existing) = Self::find_by_id(local_id, bond).await? {
-                self.row_id = existing.row_id;
                 self.remote_id = existing.remote_id;
             }
         }
@@ -249,7 +244,6 @@ impl Contact {
         .await?;
         for card in &mut self.cards {
             card.local_id = None;
-            card.row_id = None;
             card.save(bond).await.map_err(|e| {
                 error!("Failed to update contact cards: {e:?}");
                 e
@@ -601,7 +595,6 @@ impl From<ApiContactBasic> for Contact {
             size: value.size,
             uid: value.uid,
             deleted: false,
-            row_id: None,
         }
     }
 }
@@ -622,7 +615,6 @@ impl Default for Contact {
             size: Default::default(),
             uid: ContactUID::from(String::default()),
             deleted: Default::default(),
-            row_id: Default::default(),
         }
     }
 }
@@ -645,7 +637,6 @@ impl From<ApiContactFull> for Contact {
             size: value.size,
             uid: value.uid,
             deleted: false,
-            row_id: None,
         }
     }
 }

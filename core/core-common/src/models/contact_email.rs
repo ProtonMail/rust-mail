@@ -55,9 +55,6 @@ pub struct ContactEmail {
 
     #[DbField]
     pub name: String,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl ModelIdExtension for ContactEmail {
@@ -84,7 +81,6 @@ impl From<ApiContactEmail> for ContactEmail {
             label_ids: Labels::new(value.label_ids),
             last_used_time: value.last_used_time.into(),
             name: value.name,
-            row_id: None,
         }
     }
 }
@@ -107,7 +103,6 @@ impl Default for ContactEmail {
             label_ids: Default::default(),
             last_used_time: UnixTimestamp::new(0),
             name: Default::default(),
-            row_id: Default::default(),
         }
     }
 }
@@ -127,7 +122,6 @@ impl ContactEmail {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
                 self.local_id = existing.local_id;
-                self.row_id = existing.row_id;
             }
         }
 

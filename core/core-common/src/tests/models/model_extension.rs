@@ -57,6 +57,5 @@ fn create_test_address(id: usize) -> Address {
             signature: None,
             revision: 20,
         },
-        row_id: None,
     }
 }

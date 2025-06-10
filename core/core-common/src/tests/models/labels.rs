@@ -170,7 +170,6 @@ async fn create_local_label() {
                     notify: false,
                     path: None,
                     sticky: false,
-                    row_id: None,
                 };
                 new_label.save(tx).await.expect("failed to create label");
                 let db_label = Label::load(new_label.id(), tx)
@@ -206,7 +205,6 @@ async fn create_local_label_1_char_long_name() {
                     notify: false,
                     path: None,
                     sticky: false,
-                    row_id: None,
                 };
                 new_label.save(tx).await.expect("failed to create label");
                 let db_label = Label::load(new_label.id(), tx)
@@ -242,7 +240,6 @@ async fn create_local_label_100_char_long_name() {
                     notify: false,
                     path: None,
                     sticky: false,
-                    row_id: None,
                 };
                 new_label.save(tx).await.expect("failed to create label");
                 let db_label = Label::load(new_label.id(), tx)
@@ -282,7 +279,6 @@ async fn create_local_label_has_ascending_order_per_type() {
                     notify: false,
                     path: None,
                     sticky: false,
-                    row_id: None,
                 };
                 new_label1.save(tx).await.expect("failed to create label");
                 let mut new_label2 = Label {
@@ -299,7 +295,6 @@ async fn create_local_label_has_ascending_order_per_type() {
                     notify: false,
                     path: None,
                     sticky: false,
-                    row_id: None,
                 };
                 new_label2.save(tx).await.expect("failed to create label");
                 // TODO
@@ -335,7 +330,6 @@ async fn update_local_label() {
                 notify: false,
                 path: None,
                 sticky: false,
-                row_id: None,
             };
             new_label.save(tx).await.expect("failed to create label");
             let new_label2 = Label {
@@ -352,7 +346,6 @@ async fn update_local_label() {
                 notify: false,
                 path: None,
                 sticky: false,
-                row_id: None,
             };
             new_label.save(tx).await.expect("failed to create label");
 

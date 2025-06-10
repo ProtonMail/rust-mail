@@ -37,9 +37,6 @@ pub struct AppSettings {
     #[DbField]
     #[default = true]
     pub use_alternative_routing: bool,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl AppSettings {
@@ -91,8 +88,7 @@ impl AppSettings {
     ///
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         // Make sure there will be only one row.
-        if let Some(existing) = Self::get(bond).await? {
-            self.row_id = existing.row_id;
+        if let Some(_) = Self::get(bond).await? {
             self.local_id = SingleEntryId;
         }
 
@@ -246,9 +242,6 @@ pub struct PinProtection {
 
     #[DbField]
     pub attempts: u8,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 #[allow(clippy::new_without_default)]
@@ -260,7 +253,6 @@ impl PinProtection {
         Self {
             local_id: SingleEntryId,
             attempts: 0,
-            row_id: None,
         }
     }
 
@@ -290,8 +282,7 @@ impl PinProtection {
     ///
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         // Make sure there will be only one row.
-        if let Some(existing) = Self::get(bond).await? {
-            self.row_id = existing.row_id;
+        if Self::get(bond).await?.is_some() {
             self.local_id = SingleEntryId;
         }
 
@@ -381,7 +372,6 @@ mod tests {
         let pinpro = PinProtection {
             local_id: SingleEntryId,
             attempts,
-            row_id: None,
         };
 
         pinpro.remaining_attempts()

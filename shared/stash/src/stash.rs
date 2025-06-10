@@ -18,7 +18,7 @@
 //! to interface with sqlite.
 //!
 
-use crate::orm::{ConversionError, DbRecord, DbRecords, Model, from_rows, perform_load};
+use crate::orm::{ConversionError, DbRecord, DbRecords, from_rows};
 use anyhow::{Context, anyhow};
 use core::fmt;
 use core::fmt::Debug;
@@ -182,10 +182,6 @@ pub enum StashError {
     #[error("Statement preparation error: {0}")]
     PreparationError(SqliteError),
 
-    /// No row ID was returned after saving a record. This should never happen.
-    #[error("No row ID returned after saving record")]
-    NoRowIdReturned,
-
     /// There was a problem with subscriptions. For some reason the subscription
     /// has ended up in the wrong place. This should never happen in practice.
     #[error("Watcher error: `{0}`")]
@@ -213,8 +209,8 @@ pub enum StashError {
     #[error("Transaction error: {0}")]
     TransactionError(SqliteError),
 
-    /// Critical error that cannot be recovered from.
-    #[error("Critical error: {0}")]
+    /// Critical internal error that cannot be recovered from.
+    #[error("Critical internal stash error: {0}")]
     Critical(#[from] anyhow::Error),
 
     /// Custom variant that is not critical
@@ -743,25 +739,6 @@ impl Tether {
         receiver
             .await
             .expect("Tether closed its channel with handles still open")
-    }
-
-    /// Loads a record from the database by ID.
-    ///
-    /// This function retrieves a single record from the database by its unique
-    /// ID, as an instance of the specified type `T`, where `T` is any concrete
-    /// type implementing the [`Model`] trait.
-    ///
-    /// For full usage details, see [`Model::load()`].
-    ///
-    /// # Errors
-    ///
-    /// See [`Model::load()`].
-    pub async fn load<T, I>(&self, id: I) -> Result<Option<T>, StashError>
-    where
-        T: Model,
-        I: ToSql + Send + 'static,
-    {
-        perform_load(id, self).await
     }
 
     /// Runs a query and returns any rows of data emitted.

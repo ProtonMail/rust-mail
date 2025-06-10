@@ -167,9 +167,6 @@ pub struct Message {
     pub unread: bool,
 
     pub custom_labels: Vec<CustomLabel>,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl ModelIdExtension for Message {
@@ -766,7 +763,6 @@ impl Message {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
                 self.local_id = existing.local_id;
-                self.row_id = existing.row_id;
             }
         }
 
@@ -1875,7 +1871,6 @@ impl Message {
                 value: value.to_list.map_vec(),
             },
             unread: value.unread,
-            row_id: None,
             custom_labels: vec![],
         })
     }
@@ -2734,9 +2729,6 @@ pub struct MessageLabel {
 
     #[DbField]
     pub local_message_id: LocalMessageId,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl Default for Message {
@@ -2771,7 +2763,6 @@ impl Default for Message {
             to_list: Default::default(),
             unread: Default::default(),
             custom_labels: Default::default(),
-            row_id: Default::default(),
         }
     }
 }
@@ -2808,9 +2799,6 @@ pub struct MessageBodyMetadata {
     pub reply_to: MessageReplyTo,
 
     pub reply_tos: Vec<MessageReplyTo>,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl MessageBodyMetadata {
@@ -2833,18 +2821,6 @@ impl MessageBodyMetadata {
                     Message::find_first("WHERE remote_id = ?", params![remote_id], bond).await?;
                 if let Some(message) = message {
                     self.local_message_id = message.local_id;
-                }
-
-                // Need get row id or we will create new entry rather
-                // than updating.
-                if let Some(existing_body_metadata) = Self::find_first(
-                    "WHERE local_message_id=?",
-                    params![self.local_message_id],
-                    bond,
-                )
-                .await?
-                {
-                    self.row_id = existing_body_metadata.row_id;
                 }
             }
         }
@@ -2887,7 +2863,6 @@ impl MessageBodyMetadata {
                 .await?
                 {
                     self.local_message_id = existing.local_message_id;
-                    self.row_id = existing.row_id;
                 } else {
                     let Some(message) = Message::find_by_remote_id(remote_id, bond).await? else {
                         return Err(StashError::Custom(anyhow!(
@@ -2978,7 +2953,6 @@ impl MessageBodyMetadata {
                 reply_to: api_message_body.reply_to.into(),
                 reply_tos: api_message_body.reply_tos.map_vec(),
                 attachments,
-                row_id: None,
             },
             api_message_body.body,
         )
@@ -3077,9 +3051,6 @@ pub struct MessageCounters {
 
     #[DbField]
     pub unread: u64,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl MessageCounters {
@@ -3090,25 +3061,7 @@ impl MessageCounters {
             local_label_id,
             total: Default::default(),
             unread: Default::default(),
-            row_id: Default::default(),
         }
-    }
-
-    /// Save message counters to the database.
-    ///
-    /// It's imperative that you use this method over [`Model::save()`] to ensure
-    /// that if the counter already exists it is updated, and not inserted with a conflict.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the query fails.
-    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if self.row_id.is_none() {
-            if let Some(existing) = Self::find_by_id(self.local_label_id, bond).await? {
-                self.row_id = existing.row_id;
-            }
-        }
-        <Self as Model>::save(self, bond).await
     }
 
     /// Get all message counters linked to labels with given kind

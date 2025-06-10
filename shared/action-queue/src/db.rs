@@ -117,9 +117,6 @@ pub struct StoredAction {
 
     // Note this field is only used for storage into the db.
     pub dependency_keys: ActionDependencyKeys,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl StoredAction {
@@ -167,7 +164,6 @@ impl StoredAction {
             version: T::VERSION,
             action_group: metadata.group_override.unwrap_or(T::GROUP).to_string(),
             dependency_keys,
-            row_id: None,
         }
     }
 
@@ -528,7 +524,6 @@ impl StoredAction {
             let is_executing = ExecutionGuard::has_executor(existing_id, bond).await?;
             if existing.action_type == self.action_type && !is_executing {
                 self.id = existing.id;
-                self.row_id = existing.row_id;
                 // failsafe, filter out any dependencies on self.
                 // We also check this at submission time.
                 self.dependencies.retain(|v| v.dependency_id != existing_id);

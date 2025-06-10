@@ -90,13 +90,6 @@ pub struct LabelWithCounters {
     #[DbField]
     pub sticky: bool,
 
-    #[allow(clippy::doc_markdown)]
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
-    #[DbField]
-    pub row_id: Option<u64>,
-
     /// Number of total messages related to one particular label
     #[DbField]
     pub total_msg: u64,
@@ -165,7 +158,6 @@ impl LabelWithCounters {
             .query(
                 formatdoc!(
                     "SELECT
-                    {labels}.rowid AS row_id, 
                     {labels}.*,
                     {msgs}.total as total_msg,
                     {msgs}.unread as unread_msg,
@@ -218,7 +210,6 @@ impl LabelWithCounters {
             .query(
                 formatdoc!(
                     "SELECT
-                {labels}.rowid AS row_id, 
                 {labels}.*,
                 {msgs}.total as total_msg,
                 {msgs}.unread as unread_msg,
@@ -261,7 +252,6 @@ impl LabelWithCounters {
             .query(
                 formatdoc!(
                     "SELECT
-                {labels}.rowid AS row_id, 
                 {labels}.*,
                 {msgs}.total as total_msg,
                 {msgs}.unread as unread_msg,
@@ -303,7 +293,6 @@ impl LabelWithCounters {
             display_order,
             path,
             sticky,
-            row_id,
             total_msg: _,
             unread_msg: _,
             total_conv: _,
@@ -323,7 +312,6 @@ impl LabelWithCounters {
             display_order,
             path,
             sticky,
-            row_id,
         }
     }
 

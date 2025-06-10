@@ -72,9 +72,6 @@ pub struct TestModel {
 
     #[DbField]
     pub number: u32,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl TestModel {
@@ -83,7 +80,6 @@ impl TestModel {
             id: None,
             text,
             number,
-            row_id: None,
         }
     }
 }

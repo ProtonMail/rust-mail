@@ -14,17 +14,12 @@ use tempdir::TempDir;
 pub struct TestModel {
     #[IdField]
     id: u64,
-
-    #[RowIdField]
-    #[serde(skip)]
-    pub row_id: Option<u64>,
 }
 
 impl TestModel {
     /// Override `save` for create or ignore
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(element) = Self::find_first("WHERE id = ?", params![self.id], bond).await? {
-            self.row_id = element.row_id;
         } else {
             <Self as Model>::save(self, bond).await?;
         }
@@ -54,10 +49,7 @@ impl TestDataSource {
         let tx = tether.transaction().await?;
         let mut result = Vec::with_capacity(range.len());
         for i in range {
-            let mut value = TestModel {
-                id: i.into(),
-                row_id: None,
-            };
+            let mut value = TestModel { id: i.into() };
             value.save(&tx).await?;
             result.push(value);
         }
@@ -273,10 +265,7 @@ async fn data_source_sync_with_callback() {
     assert!(last_values.is_empty());
 
     // Insert new value
-    let mut new_value = TestModel {
-        id: 19,
-        row_id: None,
-    };
+    let mut new_value = TestModel { id: 19 };
     let tx = tether.transaction().await.unwrap();
     new_value.save(&tx).await.unwrap();
     tx.commit().await.unwrap();
@@ -302,10 +291,7 @@ async fn check_range(tether: &Tether, range: Range<u32>) {
 async fn check_range_with_limit(tether: &Tether, range: Range<u32>, max_len: Option<usize>) {
     let start = range.start;
     let end = range.end;
-    let iter = range.into_iter().map(|id| TestModel {
-        id: u64::from(id),
-        row_id: Some(u64::from(id)),
-    });
+    let iter = range.into_iter().map(|id| TestModel { id: u64::from(id) });
 
     let expected = if let Some(max) = max_len {
         iter.take(max).collect::<Vec<_>>()
@@ -345,10 +331,7 @@ async fn check_page_with_limit<R: DataSource<Item = TestModel>>(
     let start =
         (paginator.current_page_number().await.saturating_sub(1)) * paginator.page_size().get();
     let end = (paginator.current_page_number().await) * paginator.page_size().get();
-    let iter = (start..end).map(|id| TestModel {
-        id: u64::from(id),
-        row_id: Some(u64::from(id)),
-    });
+    let iter = (start..end).map(|id| TestModel { id: u64::from(id) });
 
     let expected = if let Some(max) = max_len {
         iter.take(max).collect::<Vec<_>>()

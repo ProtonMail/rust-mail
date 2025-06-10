@@ -526,8 +526,6 @@ mod orm_tests {
     struct MyModel {
         #[IdField(autoincrement)]
         id: Option<u64>,
-        #[RowIdField]
-        row_id: Option<u64>,
 
         /// Keeps track of all queries. should be equal among all records.
         #[DbField]
@@ -602,7 +600,6 @@ mod orm_tests {
 
         let mut boats = MyModel {
             id: None,
-            row_id: None,
             all_rustaceans: 0,
             mascot: "ferris".to_owned(),
             other_mascot: "corro".to_owned(),
@@ -610,7 +607,6 @@ mod orm_tests {
         };
         let mut niko = MyModel {
             id: None,
-            row_id: None,
             all_rustaceans: 0,
             mascot: "corro".to_owned(),
             other_mascot: "ferris".to_owned(),
