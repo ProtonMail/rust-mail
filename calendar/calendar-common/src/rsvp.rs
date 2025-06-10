@@ -111,6 +111,7 @@ pub struct RsvpEvent {
     pub description: Option<String>,
     pub occurrence: RsvpOccurrence,
     pub attendees: Vec<RsvpAttendee>,
+    pub organizer: RsvpOrganizer,
     pub calendar: RsvpCalendar,
 }
 
@@ -135,6 +136,11 @@ pub enum RsvpOccurrence {
 pub struct RsvpAttendee {
     pub email: String,
     pub status: CalendarAttendeeStatus,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RsvpOrganizer {
+    pub email: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -189,6 +195,9 @@ pub enum RsvpError {
 
     #[error("Attendee has unknown status")]
     AttendeeHasUnknownStatus,
+
+    #[error("Organizer is not known")]
+    OrganizerIsNotKnown,
 
     #[error("{0}")]
     Api(#[from] ApiServiceError),

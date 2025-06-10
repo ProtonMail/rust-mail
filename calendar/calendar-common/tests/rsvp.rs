@@ -7,7 +7,7 @@ use proton_calendar_api::{
     CalendarMemberPassphrase, CalendarPassphrase, ProtonCalendarMock,
 };
 use proton_calendar_common::{
-    RsvpAttendee, RsvpCalendar, RsvpError, RsvpEvent, RsvpEventId, RsvpOccurrence,
+    RsvpAttendee, RsvpCalendar, RsvpError, RsvpEvent, RsvpEventId, RsvpOccurrence, RsvpOrganizer,
 };
 use proton_core_api::session::{Config, Session};
 use proton_core_common::test_utils::test_context::{MockApiEnv, TestContext};
@@ -456,6 +456,9 @@ fn expected_event() -> RsvpEvent {
                 status: CalendarAttendeeStatus::Unanswered,
             },
         ],
+        organizer: RsvpOrganizer {
+            email: "foo@localhost".into(),
+        },
         calendar: RsvpCalendar {
             name: "My calendar".into(),
             color: "#273EB2".into(),

@@ -1,6 +1,6 @@
 use crate::{
     CalendarBootstrapExt, CalendarEventPayloadExt, RsvpAttendee, RsvpCalendar, RsvpError,
-    RsvpEvent, RsvpEventId, RsvpOccurrence, RsvpResult,
+    RsvpEvent, RsvpEventId, RsvpOccurrence, RsvpOrganizer, RsvpResult,
 };
 use chrono::DateTime;
 use proton_calendar_api::{
@@ -70,6 +70,7 @@ where
     let meta = extract_metadata(pgp, &event, decryptor)?;
     let occurrence = extract_occurrence(&event)?;
     let attendees = extract_attendees(pgp, &event, decryptor)?;
+    let organizer = extract_organizer(&event)?;
     let calendar = extract_calendar(calendar);
 
     Ok(RsvpEvent {
@@ -78,6 +79,7 @@ where
         description: meta.description,
         occurrence,
         attendees,
+        organizer,
         calendar,
     })
 }
@@ -190,6 +192,23 @@ fn extract_attendee(
         .ok_or(RsvpError::AttendeeHasUnknownStatus)?;
 
     Ok(RsvpAttendee { email, status })
+}
+
+fn extract_organizer(event: &CalendarEvent) -> RsvpResult<RsvpOrganizer> {
+    // All shared events come from the same author (the event organizer), so
+    // let's just pick any and call it a day.
+    //
+    // Alternatively we could actually go through all of the *.ics payloads and
+    // look for `ORGANIZER:...`, but no need to go this crazy for the same piece
+    // of information.
+    let email = event
+        .shared_events
+        .first()
+        .ok_or(RsvpError::OrganizerIsNotKnown)?
+        .author
+        .clone();
+
+    Ok(RsvpOrganizer { email })
 }
 
 fn extract_calendar(calendar: CalendarBootstrap) -> RsvpCalendar {
