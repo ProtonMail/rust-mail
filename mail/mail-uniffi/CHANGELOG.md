@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [mail-uniffi-v0.88.0] - 2025-06-10
+
+### Features
+
+- [ET-3247] Message `is_scheduled` and `can_reply` properties
+
+### Fixes
+
+- [ET-3126] Check if online before attempting to cancel scheduled msg
+- [ET-3125] Only allow up to 100 scheduled send messages
+- [ET-3212] Event loop should be requested with option to get counters back
+
+
 ## [mail-uniffi-v0.87.0] - 2025-06-09
 
 ### Fixes
