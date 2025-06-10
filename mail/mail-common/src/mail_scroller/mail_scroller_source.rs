@@ -87,4 +87,16 @@ pub trait MailScrollerSource: Send + Sync {
     fn watched_tables(&self) -> Vec<String>;
 
     fn set_notify(&mut self, _: flume::Sender<()>) {}
+
+    /// Invalidation of the source have to be performed in both [`MailScroller`] and
+    /// [`MailScrollerSource`] implementations.
+    ///
+    /// [`MailScroller`] will invalidate the source when it is dirty which means that
+    /// when it is notified about database changes.
+    ///
+    /// [`MailScrollerSource`] on the other hand should invalidate itself when switching from offline
+    /// to online or when new data arrives silently.
+    fn invalidate(&mut self) -> impl Future<Output = Result<(), MailContextError>> + Send {
+        async move { Ok(()) }
+    }
 }

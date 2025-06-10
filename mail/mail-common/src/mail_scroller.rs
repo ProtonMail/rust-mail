@@ -5,6 +5,7 @@ use anyhow::anyhow;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_task_service::AsyncTaskResult;
 use stash::stash::WatcherHandle;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Weak};
 use tokio::sync::Mutex;
 
@@ -32,9 +33,10 @@ mod conversation_scroller;
 /// of [`MailScrollerSource`].
 pub struct MailScroller<T: MailScrollerSource + 'static> {
     ctx: Weak<MailUserContext>,
-    source: Mutex<T>,
+    source: Arc<Mutex<T>>,
     total: u64,
     task: MailPaginatorJoinHandle,
+    dirty: Arc<AtomicBool>,
 }
 
 impl MailScroller<DataScrollerSource<ConversationScrollData>> {
@@ -94,8 +96,9 @@ impl<T: MailScrollerSource> MailScroller<T> {
         Ok(Self {
             ctx: Arc::downgrade(&ctx),
             total,
-            source: Mutex::new(source),
+            source: Arc::new(Mutex::new(source)),
             task,
+            dirty: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -108,6 +111,8 @@ impl<T: MailScrollerSource> MailScroller<T> {
         let tables = src.watched_tables();
         src.set_notify(sender);
         drop(src);
+        let weak_src = Arc::downgrade(&self.source);
+        let dirty = self.dirty.clone();
 
         let WatcherHandle {
             receiver, handle, ..
@@ -117,10 +122,19 @@ impl<T: MailScrollerSource> MailScroller<T> {
 
         tokio::spawn(async move {
             while receiver.recv_async().await.is_ok() {
+                let Some(src) = weak_src.upgrade() else {
+                    tracing::warn!("MailScroller source dropped, despawn watcher");
+                    break;
+                };
+
+                // Make sure source is free to be used
+                let _guard = src.lock().await;
                 if sender_clone.send_async(()).await.is_err() {
                     tracing::error!("MailScroller could not notify callback on database changes");
                     break;
                 }
+                dirty.store(true, Ordering::Release);
+                tracing::trace!("MailScroller notified about database changes");
             }
             tracing::warn!("MailScroller receiver closed, despawn watcher");
         });
@@ -149,6 +163,13 @@ impl<T: MailScrollerSource> MailScroller<T> {
     ///
     /// Returns error if the data could not be fetched or saved.
     pub async fn fetch_more(&mut self) -> Result<Vec<T::Item>, MailContextError> {
+        if self.dirty.load(Ordering::Acquire) {
+            tracing::debug!("MailScroller is dirty, invalidating");
+            self.source.lock().await.invalidate().await?;
+            self.dirty.store(false, Ordering::Release);
+            return Ok(vec![]);
+        }
+
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let mut src = self.source.lock().await;
         let is_online = ctx.session().status().await.is_online();
@@ -196,6 +217,7 @@ impl<T: MailScrollerSource> MailScroller<T> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let src = self.source.lock().await;
 
+        self.dirty.store(false, Ordering::Release);
         self.total = src.all_items_total(&ctx).await?;
         let items = src.visible_items(&ctx).await;
 
