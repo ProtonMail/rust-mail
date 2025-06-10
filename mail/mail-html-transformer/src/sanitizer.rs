@@ -131,6 +131,7 @@ static TAG_SET: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
 
 static ATTR_SET: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
     hash_set! {
+        "data-proton-original-style", // For reverting dark mode injection in inline attributes.
         "proton-src",
         "target",
         "accept",

@@ -1432,7 +1432,7 @@ impl Draft {
     /// ## Example of usage
     ///
     /// ```ignore
-    /// let head_to_inject = draft.html_head_content_for_composer(theme_opts);
+    /// let head_to_inject = draft.html_head_content_for_composer(theme_opts, "editor");
     ///
     /// let template = format!("
     /// <html>
@@ -1466,7 +1466,7 @@ impl Draft {
             BrowserCapabilities {
                 supports_dark_mode_via_media_query: theme_opts.supports_dark_mode_via_media_query,
             },
-            editor_id,
+            format!(r#"[id="{}"]"#, editor_id),
         );
         self.body = injection.body;
 
