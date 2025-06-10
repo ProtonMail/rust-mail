@@ -81,7 +81,7 @@ pub struct GetContactsOptions {
 
 /// Parameters for getting an event.
 #[serde_as]
-#[derive(Clone, Debug, Default, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct GetEventOptions {
     /// TODO: Document this field.
@@ -100,6 +100,15 @@ impl GetEventOptions {
         Self {
             conversation_counts: true,
             message_counts: true,
+        }
+    }
+
+    /// Return an instance of `GetEventOptions` with all counts set to `false`.
+    #[must_use]
+    pub fn no_counts() -> Self {
+        Self {
+            conversation_counts: false,
+            message_counts: false,
         }
     }
 }
@@ -157,9 +166,6 @@ pub struct PutDeleteContacts {
     /// The list of contact IDs to delete.
     pub ids: Vec<ContactId>,
 }
-
-
-
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Serialize)]
