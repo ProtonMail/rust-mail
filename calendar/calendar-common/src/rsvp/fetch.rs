@@ -104,7 +104,7 @@ where
     let calendar = extract_calendar(calendar);
 
     Ok(RsvpEvent {
-        title: meta.title,
+        summary: meta.summary,
         location: meta.location,
         description: meta.description,
         occurrence,
@@ -177,7 +177,7 @@ where
 
     let event = decrypt_and_parse(pgp, event, decryptor)?;
 
-    let title = event
+    let summary = event
         .summary
         .ok_or(RsvpError::IcsEventHasNoSummary)?
         .value
@@ -187,7 +187,7 @@ where
     let description = event.description.map(|desc| desc.value.into_string());
 
     Ok(Metadata {
-        title,
+        summary,
         location,
         description,
     })
@@ -283,7 +283,7 @@ fn extract_calendar(cal: CalendarBootstrap) -> RsvpCalendar {
 
 #[derive(Debug)]
 struct Metadata {
-    title: String,
+    summary: String,
     location: Option<String>,
     description: Option<String>,
 }

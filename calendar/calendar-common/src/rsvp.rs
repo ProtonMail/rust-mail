@@ -104,7 +104,7 @@ impl RsvpEventId {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RsvpEvent {
-    pub title: String,
+    pub summary: String,
     pub location: Option<String>,
     pub description: Option<String>,
     pub occurrence: RsvpOccurrence,

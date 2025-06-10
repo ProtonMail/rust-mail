@@ -435,7 +435,7 @@ where
 
 fn expected_event() -> RsvpEvent {
     RsvpEvent {
-        title: "some title".into(),
+        summary: "some title".into(),
         location: Some("some location".into()),
         description: Some("some description".into()),
         occurrence: RsvpOccurrence::DateTime {

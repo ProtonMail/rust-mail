@@ -964,7 +964,7 @@ impl DecryptedMessage {
             format!("- <{}> ({status})", att.email)
         });
 
-        let rows = iter::once(rsvp.title.clone())
+        let rows = iter::once(rsvp.summary.clone())
             .chain(iter::once(rsvp_occur))
             .chain(iter::once(String::default()))
             .chain(rsvp_atts);
