@@ -939,6 +939,9 @@ impl DecryptedMessage {
         // ---
 
         let rsvp_occur = match rsvp.occurrence {
+            RsvpOccurrence::Date { starts_at, ends_at } if ends_at == starts_at => {
+                format!("{starts_at}")
+            }
             RsvpOccurrence::Date { starts_at, ends_at } => {
                 format!("{starts_at} - {ends_at}")
             }
