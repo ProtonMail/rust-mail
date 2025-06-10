@@ -14,7 +14,7 @@ use stash::orm::Model;
 use stash::stash::Stash;
 use std::ops::Deref;
 use std::sync::Arc;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 /// Auth store implementation which records the data in the session database.
 pub struct AuthStore {
@@ -123,13 +123,26 @@ impl Store for AuthStore {
     }
 
     async fn set_auth(&mut self, auth: Auth) -> Result<(), StoreError> {
-        // If the auth is none, clear the store.
-        if matches!(auth, Auth::None) {
-            self.clear().await?;
-            return Ok(());
-        }
+        match auth {
+            Auth::None => {
+                info!("clearing auth from store");
+                return self.clear().await;
+            }
 
-        info!("setting auth in store");
+            Auth::External { .. } => {
+                warn!("ignoring external auth");
+                return Ok(());
+            }
+
+            Auth::Anonymous { .. } => {
+                info!("ignoring anonymous auth");
+                return Ok(());
+            }
+
+            Auth::Internal { .. } => {
+                info!("setting auth in store");
+            }
+        }
 
         // Get the user and session IDs from the incoming auth session.
         let user_id = UserId::from(auth.user_id().context("missing user ID")?);
@@ -140,8 +153,8 @@ impl Store for AuthStore {
         let key = self.encryption_key()?;
 
         // We write twice, so do it in a transaction.
-        let mut tether = self.stash.connection();
-        tether
+        self.stash
+            .connection()
             .tx(async |tx| {
                 // Load or create the account.
                 if (CoreAccount::find_by_id(user_id.clone(), tx).await?).is_none() {

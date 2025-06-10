@@ -164,6 +164,7 @@ impl TestContext {
         }));
 
         let mock_web_server = Arc::new(MockServer::start().await);
+        mock_web_server.mock_post_auth_session().await;
         let tmp_dir = TempDir::new("account_test").expect("failed to create temp dir");
         info!("CORE TMP DIR = {:?}", tmp_dir.path());
         let keychain = Self::keychain();
@@ -362,3 +363,32 @@ const _: () = {
         }
     }
 };
+
+trait ProtonCoreMock {
+    fn mock_post_auth_session(&self) -> impl Future<Output = ()> + Send;
+}
+
+impl ProtonCoreMock for MockServer {
+    #[function_name::named]
+    async fn mock_post_auth_session(&self) {
+        use wiremock::matchers::{method, path};
+        use wiremock::{Mock, ResponseTemplate};
+
+        let response = serde_json::json!({
+            "ServerProof": "dummy",
+            "UID": "dummy",
+            "AccessToken": "dummy",
+            "RefreshToken": "dummy",
+            "Scopes": ["dummy"],
+            "2FA": { "Enabled": 0 },
+            "PasswordMode": 1,
+        });
+
+        Mock::given(method("POST"))
+            .and(path("/api/auth/v4/sessions"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .named(function_name!())
+            .mount(self)
+            .await;
+    }
+}

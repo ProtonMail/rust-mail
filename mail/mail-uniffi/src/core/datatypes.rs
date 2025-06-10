@@ -59,7 +59,7 @@ pub use connection_status::*;
 pub use contact_list::*;
 pub use issue_report::*;
 use itertools::Itertools;
-use proton_core_api::services::proton::muon::error::ParseEndpointErr;
+use muon::common::ParseEndpointErr;
 use proton_mail_api::services::proton::common::MessageId;
 use stash::orm::Model;
 use stash::stash::Tether;
