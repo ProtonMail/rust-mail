@@ -1545,6 +1545,10 @@ pub struct Message {
 
     /// Whether this message is a draft.
     pub is_draft: bool,
+
+    pub is_scheduled: bool,
+
+    pub can_reply: bool,
 }
 
 impl From<RealMessage> for Message {
@@ -1552,6 +1556,8 @@ impl From<RealMessage> for Message {
         let starred = value.is_starred();
         let avatar = RealAvatarInformation::from(&value.sender);
         let is_draft = value.is_draft();
+        let is_scheduled = value.is_scheduled_for_send();
+        let can_reply = value.can_reply();
         Message {
             id: value.id().into(),
             conversation_id: value.local_conversation_id.unwrap().into(),
@@ -1577,8 +1583,10 @@ impl From<RealMessage> for Message {
             unread: value.unread,
             custom_labels: value.custom_labels.map_vec(),
             is_draft,
+            is_scheduled,
             starred,
             avatar: avatar.into(),
+            can_reply,
         }
     }
 }
