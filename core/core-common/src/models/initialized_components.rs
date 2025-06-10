@@ -16,17 +16,12 @@ use crate::datatypes::{InitializationKey, InitializedComponentState};
 #[derive(Debug, Eq, Model, PartialEq, Clone)]
 #[TableName("initialized_components")]
 pub struct InitializedComponent {
-    /// Key which defines which component has been initialized
     #[IdField]
     key: String,
 
-    /// State which defined whether component has been initialized or not.
     #[DbField]
     state: InitializedComponentState,
 
-    /// The internal row ID of the record in the database. This is assigned by
-    /// `SQLite`, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
 }

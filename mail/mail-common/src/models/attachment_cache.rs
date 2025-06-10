@@ -44,8 +44,6 @@ use super::{AttachmentType, Message};
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("attachment_cache")]
 pub struct AttachmentCacheMetadata {
-    /// The primary id, and also the foreign key of an attachment. It always exists as records are
-    /// created with raw sql.
     #[IdField]
     pub attachment_id: LocalAttachmentId,
 
@@ -61,7 +59,6 @@ pub struct AttachmentCacheMetadata {
     #[DbField]
     pub hit_count: u64,
 
-    /// The path in the filesystem for this attachment.
     #[DbField]
     pub path: String,
 

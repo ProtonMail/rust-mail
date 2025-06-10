@@ -92,75 +92,51 @@ use tracing::{debug, error, info};
 #[derive(Clone, Debug, Eq, Model, PartialEq, Default)]
 #[TableName("attachments")]
 pub struct Attachment {
-    /// The local ID of the record, i.e. the ID assigned by the client
-    /// application. This is a restricted-scope unique identifier for the record
-    /// within the set of all records of this type, and is important for
-    /// relating local records. It has no relationship to the centrally-stored
-    /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
     pub local_id: Option<LocalAttachmentId>,
 
-    /// The attachment type of this attachment.
-    /// It can be a pgp attachment (local only, kept around for caching purposes)
-    /// Or a remote attachment, a real attachment, that has a RemoteId.
-    /// If you're looking for the AttachmentId, look here.
     #[DbField]
     pub attachment_type: AttachmentType,
 
-    /// Address with which this attachment was encrypted.
     #[DbField]
     pub local_address_id: Option<LocalAddressId>,
 
-    /// Address with which this attachment was encrypted. The address id can
-    /// only be retrieved from a [`Message`] or the full [`Attachment`] type.
     #[DbField]
     pub remote_address_id: Option<AddressId>,
 
-    /// Local conversation id where this attachment is present.
     #[DbField]
     pub local_conversation_id: Option<LocalConversationId>,
 
-    /// Remote conversation id where this attachment is present.
     #[DbField]
     pub remote_conversation_id: Option<ConversationId>,
 
-    /// Local message id where this attachment is present.
     #[DbField]
     pub local_message_id: Option<LocalMessageId>,
 
-    /// Remote message id where this attachment is present.
     #[DbField]
     pub remote_message_id: Option<MessageId>,
 
-    /// Attachment disposition.
     #[DbField]
     pub disposition: Disposition,
 
-    /// TODO: Document this field.
     #[DbField]
     pub enc_signature: Option<AttachmentEncryptedSignature>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub is_auto_forwardee: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub key_packets: Option<KeyPackets>,
 
-    /// Mime type of the attachment
     #[DbField]
     pub mime_type: attachment::MimeType,
 
-    /// File name of the attachment.
     #[DbField]
     pub filename: String,
 
-    /// Sender of the attachment if received from an external address.
     #[DbField]
     pub sender: Option<MessageSender>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub signature: Option<AttachmentSignature>,
 
@@ -168,26 +144,19 @@ pub struct Attachment {
     #[DbField]
     pub size: u64,
 
-    #[DbField]
     /// Content id of the attachment if inlined in the message.
+    #[DbField]
     pub content_id: Option<ContentId>,
 
     #[DbField]
-    /// Encoding of the attachment in the message.
     pub transfer_encoding: Option<String>,
 
     #[DbField]
-    /// Custom proton width for this image. Yes, API is returning this as a string.
     pub image_width: Option<String>,
 
-    /// Custom proton Height for this image. Yes, API is returning this as a string.
     #[DbField]
     pub image_height: Option<String>,
 
-    #[allow(clippy::doc_markdown)]
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
 }

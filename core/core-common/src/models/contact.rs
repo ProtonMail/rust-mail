@@ -46,48 +46,30 @@ use super::{InitializationError, InitializationWatcher, InitializedComponent, La
 #[TableName("contacts")]
 #[ModelActions(on_save)]
 pub struct Contact {
-    /// The local ID of the record, i.e. the ID assigned by the client
-    /// application. This is a restricted-scope unique identifier for the record
-    /// within the set of all records of this type, and is important for
-    /// relating local records. It has no relationship to the centrally-stored
-    /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
     pub local_id: Option<LocalContactId>,
 
-    /// The remote ID of the record, i.e. the ID assigned by the API. This is a
-    /// globally-consistent unique identifier for the record within the set of
-    /// all records of this type, and is important for synchronisation.
     #[DbField]
     pub remote_id: Option<ContactId>,
 
-    /// Cards associated with the contact. They are in standard vCard format,
-    /// although each field is kept separatly within new vCard.
     pub cards: Vec<ContactCard>,
-
-    /// Emails associated with the contact.
     pub contact_emails: Vec<ContactEmail>,
 
-    /// Creation time of the contact.
     #[DbField]
     pub create_time: u64,
 
-    /// Labels associated with the contact. They are used to group contacts.
     #[DbField]
     pub label_ids: Labels,
 
-    /// Last modification time of the contact.
     #[DbField]
     pub modify_time: u64,
 
-    /// Name of the contact.
     #[DbField]
     pub name: String,
 
-    /// Size of the contact.
     #[DbField]
     pub size: u64,
 
-    /// Unique identifier of the contact.
     #[DbField]
     pub uid: ContactUID,
 
@@ -98,10 +80,6 @@ pub struct Contact {
     #[DbField]
     pub deleted: bool,
 
-    #[allow(clippy::doc_markdown)]
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
 }

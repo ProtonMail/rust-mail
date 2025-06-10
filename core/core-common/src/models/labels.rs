@@ -41,73 +41,49 @@ pub enum LabelError {
     LabelWithoutIds,
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[ModelActions(on_load, on_save)]
 #[TableName("labels")]
 pub struct Label {
-    /// The local ID of the record, i.e. the ID assigned by the client
-    /// application. This is a restricted-scope unique identifier for the record
-    /// within the set of all records of this type, and is important for
-    /// relating local records. It has no relationship to the centrally-stored
-    /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
     pub local_id: Option<LocalLabelId>,
 
-    /// The remote ID of the record, i.e. the ID assigned by the API. This is a
-    /// globally-consistent unique identifier for the record within the set of
-    /// all records of this type, and is important for synchronisation.
     #[DbField]
     pub remote_id: Option<LabelId>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub local_parent_id: Option<LocalLabelId>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub remote_parent_id: Option<LabelId>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub color: LabelColor,
 
-    /// TODO: Document this field.
     #[DbField]
     pub display: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub expanded: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub label_type: LabelType,
 
-    /// TODO: Document this field.
     #[DbField]
     pub name: String,
 
-    /// TODO: Document this field.
     #[DbField]
     pub notify: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub display_order: u32,
 
-    /// TODO: Document this field.
     #[DbField]
     pub path: Option<String>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub sticky: bool,
 
-    #[allow(clippy::doc_markdown)]
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
 }

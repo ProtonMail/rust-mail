@@ -77,49 +77,32 @@ use tracing::{debug, error, info, trace, warn};
 #[TableName("messages")]
 #[ModelActions(on_load, on_save)]
 pub struct Message {
-    /// The local ID of the record, i.e. the ID assigned by the client
-    /// application. This is a restricted-scope unique identifier for the record
-    /// within the set of all records of this type, and is important for
-    /// relating local records. It has no relationship to the centrally-stored
-    /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
     pub local_id: Option<LocalMessageId>,
 
-    /// The remote ID of the record, i.e. the ID assigned by the API. This is a
-    /// globally-consistent unique identifier for the record within the set of
-    /// all records of this type, and is important for synchronisation.
     #[DbField]
     pub remote_id: Option<MessageId>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub local_conversation_id: Option<LocalConversationId>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub remote_conversation_id: Option<ConversationId>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub local_address_id: LocalAddressId,
 
-    /// TODO: Document this field.
     #[DbField]
     pub remote_address_id: AddressId,
 
-    /// TODO: Document this field.
     pub attachments_metadata: Vec<AttachmentMetadata>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub cc_list: MessageRecipients,
 
-    /// TODO: Document this field.
     #[DbField]
     pub bcc_list: MessageRecipients,
 
-    /// Whether or not this message has been soft deleted. This means that this message
-    /// should no longer be displayed.
     #[DbField]
     pub deleted: bool,
 
@@ -137,23 +120,18 @@ pub struct Message {
     #[DbField]
     pub expiration_time: UnixTimestamp,
 
-    /// TODO: Document this field.
     #[DbField]
     pub external_id: Option<ExternalId>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub flags: MessageFlags,
 
-    /// TODO: Document this field.
     #[DbField]
     pub is_forwarded: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub is_replied: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub is_replied_all: bool,
 
@@ -161,53 +139,38 @@ pub struct Message {
     /// If you want to modify this use [`Message::apply_label`]
     pub label_ids: Vec<LabelId>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub num_attachments: u32,
 
-    /// TODO: Document this field.
     #[DbField]
     pub display_order: u64,
 
-    /// TODO: Document this field.
     #[DbField]
     pub reply_tos: MessageReplyTos,
 
-    /// TODO: Document this field.
     #[DbField]
     pub sender: MessageSender,
 
-    /// TODO: Document this field.
     #[DbField]
     pub size: u64,
 
-    /// TODO: Document this field.
     #[DbField]
     pub snooze_time: UnixTimestamp,
 
-    /// TODO: Document this field.
     #[DbField]
     pub subject: String,
 
-    /// TODO: Document this field.
     #[DbField]
     pub time: UnixTimestamp,
 
-    /// TODO: Document this field.
     #[DbField]
     pub to_list: MessageRecipients,
 
-    /// TODO: Document this field.
     #[DbField]
     pub unread: bool,
 
-    /// List of custom labels.
     pub custom_labels: Vec<CustomLabel>,
 
-    #[allow(clippy::doc_markdown)]
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
 }
@@ -3067,10 +3030,6 @@ pub struct MessageLabel {
     #[DbField]
     pub local_message_id: LocalMessageId,
 
-    #[allow(clippy::doc_markdown)]
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
 }
@@ -3125,39 +3084,23 @@ impl Default for Message {
 #[TableName("message_bodies")]
 #[ModelActions(on_load, on_save)]
 pub struct MessageBodyMetadata {
-    /// The local ID of the record, i.e. the ID assigned by the client
-    /// application. This is a restricted-scope unique identifier for the record
-    /// within the set of all records of this type, and is important for
-    /// relating local records. It has no relationship to the centrally-stored
-    /// API ID, and never leaves the local system.
     #[IdField(optional)]
     pub local_message_id: Option<LocalMessageId>,
 
-    /// The remote ID of the record, i.e. the ID assigned by the API. This is a
-    /// globally-consistent unique identifier for the record within the set of
-    /// all records of this type, and is important for synchronisation.
     #[DbField]
     pub remote_message_id: Option<MessageId>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub header: String,
 
-    /// TODO: Document this field.
     #[DbField]
     pub mime_type: MimeType,
 
-    /// TODO: Document this field.
     #[DbField]
     pub parsed_headers: ParsedHeaders,
 
-    /// Attachments associated with the message body.
     pub attachments: Vec<Attachment>,
 
-    #[allow(clippy::doc_markdown)]
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
 }
@@ -3412,22 +3355,15 @@ impl MessageLabelStats {
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("message_counters")]
 pub struct MessageCounters {
-    /// Local id of the label
     #[IdField]
     pub local_label_id: LocalLabelId,
 
-    /// Number of total messages related to one particular label
     #[DbField]
     pub total: u64,
 
-    /// Number of unread messages related to one particular label
     #[DbField]
     pub unread: u64,
 
-    #[allow(clippy::doc_markdown)]
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
 }

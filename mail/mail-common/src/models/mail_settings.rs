@@ -31,188 +31,138 @@ use tracing::debug;
 #[allow(clippy::struct_excessive_bools)]
 #[TableName("mail_settings")]
 pub struct MailSettings {
-    /// The local ID of the record, i.e. the ID assigned by the client
-    /// application. This is a restricted-scope unique identifier for the record
-    /// within the set of all records of this type, and is important for
-    /// relating local records. It has no relationship to the centrally-stored
-    /// API ID, and never leaves the local system.
     #[IdField]
     pub local_id: MailSettingsId,
 
-    /// TODO: Document this field.
     #[DbField]
     pub almost_all_mail: AlmostAllMail,
 
-    /// TODO: Document this field.
     #[DbField]
     pub attach_public_key: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub auto_delete_spam_and_trash_days: Option<u32>,
 
-    /// TODO: Document this field.
     #[DbField]
     #[default = true]
     pub auto_save_contacts: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub block_sender_confirmation: Option<bool>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub composer_mode: ComposerMode,
 
-    /// TODO: Document this field.
     #[DbField]
     #[default = true]
     pub confirm_link: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     #[default = 10]
     pub delay_send_seconds: u32,
 
-    /// TODO: Document this field.
     #[DbField]
     pub display_name: String,
 
-    /// TODO: Document this field.
     #[DbField]
     pub draft_mime_type: MimeType,
 
-    /// TODO: Document this field.
     #[DbField]
     pub enable_folder_color: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub font_face: Option<String>,
 
-    /// This enables or disables remote content in the HTML.
     #[DbField]
     pub hide_remote_images: bool,
 
-    /// This enables or disables embedded content (`Disposition::Inline`) in the HTML.
     #[DbField]
     pub hide_embedded_images: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub hide_sender_images: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub image_proxy: u32,
 
-    /// TODO: Document this field.
     #[DbField]
     #[default = true]
     pub inherit_parent_folder_color: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub message_buttons: MessageButtons,
 
-    /// TODO: Document this field.
     #[DbField]
     pub mobile_settings: Option<MobileSettings>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub next_message_on_move: Option<NextMessageOnMove>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub num_message_per_page: u32,
 
-    /// TODO: Document this field.
     #[DbField]
     pub pgp_scheme: PgpScheme,
 
-    /// TODO: Document this field.
     #[DbField]
     pub pm_signature: PmSignature,
 
-    /// TODO: Document this field.
     #[DbField]
     #[default = true]
     pub pm_signature_referral_link: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub prompt_pin: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub receive_mime_type: MimeType,
 
-    /// TODO: Document this field.
     #[DbField]
     pub right_to_left: ComposerDirection,
 
-    /// TODO: Document this field.
     #[DbField]
     #[default = true]
     pub shortcuts: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub show_images: ShowImages,
 
-    /// TODO: Document this field.
     #[DbField]
     pub show_mime_type: MimeType,
 
-    /// TODO: Document this field.
     #[DbField]
     pub show_moved: ShowMoved,
 
-    /// TODO: Document this field.
     #[DbField]
     pub sign: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub signature: String,
 
-    /// TODO: Document this field.
     #[DbField]
     pub spam_action: Option<SpamAction>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub sticky_labels: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub submission_access: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub swipe_left: SwipeAction,
 
-    /// TODO: Document this field.
     #[DbField]
     pub swipe_right: SwipeAction,
 
-    /// TODO: Document this field.
     #[DbField]
     pub theme: String,
 
-    /// TODO: Document this field.
     #[DbField]
     pub view_layout: ViewLayout,
 
-    /// TODO: Document this field.
     #[DbField]
     pub view_mode: ViewMode,
 
-    #[allow(clippy::doc_markdown)]
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
 }

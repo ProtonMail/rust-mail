@@ -22,73 +22,54 @@ use super::{
     UserSettings,
 };
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("users")]
 pub struct User {
-    /// The remote ID of the record, i.e. the ID assigned by the API. This is a
-    /// globally-consistent unique identifier for the record within the set of
-    /// all records of this type, and is important for synchronisation.
     #[IdField(optional)]
     pub remote_id: Option<UserId>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub create_time: UnixTimestamp,
 
-    /// TODO: Document this field.
     #[DbField]
     pub credit: i64,
 
-    /// TODO: Document this field.
     #[DbField]
     pub currency: String,
 
-    /// TODO: Create bitflags for this when we need to use it
     #[DbField]
     pub delinquent: DelinquentState,
 
-    /// TODO: Document this field.
     #[DbField]
     pub display_name: Option<String>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub email: String,
 
-    /// TODO: Document this field.
     #[DbField]
     pub keys: UserKeys,
 
-    /// TODO: Document this field.
     #[DbField]
     pub flags: Flags,
 
-    /// TODO: Document this field.
     #[DbField]
     pub max_space: i64,
 
-    /// TODO: Document this field.
     #[DbField]
     pub max_upload: i64,
 
-    /// TODO: Document this field.
     #[DbField]
     pub mnemonic_status: UserMnemonicStatus,
 
-    /// TODO: Document this field.
     #[DbField]
     pub private: u32,
 
-    /// TODO: Document this field.
     #[DbField]
     pub name: Option<String>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub product_used_space: ProductUsedSpace,
 
-    /// TODO: Document this field.
     #[DbField]
     pub role: u32,
 
@@ -97,26 +78,18 @@ pub struct User {
     #[DbField]
     pub services: u32,
 
-    /// TODO: Document this field.
     #[DbField]
     pub subscribed: PaidSubscription,
 
-    /// TODO: Document this field.
     #[DbField]
     pub to_migrate: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub used_space: i64,
 
-    /// TODO: Document this field.
     #[DbField]
     pub user_type: UserType,
 
-    #[allow(clippy::doc_markdown)]
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
 }

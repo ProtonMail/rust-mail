@@ -20,81 +20,55 @@ use crate::models::ModelIdExtension;
 
 use super::{InitializationError, InitializationWatcher, InitializedComponent};
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("addresses")]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Address {
-    /// The local ID of the record, i.e. the ID assigned by the client
-    /// application. This is a restricted-scope unique identifier for the record
-    /// within the set of all records of this type, and is important for
-    /// relating local records. It has no relationship to the centrally-stored
-    /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
     pub local_id: Option<LocalAddressId>,
 
-    /// The remote ID of the record, i.e. the ID assigned by the API. This is a
-    /// globally-consistent unique identifier for the record within the set of
-    /// all records of this type, and is important for synchronisation.
     #[DbField]
     pub remote_id: Option<AddressId>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub address_type: AddressType,
 
-    /// TODO: Document this field.
     #[DbField]
     pub catch_all: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub display_name: String,
 
-    /// TODO: Document this field.
     #[DbField]
     pub display_order: u32,
 
-    /// TODO: Document this field.
     #[DbField]
     pub domain_id: Option<String>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub email: String,
 
-    /// TODO: Document this field.
     #[DbField]
     pub keys: AddressKeys,
 
-    /// TODO: Document this field.
     #[DbField]
     pub proton_mx: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub receive: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub send: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub signature: String,
 
-    /// TODO: Document this field.
     #[DbField]
     pub signed_key_list: AddressSignedKeyList,
 
-    /// TODO: Document this field.
     #[DbField]
     pub status: AddressStatus,
 
-    #[allow(clippy::doc_markdown)]
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
 }

@@ -25,18 +25,12 @@ use super::MailSettings;
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("mailbox_labels")]
 pub struct MailboxLabels {
-    /// Local id of the label
     #[IdField]
     pub local_label_id: LocalLabelId,
 
-    /// Label has been already initialized by the mailbox, doesn't require additional fetching
     #[DbField]
     pub initialized: bool,
 
-    #[allow(clippy::doc_markdown)]
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
 }

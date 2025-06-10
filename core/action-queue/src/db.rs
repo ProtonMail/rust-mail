@@ -84,55 +84,40 @@ impl ActionDependency {
 #[TableName("action_queue")]
 #[ModelActions(on_load, on_save)]
 pub struct StoredAction {
-    /// Id assigned to any action that is stored in the queue for future
-    /// execution.
     #[IdField(autoincrement)]
     pub id: Option<ActionId>,
 
-    /// Type of the action, used to re-construct this action from a [`Factory`]
     #[DbField]
     pub action_type: String,
 
-    /// Custom debug string that can optionally be associated with this action.
     #[DbField]
     pub debug_string: Option<String>,
 
-    /// Other actions this action depends on.
     pub dependencies: Vec<ActionDependency>,
 
-    /// Time at which this action was created.
     #[DbField]
     pub created: DateTime<Utc>,
 
-    /// Action execution priority.
     #[DbField]
     pub priority: Priority,
 
-    /// Time at which this action should be executed.
     #[DbField]
     pub scheduled: DateTime<Utc>,
 
-    /// Serialized state fo the action.
     #[DbField]
     pub state: Vec<u8>,
 
     #[DbField]
     pub action_group: String,
 
-    /// Resources associated with the action.
     pub resources: Resources,
 
-    /// Version of the action.
     #[DbField]
     pub version: u32,
 
     // Note this field is only used for storage into the db.
     pub dependency_keys: ActionDependencyKeys,
 
-    #[allow(clippy::doc_markdown)]
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
 }

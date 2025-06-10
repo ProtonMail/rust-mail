@@ -94,26 +94,21 @@ pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
 #[derive(Debug, Model, Eq, PartialEq, Clone, TypedBuilder)]
 #[TableName("mail_message_scroll_data")]
 pub struct MessageScrollData {
-    /// Label id used in the sync.
     #[IdField]
     pub local_label_id: LocalLabelId,
-    /// Read filter used in the sync.
+
     #[DbField]
     pub unread: ReadFilter,
-    /// Last synced message id.
+
     #[DbField]
     pub remote_message_id: MessageId,
-    /// Last synced message time.
+
     #[DbField]
     pub message_time: UnixTimestamp,
-    /// Last synced message display order.
+
     #[DbField]
     pub display_order: u64,
 
-    #[allow(clippy::doc_markdown)]
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     #[builder(default, setter(strip_option))]
     pub row_id: Option<u64>,
@@ -266,30 +261,24 @@ impl ScrollData for MessageScrollData {
 #[derive(Debug, Model, Eq, PartialEq, Clone, TypedBuilder)]
 #[TableName("mail_conversation_scroll_data")]
 pub struct ConversationScrollData {
-    /// Label id used in the sync.
     #[IdField]
     pub local_label_id: LocalLabelId,
-    /// Read filter used in the sync.
+
     #[DbField]
     pub unread: ReadFilter,
-    /// Id of the last synced conversation.
+
     #[DbField]
     pub remote_conversation_id: ConversationId,
-    /// Time of the last synced conversation.
-    ///
+
     /// Note: for filtered conversation (`ReadFilter != ReadFilter::All`) we
     /// need to store the `Conversation.context_time` rather than
     /// `Conversation.Labels[active_label].context_time`
     #[DbField]
     pub conversation_time: UnixTimestamp,
-    /// Display order of the last conversation.
+
     #[DbField]
     pub display_order: u64,
 
-    #[allow(clippy::doc_markdown)]
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     #[builder(default, setter(strip_option))]
     pub row_id: Option<u64>,
@@ -815,18 +804,12 @@ impl<T: ScrollData> Deref for CachedScrollData<T> {
 #[derive(Debug, Model, Eq, PartialEq, Clone, TypedBuilder)]
 #[TableName("mail_search_scroll_data")]
 pub struct SearchScrollData {
-    /// Local message id used in the sync.
     #[IdField]
     pub local_message_id: LocalMessageId,
 
-    /// Message display order in search.
     #[DbField]
     pub display_order: u64,
 
-    #[allow(clippy::doc_markdown)]
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     #[builder(default, setter(strip_option))]
     pub row_id: Option<u64>,

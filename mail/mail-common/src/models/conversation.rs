@@ -64,32 +64,20 @@ use tracing::{debug, error, info, trace, warn};
 #[TableName("conversations")]
 #[ModelActions(on_load, on_save)]
 pub struct Conversation {
-    /// The local ID of the record, i.e. the ID assigned by the client
-    /// application. This is a restricted-scope unique identifier for the record
-    /// within the set of all records of this type, and is important for
-    /// relating local records. It has no relationship to the centrally-stored
-    /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
     pub local_id: Option<LocalConversationId>,
 
-    /// The remote ID of the record, i.e. the ID assigned by the API. This is a
-    /// globally-consistent unique identifier for the record within the set of
-    /// all records of this type, and is important for synchronisation.
     #[DbField]
     pub remote_id: Option<ConversationId>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub attachment_info: MessageAttachmentInfos,
 
-    /// Attachment metadata associated with this conversation.
     pub attachments_metadata: Vec<AttachmentMetadata>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub deleted: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub display_snooze_reminder: bool,
 
@@ -102,43 +90,33 @@ pub struct Conversation {
     /// the fact that this is not a critical field.
     pub exclusive_location: Option<ExclusiveLocation>,
 
-    /// TODO: Document this field.
     #[DbField]
     #[default(_code = "UnixTimestamp::new(0)")]
     pub expiration_time: UnixTimestamp,
 
-    /// TODO: Document this field.
     pub labels: Vec<ConversationLabel>,
 
-    /// TODO: Document this field
     #[DbField]
     pub num_attachments: u64,
 
-    /// How many messages there are in the conversation.
     #[DbField]
     pub num_messages: u64,
 
-    /// How many unread messages there are in the conversation.
     #[DbField]
     pub num_unread: u64,
 
-    /// TODO: Document this field.
     #[DbField]
     pub display_order: u64,
 
     #[DbField]
-    /// TODO: Document this field.
     pub recipients: MessageRecipients,
 
     #[DbField]
-    /// TODO: Document this field.
     pub senders: MessageSenders,
 
-    /// TODO: Document this field.
     #[DbField]
     pub size: u64,
 
-    /// TODO: Document this field.
     #[DbField]
     pub subject: String,
 
@@ -154,17 +132,12 @@ pub struct Conversation {
     #[DbField]
     pub is_known: bool,
 
-    /// List of custom labels.
     pub custom_labels: Vec<CustomLabel>,
 
     /// Whether the conversation has synced its messages.
     #[DbField]
     pub has_messages: bool,
 
-    #[allow(clippy::doc_markdown)]
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
 }
@@ -3115,56 +3088,41 @@ impl TableObserver for ConversationActionWatcher {
 #[derive(Clone, Debug, Eq, Model, PartialEq, SmartDefault)]
 #[TableName("conversation_labels")]
 pub struct ConversationLabel {
-    /// The local ID of the record, i.e. the ID assigned by the client
-    /// application. This is a restricted-scope unique identifier for the record
-    /// within the set of all records of this type, and is important for
-    /// relating local records. It has no relationship to the centrally-stored
-    /// API ID, and never leaves the local system.
-    //NOTE: This id is essentially useless. Stash does not support composite primary keys
+    // NOTE: This id is essentially useless. Stash does not support composite primary keys
     // so we do not assign it a special value. The real primary key is
     // (local_conversation_id + local_label_id).
     #[IdField(autoincrement)]
     pub local_id: Option<u64>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub local_conversation_id: Option<LocalConversationId>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub local_label_id: Option<LocalLabelId>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub remote_label_id: Option<LabelId>,
 
-    /// TODO: Document this field.
     #[DbField]
     #[default(_code = "UnixTimestamp::new(0)")]
     pub context_expiration_time: UnixTimestamp,
 
-    /// TODO: Document this field.
     #[DbField]
     pub context_num_attachments: u64,
 
-    /// TODO: Document this field.
     #[DbField]
     pub context_num_messages: u64,
 
-    /// TODO: Document this field.
     #[DbField]
     pub context_num_unread: u64,
 
-    /// TODO: Document this field.
     #[DbField]
     pub context_size: u64,
 
-    /// TODO: Document this field.
     #[DbField]
     #[default(_code = "UnixTimestamp::new(0)")]
     pub context_snooze_time: UnixTimestamp,
 
-    /// TODO: Document this field.
     #[DbField]
     #[default(_code = "UnixTimestamp::new(0)")]
     pub context_time: UnixTimestamp,
@@ -3172,10 +3130,6 @@ pub struct ConversationLabel {
     #[DbField]
     pub deleted: bool,
 
-    #[allow(clippy::doc_markdown)]
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
 }
@@ -3494,22 +3448,15 @@ impl AddAssign<&ApiMessageMetadata> for ConversationMessageLabelStats {
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("conversation_counters")]
 pub struct ConversationCounters {
-    /// Local id of the label
     #[IdField]
     pub local_label_id: LocalLabelId,
 
-    /// Number of total conversations related to one particular label
     #[DbField]
     pub total: u64,
 
-    /// Number of unread conversations related to one particular label
     #[DbField]
     pub unread: u64,
 
-    #[allow(clippy::doc_markdown)]
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
 }
