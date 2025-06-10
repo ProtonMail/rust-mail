@@ -992,6 +992,74 @@ async fn cancel_schedule_send_on_already_sent_message() {
     );
 }
 
+#[tokio::test]
+async fn schedule_send_message_limit() {
+    // There can only be up to a 100 scheduled messages
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let mut params = draft_test_params();
+    params.message_count.push(
+        proton_mail_api::services::proton::response_data::MessageCount {
+            label_id: LabelId::all_scheduled(),
+            total: 100,
+            unread: 0,
+        },
+    );
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.to_list.push(MessageRecipient {
+        address: "foo@bar.com".to_string(),
+        is_proton: false,
+        name: "".to_string(),
+        group: None,
+    });
+    let mut sent_message = message.clone();
+    message.metadata.label_ids.push(LabelId::drafts());
+    sent_message
+        .metadata
+        .label_ids
+        .push(LabelId::all_scheduled());
+    sent_message
+        .metadata
+        .flags
+        .set(MessageFlags::SCHEDULED_SEND, true);
+    sent_message.body.header = "Fancy new header".to_owned();
+
+    let delivery_time = Local::now().checked_sub_days(Days::new(2)).unwrap();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+
+    // Create draft.
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    draft
+        .to_list
+        .add_single(RecipientEntry {
+            email: "foo@bar.com".into(),
+            display_name: MaybeEmptyString(None),
+        })
+        .unwrap();
+
+    let result = draft
+        .schedule_send(
+            delivery_time,
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+        )
+        .await;
+
+    assert!(matches!(
+        result,
+        Err(MailContextError::Draft(draft::Error::Send(
+            draft::SendError::ScheduleSendMessageLimitExceeded,
+        )))
+    ));
+}
+
 async fn send_fails_if_recipient_is_not_valid_impl(
     api_error_code: u32,
 ) -> (Arc<anyhow::Error>, LocalMessageId, Arc<MailUserContext>) {

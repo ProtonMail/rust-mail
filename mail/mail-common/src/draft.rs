@@ -124,6 +124,8 @@ pub enum SendError {
     MessageBodyMissing(LocalMessageId),
     #[error("Unable to schedule send before expected delivery time")]
     ScheduleSendExpired,
+    #[error("The maximum amount of scheduled messages has been reached")]
+    ScheduleSendMessageLimitExceeded,
 }
 
 impl From<SendError> for MailContextError {

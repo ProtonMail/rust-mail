@@ -325,6 +325,11 @@ impl From<DraftSendError> for ProtonMailError {
             DraftSendError::ScheduleSendExpired => Self::Reason(MailErrorReason::DraftSendReason(
                 DraftSendErrorReason::ScheduleSendExpired,
             )),
+            DraftSendError::ScheduleSendMessageLimitExceeded => {
+                Self::Reason(MailErrorReason::DraftSendReason(
+                    DraftSendErrorReason::ScheduleSendMessageLimitExceeded,
+                ))
+            }
         }
     }
 }
