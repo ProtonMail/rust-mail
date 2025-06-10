@@ -87,7 +87,7 @@ where
         &self,
         pgp: &P,
         ics: EncryptedIcsRef,
-        sign: Option<SignatureRef>,
+        sig: Option<SignatureRef>,
     ) -> Result<DecryptedIcs>
     where
         P: PGPProviderSync,
@@ -99,11 +99,11 @@ where
         let decryptor = {
             let decryptor = pgp.new_decryptor().with_session_key_ref(&self.session_key);
 
-            if let Some(sign) = sign {
+            if let Some(sig) = sig {
                 decryptor
                     .with_verification_key_refs(&self.verification_keys)
                     .with_detached_signature_ref(
-                        sign.as_armored().as_bytes(),
+                        sig.as_armored().as_bytes(),
                         DetachedSignatureVariant::Plaintext,
                         true,
                     )
@@ -116,7 +116,7 @@ where
             .decrypt(ics, DataEncoding::Bytes)
             .map_err(Error::CouldntDecryptIcs)?;
 
-        if sign.is_some() {
+        if sig.is_some() {
             ics.verification_result().map_err(Error::CouldntVerifyIcs)?;
         }
 
