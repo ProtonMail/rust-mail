@@ -464,6 +464,7 @@ fn expected_event() -> RsvpEvent {
             email: "foo@localhost".into(),
         },
         calendar: RsvpCalendar {
+            id: "HzNtbT1J".into(),
             name: "My calendar".into(),
             color: "#273EB2".into(),
         },

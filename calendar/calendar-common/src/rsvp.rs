@@ -3,7 +3,7 @@ mod fetch;
 use chrono::{DateTime, NaiveDate, Utc};
 use proton_calendar_api::{
     CalendarAttendeeId, CalendarAttendeeStatus, CalendarAttendeeToken, CalendarColor,
-    CalendarEventId, CalendarEventRecurrenceId,
+    CalendarEventId, CalendarEventRecurrenceId, CalendarId,
 };
 use proton_core_api::{service::ApiServiceError, services::proton::Proton};
 use proton_crypto::crypto::PGPProviderSync;
@@ -148,6 +148,7 @@ pub struct RsvpOrganizer {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RsvpCalendar {
+    pub id: CalendarId,
     pub name: String,
     pub color: CalendarColor,
 }

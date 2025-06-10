@@ -71,7 +71,7 @@ where
     let occurrence = extract_occurrence(&event)?;
     let attendees = extract_attendees(pgp, &event, decryptor)?;
     let organizer = extract_organizer(&event)?;
-    let calendar = extract_calendar(calendar);
+    let calendar = extract_calendar(calendar, &event);
 
     Ok(RsvpEvent {
         summary: meta.summary,
@@ -216,12 +216,13 @@ fn extract_organizer(event: &CalendarEvent) -> RsvpResult<RsvpOrganizer> {
     Ok(RsvpOrganizer { email })
 }
 
-fn extract_calendar(calendar: CalendarBootstrap) -> RsvpCalendar {
+fn extract_calendar(calendar: CalendarBootstrap, event: &CalendarEvent) -> RsvpCalendar {
     let CalendarBootstrap {
         members: [member], ..
     } = calendar;
 
     RsvpCalendar {
+        id: event.calendar_id.clone(),
         name: member.name,
         color: member.color,
     }
