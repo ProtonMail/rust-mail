@@ -318,7 +318,7 @@ impl MessagesState {
     #[allow(clippy::too_many_lines)]
     pub fn handle_event(
         &mut self,
-        user_ctx: &Arc<MailUserContext>,
+        ctx: &Arc<MailUserContext>,
         mbox: &Mailbox,
         event: &Event,
     ) -> Command<Messages> {
@@ -391,7 +391,7 @@ impl MessagesState {
                 Command::None
             }
             KeyCode::Char('a') => {
-                let user_ctx = user_ctx.to_owned();
+                let user_ctx = ctx.to_owned();
 
                 let message = self
                     .selected_message()
@@ -444,7 +444,7 @@ impl MessagesState {
             }
             KeyCode::Char('e') => self
                 .selected_message_id()
-                .map(|id| Composer::open(user_ctx.to_owned(), id))
+                .map(|id| Composer::open(ctx.to_owned(), id))
                 .unwrap_or_default(),
             KeyCode::Char('u') => self
                 .selected_message_id()
@@ -455,9 +455,9 @@ impl MessagesState {
                 .map(|id| {
                     if key.modifiers.contains(KeyModifiers::CONTROL) {
                         if key.modifiers.contains(KeyModifiers::SHIFT) {
-                            Composer::reply(user_ctx.to_owned(), id, ReplyMode::All)
+                            Composer::reply(ctx.to_owned(), id, ReplyMode::All)
                         } else {
-                            Composer::reply(user_ctx.to_owned(), id, ReplyMode::Sender)
+                            Composer::reply(ctx.to_owned(), id, ReplyMode::Sender)
                         }
                     } else {
                         Command::message(MessageMessage::MarkMessageRead(id).into())
@@ -467,7 +467,7 @@ impl MessagesState {
             KeyCode::Char('f') => {
                 if key.modifiers.contains(KeyModifiers::CONTROL) {
                     self.selected_message_id()
-                        .map(|id| Composer::reply(user_ctx.to_owned(), id, ReplyMode::Forward))
+                        .map(|id| Composer::reply(ctx.to_owned(), id, ReplyMode::Forward))
                         .unwrap_or_default()
                 } else {
                     self.selected_message_id()
@@ -482,7 +482,7 @@ impl MessagesState {
             KeyCode::Char('t') => {
                 if key.modifiers.contains(KeyModifiers::CONTROL) {
                     self.selected_message_id()
-                        .map(|id| Composer::reply(user_ctx.to_owned(), id, ReplyMode::All))
+                        .map(|id| Composer::reply(ctx.to_owned(), id, ReplyMode::All))
                         .unwrap_or_default()
                 } else {
                     Command::None
