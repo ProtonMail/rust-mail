@@ -81,6 +81,7 @@ where
         attendees,
         organizer,
         calendar,
+        raw: Box::new(event),
     })
 }
 

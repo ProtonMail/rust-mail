@@ -64,7 +64,7 @@ async fn using_address_key() {
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_event("8maQ3qBa", None, Some(event))
+        .mock_get_calendar_event("8maQ3qBa", None, Some(event.clone()))
         .await;
 
     let actual = RsvpEventId::from_external([("X-PM-UID", "8maQ3qBa")])
@@ -73,7 +73,7 @@ async fn using_address_key() {
         .await
         .unwrap();
 
-    pa::assert_eq!(Some(expected_event()), actual);
+    pa::assert_eq!(Some(expected_event(event)), actual);
 }
 
 /// Make sure we can understand RSVPs that have been accepted/rejected/maybied.
@@ -94,7 +94,7 @@ async fn using_shared_key() {
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_event("8maQ3qBa", None, Some(event))
+        .mock_get_calendar_event("8maQ3qBa", None, Some(event.clone()))
         .await;
 
     let actual = RsvpEventId::from_external([("X-PM-UID", "8maQ3qBa")])
@@ -103,7 +103,7 @@ async fn using_shared_key() {
         .await
         .unwrap();
 
-    pa::assert_eq!(Some(expected_event()), actual);
+    pa::assert_eq!(Some(expected_event(event)), actual);
 }
 
 /// Make sure we can fetch recurring events - those are identified by an extra
@@ -122,7 +122,7 @@ async fn recurring() {
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_event("8maQ3qBa", Some("Lm9wZW5w"), Some(event))
+        .mock_get_calendar_event("8maQ3qBa", Some("Lm9wZW5w"), Some(event.clone()))
         .await;
 
     let actual =
@@ -132,7 +132,7 @@ async fn recurring() {
             .await
             .unwrap();
 
-    pa::assert_eq!(Some(expected_event()), actual);
+    pa::assert_eq!(Some(expected_event(event)), actual);
 }
 
 /// Make sure that asking for a non-imported event doesn't end up as error.
@@ -437,7 +437,7 @@ where
     }
 }
 
-fn expected_event() -> RsvpEvent {
+fn expected_event(raw: CalendarEvent) -> RsvpEvent {
     RsvpEvent {
         summary: "some title".into(),
         location: Some("some location".into()),
@@ -468,5 +468,6 @@ fn expected_event() -> RsvpEvent {
             name: "My calendar".into(),
             color: "#273EB2".into(),
         },
+        raw: Box::new(raw),
     }
 }
