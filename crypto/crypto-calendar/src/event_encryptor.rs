@@ -5,7 +5,6 @@ use proton_crypto::crypto::{
 };
 use proton_crypto_account::keys::UnlockedAddressKeys;
 
-#[derive(Debug)]
 pub struct CalendarEventEncryptor<'a, P>
 where
     P: PGPProviderSync,
