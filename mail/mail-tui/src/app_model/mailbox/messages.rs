@@ -910,8 +910,8 @@ impl DecryptedMessage {
 
     fn lay_rsvp(&self) -> u16 {
         match &self.rsvp {
-            Some(Err(_)) => 2,
             Some(Ok(rsvp)) => 4 + rsvp.attendees.len(),
+            Some(Err(msg)) => 1 + msg.lines().count(),
             None => 0,
         }
         .try_into()
