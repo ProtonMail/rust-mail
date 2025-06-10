@@ -47,7 +47,7 @@ use std::sync::Arc;
 use std::{iter, thread};
 use throbber_widgets_tui::ThrobberState;
 use tokio::fs;
-use tracing::debug;
+use tracing::{debug, warn};
 
 /// Displays a list of messages based of message metadata. If a conversation is opened the message
 /// body will be displayed.
@@ -793,6 +793,7 @@ impl DecryptedMessage {
                 .fetch_rsvp(ctx, rsvp, tether)
                 .await
                 .map_err(|err| format!("Can't fetch RSVP: {err}"))
+                .inspect_err(|err| warn!("{err}"))
                 .transpose()
         } else {
             None
@@ -909,10 +910,12 @@ impl DecryptedMessage {
 
     fn lay_rsvp(&self) -> u16 {
         match &self.rsvp {
-            Some(Ok(rsvp)) => (3 + rsvp.attendees.len()).try_into().unwrap(),
             Some(Err(_)) => 2,
+            Some(Ok(rsvp)) => 4 + rsvp.attendees.len(),
             None => 0,
         }
+        .try_into()
+        .unwrap()
     }
 
     fn draw_rsvp(&self, frame: &mut Frame, area: Rect) {
