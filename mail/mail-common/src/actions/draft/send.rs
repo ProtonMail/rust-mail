@@ -293,7 +293,7 @@ impl Send {
                 error!(
                     "Unable to schedule sending of message {local_message_id}: schedule date is past"
                 );
-                return Err(SendError::SechduleSendExpired.into());
+                return Err(SendError::ScheduleSendExpired.into());
             }
         }
 

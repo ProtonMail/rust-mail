@@ -123,7 +123,7 @@ pub enum SendError {
     #[error("Message Body for {0} missing")]
     MessageBodyMissing(LocalMessageId),
     #[error("Unable to schedule send before expected delivery time")]
-    SechduleSendExpired,
+    ScheduleSendExpired,
 }
 
 impl From<SendError> for MailContextError {

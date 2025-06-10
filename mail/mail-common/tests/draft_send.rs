@@ -466,7 +466,7 @@ async fn schedule_send_with_old_delivery_time_fails() {
     assert!(matches!(
         schedule_send_error,
         ActionError::Action(MailContextError::Draft(draft::Error::Send(
-            draft::SendError::SechduleSendExpired,
+            draft::SendError::ScheduleSendExpired,
         )))
     ));
 
