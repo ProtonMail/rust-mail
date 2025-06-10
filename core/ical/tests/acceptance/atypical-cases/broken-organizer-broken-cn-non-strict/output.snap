@@ -180,6 +180,9 @@ VCalendar {
                     role: Some(
                         ReqParticipant,
                     ),
+                    partstat: Some(
+                        NeedsAction,
+                    ),
                     rsvp: Some(
                         Rsvp(
                             true,
@@ -374,12 +377,6 @@ error: unknown property `LAST-MODIFIED`
 warn: unknown property `X-LIC-LOCATION`
  --> at 9:1..14
   | when parsing `VTimeZone` at 7:1
-  | when parsing `VCalendar` at 2:1
-
-error: unknown parameter `PARTSTAT`
- --> at 31:49..56
-  | when parsing `Attendee` at 31:9
-  | when parsing `VEvent` at 26:1
   | when parsing `VCalendar` at 2:1
 
 warn: unknown parameter `X-NUM-GUESTS`

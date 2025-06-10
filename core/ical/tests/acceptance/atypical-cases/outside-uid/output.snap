@@ -206,6 +206,9 @@ VCalendar {
                     role: Some(
                         ReqParticipant,
                     ),
+                    partstat: Some(
+                        NeedsAction,
+                    ),
                     rsvp: Some(
                         Rsvp(
                             true,
@@ -235,6 +238,9 @@ VCalendar {
                     role: Some(
                         ReqParticipant,
                     ),
+                    partstat: Some(
+                        NeedsAction,
+                    ),
                     rsvp: Some(
                         Rsvp(
                             true,
@@ -263,6 +269,9 @@ VCalendar {
                     ),
                     role: Some(
                         ReqParticipant,
+                    ),
+                    partstat: Some(
+                        Accepted,
                     ),
                     rsvp: Some(
                         Rsvp(
@@ -294,33 +303,15 @@ error: unknown property `UID`
  --> at 6:1..3
   | when parsing `VCalendar` at 2:1
 
-error: unknown parameter `PARTSTAT`
- --> at 12:49..56
-  | when parsing `Attendee` at 12:9
-  | when parsing `VEvent` at 8:1
-  | when parsing `VCalendar` at 2:1
-
 warn: unknown parameter `X-NUM-GUESTS`
  --> at 13:48..59
   | when parsing `Attendee` at 12:9
   | when parsing `VEvent` at 8:1
   | when parsing `VCalendar` at 2:1
 
-error: unknown parameter `PARTSTAT`
- --> at 15:49..56
-  | when parsing `Attendee` at 15:9
-  | when parsing `VEvent` at 8:1
-  | when parsing `VCalendar` at 2:1
-
 warn: unknown parameter `X-NUM-GUESTS`
  --> at 16:12..23
   | when parsing `Attendee` at 15:9
-  | when parsing `VEvent` at 8:1
-  | when parsing `VCalendar` at 2:1
-
-error: unknown parameter `PARTSTAT`
- --> at 17:49..56
-  | when parsing `Attendee` at 17:9
   | when parsing `VEvent` at 8:1
   | when parsing `VCalendar` at 2:1
 

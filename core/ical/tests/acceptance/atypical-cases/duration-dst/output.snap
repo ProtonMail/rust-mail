@@ -144,6 +144,9 @@ VCalendar {
                     role: Some(
                         ReqParticipant,
                     ),
+                    partstat: Some(
+                        NeedsAction,
+                    ),
                     rsvp: Some(
                         Rsvp(
                             true,
@@ -187,12 +190,6 @@ warn: unknown property `X-WR-CALNAME`
 
 warn: unknown property `X-WR-TIMEZONE`
  --> at 7:1..13
-  | when parsing `VCalendar` at 2:1
-
-error: unknown parameter `PARTSTAT`
- --> at 11:49..56
-  | when parsing `Attendee` at 11:9
-  | when parsing `VEvent` at 9:1
   | when parsing `VCalendar` at 2:1
 
 warn: unknown parameter `X-NUM-GUESTS`

@@ -214,6 +214,9 @@ VCalendar {
                     role: Some(
                         ReqParticipant,
                     ),
+                    partstat: Some(
+                        NeedsAction,
+                    ),
                     rsvp: Some(
                         Rsvp(
                             true,
@@ -242,6 +245,9 @@ VCalendar {
                     ),
                     role: Some(
                         ReqParticipant,
+                    ),
+                    partstat: Some(
+                        NeedsAction,
                     ),
                     rsvp: Some(
                         Rsvp(
@@ -379,21 +385,9 @@ VCalendar {
 
 # messages
 
-error: unknown parameter `PARTSTAT`
- --> at 23:49..56
-  | when parsing `Attendee` at 23:9
-  | when parsing `VEvent` at 16:1
-  | when parsing `VCalendar` at 2:1
-
 warn: unknown parameter `X-NUM-GUESTS`
  --> at 24:29..40
   | when parsing `Attendee` at 23:9
-  | when parsing `VEvent` at 16:1
-  | when parsing `VCalendar` at 2:1
-
-error: unknown parameter `PARTSTAT`
- --> at 25:49..56
-  | when parsing `Attendee` at 25:9
   | when parsing `VEvent` at 16:1
   | when parsing `VCalendar` at 2:1
 
