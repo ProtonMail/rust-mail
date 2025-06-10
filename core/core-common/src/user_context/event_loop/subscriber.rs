@@ -168,7 +168,7 @@ impl Provider for CoreEventLoopContext {
             .api()
             .get_event(
                 event_id.clone(),
-                proton_core_api::services::proton::GetEventOptions::default(),
+                proton_core_api::services::proton::GetEventOptions::all(),
             )
             .await?;
 
