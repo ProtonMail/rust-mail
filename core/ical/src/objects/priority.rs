@@ -144,7 +144,7 @@ mod tests {
     fn unknown() {
         let expected = vec![ReadMsg {
             at: Some(Span::new((1, 2), (1, 3))),
-            msg: "unknown priority `10`".into(),
+            body: "unknown priority `10`".into(),
             kind: ReadMsgKind::Error,
             context: Vec::new(),
         }];

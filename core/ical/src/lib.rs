@@ -93,19 +93,22 @@ impl VCalendar {
             }
         }
 
-        let msgs = r.finish();
+        let mut msgs = r.finish();
 
         let Some(cal) = cal else {
-            let msgs = if msgs.is_empty() {
-                vec![ReadMsg {
+            if msgs.iter().any(|msg| msg.kind.is_error()) {
+                // If we've already gotten some errors, let's avoid piling up an
+                // extra "missing calendar" - that's because most likely the
+                // reason why we're missing the calendar *is* one of those other
+                // errors (e.g. there's an invalid syntax somewhere)
+            } else {
+                msgs.push(ReadMsg {
                     at: None,
-                    msg: "missing calendar".into(),
+                    body: "missing calendar".into(),
                     kind: ReadMsgKind::Error,
                     context: Vec::new(),
-                }]
-            } else {
-                msgs
-            };
+                });
+            }
 
             return Err(Error::InvalidIcs(msgs));
         };
@@ -119,8 +122,8 @@ impl VCalendar {
     /// time zone, we check that calendar actually contains this time zone).
     ///
     /// Calling this function is required to convert calendar into a string,
-    /// hough note that even a calendar which fails the validation *can* be
-    /// converted into string, just with less guarantees regarding the
+    /// though note that a calendar which fails the validation can still be
+    /// converted into a string, just with less guarantees regarding the
     /// comaptibility.
     ///
     /// See [`CleanVCalendar::to_string()`] and [`DirtyVCalendar::to_string()`].
