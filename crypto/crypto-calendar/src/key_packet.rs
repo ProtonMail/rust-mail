@@ -1,4 +1,5 @@
 use base64::{prelude::BASE64_STANDARD, Engine};
+use proton_calendar_api::CalendarEvent;
 
 #[derive(Clone, Debug)]
 pub struct KeyPacket(String);
@@ -56,6 +57,25 @@ impl KeyPackets<KeyPacket> {
         KeyPackets {
             address_key_packet: self.address_key_packet.as_ref().map(KeyPacket::as_ref),
             shared_key_packet: self.shared_key_packet.as_ref().map(KeyPacket::as_ref),
+        }
+    }
+}
+
+impl<'a> KeyPackets<KeyPacketRef<'a>> {
+    pub fn from_event(event: &'a CalendarEvent) -> Self {
+        let address_key_packet = event
+            .address_key_packet
+            .as_deref()
+            .map(KeyPacketRef::from_base64);
+
+        let shared_key_packet = event
+            .shared_key_packet
+            .as_deref()
+            .map(KeyPacketRef::from_base64);
+
+        Self {
+            address_key_packet,
+            shared_key_packet,
         }
     }
 }

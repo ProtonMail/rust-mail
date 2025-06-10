@@ -2896,18 +2896,20 @@ impl Message {
         self.rsvp_attachment_id().is_some()
     }
 
-    /// Checks if given attachment is an RSVP invitation and, if so, fetches its
-    /// accompanying event from the calendar and returns it.
+    /// Checks if given attachment is an RSVP and, if so, fetches its event from
+    /// the calendar and returns it.
     ///
-    /// TODO (NGC-57) this function works only in online mode for now
-    #[tracing::instrument(skip_all)]
+    /// See: [`RsvpEvent::fetch()`].
+    ///
+    /// TODO (NGC-57) implement support for offline-mode
+    #[tracing::instrument(skip(self, ctx, tether))]
     pub async fn fetch_rsvp(
         &self,
         ctx: &MailUserContext,
         rsvp: LocalAttachmentId,
         tether: &mut Tether,
     ) -> MailContextResult<Option<RsvpEvent>> {
-        debug!(?rsvp, "Fetching RSVP");
+        debug!("Fetching RSVP");
 
         let ics = Attachment::get_attachment(ctx, rsvp).await.map_err(|err| {
             warn!(?err, "Couldn't get the RSVP attachment");

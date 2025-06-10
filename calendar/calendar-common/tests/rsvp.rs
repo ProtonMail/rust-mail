@@ -78,7 +78,7 @@ async fn using_address_key() {
 
 /// Make sure we can understand RSVPs that have been accepted/rejected/maybied.
 ///
-/// Such events get reencrypted using the calendar key, which requires going
+/// Such events get re-encrypted using the calendar key, which requires going
 /// through different crypto code paths.
 #[tokio::test]
 async fn using_shared_key() {
@@ -403,8 +403,10 @@ where
 
         CalendarEvent {
             shared_events: vec![CalendarEventPayload {
-                ty: CalendarEventPayloadType::EncryptedAndSigned,
+                ty: CalendarEventPayloadType::Encrypted,
                 data: shared_event.into_base64(),
+                signature: None,
+                author: "foo@localhost".into(),
             }],
             calendar_id: "HzNtbT1J".into(),
             start_time: 1_744_790_400,
@@ -413,9 +415,11 @@ where
             recurrence_id: None,
             address_key_packet,
             shared_key_packet,
-            attendees_events: vec![CalendarEventPayload {
-                ty: CalendarEventPayloadType::EncryptedAndSigned,
+            attendees_events: [CalendarEventPayload {
+                ty: CalendarEventPayloadType::Encrypted,
                 data: attendees_event.into_base64(),
+                signature: None,
+                author: "foo@localhost".into(),
             }],
             attendees: vec![
                 CalendarAttendee {

@@ -1,5 +1,6 @@
-use super::{
-    CalendarAttendeeId, CalendarAttendeeToken, CalendarId, CalendarKeyId, CalendarMemberId,
+use crate::{
+    CalendarAttendeeId, CalendarAttendeeToken, CalendarColor, CalendarId, CalendarKeyId,
+    CalendarMemberId,
 };
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -25,13 +26,6 @@ impl CalendarBootstrap {
     }
 
     #[must_use]
-    pub fn into_member(self) -> CalendarMember {
-        let [member] = self.members;
-
-        member
-    }
-
-    #[must_use]
     pub fn primary_key(&self) -> Option<&CalendarKey> {
         self.keys
             .iter()
@@ -45,7 +39,7 @@ pub struct CalendarMember {
     #[serde(rename = "ID")]
     pub id: CalendarMemberId,
     pub name: String,
-    pub color: String,
+    pub color: CalendarColor,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -111,8 +105,16 @@ pub struct CalendarEvent {
     pub recurrence_id: Option<String>,
     pub address_key_packet: Option<String>,
     pub shared_key_packet: Option<String>,
-    pub attendees_events: Vec<CalendarEventPayload>,
+    // Same story as with calendar members - there's always one item here
+    pub attendees_events: [CalendarEventPayload; 1],
     pub attendees: Vec<CalendarAttendee>,
+}
+
+impl CalendarEvent {
+    #[must_use]
+    pub fn attendees_event(&self) -> &CalendarEventPayload {
+        &self.attendees_events[0]
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -121,16 +123,8 @@ pub struct CalendarEventPayload {
     #[serde(rename = "Type")]
     pub ty: CalendarEventPayloadType,
     pub data: String,
-    //
-    // Each event can also be - and usually is - signed:
-    //
-    //     pub signature: Option<String>,
-    //
-    // ... but we don't check those signatures at the moment.
-    //
-    // Validating the calendar key's signature - which we *do* - is sufficient
-    // to prove that nobody has messed with the calendar, while validating each
-    // event is a bit PITA (you have to fetch event owner's public keys etc.).
+    pub signature: Option<String>,
+    pub author: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize_repr, Deserialize_repr)]
@@ -187,7 +181,11 @@ mod tests {
     #[test_case(CalendarEventPayloadType::Encrypted, NOT_SIGNED, ENCRYPTED)]
     #[test_case(CalendarEventPayloadType::Signed, SIGNED, NOT_ENCRYPTED)]
     #[test_case(CalendarEventPayloadType::EncryptedAndSigned, SIGNED, ENCRYPTED)]
-    fn payload_types(target: CalendarEventPayloadType, is_signed: bool, is_encrypted: bool) {
+    fn is_signed_or_encrypted(
+        target: CalendarEventPayloadType,
+        is_signed: bool,
+        is_encrypted: bool,
+    ) {
         assert_eq!(is_signed, target.is_signed());
         assert_eq!(is_encrypted, target.is_encrypted());
     }

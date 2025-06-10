@@ -1,12 +1,14 @@
 mod fetch;
 
 use chrono::{DateTime, NaiveDate, Utc};
-use proton_calendar_api::{CalendarAttendeeStatus, CalendarEventId, CalendarEventRecurrenceId};
+use proton_calendar_api::{
+    CalendarAttendeeStatus, CalendarColor, CalendarEventId, CalendarEventRecurrenceId,
+};
 use proton_core_api::{service::ApiServiceError, services::proton::Proton};
 use proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::keys::UnlockedAddressKeys;
 use proton_crypto_calendar::Error as CryptoError;
-use proton_ical::{self as ical, Error as IcalError, IcsWrite, Method};
+use proton_ical::{self as ical, IcsWrite};
 use thiserror::Error;
 use tracing::instrument;
 
@@ -17,8 +19,8 @@ pub struct RsvpEventId {
 }
 
 impl RsvpEventId {
-    /// Extracts event id from an internal invite (Proton -> Proton) via *.ics
-    /// file attached to the invitation email.
+    /// Extracts event id from an internal invitation (Proton -> Proton) via an
+    /// *.ics file attached to the invitation email.
     ///
     /// See: [`RsvpEventId::fetch()`].
     ///
@@ -26,7 +28,7 @@ impl RsvpEventId {
     pub fn from_internal(ics: &[u8]) -> RsvpResult<Self> {
         let cal = ical::VCalendar::from_bytes(ics)?.cal;
 
-        if cal.method != Some(Method::Request) {
+        if cal.method != Some(ical::Method::Request) {
             return Err(RsvpError::IcsIsNotRsvpRequest);
         }
 
@@ -58,7 +60,7 @@ impl RsvpEventId {
         Ok(Self { uid, recurrence_id })
     }
 
-    /// Extracts event id from an external invite ($vendor -> Proton) via
+    /// Extracts event id from an external invitation ($vendor -> Proton) via
     /// headers attached to the invitation email.
     ///
     /// See: [`RsvpEventId::fetch()`].
@@ -88,7 +90,7 @@ impl RsvpEventId {
     ///
     /// Note that this function needs to know the address keys of the currently
     /// logged-in user (i.e. the one who got the invite).
-    #[instrument(skip_all, fields(uid = self.uid.as_str()))]
+    #[instrument(skip_all)]
     pub async fn fetch<P>(
         &self,
         api: &Proton,
@@ -98,7 +100,7 @@ impl RsvpEventId {
     where
         P: PGPProviderSync,
     {
-        fetch::fetch(api, pgp, keys, self).await
+        fetch::main(api, pgp, keys, self).await
     }
 }
 
@@ -138,7 +140,7 @@ pub struct RsvpAttendee {
 #[derive(Clone, Debug, PartialEq)]
 pub struct RsvpCalendar {
     pub name: String,
-    pub color: String, // as a CSS hex-color, e.g. "#ff0000"
+    pub color: CalendarColor,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -195,7 +197,7 @@ pub enum RsvpError {
     Crypto(#[from] CryptoError),
 
     #[error("{0}")]
-    Ical(#[from] IcalError),
+    Ical(#[from] ical::Error),
 }
 
 #[cfg(test)]
