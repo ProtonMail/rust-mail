@@ -11,109 +11,79 @@ use stash::stash::StashError;
 
 use crate::models::ModelExtension as _;
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("user_settings")]
 #[allow(clippy::struct_excessive_bools)]
 pub struct UserSettings {
-    /// The remote ID of the record, i.e. the ID assigned by the API. This is a
-    /// globally-consistent unique identifier for the record within the set of
-    /// all records of this type, and is important for synchronisation.
     #[IdField(optional)]
     pub remote_id: Option<UserId>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub crash_reports: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub date_format: DateFormat,
 
-    /// TODO: Document this field.
     #[DbField]
     pub density: Density,
 
-    /// TODO: Document this field.
     #[DbField]
     pub device_recovery: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub early_access: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub email: Email,
 
-    /// TODO: Document this field.
     #[DbField]
     pub flags: SettingsFlags,
 
-    /// TODO: Document this field.
     #[DbField]
     pub hide_side_panel: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub high_security: HighSecurity,
 
-    /// TODO: Document this field.
     #[DbField]
     pub invoice_text: String,
 
-    /// TODO: Document this field.
     #[DbField]
     pub locale: String,
 
-    /// TODO: Document this field.
     #[DbField]
     pub log_auth: LogAuth,
 
-    /// TODO: Document this field.
     #[DbField]
     pub news: u32,
 
-    /// TODO: Document this field.
     #[DbField]
     pub password: Password,
 
-    /// TODO: Document this field.
     #[DbField]
     pub phone: Phone,
 
-    /// TODO: Document this field.
     #[DbField]
     pub referral: Option<Referral>,
 
-    /// TODO: Document this field.
     #[DbField]
     pub session_account_recovery: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub telemetry: bool,
 
-    /// TODO: Document this field.
     #[DbField]
     pub time_format: TimeFormat,
 
-    /// TODO: Document this field.
     #[DbField]
     pub two_factor_auth: TwoFa,
 
-    /// TODO: Document this field.
     #[DbField]
     pub week_start: WeekStart,
 
-    /// TODO: Document this field.
     #[DbField]
     pub welcome: bool,
 
-    #[allow(clippy::doc_markdown)]
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
 }

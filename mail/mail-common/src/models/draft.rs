@@ -70,34 +70,31 @@ pub struct DraftMetadata {
     #[builder(default, setter(strip_option))]
     #[IdField(autoincrement)]
     pub id: Option<MetadataId>,
-    /// Id of the draft message.
+
     #[builder(default, setter(strip_option))]
     #[DbField]
     pub local_message_id: Option<LocalMessageId>,
+
     #[builder(default, setter(strip_option))]
     #[DbField]
-    /// Id of the conversation this draft belongs to.
     pub local_conversation_id: Option<LocalConversationId>,
-    /// Local id of the message being replied to.
+
     #[builder(default, setter(strip_option))]
     #[DbField]
     pub local_parent_id: Option<LocalMessageId>,
-    /// Reply mode used for the draft, if `None` is an empty draft.
+
     #[builder(default, setter(strip_option))]
     #[DbField]
     pub reply_mode: Option<ReplyMode>,
-    /// Last save action id.
+
     #[builder(default, setter(strip_option))]
     #[DbField]
     pub save_action_id: Option<ActionId>,
-    /// Last send action id.
+
     #[builder(default, setter(strip_option))]
     #[DbField]
     pub send_action_id: Option<ActionId>,
 
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[builder(default, setter(strip_option))]
     #[RowIdField]
     pub row_id: Option<u64>,
@@ -317,33 +314,33 @@ impl DraftMetadata {
 #[derive(Clone, Debug, Eq, Model, PartialEq, Hash)]
 #[TableName("draft_send_result")]
 pub struct DraftSendResult {
-    /// Id of the draft message.
     #[IdField]
     pub local_message_id: LocalMessageId,
-    #[DbField]
+
     /// Only set when the message was sent successfully.
+    #[DbField]
     pub remote_message_id: Option<MessageId>,
-    /// Timestamp at which this entry was produced.
+
     #[DbField]
     pub timestamp: UnixTimestamp,
+
     /// Timestamp by which we can cancel the sending of this message, this corresponds to
     /// the message delivery time.
     #[DbField]
     pub undo_timestamp: UnixTimestamp,
-    /// Whether an error occurred while sending the message.
+
     #[DbField]
     pub error: Option<DraftSendFailure>,
-    /// Whether this result was seen at least once.
+
     #[DbField]
     pub seen: bool,
+
     #[DbField]
-    /// Where this error originated from
     pub origin: DraftSendResultOrigin,
+
     #[DbField]
     pub has_send_action: bool,
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
+
     #[RowIdField]
     pub row_id: Option<u64>,
 }
@@ -799,36 +796,30 @@ impl TableObserver for DraftSendResultTableObserver {
 #[derive(Clone, Debug, Eq, Model, PartialEq, Hash)]
 #[TableName("draft_attachment_metadata")]
 pub struct DraftAttachmentMetadata {
-    /// Id of the attachment.
     #[IdField]
     pub local_attachment_id: LocalAttachmentId,
+
     #[DbField]
-    /// Draft metadata id.
     pub metadata_id: MetadataId,
-    /// Timestamp at which this entry was produced.
+
     #[DbField]
     timestamp: i64,
-    /// Whether an error occurred while uploading the attachment.
+
     #[DbField]
     state: DraftAttachmentUploadState,
-    /// Ownership of this attachment.
+
     #[DbField]
     pub ownership: DraftAttachmentOwnership,
-    /// Last upload error, if any.
-    ///
-    /// We record the error separate as we need to ascertain the upload state. It's easier
-    /// to match against an integer rather than a json object on the database.
+
     #[DbField]
     pub error: Option<DraftAttachmentUploadError>,
-    /// Order in which this attachment should be displayed.
+
     #[DbField]
     pub display_order: usize,
-    /// Upload action that is currently queued or running.
+
     #[DbField]
     pub action_id: Option<ActionId>,
-    /// Whether this entry was removed from the attachment list.
-    ///
-    /// We keep it hidden until the action succeeds so we can recover.
+
     #[DbField]
     pub deleted: bool,
 

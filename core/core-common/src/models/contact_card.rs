@@ -12,38 +12,24 @@ use stash::macros::Model;
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("contact_cards")]
 pub struct ContactCard {
-    /// The local ID of the record, i.e. the ID assigned by the client
-    /// application. This is a restricted-scope unique identifier for the record
-    /// within the set of all records of this type, and is important for
-    /// relating local records. It has no relationship to the centrally-stored
-    /// API ID, and never leaves the local system.
     #[IdField(autoincrement)]
     pub local_id: Option<LocalContactId>,
 
-    /// Local contact ID to which this card belongs.
     #[DbField]
     pub local_contact_id: Option<LocalContactId>,
 
-    /// Remote contact ID to which this card belongs.
     #[DbField]
     pub remote_contact_id: Option<ContactId>,
 
-    /// Status of the card.
     #[DbField]
     pub card_type: ContactCardType,
 
-    /// The card data, encoded as a string.
     #[DbField]
     pub data: String,
 
-    /// The card signature, encoded as a string.
     #[DbField]
     pub signature: Option<String>,
 
-    #[allow(clippy::doc_markdown)]
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
 }

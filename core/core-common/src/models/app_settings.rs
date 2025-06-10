@@ -18,43 +18,29 @@ use smart_default::SmartDefault;
 #[derive(Debug, Clone, PartialEq, Model, SmartDefault)]
 #[TableName("app_settings")]
 pub struct AppSettings {
-    /// There is only one entry of `AppSettings`
-    /// stored in database.
-    ///
     #[IdField]
     pub local_id: SingleEntryId,
 
-    /// The theme of the Application
     #[DbField]
     pub appearance: AppAppearance,
 
-    /// What additional protection of the app is in use.
     #[DbField]
     pub protection: AppProtection,
 
-    /// Autolock time for additional protection to kick in,
-    /// when app is running in bg for extended time.
     #[DbField]
     pub auto_lock: ProtectionAutoLock,
 
-    /// When auto-lock was lastly invoked,
     #[DbField]
     #[default(_code = "UnixTimestamp::new(0)")]
     pub lock_accessed_unixepoch: UnixTimestamp,
 
-    /// Do you want to share contacts between the accounts.
     #[DbField]
     pub use_combine_contacts: bool,
 
-    /// Use alternative routing, helpful for ppl leaving in
-    /// area where Proton servers are blocked for any reason.
     #[DbField]
     #[default = true]
     pub use_alternative_routing: bool,
 
-    /// The internal row ID of the record in the database. This is assigned by
-    /// `SQLite`, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
 }
@@ -266,23 +252,15 @@ impl ToSql for ProtectionAutoLock {
 #[derive(Debug, Clone, PartialEq, Model)]
 #[TableName("pin_protection")]
 pub struct PinProtection {
-    /// There is only one entry of `PinProtection`
-    /// stored in database.
-    ///
     #[IdField]
     pub local_id: SingleEntryId,
 
-    /// How many unsuccessful attempts where made to authenticate
     #[DbField]
     pub attempts: u8,
 
-    /// When last attempt was made
     #[DbField]
     pub last_access_unixepoch: i64,
 
-    /// The internal row ID of the record in the database. This is assigned by
-    /// `SQLite`, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
 }

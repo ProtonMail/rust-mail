@@ -26,20 +26,12 @@ mod tests;
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("rollback_actions")]
 pub struct RollbackItem {
-    /// The remote ID of the record, i.e. the ID assigned by the API. This is a
-    /// globally-consistent unique identifier for the record within the set of
-    /// all records of this type, and it is important for synchronization.
     #[IdField]
     pub remote_id: String,
 
-    /// Table can store Labels, Messages, and Conversations.
     #[DbField]
     pub item_type: RollbackItemType,
 
-    #[allow(clippy::doc_markdown)]
-    /// The internal row ID of the record in the database. This is assigned by
-    /// SQLite, and is used as a consistent identifier for records when
-    /// listening for change notifications.
     #[RowIdField]
     pub row_id: Option<u64>,
 }

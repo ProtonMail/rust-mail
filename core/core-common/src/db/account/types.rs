@@ -36,43 +36,33 @@ use zeroize::Zeroize;
 #[derive(Debug, Clone, PartialEq, Model)]
 #[TableName("core_accounts")]
 pub struct CoreAccount {
-    /// Remote ID of the account (i.e. the API User ID).
     #[IdField]
     pub remote_id: UserId,
 
-    /// The account's username or email address (used for login).
     #[DbField]
     pub name_or_addr: String,
 
-    /// The second factor auth mode of the account.
     #[DbField]
     pub second_factor_mode: Option<TfaStatus>,
 
-    /// The mailbox password mode of the account.
     #[DbField]
     pub password_mode: Option<PasswordMode>,
 
-    /// The account's username (once known).
     #[DbField]
     pub username: Option<String>,
 
-    /// The account's password (encrypted, temporary).
     #[DbField]
     pub password: Option<EncryptedPassword>,
 
-    /// The account's display name (once known).
     #[DbField]
     pub display_name: Option<String>,
 
-    /// The account's primary email address (once known).
     #[DbField]
     pub primary_addr: Option<String>,
 
-    /// Timestamp of when the account was last set as the primary account.
     #[DbField]
     pub primary_at: Option<Timestamp>,
 
-    /// Whether the account is ready (i.e. login flow completed).
     #[DbField]
     pub is_ready: bool,
 
@@ -298,27 +288,21 @@ impl TableObserver for CoreAccountWatcher {
 #[derive(Debug, Clone, PartialEq, Eq, Model)]
 #[TableName("core_sessions")]
 pub struct CoreSession {
-    /// Remote ID of the session (i.e. the API Auth UID).
     #[IdField]
     pub remote_id: SessionId,
 
-    /// Account ID the session is associated with (i.e. the API User ID).
     #[DbField]
     pub account_id: UserId,
 
-    /// Access token for the session.
     #[DbField]
     pub access_token: EncryptedAccessToken,
 
-    /// Refresh token for the session.
     #[DbField]
     pub refresh_token: EncryptedRefreshToken,
 
-    /// The scope(s) the session has access to.
     #[DbField]
     pub auth_scopes: AuthScopes,
 
-    /// Secret used for unlocking the account's PGP key (once derived).
     #[DbField]
     pub key_secret: Option<EncryptedKeySecret>,
 
