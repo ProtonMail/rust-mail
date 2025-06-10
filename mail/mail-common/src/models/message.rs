@@ -2781,7 +2781,11 @@ impl Message {
     /// A message is considered a draft when it has the AllDrafts label assigned.
     #[must_use]
     pub fn is_draft(&self) -> bool {
-        self.label_ids.contains(&LabelId::all_drafts()) && self.flags.is_draft()
+        self.flags.is_draft()
+            && self
+                .label_ids
+                .iter()
+                .any(|l| *l == LabelId::all_drafts() || *l == LabelId::drafts())
     }
 
     /// Whether this message is a draft and has been modified locally.
@@ -3010,6 +3014,15 @@ impl Message {
         )
         .await?;
         Ok(())
+    }
+
+    pub fn can_reply(&self) -> bool {
+        self.label_ids.iter().any(|label_id| {
+            !(*label_id == LabelId::all_scheduled()
+                || *label_id == LabelId::outbox()
+                || *label_id == LabelId::drafts()
+                || *label_id == LabelId::all_drafts())
+        })
     }
 }
 
