@@ -1432,7 +1432,7 @@ impl Draft {
     /// ## Example of usage
     ///
     /// ```ignore
-    /// let head_to_inject = draft.html_head_content_for_composer(theme_opts);
+    /// let head_to_inject = draft.html_head_content_for_composer(theme_opts, "editor");
     ///
     /// let template = format!("
     /// <html>

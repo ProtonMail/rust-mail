@@ -139,7 +139,7 @@ impl<M: Model<Message> + Sized, Message: Send + 'static> App<M, Message> {
         if command.is_none() {
             // skip allocation just below
             return;
-        };
+        }
 
         let mut pending = Vec::with_capacity(4);
         pending.push(command);

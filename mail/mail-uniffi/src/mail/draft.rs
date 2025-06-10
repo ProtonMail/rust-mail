@@ -49,6 +49,18 @@ pub struct DraftScheduleSendOptions {
     pub is_custom_option_available: bool,
 }
 
+#[derive(Debug, uniffi::Record)]
+pub struct HtmlForComposer {
+    /// HTML content that should be injected into `<head>` tag.
+    ///
+    /// It does not provide `<head>` tag on its own.
+    /// Therefore, the returned HTML can be inserted alongside with other html nodes.
+    pub head_content: String,
+    /// Initial body of the draft. Usually contains signature
+    /// and replied quote.
+    pub initial_body: String,
+}
+
 impl From<ScheduleSendOptions<Local>> for DraftScheduleSendOptions {
     fn from(value: ScheduleSendOptions<Local>) -> Self {
         Self {
@@ -224,26 +236,23 @@ impl Draft {
         async_runtime().block_on(async { self.instance.read().await.subject.clone() })
     }
 
-    /// Get head content for the composer.
-    /// It is **NOT** a head of the message.
-    /// It contains styles for dark mode and nothing else.
+    /// Returns both HTML content for <head> in the composer editor, as well as modified (as in with dark mode)
+    /// body of the draft.
+    /// Used to initialize the composer editor.
     ///
     /// **WARNING**: This function modifies the draft content by removing `!important` flag.
     ///
     /// # Parameters
     ///
+    /// * `theme_opts` - theme options - used to determine html content theme.
     /// * `editor_id` - the HTML ID of the editor that wraps the message. The same used to reference DOM in javascript.
     ///
-    /// # Returned HTML
-    ///
-    /// This function returns HTML that can be inserted INTO `<head>` tag.
-    /// It does not provide `<head>` tag on its own.
-    /// Therefore, the returned HTML can be inserted alongside with other html nodes.
-    ///
-    /// ## Example of usage
+    /// # Example of usage
     ///
     /// ```ignore
-    /// let head_to_inject = draft.html_head_content_for_composer(theme_opts);
+    /// let html_for_composer = draft.html_for_composer(theme_opts, "editor");
+    /// let head_to_inject = html_for_composer.head_content;
+    /// let initial_body = html_for_composer.initial_body;
     ///
     /// let template = format!("
     /// <html>
@@ -256,22 +265,23 @@ impl Draft {
     /// </head>
     /// <body>
     /// ...
+    /// {initial_body}
+    /// ...
     /// </body>
     /// </html>
     /// ");
-    ///
     /// ```
-    pub fn html_head_content_for_composer(
-        &self,
-        theme_opts: ThemeOpts,
-        editor_id: String,
-    ) -> String {
+    pub fn html_for_composer(&self, theme_opts: ThemeOpts, editor_id: String) -> HtmlForComposer {
         let theme_opts = theme_opts.into();
         async_runtime().block_on(async {
-            self.instance
-                .write()
-                .await
-                .html_head_content_for_composer(theme_opts, editor_id)
+            let mut instance = self.instance.write().await;
+            let head_content = instance.html_head_content_for_composer(theme_opts, editor_id);
+            let initial_body = instance.body().to_owned();
+
+            HtmlForComposer {
+                head_content,
+                initial_body,
+            }
         })
     }
 
