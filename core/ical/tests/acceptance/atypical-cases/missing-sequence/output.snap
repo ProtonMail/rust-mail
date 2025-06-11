@@ -137,6 +137,7 @@ VCalendar {
                         },
                     ),
                     cn: None,
+                    sent_by: None,
                 },
             ),
             attendees: [

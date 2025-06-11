@@ -91,6 +91,7 @@ impl IcsRead<Value> for Text {
                 '\n' => {
                     break;
                 }
+
                 '\\' => {
                     let Some(ch) = r.value::<Spanned<_>>() else {
                         break;
@@ -112,6 +113,15 @@ impl IcsRead<Value> for Text {
                         }
                     }
                 }
+
+                '"' => {
+                    if r.hints().inside_quote {
+                        break;
+                    }
+
+                    text.push(ch);
+                }
+
                 ch => {
                     text.push(ch);
                 }

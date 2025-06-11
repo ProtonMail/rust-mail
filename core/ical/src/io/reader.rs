@@ -87,13 +87,19 @@ impl<'a> IcsReader<'a> {
     ///
     /// This mechanism is used to parse technically-illegal *.ics files that we
     /// can nonetheless reasonably recover.
-    pub fn hint(&mut self, h: impl FnOnce(&mut IcsReaderHints), f: impl FnOnce(&mut Self)) {
+    pub fn hint<T>(
+        &mut self,
+        h: impl FnOnce(&mut IcsReaderHints),
+        f: impl FnOnce(&mut Self) -> T,
+    ) -> T {
         let prev_hints = self.hints;
 
         h(&mut self.hints);
-        f(self);
+        let result = f(self);
 
         self.hints = prev_hints;
+
+        result
     }
 
     /// Runs `f` under a parser that contains an extra context such as "parsing
@@ -745,7 +751,7 @@ impl ReadEntry {
     }
 
     /// If this entry begins a parameter named `name`, reads that parameter and
-    /// returs true; returns false otherwise.
+    /// returns true; returns false otherwise.
     #[must_use]
     pub fn try_param<T>(&self, r: &mut IcsReader, name: &str, value: &mut Option<T>) -> bool
     where
@@ -814,12 +820,12 @@ impl ReadEntry {
             }
 
             ReadEntry::Prop { name } => {
+                let msg = format!("unknown property `{}`", name.value);
+
                 // `X-` prefix (as in `X-FOO`) marks a vendor property - we
                 // don't have to support those and they shouldn't affect the
                 // semantics of the calendar in a major way, so let's emit those
                 // as warnings instead of errors
-                let msg = format!("unknown property `{}`", name.value);
-
                 if name.starts_with("x-") || name.starts_with("X-") {
                     r.warn(name.span, msg);
                 } else {
@@ -833,11 +839,10 @@ impl ReadEntry {
             }
 
             ReadEntry::Param { name } => {
-                // Same as with properties, the `X-` prefix marks something
-                // vendor-specific - if we happen not to support anything, no
-                // need to sweat over it
                 let msg = format!("unknown parameter `{}`", name.value);
 
+                // Same as with properties, the `X-` prefix marks something
+                // vendor-specific - if we happen not to support it, it's fine
                 if name.starts_with("x-") || name.starts_with("X-") {
                     r.warn(name.span, msg);
                 } else {
@@ -847,11 +852,26 @@ impl ReadEntry {
                 // Recover by skipping the parameter
                 r.silently(|r| {
                     while let Some(ch) = r.peek() {
-                        if ch == ':' || ch == ';' {
-                            break;
-                        }
+                        match ch {
+                            ':' | ';' => {
+                                break;
+                            }
 
-                        _ = r.char();
+                            // Skip entire strings, to avoid bailing out too
+                            // early in cases like:
+                            //
+                            // PROP;UNKNOWN-PARAM="foo:bar":zar
+                            //
+                            // ... where we'd like to eat everything up to the
+                            //     enclosing quote, not bail out mid-string
+                            '"' => {
+                                _ = ParamValue::read(r);
+                            }
+
+                            _ => {
+                                _ = r.char();
+                            }
+                        }
                     }
                 });
 
@@ -945,6 +965,7 @@ impl From<IcsReaderPosition> for LineAndChar {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct IcsReaderHints {
     pub inside_array: bool,
+    pub inside_quote: bool,
 }
 
 #[cfg(test)]
@@ -1076,7 +1097,7 @@ mod tests {
     #[test]
     fn err_unknown_parameter() {
         let mut r = target(ics! {"
-            ;FOO=one;BAR=two-tree/four;ZAR=five
+            ;FOO=one;BAR=\"two-tree:four\";ZAR=five
         "});
 
         r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
@@ -1101,13 +1122,13 @@ mod tests {
                 context: Vec::new(),
             },
             ReadMsg {
-                at: Some(Span::new((1, 28), (1, 30))),
+                at: Some(Span::new((1, 30), (1, 32))),
                 msg: "unknown parameter `ZAR`".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             },
             ReadMsg {
-                at: Some(Span::new((1, 36), (1, 36))),
+                at: Some(Span::new((1, 38), (1, 38))),
                 msg: "incomplete source".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),

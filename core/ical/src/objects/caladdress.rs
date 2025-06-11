@@ -129,6 +129,7 @@ impl IcsRead<Value> for EmailAddress {
         if r.try_string("mailto:").is_some() {
             Some(Self { value: r.value()? })
         } else {
+            r.error(Span::one(r.pos()), "expected an email address (mailto:)");
             None
         }
     }

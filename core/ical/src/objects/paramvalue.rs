@@ -104,16 +104,30 @@ impl IcsRead<Value> for ParamValue {
             quote = true;
 
             while let Some(ch) = r.peek() {
-                if ch == '"' {
-                    _ = r.char();
-                    break;
-                }
+                match ch {
+                    '"' => {
+                        _ = r.char();
+                        break;
+                    }
 
-                if ch.is_control() {
-                    break;
-                }
+                    '\t' => {
+                        r.warn(Span::one(r.pos()), "quirky tab");
+                        _ = r.char();
 
-                value.push(r.char()?);
+                        // param-values don't support tabs even in quotes, so
+                        // let's sanitize it into a space for better
+                        // compatibility
+                        value.push(' ');
+                    }
+
+                    ch if ch.is_control() => {
+                        break;
+                    }
+
+                    _ => {
+                        value.push(r.char()?);
+                    }
+                }
             }
         } else {
             quote = false;

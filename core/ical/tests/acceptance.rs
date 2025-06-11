@@ -132,6 +132,7 @@ fn without_calscale() {
 #[test_case("non-conformant-cn")]
 #[test_case("nuku-alofa-tz")]
 #[test_case("outside-uid")]
+#[test_case("tabs")]
 #[test_case("tentative-status")]
 #[test_case("unexpected-newline-1")]
 #[test_case("unexpected-newline-2")]
