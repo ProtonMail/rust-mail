@@ -1,12 +1,13 @@
+use std::time::Duration;
+
+use async_trait::async_trait;
+use proton_core_common::Context;
 use proton_core_common::test_utils::test_context::TestContext;
 use proton_core_common::{
     models::{AppProtection, AppSettings, ModelExtension, PinProtection},
     pin_code::{PinCode, PinError},
 };
-use stash::{
-    orm::Model,
-    stash::{StashError, Tether},
-};
+use stash::orm::Model;
 
 #[tokio::test]
 async fn create_and_delete_pin() {
@@ -18,7 +19,7 @@ async fn create_and_delete_pin() {
         .await
         .unwrap();
 
-    let mut tether = core_ctx.account_stash().connection();
+    let tether = core_ctx.account_stash().connection();
     let app_settings = AppSettings::get_or_default(&tether).await;
 
     assert_eq!(app_settings.protection, AppProtection::Pin);
@@ -26,7 +27,7 @@ async fn create_and_delete_pin() {
 
     assert_eq!(pin_metadata.attempts, 0);
 
-    pin_metadata.last_access_reset(&mut tether).await.unwrap();
+    core_ctx.last_access_reset().await;
 
     let incorrect_pin = vec![0, 0, 0, 0];
 
@@ -39,7 +40,7 @@ async fn create_and_delete_pin() {
     pin_metadata.reload(&tether).await.unwrap();
     assert_eq!(pin_metadata.attempts, 1);
 
-    pin_metadata.last_access_reset(&mut tether).await.unwrap();
+    core_ctx.last_access_reset().await;
 
     PinCode::delete_pin(core_ctx.clone(), pin).await.unwrap();
 
@@ -60,15 +61,15 @@ async fn modify_pin() {
         .await
         .unwrap();
 
-    let mut tether = core_ctx.account_stash().connection();
+    let tether = core_ctx.account_stash().connection();
     let app_settings = AppSettings::get_or_default(&tether).await;
 
     assert_eq!(app_settings.protection, AppProtection::Pin);
-    let mut pin_metadata = PinProtection::get(&tether).await.unwrap().unwrap();
+    let pin_metadata = PinProtection::get(&tether).await.unwrap().unwrap();
 
     assert_eq!(pin_metadata.attempts, 0);
 
-    pin_metadata.last_access_reset(&mut tether).await.unwrap();
+    core_ctx.last_access_reset().await;
 
     PinCode::validate_pin(core_ctx.clone(), pin.clone())
         .await
@@ -82,14 +83,14 @@ async fn modify_pin() {
         .await
         .unwrap();
 
-    pin_metadata.last_access_reset(&mut tether).await.unwrap();
+    core_ctx.last_access_reset().await;
 
     let error = PinCode::validate_pin(core_ctx.clone(), old_pin)
         .await
         .unwrap_err();
     assert!(matches!(error, PinError::IncorrectPin));
 
-    pin_metadata.last_access_reset(&mut tether).await.unwrap();
+    core_ctx.last_access_reset().await;
 
     PinCode::validate_pin(core_ctx.clone(), new_pin)
         .await
@@ -116,9 +117,10 @@ async fn validation_max_attempts() {
 
     assert_eq!(pin_metadata.attempts, 0);
 
+    core_ctx.last_access_reset().await;
+
     // Lets pretend we have one attempt left
     pin_metadata.attempts = PinCode::MAX_ATTEMPTS - 1;
-    pin_metadata.last_access_unixepoch = 0;
 
     tether
         .tx(async |tx| pin_metadata.save(tx).await)
@@ -131,11 +133,11 @@ async fn validation_max_attempts() {
 
     assert!(matches!(error, PinError::TooManyAttempts));
 
-    let mut pin_metadata = PinProtection::get(&tether).await.unwrap().unwrap();
+    let pin_metadata = PinProtection::get(&tether).await.unwrap().unwrap();
 
     assert_eq!(pin_metadata.attempts, 10);
 
-    pin_metadata.last_access_reset(&mut tether).await.unwrap();
+    core_ctx.last_access_reset().await;
 
     // Pin code is not responsible to do anything regarding `TooManyAttempts`
     // error. In production flow there is catch on this error
@@ -158,7 +160,7 @@ async fn deleting_not_existing_pin_multiple_times_should_succeed() {
 
     let mut tether = core_ctx.account_stash().connection();
     let mut app_settings = AppSettings::get_or_default(&tether).await;
-    app_settings.set_biometrics();
+    app_settings.set_biometrics(core_ctx).await;
     tether
         .tx(async |tx| app_settings.save(tx).await)
         .await
@@ -181,20 +183,16 @@ async fn deleting_not_existing_pin_multiple_times_should_succeed() {
     );
 }
 
-trait PinProtectionExt {
-    fn last_access_reset(
-        &mut self,
-        tether: &mut Tether,
-    ) -> impl Future<Output = Result<(), StashError>>;
+#[async_trait]
+trait PinContextExt {
+    async fn last_access_reset(&self);
 }
 
-impl PinProtectionExt for PinProtection {
-    async fn last_access_reset(&mut self, tether: &mut Tether) -> Result<(), StashError> {
-        self.reload(tether).await?;
-        self.last_access_unixepoch = 0;
-
-        tether.tx(async |tx| self.save(tx).await).await?;
-
-        Ok(())
+#[async_trait]
+impl PinContextExt for Context {
+    async fn last_access_reset(&self) {
+        self.clock()
+            .pin_code_accessed_sub(Duration::from_secs(2))
+            .await;
     }
 }

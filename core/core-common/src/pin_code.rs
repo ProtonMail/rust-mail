@@ -2,14 +2,12 @@ use std::io::Error as IoError;
 use std::ops::Deref;
 use std::sync::Arc;
 
-use chrono::Utc;
 use proton_crypto_pin_hash::argon2::{Argon2HashingError, ProtonArgon2Hash};
 use secrecy::{ExposeSecret, SecretString};
 use stash::stash::StashError;
 use thiserror::Error;
 use tokio::task::JoinError;
 
-use crate::datatypes::UnixTimestamp;
 use crate::models::{AppProtection, AppSettings, ModelExtension, PinProtection};
 use crate::os::{KeyChainError, StoreInKeyChain};
 use crate::{Context, CoreContextError};
@@ -55,6 +53,7 @@ impl PinCode {
     const MIN_PASSWD_LEN: usize = 4;
     const MAX_PASSWD_LEN: usize = 21;
     const HIGHEST_SINGLE_DIGIT: u32 = 9;
+    const PIN_CODE_ACCESS_INTERVAL: u64 = 1;
 
     /// Creates new PIN
     ///
@@ -92,7 +91,6 @@ impl PinCode {
         let mut app_settings = AppSettings::get_or_default(&tether).await;
 
         app_settings.protection = AppProtection::Pin;
-        app_settings.lock_accessed_unixepoch = UnixTimestamp::now();
 
         tether
             .tx(async |bond| -> Result<(), StashError> {
@@ -102,6 +100,9 @@ impl PinCode {
                 Ok(())
             })
             .await?;
+
+        ctx.clock().pin_code_accessed_now().await;
+        ctx.clock().auto_lock_accessed_now().await;
 
         Ok(())
     }
@@ -113,16 +114,15 @@ impl PinCode {
     pub async fn validate_pin(ctx: Arc<Context>, pin: Vec<u32>) -> Result<(), PinError> {
         let pin = Self::sanitize_pin(pin)?;
         let mut tether = ctx.account_stash().connection();
-        let mut app_settings = AppSettings::get_or_default(&tether).await;
+        let app_settings = AppSettings::get_or_default(&tether).await;
 
         if matches!(app_settings.protection, AppProtection::Pin) {
             let Some(mut pin_protection) = PinProtection::get(&tether).await? else {
                 return Err(PinError::MissingPinMetadata);
             };
+            let last_access = ctx.clock().pin_code_elapsed().await.as_secs();
 
-            let now = Utc::now().timestamp();
-
-            if pin_protection.last_access_unixepoch == now {
+            if last_access <= Self::PIN_CODE_ACCESS_INTERVAL {
                 return Err(PinError::TooFrequentAttempts);
             }
 
@@ -140,13 +140,13 @@ impl PinCode {
 
             tether
                 .tx(async |bond| -> Result<(), StashError> {
-                    pin_protection.last_access_unixepoch = now;
+                    ctx.clock().pin_code_accessed_now().await;
 
                     if success {
                         pin_protection.attempts = 0;
                         pin_protection.save(bond).await?;
 
-                        app_settings.auto_lock_modified_now().save(bond).await?;
+                        ctx.clock().auto_lock_accessed_now().await;
                     } else {
                         pin_protection.attempts += 1;
                         pin_protection.save(bond).await?;

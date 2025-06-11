@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use proton_core_common::datatypes::{LocalLabelId, SystemLabel};
 use proton_core_common::models::{AppProtection, AppSettings, PinProtection};
 use proton_core_common::pin_code::{PinCode, PinError};
@@ -130,7 +132,11 @@ async fn set_default_pin_code(user_ctx: &MailUserContext) {
     // Make this attempt a last one
     let mut pin_metadata = PinProtection::get(&tether).await.unwrap().unwrap();
     pin_metadata.attempts = PinCode::MAX_ATTEMPTS - 1;
-    pin_metadata.last_access_unixepoch = 0;
+    user_ctx
+        .core_context()
+        .clock()
+        .pin_code_accessed_sub(Duration::from_secs(2))
+        .await;
     tether
         .tx(async |bond| pin_metadata.save(bond).await)
         .await
