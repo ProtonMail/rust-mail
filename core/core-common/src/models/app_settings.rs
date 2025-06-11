@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use chrono::Utc;
 use derive_more::derive::TryFrom;
 use stash::exports::{
@@ -35,6 +37,9 @@ pub struct AppSettings {
     pub lock_accessed_unixepoch: UnixTimestamp,
 
     #[DbField]
+    pub modified_unixepoch: UnixTimestamp,
+
+    #[DbField]
     pub use_combine_contacts: bool,
 
     #[DbField]
@@ -64,19 +69,48 @@ impl AppSettings {
     /// Method automatically stores current time when returning `true`, allowing
     /// for repetable calls checking if the time has passed since last autolock.
     ///
+    /// We need to make sure time does not move backwards as users can
+    /// manually set the time to the past to bypass autolock.
+    ///
+    ///    |-----locked-----|----unlocked----|----locked-----|
+    ///  past              t0               t1             future
+    ///
+    /// ``` ignore
+    /// let now = std::cmp::max(UnixTimestamp::now(), self.lock_accessed_unixepoch);
+    /// ```
+    /// So this coparison prevents time manipulation in (past; t0) range.
+    /// (t0; t1) range is still vulnerable to time manipulation.
+    /// Though its much harder for a 3rd party to guess when the app was unlocked.
+    /// But that still gives infinite number of attempts to bruteforce the unlocked period.
+    ///
+    /// So to limit the number of guesses we could set the auto lock to always if time manipulation
+    /// is detected. Which limits the number of guesses to 1. But still it is easy enough to read
+    /// logs or watch person use the app.
+    ///
+    /// To make it realy hard we will track time of each evocation of the `should_auto_lock` method.
+    /// That allows us to make a window of unlocked period to be smaller but unpredactibly as it
+    /// requires user's certain behavior to actually improve the security. In order to make it
+    /// manipulation proof we need someone from outside of the operating system to provide a time
+    /// OR someone who knows the delta time - something which works in intervals. If we know the
+    /// intervals lengths we can estimate time passage to the satisfactory degree.
+    ///
+    /// # Aliasing
+    ///
+    /// We also may suffer from the aliasing fenomen so the sampling
+    /// has to be lower than 60 seconds (AutoLock::Minutes(1)).
+    ///
     pub async fn should_auto_lock(&mut self, tether: &mut Tether) -> Result<bool, StashError> {
         if self.protection.is_unset() {
             Ok(false)
         } else {
-            let now = UnixTimestamp::now();
+            let now = self.now(None);
             let should_lock = self
                 .auto_lock
                 .should_autolock(now, self.lock_accessed_unixepoch);
 
-            if should_lock {
-                self.lock_accessed_unixepoch = now;
-                tether.tx(async |bond| self.save(bond).await).await?;
-            }
+            // We want to update time everytime this function is invoked
+            // and protection is set to something other than None
+            tether.tx(async |bond| self.save(bond).await).await?;
 
             Ok(should_lock)
         }
@@ -85,6 +119,69 @@ impl AppSettings {
     /// Get the app settings from database
     pub async fn get(tether: &Tether) -> Result<Option<Self>, StashError> {
         Self::load(SingleEntryId, tether).await
+    }
+
+    /// Get the current time.
+    ///
+    /// If the interval is provided, and the system time is in the past
+    /// it will return the current time predicted from the interval. Otherwise
+    /// it will return the max of the current time and the modified time.
+    ///
+    /// # Arguments
+    ///
+    /// * `interval` - The optional value of interval to add to the modified time.
+    ///
+    /// # Notes
+    ///
+    /// Interval should only be provided when it is known as in periodic calls.
+    ///
+    /// # Returns
+    ///
+    /// The current time.
+    ///
+    pub fn now(&self, interval: Option<Duration>) -> UnixTimestamp {
+        let now = UnixTimestamp::now();
+        let last_modified = self.modified_unixepoch;
+        let predicted_now = last_modified.saturating_add(interval.unwrap_or_default().as_secs());
+
+        if now >= last_modified {
+            now
+        } else {
+            predicted_now
+        }
+    }
+
+    pub fn modified_now(&mut self, interval: Option<Duration>) -> &mut Self {
+        self.modified_unixepoch = self.now(interval);
+        self
+    }
+
+    pub fn auto_lock_modified_now(&mut self) -> &mut Self {
+        self.lock_accessed_unixepoch = self.now(None);
+        self
+    }
+
+    /// Touch the app settings.
+    ///
+    /// This method is used to update the `modified_unixepoch` field.
+    /// It will preserve any changes done to the object as touch invokes
+    /// save on the object and modifies only `modified_unixepoch` field.
+    ///
+    /// If the interval is bigger than zero time modification in `save` method
+    /// will have no effect. It is unlikely to happen since we set up
+    /// `CoreClock` action to run everytime the event loop is run
+    /// which means for production app it will be probably around 30 seconds.
+    ///
+    pub async fn touch(
+        &mut self,
+        tether: &mut Tether,
+        interval: Duration,
+    ) -> Result<(), StashError> {
+        tether
+            .tx(async |bond| self.modified_now(Some(interval)).save(bond).await)
+            .await?;
+
+        Ok(())
     }
 
     /// Save or update a app setting.
@@ -100,6 +197,11 @@ impl AppSettings {
     /// Returns an error if the query fails
     ///
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        // It is safe to modify the `modified_unixepoch`
+        // field everytime we save the model to the database as
+        // it will only be modified if the time has gone forward.
+        self.modified_now(None);
+
         // Make sure there will be only one row.
         if let Some(existing) = Self::get(bond).await? {
             self.row_id = existing.row_id;
@@ -204,10 +306,17 @@ impl ProtectionAutoLock {
             Self::Minutes(minutes) => {
                 let seconds = u64::from(*minutes) * 60;
 
-                last_lock.as_u64().saturating_add(seconds) < now.as_u64()
+                // last lock should never be in the future
+                // and if it is we should lock the app
+                // as it means the time has been manipulated
+                last_lock > now || last_lock.as_u64().saturating_add(seconds) < now.as_u64()
             }
             Self::Never => false,
         }
+    }
+
+    pub fn as_u64(&self) -> u64 {
+        u8::from(*self) as u64
     }
 }
 
@@ -459,6 +568,21 @@ mod tests {
             .unwrap();
 
         // After 10 minutes, it will return `true`
+        assert!(app_settings.should_auto_lock(&mut tether).await.unwrap());
+
+        // But lets move time backwards, it will be fun
+        app_settings.lock_accessed_unixepoch = UnixTimestamp::now().saturating_add(10 * 60 + 1);
+
+        tether
+            .tx(async |tx| app_settings.save(tx).await)
+            .await
+            .unwrap();
+
+        // Time of course will not move backwards and rather lock_accessed_unixepoch
+        // have gone to the future to simulate the time manipulation
+        // which means `now` will be in the past relative to saved unixepoch.
+        // Nonetheless it has to return `true` as it should detect that `now` is in the past
+        // and lock the app.
         assert!(app_settings.should_auto_lock(&mut tether).await.unwrap());
     }
 }

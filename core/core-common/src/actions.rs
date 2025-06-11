@@ -2,6 +2,7 @@ use proton_action_queue::action::{Action, FactoryError};
 use proton_action_queue::queue::Queue;
 
 pub mod contacts;
+pub mod core_clock;
 pub mod event_poll;
 
 pub(crate) fn register_core_actions(queue: &Queue) {
@@ -21,4 +22,5 @@ pub(crate) fn register_core_actions(queue: &Queue) {
 
     register_action::<event_poll::EventPoll>(queue);
     register_action::<contacts::Delete>(queue);
+    register_action::<core_clock::CoreClock>(queue);
 }

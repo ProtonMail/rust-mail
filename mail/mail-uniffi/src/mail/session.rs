@@ -814,6 +814,28 @@ impl MailSession {
         .map_err(UserContextError::from)
     }
 
+    /// Update the app settings to reflect that biometrics check has passed.
+    ///
+    /// This method is used to update the app settings auto lock time on
+    /// successful biometrics check.
+    ///
+    pub async fn biometrics_check_passed(&self) -> Result<(), UserContextError> {
+        let ctx = self.mail_ctx.clone();
+
+        uniffi_async(async move {
+            let mut tether = ctx.core_context().account_stash().connection();
+            let mut app_settings = RealAppSettings::get_or_default(&tether).await;
+            app_settings.auto_lock_modified_now();
+            tether
+                .tx(async |bond| app_settings.save(bond).await)
+                .await?;
+
+            Result::<_, RealProtonMailError>::Ok(())
+        })
+        .await
+        .map_err(UserContextError::from)
+    }
+
     /// Create a PIN App protection.
     ///
     /// The same PIN will be required for authentication of the user

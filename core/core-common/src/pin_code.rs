@@ -113,7 +113,7 @@ impl PinCode {
     pub async fn validate_pin(ctx: Arc<Context>, pin: Vec<u32>) -> Result<(), PinError> {
         let pin = Self::sanitize_pin(pin)?;
         let mut tether = ctx.account_stash().connection();
-        let app_settings = AppSettings::get_or_default(&tether).await;
+        let mut app_settings = AppSettings::get_or_default(&tether).await;
 
         if matches!(app_settings.protection, AppProtection::Pin) {
             let Some(mut pin_protection) = PinProtection::get(&tether).await? else {
@@ -145,6 +145,8 @@ impl PinCode {
                     if success {
                         pin_protection.attempts = 0;
                         pin_protection.save(bond).await?;
+
+                        app_settings.auto_lock_modified_now().save(bond).await?;
                     } else {
                         pin_protection.attempts += 1;
                         pin_protection.save(bond).await?;

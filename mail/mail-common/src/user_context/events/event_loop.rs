@@ -2,6 +2,7 @@ use crate::actions::rollback::RollbackAction;
 use crate::user_context::events::subscriber::MailEventSubscriber;
 use crate::{MailContextError, MailUserContext};
 use proton_action_queue::queue::ActionError;
+use proton_core_common::actions::core_clock::CoreClock;
 use proton_core_common::actions::event_poll::EventPoll;
 use proton_event_loop::EventLoopError;
 use std::sync::Weak;
@@ -54,6 +55,10 @@ impl MailUserContext {
                     if let Err(e) = ctx.queue_item_rollback().await {
                         error!("Failed to queue item rollback action: {e:?}")
                     }
+
+                    if let Err(e) = ctx.queue_core_clock(duration).await {
+                        error!("Failed to queue core clock action: {e:?}");
+                    }
                 }
             }
             .instrument(tracing::debug_span!("event_loop")),
@@ -105,6 +110,12 @@ impl MailUserContext {
             };
             last_action_ids.last_rollback_action_id = Some(output.id);
         }
+        Ok(())
+    }
+
+    async fn queue_core_clock(&self, interval: Duration) -> Result<(), ActionError<CoreClock>> {
+        let core_clock_action = CoreClock::new(interval);
+        self.action_queue().queue_action(core_clock_action).await?;
         Ok(())
     }
 
