@@ -61,10 +61,10 @@ VCalendar {
             description: None,
             organizer: Some(
                 Organizer {
-                    address: Url(
-                        UrlAddress {
+                    address: Email(
+                        EmailAddress {
                             value: Text(
-                                "tardis@localhost\":mailto:tardis@localhost",
+                                "tardis@localhost",
                             ),
                         },
                     ),
