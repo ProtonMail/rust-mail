@@ -1,6 +1,7 @@
 ---
 source: mail/mail-common/tests/attachment_cache.rs
 expression: output
+snapshot_kind: text
 ---
 This test shows the before and after of a cleanup with a max size of 262144 bytes
 
@@ -25,6 +26,7 @@ unsent_draft_large
 fresh_but_huge
 perfect_storm
 golden_child
+name_foo.png
 
 
 ---------- Cleaned attachments ----------
@@ -33,3 +35,4 @@ trash_tiny_new
 inline_medium
 starred_trash_large
 golden_child
+name_foo.png

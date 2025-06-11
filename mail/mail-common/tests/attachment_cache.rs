@@ -260,6 +260,14 @@ fn comprehensive() -> impl Iterator<Item = UsedVariables> {
             atime: Duration::from_secs(300), // 5 minutes
             ..default()
         },
+        UsedVariables {
+            attachment_name: "name/foo.png",
+            size: kb(30),
+            disposition: Disposition::Attachment,
+            hit_count: 10,
+            atime: Duration::from_secs(300), // 5 minutes
+            ..default()
+        },
     ]
     .into_iter()
 }

@@ -30,3 +30,11 @@ pub async fn safe_write_async<C: AsRef<[u8]> + Send + 'static>(
         Err(_) => Err(io::Error::other("background task panicked")),
     }
 }
+
+/// Replaces all instances of the platform separator with `_`.
+///
+/// Note: this is only intended for the file name component, not a full path.
+#[must_use]
+pub fn sanitize_filename(filename: &str) -> String {
+    filename.replace(std::path::MAIN_SEPARATOR, "_")
+}
