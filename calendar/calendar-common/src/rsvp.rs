@@ -20,6 +20,14 @@ pub struct RsvpEventId {
 }
 
 impl RsvpEventId {
+    #[doc(hidden)]
+    pub fn new(uid: &str, recurrence_id: Option<&str>) -> Self {
+        Self {
+            uid: uid.into(),
+            recurrence_id: recurrence_id.map(Into::into),
+        }
+    }
+
     /// Extracts event id from an internal invitation (Proton -> Proton) via an
     /// *.ics file attached to the invitation email.
     ///
