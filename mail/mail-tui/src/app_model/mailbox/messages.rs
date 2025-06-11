@@ -941,6 +941,8 @@ impl DecryptedMessage {
 
         // ---
 
+        let rsvp_summary = rsvp.summary.clone().unwrap_or_else(|| "(no title)".into());
+
         let rsvp_occur = match rsvp.occurrence {
             RsvpOccurrence::Date { starts_at, ends_at } if ends_at == starts_at => {
                 format!("{starts_at}")
@@ -964,7 +966,7 @@ impl DecryptedMessage {
             format!("- <{}> ({status})", att.email)
         });
 
-        let rows = iter::once(rsvp.summary.clone())
+        let rows = iter::once(rsvp_summary)
             .chain(iter::once(rsvp_occur))
             .chain(iter::once(String::default()))
             .chain(rsvp_atts);

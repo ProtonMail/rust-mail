@@ -115,7 +115,7 @@ impl RsvpEventId {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RsvpEvent {
-    pub summary: String,
+    pub summary: Option<String>,
     pub location: Option<String>,
     pub description: Option<String>,
     pub occurrence: RsvpOccurrence,
@@ -184,9 +184,6 @@ pub enum RsvpError {
 
     #[error("*.ics contains an event without uid")]
     IcsEventHasNoUid,
-
-    #[error("*.ics contains an event without summary")]
-    IcsEventHasNoSummary,
 
     #[error("Missing X-PM-UID header")]
     MissingXPmUidHeader,

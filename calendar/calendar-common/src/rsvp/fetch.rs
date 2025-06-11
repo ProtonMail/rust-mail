@@ -102,13 +102,7 @@ where
         .ok_or(RsvpError::CouldntFindSharedEvent)?;
 
     let event = event.decrypt_and_parse(pgp, decryptor)?;
-
-    let summary = event
-        .summary
-        .ok_or(RsvpError::IcsEventHasNoSummary)?
-        .value
-        .into_string();
-
+    let summary = event.summary.map(|sum| sum.value.into_string());
     let location = event.location.map(|loc| loc.value.into_string());
     let description = event.description.map(|desc| desc.value.into_string());
 
@@ -231,7 +225,7 @@ fn extract_calendar(calendar: CalendarBootstrap, event: &CalendarEvent) -> RsvpC
 
 #[derive(Debug)]
 struct Metadata {
-    summary: String,
+    summary: Option<String>,
     location: Option<String>,
     description: Option<String>,
 }
