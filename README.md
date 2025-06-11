@@ -79,42 +79,24 @@ feat*: this will not be in the changelog
 feat(ET-1234)*: This will also not be in the changelog
 ```
 
-## Nix package manager and Devenv
+## Nix
 
-Affected files: `devenv.nix`, `devenv.lock` and `devenv.yaml`
+If you're using Nix, you can use devenv to pull most of our dependencies - just
+[install devenv](https://devenv.sh/getting-started) and run `devenv shell` to
+get a shell with (mostly) everything in scope.
 
-### What is it?
+If you're not a fan of Nix, you don't have to install it, this is optional - you
+will have to install dependencies (e.g. Go) by hand in this case, though.
 
-Devenv (https://devenv.sh) is a Nix language framework for having reusable, portable and stable developer environments across all machines.
-It is based on Nix, the language and package manager, but it does not require full NixOS or having nix-darwin distribution installed.
-
-Note, this is an experiment to see if Nix package manager can be useful for sharing common setup across developers.
-
-### Why is it included?
-
-Devenv allows us to setup all necessary dependencies including how to build the codebase for iOS, once, in a declarative manner.
-
-Currently it provides complete environment for building monorepo + building frameworks for iOS.
-
-### Do I have to install nix now?
-
-No!
-It is **opt-in** and developers not interested in the Nix ecosystem are **not required to maintain** files.
-If something breaks it is the responsibility of Nix enthusiasts to fix the config files.
-
-Moreover, this setup is not going to be used in the CI.
-
-### What if I want to try?
-
-Follow guide on https://devenv.sh/getting-started in order to setup the devenv itself. It works on most of linux distributions as well as in WSL or on macOS.
-
-Then, in the root of this repository create file `devenv.local.nix` (its gitignored) and add following:
+Note that for building mail<->ios specific stuff you'll also need to provide a
+custom envvar - create a file called `devenv.local.nix` with:
 
 ```nix
 { pkgs: ...}:
+
 {
   env.IOS_REPO_ROOT="<path to your ET apple inbox repository>";
 }
 ```
 
-Now you will be able to build iOS by using `proton-build-ios` command
+Having that, use the `proton-build-ios` command to build the iOS stuff.
