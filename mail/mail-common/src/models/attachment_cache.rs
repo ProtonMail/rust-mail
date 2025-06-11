@@ -8,7 +8,7 @@ use proton_core_api::services::proton::LabelId;
 use proton_core_common::DeleteFilesSafeError;
 use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::ModelExtension as _;
-use proton_core_common::os::safe_write_async;
+use proton_core_common::os::{safe_write_async, sanitize_filename};
 use proton_crypto_inbox::attachment::DecryptableAttachment as _;
 use proton_crypto_inbox::proton_crypto::crypto::{
     PGPProvider, PGPProviderSync, VerificationResult,
@@ -277,21 +277,7 @@ impl Attachment {
         data: Vec<u8>,
         bond: &Bond<'_>,
     ) -> MailContextResult<PathBuf> {
-        // We will write the attachment to
-        // {CACHE_PATH}/attachments/{id}/{name}
-        // The reason for this scheme is twofold:
-        // - The clients require that the name of the attachment be the name
-        // - Two different attachments might share the same name.
-        let mut path = ctx.mail_context().attachments_cache_path();
-        path.push(format!("{id}"));
-        tokio::fs::create_dir_all(&path).await?;
-        path.push(name);
-        let path_string = path
-            .clone()
-            .into_os_string()
-            .into_string()
-            // This is infallible since all pieces exist as a string at some point.
-            .map_err(MailContextError::InvalidUtf8AttachmentPath)?;
+        let (path, path_string) = Self::attachment_cache_file_path(ctx, id, name).await?;
 
         let data_len = data.len();
         safe_write_async(&path, data).await?;
@@ -326,26 +312,12 @@ impl Attachment {
     ) -> MailContextResult<PathBuf> {
         let metadata = tokio::fs::metadata(attachment_path).await?;
         let data_size = metadata.size();
-        // We will write the attachment to
-        // {CACHE_PATH}/attachments/{id}/{name}
-        // The reason for this scheme is twofold:
-        // - The clients require that the name of the attachment be the name
-        // - Two different attachments might share the same name.
-        let mut path = ctx.mail_context().attachments_cache_path();
-        path.push(format!("{id}"));
-        tokio::fs::create_dir_all(&path).await?;
-        path.push(name);
+
+        let (path, path_string) = Self::attachment_cache_file_path(ctx, id, name).await?;
 
         tokio::fs::copy(attachment_path, &path)
             .await
             .inspect_err(|e| error!("Failed to copy attachment: {e:?}"))?;
-
-        let path_string = path
-            .clone()
-            .into_os_string()
-            .into_string()
-            // This is infallible since all pieces exist as a string at some point.
-            .map_err(MailContextError::InvalidUtf8AttachmentPath)?;
 
         bond.execute(
             indoc! {
@@ -356,6 +328,31 @@ impl Attachment {
         )
         .await?;
         Ok(path)
+    }
+
+    async fn attachment_cache_file_path(
+        ctx: &MailUserContext,
+        attachment_id: LocalAttachmentId,
+        filename: &str,
+    ) -> Result<(PathBuf, String), MailContextError> {
+        // We will write the attachment to
+        // {CACHE_PATH}/attachments/{id}/{name}
+        // The reason for this scheme is twofold:
+        // - The clients require that the name of the attachment be the name
+        // - Two different attachments might share the same name.
+        let mut path = ctx.mail_context().attachments_cache_path();
+        path.push(format!("{attachment_id}"));
+        tokio::fs::create_dir_all(&path).await?;
+        path.push(sanitize_filename(filename));
+
+        let path_string = path
+            .clone()
+            .into_os_string()
+            .into_string()
+            // This is infallible since all pieces exist as a string at some point.
+            .map_err(MailContextError::InvalidUtf8AttachmentPath)?;
+
+        Ok((path, path_string))
     }
 
     /// Fetches and decrypts an attachment from the API.
