@@ -195,7 +195,7 @@ fn doesnt_inject_style_for_message_that_handles_dark_mode_natively() {
 
     let mut html = Transformer::new(html);
     html.inject_dark_mode(
-        "",
+        "test@pm.me", // This sender is on our trusted list.
         ColorMode::DarkMode,
         BrowserCapabilities {
             supports_dark_mode_via_media_query: true,
@@ -211,7 +211,7 @@ fn inject_style_for_message_that_handles_dark_mode_natively_but_sender_is_untrus
 
     let mut html = Transformer::new(html);
     html.inject_dark_mode(
-        "test@pm.me",
+        "other@pm.me",
         ColorMode::DarkMode,
         BrowserCapabilities {
             supports_dark_mode_via_media_query: true,

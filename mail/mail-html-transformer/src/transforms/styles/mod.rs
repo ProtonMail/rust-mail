@@ -147,7 +147,7 @@ pub fn inject_dark_mode(
     root_selector: String,
     include_full_static_css: IncludeFullStaticCss,
 ) {
-    let level = DarkStyleSupportLevel::new_for_html(sender, mode, &source, capabilities);
+    let level = DarkStyleSupportLevel::new_for_html(sender, mode, capabilities);
 
     let BrowserCapabilities {
         supports_dark_mode_via_media_query,
