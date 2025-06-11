@@ -110,8 +110,9 @@ pub(super) fn get_signature(
         "\n"
     };
     let mut signature = if mime_type == MimeType::TextPlain {
-        // convert signature from html to text, since it is possible there html content in it.
-        Transformer::new_text_plain(&address.signature)
+        // convert signature from html to text. All our signatures are generated
+        // on and are stored as web snippets.
+        Transformer::new(&address.signature)
             .to_plain_text(Html2TextOptions {
                 link_foot_notes: false,
                 ..Default::default()
@@ -394,7 +395,7 @@ pub const BEGIN_QUOTE: &str = "<div class=\"protonmail_quote\">";
 pub const BEGIN_BLOCKQUOTE: &str = "<blockquote class=\"protonmail_quote\">";
 pub const CLOSE_QUOTE: &str = "</div>";
 pub const CLOSE_BLOCKQUOTE: &str = "</blockquote>";
-pub const HTML_LINE_BREAK: &str = "<br/>";
+pub const HTML_LINE_BREAK: &str = "<br>";
 
 const PM_SIGNATURE_HTML: &str = r#"Sent with <a target="_blank" href="https://proton.me/mail/home">Proton Mail</a> secure email."#;
 

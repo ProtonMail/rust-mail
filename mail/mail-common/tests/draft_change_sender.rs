@@ -28,7 +28,7 @@ async fn change_sender_address() {
         "my-new-email@proton.ch",
         "new-email-key-id",
     );
-    new_address.signature = "Kind Regards\n New Address".into();
+    new_address.signature = "Kind Regards New Address".into();
 
     let old_address = params.addresses.first().cloned().unwrap();
     params.addresses.push(new_address.clone());
