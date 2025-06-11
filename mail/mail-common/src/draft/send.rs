@@ -38,7 +38,7 @@ use tracing::{Instrument, debug, debug_span, error, info};
 pub async fn load_send_preferences_for_recipients<Provider: PGPProviderSync>(
     context: &MailUserContext,
     pgp_provider: &Provider,
-    rt: &mut impl RunTransaction,
+    tx: &mut impl RunTransaction,
     recipient_emails: &[String],
     crypto_mail_settings: CryptoMailSettings,
 ) -> MailContextResult<HashMap<String, SendPreferences<Provider::PublicKey>>> {
@@ -47,7 +47,7 @@ pub async fn load_send_preferences_for_recipients<Provider: PGPProviderSync>(
         let send_preference = context
             .recipient_send_preferences(
                 pgp_provider,
-                rt,
+                tx,
                 recipient,
                 crypto_mail_settings,
                 ComposerPreference::default(),

@@ -412,10 +412,10 @@ impl Contact {
     pub async fn sync_with_card(
         local_id: LocalContactId,
         api: &Proton,
-        rt: &mut impl RunTransaction,
+        tx: &mut impl RunTransaction,
     ) -> CoreContextResult<()> {
         // First let's check if the sync has already happened.
-        let c: u32 = rt
+        let c: u32 = tx
             .tether()
             .query_value(
                 "SELECT COUNT(*) AS value FROM contact_cards WHERE local_contact_id = ?",
@@ -428,16 +428,16 @@ impl Contact {
             return Ok(());
         }
 
-        Self::force_sync_with_card(local_id, api, rt).await
+        Self::force_sync_with_card(local_id, api, tx).await
     }
 
     pub async fn force_sync_with_card(
         local_id: LocalContactId,
         api: &Proton,
-        rt: &mut impl RunTransaction,
+        tx: &mut impl RunTransaction,
     ) -> CoreContextResult<()> {
         debug!("Syncing full contact for contact id {local_id}");
-        let remote_id = Contact::local_id_counterpart(local_id, rt.tether())
+        let remote_id = Contact::local_id_counterpart(local_id, tx.tether())
             .await?
             .ok_or_else(|| {
                 CoreContextError::ContactError(ContactError::ContactDoesNotHaveRemoteId(local_id))
@@ -453,7 +453,7 @@ impl Contact {
                 .contact,
         );
 
-        rt.run_tx(async |tx| {
+        tx.run_tx(async |tx| {
             contact_with_card.save(tx).await.map_err(|err| {
                 error!("Failed to sync full contact to db: {err:?}");
                 err

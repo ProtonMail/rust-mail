@@ -173,18 +173,18 @@ impl UserContext {
     /// Returns an error on a database or sync failure.
     /// - A DB/IO error if syncing the contact or accessing the contacts fails.
     /// - A wrapped [`KeyHandlingError`] if `VCard` parsing or signature verification fails.
-    #[tracing::instrument(level = Level::DEBUG, skip(self, pgp_provider, rt, unlocked_user_keys))]
+    #[tracing::instrument(level = Level::DEBUG, skip(self, pgp_provider, tx, unlocked_user_keys))]
     pub async fn public_address_keys_from_contacts<Provider: PGPProviderSync>(
         &self,
         pgp_provider: &Provider,
-        rt: &mut impl RunTransaction,
+        tx: &mut impl RunTransaction,
         unlocked_user_keys: &UnlockedUserKeys<Provider>,
         email: &str,
     ) -> CoreContextResult<Option<PinnedPublicKeys<<Provider>::PublicKey>>> {
         // First, we try to load an contact emails that matches the email.
         debug!("Try to load the contact email for {email} from the db");
         let contact_email =
-            ContactEmail::find_first("WHERE email = ?", params![email.to_owned()], rt.tether())
+            ContactEmail::find_first("WHERE email = ?", params![email.to_owned()], tx.tether())
                 .await?
                 .ok_or(ContactError::CardNotFound(email.to_owned()))?;
 
@@ -196,16 +196,16 @@ impl UserContext {
                 ))?;
 
         // On success try to sync the most recent full contact including its v-cards from the BE.
-        Contact::force_sync_with_card(local_contact_id, self.session().api(), rt).await?;
+        Contact::force_sync_with_card(local_contact_id, self.session().api(), tx).await?;
 
-        let mut contact = Contact::load(local_contact_id, rt.tether())
+        let mut contact = Contact::load(local_contact_id, tx.tether())
             .await?
             .ok_or(ContactError::FullContactNotFound(email.to_owned()))?;
 
         debug!("Full contact with cards found");
         Ok(extract_pinned_keys(
             pgp_provider,
-            rt.tether(),
+            tx.tether(),
             unlocked_user_keys,
             &mut contact,
             email,
