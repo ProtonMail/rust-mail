@@ -28,10 +28,3 @@ pub enum CryptoPackageTypeError {
     #[error("Failed to convert {0} to a package type.")]
     Parse(u8),
 }
-
-#[derive(Debug, Clone, thiserror::Error)]
-#[allow(clippy::module_name_repetitions)]
-pub enum UserWarning {
-    #[error("No matching API key found for pinned keys, trust API key {0}.")]
-    PromptUserToTrust(OpenPGPFingerprint),
-}

@@ -47,8 +47,6 @@ pub enum Error {
     DB(#[from] StashError),
     #[error("Serialization error: {0}")]
     Serialization(#[from] rmp_serde::encode::Error),
-    #[error("Deserialization error: {0}")]
-    Deserialization(#[from] rmp_serde::decode::Error),
     #[error("{0}")]
     Context(#[from] ContextError),
     #[error("Unknown action: {0}")]

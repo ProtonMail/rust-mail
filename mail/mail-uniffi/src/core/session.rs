@@ -9,23 +9,6 @@ use proton_core_common::{
 };
 use uniffi::{Enum, Record};
 
-#[derive(Debug, thiserror::Error, uniffi::Error)]
-#[uniffi(flat_error)]
-pub enum SessionError {
-    #[error("Database Error: {0}")]
-    DB(String),
-    #[error("A Cryptography error occurred")]
-    Crypto,
-    #[error("Keychain Error: {0}")]
-    KeyChain(String),
-    #[error("Keychain has no encryption key")]
-    KeyChainHasNoKey,
-    #[error("Other: {0}")]
-    Other(String),
-    #[error("Http: {0}")]
-    Http(String),
-}
-
 /// Represents an account known to the system.
 #[derive(uniffi::Object)]
 pub struct StoredAccount {

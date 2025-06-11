@@ -32,7 +32,6 @@ pub enum LabelError {
     API(#[from] ApiServiceError),
     #[error("Stash error: {0}")]
     Stash(#[from] StashError),
-
     #[error("Could not resolve remote label: {0}")]
     CouldNotResolveRemoteLabel(LocalLabelId),
     #[error("Could not resolve local label: {0}")]

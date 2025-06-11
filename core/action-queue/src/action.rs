@@ -38,8 +38,6 @@ pub trait Error: std::error::Error + Send + Sync {
 /// Errors that may occur during action version conversion.
 #[derive(Debug, thiserror::Error)]
 pub enum VersionConverterError {
-    #[error("Deserialization error: {0}")]
-    Deserialization(#[source] rmp_serde::encode::Error),
     /// Return this error
     #[error("Action version {0} is invalid")]
     InvalidVersion(u32),
@@ -748,8 +746,6 @@ pub enum FactoryError {
     VersionConverter(#[from] VersionConverterError),
     #[error("Action type {0} is already registered")]
     AlreadyRegistered(Type),
-    #[error("Unknown error:{0}")]
-    Unknown(anyhow::Error),
 }
 
 pub type FactoryResult<T> = Result<T, FactoryError>;

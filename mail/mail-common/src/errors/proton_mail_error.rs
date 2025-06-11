@@ -553,9 +553,6 @@ impl From<SubscriberError> for ProtonMailError {
             SubscriberError::Other(_) => {
                 Self::Reason(MailErrorReason::EventReason(EventErrorReason::Subscriber))
             }
-            SubscriberError::Send | SubscriberError::Receive => {
-                Self::Unexpected(Unexpected::Internal)
-            }
             SubscriberError::StashError(stash_error) => Self::from(stash_error),
         }
     }
