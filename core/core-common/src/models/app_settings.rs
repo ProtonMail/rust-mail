@@ -97,7 +97,7 @@ impl AppSettings {
     /// # Aliasing
     ///
     /// We also may suffer from the aliasing fenomen so the sampling
-    /// has to be lower than 60 seconds (AutoLock::Minutes(1)).
+    /// has to be lower than 60 seconds (`AutoLock::Minutes(1)`).
     ///
     pub async fn should_auto_lock(&mut self, tether: &mut Tether) -> Result<bool, StashError> {
         if self.protection.is_unset() {
@@ -139,6 +139,7 @@ impl AppSettings {
     ///
     /// The current time.
     ///
+    #[must_use]
     pub fn now(&self, interval: Option<Duration>) -> UnixTimestamp {
         let now = UnixTimestamp::now();
         let last_modified = self.modified_unixepoch;
@@ -315,8 +316,9 @@ impl ProtectionAutoLock {
         }
     }
 
+    #[must_use]
     pub fn as_u64(&self) -> u64 {
-        u8::from(*self) as u64
+        u64::from(u8::from(*self))
     }
 }
 

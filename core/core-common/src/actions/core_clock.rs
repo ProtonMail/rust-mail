@@ -17,6 +17,7 @@ pub struct CoreClock {
 }
 
 impl CoreClock {
+    #[must_use]
     pub fn new(interval: Duration) -> Self {
         Self { interval }
     }
