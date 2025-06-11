@@ -1,3 +1,4 @@
+use crate::signup::ChallengeInfo;
 use crate::signup::state::want_recovery::WantRecovery;
 use crate::signup::state::{State, Username};
 use derive_more::Display;
@@ -10,13 +11,18 @@ use tracing::info;
 pub struct WantPassword {
     client: Client,
     username: Username,
+    challenge_info: ChallengeInfo,
 }
 
 impl WantPassword {
-    pub fn new(client: Client, username: Username) -> Self {
+    pub fn new(client: Client, username: Username, challenge_info: ChallengeInfo) -> Self {
         info!("Signup flow wants password");
 
-        Self { client, username }
+        Self {
+            client,
+            username,
+            challenge_info,
+        }
     }
 
     /// Submits chosen password
@@ -24,6 +30,6 @@ impl WantPassword {
         info!("Submitting password");
 
         // Asking for recovery is a default and always after password
-        WantRecovery::new(self.client, self.username, password).into()
+        WantRecovery::new(self.client, self.username, password, self.challenge_info).into()
     }
 }

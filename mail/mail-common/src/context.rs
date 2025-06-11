@@ -3,7 +3,7 @@ use crate::{AppError, MailUserContext, draft};
 use anyhow::anyhow;
 use futures::executor::block_on;
 use proton_account_api::login::{LoginError, LoginFlow};
-use proton_account_api::signup::{SignupError, SignupFlow};
+use proton_account_api::signup::{ChallengeInfo, SignupError, SignupFlow};
 use proton_action_queue::action::{Action, WriterGuardError};
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
 use proton_calendar_common::RsvpError;
@@ -239,6 +239,7 @@ impl MailContext {
         api_config: Config,
         hv_notifier: Option<DynChallengeNotifier>,
         device_info_provider: Option<DynDeviceInfoProvider>,
+        challenge_product_version: impl Into<String>,
         log_path: Option<PathBuf>,
         event_poll_mode: EventPollMode,
     ) -> Result<Arc<Self>, MailContextError> {
@@ -253,6 +254,7 @@ impl MailContext {
             api_config,
             hv_notifier,
             device_info_provider,
+            challenge_product_version,
             core_cache_path,
             connection_pool_size,
             log_path,
@@ -389,8 +391,19 @@ impl MailContext {
         let client = session.api().to_owned();
         let store = session.store().to_owned();
 
+        // Obtain device info (if possible)
+        let device_info = self.core_context.get_device_info().await;
+
+        // Build challenge info
+        let challenge_info = ChallengeInfo {
+            product_version: self.core_context.get_challenge_product_version(),
+            device_info,
+            // Will be populated during the sign up flow (if available)
+            recovery_behavior: None,
+        };
+
         // Create a new signup flow
-        Ok(SignupFlow::new(client, store).await?)
+        Ok(SignupFlow::new(client, store, challenge_info).await?)
     }
 
     /// Verify the PIN code.

@@ -1,4 +1,5 @@
-use crate::prelude::Address;
+use crate::prelude::{Address, UserBehavior};
+use crate::signup::ChallengeInfo;
 use crate::signup::state::want_create::WantCreate;
 use crate::signup::state::want_password::WantPassword;
 use crate::signup::state::want_recovery::WantRecovery;
@@ -44,10 +45,10 @@ pub enum State {
 impl State {
     /// Creates a new signup flow state, starting at `WantUsername`.
     #[must_use]
-    pub fn new(client: Client) -> Self {
+    pub fn new(client: Client, challenge_info: ChallengeInfo) -> Self {
         info!("Signup flow starts");
 
-        WantUsername::new(client).into()
+        WantUsername::new(client, challenge_info).into()
     }
 
     #[must_use]
@@ -61,10 +62,14 @@ impl State {
         s.submit_username(username).await
     }
 
-    pub async fn submit_recovery(self, recovery: Recovery) -> StateResult {
+    pub async fn submit_recovery(
+        self,
+        recovery: Recovery,
+        recovery_behavior: Option<UserBehavior>,
+    ) -> StateResult {
         let s: WantRecovery = self.try_into().map_err(|_| SignupError::InvalidState)?;
 
-        s.submit_recovery(recovery).await
+        s.submit_recovery(recovery, recovery_behavior).await
     }
 
     pub fn submit_password(self, password: String) -> StateResult {
@@ -73,10 +78,10 @@ impl State {
         Ok(s.submit_password(password))
     }
 
-    pub async fn create(self, store: DynStore) -> StateResult {
+    pub async fn create(self, store: DynStore, behavior: Option<UserBehavior>) -> StateResult {
         let s: WantCreate = self.try_into().map_err(|_| SignupError::InvalidState)?;
 
-        s.create(store).await
+        s.create(store, behavior).await
     }
 
     pub fn complete(self) -> Result<(Client, User, Address), SignupError> {

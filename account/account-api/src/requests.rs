@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+
+use proton_core_common::device::DeviceInfo;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 
@@ -35,6 +38,10 @@ pub struct CreateUserRequest {
 
     /// The referrer for the user, if any.
     pub referrer: Option<String>,
+
+    /// The challenge payload, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payload: Option<HashMap<String, Payload>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -237,6 +244,34 @@ pub struct AuthInput {
 
     /// The verifier for authentication.
     pub verifier: String,
+}
+
+/// Challenge payload containing device fingerprint and user behaviour.
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct Payload {
+    /// Device fingerprint.
+    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    pub device_info: Option<DeviceInfo>,
+    /// User behaviour on a sign up screen.
+    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    pub user_behavior: Option<UserBehavior>,
+}
+
+/// User activity during text input.
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct UserBehavior {
+    /// Time from form load to user providing input (in seconds).
+    pub time_on_field: Vec<u32>,
+    /// Number of clicks / taps during user input.
+    pub click_on_field: u32,
+    /// Text chunks copied during user input.
+    pub copy_field: Vec<String>,
+    /// Text chunks pasted during user input.
+    pub paste_field: Vec<String>,
+    /// Characters entered during user input.
+    pub key_down_field: Vec<String>,
 }
 
 pub enum AsyncUserInitialization {
@@ -498,5 +533,73 @@ mod tests {
         };
         let serialized = serde_json::to_string(&request_with_type).expect("Failed to serialize");
         assert_eq!(serialized, r#"{"Phone":"+4915735774265"}"#);
+    }
+
+    #[test]
+    fn test_create_user_payload_serialization() {
+        let request = CreateUserRequest {
+            user_type: CreateUserType::Normal,
+            username: "name".into(),
+            domain: None,
+            auth: AuthInput {
+                version: 123,
+                modulus_id: "mod".into(),
+                salt: "salt".into(),
+                verifier: "ver".into(),
+            },
+            email: None,
+            phone: None,
+            referrer: None,
+            payload: Some(HashMap::from_iter([
+                ("payload-1".into(), create_payload("lang-1")),
+                ("payload-2".into(), create_payload("lang-2")),
+            ])),
+        };
+        let serialized = serde_json::to_string(&request).expect("Failed to serialize");
+        assert_eq!(
+            serialized,
+            concat!(
+                r#"{"Type":1,"Username":"name","Domain":null,"#,
+                r#""Auth":{"Version":123,"ModulusID":"mod","Salt":"salt","Verifier":"ver"},"#,
+                r#""Email":null,"Phone":null,"Referrer":null,"Payload":{"#,
+                r#""payload-1":{"appLang":"lang-1","timezone":"tz","timezoneOffset":-60,"#,
+                r#""deviceName":"model","deviceBrand":"brand","deviceCodename":"code","uuid":"uuid","regionCode":"country","#,
+                r#""isJailbreak":false,"preferredContentSize":"scale","storageCapacity":123.0,"isDarkmodeOn":true,"#,
+                r#""keyboards":["kb"],"TimeOnField":[123],"ClickOnField":42,"#,
+                r#""CopyField":["copy"],"PasteField":["paste"],"KeyDownField":["key"]},"#,
+                r#""payload-2":{"appLang":"lang-2","timezone":"tz","timezoneOffset":-60,"#,
+                r#""deviceName":"model","deviceBrand":"brand","deviceCodename":"code","uuid":"uuid","regionCode":"country","#,
+                r#""isJailbreak":false,"preferredContentSize":"scale","storageCapacity":123.0,"isDarkmodeOn":true,"#,
+                r#""keyboards":["kb"],"TimeOnField":[123],"ClickOnField":42,"#,
+                r#""CopyField":["copy"],"PasteField":["paste"],"KeyDownField":["key"]}}}"#
+            )
+        );
+    }
+
+    fn create_payload(language: impl Into<String>) -> Payload {
+        Payload {
+            device_info: Some(DeviceInfo {
+                language: language.into(),
+                timezone: "tz".into(),
+                timezone_offset: -60,
+                model: "model".into(),
+                brand: "brand".into(),
+                codename: "code".into(),
+                uuid: "uuid".into(),
+                country: "country".into(),
+                rooted: false,
+                font_scale: "scale".into(),
+                storage: 123.0,
+                dark_mode: true,
+                keyboards: vec!["kb".into()],
+            }),
+            user_behavior: Some(UserBehavior {
+                time_on_field: vec![123],
+                click_on_field: 42,
+                copy_field: vec!["copy".into()],
+                paste_field: vec!["paste".into()],
+                key_down_field: vec!["key".into()],
+            }),
+        }
     }
 }

@@ -10,7 +10,7 @@ use crate::db::account::{
     SessionEncryptionKey,
 };
 use crate::db::migrations::migrate_account_db;
-use crate::device::DynDeviceInfoProvider;
+use crate::device::{DeviceInfo, DynDeviceInfoProvider};
 use crate::event_loop::EventPollMode;
 use crate::models::{AppSettings, ModelExtension};
 use crate::nuke_utils::{
@@ -255,6 +255,7 @@ pub struct Context {
     api_config: ApiConfig,
     hv_notifier: Option<DynChallengeNotifier>,
     device_info_provider: Option<DynDeviceInfoProvider>,
+    challenge_product_version: String,
     cancellation_token: CancellationToken,
     task_service: BackgroundAwareTaskService,
     on_session_deleted_broadcast: broadcast::Sender<(SessionId, UserId)>,
@@ -291,6 +292,7 @@ impl Context {
         api_config: ApiConfig,
         hv_notifier: Option<DynChallengeNotifier>,
         device_info_provider: Option<DynDeviceInfoProvider>,
+        challenge_product_version: impl Into<String>,
         cache_path: impl Into<PathBuf>,
         connection_pool_size: Option<u32>,
         log_path: Option<PathBuf>,
@@ -337,6 +339,7 @@ impl Context {
             api_config,
             hv_notifier,
             device_info_provider,
+            challenge_product_version: challenge_product_version.into(),
             cancellation_token: CancellationToken::new(),
             task_service: BackgroundAwareTaskService::new(task_service),
             on_session_deleted_broadcast: broadcast_sender,
@@ -1065,6 +1068,21 @@ impl Context {
                 }
             }
         });
+    }
+
+    /// Obtains the device info from the client (if possible)
+    ///
+    #[must_use]
+    pub async fn get_device_info(&self) -> Option<DeviceInfo> {
+        let provider = self.device_info_provider.as_ref()?;
+        Some(provider.get_device_info().await)
+    }
+
+    /// Returns the client version to be used for a Challenge (e.g. `mail-ios-v4`)
+    ///
+    #[must_use]
+    pub fn get_challenge_product_version(&self) -> String {
+        self.challenge_product_version.clone()
     }
 }
 

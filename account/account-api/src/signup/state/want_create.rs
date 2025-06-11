@@ -4,6 +4,7 @@
 use crate::AccountApi;
 use crate::requests::*;
 use crate::responses::*;
+use crate::signup::ChallengeInfo;
 use crate::signup::SignupError;
 use crate::signup::state::Recovery;
 use crate::signup::state::StateResult;
@@ -33,6 +34,7 @@ use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use proton_crypto_account::proton_crypto::{new_pgp_provider, new_srp_provider};
 use proton_crypto_account::salts::KeySalt;
 use proton_crypto_account::salts::KeySecret;
+use std::collections::HashMap;
 
 /// Represents the state where the user can provide recovery information.
 #[derive(Debug, Display, Clone)]
@@ -42,10 +44,17 @@ pub struct WantCreate {
     username: Username,
     password: String,
     recovery: Recovery,
+    challenge_info: ChallengeInfo,
 }
 
 impl WantCreate {
-    pub fn new(client: Client, username: Username, password: String, recovery: Recovery) -> Self {
+    pub fn new(
+        client: Client,
+        username: Username,
+        password: String,
+        recovery: Recovery,
+        challenge_info: ChallengeInfo,
+    ) -> Self {
         info!("Signup flow wants create");
 
         Self {
@@ -53,10 +62,11 @@ impl WantCreate {
             username,
             password,
             recovery,
+            challenge_info,
         }
     }
 
-    pub async fn create(self, store: DynStore) -> StateResult {
+    pub async fn create(self, store: DynStore, user_behavior: Option<UserBehavior>) -> StateResult {
         let srp = new_srp_provider();
         let pgp = new_pgp_provider();
 
@@ -66,8 +76,10 @@ impl WantCreate {
             .map_err(|_| SignupError::AccountCreationFailed)
             .await?;
 
+        let payload = create_payload(&self.challenge_info, user_behavior);
+
         let user = self
-            .create_user(&auth)
+            .create_user(&auth, payload)
             .inspect_err(|err| error!("create_user: {err}"))
             .map_err(|_| SignupError::AccountCreationFailed)
             .await?;
@@ -163,7 +175,11 @@ impl WantCreate {
         })
     }
 
-    async fn create_user(&self, auth: &AuthInput) -> Result<User, SignupError> {
+    async fn create_user(
+        &self,
+        auth: &AuthInput,
+        payload: Option<HashMap<String, Payload>>,
+    ) -> Result<User, SignupError> {
         let (email, phone) = match &self.recovery {
             Recovery::Email(email) => (Some(email), None),
             Recovery::Phone(phone) => (None, Some(phone)),
@@ -180,6 +196,7 @@ impl WantCreate {
                     email: email.cloned(),
                     phone: phone.cloned(),
                     referrer: None,
+                    payload: payload,
                 };
 
                 self.client
@@ -298,4 +315,111 @@ fn build_address_key(
 /// For the sign-up operations a key with a dummy key id is fine.
 fn new_key_id() -> KeyId {
     KeyId(String::default())
+}
+
+fn create_payload(
+    challenge_info: &ChallengeInfo,
+    user_behavior: Option<UserBehavior>,
+) -> Option<HashMap<String, Payload>> {
+    if user_behavior.is_none() && challenge_info.recovery_behavior.is_none() {
+        return None;
+    }
+
+    let mut payload = HashMap::with_capacity(2);
+
+    if let Some(behavior) = user_behavior {
+        insert_payload(&mut payload, &challenge_info, behavior);
+    }
+
+    if let Some(behavior) = challenge_info.recovery_behavior.clone() {
+        insert_payload(&mut payload, &challenge_info, behavior);
+    }
+
+    Some(payload)
+}
+
+fn insert_payload(
+    payload: &mut HashMap<String, Payload>,
+    challenge_info: &ChallengeInfo,
+    user_behavior: UserBehavior,
+) {
+    let id = payload.len();
+    let name = format!("{}-challenge-{id}", challenge_info.product_version);
+    payload.insert(
+        name,
+        Payload {
+            device_info: challenge_info.device_info.clone(),
+            user_behavior: Some(user_behavior),
+        },
+    );
+}
+
+#[cfg(test)]
+mod test {
+    use std::collections::HashMap;
+
+    use proton_core_common::device::DeviceInfo;
+
+    use crate::{
+        prelude::{Payload, UserBehavior},
+        signup::{ChallengeInfo, state::want_create::create_payload},
+    };
+
+    #[test]
+    fn test_create_payload() {
+        let device_info = DeviceInfo {
+            language: "lang".into(),
+            timezone: "tz".into(),
+            timezone_offset: -60,
+            model: "model".into(),
+            brand: "brand".into(),
+            codename: "code".into(),
+            uuid: "uuid".into(),
+            country: "country".into(),
+            rooted: false,
+            font_scale: "2.0".into(),
+            storage: 42.0,
+            dark_mode: true,
+            keyboards: vec!["kb_1".into()],
+        };
+        let user_behavior = UserBehavior {
+            time_on_field: vec![123],
+            click_on_field: 12,
+            copy_field: vec!["usr_cf".into()],
+            paste_field: vec!["usr_pf".into()],
+            key_down_field: vec!["usr_kdf".into()],
+        };
+        let recovery_behavior = UserBehavior {
+            time_on_field: vec![456],
+            click_on_field: 34,
+            copy_field: vec!["rec_cf".into()],
+            paste_field: vec!["rec_pf".into()],
+            key_down_field: vec!["rec_kdf".into()],
+        };
+        let challenge_info = ChallengeInfo {
+            product_version: "mail-v1".into(),
+            device_info: Some(device_info.clone()),
+            recovery_behavior: Some(recovery_behavior.clone()),
+        };
+        let payload = create_payload(&challenge_info, Some(user_behavior.clone()));
+        assert_eq!(
+            payload,
+            Some(HashMap::from_iter([
+                (
+                    "mail-v1-challenge-0".to_string(),
+                    Payload {
+                        device_info: Some(device_info.clone()),
+                        user_behavior: Some(user_behavior),
+                    }
+                ),
+                (
+                    "mail-v1-challenge-1".to_string(),
+                    Payload {
+                        device_info: Some(device_info.clone()),
+                        user_behavior: Some(recovery_behavior),
+                    }
+                )
+            ]))
+        )
+    }
 }

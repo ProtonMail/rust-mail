@@ -4,6 +4,7 @@
 
 use itertools::Itertools;
 use proton_account_api::countries::Country as RealCountry;
+use proton_account_api::requests::UserBehavior as RealUserBehavior;
 use proton_account_api::signup::SignupError as RealSignupError;
 use proton_account_api::signup::SignupFlow as RealSignupFlow;
 use proton_account_api::signup::state::StateKind;
@@ -137,6 +138,33 @@ pub struct Countries {
     pub default_country: Option<Country>,
 }
 
+/// User activity during text input.
+#[derive(uniffi::Record, Clone)]
+pub struct UserBehavior {
+    /// Time from form load to user providing input (in seconds).
+    pub time_on_field: Vec<u32>,
+    /// Number of clicks / taps during user input.
+    pub click_on_field: u32,
+    /// Text chunks copied during user input.
+    pub copy_field: Vec<String>,
+    /// Text chunks pasted during user input.
+    pub paste_field: Vec<String>,
+    /// Characters entered during user input.
+    pub key_down_field: Vec<String>,
+}
+
+impl From<UserBehavior> for RealUserBehavior {
+    fn from(value: UserBehavior) -> Self {
+        Self {
+            time_on_field: value.time_on_field,
+            click_on_field: value.click_on_field,
+            copy_field: value.copy_field,
+            paste_field: value.paste_field,
+            key_down_field: value.key_down_field,
+        }
+    }
+}
+
 /// Manages the state and transitions for the user signup process.
 #[derive(uniffi::Object)]
 pub struct SignupFlow {
@@ -243,13 +271,14 @@ impl SignupFlow {
     pub async fn submit_recovery_email(
         &self,
         email: String,
+        user_behavior: Option<UserBehavior>,
     ) -> Result<SimpleSignupState, SignupError> {
         let flow = self.flow.clone();
 
         uniffi_async(async move {
             flow.lock()
                 .await
-                .submit_recovery_email(email)
+                .submit_recovery_email(email, user_behavior.map(|b| b.into()))
                 .await
                 .map_err(SignupError::from)
         })
@@ -262,13 +291,14 @@ impl SignupFlow {
     pub async fn submit_recovery_phone(
         &self,
         phone: String,
+        user_behavior: Option<UserBehavior>,
     ) -> Result<SimpleSignupState, SignupError> {
         let flow = self.flow.clone();
 
         uniffi_async(async move {
             flow.lock()
                 .await
-                .submit_recovery_phone(phone)
+                .submit_recovery_phone(phone, user_behavior.map(|b| b.into()))
                 .await
                 .map_err(SignupError::from)
         })
@@ -294,11 +324,20 @@ impl SignupFlow {
     }
 
     /// Create the account.
-    pub async fn create(&self) -> Result<SimpleSignupState, SignupError> {
+    pub async fn create(
+        &self,
+        user_behavior: Option<UserBehavior>,
+    ) -> Result<SimpleSignupState, SignupError> {
         let flow = self.flow.clone();
 
-        uniffi_async(async move { flow.lock().await.create().await.map_err(SignupError::from) })
-            .await?;
+        uniffi_async(async move {
+            flow.lock()
+                .await
+                .create(user_behavior.map(|b| b.into()))
+                .await
+                .map_err(SignupError::from)
+        })
+        .await?;
 
         Ok(self.get_state())
     }

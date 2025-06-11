@@ -20,6 +20,8 @@ pub struct DeviceInfo {
     brand: String,
     /// The name of the industrial design.
     codename: String,
+    /// The device's UUID.
+    uuid: String,
     /// The country/region code, in ISO 3166 2-letter code, or a UN M.49 3-digit code.
     country: String,
     /// If device/OS is rooted/jailbroken.
@@ -42,6 +44,7 @@ impl From<DeviceInfo> for device_info::DeviceInfo {
             model: response.model,
             brand: response.brand,
             codename: response.codename,
+            uuid: response.uuid,
             country: response.country,
             rooted: response.rooted,
             font_scale: response.font_scale,
