@@ -15,9 +15,6 @@ pub(crate) enum DarkStyleSupportLevel {
     Native,
 }
 
-/// List of senders that we trust that they support dark mode on their own (with @media queries).
-const LIST_OF_TRUSTED_SENDERS: &[&str] = &["test@pm.me"];
-
 impl DarkStyleSupportLevel {
     pub(crate) fn new_for_plaintext(mode: ColorMode, capabilities: BrowserCapabilities) -> Self {
         if mode == ColorMode::LightMode && !capabilities.supports_dark_mode_via_media_query {
@@ -31,6 +28,7 @@ impl DarkStyleSupportLevel {
     pub(crate) fn new_for_html(
         sender: Option<&str>,
         mode: ColorMode,
+        trusted_senders: &[&str],
         capabilities: BrowserCapabilities,
     ) -> Self {
         // If browser supports `@media` query then even in the light mode we want to process
@@ -40,7 +38,7 @@ impl DarkStyleSupportLevel {
         }
 
         match sender {
-            Some(sender) if LIST_OF_TRUSTED_SENDERS.contains(&sender) => Self::Native,
+            Some(sender) if trusted_senders.contains(&sender) => Self::Native,
             _ => Self::Injected,
         }
     }
@@ -69,6 +67,6 @@ mod tests {
         mode: ColorMode,
         capabilities: BrowserCapabilities,
     ) -> DarkStyleSupportLevel {
-        DarkStyleSupportLevel::new_for_html(sender, mode, capabilities)
+        DarkStyleSupportLevel::new_for_html(sender, mode, &["test@pm.me"], capabilities)
     }
 }

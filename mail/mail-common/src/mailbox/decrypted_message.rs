@@ -372,6 +372,9 @@ impl DecryptedMessageBody {
 
         transform_html_with_banners(
             sender,
+            // At this point in time we do not have a list of trusted senders.
+            // We also do not store that in the database as there is no syncing with the server.
+            &[],
             &self.body,
             resolved,
             self.metadata.mime_type,
@@ -413,20 +416,24 @@ pub struct BodyOutput {
 
 /// # Parameters
 /// * `sender` - the email address of the sender. Example: `test@pm.me`
+/// * `trusted_senders` - list of senders (email addresses, example: `test@pm.me`) that we trust that they support dark mode natively.
 pub fn transform_html(
     sender: &str,
+    trusted_senders: &[&str],
     html: &str,
     opts: TransformOptsResolved,
     mime_type: MimeType,
 ) -> BodyOutput {
-    transform_html_with_banners(sender, html, opts, mime_type, vec![])
+    transform_html_with_banners(sender, trusted_senders, html, opts, mime_type, vec![])
 }
 
 /// # Parameters
 /// * `sender` - the email address of the sender. Example: `test@pm.me`
+/// * `trusted_senders` - list of senders (email addresses, example: `test@pm.me`) that we trust that they support dark mode natively.
 #[tracing::instrument(skip_all)]
 pub fn transform_html_with_banners(
     sender: &str,
+    trusted_senders: &[&str],
     html: &str,
     opts: TransformOptsResolved,
     mime_type: MimeType,
@@ -482,6 +489,7 @@ mime_type: {mime_type:?}"
             supports_dark_mode_via_media_query: theme.supports_dark_mode_via_media_query,
         },
         IncludeFullStaticCss::Yes,
+        trusted_senders,
     );
 
     if opts.hide_remote_images && remote_images_count > 0 {

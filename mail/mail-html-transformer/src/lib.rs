@@ -59,7 +59,8 @@ mod html2text;
 
 pub use html2text::Html2TextOptions;
 
-use crate::transforms::styles::IncludeFullStaticCss;
+use crate::transforms::styles::{IncludeFullStaticCss, InjectDarkModeOptions};
+
 #[cfg(test)]
 #[path = "tests/lib.rs"]
 mod tests;
@@ -163,6 +164,7 @@ impl Transformer {
     ///
     /// # Parameters
     /// * `sender` - the email address of the sender. Example: `test@pm.me`
+    /// * `trusted_senders` - list of senders (email addresses, example: `test@pm.me`) that we trust that they support dark mode natively.
     #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub fn inject_dark_mode(
         &mut self,
@@ -170,16 +172,20 @@ impl Transformer {
         mode: ColorMode,
         capabilities: BrowserCapabilities,
         include_full_static_css: IncludeFullStaticCss,
+        trusted_senders: &[&str],
     ) {
         transforms::styles::inject_root_selector_to_html(&self.document);
         transforms::styles::inject_dark_mode(
-            Some(sender),
             self.document.clone(),
             self.document.clone(),
-            mode,
-            capabilities,
-            "[data-protonmail-message]".to_owned(),
-            include_full_static_css,
+            InjectDarkModeOptions {
+                sender: Some(sender),
+                mode,
+                capabilities,
+                root_selector: "[data-protonmail-message]".to_owned(),
+                include_full_static_css,
+                trusted_senders,
+            },
         );
     }
 
@@ -190,19 +196,13 @@ impl Transformer {
     ///
     /// # Parameters
     /// * `sender` - the email address of the sender. Example: `test@pm.me`
-    ///   If `None` the sender is considered trusted.
+    ///   If `None` the sender is considered not trusted.
     /// * `root_selector` - the CSS selector of the root of message.
     ///   In case of viewing message, it is usually data attribute pointing to the `html` tag.
     ///   In case of composer, it is ID pointing to custom editor that wraps the message.
     ///   Used to create a selector with bigger specificity than any provided by the sender.
-    pub fn inject_dark_mode_to_another_target(
-        &mut self,
-        sender: Option<&str>,
-        mode: ColorMode,
-        capabilities: BrowserCapabilities,
-        root_selector: String,
-        include_full_static_css: IncludeFullStaticCss,
-    ) -> String {
+    /// * `trusted_senders` - list of senders (email addresses, example: `test@pm.me`) that we trust that they support dark mode natively.
+    pub fn inject_dark_mode_to_another_target(&mut self, options: InjectDarkModeOptions) -> String {
         use html5ever::namespace_url;
         let source = self.document.clone();
         let target = NodeRef::new_document();
@@ -216,15 +216,7 @@ impl Transformer {
         );
         target.append(head.clone());
 
-        transforms::styles::inject_dark_mode(
-            sender,
-            source,
-            target.clone(),
-            mode,
-            capabilities,
-            root_selector,
-            include_full_static_css,
-        );
+        transforms::styles::inject_dark_mode(source, target.clone(), options);
         inner_html(&head)
     }
 

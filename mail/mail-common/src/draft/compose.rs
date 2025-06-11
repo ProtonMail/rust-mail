@@ -15,7 +15,7 @@ use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_api::services::proton::request_data::DraftRecipient;
 use proton_mail_html_transformer::transforms::ColorMode;
 use proton_mail_html_transformer::transforms::styles::{
-    BrowserCapabilities, IncludeFullStaticCss, dark_mode_for_plaintext,
+    BrowserCapabilities, IncludeFullStaticCss, InjectDarkModeOptions, dark_mode_for_plaintext,
 };
 use proton_mail_html_transformer::{Html2TextOptions, Transformer};
 use stash::stash::Tether;
@@ -303,14 +303,16 @@ pub fn inject_dark_mode(
     }
 
     let mut transformer = Transformer::new(body);
-    // For now we set sender to None which means that we do not trust the sender.
-    let head = transformer.inject_dark_mode_to_another_target(
-        None,
-        color_mode,
+    let head = transformer.inject_dark_mode_to_another_target(InjectDarkModeOptions {
+        // We do not trust the sender, so we will always inject dark mode.
+        sender: None,
+        mode: color_mode,
         capabilities,
         root_selector,
-        IncludeFullStaticCss::Yes,
-    );
+        include_full_static_css: IncludeFullStaticCss::Yes,
+        // Therefore we do not populate trusted senders list.
+        trusted_senders: &[],
+    });
     DarkModeInjection {
         head,
         body: transformer.to_string(),

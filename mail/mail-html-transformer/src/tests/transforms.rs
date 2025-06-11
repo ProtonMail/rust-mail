@@ -19,6 +19,7 @@ fn inject_style() {
             supports_dark_mode_via_media_query: false,
         },
         IncludeFullStaticCss::No,
+        &[],
     );
     insta::assert_snapshot!(html.to_string());
 }
@@ -39,6 +40,7 @@ fn inject_style_no_head() {
             supports_dark_mode_via_media_query: false,
         },
         IncludeFullStaticCss::No,
+        &[],
     );
     insta::assert_snapshot!(html.to_string());
 }
