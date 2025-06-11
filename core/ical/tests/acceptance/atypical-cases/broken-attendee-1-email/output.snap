@@ -158,6 +158,7 @@ VCalendar {
                             },
                         },
                     ),
+                    sent_by: None,
                 },
             ),
             attendees: [

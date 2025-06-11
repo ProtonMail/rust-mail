@@ -87,13 +87,19 @@ impl<'a> IcsReader<'a> {
     ///
     /// This mechanism is used to parse technically-illegal *.ics files that we
     /// can nonetheless reasonably recover.
-    pub fn hint(&mut self, h: impl FnOnce(&mut IcsReaderHints), f: impl FnOnce(&mut Self)) {
+    pub fn hint<T>(
+        &mut self,
+        h: impl FnOnce(&mut IcsReaderHints),
+        f: impl FnOnce(&mut Self) -> T,
+    ) -> T {
         let prev_hints = self.hints;
 
         h(&mut self.hints);
-        f(self);
+        let result = f(self);
 
         self.hints = prev_hints;
+
+        result
     }
 
     /// Runs `f` under a parser that contains an extra context such as "parsing
@@ -745,7 +751,7 @@ impl ReadEntry {
     }
 
     /// If this entry begins a parameter named `name`, reads that parameter and
-    /// returs true; returns false otherwise.
+    /// returns true; returns false otherwise.
     #[must_use]
     pub fn try_param<T>(&self, r: &mut IcsReader, name: &str, value: &mut Option<T>) -> bool
     where
@@ -959,6 +965,7 @@ impl From<IcsReaderPosition> for LineAndChar {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct IcsReaderHints {
     pub inside_array: bool,
+    pub inside_quote: bool,
 }
 
 #[cfg(test)]

@@ -8,12 +8,19 @@ use super::*;
 pub struct Organizer {
     pub address: CalAddress,
     pub cn: Option<Cn>,
+    pub sent_by: Option<SentBy>,
 }
 
 impl Organizer {
     #[must_use]
     pub fn with_cn(mut self, cn: impl Into<Cn>) -> Self {
         self.cn = Some(cn.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_sent_by(mut self, sent_by: impl Into<SentBy>) -> Self {
+        self.sent_by = Some(sent_by.into());
         self
     }
 }
@@ -26,6 +33,7 @@ where
         Self {
             address: address.into(),
             cn: None,
+            sent_by: None,
         }
     }
 }
@@ -33,11 +41,12 @@ where
 impl IcsRead<Property> for Organizer {
     fn read(r: &mut IcsReader) -> Option<Self> {
         let mut cn = None;
+        let mut sent_by = None;
 
         loop {
             let e = r.entry()?;
 
-            if e.try_param(r, "CN", &mut cn) {
+            if e.try_param(r, "CN", &mut cn) || e.try_param(r, "SENT-BY", &mut sent_by) {
                 continue;
             }
 
@@ -51,6 +60,7 @@ impl IcsRead<Property> for Organizer {
         Some(Self {
             address: r.value()?,
             cn,
+            sent_by,
         })
     }
 }
@@ -58,6 +68,7 @@ impl IcsRead<Property> for Organizer {
 impl IcsWrite<Property> for Organizer {
     fn write(&self, w: &mut IcsWriter) {
         w.param_opt("CN", self.cn.as_ref());
+        w.param_opt("SENT-BY", self.sent_by.as_ref());
         w.raw(":");
         w.value(&self.address);
     }
@@ -68,10 +79,46 @@ mod tests {
     use super::*;
     use test_case::test_case;
 
-    #[test_case(":someone@somewhere.com")]
+    #[test_case(":mailto:someone@somewhere.com")]
     #[test_case(":https://somewhere.com")]
-    #[test_case(";CN=Someone At Somewhere:someone@somewhere.com")]
+    #[test_case(";CN=Someone At Somewhere:mailto:someone@somewhere.com")]
+    #[test_case(";CN=Someone At Somewhere:https://somewhere.com")]
+    #[test_case(";SENT-BY=\"mailto:someone-else@somewhere.com\":localhost")]
     fn smoke(s: &str) {
         assert_trip!(s, Organizer as Property);
+    }
+
+    #[test]
+    fn invalid_sent_by() {
+        let (obj, msgs) = Organizer::from_str_ex(
+            ";SENT-BY=\"Spanish\tInquisition\":mailto:bar@localhost",
+            Property,
+        );
+
+        assert_eq!(
+            Some(Organizer::from(CalAddress::Email(EmailAddress::from(
+                "bar@localhost"
+            )))),
+            obj
+        );
+
+        assert_eq!(
+            vec![ReadMsg {
+                at: Some(Span::one((1, 11))),
+                msg: "expected an email address (mailto:)".into(),
+                kind: ReadMsgKind::Error,
+                context: vec![
+                    Spanned {
+                        span: Span::one((1, 10)),
+                        value: "`SentBy`".into(),
+                    },
+                    Spanned {
+                        span: Span::one((1, 11)),
+                        value: "`EmailAddress`".into(),
+                    },
+                ],
+            }],
+            msgs
+        );
     }
 }

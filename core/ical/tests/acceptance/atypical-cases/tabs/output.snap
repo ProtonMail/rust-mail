@@ -64,7 +64,7 @@ VCalendar {
                     address: Email(
                         EmailAddress {
                             value: Text(
-                                "tardis@localhost",
+                                "doctor@localhost",
                             ),
                         },
                     ),
@@ -73,6 +73,15 @@ VCalendar {
                             value: ParamValue {
                                 value: "The Eleventh, Doctor",
                                 quote: true,
+                            },
+                        },
+                    ),
+                    sent_by: Some(
+                        SentBy {
+                            value: EmailAddress {
+                                value: Text(
+                                    "tardis@localhost",
+                                ),
                             },
                         },
                     ),
@@ -97,12 +106,6 @@ warn: quirky tab
  --> at 5:18
   | when parsing `ParamValue` at 5:14
   | when parsing `Cn` at 5:14
-  | when parsing `Organizer` at 5:10
-  | when parsing `VEvent` at 5:1
-  | when parsing `VCalendar` at 2:1
-
-error: unknown parameter `SENT-BY`
- --> at 5:37..43
   | when parsing `Organizer` at 5:10
   | when parsing `VEvent` at 5:1
   | when parsing `VCalendar` at 2:1
