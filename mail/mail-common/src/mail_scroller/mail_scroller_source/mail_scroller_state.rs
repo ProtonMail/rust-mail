@@ -1,6 +1,7 @@
 use proton_core_common::datatypes::LocalLabelId;
 use stash::stash::{StashError, Tether};
 
+use crate::datatypes::labels::LabelScrollOrder;
 use crate::{
     datatypes::ReadFilter,
     models::{CachedScrollData, ScrollData},
@@ -48,14 +49,15 @@ impl<T: ScrollData> MailScrollerState<T> {
     }
 
     /// Create new not synced state.
-    pub async fn new_not_synced(
+    pub fn new_not_synced(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
         page_size: usize,
-    ) -> Result<Self, StashError> {
-        let unordered = CachedScrollData::all(local_label_id, unread, page_size);
+        scroll_order: LabelScrollOrder,
+    ) -> Self {
+        let unordered = CachedScrollData::all(local_label_id, unread, page_size, scroll_order);
 
-        Ok(MailScrollerState::NotSynced(unordered))
+        MailScrollerState::NotSynced(unordered)
     }
 
     /// If state is online, return the ordered data.

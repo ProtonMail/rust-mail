@@ -24,6 +24,7 @@ use std::sync::{Arc, Weak};
 use tracing::{debug, error, info, warn};
 
 // Import common macros from core
+use crate::datatypes::labels::LabelScrollOrder;
 use proton_core_common::event_loop::{join_task, try_refresh};
 
 pub struct MailEventSubscriber(Weak<MailUserContext>);
@@ -283,6 +284,7 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
                 all_mail.id(),
                 ReadFilter::All,
                 page_size,
+                LabelScrollOrder::default(),
             );
 
             info!(
@@ -304,6 +306,7 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
                 all_mail.id(),
                 ReadFilter::All,
                 page_size,
+                LabelScrollOrder::default(),
             );
 
             info!(

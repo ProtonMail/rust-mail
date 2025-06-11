@@ -1,9 +1,15 @@
 use crate::AppError;
-use crate::datatypes::{LabelColor, ViewMode};
+use crate::datatypes::{LabelColor, SystemLabelId, ViewMode};
 use crate::models::{ConversationCounters, MailLabel, MailSettings, MessageCounters};
-use proton_core_common::models::{Label, ModelExtension};
+use proton_core_api::services::proton::LabelId;
+use proton_core_common::datatypes::LocalLabelId;
+use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
+use proton_sqlite3::rusqlite::types::{
+    FromSql, FromSqlError, FromSqlResult, ToSqlOutput, Value, ValueRef,
+};
+use proton_sqlite3::rusqlite::{Error as SqliteError, ToSql};
 use stash::orm::Model;
-use stash::stash::Tether;
+use stash::stash::{StashError, Tether};
 
 pub mod custom_folder;
 pub mod custom_labels;
@@ -70,5 +76,47 @@ pub async fn color_to_display(
         }
     } else {
         Ok(None)
+    }
+}
+
+#[derive(Default, Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[repr(u8)]
+pub enum LabelScrollOrder {
+    Ascending = 0,
+    #[default]
+    Descending = 1,
+}
+
+impl LabelScrollOrder {
+    pub fn for_label_id(id: &LabelId) -> Self {
+        if *id == LabelId::all_scheduled() {
+            Self::Ascending
+        } else {
+            Self::Descending
+        }
+    }
+
+    pub async fn for_local_label_id(id: LocalLabelId, tether: &Tether) -> Result<Self, StashError> {
+        if let Some(remote_id) = Label::local_id_counterpart(id, tether).await? {
+            Ok(Self::for_label_id(&remote_id))
+        } else {
+            Ok(Self::default())
+        }
+    }
+}
+
+impl ToSql for LabelScrollOrder {
+    fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
+        Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
+    }
+}
+
+impl FromSql for LabelScrollOrder {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match i64::column_result(value)? {
+            0 => Ok(Self::Ascending),
+            1 => Ok(Self::Descending),
+            v => Err(FromSqlError::OutOfRange(v)),
+        }
     }
 }

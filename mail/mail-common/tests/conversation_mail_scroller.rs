@@ -9,6 +9,7 @@ use proton_mail_api::services::proton::{
     common::ConversationId, prelude::GetConversationsResponse,
     response_data::Conversation as ApiConversation,
 };
+use proton_mail_common::datatypes::labels::LabelScrollOrder;
 use proton_mail_common::test_utils::{
     init::Params as TestParams,
     scroller::{StoreLabeledModelMap, save_single_conversation, test_conversations},
@@ -89,6 +90,7 @@ async fn test_conversation_mail_scroller_reads_correct_items_within_visible_rang
         .remote_conversation_id(last_conversation.remote_id.clone().unwrap())
         .conversation_time(last_label.context_time)
         .display_order(last_conversation.display_order)
+        .scroll_order(LabelScrollOrder::Descending)
         .build();
 
     tether
@@ -728,6 +730,7 @@ async fn test_conversation_mail_scroller_reads_cached_data_and_return_error_on_o
         .remote_conversation_id(last_conversation.remote_id.clone().unwrap())
         .conversation_time(last_label.context_time)
         .display_order(last_conversation.display_order)
+        .scroll_order(LabelScrollOrder::Descending)
         .build();
 
     tether
@@ -816,6 +819,7 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
         .remote_conversation_id(last_conversation.remote_id.clone().unwrap())
         .conversation_time(last_label.context_time)
         .display_order(last_conversation.display_order)
+        .scroll_order(LabelScrollOrder::Descending)
         .build();
 
     tether

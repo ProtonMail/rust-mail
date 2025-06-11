@@ -5,12 +5,13 @@ use anyhow::anyhow;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_task_service::AsyncTaskResult;
 use stash::stash::WatcherHandle;
-use std::sync::Weak;
+use std::sync::{Arc, Weak};
 use tokio::sync::Mutex;
 
 mod mail_scroller_source;
 mod mail_scroller_watcher;
 
+use crate::datatypes::labels::LabelScrollOrder;
 pub use mail_scroller_source::*;
 pub use mail_scroller_watcher::*;
 
@@ -43,7 +44,11 @@ impl MailScroller<DataScrollerSource<ConversationScrollData>> {
         unread: ReadFilter,
         page_size: usize,
     ) -> Result<Self, MailContextError> {
-        let source = DataScrollerSource::new(local_label_id, unread, page_size);
+        let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
+        let scroll_order =
+            LabelScrollOrder::for_local_label_id(local_label_id, &ctx.user_stash().connection())
+                .await?;
+        let source = DataScrollerSource::new(local_label_id, unread, page_size, scroll_order);
         MailScroller::new(ctx, source).await
     }
 }
@@ -55,7 +60,11 @@ impl MailScroller<DataScrollerSource<MessageScrollData>> {
         unread: ReadFilter,
         page_size: usize,
     ) -> Result<Self, MailContextError> {
-        let source = DataScrollerSource::new(local_label_id, unread, page_size);
+        let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
+        let scroll_order =
+            LabelScrollOrder::for_local_label_id(local_label_id, &ctx.user_stash().connection())
+                .await?;
+        let source = DataScrollerSource::new(local_label_id, unread, page_size, scroll_order);
         MailScroller::new(ctx, source).await
     }
 }
@@ -66,6 +75,7 @@ impl MailScroller<SearchScrollerSource> {
         search: SearchOptions,
         page_size: usize,
     ) -> Result<Self, MailContextError> {
+        let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let source = SearchScrollerSource::new(search, page_size);
         MailScroller::new(ctx, source).await
     }
@@ -78,15 +88,11 @@ impl<T: MailScrollerSource> MailScroller<T> {
     /// # Errors
     ///
     /// Returns error if something went wrong with initializing the data source.
-    async fn new(ctx: Weak<MailUserContext>, mut source: T) -> Result<Self, MailContextError> {
-        let (total, task) = if let Some(ctx) = ctx.upgrade() {
-            source.initialize(&ctx).await?
-        } else {
-            return Err(MailContextError::MissingContext);
-        };
+    async fn new(ctx: Arc<MailUserContext>, mut source: T) -> Result<Self, MailContextError> {
+        let (total, task) = source.initialize(&ctx).await?;
 
         Ok(Self {
-            ctx,
+            ctx: Arc::downgrade(&ctx),
             total,
             source: Mutex::new(source),
             task,
