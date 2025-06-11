@@ -429,12 +429,15 @@ impl Draft {
             return Err(ProtonError::Unexpected(UnexpectedError::Internal).into());
         };
         uniffi_async::<_, RealProtonMailError, _>(async move {
-            Ok(self
-                .instance
-                .write()
-                .await
+            let mut instance = self.instance.write().await;
+            instance
                 .change_sender_address_by_email(&ctx, &email)
-                .await?)
+                .await?;
+            instance
+                .save(ctx.action_queue(), &ctx.user_stash().connection())
+                .await
+                .map_err(RealProtonMailError::from)?;
+            Ok(())
         })
         .await
         .map_err(DraftSenderAddressChangeError::from)
