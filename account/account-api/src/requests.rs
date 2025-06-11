@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{borrow::Cow, collections::HashMap};
 
 use proton_core_common::device::DeviceInfo;
 use serde::{Deserialize, Serialize};
@@ -250,6 +250,10 @@ pub struct AuthInput {
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct Payload {
+    /// Payload version.
+    /// To be agreed on with anti-abuse team and bumped on structural changes.
+    #[serde(rename = "v")]
+    pub version: Cow<'static, str>,
     /// Device fingerprint.
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     pub device_info: Option<DeviceInfo>,
@@ -562,12 +566,12 @@ mod tests {
                 r#"{"Type":1,"Username":"name","Domain":null,"#,
                 r#""Auth":{"Version":123,"ModulusID":"mod","Salt":"salt","Verifier":"ver"},"#,
                 r#""Email":null,"Phone":null,"Referrer":null,"Payload":{"#,
-                r#""payload-1":{"appLang":"lang-1","timezone":"tz","timezoneOffset":-60,"#,
+                r#""payload-1":{"v":"1.0","appLang":"lang-1","timezone":"tz","timezoneOffset":-60,"#,
                 r#""deviceName":"model","deviceBrand":"brand","deviceCodename":"code","uuid":"uuid","regionCode":"country","#,
                 r#""isJailbreak":false,"preferredContentSize":"scale","storageCapacity":123.0,"isDarkmodeOn":true,"#,
                 r#""keyboards":["kb"],"TimeOnField":[123],"ClickOnField":42,"#,
                 r#""CopyField":["copy"],"PasteField":["paste"],"KeyDownField":["key"]},"#,
-                r#""payload-2":{"appLang":"lang-2","timezone":"tz","timezoneOffset":-60,"#,
+                r#""payload-2":{"v":"1.0","appLang":"lang-2","timezone":"tz","timezoneOffset":-60,"#,
                 r#""deviceName":"model","deviceBrand":"brand","deviceCodename":"code","uuid":"uuid","regionCode":"country","#,
                 r#""isJailbreak":false,"preferredContentSize":"scale","storageCapacity":123.0,"isDarkmodeOn":true,"#,
                 r#""keyboards":["kb"],"TimeOnField":[123],"ClickOnField":42,"#,
@@ -578,6 +582,7 @@ mod tests {
 
     fn create_payload(language: impl Into<String>) -> Payload {
         Payload {
+            version: "1.0".into(),
             device_info: Some(DeviceInfo {
                 language: language.into(),
                 timezone: "tz".into(),

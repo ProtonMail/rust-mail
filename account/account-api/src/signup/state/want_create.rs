@@ -348,6 +348,7 @@ fn insert_payload(
     payload.insert(
         name,
         Payload {
+            version: challenge_info.payload_version.into(),
             device_info: challenge_info.device_info.clone(),
             user_behavior: Some(user_behavior),
         },
@@ -397,6 +398,7 @@ mod test {
             key_down_field: vec!["rec_kdf".into()],
         };
         let challenge_info = ChallengeInfo {
+            payload_version: "1.0",
             product_version: "mail-v1".into(),
             device_info: Some(device_info.clone()),
             recovery_behavior: Some(recovery_behavior.clone()),
@@ -408,6 +410,7 @@ mod test {
                 (
                     "mail-v1-challenge-0".to_string(),
                     Payload {
+                        version: "1.0".into(),
                         device_info: Some(device_info.clone()),
                         user_behavior: Some(user_behavior),
                     }
@@ -415,6 +418,7 @@ mod test {
                 (
                     "mail-v1-challenge-1".to_string(),
                     Payload {
+                        version: "1.0".into(),
                         device_info: Some(device_info.clone()),
                         user_behavior: Some(recovery_behavior),
                     }
