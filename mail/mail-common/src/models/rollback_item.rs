@@ -89,15 +89,15 @@ impl RollbackItem {
     ///
     pub async fn sync_all<I>(
         session: &Session,
-        tx_runner: &mut impl RunTransaction,
+        tx: &mut impl RunTransaction,
         batch: I,
     ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>> + Copy,
     {
-        Self::sync_labels(session, tx_runner, batch).await?;
-        Self::sync_messages(session, tx_runner, batch).await?;
-        Self::sync_conversations(session, tx_runner, batch).await?;
+        Self::sync_labels(session, tx, batch).await?;
+        Self::sync_messages(session, tx, batch).await?;
+        Self::sync_conversations(session, tx, batch).await?;
 
         Ok(())
     }
@@ -111,13 +111,13 @@ impl RollbackItem {
     #[tracing::instrument(level = "debug", skip_all)]
     pub async fn sync_labels<I>(
         session: &Session,
-        tx_runner: &mut impl RunTransaction,
+        tx: &mut impl RunTransaction,
         batch: I,
     ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>>,
     {
-        Self::sync_items_impl::<LabelRollbackHandler, _>(session, tx_runner, batch.into()).await
+        Self::sync_items_impl::<LabelRollbackHandler, _>(session, tx, batch.into()).await
     }
 
     /// Synchronize all messages with remote counterparts.
@@ -129,13 +129,13 @@ impl RollbackItem {
     #[tracing::instrument(level = "debug", skip_all)]
     pub async fn sync_messages<I>(
         session: &Session,
-        tx_runner: &mut impl RunTransaction,
+        tx: &mut impl RunTransaction,
         batch: I,
     ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>>,
     {
-        Self::sync_items_impl::<MessageRollbackHandler, _>(session, tx_runner, batch.into()).await
+        Self::sync_items_impl::<MessageRollbackHandler, _>(session, tx, batch.into()).await
     }
 
     /// Synchronize all conversations with remote counterparts.
@@ -147,14 +147,13 @@ impl RollbackItem {
     #[tracing::instrument(level = "debug", skip_all)]
     pub async fn sync_conversations<I>(
         session: &Session,
-        tx_runner: &mut impl RunTransaction,
+        tx: &mut impl RunTransaction,
         batch: I,
     ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>>,
     {
-        Self::sync_items_impl::<ConversationRollbackHandler, _>(session, tx_runner, batch.into())
-            .await
+        Self::sync_items_impl::<ConversationRollbackHandler, _>(session, tx, batch.into()).await
     }
 
     /// This helper method is used to find all rollback items of a specific kind.

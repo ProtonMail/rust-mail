@@ -2187,7 +2187,7 @@ impl Conversation {
     pub async fn sync_metadata<PM: ProtonMail>(
         ids: Vec<ConversationId>,
         api: &PM,
-        mut run_tx: impl RunTransaction,
+        mut tx: impl RunTransaction,
     ) -> Result<Vec<Self>, AppError> {
         let remote_convs = api
             .get_conversations(GetConversationsOptions {
@@ -2198,16 +2198,15 @@ impl Conversation {
             .conversations;
         let mut local_convs = Vec::with_capacity(remote_convs.len());
 
-        run_tx
-            .run_tx(async |tx| {
-                for conv in remote_convs {
-                    let mut conv = Self::from(conv);
-                    conv.save(tx).await?;
-                    local_convs.push(conv);
-                }
-                Ok(())
-            })
-            .await?;
+        tx.run_tx(async |tx| {
+            for conv in remote_convs {
+                let mut conv = Self::from(conv);
+                conv.save(tx).await?;
+                local_convs.push(conv);
+            }
+            Ok(())
+        })
+        .await?;
 
         Ok(local_convs)
     }
@@ -2822,11 +2821,10 @@ impl Conversation {
     /// Returns error if the queries failed or if the server request failed.
     pub async fn sync_conversation_messages(
         local_conversation_id: LocalConversationId,
-        run_tx: &mut impl RunTransaction,
+        tx: &mut impl RunTransaction,
         session: &Session,
     ) -> Result<(), AppError> {
-        let Some(conversation) = Self::find_by_id(local_conversation_id, run_tx.tether()).await?
-        else {
+        let Some(conversation) = Self::find_by_id(local_conversation_id, tx.tether()).await? else {
             return Err(AppError::ConversationNotFound(local_conversation_id));
         };
 
@@ -2848,32 +2846,30 @@ impl Conversation {
                 AppError::from(e)
             })?;
 
-            run_tx
-                .run_tx::<_, _>(async |tx| {
-                    let message_metadata: Vec<ApiMessageMetadata> = conversation_response.messages;
-                    let mut new_conversation: Conversation =
-                        conversation_response.conversation.into();
+            tx.run_tx::<_, _>(async |tx| {
+                let message_metadata: Vec<ApiMessageMetadata> = conversation_response.messages;
+                let mut new_conversation: Conversation = conversation_response.conversation.into();
 
-                    Message::create_or_update_messages_from_metadata(message_metadata, tx)
-                        .await
-                        .map_err(|e| {
-                            error!("Failed to write message metadata: {e:?}");
-                            e
-                        })?;
-
-                    new_conversation.local_id = conversation.local_id;
-                    new_conversation.row_id = conversation.row_id;
-                    new_conversation.has_messages = true;
-
-                    new_conversation.save(tx).await.map_err(|e| {
-                        error!("Failed to write conversation: {e:?}");
+                Message::create_or_update_messages_from_metadata(message_metadata, tx)
+                    .await
+                    .map_err(|e| {
+                        error!("Failed to write message metadata: {e:?}");
                         e
                     })?;
 
-                    Ok(())
-                })
-                .await
-                .map_err(AppError::Other)?;
+                new_conversation.local_id = conversation.local_id;
+                new_conversation.row_id = conversation.row_id;
+                new_conversation.has_messages = true;
+
+                new_conversation.save(tx).await.map_err(|e| {
+                    error!("Failed to write conversation: {e:?}");
+                    e
+                })?;
+
+                Ok(())
+            })
+            .await
+            .map_err(AppError::Other)?;
         } else {
             debug!("Conversation messages already synced")
         }

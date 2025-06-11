@@ -368,7 +368,7 @@ impl MailUserContext {
     pub async fn recipient_send_preferences<Provider>(
         &self,
         pgp_provider: &Provider,
-        rt: &mut impl RunTransaction,
+        tx: &mut impl RunTransaction,
         email: &str,
         settings: CryptoMailSettings,
         composer_preference: ComposerPreference,
@@ -379,7 +379,7 @@ impl MailUserContext {
         let encryption_time = crypto_clock::server_crypto_clock().unix_time();
 
         // If the email is from an owned address by the user, use the corresponding keys.
-        if let Some(address) = Address::by_email(email, rt.tether())
+        if let Some(address) = Address::by_email(email, tx.tether())
             .await
             .inspect_err(|err| {
                 error!("send preferences: failed to search address by email: {err:?}")
@@ -392,7 +392,7 @@ impl MailUserContext {
             })?;
 
             let address_keys = self
-                .unlocked_address_keys(pgp_provider, rt.tether(), address_rid)
+                .unlocked_address_keys(pgp_provider, tx.tether(), address_rid)
                 .await
                 .inspect_err(|err| error!("send preferences for self: {err:?}"))?;
             let send_preferences =
@@ -401,14 +401,14 @@ impl MailUserContext {
             return Ok(send_preferences);
         }
 
-        let user_keys = self.unlocked_user_keys(pgp_provider, rt.tether()).await?;
+        let user_keys = self.unlocked_user_keys(pgp_provider, tx.tether()).await?;
         // Fetch API keys, and contact-pinned keys concurrently.
         let (api_keys_result, vcard_keys_result) = join!(
             self.user_context
                 .public_address_keys(pgp_provider, email, false),
             self.user_context.public_address_keys_from_contacts(
                 pgp_provider,
-                rt,
+                tx,
                 &user_keys,
                 email
             )

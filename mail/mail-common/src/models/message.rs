@@ -1799,10 +1799,10 @@ impl Message {
     pub async fn fetch_message_body(
         &self,
         ctx: &MailUserContext,
-        mut run_tx: impl RunTransaction,
+        mut tx: impl RunTransaction,
     ) -> Result<DecryptedMessageBody, MailContextError> {
         if let Some(decrypted) =
-            Self::load_decrypted_message_from_cache(self.id(), run_tx.tether()).await?
+            Self::load_decrypted_message_from_cache(self.id(), tx.tether()).await?
         {
             debug!("Found message body in cache.");
             return Ok(decrypted);
@@ -1821,27 +1821,26 @@ impl Message {
         }
 
         let (_, encrypted_body) =
-            Self::sync_message_and_body(remote_id, ctx.api(), &mut run_tx).await?;
+            Self::sync_message_and_body(remote_id, ctx.api(), &mut tx).await?;
         trace!("Message successfully downloaded. Decrypting...");
 
         let decrypted = Self::decrypt_message_body(
             ctx,
             &self.remote_address_id,
             encrypted_body,
-            run_tx.tether(),
+            tx.tether(),
             true,
         )
         .await?;
         trace!("Message successfully decrypted. Caching...");
 
-        run_tx
-            .run_tx(async |tx| {
-                Self::store_decrypted_message_body(self.id(), decrypted.body.clone(), tx).await?;
+        tx.run_tx(async |tx| {
+            Self::store_decrypted_message_body(self.id(), decrypted.body.clone(), tx).await?;
 
-                Ok(())
-            })
-            .await
-            .map_err(MailContextError::Other)?;
+            Ok(())
+        })
+        .await
+        .map_err(MailContextError::Other)?;
 
         debug!("Message successfully synced.");
         Ok(decrypted)
@@ -2539,7 +2538,7 @@ impl Message {
     pub async fn sync_metadata<PM: ProtonMail>(
         ids: Vec<MessageId>,
         api: &PM,
-        mut run_tx: impl RunTransaction,
+        mut tx: impl RunTransaction,
     ) -> Result<Vec<Self>, AppError> {
         let remote_msgs = Self::fetch_metadata(
             GetMessagesOptions {
@@ -2552,19 +2551,18 @@ impl Message {
         .messages;
         let mut local_msgs = Vec::with_capacity(remote_msgs.len());
 
-        run_tx
-            .run_tx(async |tx| {
-                for msg in remote_msgs {
-                    let mut remote_msg = Message::from_api_metadata(msg, tx).await?;
+        tx.run_tx(async |tx| {
+            for msg in remote_msgs {
+                let mut remote_msg = Message::from_api_metadata(msg, tx).await?;
 
-                    if !remote_msg.is_local_draft(tx).await? {
-                        remote_msg.save(tx).await?;
-                    }
-                    local_msgs.push(remote_msg);
+                if !remote_msg.is_local_draft(tx).await? {
+                    remote_msg.save(tx).await?;
                 }
-                Ok(())
-            })
-            .await?;
+                local_msgs.push(remote_msg);
+            }
+            Ok(())
+        })
+        .await?;
 
         Ok(local_msgs)
     }
@@ -2612,35 +2610,33 @@ impl Message {
     ///
     /// Returns error if the message failed to fetch from the server or update the
     /// metadata on the server.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(api, run_tx))]
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip(api, tx))]
     async fn sync_message_and_body(
         message_id: MessageId,
         api: &Proton,
-        mut run_tx: impl RunTransaction,
+        mut tx: impl RunTransaction,
     ) -> Result<(Message, EncryptedMessageBody), MailContextError> {
         let message = api.get_message(message_id).await.map(|v| v.message)?;
 
-        let (mut message, mut body_metadata, body) =
-            Message::from_api_data(message, run_tx.tether())
-                .await
-                .inspect_err(|e| {
-                    error!("Failed to convert message from api: {e:?}");
-                })?;
-
-        run_tx
-            .run_tx(async |tx| {
-                message.save(tx).await.inspect_err(|e| {
-                    error!("Failed to save message metadata: {e:?}");
-                })?;
-
-                body_metadata.save(tx).await.inspect_err(|e| {
-                    error!("Failed to save message body metadata: {e:?}");
-                })?;
-
-                Ok(())
-            })
+        let (mut message, mut body_metadata, body) = Message::from_api_data(message, tx.tether())
             .await
-            .map_err(MailContextError::Other)?;
+            .inspect_err(|e| {
+                error!("Failed to convert message from api: {e:?}");
+            })?;
+
+        tx.run_tx(async |tx| {
+            message.save(tx).await.inspect_err(|e| {
+                error!("Failed to save message metadata: {e:?}");
+            })?;
+
+            body_metadata.save(tx).await.inspect_err(|e| {
+                error!("Failed to save message body metadata: {e:?}");
+            })?;
+
+            Ok(())
+        })
+        .await
+        .map_err(MailContextError::Other)?;
 
         Ok((
             message,
