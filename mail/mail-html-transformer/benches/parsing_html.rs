@@ -75,15 +75,18 @@ pub fn parse(c: &mut Criterion) {
             b.iter(|| {
                 let tr = tr.clone();
                 transforms::styles::inject_dark_mode(
-                    Some("test@pm.me"),
                     tr.document(),
                     tr.document(),
-                    transforms::ColorMode::LightMode,
-                    BrowserCapabilities {
-                        supports_dark_mode_via_media_query: true,
+                    transforms::styles::InjectDarkModeOptions {
+                        sender: Some("test@pm.me"),
+                        mode: transforms::ColorMode::LightMode,
+                        capabilities: BrowserCapabilities {
+                            supports_dark_mode_via_media_query: true,
+                        },
+                        root_selector: "#protonmail-message".to_owned(),
+                        include_full_static_css: IncludeFullStaticCss::No,
+                        trusted_senders: &[],
                     },
-                    "#protonmail-message".to_owned(),
-                    IncludeFullStaticCss::No,
                 );
             })
         });
@@ -139,6 +142,7 @@ pub fn all_transforms(c: &mut Criterion) {
                         supports_dark_mode_via_media_query: true,
                     },
                     IncludeFullStaticCss::No,
+                    &[],
                 );
                 _ = t.strip_blockquote();
                 let tok = t.add_noreferrer();

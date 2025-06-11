@@ -118,6 +118,21 @@ pub fn inject_root_selector_to_html(document: &NodeRef) {
         .insert("data-protonmail-message", "true".to_owned());
 }
 
+pub struct InjectDarkModeOptions<'a> {
+    /// The email address of the sender. Example: `test@pm.me`
+    pub sender: Option<&'a str>,
+    pub mode: ColorMode,
+    pub capabilities: BrowserCapabilities,
+    /// The CSS selector of the root of message.
+    /// In case of viewing message, it is usually data attribute pointing to the `html` tag.
+    /// In case of composer, it is ID pointing to custom editor that wraps the message.
+    /// Used to create a selector with bigger specificity than any provided by the sender.
+    pub root_selector: String,
+    pub include_full_static_css: IncludeFullStaticCss,
+    /// List of senders (email addresses, example: `test@pm.me`) that we trust that they support dark mode natively.
+    pub trusted_senders: &'a [&'a str],
+}
+
 /// Adjusts style of the message to the light/dark mode.
 /// In case of light mode only slight changes are applied.
 /// In case of the dark mode, this function scans all styles provided by the sender,
@@ -133,21 +148,23 @@ pub fn inject_root_selector_to_html(document: &NodeRef) {
 ///   In case of viewing message, it is usually data attribute pointing to the `html` tag.
 ///   In case of composer, it is ID pointing to custom editor that wraps the message.
 ///   Used to create a selector with bigger specificity than any provided by the sender.
+/// * `trusted_senders` - list of senders (email addresses, example: `test@pm.me`) that we trust that they support dark mode natively.
 ///
 /// # Difference between `source` and `target`
 /// In the view mode of the message, both nodes are pointing to the same document.
 /// However in the composer, `source` is the message being edited, while `target` is the head of HTML editor that wraps
 /// the message. Styles appended to the `target` are not sent to the recipient.
-pub fn inject_dark_mode(
-    sender: Option<&str>,
-    source: NodeRef,
-    target: NodeRef,
-    mode: ColorMode,
-    capabilities: BrowserCapabilities,
-    root_selector: String,
-    include_full_static_css: IncludeFullStaticCss,
-) {
-    let level = DarkStyleSupportLevel::new_for_html(sender, mode, &source, capabilities);
+pub fn inject_dark_mode(source: NodeRef, target: NodeRef, options: InjectDarkModeOptions) {
+    let InjectDarkModeOptions {
+        sender,
+        mode,
+        capabilities,
+        root_selector,
+        include_full_static_css,
+        trusted_senders,
+    } = options;
+
+    let level = DarkStyleSupportLevel::new_for_html(sender, mode, trusted_senders, capabilities);
 
     let BrowserCapabilities {
         supports_dark_mode_via_media_query,
