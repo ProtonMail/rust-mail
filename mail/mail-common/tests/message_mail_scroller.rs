@@ -21,6 +21,7 @@ use proton_mail_common::{
 use proton_mail_common::{message, msg_id};
 use velcro::hash_map;
 
+use proton_mail_common::datatypes::labels::LabelScrollOrder;
 use stash::stash::StashError;
 use stash::{orm::Model, stash::WatcherHandle};
 use std::{collections::HashMap, vec};
@@ -69,6 +70,7 @@ async fn test_message_mail_scroller_reads_correct_items_within_visible_range_for
         .remote_message_id(last_message.remote_id.clone().unwrap())
         .message_time(last_message.time)
         .display_order(last_message.display_order)
+        .scroll_order(LabelScrollOrder::Descending)
         .build();
 
     tether
@@ -413,10 +415,108 @@ async fn test_message_mail_scroller_notificate_about_changes() {
     );
 }
 
+#[tokio::test]
+async fn all_scheduled_is_displayed_in_ascending_order() {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
+    let page_size = 5;
+    let unread = ReadFilter::All;
+    let local_label_id = SystemLabel::Scheduled
+        .local_id(&tether)
+        .await
+        .unwrap()
+        .unwrap();
+    let params =
+        setup_api_message_pages_ext(&ctx, page_size, 1, SystemLabel::Scheduled, false).await;
+
+    ctx.setup_user(params.clone()).await;
+
+    ctx.initialize_uninitialized_ctx(&user_ctx).await;
+
+    // Update the inbox label to have all messages
+    let mut counters = MessageCounters::load(local_label_id, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    counters.total = page_size as u64 * 2;
+    tether
+        .tx(async |bond| counters.save(bond).await)
+        .await
+        .unwrap();
+
+    // Online
+    let mut scroller =
+        MailScroller::messages(user_ctx.as_weak(), local_label_id, unread, page_size)
+            .await
+            .unwrap();
+    let fetched = scroller.fetch_more().await.unwrap();
+    assert_eq!(fetched.len(), 5);
+
+    let actual = scroller.all_items().await.unwrap();
+    assert_eq!(actual.len(), 5);
+
+    let actual_rids = actual.iter().map(|msg| msg.remote_id.clone()).collect_vec();
+    assert_eq!(
+        actual_rids,
+        vec![
+            msg_id!("mymsg_0"),
+            msg_id!("mymsg_1"),
+            msg_id!("mymsg_2"),
+            msg_id!("mymsg_3"),
+            msg_id!("mymsg_4"),
+        ]
+    );
+    assert!(scroller.has_more().await.unwrap());
+
+    // Get next page - it will progress cursor to the next page
+    // But there is no more data available, the request will return an empty page
+    let actual_page = scroller.fetch_more().await.unwrap();
+    assert_eq!(actual_page.len(), 5);
+    let actual = scroller.all_items().await.unwrap();
+    assert_eq!(actual.len(), 10);
+    let actual_rids = actual
+        .iter()
+        .map(|conv| conv.remote_id.clone())
+        .collect_vec();
+    assert_eq!(
+        actual_rids,
+        vec![
+            msg_id!("mymsg_0"),
+            msg_id!("mymsg_1"),
+            msg_id!("mymsg_2"),
+            msg_id!("mymsg_3"),
+            msg_id!("mymsg_4"),
+            msg_id!("mymsg_5"),
+            msg_id!("mymsg_6"),
+            msg_id!("mymsg_7"),
+            msg_id!("mymsg_8"),
+            msg_id!("mymsg_9"),
+        ]
+    );
+    assert!(!scroller.has_more().await.unwrap());
+}
+
 async fn setup_api_message_pages(
     ctx: &MailTestContext,
     page_size: usize,
     empty_pages_requests: u64,
+) -> TestParams {
+    setup_api_message_pages_ext(
+        ctx,
+        page_size,
+        empty_pages_requests,
+        SystemLabel::Inbox,
+        true,
+    )
+    .await
+}
+async fn setup_api_message_pages_ext(
+    ctx: &MailTestContext,
+    page_size: usize,
+    empty_pages_requests: u64,
+    system_label: SystemLabel,
+    descending: bool,
 ) -> TestParams {
     ctx.mock_ping_success().await;
     let params = TestParams::default_basic();
@@ -426,28 +526,54 @@ async fn setup_api_message_pages(
         id: MessageId::from("mymsg"),
         conversation_id: conversation.id,
         address_id: address.id,
-        label_ids: vec![SystemLabel::Inbox.remote_id()]
+        label_ids: vec![system_label.remote_id()]
     );
 
     // Messages are returned and displayed in DESC order, newer at the top
-    let second_page = (0..page_size)
-        .rev()
-        .map(|i| {
-            let mut new = test_message.clone();
-            new.id = format!("{}_{}", new.id, i).into();
-            new.order = i as u64;
-            new
-        })
-        .collect_vec();
-    let first_page = (page_size..(page_size * 2))
-        .rev()
-        .map(|i| {
-            let mut new = test_message.clone();
-            new.id = format!("{}_{}", new.id, i).into();
-            new.order = i as u64;
-            new
-        })
-        .collect_vec();
+    let (first_page, second_page) = if descending {
+        let second_page = (0..page_size)
+            .rev()
+            .map(|i| {
+                let mut new = test_message.clone();
+                new.id = format!("{}_{}", new.id, i).into();
+                new.order = i as u64;
+                new.time = new.order + 1;
+                new
+            })
+            .collect_vec();
+        let first_page = (page_size..(page_size * 2))
+            .rev()
+            .map(|i| {
+                let mut new = test_message.clone();
+                new.id = format!("{}_{}", new.id, i).into();
+                new.order = i as u64;
+                new.time = new.order + 1;
+                new
+            })
+            .collect_vec();
+        (first_page, second_page)
+    } else {
+        let total = page_size * 2;
+        let second_page = (page_size..total)
+            .map(|i| {
+                let mut new = test_message.clone();
+                new.id = format!("{}_{}", new.id, i).into();
+                new.order = i as u64;
+                new.time = new.order + 1;
+                new
+            })
+            .collect_vec();
+        let first_page = (0..page_size)
+            .map(|i| {
+                let mut new = test_message.clone();
+                new.id = format!("{}_{}", new.id, i).into();
+                new.order = i as u64;
+                new.time = new.order + 1;
+                new
+            })
+            .collect_vec();
+        (first_page, second_page)
+    };
     let first_page_last_id = first_page.last().map(|conv| conv.id.to_string()).unwrap();
     let second_page_last_id = second_page.last().map(|conv| conv.id.to_string()).unwrap();
 

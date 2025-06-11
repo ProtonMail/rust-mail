@@ -12,13 +12,13 @@ use proton_mail_api::services::proton::{
 use stash::stash::{Bond, Stash, Tether};
 use tracing::debug;
 
+use super::{MailPaginatorJoinHandle, RemoteSource};
+use crate::datatypes::labels::LabelScrollOrder;
 use crate::{
     MailContextError, MailUserContext,
     datatypes::{ContextualConversation, ReadFilter},
     models::{Conversation, ConversationScrollData},
 };
-
-use super::{MailPaginatorJoinHandle, RemoteSource};
 
 /// Mail scroller implementation for [`Conversation`] on in a [`Label`].
 ///
@@ -35,6 +35,7 @@ impl RemoteSource for ConversationScrollData {
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
+        scroll_order: LabelScrollOrder,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let session = ctx.session().clone();
         let stash = ctx.user_stash().clone();
@@ -46,6 +47,7 @@ impl RemoteSource for ConversationScrollData {
                 remote_label_id,
                 unread,
                 page_size,
+                scroll_order,
             )
             .await?;
 
@@ -62,6 +64,7 @@ impl RemoteSource for ConversationScrollData {
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
+        scroll_order: LabelScrollOrder,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         RemoteConversationScrollerSource::spawn_background_sync(
             ctx,
@@ -70,6 +73,7 @@ impl RemoteSource for ConversationScrollData {
             remote_label_id,
             unread,
             page_size,
+            scroll_order,
         )
         .await
     }
@@ -81,6 +85,7 @@ impl RemoteSource for ConversationScrollData {
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
+        scroll_order: LabelScrollOrder,
         sender: flume::Sender<()>,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let stash = ctx.user_stash().clone();
@@ -98,6 +103,7 @@ impl RemoteSource for ConversationScrollData {
                 conversation_time,
                 unread,
                 page_size,
+                scroll_order,
             )
             .await?;
 
@@ -124,6 +130,7 @@ impl RemoteConversationScrollerSource {
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
+        scroll_order: LabelScrollOrder,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let stash = ctx.user_stash().clone();
         let remote_id = scroller.remote_conversation_id.clone();
@@ -140,6 +147,7 @@ impl RemoteConversationScrollerSource {
                 conversation_time,
                 unread,
                 page_size,
+                scroll_order,
             )
             .await?;
 
@@ -157,15 +165,16 @@ impl RemoteConversationScrollerSource {
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
+        scroll_order: LabelScrollOrder,
     ) -> Result<Vec<ContextualConversation>, MailContextError> {
         debug!("Syncing first page");
         let response = session
             .api()
             .get_conversations(GetConversationsOptions {
-                desc: Some(true),
                 label_id: Some(remote_label_id),
                 page_size: page_size as u64,
                 unread: unread.into(),
+                desc: Some(scroll_order == LabelScrollOrder::Descending),
                 ..Default::default()
             })
             .await?;
@@ -189,6 +198,7 @@ impl RemoteConversationScrollerSource {
             unread,
             context_time,
             true,
+            scroll_order,
             &mut tether,
         )
         .await?;
@@ -210,12 +220,13 @@ impl RemoteConversationScrollerSource {
         first_element_time: UnixTimestamp,
         unread: ReadFilter,
         page_size: usize,
+        scroll_order: LabelScrollOrder,
     ) -> Result<Vec<ContextualConversation>, MailContextError> {
         debug!("Syncing previous page");
         let response = session
             .api()
             .get_conversations(GetConversationsOptions {
-                desc: Some(true),
+                desc: Some(scroll_order == LabelScrollOrder::Descending),
                 // time == 0 breaks the api query.
                 begin: Some(first_element_time.as_u64()),
                 begin_id: Some(first_element_id.clone()),
@@ -247,6 +258,7 @@ impl RemoteConversationScrollerSource {
             unread,
             context_time,
             false,
+            scroll_order,
             &mut tether,
         )
         .await?;
@@ -268,12 +280,13 @@ impl RemoteConversationScrollerSource {
         last_element_time: UnixTimestamp,
         unread: ReadFilter,
         page_size: usize,
+        scroll_order: LabelScrollOrder,
     ) -> Result<Vec<ContextualConversation>, MailContextError> {
         debug!("Syncing next page");
         let mut response = session
             .api()
             .get_conversations(GetConversationsOptions {
-                desc: Some(true),
+                desc: Some(scroll_order == LabelScrollOrder::Descending),
                 // time == 0 breaks the api query.
                 end: Some(last_element_time.as_u64()),
                 end_id: Some(last_element_id.clone()),
@@ -316,6 +329,7 @@ impl RemoteConversationScrollerSource {
             unread,
             context_time,
             true,
+            scroll_order,
             &mut tether,
         )
         .await?;
@@ -359,6 +373,7 @@ impl RemoteConversationScrollerSource {
         unread: ReadFilter,
         context_time: Option<UnixTimestamp>,
         update_scroller: bool,
+        scroll_order: LabelScrollOrder,
         tether: &mut Tether,
     ) -> Result<(), MailContextError> {
         // We do not want to notify the UI about the not visible items
@@ -397,6 +412,7 @@ impl RemoteConversationScrollerSource {
                         unread,
                         context_time,
                         display_order,
+                        scroll_order,
                         tx,
                     )
                     .await?;
@@ -418,6 +434,7 @@ impl RemoteConversationScrollerSource {
         unread: ReadFilter,
         context_time: UnixTimestamp,
         display_order: u64,
+        scroll_order: LabelScrollOrder,
         bond: &Bond<'_>,
     ) -> Result<ConversationScrollData, MailContextError> {
         let mut conv_paginator = ConversationScrollData::builder()
@@ -426,6 +443,7 @@ impl RemoteConversationScrollerSource {
             .remote_conversation_id(remote_conv_id)
             .conversation_time(context_time)
             .display_order(display_order)
+            .scroll_order(scroll_order)
             .build();
 
         conv_paginator.save(bond).await?;

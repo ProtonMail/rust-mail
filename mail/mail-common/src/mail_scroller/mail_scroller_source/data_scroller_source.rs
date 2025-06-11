@@ -8,12 +8,12 @@ use stash::orm::Model;
 use stash::stash::Tether;
 use tracing::{debug, trace};
 
-use crate::{AppError, MailContextError, MailUserContext, datatypes::ReadFilter};
-
 use super::{
     MailPaginatorJoinHandle, MailScrollerSource, mail_scroller_state::MailScrollerState,
     remote_source::RemoteSource,
 };
+use crate::datatypes::labels::LabelScrollOrder;
+use crate::{AppError, MailContextError, MailUserContext, datatypes::ReadFilter};
 
 #[derive(Debug)]
 pub struct DataScrollerSource<T: RemoteSource> {
@@ -22,11 +22,17 @@ pub struct DataScrollerSource<T: RemoteSource> {
     page_size: usize,
     invalidate: Option<flume::Sender<()>>,
     new_data_callback: (flume::Sender<()>, flume::Receiver<()>),
+    scroll_order: LabelScrollOrder,
     state: MailScrollerState<T>,
 }
 
 impl<T: RemoteSource> DataScrollerSource<T> {
-    pub fn new(local_label_id: LocalLabelId, unread: ReadFilter, page_size: usize) -> Self {
+    pub fn new(
+        local_label_id: LocalLabelId,
+        unread: ReadFilter,
+        page_size: usize,
+        scroll_order: LabelScrollOrder,
+    ) -> Self {
         Self {
             local_label_id,
             unread,
@@ -34,6 +40,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             invalidate: None,
             new_data_callback: flume::bounded(0),
             state: MailScrollerState::None,
+            scroll_order,
         }
     }
 
@@ -83,9 +90,14 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         ctx: &MailUserContext,
         tether: &Tether,
     ) -> Result<(Vec<T::Item>, MailPaginatorJoinHandle), MailContextError> {
-        self.state =
-            MailScrollerState::new_not_synced(self.local_label_id, self.unread, self.page_size)
-                .await?;
+        let scroll_order =
+            LabelScrollOrder::for_local_label_id(self.local_label_id, tether).await?;
+        self.state = MailScrollerState::new_not_synced(
+            self.local_label_id,
+            self.unread,
+            self.page_size,
+            scroll_order,
+        );
 
         debug!("We are offline, load whatever is in the cache");
         let items = self.state.offline_mut().unwrap().fetch_more(tether).await?;
@@ -102,8 +114,17 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
+        scroll_order: LabelScrollOrder,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
-        T::sync_first_page(ctx, local_label_id, remote_label_id, unread, page_size).await
+        T::sync_first_page(
+            ctx,
+            local_label_id,
+            remote_label_id,
+            unread,
+            page_size,
+            scroll_order,
+        )
+        .await
     }
 
     async fn sync_next_page(
@@ -123,6 +144,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             remote_label_id,
             unread,
             page_size,
+            self.scroll_order,
         )
         .await
     }
@@ -143,6 +165,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
             remote_label_id,
             unread,
             page_size,
+            self.scroll_order,
             self.new_data_callback.0.clone(),
         )
         .await?;
@@ -218,6 +241,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                         remote_label_id,
                         unread,
                         self.page_size,
+                        self.scroll_order,
                     )
                     .await?
                 }
@@ -235,7 +259,15 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         let task = if total == 0 {
             None
         } else {
-            Self::sync_first_page(ctx, local_label_id, remote_label_id, unread, page_size).await?
+            Self::sync_first_page(
+                ctx,
+                local_label_id,
+                remote_label_id,
+                unread,
+                page_size,
+                self.scroll_order,
+            )
+            .await?
         };
 
         Ok((total, task))

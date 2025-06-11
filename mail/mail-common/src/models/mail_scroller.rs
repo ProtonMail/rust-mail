@@ -1,4 +1,6 @@
+use super::{ConversationCounters, MessageCounters};
 use crate::AppError;
+use crate::datatypes::labels::LabelScrollOrder;
 use crate::datatypes::{ContextualConversation, ReadFilter};
 use crate::models::{Conversation, ConversationLabel, Message, MessageLabel};
 use anyhow::anyhow;
@@ -14,8 +16,6 @@ use stash::stash::{Bond, StashError, Tether};
 use std::future::Future;
 use std::ops::Deref;
 use typed_builder::TypedBuilder;
-
-use super::{ConversationCounters, MessageCounters};
 
 /// Trait defining the scroll data.
 ///
@@ -33,12 +33,13 @@ pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
     fn find_with_key(
         local_label_id: LocalLabelId,
         unread: ReadFilter,
+        scroll_order: LabelScrollOrder,
         tether: &Tether,
     ) -> impl Future<Output = Result<Option<Self>, StashError>> + Send {
         async move {
             Self::find_first(
-                "WHERE local_label_id=? AND unread=?",
-                params![local_label_id, unread],
+                "WHERE local_label_id=? AND unread=? AND scroll_order=?",
+                params![local_label_id, unread, scroll_order],
                 tether,
             )
             .await
@@ -69,6 +70,7 @@ pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
         limit: Option<usize>,
         require_remote_id: bool,
         offset: Option<u64>,
+        order: LabelScrollOrder,
     ) -> String;
 
     /// Conversion between associated types of Model and Item.
@@ -85,6 +87,7 @@ pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
         local_label_id: LocalLabelId,
         unread: ReadFilter,
         item: Self::Item,
+        scroll_order: LabelScrollOrder,
     ) -> Option<Self>;
 
     /// List of tables that are watched by the scroll data.
@@ -109,6 +112,9 @@ pub struct MessageScrollData {
     #[DbField]
     pub display_order: u64,
 
+    #[DbField]
+    pub scroll_order: LabelScrollOrder,
+
     #[RowIdField]
     #[builder(default, setter(strip_option))]
     pub row_id: Option<u64>,
@@ -119,7 +125,9 @@ impl MessageScrollData {
         // NOTE: save should always update existing records.
         // But as long as we have no support for multiple records as a key
         // we have to first delete the record and then save it.
-        if let Some(existing) = Self::find_with_key(self.local_label_id, self.unread, tx).await? {
+        if let Some(existing) =
+            Self::find_with_key(self.local_label_id, self.unread, self.scroll_order, tx).await?
+        {
             self.row_id = existing.row_id;
             if self != &existing {
                 existing.delete(tx).await?;
@@ -141,6 +149,7 @@ impl From<MessageScrollData> for ScrollCursor<MessageScrollData> {
             unread: data.unread,
             time: data.message_time,
             display_order: data.display_order,
+            scroll_order: data.scroll_order,
             _phantom: std::marker::PhantomData,
         }
     }
@@ -167,9 +176,18 @@ impl ScrollData for MessageScrollData {
         limit: Option<usize>,
         require_remote_id: bool,
         offset: Option<u64>,
+        scroll_order: LabelScrollOrder,
     ) -> String {
         //NOTE: we only check the display order for elements with matching time
         // or we will get incorrect query results.
+
+        let (time_compare_op, display_order_compare_op) =
+            if scroll_order == LabelScrollOrder::Descending {
+                ('>', ">=")
+            } else {
+                ('<', "<=")
+            };
+
         let mut query = formatdoc!(
             "
             JOIN message_labels
@@ -179,9 +197,9 @@ impl ScrollData for MessageScrollData {
             AND
                 messages.deleted = 0
             AND (
-                    messages.time > ?2
+                    messages.time {time_compare_op} ?2
                 OR
-                    (messages.time = ?2 AND messages.display_order >= ?3)
+                    (messages.time = ?2 AND messages.display_order {display_order_compare_op} ?3)
                 )
             "
         );
@@ -199,10 +217,17 @@ impl ScrollData for MessageScrollData {
             }
         }
 
-        query += " ORDER BY
+        if scroll_order == LabelScrollOrder::Ascending {
+            query += " ORDER BY
+            messages.time ASC,
+            messages.display_order ASC
+        ";
+        } else {
+            query += " ORDER BY
             messages.time DESC,
             messages.display_order DESC
         ";
+        }
 
         if let Some(limit) = limit {
             query += &format!(" LIMIT {limit} ");
@@ -231,6 +256,7 @@ impl ScrollData for MessageScrollData {
         local_label_id: LocalLabelId,
         unread: ReadFilter,
         item: Self::Item,
+        scroll_order: LabelScrollOrder,
     ) -> Option<Self> {
         let time = Self::time(&item);
         let display_order = Self::display_order(&item);
@@ -242,6 +268,7 @@ impl ScrollData for MessageScrollData {
                     .message_time(time)
                     .display_order(display_order)
                     .remote_message_id(remote_id)
+                    .scroll_order(scroll_order)
                     .build(),
             );
         }
@@ -279,6 +306,9 @@ pub struct ConversationScrollData {
     #[DbField]
     pub display_order: u64,
 
+    #[DbField]
+    pub scroll_order: LabelScrollOrder,
+
     #[RowIdField]
     #[builder(default, setter(strip_option))]
     pub row_id: Option<u64>,
@@ -289,7 +319,9 @@ impl ConversationScrollData {
         // NOTE: save should always update existing records.
         // But as long as we have no support for multiple records as a key
         // we have to first delete the record and then save it.
-        if let Some(existing) = Self::find_with_key(self.local_label_id, self.unread, tx).await? {
+        if let Some(existing) =
+            Self::find_with_key(self.local_label_id, self.unread, self.scroll_order, tx).await?
+        {
             self.row_id = existing.row_id;
             if self != &existing {
                 existing.delete(tx).await?;
@@ -311,6 +343,7 @@ impl From<ConversationScrollData> for ScrollCursor<ConversationScrollData> {
             unread: data.unread,
             time: data.conversation_time,
             display_order: data.display_order,
+            scroll_order: LabelScrollOrder::default(),
             _phantom: std::marker::PhantomData,
         }
     }
@@ -337,7 +370,14 @@ impl ScrollData for ConversationScrollData {
         limit: Option<usize>,
         require_remote_id: bool,
         offset: Option<u64>,
+        scroll_order: LabelScrollOrder,
     ) -> String {
+        let (time_compare_op, display_order_compare_op) =
+            if scroll_order == LabelScrollOrder::Descending {
+                ('>', ">=")
+            } else {
+                ('<', "<=")
+            };
         let mut query = formatdoc!(
             "
             JOIN conversation_labels
@@ -349,9 +389,9 @@ impl ScrollData for ConversationScrollData {
             AND
                 conversation_labels.deleted = 0
             AND (
-                    conversation_labels.context_time > ?2
+                    conversation_labels.context_time {time_compare_op} ?2
                 OR
-                    (conversation_labels.context_time = ?2 AND conversations.display_order >= ?3)
+                    (conversation_labels.context_time = ?2 AND conversations.display_order {display_order_compare_op} ?3)
                 )
             "
         );
@@ -369,10 +409,17 @@ impl ScrollData for ConversationScrollData {
             }
         }
 
-        query += " ORDER BY
+        if scroll_order == LabelScrollOrder::Ascending {
+            query += " ORDER BY
+            conversation_labels.context_time ASC,
+            conversations.display_order ASC
+        ";
+        } else {
+            query += " ORDER BY
             conversation_labels.context_time DESC,
             conversations.display_order DESC
         ";
+        }
 
         if let Some(limit) = limit {
             query += &format!(" LIMIT {limit} ");
@@ -404,6 +451,7 @@ impl ScrollData for ConversationScrollData {
         local_label_id: LocalLabelId,
         unread: ReadFilter,
         item: Self::Item,
+        scroll_order: LabelScrollOrder,
     ) -> Option<Self> {
         let time = Self::time(&item);
         let display_order = Self::display_order(&item);
@@ -415,6 +463,7 @@ impl ScrollData for ConversationScrollData {
                     .conversation_time(time)
                     .display_order(display_order)
                     .remote_conversation_id(remote_id)
+                    .scroll_order(scroll_order)
                     .build(),
             );
         }
@@ -445,39 +494,64 @@ pub struct ScrollCursor<T: ScrollData> {
     /// Last synced display order.
     pub display_order: u64,
 
+    pub scroll_order: LabelScrollOrder,
+
     #[builder(default)]
     pub _phantom: std::marker::PhantomData<T>,
 }
 
 impl<T: ScrollData> ScrollCursor<T> {
     /// Create a new ScrollCursor set to the very begining of the data.
-    ///
-    /// It relies on the `i64::MAX` as the time and display order has to be
-    /// lower in order to read data from cursor. i64::MAX is used as the
-    /// sqlite3 does use 64 bit signed ints.
-    ///
-    pub fn absolute_begining(local_label_id: LocalLabelId, unread: ReadFilter) -> Self {
+    pub fn absolute_beginning(
+        local_label_id: LocalLabelId,
+        unread: ReadFilter,
+        scroll_order: LabelScrollOrder,
+    ) -> Self {
+        if scroll_order == LabelScrollOrder::Descending {
+            Self::highest(local_label_id, unread, scroll_order)
+        } else {
+            Self::lowest(local_label_id, unread, scroll_order)
+        }
+    }
+
+    /// Create a new ScrollCursor set to the very end of the data.
+    pub fn absolute_end(
+        local_label_id: LocalLabelId,
+        unread: ReadFilter,
+        scroll_order: LabelScrollOrder,
+    ) -> Self {
+        if scroll_order == LabelScrollOrder::Ascending {
+            Self::highest(local_label_id, unread, scroll_order)
+        } else {
+            Self::lowest(local_label_id, unread, scroll_order)
+        }
+    }
+
+    fn highest(
+        local_label_id: LocalLabelId,
+        unread: ReadFilter,
+        scroll_order: LabelScrollOrder,
+    ) -> Self {
         ScrollCursor {
             local_label_id,
             unread,
             time: (i64::MAX as u64).into(),
             display_order: i64::MAX as u64,
+            scroll_order,
             _phantom: std::marker::PhantomData,
         }
     }
-
-    /// Create a new ScrollCursor set to the very end of the data.
-    ///
-    /// It relies on the `0` as the time and display order has to be
-    /// greater in order to read data from cursor. And 0 is the lowest possible value
-    /// for the unsigned int.
-    ///
-    pub fn absolute_end(local_label_id: LocalLabelId, unread: ReadFilter) -> Self {
+    fn lowest(
+        local_label_id: LocalLabelId,
+        unread: ReadFilter,
+        scroll_order: LabelScrollOrder,
+    ) -> Self {
         ScrollCursor {
             local_label_id,
             unread,
             time: 0.into(),
             display_order: 0,
+            scroll_order,
             _phantom: std::marker::PhantomData,
         }
     }
@@ -489,7 +563,7 @@ impl<T: ScrollData> ScrollCursor<T> {
     /// Return error if the query failed.
     ///
     pub async fn visible_element_count(&self, tether: &Tether) -> Result<u64, StashError> {
-        let query = T::query(self.unread, None, false, None);
+        let query = T::query(self.unread, None, false, None, self.scroll_order);
         T::Model::count(
             query,
             params![self.local_label_id, self.time, self.display_order],
@@ -525,7 +599,13 @@ impl<T: ScrollData> ScrollCursor<T> {
         require_remote_id: bool,
         tether: &Tether,
     ) -> Result<Vec<T::Item>, StashError> {
-        let query = T::query(self.unread, limit, require_remote_id, offset);
+        let query = T::query(
+            self.unread,
+            limit,
+            require_remote_id,
+            offset,
+            self.scroll_order,
+        );
         Ok(T::convert(
             self.local_label_id,
             T::Model::find(
@@ -578,12 +658,13 @@ impl<T: ScrollData> CachedScrollData<T> {
         page_size: usize,
         tether: &Tether,
     ) -> Result<Option<Self>, StashError> {
-        let data = T::find_with_key(local_label_id, unread, tether).await?;
+        let scroll_order = LabelScrollOrder::for_local_label_id(local_label_id, tether).await?;
+        let data = T::find_with_key(local_label_id, unread, scroll_order, tether).await?;
 
         Ok(match data {
             Some(data) => {
                 let end = data.into();
-                let cursor = ScrollCursor::absolute_begining(local_label_id, unread);
+                let cursor = ScrollCursor::absolute_beginning(local_label_id, unread, scroll_order);
 
                 Some(Self {
                     page_size,
@@ -615,9 +696,14 @@ impl<T: ScrollData> CachedScrollData<T> {
     ///
     /// Specific to database access.
     ///
-    pub fn all(local_label_id: LocalLabelId, unread: ReadFilter, page_size: usize) -> Self {
-        let end = ScrollCursor::absolute_end(local_label_id, unread);
-        let cursor = ScrollCursor::absolute_begining(local_label_id, unread);
+    pub fn all(
+        local_label_id: LocalLabelId,
+        unread: ReadFilter,
+        page_size: usize,
+        scroll_order: LabelScrollOrder,
+    ) -> Self {
+        let end = ScrollCursor::absolute_end(local_label_id, unread, scroll_order);
+        let cursor = ScrollCursor::absolute_beginning(local_label_id, unread, scroll_order);
 
         Self {
             page_size,
@@ -628,7 +714,11 @@ impl<T: ScrollData> CachedScrollData<T> {
 
     /// Transform the cursor to read absolutly all items from the database.
     pub fn set_absolute_end(mut self) -> Self {
-        self.end = ScrollCursor::absolute_end(self.cursor.local_label_id, self.cursor.unread);
+        self.end = ScrollCursor::absolute_end(
+            self.cursor.local_label_id,
+            self.cursor.unread,
+            self.end.scroll_order,
+        );
         self
     }
 
@@ -710,6 +800,7 @@ impl<T: ScrollData> CachedScrollData<T> {
                 .unread(self.unread)
                 .time(T::time(last))
                 .display_order(T::display_order(last))
+                .scroll_order(self.end.scroll_order)
                 .build(),
             None => self.end.clone(),
         };
@@ -767,7 +858,12 @@ impl<T: ScrollData> CachedScrollData<T> {
             .pop();
 
         match first {
-            Some(first) => Ok(T::into_scroll_data(self.local_label_id, self.unread, first)),
+            Some(first) => Ok(T::into_scroll_data(
+                self.local_label_id,
+                self.unread,
+                first,
+                self.scroll_order,
+            )),
             None => Ok(None),
         }
     }
@@ -780,7 +876,7 @@ impl<T: ScrollData> CachedScrollData<T> {
         // they should be the same however `end` var is just shorter.
         let end = &self.end;
 
-        T::find_with_key(end.local_label_id, end.unread, tether)
+        T::find_with_key(end.local_label_id, end.unread, end.scroll_order,tether)
             .await
             .and_then(|op| {
                 op.ok_or_else(|| {

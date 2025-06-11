@@ -11,6 +11,7 @@ mod remote_conversation_scroller_source;
 mod remote_messace_scroller_source;
 mod search_scroller_source;
 
+use crate::datatypes::labels::LabelScrollOrder;
 pub use search_scroller_source::SearchScrollerSource;
 
 pub trait RemoteSource: ScrollData + Send {
@@ -20,6 +21,7 @@ pub trait RemoteSource: ScrollData + Send {
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
+        label_scroll_order: LabelScrollOrder,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 
     fn sync_next_page(
@@ -29,8 +31,10 @@ pub trait RemoteSource: ScrollData + Send {
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
+        label_scroll_order: LabelScrollOrder,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 
+    #[allow(clippy::too_many_arguments)]
     fn sync_previous_page(
         ctx: &MailUserContext,
         local_label_id: LocalLabelId,
@@ -38,6 +42,7 @@ pub trait RemoteSource: ScrollData + Send {
         remote_label_id: LabelId,
         unread: ReadFilter,
         page_size: usize,
+        label_scroll_order: LabelScrollOrder,
         callback: flume::Sender<()>,
     ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 }
