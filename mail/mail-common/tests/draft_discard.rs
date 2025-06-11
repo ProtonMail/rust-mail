@@ -409,7 +409,7 @@ async fn discard_reply_draft_after_cancelled_or_failed_save_action_only_deletes_
     message.metadata.label_ids.clear();
     message.metadata.label_ids.push(LabelId::drafts());
 
-    let mut remote_existing_message = draft_message_with_attachments();
+    let mut remote_existing_message = draft_message();
     remote_existing_message.metadata.sender.address = "me@proton.me".to_owned();
     remote_existing_message.metadata.id = "FancyRemoteId".into();
     remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
