@@ -461,6 +461,8 @@ impl Save {
                 &result,
                 Err(MailContextError::Draft(draft::Error::Save(
                     SaveError::AlreadySent
+                ))) | Err(MailContextError::Draft(draft::Error::Save(
+                    SaveError::MessageNotADraft(_)
                 )))
             ) {
                 // if we hit an already sent error, we should delete the draft metadata
@@ -492,8 +494,11 @@ impl Save {
                     // if the transaction fails. The user will have to try again later.
                     error!("Failed to recover after draft already sent error: {e:?}");
                 }
-            }
 
+                return Err(MailContextError::Draft(draft::Error::Save(
+                    SaveError::AlreadySent,
+                )));
+            }
             result?
         } else {
             Draft::remote_create(
