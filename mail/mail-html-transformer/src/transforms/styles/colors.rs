@@ -137,9 +137,10 @@ pub fn hsla_for_dark_mode(purpose: ColorPurpose, mut color: HSL) -> RGBA {
 pub fn css_to_hsla(color: &CssColor) -> Result<HSL, ()> {
     match color {
         CssColor::CurrentColor => {
-            // This is the most common case. Unfortunately we do not support it because we would have to
-            // emulate parts of the css engine.
-            tracing::debug!("CurrentColor is not supported");
+            // `currentColor` is a special value that might be treated as a "pointer" to another property.
+            // We do not need to support it, because we can assume, that our CSS injection will actually process the property
+            // that `currentColor` points to.
+            // Therefore here, we return `Err(())` that will be handled by the caller by skipping the property with it.
             Err(())
         }
         CssColor::LightDark(_light, dark) => {

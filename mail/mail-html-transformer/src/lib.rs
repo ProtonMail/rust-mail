@@ -193,15 +193,6 @@ impl Transformer {
     /// of removing `!important` flag from styles and attributes.
     ///
     /// Supplement CSS are not injected, instead the function returns the head of the new document.
-    ///
-    /// # Parameters
-    /// * `sender` - the email address of the sender. Example: `test@pm.me`
-    ///   If `None` the sender is considered not trusted.
-    /// * `root_selector` - the CSS selector of the root of message.
-    ///   In case of viewing message, it is usually data attribute pointing to the `html` tag.
-    ///   In case of composer, it is ID pointing to custom editor that wraps the message.
-    ///   Used to create a selector with bigger specificity than any provided by the sender.
-    /// * `trusted_senders` - list of senders (email addresses, example: `test@pm.me`) that we trust that they support dark mode natively.
     pub fn inject_dark_mode_to_another_target(&mut self, options: InjectDarkModeOptions) -> String {
         use html5ever::namespace_url;
         let source = self.document.clone();

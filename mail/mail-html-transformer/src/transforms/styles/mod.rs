@@ -140,15 +140,9 @@ pub struct InjectDarkModeOptions<'a> {
 /// the style of the message to suit better the theme.
 ///
 /// Parameters:
-/// * `sender` - the email address of the sender. Example: `test@pm.me`
 /// * `source` - the source HTML document. Usually a message fetched from remote. Might be modified by removing `!important` flag from
 ///   styles and attributes.
 /// * `target` - the target HTML document. Stylesheets and CSS supplements are appended to the head of the document.
-/// * `root_selector` - the CSS selector of the root of message.
-///   In case of viewing message, it is usually data attribute pointing to the `html` tag.
-///   In case of composer, it is ID pointing to custom editor that wraps the message.
-///   Used to create a selector with bigger specificity than any provided by the sender.
-/// * `trusted_senders` - list of senders (email addresses, example: `test@pm.me`) that we trust that they support dark mode natively.
 ///
 /// # Difference between `source` and `target`
 /// In the view mode of the message, both nodes are pointing to the same document.
