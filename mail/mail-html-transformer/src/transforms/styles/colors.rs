@@ -1,4 +1,4 @@
-use lightningcss::values::color::{HSL, RGBA, SRGBLinear, XYZd65};
+use lightningcss::values::color::{CssColor, HSL, RGBA, SRGBLinear, XYZd65};
 
 use crate::transforms::styles::{ColorPurpose, DARK_MODE_BACKGROUND_COLOR};
 
@@ -132,6 +132,31 @@ pub fn hsla_for_dark_mode(purpose: ColorPurpose, mut color: HSL) -> RGBA {
     }
 
     color.into()
+}
+
+pub fn css_to_hsla(color: &CssColor) -> Result<HSL, ()> {
+    match color {
+        CssColor::CurrentColor => {
+            // This is the most common case. Unfortunately we do not support it because we would have to
+            // emulate parts of the css engine.
+            tracing::debug!("CurrentColor is not supported");
+            Err(())
+        }
+        CssColor::LightDark(_light, dark) => {
+            // `light-dark` allows CSS developer to define two colors, depending on the light or dark color theme.
+            // Since we are transforming colors for dark mode, we can just use the dark color and adjust the contrast if necessary.
+            css_to_hsla(dark)
+        }
+        CssColor::System(system) => {
+            // We do not support system colors as these depend on the browser.
+            tracing::debug!("System color ({:?}) is not supported", system);
+            Err(())
+        }
+        CssColor::RGBA(rgba) => Ok((*rgba).into()),
+        CssColor::LAB(lab) => Ok((**lab).into()),
+        CssColor::Predefined(predefined) => Ok((**predefined).into()),
+        CssColor::Float(float_color) => Ok((**float_color).into()),
+    }
 }
 
 #[cfg(test)]

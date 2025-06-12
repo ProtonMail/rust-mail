@@ -10,7 +10,7 @@ use lightningcss::{
 
 use crate::transforms::styles::{
     ColorPurpose, DARK_MODE_BACKGROUND_COLOR, NewProperty, OldProperty, PropertyWithPurpose,
-    colors::HSLExt,
+    colors::{HSLExt, css_to_hsla},
 };
 
 use super::properties::PropertiesVisitor;
@@ -227,8 +227,7 @@ impl Visitor<'_> for HSLColorExtractor {
     }
 
     fn visit_color(&mut self, color: &mut CssColor) -> Result<(), Self::Error> {
-        let Ok(hsl) = HSL::try_from(color.clone()) else {
-            tracing::error!("Could not transform {color:?} into HSL colorspace. Skipping it");
+        let Ok(hsl) = css_to_hsla(color) else {
             return Ok(());
         };
 
