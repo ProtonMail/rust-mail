@@ -39,8 +39,11 @@ impl CalendarColor {
     }
 }
 
-impl From<&str> for CalendarColor {
-    fn from(value: &str) -> Self {
-        Self::new(value)
+impl<T> From<T> for CalendarColor
+where
+    T: Into<String>,
+{
+    fn from(value: T) -> Self {
+        Self::new(value.into())
     }
 }
