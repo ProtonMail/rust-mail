@@ -94,9 +94,6 @@ impl From<SKLError> for SignupError {
 /// Info needed to construct the challenge payload.
 #[derive(Debug, Clone)]
 pub struct ChallengeInfo {
-    /// Payload version.
-    /// To be agreed on with anti-abuse team and bumped on structural changes.
-    pub payload_version: &'static str,
     /// Client version to be used for a challenge (e.g. `mail-ios-v4`).
     pub product_version: String,
     /// Device fingerprint.

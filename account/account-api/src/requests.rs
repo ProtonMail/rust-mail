@@ -1,7 +1,7 @@
 use proton_core_common::device::DeviceInfo;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
-use std::{borrow::Cow, collections::HashMap};
+use std::collections::HashMap;
 
 /// The type of account to create.
 #[derive(Clone, Copy, Debug, Serialize_repr, Deserialize_repr, Eq, Hash, PartialEq)]
@@ -247,12 +247,16 @@ pub struct AuthInput {
 
 /// Challenge payload frame containing device fingerprint and user behaviour.
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(tag = "v")]
 #[serde(rename_all = "PascalCase")]
-pub struct PayloadFrame {
-    /// Frame's version.
-    /// To be agreed on with anti-abuse team and bumped on structural changes.
-    #[serde(rename = "v")]
-    pub version: Cow<'static, str>,
+pub enum PayloadFrame {
+    #[serde(rename = "2.2.0")]
+    V2_2(PayloadFrameV2_2),
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PayloadFrameV2_2 {
     /// Frame's metadata.
     #[serde(rename = "frame")]
     pub metadata: PayloadFrameMetadata,
@@ -266,17 +270,8 @@ pub struct PayloadFrame {
 
 /// Challenge payload frame's metadata.
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PayloadFrameMetadata {
-    /// Frame type.
-    #[serde(rename = "name")]
-    pub ty: PayloadFrameType,
-}
-
-/// Challenge payload frame's type.
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum PayloadFrameType {
+#[serde(tag = "name", rename_all = "camelCase")]
+pub enum PayloadFrameMetadata {
     /// Frame built while user was entering the recovery method.
     Recovery,
     /// Frame built while user was entering the username.
@@ -627,7 +622,7 @@ mod tests {
                 "frame-1".into(),
                 create_payload_frame(
                     "lang-1",
-                    PayloadFrameType::Recovery,
+                    PayloadFrameMetadata::Recovery,
                     RecoveryBehavior {
                         time_on_field: vec![123],
                         click_on_field: 42,
@@ -645,7 +640,7 @@ mod tests {
                 r#"{"Type":1,"Username":"name","Domain":null,"#,
                 r#""Auth":{"Version":123,"ModulusID":"mod","Salt":"salt","Verifier":"ver"},"#,
                 r#""Email":null,"Phone":null,"Referrer":null,"Payload":{"#,
-                r#""frame-1":{"v":"1.0","frame":{"name":"recovery"},"appLang":"lang-1","timezone":"tz","timezoneOffset":-60,"#,
+                r#""frame-1":{"v":"2.2.0","frame":{"name":"recovery"},"appLang":"lang-1","timezone":"tz","timezoneOffset":-60,"#,
                 r#""deviceName":"model","deviceBrand":"brand","deviceCodename":"code","uuid":"uuid","regionCode":"country","#,
                 r#""isJailbreak":false,"preferredContentSize":"scale","storageCapacity":123.0,"isDarkmodeOn":true,"#,
                 r#""keyboards":["kb"],"timeRecovery":[123],"clickRecovery":42,"copyRecovery":["copy"],"pasteRecovery":["paste"],"keydownRecovery":["key"]}}}"#,
@@ -655,12 +650,11 @@ mod tests {
 
     fn create_payload_frame(
         language: impl Into<String>,
-        ty: PayloadFrameType,
+        metadata: PayloadFrameMetadata,
         user_behavior: impl Into<PayloadFrameBehavior>,
     ) -> PayloadFrame {
-        PayloadFrame {
-            version: "1.0".into(),
-            metadata: PayloadFrameMetadata { ty },
+        PayloadFrame::V2_2(PayloadFrameV2_2 {
+            metadata,
             device_info: Some(DeviceInfo {
                 language: language.into(),
                 timezone: "tz".into(),
@@ -677,6 +671,6 @@ mod tests {
                 keyboards: vec!["kb".into()],
             }),
             user_behavior: Some(user_behavior.into()),
-        }
+        })
     }
 }

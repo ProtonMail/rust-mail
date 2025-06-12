@@ -335,7 +335,7 @@ fn create_payload(
     if let Some(behavior) = challenge_info.recovery_behavior.clone() {
         insert_payload_frame(
             &mut payload,
-            PayloadFrameType::Recovery,
+            PayloadFrameMetadata::Recovery,
             challenge_info,
             behavior,
         );
@@ -344,7 +344,7 @@ fn create_payload(
     if let Some(behavior) = username_behavior {
         insert_payload_frame(
             &mut payload,
-            PayloadFrameType::Username,
+            PayloadFrameMetadata::Username,
             challenge_info,
             behavior,
         );
@@ -355,7 +355,7 @@ fn create_payload(
 
 fn insert_payload_frame(
     payload: &mut HashMap<String, PayloadFrame>,
-    ty: PayloadFrameType,
+    metadata: PayloadFrameMetadata,
     challenge_info: &ChallengeInfo,
     behavior: impl Into<PayloadFrameBehavior>,
 ) {
@@ -363,12 +363,11 @@ fn insert_payload_frame(
     let name = format!("{}-challenge-{id}", challenge_info.product_version);
     payload.insert(
         name,
-        PayloadFrame {
-            version: challenge_info.payload_version.into(),
-            metadata: PayloadFrameMetadata { ty },
+        PayloadFrame::V2_2(PayloadFrameV2_2 {
+            metadata,
             device_info: challenge_info.device_info.clone(),
             user_behavior: Some(behavior.into()),
-        },
+        }),
     );
 }
 
@@ -380,7 +379,7 @@ mod test {
 
     use crate::{
         prelude::{
-            PayloadFrame, PayloadFrameMetadata, PayloadFrameType, RecoveryBehavior,
+            PayloadFrame, PayloadFrameMetadata, PayloadFrameV2_2, RecoveryBehavior,
             UsernameBehavior,
         },
         signup::{ChallengeInfo, state::want_create::create_payload},
@@ -418,7 +417,6 @@ mod test {
             key_down_field: vec!["rec_kdf".into()],
         };
         let challenge_info = ChallengeInfo {
-            payload_version: "1.0",
             product_version: "mail-v1".into(),
             device_info: Some(device_info.clone()),
             recovery_behavior: Some(recovery_behavior.clone()),
@@ -429,25 +427,19 @@ mod test {
             Some(HashMap::from_iter([
                 (
                     "mail-v1-challenge-0".to_string(),
-                    PayloadFrame {
-                        version: "1.0".into(),
-                        metadata: PayloadFrameMetadata {
-                            ty: PayloadFrameType::Recovery,
-                        },
+                    PayloadFrame::V2_2(PayloadFrameV2_2 {
+                        metadata: PayloadFrameMetadata::Recovery,
                         device_info: Some(device_info.clone()),
                         user_behavior: Some(recovery_behavior.into()),
-                    }
+                    }),
                 ),
                 (
                     "mail-v1-challenge-1".to_string(),
-                    PayloadFrame {
-                        version: "1.0".into(),
-                        metadata: PayloadFrameMetadata {
-                            ty: PayloadFrameType::Username,
-                        },
+                    PayloadFrame::V2_2(PayloadFrameV2_2 {
+                        metadata: PayloadFrameMetadata::Username,
                         device_info: Some(device_info.clone()),
                         user_behavior: Some(username_behavior.into()),
-                    }
+                    }),
                 )
             ]))
         );

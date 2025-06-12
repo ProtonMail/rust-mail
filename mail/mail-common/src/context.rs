@@ -40,9 +40,6 @@ use tokio::sync::Mutex;
 use tokio::task::{JoinError, JoinHandle};
 use tracing::{Level, error};
 
-// To be agreed on with anti-abuse team and bumped on structural changes of the challenge payload.
-const CHALLENGE_PAYLOAD_VERSION: &str = "2.2.0";
-
 /// Whether we should initialize MailUserContext on creation
 #[derive(Debug, Clone, Copy)]
 pub enum ShouldInitializeMailUserContext {
@@ -399,7 +396,6 @@ impl MailContext {
 
         // Build challenge info
         let challenge_info = ChallengeInfo {
-            payload_version: CHALLENGE_PAYLOAD_VERSION,
             product_version: self.core_context.get_challenge_product_version(),
             device_info,
             // Will be populated during the sign up flow (if available)
