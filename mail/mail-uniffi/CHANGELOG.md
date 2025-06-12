@@ -5,33 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [mail-uniffi-v0.90.0] - 2025-06-12
+
+### Changed
+
+- Move time validation of pin and autolock out of the database and utilize `instant`
+
+### Fixes
+
+- [ET-3300] Dissallow manipiulation of time
+- [ET-3301] Start counting time for autolock when going to background
+- [ET-3212] Mail scroller prevents double pages by marking itself as a dirty
+- [ET-3325] Correctly handle save when already sent
+- [ET-3212] Add `mailscrollerdirty` error reason on fetch_more when scroller is dirty
+
+
+## [mail-uniffi-v0.89.0] - 2025-06-12
 
 ### Features
 
+- [ET-3247] Message `is_scheduled` and `can_reply` properties
 - [ET-3101] Breaking change - replace `html_head_content_for_composer()` with `html_for_composer()`
 - [ET-3101] Introduce list of **trusted** senders
 - [ET-3101] Lower tracing level when transforming hsl, add support for light-dark
 
 ### Fixes
 
+- [ET-3126] Check if online before attempting to cancel scheduled msg
+- [ET-3125] Only allow up to 100 scheduled send messages
+- [ET-3212] Event loop should be requested with option to get counters back
 - [ET-3178] Fix editor id in composer
 - [ET-3169] Replace path separators from attachment file name
 - Save draft after address change
 - [ET-3211] Scheduled send messages should be sorted ascending
 - Signatures are always stored in html
-
-### [mail-uniffi-v0.88.0] - 2025-06-10
-
-### Features
-
-- [ET-3247] Message `is_scheduled` and `can_reply` properties
-
-### Fixes
-
-- [ET-3126] Check if online before attempting to cancel scheduled msg
-- [ET-3125] Only allow up to 100 scheduled send messages
-- [ET-3212] Event loop should be requested with option to get counters back
 
 
 ## [mail-uniffi-v0.87.0] - 2025-06-09
