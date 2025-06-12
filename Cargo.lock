@@ -5710,7 +5710,7 @@ dependencies = [
 
 [[package]]
 name = "proton-ical"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "criterion",
  "ext-php-rs",
