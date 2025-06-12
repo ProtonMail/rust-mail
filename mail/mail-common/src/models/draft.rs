@@ -227,19 +227,14 @@ impl DraftMetadata {
         Ok(metadata.local_message_id)
     }
 
-    /// Check whether a given message with remote id has an active draft metadata record.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
-    pub async fn exists_for_message_with_remote_id(
+    pub async fn find_by_message_with_remote_id(
         remote_id: MessageId,
         tether: &Tether,
-    ) -> Result<bool, StashError> {
+    ) -> Result<Option<Self>, StashError> {
         let Some(local_id) = Message::remote_id_counterpart(remote_id, tether).await? else {
-            return Ok(false);
+            return Ok(None);
         };
-        Ok(Self::find_by_message_id(local_id, tether).await?.is_some())
+        Self::find_by_message_id(local_id, tether).await
     }
 
     /// Check whether this draft has pending changes that have not been communicated to the server.

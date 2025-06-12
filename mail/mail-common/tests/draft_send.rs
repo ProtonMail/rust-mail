@@ -1,8 +1,10 @@
+mod drafts_common;
+use crate::drafts_common::draft_message;
 use chrono::{Days, Local, Months, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
 use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
 use proton_core_api::consts::{CoreBundle, Mail};
-use proton_core_api::services::proton::GetKeysAllResponse;
 use proton_core_api::services::proton::common::ApiErrorInfo;
+use proton_core_api::services::proton::{Action, EventId, GetKeysAllResponse};
 use proton_core_api::services::proton::{
     Address as ApiAddress, AddressSignedKeyList as ApiAddressSignedKeyList,
     AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
@@ -14,7 +16,7 @@ use proton_crypto_inbox::message::EncryptedDraft;
 use proton_crypto_inbox::proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, KeyFlag, KeyId, LockedKey,
 };
-use proton_mail_api::services::proton::prelude::PostCancelSendResponse;
+use proton_mail_api::services::proton::prelude::{MailEvent, MessageEvent, PostCancelSendResponse};
 use proton_mail_api::services::proton::request_data::{
     DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
 };
@@ -1058,6 +1060,89 @@ async fn schedule_send_message_limit() {
             draft::SendError::ScheduleSendMessageLimitExceeded,
         )))
     ));
+}
+
+#[tokio::test]
+async fn message_sent_from_another_session_should_move_draft_to_sent_folder() {
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = drafts_common::draft_test_params();
+
+    let message = draft_message();
+
+    let expected_draft_params = drafts_common::expected_create_draft_params();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_create_draft(
+        expected_draft_params,
+        None,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+    // Add some other label ids to this message to make sure they are skipped.
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+
+    // Create draft.
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    draft
+        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
+
+    // Execute action.
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    // Simulate event loop update
+    let mut sent_message = message.clone();
+    sent_message.metadata.label_ids.clear();
+    sent_message.metadata.label_ids.push(LabelId::sent());
+    sent_message.metadata.label_ids.push(LabelId::all_mail());
+    sent_message.metadata.flags = MessageFlags::SENT;
+    user_ctx
+        .apply_event(
+            MailEvent {
+                event_id: EventId::from("My Event ID"),
+                labels: None,
+                conversation_counts: None,
+                conversations: None,
+                incoming_defaults: None,
+                mail_settings: None,
+                message_counts: None,
+                messages: Some(vec![MessageEvent {
+                    id: message.metadata.id.clone(),
+                    action: Action::Update,
+                    message: Some(sent_message.metadata),
+                }]),
+                refresh: 0,
+                has_more: false,
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+
+    // Load the draft.
+    let tether = user_ctx.user_stash().connection();
+    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+    let draft_message = Message::load(draft_message_id, &tether)
+        .await
+        .unwrap()
+        .expect("failed to load message");
+    assert_eq!(draft_message.remote_id, Some(message.metadata.id));
+
+    // Check the draft has the draft label.
+    assert!(!draft_message.label_ids.contains(&LabelId::drafts()));
+    assert!(!draft_message.label_ids.contains(&LabelId::all_drafts()));
+    assert!(draft_message.label_ids.contains(&LabelId::all_mail()));
+    assert!(draft_message.label_ids.contains(&LabelId::sent()));
+    assert!(!draft_message.is_draft());
 }
 
 async fn send_fails_if_recipient_is_not_valid_impl(
