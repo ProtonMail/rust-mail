@@ -14,3 +14,4 @@ END:VCARD
 ---------------------------
 
 Sorted fields:
+Emails([ContactDetailsEmail { email_type: [], email: "anonymous@pm.me" }])

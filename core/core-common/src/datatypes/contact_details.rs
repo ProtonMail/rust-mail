@@ -88,6 +88,14 @@ impl InspectableContactDetails {
             extended_name: None,
         };
         let v = &mut res.fields;
+
+        vcard
+            .emails
+            .sorted_extend(v, ContactField::Emails, |email| ContactDetailsEmail {
+                email_type: email.r#type.iter().cloned().map_vec(),
+                email: email.value.value,
+            });
+
         vcard
             .telephones
             .sorted_extend(v, ContactField::Phones, |tel| Telephone {
@@ -210,7 +218,7 @@ pub struct VCardUrl {
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ContactDetailsEmail {
-    pub name: String,
+    pub email_type: Vec<VcardPropType>,
     pub email: String,
 }
 
@@ -387,6 +395,12 @@ pub(crate) mod test {
     #[test]
     fn frodo() {
         let frodo = include_str!("../../tests/vcards/frodo.vcf");
+        assert_snapshot!(get_vcard(frodo));
+    }
+
+    #[test]
+    fn mateusz() {
+        let frodo = include_str!("../../tests/vcards/mateusz.vcf");
         assert_snapshot!(get_vcard(frodo));
     }
 }

@@ -147,14 +147,14 @@ impl From<RealVCardUrl> for VCardUrl {
 
 #[derive(uniffi::Record)]
 pub struct ContactDetailsEmail {
-    pub name: String,
+    pub email_type: Vec<VcardPropType>,
     pub email: String,
 }
 
 impl From<RealContactDetailsEmail> for ContactDetailsEmail {
     fn from(value: RealContactDetailsEmail) -> Self {
         Self {
-            name: value.name,
+            email_type: value.email_type.map_vec(),
             email: value.email,
         }
     }
