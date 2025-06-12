@@ -266,7 +266,7 @@ impl From<MailContextError> for ProtonMailError {
 impl From<MailScrollerError> for ProtonMailError {
     fn from(error: MailScrollerError) -> Self {
         match error {
-            MailScrollerError::Dirty => Self::reason(ContextErrorReason::MailScrollerDirty),
+            MailScrollerError::Dirty => Self::reason(MailScrollerErrorReason::Dirty),
         }
     }
 }
