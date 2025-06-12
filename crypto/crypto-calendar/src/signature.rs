@@ -3,8 +3,8 @@ pub struct Signature(String);
 
 impl Signature {
     #[must_use]
-    pub fn from_armored(sign: String) -> Self {
-        Self(sign)
+    pub fn from_armored(sig: String) -> Self {
+        Self(sig)
     }
 
     #[must_use]
@@ -28,8 +28,8 @@ pub struct SignatureRef<'a>(&'a str);
 
 impl<'a> SignatureRef<'a> {
     #[must_use]
-    pub fn from_armored(sign: &'a str) -> Self {
-        Self(sign)
+    pub fn from_armored(sig: &'a str) -> Self {
+        Self(sig)
     }
 
     #[must_use]

@@ -447,7 +447,7 @@ mod tests {
             "P2W3D" => "P2W", yielding [
                 ReadMsg {
                     at: None,
-                    msg: "duration unit `D` is not supported together with `W`".into(),
+                    body: "duration unit `D` is not supported together with `W`".into(),
                     kind: ReadMsgKind::Error,
                     context: vec![
                         Spanned {

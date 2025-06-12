@@ -88,7 +88,7 @@ mod tests {
         assert_eq!(
             vec![ReadMsg {
                 at: Some(Span::new((1, 2), (1, 7))),
-                msg: "unknown classification `foobar`".into(),
+                body: "unknown classification `foobar`".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             }],

@@ -101,6 +101,51 @@ fn without_calscale() {
     assert!(out.viols.is_empty());
 }
 
+#[test]
+fn vtimezone() {
+    let out = VTimeZone::from_str(&ics! {"
+        BEGIN:VTIMEZONE
+        TZID:Breaking/Bad
+        BEGIN:STANDARD
+        TZNAME:GMT
+        TZOFFSETFROM:+0100
+        TZOFFSETTO:+0000
+        DTSTART:19701025T020000
+        END:STANDARD
+        END:VTIMEZONE
+    "})
+    .unwrap();
+
+    assert!(out.msgs.is_empty());
+    assert_eq!("Breaking/Bad", out.tz.tzid.value.as_str());
+    assert_eq!(1, out.tz.standards.len());
+
+    // ---
+
+    let actual = VTimeZone::from_str(&ics! {"
+        BEGIN:VTIMEZONE
+        END:VTIMEZONE
+    "})
+    .unwrap_err()
+    .as_invalid_ics()
+    .unwrap()
+    .to_owned();
+
+    assert_eq!(1, actual.len());
+    assert_eq!("missing property `TZID`", actual[0].body);
+
+    // ---
+
+    let actual = VTimeZone::from_str("")
+        .unwrap_err()
+        .as_invalid_ics()
+        .unwrap()
+        .to_owned();
+
+    assert_eq!(1, actual.len());
+    assert_eq!("missing time zone", actual[0].body);
+}
+
 /// Make sure we can parse various atypical and funny cases.
 ///
 /// Fixtures here were taken (mostly) from the surgery dataset, but since we

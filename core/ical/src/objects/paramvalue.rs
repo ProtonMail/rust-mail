@@ -342,7 +342,7 @@ mod tests {
         assert_eq!(
             vec![ReadMsg {
                 at: Some(Span::new((1, 11), (1, 12))),
-                msg: "quirky escape sequence".into(),
+                body: "quirky escape sequence".into(),
                 kind: ReadMsgKind::Warning,
                 context: Vec::new(),
             }],
@@ -365,7 +365,7 @@ mod tests {
         assert_eq!(
             vec![ReadMsg {
                 at: Some(Span::new((1, 11), (1, 12))),
-                msg: "unrecognized escape sequence".into(),
+                body: "unrecognized escape sequence".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             }],
@@ -398,7 +398,7 @@ mod tests {
         assert_eq!(
             vec![ReadMsg {
                 at: Some(Span::new((1, 14), (1, 14))),
-                msg: "quirky comma".into(),
+                body: "quirky comma".into(),
                 kind: ReadMsgKind::Warning,
                 context: Vec::new(),
             }],
@@ -438,7 +438,7 @@ mod tests {
         assert_eq!(
             vec![ReadMsg {
                 at: Some(Span::new((1, 9), (1, 9))),
-                msg: "quirky tab".into(),
+                body: "quirky tab".into(),
                 kind: ReadMsgKind::Warning,
                 context: Vec::new(),
             }],

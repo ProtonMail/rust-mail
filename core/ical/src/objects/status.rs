@@ -87,7 +87,7 @@ mod tests {
 
         let expected = vec![ReadMsg {
             at: Some(Span::new((1, 2), (1, 7))),
-            msg: "unknown status `foobar`".into(),
+            body: "unknown status `foobar`".into(),
             kind: ReadMsgKind::Error,
             context: Vec::new(),
         }];
@@ -104,7 +104,7 @@ mod tests {
         assert_eq!(
             vec![ReadMsg {
                 at: Some(Span::new((1, 2), (1, 9))),
-                msg: "quirky status `ACCEPTED`".into(),
+                body: "quirky status `ACCEPTED`".into(),
                 kind: ReadMsgKind::Warning,
                 context: Vec::new(),
             }],
@@ -121,7 +121,7 @@ mod tests {
         assert_eq!(
             vec![ReadMsg {
                 at: Some(Span::new((1, 2), (1, 8))),
-                msg: "quirky status `UPDATED`".into(),
+                body: "quirky status `UPDATED`".into(),
                 kind: ReadMsgKind::Warning,
                 context: Vec::new(),
             }],

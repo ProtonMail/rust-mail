@@ -182,6 +182,9 @@ VCalendar {
                     role: Some(
                         ReqParticipant,
                     ),
+                    partstat: Some(
+                        NeedsAction,
+                    ),
                     rsvp: None,
                     x_pm_token: None,
                 },
@@ -203,12 +206,6 @@ VCalendar {
 ```
 
 # messages
-
-error: unknown parameter `PARTSTAT`
- --> at 12:31..38
-  | when parsing `Attendee` at 12:9
-  | when parsing `VEvent` at 7:1
-  | when parsing `VCalendar` at 2:1
 
 warn: unknown property `X-MICROSOFT-CDO-OWNERAPPTID`
  --> at 14:1..27

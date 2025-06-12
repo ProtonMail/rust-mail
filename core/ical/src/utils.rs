@@ -41,7 +41,7 @@ macro_rules! assert_trip {
 
         pretty_assertions::assert_eq!(
             $str,
-            <$ty>::from_str(&given, Component)
+            <$ty as IcsRead<_>>::from_str(&given, Component)
                 .unwrap()
                 .to_string(Component)
         );
@@ -56,7 +56,7 @@ macro_rules! assert_trip {
     };
 
     ($lhs:expr => $rhs:expr, yielding $msgs:expr, $ty:ty as $marker:expr) => {
-        let (actual_obj, actual_msgs) = <$ty>::from_str_ex(&$lhs, $marker);
+        let (actual_obj, actual_msgs) = <$ty as IcsRead<_>>::from_str_ex(&$lhs, $marker);
 
         pretty_assertions::assert_eq!(
             Vec::<ReadMsg>::from($msgs),
