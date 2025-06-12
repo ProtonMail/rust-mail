@@ -62,18 +62,18 @@ impl InspectableContactDetails {
         contact_id: LocalContactId,
     ) -> anyhow::Result<Option<Self>> {
         let mut tether = ctx.stash().connection();
+
         Contact::sync_with_card(contact_id, ctx.session(), &mut tether).await?;
+
         let contact = Contact::load(contact_id, &tether)
             .await?
             .context("Contact does not exist")?;
 
-        let pgp_provider = new_pgp_provider();
-        let unlocked_user_keys = ctx
-            .unlocked_user_keys(&pgp_provider, &tether, ctx.session())
-            .await?;
+        let pgp = new_pgp_provider();
+        let unlocked_user_keys = ctx.unlocked_user_keys(&pgp, &tether, ctx.session()).await?;
 
         let card = contact
-            .vcard_details(&tether, &pgp_provider, &unlocked_user_keys)
+            .vcard_details(&tether, &pgp, &unlocked_user_keys)
             .await?
             .map(|c| Self::from_vcard(contact_id, c));
 

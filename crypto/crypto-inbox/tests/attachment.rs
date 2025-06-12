@@ -73,18 +73,20 @@ struct DecryptableAttachmentMetadata {
 }
 
 impl DecryptableAttachmentMetadata {
-    pub fn new<Provider: PGPProviderSync>(
-        pgp_provider: &Provider,
-        original: &EncryptedAttachmentMetadata,
-    ) -> Self {
+    pub fn new<P>(pgp: &P, original: &EncryptedAttachmentMetadata) -> Self
+    where
+        P: PGPProviderSync,
+    {
         let armored_signature = original
             .signature
             .as_ref()
-            .map(|data| data.armor(pgp_provider).expect("failed to armor"));
+            .map(|data| data.armor(pgp).expect("failed to armor"));
+
         let armored_encrypted_signature = original
             .encrypted_signature
             .as_ref()
-            .map(|data| data.armor(pgp_provider).expect("failed to armor"));
+            .map(|data| data.armor(pgp).expect("failed to armor"));
+
         Self {
             key_packets: KeyPackets::new_from_bytes(&original.key_packets),
             armored_signature,
@@ -189,34 +191,32 @@ fn test_attachment_encrypt_decrypt_encrypted_signature_stream() {
 
 #[test]
 fn test_attachment_re_encrypt() {
-    let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
+    let pgp = proton_crypto_inbox::proton_crypto::new_pgp_provider();
 
-    let address_keys =
-        create_account_unlocked_address_keys(&pgp_provider, TEST_DECRYPTION_KEY, "password");
+    let address_keys = create_account_unlocked_address_keys(&pgp, TEST_DECRYPTION_KEY, "password");
     let primary_address_key = address_keys.primary_for_mail().expect("No primary key");
 
     let attachment_raw = TestAttachmentRaw(TEST_ATTACHMENT_PLAIN_DATA);
     let encrypted_attachment = attachment_raw
-        .attachment_encrypt_and_sign(&pgp_provider, &primary_address_key)
+        .attachment_encrypt_and_sign(&pgp, &primary_address_key)
         .unwrap();
 
-    let attachment_info =
-        DecryptableAttachmentMetadata::new(&pgp_provider, &encrypted_attachment.metadata)
-            .decrypt_attachment_info(&pgp_provider, &address_keys)
-            .expect("must decrypt");
+    let attachment_info = DecryptableAttachmentMetadata::new(&pgp, &encrypted_attachment.metadata)
+        .decrypt_attachment_info(&pgp, &address_keys)
+        .expect("must decrypt");
 
-    let (recipients_priv, recipients_priv_pub) = create_test_recipient_keys(&pgp_provider);
+    let (recipients_priv, recipients_priv_pub) = create_test_recipient_keys(&pgp);
 
     let key_packets = attachment_info
         .session_key
-        .encrypt_to_recipients(&pgp_provider, &recipients_priv_pub)
+        .encrypt_to_recipients(&pgp, &recipients_priv_pub)
         .expect("encrypt towards recipient should work");
 
     let enc_signatures = recipients_priv_pub
         .iter()
         .map(|recipient| {
             attachment_info
-                .encrypt_signature_to_recipient(&pgp_provider, recipient)
+                .encrypt_signature_to_recipient(&pgp, recipient)
                 .expect("encrypt signature must succeed")
         })
         .collect::<Vec<_>>();
@@ -229,11 +229,11 @@ fn test_attachment_re_encrypt() {
         let metadata = TestAttachmentMetdata {
             key_packets: KeyPackets::from(key_packet.0),
             signature: None,
-            enc_signature: enc_signature.map(|sig| sig.armor(&pgp_provider).unwrap()),
+            enc_signature: enc_signature.map(|sig| sig.armor(&pgp).unwrap()),
         };
         let dec_result = metadata
             .decrypt(
-                &pgp_provider,
+                &pgp,
                 &[private_key],
                 &[primary_address_key.for_encryption()],
                 &encrypted_attachment.data,
@@ -243,7 +243,7 @@ fn test_attachment_re_encrypt() {
         assert!(dec_result.verification_result().is_ok());
 
         let dec_result_fail = metadata.decrypt(
-            &pgp_provider,
+            &pgp,
             &address_keys,
             &address_keys,
             &encrypted_attachment.data,
@@ -254,10 +254,10 @@ fn test_attachment_re_encrypt() {
 
 #[test]
 fn test_attachment_encrypt_decrypt_v6() {
-    let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
+    let pgp = proton_crypto_inbox::proton_crypto::new_pgp_provider();
 
     let address_keys = create_account_unlocked_address_keys_v6(
-        &pgp_provider,
+        &pgp,
         TEST_DECRYPTION_KEY,
         TEST_DECRYPTION_KEY_V6,
         "password",
@@ -267,13 +267,13 @@ fn test_attachment_encrypt_decrypt_v6() {
     assert!(primary_address_key.is_v6);
     let attachment_raw = TestAttachmentRaw(TEST_ATTACHMENT_PLAIN_DATA);
     let result = attachment_raw
-        .attachment_encrypt_and_sign(&pgp_provider, &primary_address_key)
+        .attachment_encrypt_and_sign(&pgp, &primary_address_key)
         .unwrap();
 
     // Sig should be ok v4
-    let decrypted_attachment = DecryptableAttachmentMetadata::new(&pgp_provider, &result.metadata)
+    let decrypted_attachment = DecryptableAttachmentMetadata::new(&pgp, &result.metadata)
         .decrypt(
-            &pgp_provider,
+            &pgp,
             &address_keys,
             &[address_keys.first().unwrap()],
             &result.data,
@@ -289,9 +289,9 @@ fn test_attachment_encrypt_decrypt_v6() {
     assert!(verification_result.is_ok());
 
     // Sig should be ok v6
-    let decrypted_attachment = DecryptableAttachmentMetadata::new(&pgp_provider, &result.metadata)
+    let decrypted_attachment = DecryptableAttachmentMetadata::new(&pgp, &result.metadata)
         .decrypt(
-            &pgp_provider,
+            &pgp,
             &address_keys,
             &[primary_address_key.for_encryption()],
             &result.data,
@@ -308,15 +308,14 @@ fn test_attachment_encrypt_decrypt_v6() {
 }
 
 fn test_attachment_encrypt_decrypt_helper(enc_sig: bool) {
-    let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
+    let pgp = proton_crypto_inbox::proton_crypto::new_pgp_provider();
 
-    let address_keys =
-        create_account_unlocked_address_keys(&pgp_provider, TEST_DECRYPTION_KEY, "password");
+    let address_keys = create_account_unlocked_address_keys(&pgp, TEST_DECRYPTION_KEY, "password");
     let primary_address_key = address_keys.primary_for_mail().expect("No primary key");
 
     let attachment_raw = TestAttachmentRaw(TEST_ATTACHMENT_PLAIN_DATA);
     let mut result = attachment_raw
-        .attachment_encrypt_and_sign(&pgp_provider, &primary_address_key)
+        .attachment_encrypt_and_sign(&pgp, &primary_address_key)
         .unwrap();
 
     if enc_sig {
@@ -324,8 +323,8 @@ fn test_attachment_encrypt_decrypt_helper(enc_sig: bool) {
     }
 
     // Sig should be ok
-    let decrypted_attachment = DecryptableAttachmentMetadata::new(&pgp_provider, &result.metadata)
-        .decrypt(&pgp_provider, &address_keys, &address_keys, &result.data)
+    let decrypted_attachment = DecryptableAttachmentMetadata::new(&pgp, &result.metadata)
+        .decrypt(&pgp, &address_keys, &address_keys, &result.data)
         .unwrap();
 
     assert_eq!(
@@ -337,27 +336,25 @@ fn test_attachment_encrypt_decrypt_helper(enc_sig: bool) {
     assert!(verification_result.is_ok());
 
     // Sig should be not ok
-    let wrong_keys = get_test_public_address_keys(&pgp_provider);
-    let decrypted_attachment_wrong =
-        DecryptableAttachmentMetadata::new(&pgp_provider, &result.metadata)
-            .decrypt(&pgp_provider, &address_keys, &wrong_keys, &result.data)
-            .unwrap();
+    let wrong_keys = get_test_public_address_keys(&pgp);
+    let decrypted_attachment_wrong = DecryptableAttachmentMetadata::new(&pgp, &result.metadata)
+        .decrypt(&pgp, &address_keys, &wrong_keys, &result.data)
+        .unwrap();
 
     let verification_result = decrypted_attachment_wrong.verification_result();
     assert!(verification_result.is_err());
 }
 
 fn test_attachment_encrypt_decrypt_stream_helper(enc_sig: bool) {
-    let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
+    let pgp = proton_crypto_inbox::proton_crypto::new_pgp_provider();
 
-    let address_keys =
-        create_account_unlocked_address_keys(&pgp_provider, TEST_DECRYPTION_KEY, "password");
+    let address_keys = create_account_unlocked_address_keys(&pgp, TEST_DECRYPTION_KEY, "password");
     let primary_address_key = address_keys.primary_for_mail().expect("No primary key");
 
     let mut data = Vec::with_capacity(TEST_ATTACHMENT_PLAIN_DATA.len());
     let mut metadata = {
         let mut attachment_writer =
-            encrypt_and_sign_to_writer(&pgp_provider, &primary_address_key, &mut data).unwrap();
+            encrypt_and_sign_to_writer(&pgp, &primary_address_key, &mut data).unwrap();
         attachment_writer
             .write_all(TEST_ATTACHMENT_PLAIN_DATA.as_bytes())
             .unwrap();
@@ -369,8 +366,8 @@ fn test_attachment_encrypt_decrypt_stream_helper(enc_sig: bool) {
     }
 
     // Sig should be ok
-    let decrypted_attachment = DecryptableAttachmentMetadata::new(&pgp_provider, &metadata)
-        .decrypt(&pgp_provider, &address_keys, &address_keys, &data)
+    let decrypted_attachment = DecryptableAttachmentMetadata::new(&pgp, &metadata)
+        .decrypt(&pgp, &address_keys, &address_keys, &data)
         .unwrap();
 
     assert_eq!(
@@ -382,9 +379,9 @@ fn test_attachment_encrypt_decrypt_stream_helper(enc_sig: bool) {
     assert!(verification_result.is_ok());
 
     // Sig should be not ok
-    let wrong_keys = get_test_public_address_keys(&pgp_provider);
-    let decrypted_attachment_wrong = DecryptableAttachmentMetadata::new(&pgp_provider, &metadata)
-        .decrypt(&pgp_provider, &address_keys, &wrong_keys, &data)
+    let wrong_keys = get_test_public_address_keys(&pgp);
+    let decrypted_attachment_wrong = DecryptableAttachmentMetadata::new(&pgp, &metadata)
+        .decrypt(&pgp, &address_keys, &wrong_keys, &data)
         .unwrap();
 
     let verification_result = decrypted_attachment_wrong.verification_result();
@@ -392,19 +389,14 @@ fn test_attachment_encrypt_decrypt_stream_helper(enc_sig: bool) {
 }
 
 fn test_attachment_decrypt_helper(attachment_metadata: &impl DecryptableAttachment) {
-    let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
+    let pgp = proton_crypto_inbox::proton_crypto::new_pgp_provider();
 
-    let decryption_keys = get_test_address_keys(&pgp_provider);
-    let verification_keys = get_test_public_address_keys(&pgp_provider);
+    let decryption_keys = get_test_address_keys(&pgp);
+    let verification_keys = get_test_public_address_keys(&pgp);
 
     let enc_data: Vec<u8> = create_test_attachment_encrypted_data();
     let decrypted_attachment = attachment_metadata
-        .decrypt(
-            &pgp_provider,
-            &decryption_keys,
-            &verification_keys,
-            enc_data,
-        )
+        .decrypt(&pgp, &decryption_keys, &verification_keys, enc_data)
         .unwrap();
 
     assert_eq!(
@@ -417,21 +409,16 @@ fn test_attachment_decrypt_helper(attachment_metadata: &impl DecryptableAttachme
 }
 
 fn test_attachment_decrypt_stream_helper(attachment_metadata: &impl DecryptableAttachment) {
-    let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
+    let pgp = proton_crypto_inbox::proton_crypto::new_pgp_provider();
 
-    let decryption_keys = get_test_address_keys(&pgp_provider);
-    let verification_keys = get_test_public_address_keys(&pgp_provider);
+    let decryption_keys = get_test_address_keys(&pgp);
+    let verification_keys = get_test_public_address_keys(&pgp);
 
     let enc_data: Vec<u8> = create_test_attachment_encrypted_data();
     let mut output_buffer = Vec::new();
     let enc_data_reader: &[u8] = enc_data.as_ref();
     let mut verification_reader = attachment_metadata
-        .decrypt_from_reader(
-            &pgp_provider,
-            &decryption_keys,
-            &verification_keys,
-            enc_data_reader,
-        )
+        .decrypt_from_reader(&pgp, &decryption_keys, &verification_keys, enc_data_reader)
         .unwrap();
     io::copy(&mut verification_reader, &mut output_buffer).unwrap();
     assert_eq!(&output_buffer, TEST_ATTACHMENT_PLAIN_DATA.as_bytes());

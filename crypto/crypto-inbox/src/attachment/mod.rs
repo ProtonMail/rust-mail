@@ -90,15 +90,17 @@ impl ::std::ops::Deref for BinaryAttachmentSignature {
 
 impl BinaryAttachmentSignature {
     /// Armors the signature.
-    pub fn armor<Provider: PGPProviderSync>(
-        &self,
-        pgp_provider: &Provider,
-    ) -> Result<AttachmentSignature, ArmorEncodingError> {
-        let detached_signature_armored = pgp_provider
+    pub fn armor<P>(&self, pgp: &P) -> Result<AttachmentSignature, ArmorEncodingError>
+    where
+        P: PGPProviderSync,
+    {
+        let detached_signature_armored = pgp
             .armorer()
             .armor_signature(&self.0)
             .map_err(ArmorEncodingError::Armor)?;
+
         let signature = String::from_utf8(detached_signature_armored).map(AttachmentSignature)?;
+
         Ok(signature)
     }
 }
@@ -123,17 +125,19 @@ impl ::std::ops::Deref for BinaryAttachmentEncryptedSignature {
 
 impl BinaryAttachmentEncryptedSignature {
     /// Armors the encrypted signature.
-    pub fn armor<Provider: PGPProviderSync>(
-        &self,
-        pgp_provider: &Provider,
-    ) -> Result<AttachmentEncryptedSignature, ArmorEncodingError> {
-        let encrypted_detached_signature_armored = pgp_provider
+    pub fn armor<P>(&self, pgp: &P) -> Result<AttachmentEncryptedSignature, ArmorEncodingError>
+    where
+        P: PGPProviderSync,
+    {
+        let encrypted_detached_signature_armored = pgp
             .armorer()
             .armor_message(&self.0)
             .map_err(ArmorEncodingError::Armor)?;
+
         let attachment_encrypted_signature =
             String::from_utf8(encrypted_detached_signature_armored)
                 .map(AttachmentEncryptedSignature)?;
+
         Ok(attachment_encrypted_signature)
     }
 

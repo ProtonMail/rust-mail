@@ -77,9 +77,9 @@ const PRIVATE_KEY_PASSWORD: &str = "password";
 
 #[test]
 fn test_verification_preferences() {
-    let pgp_provider = new_pgp_provider();
-    let pinned_keys = create_test_pinned_key(&pgp_provider, TEST_KEY);
-    let api_keys = create_test_public_key(&pgp_provider);
+    let pgp = new_pgp_provider();
+    let pinned_keys = create_test_pinned_key(&pgp, TEST_KEY);
+    let api_keys = create_test_public_key(&pgp);
     let verification_preferences =
         InboxVerificationPreferences::from_public_keys(api_keys, Some(pinned_keys));
     assert!(verification_preferences.compromised_fingerprints.is_empty());
@@ -90,9 +90,9 @@ fn test_verification_preferences() {
 
 #[test]
 fn test_verification_preferences_compromised() {
-    let pgp_provider = new_pgp_provider();
-    let mut api_keys = create_test_public_key(&pgp_provider);
-    let pinned_keys = create_test_pinned_key(&pgp_provider, TEST_KEY);
+    let pgp = new_pgp_provider();
+    let mut api_keys = create_test_public_key(&pgp);
+    let pinned_keys = create_test_pinned_key(&pgp, TEST_KEY);
     api_keys
         .address
         .keys
@@ -109,8 +109,8 @@ fn test_verification_preferences_compromised() {
 
 #[test]
 fn test_verification_preferences_own() {
-    let pgp_provider = new_pgp_provider();
-    let address_keys = create_test_decrypted_address_key(&pgp_provider);
+    let pgp = new_pgp_provider();
+    let address_keys = create_test_decrypted_address_key(&pgp);
     let verification_preferences =
         InboxVerificationPreferences::from_unlocked_address_keys(&address_keys);
     assert!(verification_preferences.pinned_keys.is_empty());
@@ -121,8 +121,8 @@ fn test_verification_preferences_own() {
 
 #[test]
 fn test_verification_preferences_own_compromised() {
-    let pgp_provider = new_pgp_provider();
-    let mut address_keys = create_test_decrypted_address_key(&pgp_provider);
+    let pgp = new_pgp_provider();
+    let mut address_keys = create_test_decrypted_address_key(&pgp);
     address_keys.first_mut().unwrap().flags.set_compromised();
     let verification_preferences =
         InboxVerificationPreferences::from_unlocked_address_keys(&address_keys);
@@ -133,12 +133,12 @@ fn test_verification_preferences_own_compromised() {
 
 #[test]
 fn test_sending_preferences() {
-    let pgp_provider = new_pgp_provider();
-    let expected_key = pgp_provider
+    let pgp = new_pgp_provider();
+    let expected_key = pgp
         .public_key_import(TEST_KEY, DataEncoding::Armor)
         .unwrap();
-    let pinned_keys = create_test_pinned_key(&pgp_provider, TEST_KEY);
-    let api_keys = create_test_public_key(&pgp_provider);
+    let pinned_keys = create_test_pinned_key(&pgp, TEST_KEY);
+    let api_keys = create_test_public_key(&pgp);
     let mail_setting = CryptoMailSettings {
         pgp_scheme: PGPScheme::PGPMime,
         mime_type: EmailMimeType::Text,
@@ -195,12 +195,12 @@ fn test_sending_preferences() {
 
 #[test]
 fn test_sending_preferences_external() {
-    let pgp_provider = new_pgp_provider();
-    let expected_key = pgp_provider
+    let pgp = new_pgp_provider();
+    let expected_key = pgp
         .public_key_import(TEST_KEY, DataEncoding::Armor)
         .unwrap();
-    let mut pinned_keys = create_test_pinned_key(&pgp_provider, TEST_KEY);
-    let mut api_keys = create_test_public_key_external(&pgp_provider);
+    let mut pinned_keys = create_test_pinned_key(&pgp, TEST_KEY);
+    let mut api_keys = create_test_public_key_external(&pgp);
     let mut mail_setting = CryptoMailSettings {
         pgp_scheme: PGPScheme::PGPMime,
         mime_type: EmailMimeType::Text,
@@ -279,9 +279,9 @@ fn test_sending_preferences_external() {
 
 #[test]
 fn test_sending_preferences_user_warning() {
-    let pgp_provider = new_pgp_provider();
-    let pinned_keys = create_test_pinned_key(&pgp_provider, TEST_VERIFICATION_KEY);
-    let mut api_keys = create_test_public_key(&pgp_provider);
+    let pgp = new_pgp_provider();
+    let pinned_keys = create_test_pinned_key(&pgp, TEST_VERIFICATION_KEY);
+    let mut api_keys = create_test_public_key(&pgp);
     let mail_setting = CryptoMailSettings {
         pgp_scheme: PGPScheme::PGPMime,
         mime_type: EmailMimeType::Text,
@@ -301,7 +301,7 @@ fn test_sending_preferences_user_warning() {
     ));
 
     api_keys.address.keys.clear();
-    let mut pinned_keys = create_test_pinned_key(&pgp_provider, EXPIRED_KEY);
+    let mut pinned_keys = create_test_pinned_key(&pgp, EXPIRED_KEY);
     pinned_keys.encrypt_to_pinned = Some(true);
     let sending_preferences = SendPreferences::new(
         api_keys,
@@ -323,8 +323,8 @@ fn test_sending_preferences_user_warning() {
 
 #[test]
 fn test_sending_preferences_own() {
-    let pgp_provider = new_pgp_provider();
-    let address_keys = create_test_decrypted_address_key(&pgp_provider);
+    let pgp = new_pgp_provider();
+    let address_keys = create_test_decrypted_address_key(&pgp);
     let expected_key = &address_keys.first().unwrap().public_key;
 
     let mail_setting = CryptoMailSettings {

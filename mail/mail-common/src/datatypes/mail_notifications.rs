@@ -192,14 +192,15 @@ impl DecryptableInboxPushNotification for EncryptedPushNotification {
         self,
         key_chain: Arc<dyn KeyChain>,
     ) -> Result<DecryptedInboxPushNotification, MailContextError> {
-        let pgp_provider = proton_crypto::new_pgp_provider();
+        let pgp = proton_crypto::new_pgp_provider();
 
         let Some(key) = key_chain.load::<StoredDevicePrivateKey>()? else {
             error!("Missing device decryption key in the keychain");
             return Err(MailContextError::Crypto);
         };
+
         let pgp_device_key = PGPDeviceKey::deserialize_from_secure_storage(
-            &pgp_provider,
+            &pgp,
             key.as_ref().expose_secret().as_slice(),
         )
         .map_err(|_e| {
@@ -208,7 +209,7 @@ impl DecryptableInboxPushNotification for EncryptedPushNotification {
         })?;
 
         let decrypted_notification = self
-            .into_decrypted_push_notification(&pgp_provider, &pgp_device_key)
+            .into_decrypted_push_notification(&pgp, &pgp_device_key)
             .inspect_err(|e| error!("Failed to decrypt mail notification: {e:?}"))
             .map_err(|_| MailContextError::Crypto)?;
 

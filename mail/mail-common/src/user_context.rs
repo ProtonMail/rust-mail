@@ -303,20 +303,23 @@ impl MailUserContext {
     ///
     /// # Parameters
     ///
-    /// * `pgp_provider` - The `OpenPGP` crypto provider from [`proton_crypto_inbox::proton_crypto`].
+    /// * `pgp`          - The `OpenPGP` crypto provider from [`proton_crypto_inbox::proton_crypto`].
     /// * `conn`         - The database connection to load the keys from database.
     ///
     /// # Errors
     /// Returns a wrapped [`MailContextError::KeyHandlingError`] if the operation fails.
     ///
-    pub async fn unlocked_user_keys<Provider: PGPProviderSync>(
+    pub async fn unlocked_user_keys<P>(
         &self,
-        pgp_provider: &Provider,
+        pgp: &P,
         conn: &Tether,
-    ) -> MailContextResult<UnlockedUserKeys<Provider>> {
+    ) -> MailContextResult<UnlockedUserKeys<P>>
+    where
+        P: PGPProviderSync,
+    {
         let keys = self
             .user_context
-            .unlocked_user_keys(pgp_provider, conn, self.session())
+            .unlocked_user_keys(pgp, conn, self.session())
             .await?;
         Ok(keys)
     }
@@ -325,22 +328,25 @@ impl MailUserContext {
     ///
     /// # Parameters
     ///
-    /// * `pgp_provider` - The `OpenPGP` crypto provider from [`proton_crypto_inbox::proton_crypto`].
+    /// * `pgp`          - The `OpenPGP` crypto provider from [`proton_crypto_inbox::proton_crypto`].
     /// * `conn`         - The database connection to load the keys from database.
     /// * `address_id`   - The address identifier to load the keys for.
     ///
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
     ///
-    pub async fn unlocked_address_keys<Provider: PGPProviderSync>(
+    pub async fn unlocked_address_keys<P>(
         &self,
-        pgp_provider: &Provider,
+        pgp: &P,
         conn: &Tether,
         address_id: &AddressId,
-    ) -> MailContextResult<UnlockedAddressKeys<Provider>> {
+    ) -> MailContextResult<UnlockedAddressKeys<P>>
+    where
+        P: PGPProviderSync,
+    {
         let keys = self
             .user_context
-            .unlocked_address_keys(pgp_provider, conn, self.session(), address_id)
+            .unlocked_address_keys(pgp, conn, self.session(), address_id)
             .await?;
         Ok(keys)
     }
@@ -356,7 +362,7 @@ impl MailUserContext {
     ///
     /// # Parameters
     ///
-    /// * `pgp_provider`        - The `OpenPGP` crypto provider from [`proton_crypto_inbox::proton_crypto`].
+    /// * `pgp`                 - The `OpenPGP` crypto provider from [`proton_crypto_inbox::proton_crypto`].
     /// * `tx `                 - The transaction to query from.
     /// * `email`               - The email address of the recipient.
     /// * `settings`            - The [`CryptoMailSettings`] extracted from the mail settings [`super::models::MailSettings::crypto_mail_settings`]
@@ -365,16 +371,16 @@ impl MailUserContext {
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] or [`proton_crypto_inbox::keys::EncryptionPreferencesError`] if the operation fails.
     ///
-    pub async fn recipient_send_preferences<Provider>(
+    pub async fn recipient_send_preferences<P>(
         &self,
-        pgp_provider: &Provider,
+        pgp: &P,
         tx: &mut impl RunTransaction,
         email: &str,
         settings: CryptoMailSettings,
         composer_preference: ComposerPreference,
-    ) -> MailContextResult<SendPreferences<Provider::PublicKey>>
+    ) -> MailContextResult<SendPreferences<P::PublicKey>>
     where
-        Provider: PGPProviderSync,
+        P: PGPProviderSync,
     {
         let encryption_time = crypto_clock::server_crypto_clock().unix_time();
 
@@ -392,26 +398,24 @@ impl MailUserContext {
             })?;
 
             let address_keys = self
-                .unlocked_address_keys(pgp_provider, tx.tether(), address_rid)
+                .unlocked_address_keys(pgp, tx.tether(), address_rid)
                 .await
                 .inspect_err(|err| error!("send preferences for self: {err:?}"))?;
+
             let send_preferences =
                 SendPreferences::new_for_self(&address_keys, encryption_time, settings)
                     .inspect_err(|err| error!("send preferences for self: {err:?}"))?;
+
             return Ok(send_preferences);
         }
 
-        let user_keys = self.unlocked_user_keys(pgp_provider, tx.tether()).await?;
+        let user_keys = self.unlocked_user_keys(pgp, tx.tether()).await?;
+
         // Fetch API keys, and contact-pinned keys concurrently.
         let (api_keys_result, vcard_keys_result) = join!(
+            self.user_context.public_address_keys(pgp, email, false),
             self.user_context
-                .public_address_keys(pgp_provider, email, false),
-            self.user_context.public_address_keys_from_contacts(
-                pgp_provider,
-                tx,
-                &user_keys,
-                email
-            )
+                .public_address_keys_from_contacts(pgp, tx, &user_keys, email)
         );
 
         // Handle error when loading contact keys, but ignore CardNotFound as it's valid to have no contact.

@@ -58,24 +58,27 @@ impl StoredDevicePrivateKey {
     ///
     pub fn to_device_key<P>(
         &self,
-        pgp_provider: &P,
+        pgp: &P,
     ) -> Result<PGPDeviceKey<P::PrivateKey, P::PublicKey>, KeySerializationError>
     where
         P: PGPProviderSync,
     {
         let key_data = self.0.expose_secret();
-        PGPDeviceKey::deserialize_from_secure_storage(pgp_provider, key_data)
+
+        PGPDeviceKey::deserialize_from_secure_storage(pgp, key_data)
     }
 
     #[must_use]
     fn to_base64(&self) -> SecretString {
         let key = self.0.expose_secret();
+
         SecretString::new(BASE64_STANDARD.encode(key))
     }
 
     fn from_base64(val: &SecretString) -> Result<Self, base64::DecodeError> {
         let val = val.expose_secret();
         let bytes = BASE64_STANDARD.decode(val)?;
+
         Ok(Self::with_bytes(bytes))
     }
 }
@@ -141,7 +144,7 @@ impl EncryptedPushNotification {
     ///
     pub fn into_decrypted_push_notification<P, O>(
         self,
-        pgp_provider: &P,
+        pgp: &P,
         device_key: &PGPDeviceKey<P::PrivateKey, P::PublicKey>,
     ) -> Result<DecryptedPushNotification<O>, NotificationError>
     where
@@ -149,7 +152,7 @@ impl EncryptedPushNotification {
         for<'de> O: Deserialize<'de>,
     {
         let notification = self
-            .decrypt(pgp_provider, device_key)
+            .decrypt(pgp, device_key)
             .inspect_err(|e| error!("Failed to decrypt push notification: {e:?}"))?;
 
         Ok(DecryptedPushNotification {

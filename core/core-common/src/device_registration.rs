@@ -285,22 +285,26 @@ async fn register_session(
         .user_context_from_session(&session, Some(status_watcher))
         .await?;
 
-    let pgp_provider = proton_crypto::new_pgp_provider();
+    let pgp = proton_crypto::new_pgp_provider();
+
     let private_key = ctx
         .load_secret::<StoredDevicePrivateKey>()
         .map_err(|_| RegisteredDeviceTaskError::Crypto)?;
+
     let public_key = match private_key {
         None => ctx
-            .gen_device_key_pair(&pgp_provider)
+            .gen_device_key_pair(&pgp)
             .map_err(|_| RegisteredDeviceTaskError::Crypto)?,
+
         Some(key) => {
             let device_key = key
-                .to_device_key(&pgp_provider)
+                .to_device_key(&pgp)
                 .map_err(|_| RegisteredDeviceTaskError::Crypto)?;
 
             let public_key = device_key
-                .export_public_key(&pgp_provider)
+                .export_public_key(&pgp)
                 .map_err(|_| RegisteredDeviceTaskError::Crypto)?;
+
             StoredDevicePublicKey::from(public_key)
         }
     };
@@ -318,5 +322,6 @@ async fn register_session(
         .await?;
 
     registered_sessions.insert(session.remote_id.clone());
+
     Ok(())
 }

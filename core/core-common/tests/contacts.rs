@@ -329,16 +329,12 @@ async fn test_contact_load_public_address_keys() {
     .await;
 
     // Check public address keys from contacts
-    let pgp_provider = new_pgp_provider();
-    let unlocked_user_keys = unlocked_user_key(&pgp_provider);
+    let pgp = new_pgp_provider();
+    let unlocked_user_keys = unlocked_user_key(&pgp);
     let mut tether = user_ctx.stash().connection();
+
     let keys = user_ctx
-        .public_address_keys_from_contacts(
-            &pgp_provider,
-            &mut tether,
-            &unlocked_user_keys,
-            &contact_email,
-        )
+        .public_address_keys_from_contacts(&pgp, &mut tether, &unlocked_user_keys, &contact_email)
         .await
         .expect("there should be no error or key extraction")
         .expect("key must be found");
@@ -372,15 +368,11 @@ async fn test_contact_load_public_address_keys() {
     .await;
 
     // Check public address keys from contacts
-    let pgp_provider = new_pgp_provider();
-    let unlocked_user_keys = unlocked_user_key(&pgp_provider);
+    let pgp = new_pgp_provider();
+    let unlocked_user_keys = unlocked_user_key(&pgp);
+
     let preferred_fingerprint_2 = user_ctx
-        .public_address_keys_from_contacts(
-            &pgp_provider,
-            &mut tether,
-            &unlocked_user_keys,
-            &contact_email,
-        )
+        .public_address_keys_from_contacts(&pgp, &mut tether, &unlocked_user_keys, &contact_email)
         .await
         .expect("there should be no error or key extraction")
         .expect("key must be found")

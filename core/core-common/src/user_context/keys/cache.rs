@@ -1,19 +1,16 @@
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
-
+use crate::KeyHandlingError;
 use proton_crypto_account::{
     keys::{
         DecryptedAddressKey, DecryptedUserKey, KeyFlag, KeyId, UnlockedAddressKey, UnlockedUserKey,
     },
     proton_crypto::crypto::{DataEncoding, PGPProviderSync},
 };
-use secrecy::SecretVec;
-
 use secrecy::ExposeSecret;
-
-use crate::KeyHandlingError;
+use secrecy::SecretVec;
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 /// The default lifetime of user keys in the cache.
 pub const USER_KEY_LIFETIME: Duration = Duration::from_secs(600);
@@ -29,12 +26,13 @@ pub struct CachedUserKey {
 
 impl CachedUserKey {
     /// Tries to create a [`CachedUserKey`] from an [`UnlockedUserKey`].
-    pub fn new<Provider: PGPProviderSync>(
-        pgp_provider: &Provider,
-        key: &UnlockedUserKey<Provider>,
-    ) -> Result<CachedUserKey, KeyHandlingError> {
+    pub fn new<P>(pgp: &P, key: &UnlockedUserKey<P>) -> Result<CachedUserKey, KeyHandlingError>
+    where
+        P: PGPProviderSync,
+    {
         let exported_key =
-            pgp_provider.private_key_export_unlocked(&key.private_key, DataEncoding::Bytes)?;
+            pgp.private_key_export_unlocked(&key.private_key, DataEncoding::Bytes)?;
+
         Ok(CachedUserKey {
             id: key.id.clone(),
             private_key: SecretVec::new(exported_key.as_ref().to_vec()),
@@ -42,13 +40,15 @@ impl CachedUserKey {
     }
 
     /// Tries to transform a [`CachedUserKey`] into a [`UnlockedUserKey`].
-    pub fn to_unlocked_key<Provider: PGPProviderSync>(
-        &self,
-        pgp_provider: &Provider,
-    ) -> Result<UnlockedUserKey<Provider>, KeyHandlingError> {
-        let imported_key = pgp_provider
-            .private_key_import_unlocked(self.private_key.expose_secret(), DataEncoding::Bytes)?;
-        let public_key = pgp_provider.private_key_to_public_key(&imported_key)?;
+    pub fn to_unlocked_key<P>(&self, pgp: &P) -> Result<UnlockedUserKey<P>, KeyHandlingError>
+    where
+        P: PGPProviderSync,
+    {
+        let imported_key =
+            pgp.private_key_import_unlocked(self.private_key.expose_secret(), DataEncoding::Bytes)?;
+
+        let public_key = pgp.private_key_to_public_key(&imported_key)?;
+
         Ok(DecryptedUserKey {
             id: self.id.clone(),
             private_key: imported_key,
@@ -68,12 +68,16 @@ pub struct CachedAddressKey {
 
 impl CachedAddressKey {
     /// Tries to create a [`CachedAddressKey`] from an [`UnlockedAddressKey`].
-    pub fn new<Provider: PGPProviderSync>(
-        pgp_provider: &Provider,
-        key: &UnlockedAddressKey<Provider>,
-    ) -> Result<CachedAddressKey, KeyHandlingError> {
+    pub fn new<P>(
+        pgp: &P,
+        key: &UnlockedAddressKey<P>,
+    ) -> Result<CachedAddressKey, KeyHandlingError>
+    where
+        P: PGPProviderSync,
+    {
         let exported_key =
-            pgp_provider.private_key_export_unlocked(&key.private_key, DataEncoding::Bytes)?;
+            pgp.private_key_export_unlocked(&key.private_key, DataEncoding::Bytes)?;
+
         Ok(CachedAddressKey {
             id: key.id.clone(),
             flags: key.flags,
@@ -84,13 +88,15 @@ impl CachedAddressKey {
     }
 
     /// Tries to transform a [`CachedAddressKey`] into a [`UnlockedAddressKey`].
-    pub fn to_unlocked_key<Provider: PGPProviderSync>(
-        &self,
-        pgp_provider: &Provider,
-    ) -> Result<UnlockedAddressKey<Provider>, KeyHandlingError> {
-        let imported_key = pgp_provider
-            .private_key_import_unlocked(self.private_key.expose_secret(), DataEncoding::Bytes)?;
-        let public_key = pgp_provider.private_key_to_public_key(&imported_key)?;
+    pub fn to_unlocked_key<P>(&self, pgp: &P) -> Result<UnlockedAddressKey<P>, KeyHandlingError>
+    where
+        P: PGPProviderSync,
+    {
+        let imported_key =
+            pgp.private_key_import_unlocked(self.private_key.expose_secret(), DataEncoding::Bytes)?;
+
+        let public_key = pgp.private_key_to_public_key(&imported_key)?;
+
         Ok(DecryptedAddressKey {
             id: self.id.clone(),
             flags: self.flags,

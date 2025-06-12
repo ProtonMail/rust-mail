@@ -1000,13 +1000,16 @@ impl EncryptedMessageBody {
     /// # Errors
     ///
     /// Return error if the decryption failed.
-    pub async fn into_decrypted_message<P: PGPProviderSync>(
+    pub async fn into_decrypted_message<P>(
         mut self,
         ctx: &MailUserContext,
         address_keys: UnlockedAddressKeys<P>,
-        pgp_provider: P,
+        pgp: P,
         with_attachment_prefetch: bool,
-    ) -> Result<DecryptedMessageBody, MailContextError> {
+    ) -> Result<DecryptedMessageBody, MailContextError>
+    where
+        P: PGPProviderSync,
+    {
         let ctx = ctx
             .as_weak()
             .upgrade()
@@ -1014,7 +1017,7 @@ impl EncryptedMessageBody {
 
         // TODO: Verify signature.
         let (decrypted_body, _) = self
-            .decrypt(&pgp_provider, &address_keys)
+            .decrypt(&pgp, &address_keys)
             .context("Failed to decrypt message body")
             .map_err(|e| {
                 error!(

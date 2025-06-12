@@ -40,27 +40,27 @@ impl SessionKeyAndDataPacketsExtractable for TestEncryptedDraft {}
 
 #[test]
 fn test_extract_keys_and_data_from_draft() {
-    let pgp_provider = new_pgp_provider();
-    let private_key = pgp_provider
+    let pgp = new_pgp_provider();
+
+    let private_key = pgp
         .private_key_import(
             PRIVATE_KEY.as_bytes(),
             "password".as_bytes(),
             DataEncoding::Armor,
         )
         .unwrap();
-    let public_key = pgp_provider
-        .private_key_to_public_key(&private_key)
-        .unwrap();
+
+    let public_key = pgp.private_key_to_public_key(&private_key).unwrap();
     let message = "hello_world";
 
-    let session_key = pgp_provider
+    let session_key = pgp
         .session_key_import(
             "Never gonna give/let you up/down".as_bytes(),
             SessionKeyAlgorithm::Aes256,
         )
         .expect("Rick wouldn't fail us");
 
-    let draft_data = pgp_provider
+    let draft_data = pgp
         .new_encryptor()
         .with_session_key(session_key)
         .with_encryption_key(&public_key)
@@ -73,7 +73,7 @@ fn test_extract_keys_and_data_from_draft() {
     );
 
     let (session_key, data_packets) = encrypted_draft
-        .extract_session_key_and_data_packets(&pgp_provider, &[&private_key])
+        .extract_session_key_and_data_packets(&pgp, &[&private_key])
         .expect("extracting packets should not fail");
 
     assert_eq!(
@@ -87,9 +87,10 @@ fn test_extract_keys_and_data_from_draft() {
     );
 
     let session_key_provider = session_key
-        .export_to_pgp_provider(&pgp_provider)
+        .export_to_pgp_provider(&pgp)
         .expect("Failed to export session key to provider");
-    let decrypted_data = pgp_provider
+
+    let decrypted_data = pgp
         .new_decryptor()
         .with_session_key(session_key_provider)
         .decrypt(data_packets.as_ref(), DataEncoding::Bytes)
