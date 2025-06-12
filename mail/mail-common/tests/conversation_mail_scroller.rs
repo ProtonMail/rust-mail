@@ -9,7 +9,6 @@ use proton_mail_api::services::proton::{
     common::ConversationId, prelude::GetConversationsResponse,
     response_data::Conversation as ApiConversation,
 };
-use proton_mail_common::datatypes::labels::LabelScrollOrder;
 use proton_mail_common::test_utils::{
     init::Params as TestParams,
     scroller::{StoreLabeledModelMap, save_single_conversation, test_conversations},
@@ -22,6 +21,7 @@ use proton_mail_common::{
     models::{Conversation, ConversationCounters, ConversationScrollData},
 };
 use proton_mail_common::{conv_id, lbl_id, test_utils::test_context::MailTestContext};
+use proton_mail_common::{datatypes::labels::LabelScrollOrder, mail_scroller::MailScrollerError};
 use stash::stash::StashError;
 use stash::{orm::Model, stash::WatcherHandle};
 use std::{collections::HashMap, time::Duration};
@@ -999,12 +999,11 @@ async fn test_conversation_mail_scroller_invalidates_when_dirty() {
 
     // The critical test: fetch_more should return empty vec when dirty
     // This prevents the race condition where clients might append duplicates
-    let dirty_fetch_result = scroller.fetch_more().await.unwrap();
-    assert_eq!(
-        dirty_fetch_result.len(),
-        0,
-        "fetch_more should return empty vec when dirty to prevent duplicates"
-    );
+    let dirty_fetch_result = scroller.fetch_more().await.unwrap_err();
+    assert!(matches!(
+        dirty_fetch_result,
+        MailContextError::MailScroller(MailScrollerError::Dirty)
+    ));
 
     // After the dirty invalidation, all_items should show the updated state
     let all_items_after_dirty = scroller.all_items().await.unwrap();

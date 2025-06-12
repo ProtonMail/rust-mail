@@ -424,10 +424,4 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
     fn set_notify(&mut self, sender: flume::Sender<()>) {
         let _ = self.invalidate.insert(sender);
     }
-
-    async fn invalidate(&mut self) -> Result<(), MailContextError> {
-        Self::notify_scroller_order_invalid(&self.invalidate).await?;
-
-        Ok(())
-    }
 }

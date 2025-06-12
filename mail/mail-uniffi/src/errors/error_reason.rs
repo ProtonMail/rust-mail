@@ -42,6 +42,7 @@ impl From<RealActionErrorReason> for ActionErrorReason {
 /// as context is nomenclature used in the common library.
 #[derive(Debug, UniffiEnum)]
 pub enum ContextReason {
+    MailScrollerDirty,
     UnknownLabel,
     DuplicateContext,
     UserContextNotInitialized,
@@ -50,6 +51,7 @@ pub enum ContextReason {
 impl From<RealContextErrorReason> for ContextReason {
     fn from(reason: RealContextErrorReason) -> Self {
         match reason {
+            RealContextErrorReason::MailScrollerDirty => ContextReason::MailScrollerDirty,
             RealContextErrorReason::DuplicateContext => ContextReason::DuplicateContext,
             RealContextErrorReason::UserContextNotInitialized(_) => {
                 ContextReason::UserContextNotInitialized

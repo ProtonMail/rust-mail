@@ -24,6 +24,12 @@ mod message_scroller;
 #[path = "tests/mail_scroller/conversation_scroller.rs"]
 mod conversation_scroller;
 
+#[derive(Debug, thiserror::Error)]
+pub enum MailScrollerError {
+    #[error("MailScroller is dirty, invalidating")]
+    Dirty,
+}
+
 /// Paginate over mail related items which implement [`MailScrollerSource`].
 ///
 /// You should use [`has_more()`] to check if more data is available and [`fetch_more()`] to
@@ -31,6 +37,10 @@ mod conversation_scroller;
 ///
 /// Whether the data is cached or always updated from the server, depends on the implementation
 /// of [`MailScrollerSource`].
+///
+/// Dirty flag is used to indicate that the data is not up to date and needs to be
+/// invalidated. It is set when the callback from the database is received and cleared
+/// when the data is re-fetched using `all_items()`.
 pub struct MailScroller<T: MailScrollerSource + 'static> {
     ctx: Weak<MailUserContext>,
     source: Arc<Mutex<T>>,
@@ -129,11 +139,11 @@ impl<T: MailScrollerSource> MailScroller<T> {
 
                 // Make sure source is free to be used
                 let _guard = src.lock().await;
+                dirty.store(true, Ordering::Release);
                 if sender_clone.send_async(()).await.is_err() {
                     tracing::error!("MailScroller could not notify callback on database changes");
                     break;
                 }
-                dirty.store(true, Ordering::Release);
                 tracing::trace!("MailScroller notified about database changes");
             }
             tracing::warn!("MailScroller receiver closed, despawn watcher");
@@ -163,11 +173,11 @@ impl<T: MailScrollerSource> MailScroller<T> {
     ///
     /// Returns error if the data could not be fetched or saved.
     pub async fn fetch_more(&mut self) -> Result<Vec<T::Item>, MailContextError> {
+        // The check is done before acquiring the lock as if the `all_items` call is ongoing
+        // we can pass through the dirty flag and when the lock will be acquired it will
+        // return correct next page.
         if self.dirty.load(Ordering::Acquire) {
-            tracing::debug!("MailScroller is dirty, invalidating");
-            self.source.lock().await.invalidate().await?;
-            self.dirty.store(false, Ordering::Release);
-            return Ok(vec![]);
+            return Err(MailScrollerError::Dirty.into());
         }
 
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
@@ -215,6 +225,9 @@ impl<T: MailScrollerSource> MailScroller<T> {
     /// Return error if the query failed.
     pub async fn all_items(&mut self) -> Result<Vec<T::Item>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
+        // We need to acquire the lock before clearing the dirty flag
+        // as the fetch more should not be able to pass through the dirty flag.
+        // before all_items is finished loading.
         let src = self.source.lock().await;
 
         self.dirty.store(false, Ordering::Release);
