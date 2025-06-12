@@ -3,5 +3,4 @@ source: mail/mail-common/src/draft/../tests/draft/compose.rs
 expression: signature
 snapshot_kind: text
 ---
-<div style="font-family: Arial, sans-serif; font-size: 14px; color: rgb(0, 0, 
-0); background-color: rgb(255, 255, 255);">My Default Signature<br></div>
+My Default Signature
