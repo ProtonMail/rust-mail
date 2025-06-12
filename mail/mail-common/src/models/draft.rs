@@ -414,8 +414,8 @@ impl DraftSendResult {
 
     pub async fn unseen_with_send_action(tether: &Tether) -> Result<Vec<Self>, StashError> {
         Self::find(
-            "WHERE seen=0 AND has_send_action= 1 ORDER BY timestamp DESC",
-            vec![],
+            "WHERE seen=0 AND (has_send_action= 1 OR origin = ?) ORDER BY timestamp DESC",
+            params![DraftSendResultOrigin::SaveBeforeSend],
             tether,
         )
         .await
@@ -607,10 +607,7 @@ impl DraftSendFailure {
     pub fn is_skippable(&self) -> bool {
         // No connection is handled by external queue code
         // Already sent is an error that is expected to occur
-        matches!(
-            self,
-            Self::NoConnection | Self::Save(DraftSendFailureSave::AlreadySent)
-        )
+        matches!(self, Self::NoConnection)
     }
 
     /// Convert from a draft [`Error`]

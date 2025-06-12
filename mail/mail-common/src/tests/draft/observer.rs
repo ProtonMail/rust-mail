@@ -312,6 +312,22 @@ async fn draft_send_observer_only_triggers_when_send_action_is_queued() {
         .unwrap()
         .unwrap();
     assert_eq!(new_values, vec![v2.clone()]);
+
+    // Save before send failures should also be reported.
+    v1.origin = DraftSendResultOrigin::SaveBeforeSend;
+
+    conn.tx::<_, _, StashError>(async |tx| {
+        v1.save(tx).await.unwrap();
+        Ok(())
+    })
+    .await
+    .unwrap();
+
+    let new_values = tokio::time::timeout(std::time::Duration::from_secs(5), watcher.next())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(new_values, vec![v1.clone()]);
 }
 
 #[tokio::test]
