@@ -7,7 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [mail-uniffi-v0.88.0] - 2025-06-10
+### Features
+
+- [ET-3101] Breaking change - replace `html_head_content_for_composer()` with `html_for_composer()`
+- [ET-3101] Introduce list of **trusted** senders
+- [ET-3101] Lower tracing level when transforming hsl, add support for light-dark
+
+### Fixes
+
+- [ET-3178] Fix editor id in composer
+- [ET-3169] Replace path separators from attachment file name
+- Save draft after address change
+- [ET-3211] Scheduled send messages should be sorted ascending
+- Signatures are always stored in html
+
+### [mail-uniffi-v0.88.0] - 2025-06-10
 
 ### Features
 
