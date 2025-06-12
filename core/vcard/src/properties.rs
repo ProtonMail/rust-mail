@@ -193,7 +193,7 @@ impl TryFrom<&str> for PropertyKind {
             "VERSION" => Ok(PropertyKind::Version),
             "XML" => Ok(PropertyKind::Xml),
             extended if extended.starts_with("X-") => Ok(PropertyKind::Extended(value.to_owned())),
-            _name => Err(VcardValidationError::InvalidPropertyName(value.to_owned())),
+            _ => Err(VcardValidationError::InvalidPropertyName(value.to_owned())),
         }
     }
 }

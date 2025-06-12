@@ -42,7 +42,6 @@ use crate::properties::version::validate_version;
 use crate::properties::xml::validate_xml;
 use ical::VcardParser;
 use ical::generator::{Property, VcardContact};
-use regex::Regex;
 use std::collections::HashMap;
 use std::io::BufRead;
 use velcro::hash_map;
@@ -231,21 +230,13 @@ pub fn validate_property(property: &Property) -> VcardValidationResult<()> {
 }
 
 /// Extract the property name from a name who can contain a group name.
-pub(super) fn get_property_kind(name: &str) -> VcardValidationResult<PropertyKind> {
-    // group = 1*(ALPHA / DIGIT / "-")
-    if let Some(position) = name.rfind('.') {
-        let re = Regex::new(r"^[a-zA-Z0-9-]+$").unwrap();
-        if re.is_match(&name[..position]) {
-            let name = &name[(position + 1)..];
-            PropertyKind::try_from(name)
-        } else {
-            Err(VcardValidationError::InvalidPropertyGroupName(
-                name.to_owned(),
-            ))
-        }
-    } else {
-        PropertyKind::try_from(name)
+pub(super) fn get_property_kind(mut name: &str) -> VcardValidationResult<PropertyKind> {
+    // Get the group name after the last dot
+    if let Some(dot_index) = name.rfind('.') {
+        name = &name[(dot_index + 1)..];
     }
+
+    PropertyKind::try_from(name)
 }
 
 /// Validate order of properties in a contact
