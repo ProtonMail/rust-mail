@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 use crate::ParameterType;
 use crate::errors::{VCardParameterError, VCardParameterResult};
@@ -9,7 +9,7 @@ const LOWEST_PREF: u32 = 101;
 
 /// The PREF parameter is OPTIONAL and is used to indicate that the corresponding instance of a
 /// property is preferred by the vCard author.
-#[derive(Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Preference {
     pub value: u32,
 }
@@ -28,12 +28,6 @@ impl Preference {
     #[must_use]
     pub fn less_than_lowest() -> Self {
         Self { value: LOWEST_PREF }
-    }
-}
-
-impl Debug for Preference {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Preference({})", self.value)
     }
 }
 

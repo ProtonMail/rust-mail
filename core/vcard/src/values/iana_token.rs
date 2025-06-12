@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 use regex::Regex;
 
@@ -6,7 +6,7 @@ use crate::errors::{VCardValueError, VCardValueResult};
 use crate::parameters::value::ValueType;
 
 /// Represent a iana-token value from vCard RFC6350
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub struct IanaToken(pub String);
 
 impl IanaToken {
@@ -22,12 +22,6 @@ impl IanaToken {
     ///   * if given value is not a valid iana token (only alphanumeric and dash allowed)
     pub fn new_validated(value: &str) -> VCardValueResult<Self> {
         Self::try_from(value)
-    }
-}
-
-impl Debug for IanaToken {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "IT({})", self.0)
     }
 }
 

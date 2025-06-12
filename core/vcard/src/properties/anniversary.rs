@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 use ical::generator::Property as IcalProperty;
 
@@ -15,7 +15,7 @@ use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
 /// The date of marriage, or equivalent, of the object the vCard represents.
-#[derive(Clone, Default, Debug)]
+#[derive(Debug, Clone, Default)]
 pub struct Anniversary {
     /// Value (ex: 19960415)
     pub value: MaybeDateAndOrTime,
@@ -124,15 +124,6 @@ impl AnniversaryValue {
     ///   * if given value is neither a date-and-or-time value nor a text
     pub fn new_validated(value: impl AsRef<str>) -> Self {
         Self::from(value)
-    }
-}
-
-impl Debug for AnniversaryValue {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::DateAndOrTime(v) => write!(f, "{v:?}"),
-            Self::Text(v) => write!(f, "{v:?}"),
-        }
     }
 }
 

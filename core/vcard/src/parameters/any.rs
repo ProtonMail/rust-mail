@@ -1,5 +1,5 @@
 use crate::errors::{VCardParameterError, VCardParameterResult};
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 use crate::ParameterType;
 use crate::values::iana_token::{IanaToken, is_iana_token_value};
@@ -7,7 +7,7 @@ use crate::values::param_value::{ParamValue, is_param_value};
 use crate::values::x_name::{XName, is_x_name_value};
 
 /// Additional parameter authorized but not defined by RFC6350
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub struct Any {
     /// name of the parameter (Iana token or x-name)
     pub name: AnyName,
@@ -60,25 +60,10 @@ impl Any {
     }
 }
 
-impl Debug for Any {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Any({:?}:{:?})", self.name, self.values)
-    }
-}
-
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub enum AnyName {
     IanaToken(IanaToken),
     XName(XName),
-}
-
-impl Debug for AnyName {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            AnyName::IanaToken(v) => write!(f, "{v:?}"),
-            AnyName::XName(v) => write!(f, "{v:?}"),
-        }
-    }
 }
 
 impl TryFrom<&str> for AnyName {

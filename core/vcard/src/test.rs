@@ -4,8 +4,12 @@ mod vcard;
 
 #[cfg(test)]
 pub fn validate_vcard(card: impl std::io::BufRead) {
+    use ical::VcardParser;
+
     let card = VcardParser::new(card);
     for contact in card {
+        use crate::vcard::VCard;
+
         _ = VCard::try_from(contact.expect("ical failed to parse vCard"))
             .expect("Failed to parse vCard");
     }

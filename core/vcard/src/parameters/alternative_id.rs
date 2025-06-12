@@ -1,5 +1,5 @@
 use crate::errors::{VCardParameterError, VCardParameterResult};
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 use crate::ParameterType;
 use crate::values::param_value::{ParamValue, is_param_value};
@@ -8,7 +8,7 @@ use crate::values::param_value::{ParamValue, is_param_value};
 /// the same logical property.  For example, translations of a property in multiple languages
 /// generates multiple property instances having different LANGUAGE parameter that are tagged with
 /// the same ALTID value.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct AlternativeId {
     /// value
     pub value: ParamValue,
@@ -32,12 +32,6 @@ impl AlternativeId {
             value: ParamValue::try_from(value)
                 .map_err(VCardParameterError::from_value_error(ParameterType::AltId))?,
         })
-    }
-}
-
-impl Debug for AlternativeId {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "AlternativeId({})", self.value)
     }
 }
 

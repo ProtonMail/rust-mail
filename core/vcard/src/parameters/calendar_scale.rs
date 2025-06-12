@@ -2,14 +2,14 @@ use crate::ParameterType;
 use crate::errors::{VCardParameterError, VCardParameterResult};
 use crate::values::iana_token::{IanaToken, is_iana_token_value};
 use crate::values::x_name::{XName, is_x_name_value};
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 const GREGORIAN: &str = "gregorian";
 
 /// The CALSCALE parameter is identical to the CALSCALE property in iCalendar (see (RFC5545),
 /// Section 3.7.1).  It is used to define the calendar system in which a date or date-time value is
 /// expressed.
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum CalendarScale {
     /// Gregorian calendar
     Gregorian,
@@ -38,16 +38,6 @@ impl CalendarScale {
     ///   * not a valid value : "gregorian" (case-insensitive), an iana-token or an x-name
     pub fn new_validated(value: &str) -> VCardParameterResult<Self> {
         Self::try_from(value)
-    }
-}
-
-impl Debug for CalendarScale {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            CalendarScale::Gregorian => write!(f, "gregorian"),
-            CalendarScale::IanaToken(v) => write!(f, "{v:?}"),
-            CalendarScale::XName(v) => write!(f, "{v:?}"),
-        }
     }
 }
 

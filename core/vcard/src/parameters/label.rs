@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 use crate::ParameterType;
 use crate::errors::{VCardParameterError, VCardParameterResult};
@@ -6,7 +6,7 @@ use crate::values::param_value::{ParamValue, is_param_value};
 
 /// An ADR can include a "LABEL" parameter to present a delivery address label for the address.  Its
 /// value is a plain-text string representing the formatted address.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Label {
     /// Value
     pub value: ParamValue,
@@ -31,12 +31,6 @@ impl Label {
             value: ParamValue::try_from(value)
                 .map_err(VCardParameterError::from_value_error(ParameterType::Label))?,
         })
-    }
-}
-
-impl Debug for Label {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.value)
     }
 }
 

@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 use ical::generator::Property as IcalProperty;
 
@@ -12,7 +12,7 @@ use crate::{PropertyKind, VCardError, VCardResult};
 /// properties and parameters with a name starting with "X-" may be defined bilaterally between two
 /// cooperating agents without outside registration or standardization.
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Xtended {
     /// Name of the property
     pub name: XName,
@@ -49,16 +49,6 @@ impl Xtended {
             parameters: Parameters::new(),
             group: None,
         })
-    }
-}
-
-impl Debug for Xtended {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Extended {{{:?}, {:?}", self.name, self.value)?;
-        if !self.parameters.is_empty() {
-            write!(f, ", parameters={:?}", self.parameters)?;
-        }
-        write!(f, "}}",)
     }
 }
 
