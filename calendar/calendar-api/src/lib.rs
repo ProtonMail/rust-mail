@@ -201,7 +201,7 @@ mod tests {
                     ty: CalendarEventPayloadType::EncryptedAndSigned,
                     data: "0sLJAdwR...".into(),
                     signature: Some("-----BEGIN PGP SIGNATURE-----...".into()),
-                    author: "john@localhost".into(),
+                    author: "spongebob@squarepants.com".into(),
                 }],
                 attendees: vec![CalendarAttendee {
                     id: "0FcDfeKS...".into(),
