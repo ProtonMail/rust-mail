@@ -107,6 +107,7 @@ pub enum ActionErrorReason {
 /// as the session is nomenclature used in the client library.
 #[derive(Debug)]
 pub enum ContextErrorReason {
+    MailScrollerDirty,
     DuplicateContext,
     UserContextNotInitialized(String),
 }

@@ -6,6 +6,7 @@ use crate::draft::{
 };
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
+use crate::mail_scroller::MailScrollerError;
 use crate::{
     AppError, MailContextError, SidebarError, draft::DiscardError as DraftDiscardError,
     draft::Error as DraftError, draft::OpenError as DraftOpenError,
@@ -257,6 +258,15 @@ impl From<MailContextError> for ProtonMailError {
                 ContextErrorReason::UserContextNotInitialized(user_id.into_inner()),
             ),
             MailContextError::Rsvp(_) => Self::Unexpected(Unexpected::Unknown),
+            MailContextError::MailScroller(mail_scroller_error) => Self::from(mail_scroller_error),
+        }
+    }
+}
+
+impl From<MailScrollerError> for ProtonMailError {
+    fn from(error: MailScrollerError) -> Self {
+        match error {
+            MailScrollerError::Dirty => Self::reason(ContextErrorReason::MailScrollerDirty),
         }
     }
 }
