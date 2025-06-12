@@ -14,7 +14,7 @@ use proton_ical as ical;
 use std::collections::HashMap;
 use tracing::{debug, info, instrument};
 
-pub(super) async fn main<P>(
+pub(super) async fn exec<P>(
     api: &Proton,
     pgp: &P,
     keys: &UnlockedAddressKeys<P>,

@@ -109,7 +109,7 @@ impl RsvpEventId {
     where
         P: PGPProviderSync,
     {
-        fetch::main(api, pgp, keys, self).await
+        fetch::exec(api, pgp, keys, self).await
     }
 }
 
