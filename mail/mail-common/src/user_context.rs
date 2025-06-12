@@ -6,8 +6,10 @@ mod initialization;
 use crate::actions::draft::SEND_ACTION_GROUP;
 use crate::actions::register_mail_actions;
 use crate::draft::attachments::DraftStagingAreaCleaner;
+use crate::events::MailEvent;
 use crate::models::{Conversation, Message};
 use crate::prefetch::{Prefetch, PrefetchJob, PrefetchNotify};
+use crate::user_context::events::subscriber::MailEventSubscriber;
 use crate::user_context::initialization::InitializationMediator;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
@@ -25,7 +27,7 @@ use proton_crypto_inbox::keys::{ComposerPreference, CryptoMailSettings, SendPref
 use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
-use proton_event_loop::EventPoll;
+use proton_event_loop::{EventPoll, Subscriber};
 use proton_task_service::{AsyncTaskResult, TaskService, TaskSpawner};
 use stash::orm::Model;
 use stash::stash::{RunTransaction, Stash, Tether};
@@ -532,6 +534,10 @@ impl MailUserContext {
     /// Get the connection status of the current user session.
     pub async fn connection_status(&self) -> ConnectionStatus {
         self.user_context.connection_status().await
+    }
+
+    pub fn event_subscriber(&self) -> impl Subscriber<MailEvent> + 'static {
+        MailEventSubscriber::new(Weak::clone(&self.this))
     }
 
     /// Prefetch key locations in the background.

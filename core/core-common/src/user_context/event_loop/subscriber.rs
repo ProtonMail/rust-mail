@@ -322,9 +322,9 @@ impl UserContext {
     /// Returns error if the event loop failed to register the subscriber.
     ///
     pub(crate) async fn register_subscribers(self: &Arc<Self>) -> Result<(), EventLoopError> {
-        let core_subscriber = CoreEventSubscriber::from(Arc::downgrade(self));
-
-        self.event_loop.register(core_subscriber.boxed()).await?;
+        self.event_loop
+            .register(Box::new(self.event_subscriber()))
+            .await?;
 
         Ok(())
     }
@@ -341,6 +341,10 @@ impl UserContext {
     ///
     pub async fn poll_event_loop_impl(&self) -> Result<(), EventLoopError> {
         self.event_loop.poll().await
+    }
+
+    pub fn event_subscriber(self: &Arc<Self>) -> impl Subscriber<CoreEvent> + 'static {
+        CoreEventSubscriber::from(Arc::downgrade(self))
     }
 }
 

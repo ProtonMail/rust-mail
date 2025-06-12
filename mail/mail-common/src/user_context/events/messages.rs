@@ -1,6 +1,6 @@
 use crate::AppError;
 use crate::events::MessageEvent;
-use crate::models::{DraftMetadata, Message};
+use crate::models::Message;
 use proton_core_common::events::Action;
 use proton_mail_ids::LocalMessageId;
 use stash::params;
@@ -33,19 +33,20 @@ pub async fn handle_message_events(
                 }
             }
             Action::Update | Action::UpdateFlags => {
-                if DraftMetadata::exists_for_message_with_remote_id(
-                    message_event.remote_id.clone(),
-                    tx,
-                )
-                .await?
-                {
-                    debug!(
-                        "Skipping message update for {} due to draft metadata",
-                        message_event.remote_id
-                    );
-                    continue;
-                }
                 if let Some(message) = &message_event.message {
+                    if !Message::can_update_from_event_loop(
+                        message_event.remote_id.clone(),
+                        message.flags.into(),
+                        tx,
+                    )
+                    .await?
+                    {
+                        debug!(
+                            "Skipping message update for {} due to draft metadata",
+                            message_event.remote_id
+                        );
+                        continue;
+                    }
                     Message::create_or_update_messages_from_metadata(vec![message.clone()], tx)
                         .await?;
                 } else {
