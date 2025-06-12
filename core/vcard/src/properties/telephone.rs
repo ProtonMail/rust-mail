@@ -3,9 +3,7 @@ use std::fmt::{Display, Formatter};
 
 use ical::generator::Property as IcalProperty;
 use url::Url;
-use velcro::hash_set;
 
-use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::alternative_id::AlternativeId;
 use crate::parameters::any::Any;
 use crate::parameters::mediatype::MediaType;
@@ -13,8 +11,7 @@ use crate::parameters::pid::Pid;
 use crate::parameters::preference::Preference;
 use crate::parameters::type_tel::TelType;
 use crate::parameters::value::ValueType;
-use crate::properties::{VcardProperty, get_value_type, validate_parameters};
-use crate::validation::get_property_kind;
+use crate::properties::VcardProperty;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
@@ -172,76 +169,4 @@ impl From<String> for TelephoneValue {
             Self::Text(value)
         }
     }
-}
-
-/// Validate that the given `property` respect the format for a `TEL` property
-///
-/// # Errors
-///   * if the property value is not a text value nor an uri value
-///   * if any of the parameters is invalid
-#[allow(clippy::too_many_lines)]
-pub fn validate_tel(property: &IcalProperty) -> VcardValidationResult<()> {
-    // TEL-param = TEL-text-param / TEL-uri-param
-    // TEL-value = TEL-text-value / TEL-uri-value
-    //   ; Value and parameter MUST match.
-    //
-    // TEL-text-param = "VALUE=text"
-    // TEL-text-value = text
-    //
-    // TEL-uri-param = "VALUE=uri" / mediatype-param
-    // TEL-uri-value = URI
-    //
-    // TEL-param =/ type-param / pid-param / pref-param / altid-param / any-param
-    //
-    // type-param-tel = "text" / "voice" / "fax" / "cell" / "video" / "pager" / "textphone" / iana-token / x-name
-    //   ; type-param-tel MUST NOT be used with a property other than TEL.
-    if let Some(value) = &property.value {
-        let value_type = if let Some(value_type) = get_value_type(property)? {
-            let validated = match value_type {
-                ValueType::Text => true,
-                ValueType::Uri => Url::parse(value).is_ok(),
-                _ => false,
-            };
-            if !validated {
-                return Err(VcardValidationError::InvalidPropertyValue(
-                    get_property_kind(&property.name)?,
-                ));
-            }
-            value_type
-        } else {
-            ValueType::Text
-        };
-
-        let allowed = match value_type {
-            ValueType::Text => hash_set!(
-                ParameterType::Value,
-                ParameterType::Type,
-                ParameterType::Pid,
-                ParameterType::Pref,
-                ParameterType::AltId,
-                ParameterType::Any
-            ),
-            ValueType::Uri => hash_set!(
-                ParameterType::Value,
-                ParameterType::MediaType,
-                ParameterType::Type,
-                ParameterType::Pid,
-                ParameterType::Pref,
-                ParameterType::AltId,
-                ParameterType::Any
-            ),
-            _ => {
-                return Err(VcardValidationError::InvalidPropertyValue(
-                    get_property_kind(&property.name)?,
-                ));
-            }
-        };
-
-        validate_parameters(property, value_type, &allowed)?;
-    } else {
-        return Err(VcardValidationError::InvalidPropertyValue(
-            get_property_kind(&property.name)?,
-        ));
-    }
-    Ok(())
 }

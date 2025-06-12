@@ -2,9 +2,7 @@ use std::collections::HashSet;
 
 use ical::generator::Property as IcalProperty;
 use url::Url;
-use velcro::hash_set;
 
-use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::alternative_id::AlternativeId;
 use crate::parameters::any::Any;
 use crate::parameters::language::Language;
@@ -13,8 +11,7 @@ use crate::parameters::pid::Pid;
 use crate::parameters::preference::Preference;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
-use crate::properties::{VcardProperty, validate_parameters};
-use crate::validation::get_property_kind;
+use crate::properties::VcardProperty;
 use crate::values::uri::Uri;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
@@ -159,41 +156,4 @@ impl VcardProperty for Logo {
     fn get_preference(&self) -> Option<Preference> {
         self.preference
     }
-}
-
-/// Validate that the given `property` respect the format for a `LOGO` property
-///
-/// # Errors
-///   * if property value is not a valid uri value
-///   * if any of the parameters is not valid
-pub fn validate_logo(property: &IcalProperty) -> VcardValidationResult<()> {
-    // LOGO-param = "VALUE=uri" / language-param / pid-param / pref-param / type-param / mediatype-param / altid-param / any-param
-    // LOGO-value = URI
-    if let Some(value) = &property.value {
-        if Url::parse(value).is_ok() {
-            validate_parameters(
-                property,
-                ValueType::Uri,
-                &hash_set!(
-                    ParameterType::Value,
-                    ParameterType::Language,
-                    ParameterType::Pid,
-                    ParameterType::Pref,
-                    ParameterType::Type,
-                    ParameterType::MediaType,
-                    ParameterType::AltId,
-                    ParameterType::Any
-                ),
-            )?;
-        } else {
-            return Err(VcardValidationError::InvalidPropertyValue(
-                get_property_kind(&property.name)?,
-            ));
-        }
-    } else {
-        return Err(VcardValidationError::InvalidPropertyValue(
-            get_property_kind(&property.name)?,
-        ));
-    }
-    Ok(())
 }

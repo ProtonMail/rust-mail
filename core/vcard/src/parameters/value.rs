@@ -98,9 +98,3 @@ impl TryFrom<&str> for ValueType {
         }
     }
 }
-
-/// Validate that the given `values` contains the `expected` value type
-#[must_use]
-pub fn is_value_param(values: &[String], expected: ValueType) -> bool {
-    values.len() == 1 && expected == values[0]
-}

@@ -3,9 +3,7 @@ use std::fmt::{Debug, Display};
 
 use ical::generator::Property as IcalProperty;
 use url::Url;
-use velcro::hash_set;
 
-use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::alternative_id::AlternativeId;
 use crate::parameters::any::Any;
 use crate::parameters::mediatype::MediaType;
@@ -13,8 +11,7 @@ use crate::parameters::pid::Pid;
 use crate::parameters::preference::Preference;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
-use crate::properties::{VcardProperty, get_value_type, validate_parameters};
-use crate::validation::get_property_kind;
+use crate::properties::VcardProperty;
 use crate::values::text::Text;
 use crate::values::uri::Uri;
 use crate::values::utc_offset::UTCOffset;
@@ -160,51 +157,4 @@ impl Display for TimeZoneValue {
             TimeZoneValue::UtcOffset(offset) => write!(f, "{offset}"),
         }
     }
-}
-
-/// Validate that the given `property` respect the format for a `TZ` property
-///
-/// # Errors
-///   * if property value is not a valid text value, an uri value or an utc-offset
-///   * if any of the parameters is not valid
-pub fn validate_tz(property: &IcalProperty) -> VcardValidationResult<()> {
-    // TZ-param = "VALUE=" ("text" / "uri" / "utc-offset")
-    // TZ-value = text / URI / utc-offset
-    //   ; Value and parameter MUST match.
-    //
-    // TZ-param =/ altid-param / pid-param / pref-param / type-param / mediatype-param / any-param
-    if property.value.is_some() {
-        let value_type = if let Some(value_type) = get_value_type(property)? {
-            if matches!(
-                value_type,
-                ValueType::Uri | ValueType::Text | ValueType::UTCOffset
-            ) {
-                value_type
-            } else {
-                return Err(VcardValidationError::InvalidPropertyValue(
-                    get_property_kind(&property.name)?,
-                ));
-            }
-        } else {
-            ValueType::Text
-        };
-        validate_parameters(
-            property,
-            value_type,
-            &hash_set!(
-                ParameterType::Value,
-                ParameterType::AltId,
-                ParameterType::Pid,
-                ParameterType::Pref,
-                ParameterType::Type,
-                ParameterType::MediaType,
-                ParameterType::Any
-            ),
-        )?;
-    } else {
-        return Err(VcardValidationError::InvalidPropertyValue(
-            get_property_kind(&property.name)?,
-        ));
-    }
-    Ok(())
 }

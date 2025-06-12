@@ -3,9 +3,7 @@ use std::fmt::Debug;
 
 use ical::generator::Property as IcalProperty;
 use tracing::warn;
-use velcro::hash_set;
 
-use crate::errors::VcardValidationResult;
 use crate::parameters::alternative_id::AlternativeId;
 use crate::parameters::any::Any;
 use crate::parameters::language::Language;
@@ -13,7 +11,7 @@ use crate::parameters::pid::Pid;
 use crate::parameters::preference::Preference;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
-use crate::properties::{VcardProperty, validate_parameters};
+use crate::properties::VcardProperty;
 use crate::values::text_list::TextList;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
@@ -119,27 +117,4 @@ impl VcardProperty for Nickname {
     fn get_preference(&self) -> Option<Preference> {
         self.preference
     }
-}
-
-/// Validate that the given `property` respect the format for a `NICKNAME` property
-///
-/// # Errors
-///   * if property value is not a text value
-///   * if any of the parameters is not valid
-pub fn validate_nickname(property: &IcalProperty) -> VcardValidationResult<()> {
-    // NICKNAME-param = "VALUE=text" / type-param / language-param / altid-param / pid-param / pref-param / any-param
-    // NICKNAME-value = text-list
-    validate_parameters(
-        property,
-        ValueType::Text,
-        &hash_set!(
-            ParameterType::Value,
-            ParameterType::Type,
-            ParameterType::Language,
-            ParameterType::AltId,
-            ParameterType::Pid,
-            ParameterType::Pref,
-            ParameterType::Any
-        ),
-    )
 }

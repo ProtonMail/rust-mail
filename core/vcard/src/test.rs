@@ -1,97 +1,14 @@
-mod parameters;
 mod properties;
 mod values;
 mod vcard;
 
-use crate::parameters::*;
-use crate::validation::validate_vcard;
-
-use crate::errors::{VcardValidationError, VcardValidationResult};
-use ical::property::Property;
-use std::collections::HashSet;
-
-#[test]
-fn cardinality_fn() {
-    let vcard = r"BEGIN:VCARD
-VERSION:4.0
-FN:Foo Bar
-END:VCARD"
-        .as_bytes();
-    validate_vcard(vcard).unwrap();
-
-    let vcard = r"BEGIN:VCARD
-VERSION:4.0
-END:VCARD"
-        .as_bytes();
-    assert!(validate_vcard(vcard).is_err());
-}
-
-#[test]
-fn cardinality_altid() {
-    let vcard = r"BEGIN:VCARD
-VERSION:4.0
-FN:Foo Bar
-N;ALTID=1;LANGUAGE=jp:<U+5C71><U+7530>;<U+592A><U+90CE>;;;
-N;ALTID=1;LANGUAGE=en:Yamada;Taro;;;
-END:VCARD"
-        .as_bytes();
-    validate_vcard(vcard).unwrap();
-
-    let vcard = r"BEGIN:VCARD
-VERSION:4.0
-FN:Foo Bar
-TITLE;ALTID=1;LANGUAGE=fr:Patron
-TITLE;ALTID=1;LANGUAGE=en:Boss
-END:VCARD"
-        .as_bytes();
-    validate_vcard(vcard).unwrap();
-
-    let vcard = r"BEGIN:VCARD
-VERSION:4.0
-FN:Foo Bar
-TITLE;ALTID=1;LANGUAGE=fr:Patron
-TITLE;ALTID=1;LANGUAGE=en:Boss
-TITLE;ALTID=2;LANGUAGE=en:Chief vCard Evangelist
-END:VCARD"
-        .as_bytes();
-    validate_vcard(vcard).unwrap();
-
-    let vcard = r"BEGIN:VCARD
-VERSION:4.0
-FN:Foo Bar
-N;ALTID=1;LANGUAGE=jp:<U+5C71><U+7530>;<U+592A><U+90CE>;;;
-N:Yamada;Taro;;;
-END:VCARD"
-        .as_bytes();
-    assert!(validate_vcard(vcard).is_err());
-
-    let vcard = r"BEGIN:VCARD
-VERSION:4.0
-FN:Foo Bar
-TITLE;ALTID=1;LANGUAGE=fr:Patron
-TITLE;ALTID=2;LANGUAGE=en:Boss
-END:VCARD"
-        .as_bytes();
-    validate_vcard(vcard).unwrap();
-
-    let vcard = r"BEGIN:VCARD
-VERSION:4.0
-FN:Foo Bar
-TITLE;ALTID=1;LANGUAGE=fr:Patron
-TITLE:LANGUAGE=en:Boss
-END:VCARD"
-        .as_bytes();
-    validate_vcard(vcard).unwrap();
-
-    let vcard = r"BEGIN:VCARD
-VERSION:4.0
-FN:Foo Bar
-N;ALTID=1;LANGUAGE=jp:<U+5C71><U+7530>;<U+592A><U+90CE>;;;
-N;ALTID=1;LANGUAGE=en:Yamada;Taro;;;
-N;ALTID=1;LANGUAGE=en:Smith;John;;;
-END:VCARD"
-        .as_bytes();
-    validate_vcard(vcard).unwrap();
+#[cfg(test)]
+pub fn validate_vcard(card: impl std::io::BufRead) {
+    let card = VcardParser::new(card);
+    for contact in card {
+        _ = VCard::try_from(contact.expect("ical failed to parse vCard"))
+            .expect("Failed to parse vCard");
+    }
 }
 
 #[test]
@@ -131,7 +48,7 @@ PRODID;VALUE=TEXT:-//ProtonMail//ProtonMail vCard 1.0.0//EN
 ITEM2.CATEGORIES:Test Group
 END:VCARD"
         .as_bytes();
-    validate_vcard(vcard).unwrap();
+    validate_vcard(vcard);
 }
 
 #[test]
@@ -165,7 +82,7 @@ MEMBER:sip:subscriber3@example.com
 MEMBER:tel:+1-418-555-5555
 END:VCARD"
         .as_bytes();
-    validate_vcard(vcard).unwrap();
+    validate_vcard(vcard);
 }
 
 #[test]
@@ -193,57 +110,5 @@ TZ:-0500
 URL;TYPE=home:http://nomis80.org
 END:VCARD"#
         .as_bytes();
-    validate_vcard(vcard).unwrap();
-}
-
-fn make_property(
-    name: &str,
-    value: Option<&str>,
-    params: Option<Vec<(&str, Vec<&str>)>>,
-) -> Property {
-    Property {
-        name: name.to_owned(),
-        params: params.map(|v| {
-            v.into_iter()
-                .map(|(n, v)| (n.to_owned(), v.into_iter().map(ToOwned::to_owned).collect()))
-                .collect()
-        }),
-        value: value.map(ToOwned::to_owned),
-    }
-}
-
-fn property_reject_parameters(
-    func: fn(&Property) -> VcardValidationResult<()>,
-    name: &str,
-    value: &str,
-    params: HashSet<ParameterType>,
-) {
-    assert!(
-        func(&make_property(name, Some(value), None)).is_ok(),
-        "Invalid test: value should be valid for given function"
-    );
-    for param in params {
-        let param_value = match param {
-            ParameterType::AltId => ("ALTID", vec!["param-value"]),
-            ParameterType::Any => ("any", vec!["foo", "bar"]),
-            ParameterType::CalScale => ("CALSCALE", vec!["gregorian"]),
-            ParameterType::Geo => ("GEO", vec!["uri:uri"]),
-            ParameterType::Label => ("LABEL", vec!["param-value"]),
-            ParameterType::Language => ("LANGUAGE", vec!["zh-cmn-Hans-CN"]),
-            ParameterType::MediaType => ("MEDIATYPE", vec!["type/subtype"]),
-            ParameterType::Pid => ("PID", vec!["1.2", "3.4"]),
-            ParameterType::Pref => ("PREF", vec!["1"]),
-            ParameterType::SortAs => ("SORT-AS", vec!["foo", "bar"]),
-            ParameterType::Type => ("TYPE", vec!["home", "work"]),
-            ParameterType::TZ => ("TZ", vec!["param-value"]),
-            ParameterType::Value => ("VALUE", vec!["text"]),
-        };
-        let result = func(&make_property(name, Some(value), Some(vec![param_value])));
-        if !matches!(
-            result,
-            Err(VcardValidationError::UnexpectedPropertyParam(_, _))
-        ) {
-            panic!("{param:?} should be rejected, got {result:?}");
-        }
-    }
+    validate_vcard(vcard);
 }

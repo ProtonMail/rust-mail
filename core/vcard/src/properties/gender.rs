@@ -1,14 +1,11 @@
 use std::collections::HashSet;
 
 use ical::generator::Property as IcalProperty;
-use velcro::hash_set;
 
-use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::any::Any;
 use crate::parameters::preference::Preference;
 use crate::parameters::value::ValueType;
-use crate::properties::{VcardProperty, validate_parameters};
-use crate::validation::get_property_kind;
+use crate::properties::VcardProperty;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
@@ -121,35 +118,4 @@ impl TryFrom<&str> for GenderValue {
             rest => Ok(Self::Custom(rest.to_owned())),
         }
     }
-}
-
-/// Validate that the given `property` respect the format for a `GENDER` property
-///
-/// # Errors
-///   * if property value is not valid (see vCard RFC6350 6.2.7)
-pub fn validate_gender(property: &IcalProperty) -> VcardValidationResult<()> {
-    // GENDER-param = "VALUE=text" / any-param
-    // GENDER-value = sex [";" text]
-    //
-    // sex = "" / "M" / "F" / "O" / "N" / "U"
-
-    if let Some(value) = &property.value {
-        let value = match value.split_once(';') {
-            Some((new_value, _)) => new_value,
-            None => value,
-        };
-        if value.is_empty() || "MFONUmfonu".contains(value) {
-            validate_parameters(
-                property,
-                ValueType::Text,
-                &hash_set!(ParameterType::Value, ParameterType::Any),
-            )?;
-        } else {
-            return Err(VcardValidationError::InvalidPropertyValue(
-                get_property_kind(&property.name)?,
-            ));
-        }
-    } else { // only property ok with no value
-    }
-    Ok(())
 }

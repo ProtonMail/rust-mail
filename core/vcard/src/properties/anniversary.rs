@@ -2,19 +2,14 @@ use std::collections::HashSet;
 use std::fmt::{Debug, Formatter};
 
 use ical::generator::Property as IcalProperty;
-use velcro::hash_set;
 
-use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::alternative_id::AlternativeId;
 use crate::parameters::any::Any;
 use crate::parameters::calendar_scale::CalendarScale;
 use crate::parameters::preference::Preference;
 use crate::parameters::value::ValueType;
-use crate::properties::{VcardProperty, get_value_type, validate_parameters};
-use crate::validation::get_property_kind;
-use crate::values::date_and_or_time::{
-    DateAndOrTimeValue, MaybeDateAndOrTime, is_date_and_or_time_value,
-};
+use crate::properties::VcardProperty;
+use crate::values::date_and_or_time::{DateAndOrTimeValue, MaybeDateAndOrTime};
 use crate::values::text::Text;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
@@ -148,65 +143,4 @@ impl<T: AsRef<str>> From<T> for AnniversaryValue {
             _ => Self::Text(value.into()),
         }
     }
-}
-
-/// Validate that the given `property` respect the format for a `ANNIVERSARY` property
-///
-/// # Errors
-///   * if property value is not a date-and-or-time value nor a text
-///   * if any parameter is invalid
-pub fn validate_anniversary(property: &IcalProperty) -> VcardValidationResult<()> {
-    // ANNIVERSARY-param = "VALUE=" ("date-and-or-time" / "text")
-    // ANNIVERSARY-value = date-and-or-time / text
-    //   ; Value and parameter MUST match.
-    //
-    // ANNIVERSARY-param =/ altid-param / calscale-param / any-param
-    //   ; calscale-param can only be present when ANNIVERSARY-value is
-    //   ; date-and-or-time and actually contains a date or date-time.
-
-    // TODO: CALSCALE only with date or date-time (not time designator)
-
-    if let Some(value) = &property.value {
-        let value_type = if let Some(value_type) = get_value_type(property)? {
-            let validated = match value_type {
-                ValueType::DateAndOrTime => is_date_and_or_time_value(value),
-                ValueType::Text => true,
-                _ => false,
-            };
-            if !validated {
-                return Err(VcardValidationError::InvalidPropertyValue(
-                    get_property_kind(&property.name)?,
-                ));
-            }
-            value_type
-        } else if is_date_and_or_time_value(value) {
-            ValueType::DateAndOrTime
-        } else {
-            ValueType::Text
-        };
-        let allowed = match value_type {
-            ValueType::DateAndOrTime => hash_set!(
-                ParameterType::Value,
-                ParameterType::AltId,
-                ParameterType::CalScale,
-                ParameterType::Any
-            ),
-            ValueType::Text => hash_set!(
-                ParameterType::Value,
-                ParameterType::AltId,
-                ParameterType::Any
-            ),
-            _ => {
-                return Err(VcardValidationError::InvalidPropertyValue(
-                    get_property_kind(&property.name)?,
-                ));
-            }
-        };
-        validate_parameters(property, value_type, &allowed)?;
-    } else {
-        return Err(VcardValidationError::InvalidPropertyValue(
-            get_property_kind(&property.name)?,
-        ));
-    }
-    Ok(())
 }

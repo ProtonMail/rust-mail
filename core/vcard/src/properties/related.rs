@@ -2,10 +2,7 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 
 use ical::generator::Property as IcalProperty;
-use url::Url;
-use velcro::hash_set;
 
-use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::alternative_id::AlternativeId;
 use crate::parameters::any::Any;
 use crate::parameters::language::Language;
@@ -14,8 +11,7 @@ use crate::parameters::pid::Pid;
 use crate::parameters::preference::Preference;
 use crate::parameters::type_related::RelatedType;
 use crate::parameters::value::ValueType;
-use crate::properties::{VcardProperty, get_value_type, validate_parameters};
-use crate::validation::get_property_kind;
+use crate::properties::VcardProperty;
 use crate::values::uri::MaybeUri;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
@@ -139,67 +135,4 @@ impl VcardProperty for Related {
     fn get_preference(&self) -> Option<Preference> {
         self.preference
     }
-}
-
-/// Validate that the given `property` respect the format for a `RELATED` property
-///
-/// # Errors
-///   * if property value is not a valid uri or text
-///   * if any of the parameters is not valid
-pub fn validate_related(property: &IcalProperty) -> VcardValidationResult<()> {
-    // RELATED-param = RELATED-param-uri / RELATED-param-text
-    // RELATED-value = URI / text
-    //   ; Parameter and value MUST match.
-    //
-    // RELATED-param-uri = "VALUE=uri" / mediatype-param
-    // RELATED-param-text = "VALUE=text" / language-param
-    //
-    // RELATED-param =/ pid-param / pref-param / altid-param / type-param / any-param
-    //
-    // type-param-related = related-type-value *("," related-type-value)
-    //   ; type-param-related MUST NOT be used with a property other than
-    //   ; RELATED.
-    //
-    // related-type-value = "contact" / "acquaintance" / "friend" / "met" / "co-worker" / "colleague" / "co-resident" / "neighbor" / "child" / "parent" / "sibling" / "spouse" / "kin" / "muse" / "crush" / "date" / "sweetheart" / "me" / "agent" / "emergency"
-    if let Some(value) = &property.value {
-        let value_type = if let Some(value_type) = get_value_type(property)? {
-            let validated = match value_type {
-                ValueType::Text => true,
-                ValueType::Uri => Url::parse(value).is_ok(),
-                _ => false,
-            };
-            if !validated {
-                return Err(VcardValidationError::InvalidPropertyValue(
-                    get_property_kind(&property.name)?,
-                ));
-            }
-            value_type
-        } else if Url::parse(value).is_ok() {
-            ValueType::Uri
-        } else {
-            ValueType::Text
-        };
-        validate_parameters(
-            property,
-            value_type,
-            &hash_set!(
-                ParameterType::Value,
-                if matches!(value_type, ValueType::Text) {
-                    ParameterType::Language
-                } else {
-                    ParameterType::MediaType
-                },
-                ParameterType::Pid,
-                ParameterType::Pref,
-                ParameterType::AltId,
-                ParameterType::Type,
-                ParameterType::Any,
-            ),
-        )?;
-    } else {
-        return Err(VcardValidationError::InvalidPropertyValue(
-            get_property_kind(&property.name)?,
-        ));
-    }
-    Ok(())
 }

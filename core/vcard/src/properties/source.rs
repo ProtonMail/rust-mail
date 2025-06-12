@@ -1,9 +1,7 @@
 use ical::generator::Property as IcalProperty;
 use std::collections::HashSet;
 use url::Url;
-use velcro::hash_set;
 
-use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::ParameterType;
 use crate::parameters::alternative_id::AlternativeId;
 use crate::parameters::any::Any;
@@ -11,8 +9,7 @@ use crate::parameters::mediatype::MediaType;
 use crate::parameters::pid::Pid;
 use crate::parameters::preference::Preference;
 use crate::parameters::value::ValueType;
-use crate::properties::{VcardProperty, validate_parameters};
-use crate::validation::get_property_kind;
+use crate::properties::VcardProperty;
 use crate::values::uri::Uri;
 use crate::vcard::group_from_name;
 use crate::{PropertyKind, VCardError, VCardResult};
@@ -139,34 +136,4 @@ impl VcardProperty for Source {
     fn get_preference(&self) -> Option<Preference> {
         self.preference
     }
-}
-
-/// Validate that the given `property` respect the format for a `SOURCE` property
-///
-/// # Errors
-///   * property value is not a valid uri
-///   * any of the property is invalid
-pub fn validate_source(property: &IcalProperty) -> VcardValidationResult<()> {
-    // SOURCE-param = "VALUE=uri" / pid-param / pref-param / altid-param / mediatype-param / any-param
-    // SOURCE-value = URI
-    if let Some(value) = &property.value {
-        if Url::parse(value).is_ok() {
-            validate_parameters(
-                property,
-                ValueType::Uri,
-                &hash_set!(
-                    ParameterType::Value,
-                    ParameterType::Pid,
-                    ParameterType::Pref,
-                    ParameterType::AltId,
-                    ParameterType::MediaType,
-                    ParameterType::Any
-                ),
-            )?;
-        }
-        return Ok(());
-    }
-    Err(VcardValidationError::InvalidPropertyValue(
-        get_property_kind(&property.name)?,
-    ))
 }

@@ -107,7 +107,6 @@ impl PinCode {
     }
 
     /// Validate PIN value
-    ///
     /// This method will be utilized to verify user if he is eligible person to access the app.
     ///
     pub async fn validate_pin(ctx: Arc<Context>, pin: Vec<u32>) -> Result<(), PinError> {

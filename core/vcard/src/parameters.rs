@@ -277,11 +277,3 @@ impl From<&str> for ParameterType {
         }
     }
 }
-
-/// Utility function to check if a Ical property have any parameter set
-pub(crate) fn have_no_param(params: Option<&[(String, Vec<String>)]>) -> bool {
-    match params {
-        None => true,
-        Some(params) => params.is_empty(),
-    }
-}

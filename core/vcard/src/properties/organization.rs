@@ -2,9 +2,7 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 
 use ical::generator::Property as IcalProperty;
-use velcro::hash_set;
 
-use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::alternative_id::AlternativeId;
 use crate::parameters::any::Any;
 use crate::parameters::language::Language;
@@ -13,10 +11,8 @@ use crate::parameters::preference::Preference;
 use crate::parameters::sort_as::SortAs;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
-use crate::properties::{VcardProperty, validate_parameters};
-use crate::validation::get_property_kind;
+use crate::properties::VcardProperty;
 use crate::values::component::Component;
-use crate::values::list_component::is_list_component_value;
 use crate::vcard::{group_from_name, split_list};
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
@@ -167,41 +163,4 @@ impl VcardProperty for Organization {
     fn get_preference(&self) -> Option<Preference> {
         self.preference
     }
-}
-
-/// Validate that the given `property` respect the format for a `ORG` property
-///
-/// # Errors
-///   * if property value is not a valid text
-///   * if any of the parameters is not valid
-pub fn validate_org(property: &IcalProperty) -> VcardValidationResult<()> {
-    // ORG-param = "VALUE=text" / sort-as-param / language-param / pid-param / pref-param / altid-param / type-param / any-param
-    // ORG-value = component *(";" component)
-    if let Some(value) = &property.value {
-        if is_list_component_value(value) {
-            validate_parameters(
-                property,
-                ValueType::Text,
-                &hash_set!(
-                    ParameterType::Value,
-                    ParameterType::SortAs,
-                    ParameterType::Language,
-                    ParameterType::Pid,
-                    ParameterType::Pref,
-                    ParameterType::AltId,
-                    ParameterType::Type,
-                    ParameterType::Any
-                ),
-            )?;
-        } else {
-            return Err(VcardValidationError::InvalidPropertyValue(
-                get_property_kind(&property.name)?,
-            ));
-        }
-    } else {
-        return Err(VcardValidationError::InvalidPropertyValue(
-            get_property_kind(&property.name)?,
-        ));
-    }
-    Ok(())
 }

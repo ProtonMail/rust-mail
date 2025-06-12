@@ -8,81 +8,6 @@
 //!
 //! # Typical usages
 //!
-//! ## Validating a value
-//!
-//!You can use `validate_value` function to validate a single value
-//! ### Examples
-//!
-//!```
-//! use proton_vcard::{is_value_type, ValueType};
-//!
-//! assert!(is_value_type(ValueType::Text, "text"));
-//! ```
-//! Check that "text" is a valid Text value.
-//!
-//!
-//! ## Validating a property parameter
-//!
-//! You can use `validate_parameter` function to validate a parameter
-//! ### Examples
-//!
-//!```
-//! use proton_vcard::{ParameterType, is_valid_parameter};
-//!
-//! assert!(is_valid_parameter(&ParameterType::Pid, &["4.2".to_owned(), "2.3".to_owned()]));
-//! ```
-//! Check that the list of 4.2 and 2.3 is a valid value for parameter PID
-//!
-//! ### `Any` parameter special case
-//!
-//! `Any` value can be validated using `validate_parameter`, but it doesn't validate the name of the parameter.
-//! You can use `is_any_param` function if you want to check that too.
-//!
-//!```
-//! use proton_vcard::parameters::any::is_any_param;
-//!
-//! assert!(is_any_param("any-name", &["foo".to_owned(), "bar".to_owned()]));
-//! ```
-//!
-//! ### `Type` parameter special case
-//!
-//! `Type` parameter have different specification depending on the `Property` it used with. (i.e. `TEL` and `RELATED`)
-//! You can use `is_tel_param` function if you want to check in relation with those `Property`.
-//!
-//!```
-//! use proton_vcard::PropertyKind;
-//! use proton_vcard::parameters::type_generic::is_type_param;
-//!
-//! assert!(is_type_param(&PropertyKind::Tel, &["voice".to_owned(), "fax".to_owned()]));
-//! ```
-//!
-//!
-//! ## Validating a whole vCard
-//!
-//! You can use `validate_vcard` function to validate a vCard
-//! ### Examples
-//!
-//! ```
-//! use proton_vcard::validate_vcard;
-//!
-//! let vcard = r"BEGIN:VCARD
-//! VERSION:4.0
-//! KIND:individual
-//! FN:Jane Doe
-//! END:VCARD".as_bytes();
-//! validate_vcard(vcard).unwrap();
-//! ```
-//!
-//!
-//! ## Known limitations/Not Validated:
-//!
-//!  * Values type authorized, but not used in the RFC don't have validation function
-//!  * Most `SHOULD` are not checked, only the `MUST` are checked
-//!    + Example:
-//!      - XML property value SHOULD be XML, but MUST be text → we check only text
-//!      - PRODID param SHOULD be ISO9070 or RFC3406, but MUST be text → we check only text
-//!  * Mapping between PID parameters and CLIENTPIDMAP is not checked
-
 use crate::parameters::alternative_id::is_altid_param;
 use crate::parameters::any::is_any_param;
 use crate::parameters::calendar_scale::is_calscale_param;
@@ -114,7 +39,6 @@ use crate::parameters::time_zone::is_tz_param;
 use crate::parameters::type_generic::is_type_param;
 pub use crate::parameters::value::ValueType;
 pub use crate::properties::PropertyKind;
-pub use crate::validation::validate_vcard;
 use crate::values::component::is_component_value;
 use crate::values::date::is_date_value;
 use crate::values::date_and_or_time::is_date_and_or_time_value;

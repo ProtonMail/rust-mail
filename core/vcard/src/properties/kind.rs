@@ -1,13 +1,10 @@
 use std::collections::HashSet;
 
 use ical::generator::Property as IcalProperty;
-use velcro::hash_set;
 
-use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::any::Any;
 use crate::parameters::value::ValueType;
-use crate::properties::validate_parameters;
-use crate::validation::get_property_kind;
+
 use crate::values::iana_token::{IanaToken, is_iana_token_value};
 use crate::values::x_name::{XName, is_x_name_value};
 use crate::vcard::group_from_name;
@@ -132,35 +129,4 @@ impl TryFrom<&str> for KindValue {
             }
         }
     }
-}
-
-/// Validate that the given `property` respect the format for a `KIND` property
-///
-/// # Errors
-///   * if property value is not one of: "individual" / "group" / "org" / "location" / iana-token / x-name
-///   * if any of the parameters is invalid
-pub fn validate_kind(property: &IcalProperty) -> VcardValidationResult<()> {
-    // KIND-param = "VALUE=text" / any-param
-    // KIND-value = "individual" / "group" / "org" / "location" / iana-token / x-name
-    let validate_value = if let Some(value) = &property.value {
-        match value.to_ascii_lowercase().as_str() {
-            "individual" | "group" | "org" | "location" => true,
-            value => is_iana_token_value(value) || is_x_name_value(value),
-        }
-    } else {
-        false
-    };
-
-    if validate_value {
-        validate_parameters(
-            property,
-            ValueType::Text,
-            &hash_set!(ParameterType::Value, ParameterType::Any),
-        )?;
-    } else {
-        return Err(VcardValidationError::InvalidPropertyValue(
-            get_property_kind(&property.name)?,
-        ));
-    }
-    Ok(())
 }
