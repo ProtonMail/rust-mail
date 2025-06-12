@@ -354,12 +354,12 @@ impl Send {
             return Err(SendError::MessageBodyMissing(message_metadata.id()).into());
         };
 
-        let pgp_provider = new_pgp_provider();
+        let pgp = new_pgp_provider();
 
         // Load send preferences for each recipient of the message.
         let send_preferences = load_send_preferences_for_recipients(
             context,
-            &pgp_provider,
+            &pgp,
             guard,
             &action.recipients,
             mail_settings.crypto_mail_settings(),
@@ -369,11 +369,7 @@ impl Send {
 
         // Unlock sender address keys
         let address_keys = context
-            .unlocked_address_keys(
-                &pgp_provider,
-                guard.tether(),
-                &message_metadata.remote_address_id,
-            )
+            .unlocked_address_keys(&pgp, guard.tether(), &message_metadata.remote_address_id)
             .await
             .inspect_err(|err| error!("Failed to load address key for sending: {err:?}"))?;
 
@@ -385,7 +381,7 @@ impl Send {
         // TODO(ET-1407): PGP/Embedded attachments
         let packages = build_packages(
             context,
-            &pgp_provider,
+            &pgp,
             &address_keys,
             send_preferences,
             action.mime_type,

@@ -224,7 +224,7 @@ pub async fn build_attachment_key_packets(
     tether: &Tether,
 ) -> MailContextResult<DraftAttachmentKeyPackets> {
     let mut attachment_key_packets = DraftAttachmentKeyPackets::new();
-    let pgp_provider = new_pgp_provider();
+    let pgp = new_pgp_provider();
 
     for attachment in attachments {
         let Some(remote_id) = attachment.remote_id().clone() else {
@@ -240,6 +240,7 @@ pub async fn build_attachment_key_packets(
         };
 
         let attachment_address_id = attachment.remote_address_id.as_ref().unwrap();
+
         // If the address of the sender changed we need to regenerate the key packets for this
         // attachment, this required decrypting the current key packets and re-encrypting them
         // with the new address key.
@@ -248,14 +249,16 @@ pub async fn build_attachment_key_packets(
                 "Address id has changed, re-encrypting attachment {} key packets",
                 attachment.local_id.unwrap()
             );
+
             let unlocked_attachment_keys = ctx
-                .unlocked_address_keys(&pgp_provider, tether, attachment_address_id)
+                .unlocked_address_keys(&pgp, tether, attachment_address_id)
                 .await
                 .inspect_err(|e| {
                     error!("Failed to unlock attachment address {address_id} keys:{e:?}")
                 })?;
+
             let unlocked_addr_keys = ctx
-                .unlocked_address_keys(&pgp_provider, tether, address_id)
+                .unlocked_address_keys(&pgp, tether, address_id)
                 .await
                 .inspect_err(|e| error!("Failed to unlock address {address_id} keys:{e:?}"))?
                 .primary_for_mail()
@@ -263,23 +266,26 @@ pub async fn build_attachment_key_packets(
                     error!("Failed get primary key for {address_id}:{e:?}");
                     MailContextError::Crypto
                 })?;
+
             // Decrypt attachment information using sender's keys
             let attachment_info = attachment
-                .decrypt_attachment_info(&pgp_provider, &unlocked_attachment_keys)
+                .decrypt_attachment_info(&pgp, &unlocked_attachment_keys)
                 .map_err(|e| {
                     error!("Failed to decrypt attachment key packets: {e:?}");
                     MailContextError::Crypto
                 })?;
+
             // Encrypt the attachment session key to the new sender
             let new_attachment_key_packet = attachment_info
                 .encrypt_session_key_to_recipient(
-                    &pgp_provider,
+                    &pgp,
                     unlocked_addr_keys.for_encryption().as_public_key(),
                 )
                 .map_err(|e| {
                     error!("Failed to encrypt attachment key packets: {e:?}");
                     MailContextError::Crypto
                 })?;
+
             attachment_key_packets.insert(
                 remote_id,
                 KeyPackets::from_vec(vec![new_attachment_key_packet]),

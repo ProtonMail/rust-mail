@@ -99,15 +99,19 @@ async fn initial_registration_when_device_key_already_exist_in_keychain() {
         1,
     )
     .await;
+
     ctx.catch_all().await;
+
     let core_ctx = ctx.context();
+
     // Imagine a scenario where keychain already has device key.
     // We want to reuse such a key.
-    let pgp_provider = proton_crypto::new_pgp_provider();
+    let pgp = proton_crypto::new_pgp_provider();
+
     let stored_public_key = core_ctx
         // It stores private key in keychain.
         // Later, we use private key to derive public key
-        .gen_device_key_pair(&pgp_provider)
+        .gen_device_key_pair(&pgp)
         .unwrap()
         .to_string();
 

@@ -39,24 +39,23 @@ impl EncryptablePackage for TestPlainPackage {
 
 #[test]
 fn test_package_create() {
-    let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
+    let pgp = proton_crypto_inbox::proton_crypto::new_pgp_provider();
     let plain_package = TestPlainPackage::default();
-    let address_keys =
-        create_account_unlocked_address_keys(&pgp_provider, TEST_DECRYPTION_KEY, "password");
+    let address_keys = create_account_unlocked_address_keys(&pgp, TEST_DECRYPTION_KEY, "password");
     let primary = address_keys
         .primary_for_mail()
         .expect("Primary must be there");
     let encrypted_package = plain_package
-        .package_body_encrypt(&pgp_provider, &primary)
+        .package_body_encrypt(&pgp, &primary)
         .expect("should encrypt");
 
     // Package should decrypt with session key.
-    let data = pgp_provider
+    let data = pgp
         .new_decryptor()
         .with_session_key(
             encrypted_package
                 .session_key
-                .export_to_pgp_provider(&pgp_provider)
+                .export_to_pgp_provider(&pgp)
                 .unwrap(),
         )
         .decrypt(&encrypted_package.encrypted_body, DataEncoding::Bytes)
@@ -66,27 +65,26 @@ fn test_package_create() {
 
 #[test]
 fn test_package_with_key_packets_create() {
-    let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
+    let pgp = proton_crypto_inbox::proton_crypto::new_pgp_provider();
     let plain_package = TestPlainPackage::default();
 
-    let address_keys =
-        create_account_unlocked_address_keys(&pgp_provider, TEST_DECRYPTION_KEY, "password");
+    let address_keys = create_account_unlocked_address_keys(&pgp, TEST_DECRYPTION_KEY, "password");
     let primary = address_keys
         .primary_for_mail()
         .expect("Primary must be there");
     let encrypted_package = plain_package
-        .package_body_encrypt(&pgp_provider, &primary)
+        .package_body_encrypt(&pgp, &primary)
         .expect("should encrypt");
 
-    let (recipients_priv, recipients_priv_pub) = create_test_recipient_keys(&pgp_provider);
+    let (recipients_priv, recipients_priv_pub) = create_test_recipient_keys(&pgp);
     let key_packets = encrypted_package
         .session_key
-        .encrypt_to_recipients(&pgp_provider, &recipients_priv_pub)
+        .encrypt_to_recipients(&pgp, &recipients_priv_pub)
         .expect("key packet create must succeed");
     for (key_packet, recipient_key) in key_packets.iter().zip(recipients_priv.iter()) {
         let mut message = key_packet.decode().expect("decode must succeed");
         message.extend(encrypted_package.encrypted_body.as_ref().iter());
-        let dec_result = pgp_provider
+        let dec_result = pgp
             .new_decryptor()
             .with_decryption_key(recipient_key)
             .with_verification_key_refs(&address_keys)
@@ -99,18 +97,17 @@ fn test_package_with_key_packets_create() {
 
 #[test]
 fn test_package_create_mime_large_compression() {
-    let pgp_provider = proton_crypto_inbox::proton_crypto::new_pgp_provider();
+    let pgp = proton_crypto_inbox::proton_crypto::new_pgp_provider();
     let plain_package = TestPlainPackage {
         mime_type: PackageMimeType::Multipart,
         content: vec![1; 1024 * 1024 + 1],
     };
-    let address_keys =
-        create_account_unlocked_address_keys(&pgp_provider, TEST_DECRYPTION_KEY, "password");
+    let address_keys = create_account_unlocked_address_keys(&pgp, TEST_DECRYPTION_KEY, "password");
     let primary = address_keys
         .primary_for_mail()
         .expect("Primary must be there");
     let encrypted_package = plain_package
-        .package_body_encrypt(&pgp_provider, &primary)
+        .package_body_encrypt(&pgp, &primary)
         .expect("should encrypt");
     assert!(plain_package.content.len() > encrypted_package.encrypted_body.as_ref().len());
 }

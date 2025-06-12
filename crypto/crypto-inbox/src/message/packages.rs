@@ -127,19 +127,22 @@ pub trait EncryptablePackage {
     ///
     /// # Parameters
     ///
-    /// * `pgp_provider` - The PGP provider instance from [`proton_crypto_account::proton_crypto`].
+    /// * `pgp` - The PGP provider instance from [`proton_crypto_account::proton_crypto`].
     /// * `address_key` - The user's address key with which the body is signed.
     ///
     /// # Errors
     ///
     /// Returns a [`MessageError::Encryption`] error if the encryption fails.
-    fn package_body_encrypt<Provider: PGPProviderSync>(
+    fn package_body_encrypt<P>(
         &self,
-        pgp_provider: &Provider,
-        address_key: &PrimaryUnlockedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
-    ) -> Result<EncryptedPackageBody, MessageError> {
+        pgp: &P,
+        address_key: &PrimaryUnlockedAddressKey<P::PrivateKey, P::PublicKey>,
+    ) -> Result<EncryptedPackageBody, MessageError>
+    where
+        P: PGPProviderSync,
+    {
         package_body_encrypt(
-            pgp_provider,
+            pgp,
             address_key,
             self.package_mime_type(),
             self.package_body_content(),
@@ -155,7 +158,7 @@ pub trait EncryptablePackage {
 ///
 /// # Parameters
 ///
-/// * `pgp_provider` - The PGP provider instance from [`proton_crypto_account::proton_crypto`].
+/// * `pgp` - The PGP provider instance from [`proton_crypto_account::proton_crypto`].
 /// * `address_key`  - The user's address key with which the body is signed.
 /// * `mime_type`    - The mime type of the content.
 /// * `body`         - The body to encrypt.
@@ -163,31 +166,37 @@ pub trait EncryptablePackage {
 /// # Errors
 ///
 /// Returns a [`MessageError::Encryption`] error if the encryption fails.
-pub fn package_body_encrypt<Provider: PGPProviderSync>(
-    pgp_provider: &Provider,
-    address_key: &PrimaryUnlockedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
+pub fn package_body_encrypt<P>(
+    pgp: &P,
+    address_key: &PrimaryUnlockedAddressKey<P::PrivateKey, P::PublicKey>,
     mime_type: PackageMimeType,
     body: &[u8],
-) -> Result<EncryptedPackageBody, MessageError> {
+) -> Result<EncryptedPackageBody, MessageError>
+where
+    P: PGPProviderSync,
+{
     // TODO: Might want to generate a session key based on the recipients keys
     // The session key is currently hardcoded to AES-256.
-    let session_key = pgp_provider
+    let session_key = pgp
         .session_key_generate(SessionKeyAlgorithm::default())
         .map_err(MessageError::Encryption)?;
 
-    let mut encryptor = pgp_provider
+    let mut encryptor = pgp
         .new_encryptor()
         .with_session_key_ref(&session_key)
         .with_signing_keys(address_key.for_signing())
         .with_utf8();
+
     // Security trade-off for large mime messages.
     // We use compression on large mime messages with embedded attachments greater than 1MB.
     // Note that compression can lead to side-channels on the message size.
     if mime_type == PackageMimeType::Multipart && body.len() > MEGABYTE {
         encryptor = encryptor.with_compression();
     }
+
     // We need to strip trailing spaces in the content for compatibility.
     let transformed_content = remove_trailing_spaces(std::str::from_utf8(body)?);
+
     let encrypted_body = encryptor
         .encrypt_raw(transformed_content.as_bytes(), DataEncoding::Bytes)
         .map_err(MessageError::Encryption)?;

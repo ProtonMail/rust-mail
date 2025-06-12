@@ -72,17 +72,23 @@ impl<T: PublicKey> AsPublicKeyRef<T> for TestDevicePublicKey<T> {
     }
 }
 
-fn get_test_device_key<T: PGPProviderSync>(pgp_provider: &T) -> TestDeviceKey<T::PrivateKey> {
-    get_test_device_key_source(pgp_provider, TEST_DECRYPTION_KEY, "password")
+fn get_test_device_key<P>(pgp: &P) -> TestDeviceKey<P::PrivateKey>
+where
+    P: PGPProviderSync,
+{
+    get_test_device_key_source(pgp, TEST_DECRYPTION_KEY, "password")
 }
 
 #[allow(clippy::missing_panics_doc, dead_code)]
-pub fn get_test_device_key_source<T: PGPProviderSync>(
-    pgp_provider: &T,
+pub fn get_test_device_key_source<P>(
+    pgp: &P,
     source: &str,
     passphrase: &str,
-) -> TestDeviceKey<T::PrivateKey> {
-    let decryption_key = pgp_provider
+) -> TestDeviceKey<P::PrivateKey>
+where
+    P: PGPProviderSync,
+{
+    let decryption_key = pgp
         .private_key_import(source, passphrase, DataEncoding::Armor)
         .unwrap();
     TestDeviceKey(decryption_key)
@@ -90,36 +96,30 @@ pub fn get_test_device_key_source<T: PGPProviderSync>(
 
 #[test]
 fn decrypt_notification() {
-    let pgp_provider = proton_crypto_account::proton_crypto::new_pgp_provider();
-
-    let decryption_key = get_test_device_key(&pgp_provider);
-
+    let pgp = proton_crypto_account::proton_crypto::new_pgp_provider();
+    let decryption_key = get_test_device_key(&pgp);
     let test_notification = EncryptedTestNotification(TEST_NOTIFICATION.into());
-    let decrypted_notification = test_notification
-        .decrypt(&pgp_provider, &decryption_key)
-        .unwrap();
-
+    let decrypted_notification = test_notification.decrypt(&pgp, &decryption_key).unwrap();
     let notification: DecryptedTestNotification = decrypted_notification.inner;
+
     assert_eq!(notification, TEST_EXPECTED_NOTIFICATION);
 }
 
 #[test]
 fn integration_test() {
-    let pgp_provider = proton_crypto_account::proton_crypto::new_pgp_provider();
+    let pgp = proton_crypto_account::proton_crypto::new_pgp_provider();
 
     // Simulating registration of the token:
-    let device_key = PGPDeviceKey::generate(&pgp_provider).expect("key generation failed");
-    let server_public_key = device_key
-        .export_public_key(&pgp_provider)
-        .expect("export failed");
+    let device_key = PGPDeviceKey::generate(&pgp).expect("key generation failed");
+    let server_public_key = device_key.export_public_key(&pgp).expect("export failed");
 
     // Simulating storing the key in keychain:
     let decryption_key_in_keychain = device_key
-        .serialize_to_secure_storage(&pgp_provider)
+        .serialize_to_secure_storage(&pgp)
         .expect("Failed to ''store'' the key");
 
     // Simulating the server:
-    let server_public_key_imported = pgp_provider
+    let server_public_key_imported = pgp
         .public_key_import(server_public_key.as_bytes(), DataEncoding::Armor)
         .expect("Server failed to import the key");
 
@@ -129,7 +129,7 @@ fn integration_test() {
     });
     let serialized_push_notification = serde_json::to_string(&push_notification)
         .expect("Server failed to serialize push notification");
-    let encrypted_notification = pgp_provider
+    let encrypted_notification = pgp
         .new_encryptor()
         .with_encryption_key(&server_public_key_imported)
         .encrypt_raw(serialized_push_notification.as_bytes(), DataEncoding::Armor)
@@ -142,14 +142,12 @@ fn integration_test() {
     // Message has arrived on our end.
 
     // Simulating fetching key from keychain
-    let decryption_key = PGPDeviceKey::deserialize_from_secure_storage(
-        &pgp_provider,
-        decryption_key_in_keychain.as_bytes(),
-    )
-    .expect("Failed to ''load'' key from the keychain");
+    let decryption_key =
+        PGPDeviceKey::deserialize_from_secure_storage(&pgp, decryption_key_in_keychain.as_bytes())
+            .expect("Failed to ''load'' key from the keychain");
 
     let decrypted_notification = encrypted_notification
-        .decrypt(&pgp_provider, &decryption_key)
+        .decrypt(&pgp, &decryption_key)
         .unwrap();
 
     let notification: DecryptedTestNotification = decrypted_notification.inner;

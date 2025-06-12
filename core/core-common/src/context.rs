@@ -852,17 +852,20 @@ impl Context {
     ///
     /// It may return an error if crypto operation fails or if it fails to store key in the keychain.
     ///
-    pub fn gen_device_key_pair<Provider: PGPProviderSync>(
-        &self,
-        pgp_provider: &Provider,
-    ) -> CoreContextResult<StoredDevicePublicKey> {
-        let key = PGPDeviceKey::generate(pgp_provider).map_err(|_| CoreContextError::Crypto)?;
+    pub fn gen_device_key_pair<P>(&self, pgp: &P) -> CoreContextResult<StoredDevicePublicKey>
+    where
+        P: PGPProviderSync,
+    {
+        let key = PGPDeviceKey::generate(pgp).map_err(|_| CoreContextError::Crypto)?;
+
         let private_key = key
-            .serialize_to_secure_storage(pgp_provider)
+            .serialize_to_secure_storage(pgp)
             .map_err(|_| CoreContextError::Crypto)?;
+
         let private_key = StoredDevicePrivateKey::with_bytes(private_key.as_bytes().to_vec());
+
         let public_key = key
-            .export_public_key(pgp_provider)
+            .export_public_key(pgp)
             .map_err(|_| CoreContextError::Crypto)?;
 
         self.key_chain

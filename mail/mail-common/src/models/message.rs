@@ -1785,7 +1785,7 @@ impl Message {
     ///
     /// * `cache_path`   - TODO: Document this parameter.
     /// * `address_keys` - The address keys to use for decryption.
-    /// * `pgp_provider` - The PGP provider to use for decryption.
+    /// * `pgp`          - The PGP provider to use for decryption.
     /// * `api`          - The API instance to use.
     /// * `interface`    - The database interface, i.e. [`Stash`] or [`Tether`],
     ///                    to use for finding the records.
@@ -2662,13 +2662,11 @@ impl Message {
         tether: &Tether,
         attachment_prefetch: bool,
     ) -> Result<DecryptedMessageBody, MailContextError> {
-        let pgp_provider = proton_crypto::new_pgp_provider();
+        let pgp = proton_crypto::new_pgp_provider();
+        let address_keys = ctx.unlocked_address_keys(&pgp, tether, address_id).await?;
 
-        let address_keys = ctx
-            .unlocked_address_keys(&pgp_provider, tether, address_id)
-            .await?;
         encrypted_message_body
-            .into_decrypted_message(ctx, address_keys, pgp_provider, attachment_prefetch)
+            .into_decrypted_message(ctx, address_keys, pgp, attachment_prefetch)
             .await
             .map_err(|e| {
                 error!("Failed to decrypt message body: {e:?}");

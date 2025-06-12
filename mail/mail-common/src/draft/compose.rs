@@ -169,12 +169,10 @@ pub(super) async fn encrypt_draft_body(
     body: &str,
 ) -> Result<EncryptedDraft, MailContextError> {
     let draft_body = DraftBody { body };
-    let pgp_provider = new_pgp_provider();
+    let pgp = new_pgp_provider();
 
     let tether = ctx.user_stash().connection();
-    let unlocked_keys = ctx
-        .unlocked_address_keys(&pgp_provider, &tether, address_id)
-        .await?;
+    let unlocked_keys = ctx.unlocked_address_keys(&pgp, &tether, address_id).await?;
 
     let draft_encryption_key = unlocked_keys
         .primary_for_mail()
@@ -184,8 +182,9 @@ pub(super) async fn encrypt_draft_body(
             );
             SaveError::AddressWithoutPrimaryKey(address_id.clone())
         })?;
+
     draft_body
-        .encrypt_draft_body(&pgp_provider, &draft_encryption_key)
+        .encrypt_draft_body(&pgp, &draft_encryption_key)
         .map_err(|e| {
             error!("Failed to encrypt draft: {e:?}");
             MailContextError::Crypto

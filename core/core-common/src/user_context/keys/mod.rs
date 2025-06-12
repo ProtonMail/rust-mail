@@ -87,20 +87,24 @@ impl UserContext {
     ///
     /// # Parameters
     ///
-    /// * `pgp_provider`  - The pgp provider instance from `proton_crypto`.
+    /// * `pgp`           - The pgp provider instance from `proton_crypto`.
     /// * `conn`          - The database connection to load the keys from database.
     /// * `secret_loader` - The struct providing the access to the secret needed to unlock the user keys
     ///
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
-    pub async fn unlocked_user_keys<Provider: PGPProviderSync, Secret: LoadKeySecret>(
+    pub async fn unlocked_user_keys<P, S>(
         &self,
-        pgp_provider: &Provider,
+        pgp: &P,
         conn: &Tether,
-        secret_loader: &Secret,
-    ) -> CoreContextResult<UnlockedUserKeys<Provider>> {
+        secret_loader: &S,
+    ) -> CoreContextResult<UnlockedUserKeys<P>>
+    where
+        P: PGPProviderSync,
+        S: LoadKeySecret,
+    {
         self.key_manager
-            .user_keys(pgp_provider, conn, secret_loader, &self.user_id)
+            .user_keys(pgp, conn, secret_loader, &self.user_id)
             .await
     }
 
@@ -110,22 +114,26 @@ impl UserContext {
     ///
     /// # Parameters
     ///
-    /// * `pgp_provider`   - The pgp provider instance from `proton_crypto`.
+    /// * `pgp`            - The pgp provider instance from `proton_crypto`.
     /// * `conn`           - The database connection to load the keys from database.
     /// * `secret_load_fn` - The struct providing the access to the secret needed to unlock the user keys
     /// * `address_id`     - The ID of the address key
     ///
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
-    pub async fn unlocked_address_keys<Provider: PGPProviderSync, Secret: LoadKeySecret>(
+    pub async fn unlocked_address_keys<P, S>(
         &self,
-        pgp_provider: &Provider,
+        pgp: &P,
         conn: &Tether,
-        secret_loader: &Secret,
+        secret_loader: &S,
         address_id: &AddressId,
-    ) -> CoreContextResult<UnlockedAddressKeys<Provider>> {
+    ) -> CoreContextResult<UnlockedAddressKeys<P>>
+    where
+        P: PGPProviderSync,
+        S: LoadKeySecret,
+    {
         self.key_manager
-            .address_keys(pgp_provider, conn, secret_loader, &self.user_id, address_id)
+            .address_keys(pgp, conn, secret_loader, &self.user_id, address_id)
             .await
     }
 
@@ -136,20 +144,23 @@ impl UserContext {
     ///
     /// # Parameters
     ///
-    /// * `pgp_provider` - The pgp provider instance from `proton_crypto`.
+    /// * `pgp` - The pgp provider instance from `proton_crypto`.
     /// * `email` - The email address the public address keys are being requested for.
     /// * `internal_only` - A flag used to indicate if the keys requested are internal-only, i.e. keys for a Proton user.
     ///
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
-    pub async fn public_address_keys<Provider: PGPProviderSync>(
+    pub async fn public_address_keys<P>(
         &self,
-        pgp_provider: &Provider,
+        pgp: &P,
         email: &str,
         internal_only: bool,
-    ) -> CoreContextResult<PublicAddressKeys<<Provider>::PublicKey>> {
+    ) -> CoreContextResult<PublicAddressKeys<<P>::PublicKey>>
+    where
+        P: PGPProviderSync,
+    {
         self.key_manager
-            .public_address_keys(pgp_provider, email, internal_only, self)
+            .public_address_keys(pgp, email, internal_only, self)
             .await
     }
 
@@ -164,7 +175,7 @@ impl UserContext {
     ///
     /// Parameters
     ///
-    /// * `pgp_provider`       - The pgp provider instance from `proton_crypto`.
+    /// * `pgp`                - The pgp provider instance from `proton_crypto`.
     /// * `db_interface`       - The database interface to query from.
     /// * `unlocked_user_keys` - Unlocked keys for the current user, these are used to decrypt and verify the contact cards.
     /// * `email`              - the email address that keys are being sought for.
@@ -173,16 +184,20 @@ impl UserContext {
     /// Returns an error on a database or sync failure.
     /// - A DB/IO error if syncing the contact or accessing the contacts fails.
     /// - A wrapped [`KeyHandlingError`] if `VCard` parsing or signature verification fails.
-    #[tracing::instrument(level = Level::DEBUG, skip(self, pgp_provider, tx, unlocked_user_keys))]
-    pub async fn public_address_keys_from_contacts<Provider: PGPProviderSync>(
+    #[tracing::instrument(level = Level::DEBUG, skip(self, pgp, tx, unlocked_user_keys))]
+    pub async fn public_address_keys_from_contacts<P>(
         &self,
-        pgp_provider: &Provider,
+        pgp: &P,
         tx: &mut impl RunTransaction,
-        unlocked_user_keys: &UnlockedUserKeys<Provider>,
+        unlocked_user_keys: &UnlockedUserKeys<P>,
         email: &str,
-    ) -> CoreContextResult<Option<PinnedPublicKeys<<Provider>::PublicKey>>> {
+    ) -> CoreContextResult<Option<PinnedPublicKeys<<P>::PublicKey>>>
+    where
+        P: PGPProviderSync,
+    {
         // First, we try to load an contact emails that matches the email.
         debug!("Try to load the contact email for {email} from the db");
+
         let contact_email =
             ContactEmail::find_first("WHERE email = ?", params![email.to_owned()], tx.tether())
                 .await?
@@ -203,28 +218,25 @@ impl UserContext {
             .ok_or(ContactError::FullContactNotFound(email.to_owned()))?;
 
         debug!("Full contact with cards found");
-        Ok(extract_pinned_keys(
-            pgp_provider,
-            tx.tether(),
-            unlocked_user_keys,
-            &mut contact,
-            email,
-        )
-        .await?)
+
+        Ok(extract_pinned_keys(pgp, tx.tether(), unlocked_user_keys, &mut contact, email).await?)
     }
 }
 
 /// Helper function to extract pinned keys from a contact with cards.
-async fn extract_pinned_keys<Provider: PGPProviderSync>(
-    pgp_provider: &Provider,
-    db_interface: &Tether,
-    unlocked_user_keys: &UnlockedUserKeys<Provider>,
+async fn extract_pinned_keys<P>(
+    pgp: &P,
+    db: &Tether,
+    unlocked_user_keys: &UnlockedUserKeys<P>,
     full_contact: &mut Contact,
     email: &str,
-) -> Result<Option<PinnedPublicKeys<<Provider>::PublicKey>>, KeyHandlingError> {
+) -> Result<Option<PinnedPublicKeys<<P>::PublicKey>>, KeyHandlingError>
+where
+    P: PGPProviderSync,
+{
     // The pinned key information can be found in the signed v-card.
     let signed_card_opt = full_contact
-        .cards(db_interface)
+        .cards(db)
         .await?
         .iter()
         .find(|card| card.card_type == ContactCardType::Signed);
@@ -234,25 +246,21 @@ async fn extract_pinned_keys<Provider: PGPProviderSync>(
     };
 
     let mut verification_keys = Vec::with_capacity(unlocked_user_keys.len());
+
     unlocked_user_keys
         .iter()
         .for_each(|uuk| verification_keys.push(uuk.public_key.clone()));
 
     // Verify the signature of the v-card.
-    let card_data = signed_card.decrypt_and_verify_sync(
-        pgp_provider,
-        &pgp_provider.empty_private_keys(),
-        &verification_keys,
-    )?;
+    let card_data =
+        signed_card.decrypt_and_verify_sync(pgp, &pgp.empty_private_keys(), &verification_keys)?;
 
     // Parse the v-card contact, there should be exactly one v-card
     let vcard_contact = VcardParser::new(card_data.reader())
         .next()
         .ok_or(KeyHandlingError::NoVCard)??;
+
     let vcard = VCard::try_from(vcard_contact)?;
-    Ok(vcard_crypto::pinned_keys_for_mail(
-        &vcard,
-        pgp_provider,
-        email,
-    ))
+
+    Ok(vcard_crypto::pinned_keys_for_mail(&vcard, pgp, email))
 }

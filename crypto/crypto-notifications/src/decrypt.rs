@@ -42,17 +42,17 @@ pub trait DecryptableNotification: PGPEncryptedNotification {
     /// Note, that function does not verify notification, nor it provides verifier.
     /// It is because we are receiving notification encrypted with **public** key.
     ///
-    fn decrypt<T, O>(
+    fn decrypt<P, O>(
         &self,
-        pgp_provider: &T,
-        decryption_key: &impl AsRef<T::PrivateKey>,
+        pgp: &P,
+        decryption_key: &impl AsRef<P::PrivateKey>,
     ) -> Result<DecryptedNotification<O>, NotificationError>
     where
-        T: PGPProviderSync,
+        P: PGPProviderSync,
         for<'de> O: Deserialize<'de>,
     {
         let data = self.pgp_encrypted_notification_data();
-        let decrypted_notification = pgp_provider
+        let decrypted_notification = pgp
             .new_decryptor()
             .with_decryption_key(decryption_key.as_ref())
             .decrypt(data, DataEncoding::Armor)
