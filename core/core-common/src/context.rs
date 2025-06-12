@@ -2,6 +2,7 @@
 
 use crate::action_queue::CoreActionError;
 use crate::auth_store::{AuthStore, DecryptExt};
+use crate::core_clock::CoreClock;
 use crate::datatypes::{
     LocalContactId, PasswordMode, StoredDevicePrivateKey, StoredDevicePublicKey, TfaStatus,
 };
@@ -259,6 +260,7 @@ pub struct Context {
     task_service: BackgroundAwareTaskService,
     on_session_deleted_broadcast: broadcast::Sender<(SessionId, UserId)>,
     pub event_poll_mode: EventPollMode,
+    clock: CoreClock,
 }
 
 const SESSION_OBSERVER_BROADCAST_CAPACITY: usize = 8;
@@ -341,6 +343,7 @@ impl Context {
             task_service: BackgroundAwareTaskService::new(task_service),
             on_session_deleted_broadcast: broadcast_sender,
             event_poll_mode,
+            clock: CoreClock::new(),
         });
 
         let ctx_weak = ctx.this.clone();
@@ -1041,6 +1044,10 @@ impl Context {
 
     pub fn task_service(&self) -> &BackgroundAwareTaskService {
         &self.task_service
+    }
+
+    pub fn clock(&self) -> &CoreClock {
+        &self.clock
     }
 
     /// Subscribes for the event of closing the session. Use it to cleanup any remaining tasks
