@@ -1,6 +1,6 @@
 use crate::AccountApi;
 use crate::countries::{COUNTRIES, Country};
-use crate::prelude::{RecoveryBehavior, ValidateEmailRequest, ValidatePhoneRequest};
+use crate::prelude::{Behavior, ValidateEmailRequest, ValidatePhoneRequest};
 use crate::signup::SignupError;
 use crate::signup::state::want_create::WantCreate;
 use crate::signup::state::{Recovery, StateData, StateResult, Username};
@@ -39,7 +39,7 @@ impl WantRecovery {
     pub async fn submit_recovery(
         self,
         recovery: Recovery,
-        recovery_behavior: Option<RecoveryBehavior>,
+        recovery_behavior: Option<Behavior>,
     ) -> StateResult {
         match recovery.clone() {
             Recovery::Email(email) => {

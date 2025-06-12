@@ -284,51 +284,30 @@ pub enum PayloadFrameMetadata {
 #[serde(untagged)]
 pub enum PayloadFrameBehavior {
     /// User activity while entering the recovery method.
-    Recovery(RecoveryBehavior),
+    #[serde(with = "suffix_recovery")]
+    Recovery(Behavior),
     /// User activity while entering the username.
-    Username(UsernameBehavior),
+    #[serde(with = "suffix_username")]
+    Username(Behavior),
 }
+
+serde_with::with_suffix!(suffix_recovery "Recovery");
+serde_with::with_suffix!(suffix_username "Username");
 
 /// User activity while entering the recovery method.
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RecoveryBehavior {
+pub struct Behavior {
     /// Time from form load to user providing input (in seconds).
-    #[serde(rename = "timeRecovery")]
-    pub time_on_field: Vec<u32>,
+    pub time: Vec<u32>,
     /// Number of clicks / taps during user input.
-    #[serde(rename = "clickRecovery")]
-    pub click_on_field: u32,
+    pub click: u32,
     /// Text chunks copied during user input.
-    #[serde(rename = "copyRecovery")]
-    pub copy_field: Vec<String>,
+    pub copy: Vec<String>,
     /// Text chunks pasted during user input.
-    #[serde(rename = "pasteRecovery")]
-    pub paste_field: Vec<String>,
+    pub paste: Vec<String>,
     /// Characters entered during user input.
-    #[serde(rename = "keydownRecovery")]
-    pub key_down_field: Vec<String>,
-}
-
-/// User activity while entering the username.
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UsernameBehavior {
-    /// Time from form load to user providing input (in seconds).
-    #[serde(rename = "timeUsername")]
-    pub time_on_field: Vec<u32>,
-    /// Number of clicks / taps during user input.
-    #[serde(rename = "clickUsername")]
-    pub click_on_field: u32,
-    /// Text chunks copied during user input.
-    #[serde(rename = "copyUsername")]
-    pub copy_field: Vec<String>,
-    /// Text chunks pasted during user input.
-    #[serde(rename = "pasteUsername")]
-    pub paste_field: Vec<String>,
-    /// Characters entered during user input.
-    #[serde(rename = "keydownUsername")]
-    pub key_down_field: Vec<String>,
+    pub keydown: Vec<String>,
 }
 
 pub enum AsyncUserInitialization {
@@ -379,18 +358,6 @@ pub struct ValidateEmailRequest {
 #[serde(rename_all = "PascalCase")]
 pub struct ValidatePhoneRequest {
     pub phone: String,
-}
-
-impl From<RecoveryBehavior> for PayloadFrameBehavior {
-    fn from(value: RecoveryBehavior) -> Self {
-        PayloadFrameBehavior::Recovery(value)
-    }
-}
-
-impl From<UsernameBehavior> for PayloadFrameBehavior {
-    fn from(value: UsernameBehavior) -> Self {
-        PayloadFrameBehavior::Username(value)
-    }
 }
 
 #[cfg(test)]
@@ -624,13 +591,13 @@ mod tests {
                 create_payload_frame(
                     "lang-1",
                     PayloadFrameMetadata::Recovery,
-                    RecoveryBehavior {
-                        time_on_field: vec![123],
-                        click_on_field: 42,
-                        copy_field: vec!["copy".into()],
-                        paste_field: vec!["paste".into()],
-                        key_down_field: vec!["key".into()],
-                    },
+                    PayloadFrameBehavior::Recovery(Behavior {
+                        time: vec![123],
+                        click: 42,
+                        copy: vec!["copy".into()],
+                        paste: vec!["paste".into()],
+                        keydown: vec!["key".into()],
+                    }),
                 ),
             )])),
         };
@@ -652,7 +619,7 @@ mod tests {
     fn create_payload_frame(
         language: impl Into<String>,
         metadata: PayloadFrameMetadata,
-        user_behavior: impl Into<PayloadFrameBehavior>,
+        user_behavior: PayloadFrameBehavior,
     ) -> PayloadFrame {
         PayloadFrameV2_2 {
             metadata,
@@ -671,7 +638,7 @@ mod tests {
                 dark_mode: true,
                 keyboards: vec!["kb".into()],
             }),
-            user_behavior: Some(user_behavior.into()),
+            user_behavior: Some(user_behavior),
         }
         .into()
     }

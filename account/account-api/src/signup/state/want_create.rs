@@ -67,11 +67,7 @@ impl WantCreate {
         }
     }
 
-    pub async fn create(
-        self,
-        store: DynStore,
-        username_behavior: Option<UsernameBehavior>,
-    ) -> StateResult {
+    pub async fn create(self, store: DynStore, username_behavior: Option<Behavior>) -> StateResult {
         let srp = new_srp_provider();
         let pgp = new_pgp_provider();
 
@@ -324,7 +320,7 @@ fn new_key_id() -> KeyId {
 
 fn create_payload(
     challenge_info: &ChallengeInfo,
-    username_behavior: Option<UsernameBehavior>,
+    username_behavior: Option<Behavior>,
 ) -> Option<HashMap<String, PayloadFrame>> {
     if username_behavior.is_none() && challenge_info.recovery_behavior.is_none() {
         return None;
@@ -337,7 +333,7 @@ fn create_payload(
             &mut payload,
             PayloadFrameMetadata::Recovery,
             challenge_info,
-            behavior,
+            PayloadFrameBehavior::Recovery(behavior),
         );
     }
 
@@ -346,7 +342,7 @@ fn create_payload(
             &mut payload,
             PayloadFrameMetadata::Username,
             challenge_info,
-            behavior,
+            PayloadFrameBehavior::Username(behavior),
         );
     }
 
@@ -357,7 +353,7 @@ fn insert_payload_frame(
     payload: &mut HashMap<String, PayloadFrame>,
     metadata: PayloadFrameMetadata,
     challenge_info: &ChallengeInfo,
-    behavior: impl Into<PayloadFrameBehavior>,
+    behavior: PayloadFrameBehavior,
 ) {
     let id = payload.len();
     let name = format!("{}-challenge-{id}", challenge_info.product_version);
@@ -366,7 +362,7 @@ fn insert_payload_frame(
         PayloadFrameV2_2 {
             metadata,
             device_info: challenge_info.device_info.clone(),
-            user_behavior: Some(behavior.into()),
+            user_behavior: Some(behavior),
         }
         .into(),
     );
@@ -379,7 +375,7 @@ mod test {
     use proton_core_common::device::DeviceInfo;
 
     use crate::{
-        prelude::{PayloadFrameMetadata, PayloadFrameV2_2, RecoveryBehavior, UsernameBehavior},
+        prelude::{Behavior, PayloadFrameBehavior, PayloadFrameMetadata, PayloadFrameV2_2},
         signup::{ChallengeInfo, state::want_create::create_payload},
     };
 
@@ -400,19 +396,19 @@ mod test {
             dark_mode: true,
             keyboards: vec!["kb_1".into()],
         };
-        let username_behavior = UsernameBehavior {
-            time_on_field: vec![123],
-            click_on_field: 12,
-            copy_field: vec!["usr_cf".into()],
-            paste_field: vec!["usr_pf".into()],
-            key_down_field: vec!["usr_kdf".into()],
+        let username_behavior = Behavior {
+            time: vec![123],
+            click: 12,
+            copy: vec!["usr_cf".into()],
+            paste: vec!["usr_pf".into()],
+            keydown: vec!["usr_kdf".into()],
         };
-        let recovery_behavior = RecoveryBehavior {
-            time_on_field: vec![456],
-            click_on_field: 34,
-            copy_field: vec!["rec_cf".into()],
-            paste_field: vec!["rec_pf".into()],
-            key_down_field: vec!["rec_kdf".into()],
+        let recovery_behavior = Behavior {
+            time: vec![456],
+            click: 34,
+            copy: vec!["rec_cf".into()],
+            paste: vec!["rec_pf".into()],
+            keydown: vec!["rec_kdf".into()],
         };
         let challenge_info = ChallengeInfo {
             product_version: "mail-v1".into(),
@@ -428,7 +424,7 @@ mod test {
                     PayloadFrameV2_2 {
                         metadata: PayloadFrameMetadata::Recovery,
                         device_info: Some(device_info.clone()),
-                        user_behavior: Some(recovery_behavior.into()),
+                        user_behavior: Some(PayloadFrameBehavior::Recovery(recovery_behavior)),
                     }
                     .into(),
                 ),
@@ -437,7 +433,7 @@ mod test {
                     PayloadFrameV2_2 {
                         metadata: PayloadFrameMetadata::Username,
                         device_info: Some(device_info.clone()),
-                        user_behavior: Some(username_behavior.into()),
+                        user_behavior: Some(PayloadFrameBehavior::Username(username_behavior)),
                     }
                     .into(),
                 )

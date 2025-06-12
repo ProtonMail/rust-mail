@@ -1,5 +1,5 @@
 use crate::countries::{COUNTRIES, Country};
-use crate::prelude::{Address, RecoveryBehavior, User, UsernameBehavior};
+use crate::prelude::{Address, Behavior, User};
 use crate::signup::state::{Recovery, StateKind, Username};
 use crate::{AccountApi, ApiError};
 use proton_core_api::store::{DynStore, StoreError};
@@ -99,7 +99,7 @@ pub struct ChallengeInfo {
     /// Device fingerprint.
     pub device_info: Option<DeviceInfo>,
     /// User behaviour while entering recovery method (if applicable).
-    pub recovery_behavior: Option<RecoveryBehavior>,
+    pub recovery_behavior: Option<Behavior>,
 }
 
 /// A signup flow that can be used to sign up a user.
@@ -188,7 +188,7 @@ impl SignupFlow {
     pub async fn submit_recovery_email(
         &mut self,
         email: String,
-        behavior: Option<RecoveryBehavior>,
+        behavior: Option<Behavior>,
     ) -> Result<(), SignupError> {
         let recovery = Recovery::Email(email);
 
@@ -203,7 +203,7 @@ impl SignupFlow {
     pub async fn submit_recovery_phone(
         &mut self,
         phone: String,
-        behavior: Option<RecoveryBehavior>,
+        behavior: Option<Behavior>,
     ) -> Result<(), SignupError> {
         let recovery = Recovery::Phone(phone);
 
@@ -226,10 +226,7 @@ impl SignupFlow {
     }
 
     /// Create the account.
-    pub async fn create(
-        &mut self,
-        username_behavior: Option<UsernameBehavior>,
-    ) -> Result<(), SignupError> {
+    pub async fn create(&mut self, username_behavior: Option<Behavior>) -> Result<(), SignupError> {
         let store = DynStore::clone(&self.store);
 
         let next = self.state()?.create(store, username_behavior).await?;
