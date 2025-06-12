@@ -43,10 +43,9 @@ pub struct AppSettings {
 }
 
 impl AppSettings {
-    pub async fn set_biometrics(&mut self, ctx: &Context) {
+    pub fn set_biometrics(&mut self) {
         if let AppProtection::None = self.protection {
             self.protection = AppProtection::Biometrics;
-            ctx.clock().auto_lock_accessed_now().await;
         }
     }
 
@@ -60,7 +59,7 @@ impl AppSettings {
         if self.protection.is_unset() {
             false
         } else {
-            let lock_elapsed = ctx.clock().auto_lock_elapsed().await;
+            let lock_elapsed = ctx.clock().auto_lock_elapsed();
 
             self.auto_lock.should_autolock(lock_elapsed)
         }
@@ -404,16 +403,16 @@ mod tests {
         let tether = core_ctx.account_stash().connection();
         let mut app_settings = AppSettings::get_or_default(&tether).await;
 
-        app_settings.set_biometrics(core_ctx).await;
+        app_settings.set_biometrics();
         app_settings.auto_lock = ProtectionAutoLock::Minutes(10);
 
         // Last lock defaults no longer defaults to 0, so it will return `false`
         assert!(!app_settings.should_auto_lock(core_ctx).await);
-        let last_lock_1 = core_ctx.clock().auto_lock_elapsed().await;
+        let last_lock_1 = core_ctx.clock().auto_lock_elapsed();
         // and any subsequent call for next 10 minutes will also return `false`
         assert!(!app_settings.should_auto_lock(core_ctx).await);
         assert!(!app_settings.should_auto_lock(core_ctx).await);
-        let last_lock_2 = core_ctx.clock().auto_lock_elapsed().await;
+        let last_lock_2 = core_ctx.clock().auto_lock_elapsed();
 
         assert!(last_lock_1 < last_lock_2);
 
@@ -424,8 +423,7 @@ mod tests {
         // as we cannot move time backwards
         core_ctx
             .clock()
-            .auto_lock_accessed_sub(ten_minutes_one_second)
-            .await;
+            .auto_lock_duration_sub(ten_minutes_one_second);
 
         // After 10 minutes, it will return `true`
         assert!(app_settings.should_auto_lock(core_ctx).await);
@@ -433,7 +431,7 @@ mod tests {
         assert!(app_settings.should_auto_lock(core_ctx).await);
 
         // Now it will return `false` as we have accessed the app
-        core_ctx.clock().auto_lock_accessed_now().await;
+        core_ctx.clock().auto_lock_tick();
         assert!(!app_settings.should_auto_lock(core_ctx).await);
     }
 }

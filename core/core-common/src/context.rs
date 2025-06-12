@@ -2,6 +2,7 @@
 
 use crate::action_queue::CoreActionError;
 use crate::auth_store::{AuthStore, DecryptExt};
+use crate::core_clock::CoreClock;
 use crate::datatypes::{
     LocalContactId, PasswordMode, StoredDevicePrivateKey, StoredDevicePublicKey, TfaStatus,
 };
@@ -44,12 +45,10 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
-use std::time::Duration;
 use thiserror::Error;
 use tokio::fs;
 use tokio::sync::{Mutex, broadcast};
 use tokio::task::{JoinError, JoinHandle};
-use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 use tracing::{Level, debug, error, info, trace, warn};
 
@@ -344,7 +343,7 @@ impl Context {
             task_service: BackgroundAwareTaskService::new(task_service),
             on_session_deleted_broadcast: broadcast_sender,
             event_poll_mode,
-            clock: CoreClock::new(Instant::now()),
+            clock: CoreClock::new(),
         });
 
         let ctx_weak = ctx.this.clone();
@@ -1131,66 +1130,4 @@ async fn on_session_deletion(
         }
     }
     tracing::debug!("Stopping task");
-}
-
-pub struct CoreClock {
-    created: Instant,
-    auto_lock_accessed: Mutex<Instant>,
-    pin_code_accessed: Mutex<Instant>,
-}
-
-impl CoreClock {
-    #[must_use]
-    pub fn new(now: Instant) -> Self {
-        Self {
-            created: now,
-            auto_lock_accessed: Mutex::new(now),
-            pin_code_accessed: Mutex::new(now),
-        }
-    }
-
-    pub fn elapsed(&self) -> Duration {
-        self.created.elapsed()
-    }
-
-    pub async fn auto_lock_elapsed(&self) -> Duration {
-        self.auto_lock_accessed.lock().await.elapsed()
-    }
-
-    pub async fn pin_code_elapsed(&self) -> Duration {
-        self.pin_code_accessed.lock().await.elapsed()
-    }
-
-    pub async fn auto_lock_accessed_now(&self) {
-        self.auto_lock_accessed_add(self.auto_lock_elapsed().await)
-            .await;
-    }
-
-    pub async fn pin_code_accessed_now(&self) {
-        self.pin_code_accessed_add(self.pin_code_elapsed().await)
-            .await;
-    }
-
-    async fn auto_lock_accessed_add(&self, duration: Duration) {
-        let mut accessed = self.auto_lock_accessed.lock().await;
-        *accessed = accessed.checked_add(duration).unwrap_or(*accessed);
-    }
-
-    async fn pin_code_accessed_add(&self, duration: Duration) {
-        let mut accessed = self.pin_code_accessed.lock().await;
-        *accessed = accessed.checked_add(duration).unwrap_or(*accessed);
-    }
-}
-
-#[cfg(any(test, feature = "test-utils"))]
-impl CoreClock {
-    pub async fn pin_code_accessed_sub(&self, duration: Duration) {
-        let mut accessed = self.pin_code_accessed.lock().await;
-        *accessed = accessed.checked_sub(duration).unwrap_or(*accessed);
-    }
-
-    pub async fn auto_lock_accessed_sub(&self, duration: Duration) {
-        let mut accessed = self.auto_lock_accessed.lock().await;
-        *accessed = accessed.checked_sub(duration).unwrap_or(*accessed);
-    }
 }

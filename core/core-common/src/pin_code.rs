@@ -101,8 +101,7 @@ impl PinCode {
             })
             .await?;
 
-        ctx.clock().pin_code_accessed_now().await;
-        ctx.clock().auto_lock_accessed_now().await;
+        ctx.clock().pin_code_tick();
 
         Ok(())
     }
@@ -120,7 +119,7 @@ impl PinCode {
             let Some(mut pin_protection) = PinProtection::get(&tether).await? else {
                 return Err(PinError::MissingPinMetadata);
             };
-            let last_access = ctx.clock().pin_code_elapsed().await.as_secs();
+            let last_access = ctx.clock().pin_code_elapsed().as_secs();
 
             if last_access <= Self::PIN_CODE_ACCESS_INTERVAL {
                 return Err(PinError::TooFrequentAttempts);
@@ -140,13 +139,11 @@ impl PinCode {
 
             tether
                 .tx(async |bond| -> Result<(), StashError> {
-                    ctx.clock().pin_code_accessed_now().await;
+                    ctx.clock().pin_code_tick();
 
                     if success {
                         pin_protection.attempts = 0;
                         pin_protection.save(bond).await?;
-
-                        ctx.clock().auto_lock_accessed_now().await;
                     } else {
                         pin_protection.attempts += 1;
                         pin_protection.save(bond).await?;

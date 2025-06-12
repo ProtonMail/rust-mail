@@ -785,12 +785,6 @@ impl MailContext {
         self.core_context.account_stash()
     }
 
-    pub async fn auto_lock_modified_now(&self) -> MailContextResult<()> {
-        self.core_context.clock().auto_lock_accessed_now().await;
-
-        Ok(())
-    }
-
     /// Retrieve initialized user context or return None.
     ///
     /// Initialized means that we are fully logged in and all the initialization stages

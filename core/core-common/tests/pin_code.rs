@@ -1,6 +1,5 @@
 use std::time::Duration;
 
-use async_trait::async_trait;
 use proton_core_common::Context;
 use proton_core_common::test_utils::test_context::TestContext;
 use proton_core_common::{
@@ -27,7 +26,7 @@ async fn create_and_delete_pin() {
 
     assert_eq!(pin_metadata.attempts, 0);
 
-    core_ctx.last_access_reset().await;
+    core_ctx.last_access_reset();
 
     let incorrect_pin = vec![0, 0, 0, 0];
 
@@ -40,7 +39,7 @@ async fn create_and_delete_pin() {
     pin_metadata.reload(&tether).await.unwrap();
     assert_eq!(pin_metadata.attempts, 1);
 
-    core_ctx.last_access_reset().await;
+    core_ctx.last_access_reset();
 
     PinCode::delete_pin(core_ctx.clone(), pin).await.unwrap();
 
@@ -69,7 +68,7 @@ async fn modify_pin() {
 
     assert_eq!(pin_metadata.attempts, 0);
 
-    core_ctx.last_access_reset().await;
+    core_ctx.last_access_reset();
 
     PinCode::validate_pin(core_ctx.clone(), pin.clone())
         .await
@@ -83,14 +82,14 @@ async fn modify_pin() {
         .await
         .unwrap();
 
-    core_ctx.last_access_reset().await;
+    core_ctx.last_access_reset();
 
     let error = PinCode::validate_pin(core_ctx.clone(), old_pin)
         .await
         .unwrap_err();
     assert!(matches!(error, PinError::IncorrectPin));
 
-    core_ctx.last_access_reset().await;
+    core_ctx.last_access_reset();
 
     PinCode::validate_pin(core_ctx.clone(), new_pin)
         .await
@@ -117,7 +116,7 @@ async fn validation_max_attempts() {
 
     assert_eq!(pin_metadata.attempts, 0);
 
-    core_ctx.last_access_reset().await;
+    core_ctx.last_access_reset();
 
     // Lets pretend we have one attempt left
     pin_metadata.attempts = PinCode::MAX_ATTEMPTS - 1;
@@ -137,7 +136,7 @@ async fn validation_max_attempts() {
 
     assert_eq!(pin_metadata.attempts, 10);
 
-    core_ctx.last_access_reset().await;
+    core_ctx.last_access_reset();
 
     // Pin code is not responsible to do anything regarding `TooManyAttempts`
     // error. In production flow there is catch on this error
@@ -160,7 +159,7 @@ async fn deleting_not_existing_pin_multiple_times_should_succeed() {
 
     let mut tether = core_ctx.account_stash().connection();
     let mut app_settings = AppSettings::get_or_default(&tether).await;
-    app_settings.set_biometrics(core_ctx).await;
+    app_settings.set_biometrics();
     tether
         .tx(async |tx| app_settings.save(tx).await)
         .await
@@ -183,16 +182,12 @@ async fn deleting_not_existing_pin_multiple_times_should_succeed() {
     );
 }
 
-#[async_trait]
 trait PinContextExt {
-    async fn last_access_reset(&self);
+    fn last_access_reset(&self);
 }
 
-#[async_trait]
 impl PinContextExt for Context {
-    async fn last_access_reset(&self) {
-        self.clock()
-            .pin_code_accessed_sub(Duration::from_secs(2))
-            .await;
+    fn last_access_reset(&self) {
+        self.clock().pin_code_duration_sub(Duration::from_secs(2));
     }
 }
