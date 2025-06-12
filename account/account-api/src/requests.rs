@@ -1,3 +1,4 @@
+use derive_more::From;
 use proton_core_common::device::DeviceInfo;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -246,7 +247,7 @@ pub struct AuthInput {
 }
 
 /// Challenge payload frame containing device fingerprint and user behaviour.
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize, From)]
 #[serde(tag = "v")]
 #[serde(rename_all = "PascalCase")]
 pub enum PayloadFrame {
@@ -653,7 +654,7 @@ mod tests {
         metadata: PayloadFrameMetadata,
         user_behavior: impl Into<PayloadFrameBehavior>,
     ) -> PayloadFrame {
-        PayloadFrame::V2_2(PayloadFrameV2_2 {
+        PayloadFrameV2_2 {
             metadata,
             device_info: Some(DeviceInfo {
                 language: language.into(),
@@ -671,6 +672,7 @@ mod tests {
                 keyboards: vec!["kb".into()],
             }),
             user_behavior: Some(user_behavior.into()),
-        })
+        }
+        .into()
     }
 }

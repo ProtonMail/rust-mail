@@ -363,11 +363,12 @@ fn insert_payload_frame(
     let name = format!("{}-challenge-{id}", challenge_info.product_version);
     payload.insert(
         name,
-        PayloadFrame::V2_2(PayloadFrameV2_2 {
+        PayloadFrameV2_2 {
             metadata,
             device_info: challenge_info.device_info.clone(),
             user_behavior: Some(behavior.into()),
-        }),
+        }
+        .into(),
     );
 }
 
@@ -378,10 +379,7 @@ mod test {
     use proton_core_common::device::DeviceInfo;
 
     use crate::{
-        prelude::{
-            PayloadFrame, PayloadFrameMetadata, PayloadFrameV2_2, RecoveryBehavior,
-            UsernameBehavior,
-        },
+        prelude::{PayloadFrameMetadata, PayloadFrameV2_2, RecoveryBehavior, UsernameBehavior},
         signup::{ChallengeInfo, state::want_create::create_payload},
     };
 
@@ -427,19 +425,21 @@ mod test {
             Some(HashMap::from_iter([
                 (
                     "mail-v1-challenge-0".to_string(),
-                    PayloadFrame::V2_2(PayloadFrameV2_2 {
+                    PayloadFrameV2_2 {
                         metadata: PayloadFrameMetadata::Recovery,
                         device_info: Some(device_info.clone()),
                         user_behavior: Some(recovery_behavior.into()),
-                    }),
+                    }
+                    .into(),
                 ),
                 (
                     "mail-v1-challenge-1".to_string(),
-                    PayloadFrame::V2_2(PayloadFrameV2_2 {
+                    PayloadFrameV2_2 {
                         metadata: PayloadFrameMetadata::Username,
                         device_info: Some(device_info.clone()),
                         user_behavior: Some(username_behavior.into()),
-                    }),
+                    }
+                    .into(),
                 )
             ]))
         );
