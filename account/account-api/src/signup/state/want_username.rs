@@ -1,6 +1,6 @@
+use crate::signup::SignupError;
 use crate::signup::state::want_password::WantPassword;
-use crate::signup::state::{StateResult, Username};
-use crate::signup::{ChallengeInfo, SignupError};
+use crate::signup::state::{StateData, StateResult, Username};
 use crate::{AccountApi, requests::ParseDomain};
 use derive_more::Display;
 use futures::TryFutureExt;
@@ -12,17 +12,14 @@ use tracing::info;
 #[display("WantUsername")]
 pub struct WantUsername {
     client: Client,
-    challenge_info: ChallengeInfo,
+    data: StateData,
 }
 
 impl WantUsername {
-    pub fn new(client: Client, challenge_info: ChallengeInfo) -> Self {
+    pub fn new(client: Client, data: StateData) -> Self {
         info!("Signup flow wants username");
 
-        Self {
-            client,
-            challenge_info,
-        }
+        Self { client, data }
     }
 
     /// Submits chosen username, confirming availability with `AccountApi::check_username_availability`.
@@ -45,6 +42,6 @@ impl WantUsername {
             }
         }
 
-        Ok(WantPassword::new(self.client, username, self.challenge_info).into())
+        Ok(WantPassword::new(self.client, username, self.data).into())
     }
 }

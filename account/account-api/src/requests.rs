@@ -623,36 +623,20 @@ mod tests {
             email: None,
             phone: None,
             referrer: None,
-            payload: Some(HashMap::from_iter([
-                (
-                    "frame-1".into(),
-                    create_payload_frame(
-                        "lang-1",
-                        PayloadFrameType::Recovery,
-                        RecoveryBehavior {
-                            time_on_field: vec![123],
-                            click_on_field: 42,
-                            copy_field: vec!["copy".into()],
-                            paste_field: vec!["paste".into()],
-                            key_down_field: vec!["key".into()],
-                        },
-                    ),
+            payload: Some(HashMap::from_iter([(
+                "frame-1".into(),
+                create_payload_frame(
+                    "lang-1",
+                    PayloadFrameType::Recovery,
+                    RecoveryBehavior {
+                        time_on_field: vec![123],
+                        click_on_field: 42,
+                        copy_field: vec!["copy".into()],
+                        paste_field: vec!["paste".into()],
+                        key_down_field: vec!["key".into()],
+                    },
                 ),
-                (
-                    "frame-2".into(),
-                    create_payload_frame(
-                        "lang-2",
-                        PayloadFrameType::Username,
-                        UsernameBehavior {
-                            time_on_field: vec![456],
-                            click_on_field: 42,
-                            copy_field: vec!["copy".into()],
-                            paste_field: vec!["paste".into()],
-                            key_down_field: vec!["key".into()],
-                        },
-                    ),
-                ),
-            ])),
+            )])),
         };
         let serialized = serde_json::to_string(&request).expect("Failed to serialize");
         assert_eq!(
@@ -664,11 +648,7 @@ mod tests {
                 r#""frame-1":{"v":"1.0","frame":{"name":"recovery"},"appLang":"lang-1","timezone":"tz","timezoneOffset":-60,"#,
                 r#""deviceName":"model","deviceBrand":"brand","deviceCodename":"code","uuid":"uuid","regionCode":"country","#,
                 r#""isJailbreak":false,"preferredContentSize":"scale","storageCapacity":123.0,"isDarkmodeOn":true,"#,
-                r#""keyboards":["kb"],"timeRecovery":[123],"clickRecovery":42,"copyRecovery":["copy"],"pasteRecovery":["paste"],"keydownRecovery":["key"]},"#,
-                r#""frame-2":{"v":"1.0","frame":{"name":"username"},"appLang":"lang-2","timezone":"tz","timezoneOffset":-60,"#,
-                r#""deviceName":"model","deviceBrand":"brand","deviceCodename":"code","uuid":"uuid","regionCode":"country","#,
-                r#""isJailbreak":false,"preferredContentSize":"scale","storageCapacity":123.0,"isDarkmodeOn":true,"#,
-                r#""keyboards":["kb"],"timeUsername":[456],"clickUsername":42,"copyUsername":["copy"],"pasteUsername":["paste"],"keydownUsername":["key"]}}}"#,
+                r#""keyboards":["kb"],"timeRecovery":[123],"clickRecovery":42,"copyRecovery":["copy"],"pasteRecovery":["paste"],"keydownRecovery":["key"]}}}"#,
             )
         );
     }

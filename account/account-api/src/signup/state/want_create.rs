@@ -7,6 +7,7 @@ use crate::responses::*;
 use crate::signup::ChallengeInfo;
 use crate::signup::SignupError;
 use crate::signup::state::Recovery;
+use crate::signup::state::StateData;
 use crate::signup::state::StateResult;
 use crate::signup::state::Username;
 use crate::signup::state::complete::Complete;
@@ -44,7 +45,7 @@ pub struct WantCreate {
     username: Username,
     password: String,
     recovery: Recovery,
-    challenge_info: ChallengeInfo,
+    data: StateData,
 }
 
 impl WantCreate {
@@ -53,7 +54,7 @@ impl WantCreate {
         username: Username,
         password: String,
         recovery: Recovery,
-        challenge_info: ChallengeInfo,
+        data: StateData,
     ) -> Self {
         info!("Signup flow wants create");
 
@@ -62,7 +63,7 @@ impl WantCreate {
             username,
             password,
             recovery,
-            challenge_info,
+            data,
         }
     }
 
@@ -80,7 +81,7 @@ impl WantCreate {
             .map_err(|_| SignupError::AccountCreationFailed)
             .await?;
 
-        let payload = create_payload(&self.challenge_info, username_behavior);
+        let payload = create_payload(&self.data.challenge_info, username_behavior);
 
         let user = self
             .create_user(&auth, payload)

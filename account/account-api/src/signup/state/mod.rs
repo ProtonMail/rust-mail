@@ -48,7 +48,9 @@ impl State {
     pub fn new(client: Client, challenge_info: ChallengeInfo) -> Self {
         info!("Signup flow starts");
 
-        WantUsername::new(client, challenge_info).into()
+        let data = StateData { challenge_info };
+
+        WantUsername::new(client, data).into()
     }
 
     #[must_use]
@@ -114,4 +116,9 @@ impl StateKind {
             State::Complete(_) => Self::Complete,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct StateData {
+    pub challenge_info: ChallengeInfo,
 }

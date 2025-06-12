@@ -1,9 +1,9 @@
 use crate::AccountApi;
 use crate::countries::{COUNTRIES, Country};
 use crate::prelude::{RecoveryBehavior, ValidateEmailRequest, ValidatePhoneRequest};
+use crate::signup::SignupError;
 use crate::signup::state::want_create::WantCreate;
-use crate::signup::state::{Recovery, StateResult, Username};
-use crate::signup::{ChallengeInfo, SignupError};
+use crate::signup::state::{Recovery, StateData, StateResult, Username};
 use derive_more::Display;
 use futures::TryFutureExt;
 use muon::Client;
@@ -15,7 +15,7 @@ pub struct WantRecovery {
     client: Client,
     username: Username,
     password: String,
-    challenge_info: ChallengeInfo,
+    data: StateData,
 }
 
 impl WantRecovery {
@@ -23,7 +23,7 @@ impl WantRecovery {
         client: Client,
         username: Username,
         password: String,
-        challenge_info: ChallengeInfo,
+        data: StateData,
     ) -> WantRecovery {
         info!("Signup flow wants recovery info");
 
@@ -31,7 +31,7 @@ impl WantRecovery {
             client,
             username,
             password,
-            challenge_info,
+            data,
         }
     }
 
@@ -57,17 +57,10 @@ impl WantRecovery {
             Recovery::None => {}
         }
 
-        Ok(WantCreate::new(
-            self.client,
-            self.username,
-            self.password,
-            recovery,
-            ChallengeInfo {
-                recovery_behavior,
-                ..self.challenge_info
-            },
-        )
-        .into())
+        let mut data = self.data;
+        data.challenge_info.recovery_behavior = recovery_behavior;
+
+        Ok(WantCreate::new(self.client, self.username, self.password, recovery, data).into())
     }
 
     /// Available countries getter.
