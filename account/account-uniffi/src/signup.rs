@@ -290,7 +290,7 @@ impl SignupFlow {
         uniffi_async(async move {
             flow.lock()
                 .await
-                .submit_recovery_email(email, user_behavior.map(|b| b.into()))
+                .submit_recovery_email(email, user_behavior.map(Into::into))
                 .await
                 .map_err(SignupError::from)
         })
@@ -310,7 +310,7 @@ impl SignupFlow {
         uniffi_async(async move {
             flow.lock()
                 .await
-                .submit_recovery_phone(phone, user_behavior.map(|b| b.into()))
+                .submit_recovery_phone(phone, user_behavior.map(Into::into))
                 .await
                 .map_err(SignupError::from)
         })
@@ -345,7 +345,7 @@ impl SignupFlow {
         uniffi_async(async move {
             flow.lock()
                 .await
-                .create(user_behavior.map(|b| b.into()))
+                .create(user_behavior.map(Into::into))
                 .await
                 .map_err(SignupError::from)
         })

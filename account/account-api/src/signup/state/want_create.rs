@@ -200,7 +200,7 @@ impl WantCreate {
                     email: email.cloned(),
                     phone: phone.cloned(),
                     referrer: None,
-                    payload: payload,
+                    payload,
                 };
 
                 self.client
@@ -335,7 +335,7 @@ fn create_payload(
         insert_payload_frame(
             &mut payload,
             PayloadFrameType::Recovery,
-            &challenge_info,
+            challenge_info,
             behavior,
         );
     }
@@ -344,7 +344,7 @@ fn create_payload(
         insert_payload_frame(
             &mut payload,
             PayloadFrameType::Username,
-            &challenge_info,
+            challenge_info,
             behavior,
         );
     }
@@ -449,6 +449,6 @@ mod test {
                     }
                 )
             ]))
-        )
+        );
     }
 }
