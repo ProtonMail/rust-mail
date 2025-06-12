@@ -16,20 +16,10 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum SubscriberError {
-    /// API error should be returned when the error resulted due to an API or Network error.
     #[error("{0:?}")]
     Api(#[from] ApiServiceError),
-    /// Failed to send to the subscriber.
-    #[error("Failed to send data to subscriber")]
-    Send,
-    /// Failed to receive data from subscriber.
-    #[error("Failed to receive data from subscriber")]
-    Receive,
-
     #[error("{0:?}")]
     StashError(#[from] StashError),
-
-    /// Subscriber specific errors should be returned here.
     #[error("{0:?}")]
     Other(anyhow::Error),
 }

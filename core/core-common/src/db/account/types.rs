@@ -312,12 +312,6 @@ pub struct CoreSession {
 
 #[derive(Debug, Error)]
 pub enum CoreSessionError {
-    #[error("missing auth UID")]
-    AuthUid,
-
-    #[error("missing auth user ID")]
-    AuthUserId,
-
     #[error("missing access token")]
     AccTok,
 
@@ -443,9 +437,6 @@ impl TableObserver for CoreSessionWatcher {
 
 #[derive(Debug, Error)]
 pub enum DecryptionError {
-    #[error("Decryption failed")]
-    Decryption,
-
     #[error("String Conversion: {0}")]
     String(#[from] FromUtf8Error),
 }
