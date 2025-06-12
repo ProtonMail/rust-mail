@@ -66,7 +66,11 @@ impl WantCreate {
         }
     }
 
-    pub async fn create(self, store: DynStore, user_behavior: Option<UserBehavior>) -> StateResult {
+    pub async fn create(
+        self,
+        store: DynStore,
+        username_behavior: Option<UsernameBehavior>,
+    ) -> StateResult {
         let srp = new_srp_provider();
         let pgp = new_pgp_provider();
 
@@ -76,7 +80,7 @@ impl WantCreate {
             .map_err(|_| SignupError::AccountCreationFailed)
             .await?;
 
-        let payload = create_payload(&self.challenge_info, user_behavior);
+        let payload = create_payload(&self.challenge_info, username_behavior);
 
         let user = self
             .create_user(&auth, payload)
@@ -178,7 +182,7 @@ impl WantCreate {
     async fn create_user(
         &self,
         auth: &AuthInput,
-        payload: Option<HashMap<String, Payload>>,
+        payload: Option<HashMap<String, PayloadFrame>>,
     ) -> Result<User, SignupError> {
         let (email, phone) = match &self.recovery {
             Recovery::Email(email) => (Some(email), None),
@@ -319,38 +323,50 @@ fn new_key_id() -> KeyId {
 
 fn create_payload(
     challenge_info: &ChallengeInfo,
-    user_behavior: Option<UserBehavior>,
-) -> Option<HashMap<String, Payload>> {
-    if user_behavior.is_none() && challenge_info.recovery_behavior.is_none() {
+    username_behavior: Option<UsernameBehavior>,
+) -> Option<HashMap<String, PayloadFrame>> {
+    if username_behavior.is_none() && challenge_info.recovery_behavior.is_none() {
         return None;
     }
 
     let mut payload = HashMap::with_capacity(2);
 
-    if let Some(behavior) = user_behavior {
-        insert_payload(&mut payload, &challenge_info, behavior);
+    if let Some(behavior) = challenge_info.recovery_behavior.clone() {
+        insert_payload_frame(
+            &mut payload,
+            PayloadFrameType::Recovery,
+            &challenge_info,
+            behavior,
+        );
     }
 
-    if let Some(behavior) = challenge_info.recovery_behavior.clone() {
-        insert_payload(&mut payload, &challenge_info, behavior);
+    if let Some(behavior) = username_behavior {
+        insert_payload_frame(
+            &mut payload,
+            PayloadFrameType::Username,
+            &challenge_info,
+            behavior,
+        );
     }
 
     Some(payload)
 }
 
-fn insert_payload(
-    payload: &mut HashMap<String, Payload>,
+fn insert_payload_frame(
+    payload: &mut HashMap<String, PayloadFrame>,
+    ty: PayloadFrameType,
     challenge_info: &ChallengeInfo,
-    user_behavior: UserBehavior,
+    behavior: impl Into<PayloadFrameBehavior>,
 ) {
     let id = payload.len();
     let name = format!("{}-challenge-{id}", challenge_info.product_version);
     payload.insert(
         name,
-        Payload {
+        PayloadFrame {
             version: challenge_info.payload_version.into(),
+            metadata: PayloadFrameMetadata { ty },
             device_info: challenge_info.device_info.clone(),
-            user_behavior: Some(user_behavior),
+            user_behavior: Some(behavior.into()),
         },
     );
 }
@@ -362,7 +378,10 @@ mod test {
     use proton_core_common::device::DeviceInfo;
 
     use crate::{
-        prelude::{Payload, UserBehavior},
+        prelude::{
+            PayloadFrame, PayloadFrameMetadata, PayloadFrameType, RecoveryBehavior,
+            UsernameBehavior,
+        },
         signup::{ChallengeInfo, state::want_create::create_payload},
     };
 
@@ -383,14 +402,14 @@ mod test {
             dark_mode: true,
             keyboards: vec!["kb_1".into()],
         };
-        let user_behavior = UserBehavior {
+        let username_behavior = UsernameBehavior {
             time_on_field: vec![123],
             click_on_field: 12,
             copy_field: vec!["usr_cf".into()],
             paste_field: vec!["usr_pf".into()],
             key_down_field: vec!["usr_kdf".into()],
         };
-        let recovery_behavior = UserBehavior {
+        let recovery_behavior = RecoveryBehavior {
             time_on_field: vec![456],
             click_on_field: 34,
             copy_field: vec!["rec_cf".into()],
@@ -403,24 +422,30 @@ mod test {
             device_info: Some(device_info.clone()),
             recovery_behavior: Some(recovery_behavior.clone()),
         };
-        let payload = create_payload(&challenge_info, Some(user_behavior.clone()));
+        let payload = create_payload(&challenge_info, Some(username_behavior.clone()));
         assert_eq!(
             payload,
             Some(HashMap::from_iter([
                 (
                     "mail-v1-challenge-0".to_string(),
-                    Payload {
+                    PayloadFrame {
                         version: "1.0".into(),
+                        metadata: PayloadFrameMetadata {
+                            ty: PayloadFrameType::Recovery,
+                        },
                         device_info: Some(device_info.clone()),
-                        user_behavior: Some(user_behavior),
+                        user_behavior: Some(recovery_behavior.into()),
                     }
                 ),
                 (
                     "mail-v1-challenge-1".to_string(),
-                    Payload {
+                    PayloadFrame {
                         version: "1.0".into(),
+                        metadata: PayloadFrameMetadata {
+                            ty: PayloadFrameType::Username,
+                        },
                         device_info: Some(device_info.clone()),
-                        user_behavior: Some(recovery_behavior),
+                        user_behavior: Some(username_behavior.into()),
                     }
                 )
             ]))

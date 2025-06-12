@@ -4,7 +4,7 @@
 
 use itertools::Itertools;
 use proton_account_api::countries::Country as RealCountry;
-use proton_account_api::requests::UserBehavior as RealUserBehavior;
+use proton_account_api::requests::{RecoveryBehavior, UsernameBehavior};
 use proton_account_api::signup::SignupError as RealSignupError;
 use proton_account_api::signup::SignupFlow as RealSignupFlow;
 use proton_account_api::signup::state::StateKind;
@@ -153,7 +153,19 @@ pub struct UserBehavior {
     pub key_down_field: Vec<String>,
 }
 
-impl From<UserBehavior> for RealUserBehavior {
+impl From<UserBehavior> for RecoveryBehavior {
+    fn from(value: UserBehavior) -> Self {
+        Self {
+            time_on_field: value.time_on_field,
+            click_on_field: value.click_on_field,
+            copy_field: value.copy_field,
+            paste_field: value.paste_field,
+            key_down_field: value.key_down_field,
+        }
+    }
+}
+
+impl From<UserBehavior> for UsernameBehavior {
     fn from(value: UserBehavior) -> Self {
         Self {
             time_on_field: value.time_on_field,

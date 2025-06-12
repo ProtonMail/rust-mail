@@ -1,8 +1,7 @@
-use std::{borrow::Cow, collections::HashMap};
-
 use proton_core_common::device::DeviceInfo;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use std::{borrow::Cow, collections::HashMap};
 
 /// The type of account to create.
 #[derive(Clone, Copy, Debug, Serialize_repr, Deserialize_repr, Eq, Hash, PartialEq)]
@@ -41,7 +40,7 @@ pub struct CreateUserRequest {
 
     /// The challenge payload, if any.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub payload: Option<HashMap<String, Payload>>,
+    pub payload: Option<HashMap<String, PayloadFrame>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -246,35 +245,93 @@ pub struct AuthInput {
     pub verifier: String,
 }
 
-/// Challenge payload containing device fingerprint and user behaviour.
+/// Challenge payload frame containing device fingerprint and user behaviour.
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct Payload {
-    /// Payload version.
+pub struct PayloadFrame {
+    /// Frame's version.
     /// To be agreed on with anti-abuse team and bumped on structural changes.
     #[serde(rename = "v")]
     pub version: Cow<'static, str>,
+    /// Frame's metadata.
+    #[serde(rename = "frame")]
+    pub metadata: PayloadFrameMetadata,
     /// Device fingerprint.
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     pub device_info: Option<DeviceInfo>,
     /// User behaviour on a sign up screen.
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
-    pub user_behavior: Option<UserBehavior>,
+    pub user_behavior: Option<PayloadFrameBehavior>,
+}
+
+/// Challenge payload frame's metadata.
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PayloadFrameMetadata {
+    /// Frame type.
+    #[serde(rename = "name")]
+    pub ty: PayloadFrameType,
+}
+
+/// Challenge payload frame's type.
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PayloadFrameType {
+    /// Frame built while user was entering the recovery method.
+    Recovery,
+    /// Frame built while user was entering the username.
+    Username,
 }
 
 /// User activity during text input.
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-#[serde(rename_all = "PascalCase")]
-pub struct UserBehavior {
+#[serde(untagged)]
+pub enum PayloadFrameBehavior {
+    /// User activity while entering the recovery method.
+    Recovery(RecoveryBehavior),
+    /// User activity while entering the username.
+    Username(UsernameBehavior),
+}
+
+/// User activity while entering the recovery method.
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecoveryBehavior {
     /// Time from form load to user providing input (in seconds).
+    #[serde(rename = "timeRecovery")]
     pub time_on_field: Vec<u32>,
     /// Number of clicks / taps during user input.
+    #[serde(rename = "clickRecovery")]
     pub click_on_field: u32,
     /// Text chunks copied during user input.
+    #[serde(rename = "copyRecovery")]
     pub copy_field: Vec<String>,
     /// Text chunks pasted during user input.
+    #[serde(rename = "pasteRecovery")]
     pub paste_field: Vec<String>,
     /// Characters entered during user input.
+    #[serde(rename = "keydownRecovery")]
+    pub key_down_field: Vec<String>,
+}
+
+/// User activity while entering the username.
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsernameBehavior {
+    /// Time from form load to user providing input (in seconds).
+    #[serde(rename = "timeUsername")]
+    pub time_on_field: Vec<u32>,
+    /// Number of clicks / taps during user input.
+    #[serde(rename = "clickUsername")]
+    pub click_on_field: u32,
+    /// Text chunks copied during user input.
+    #[serde(rename = "copyUsername")]
+    pub copy_field: Vec<String>,
+    /// Text chunks pasted during user input.
+    #[serde(rename = "pasteUsername")]
+    pub paste_field: Vec<String>,
+    /// Characters entered during user input.
+    #[serde(rename = "keydownUsername")]
     pub key_down_field: Vec<String>,
 }
 
@@ -326,6 +383,18 @@ pub struct ValidateEmailRequest {
 #[serde(rename_all = "PascalCase")]
 pub struct ValidatePhoneRequest {
     pub phone: String,
+}
+
+impl From<RecoveryBehavior> for PayloadFrameBehavior {
+    fn from(value: RecoveryBehavior) -> Self {
+        PayloadFrameBehavior::Recovery(value)
+    }
+}
+
+impl From<UsernameBehavior> for PayloadFrameBehavior {
+    fn from(value: UsernameBehavior) -> Self {
+        PayloadFrameBehavior::Username(value)
+    }
 }
 
 #[cfg(test)]
@@ -555,8 +624,34 @@ mod tests {
             phone: None,
             referrer: None,
             payload: Some(HashMap::from_iter([
-                ("payload-1".into(), create_payload("lang-1")),
-                ("payload-2".into(), create_payload("lang-2")),
+                (
+                    "frame-1".into(),
+                    create_payload_frame(
+                        "lang-1",
+                        PayloadFrameType::Recovery,
+                        RecoveryBehavior {
+                            time_on_field: vec![123],
+                            click_on_field: 42,
+                            copy_field: vec!["copy".into()],
+                            paste_field: vec!["paste".into()],
+                            key_down_field: vec!["key".into()],
+                        },
+                    ),
+                ),
+                (
+                    "frame-2".into(),
+                    create_payload_frame(
+                        "lang-2",
+                        PayloadFrameType::Username,
+                        UsernameBehavior {
+                            time_on_field: vec![456],
+                            click_on_field: 42,
+                            copy_field: vec!["copy".into()],
+                            paste_field: vec!["paste".into()],
+                            key_down_field: vec!["key".into()],
+                        },
+                    ),
+                ),
             ])),
         };
         let serialized = serde_json::to_string(&request).expect("Failed to serialize");
@@ -566,23 +661,26 @@ mod tests {
                 r#"{"Type":1,"Username":"name","Domain":null,"#,
                 r#""Auth":{"Version":123,"ModulusID":"mod","Salt":"salt","Verifier":"ver"},"#,
                 r#""Email":null,"Phone":null,"Referrer":null,"Payload":{"#,
-                r#""payload-1":{"v":"1.0","appLang":"lang-1","timezone":"tz","timezoneOffset":-60,"#,
+                r#""frame-1":{"v":"1.0","frame":{"name":"recovery"},"appLang":"lang-1","timezone":"tz","timezoneOffset":-60,"#,
                 r#""deviceName":"model","deviceBrand":"brand","deviceCodename":"code","uuid":"uuid","regionCode":"country","#,
                 r#""isJailbreak":false,"preferredContentSize":"scale","storageCapacity":123.0,"isDarkmodeOn":true,"#,
-                r#""keyboards":["kb"],"TimeOnField":[123],"ClickOnField":42,"#,
-                r#""CopyField":["copy"],"PasteField":["paste"],"KeyDownField":["key"]},"#,
-                r#""payload-2":{"v":"1.0","appLang":"lang-2","timezone":"tz","timezoneOffset":-60,"#,
+                r#""keyboards":["kb"],"timeRecovery":[123],"clickRecovery":42,"copyRecovery":["copy"],"pasteRecovery":["paste"],"keydownRecovery":["key"]},"#,
+                r#""frame-2":{"v":"1.0","frame":{"name":"username"},"appLang":"lang-2","timezone":"tz","timezoneOffset":-60,"#,
                 r#""deviceName":"model","deviceBrand":"brand","deviceCodename":"code","uuid":"uuid","regionCode":"country","#,
                 r#""isJailbreak":false,"preferredContentSize":"scale","storageCapacity":123.0,"isDarkmodeOn":true,"#,
-                r#""keyboards":["kb"],"TimeOnField":[123],"ClickOnField":42,"#,
-                r#""CopyField":["copy"],"PasteField":["paste"],"KeyDownField":["key"]}}}"#
+                r#""keyboards":["kb"],"timeUsername":[456],"clickUsername":42,"copyUsername":["copy"],"pasteUsername":["paste"],"keydownUsername":["key"]}}}"#,
             )
         );
     }
 
-    fn create_payload(language: impl Into<String>) -> Payload {
-        Payload {
+    fn create_payload_frame(
+        language: impl Into<String>,
+        ty: PayloadFrameType,
+        user_behavior: impl Into<PayloadFrameBehavior>,
+    ) -> PayloadFrame {
+        PayloadFrame {
             version: "1.0".into(),
+            metadata: PayloadFrameMetadata { ty },
             device_info: Some(DeviceInfo {
                 language: language.into(),
                 timezone: "tz".into(),
@@ -598,13 +696,7 @@ mod tests {
                 dark_mode: true,
                 keyboards: vec!["kb".into()],
             }),
-            user_behavior: Some(UserBehavior {
-                time_on_field: vec![123],
-                click_on_field: 42,
-                copy_field: vec!["copy".into()],
-                paste_field: vec!["paste".into()],
-                key_down_field: vec!["key".into()],
-            }),
+            user_behavior: Some(user_behavior.into()),
         }
     }
 }

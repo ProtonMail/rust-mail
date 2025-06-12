@@ -1,4 +1,4 @@
-use crate::prelude::{Address, UserBehavior};
+use crate::prelude::{Address, RecoveryBehavior, UsernameBehavior};
 use crate::signup::ChallengeInfo;
 use crate::signup::state::want_create::WantCreate;
 use crate::signup::state::want_password::WantPassword;
@@ -65,7 +65,7 @@ impl State {
     pub async fn submit_recovery(
         self,
         recovery: Recovery,
-        recovery_behavior: Option<UserBehavior>,
+        recovery_behavior: Option<RecoveryBehavior>,
     ) -> StateResult {
         let s: WantRecovery = self.try_into().map_err(|_| SignupError::InvalidState)?;
 
@@ -78,10 +78,14 @@ impl State {
         Ok(s.submit_password(password))
     }
 
-    pub async fn create(self, store: DynStore, behavior: Option<UserBehavior>) -> StateResult {
+    pub async fn create(
+        self,
+        store: DynStore,
+        username_behavior: Option<UsernameBehavior>,
+    ) -> StateResult {
         let s: WantCreate = self.try_into().map_err(|_| SignupError::InvalidState)?;
 
-        s.create(store, behavior).await
+        s.create(store, username_behavior).await
     }
 
     pub fn complete(self) -> Result<(Client, User, Address), SignupError> {
