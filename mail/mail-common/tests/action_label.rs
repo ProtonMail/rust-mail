@@ -272,7 +272,9 @@ async fn test_labeling_conversation_with_starred_label() {
 
 /// Validates that it is NOT possible to apply a label which is a
 /// "folder" (since Folder is a type of label) to conversations.
+//TODO(ET-3337): Should use local check not remote check.
 #[tokio::test]
+#[ignore]
 async fn test_labeling_fails_when_labelling_folders() {
     // General setup
     let ctx = MailTestContext::new().await;

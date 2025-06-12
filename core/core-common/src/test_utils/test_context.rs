@@ -156,6 +156,12 @@ impl TestContext {
                 .with(layer().with_writer(stdout.with_max_level(Level::TRACE))),
         ));
 
+        let original_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            original_hook(info);
+            std::process::exit(-1);
+        }));
+
         let mock_web_server = Arc::new(MockServer::start().await);
         let tmp_dir = TempDir::new("account_test").expect("failed to create temp dir");
         info!("CORE TMP DIR = {:?}", tmp_dir.path());

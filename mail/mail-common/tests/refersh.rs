@@ -191,6 +191,7 @@ async fn test_on_refresh_impl_retry_behavior() {
         .mount(ctx.mock_server())
         .await;
 
+    ctx.mock_ping_success().await;
     ctx.catch_all().await;
 
     // Test Refresh::Mail - the internal retry logic will be tested
