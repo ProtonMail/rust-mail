@@ -216,7 +216,6 @@ impl DecryptableInboxPushNotification for EncryptedPushNotification {
         let decrypted_mail_notification: ApiDecryptedInboxPushNotification =
             decrypted_notification.notification.inner;
 
-        tracing::debug!("Decrypted: {:?}", decrypted_mail_notification);
         let decrypted_mail_notification =
             DecryptedInboxPushNotification::from(decrypted_mail_notification);
 
