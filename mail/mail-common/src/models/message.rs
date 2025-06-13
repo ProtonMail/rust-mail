@@ -1295,8 +1295,10 @@ impl Message {
             .await?;
         }
 
-        // FIXME: this is wrong because we don't update anything.
-        // We should use Message::apply_label and Message::remove_label instead.
+        // This code appears to be doing nothing other than setting up the relationship between
+        // message and its labels. This does not cover conversation label updates as this
+        // method is meant to be used in conjunction with the event loop state updates where
+        // conversations update their own state.
         for label_id in &mut self.label_ids {
             bond.execute(
                 format!(
@@ -2062,8 +2064,8 @@ impl Message {
         value: ApiMessageMetadata,
         tether: &Tether,
     ) -> Result<Self, AppError> {
-        let label_ids: Vec<LabelId> = value.label_ids.into_iter().map_into().collect();
-        let exclusive_location = ExclusiveLocation::from_label_ids(&label_ids, tether).await?;
+        let exclusive_location =
+            ExclusiveLocation::from_label_ids(&value.label_ids, tether).await?;
 
         Ok(Self {
             local_id: None,
@@ -2099,7 +2101,7 @@ impl Message {
             is_replied: value.is_replied,
             is_replied_all: value.is_replied_all,
             exclusive_location,
-            label_ids,
+            label_ids: value.label_ids,
             num_attachments: value.num_attachments,
             reply_tos: MessageReplyTos {
                 value: value.reply_tos.map_vec(),
