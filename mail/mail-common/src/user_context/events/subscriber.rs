@@ -65,7 +65,10 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
                 for event in events {
                     if let Some(labels) = &event.labels {
                         debug!("Handling label events");
-                        handle_label_events(tx, labels).await?;
+                        handle_label_events(tx, labels).await.map_err(|e| {
+                            error!("{e:?}");
+                            SubscriberError::Other(e.into())
+                        })?;
                     }
 
                     if let Some(conversations) = &event.conversations {
@@ -233,7 +236,7 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
             ConversationScrollData::delete_all(tx).await?;
             MessageScrollData::delete_all(tx).await?;
 
-            Label::sync_labels(tx, all_remote_labels)
+            Label::store_labels(tx, all_remote_labels)
                 .await
                 .map_err(|e| {
                     let e = anyhow!("Failed to sync labels: {e}");

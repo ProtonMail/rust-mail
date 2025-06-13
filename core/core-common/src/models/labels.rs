@@ -272,7 +272,7 @@ impl Label {
     /// If labels fetched from database do not contain Local ID.
     /// Note, this is rather impossible and is just a matter of limitations of Stash API
     ///
-    pub async fn sync_labels(
+    pub async fn store_labels(
         tx: &Bond<'_>,
         labels: Vec<Label>,
     ) -> Result<Vec<LocalLabelId>, LabelError> {

@@ -138,7 +138,7 @@ impl LabelWithCounters {
                 Ok(labels)
             },
             async |tx, labels| {
-                let label_ids = Label::sync_labels(tx, labels).await?;
+                let label_ids = Label::store_labels(tx, labels).await?;
                 for local_id in label_ids {
                     ConversationCounters::new(local_id).save(tx).await?;
                     MessageCounters::new(local_id).save(tx).await?;

@@ -2131,7 +2131,7 @@ impl Conversation {
             );
             let missing_labels = Label::get_labels_by_ids(api, missing_labels_ids).await?;
             tether
-                .tx(async |tx| Label::sync_labels(tx, missing_labels).await)
+                .tx(async |tx| Label::store_labels(tx, missing_labels).await)
                 .await?;
         }
         Ok(())

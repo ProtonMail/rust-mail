@@ -31,12 +31,12 @@
 //!
 
 use crate::datatypes::{ProductUsedSpace, Refresh};
-use crate::models::{Address, Contact, ContactEmail, User, UserSettings};
+use crate::models::{Address, Contact, ContactEmail, Label, User, UserSettings};
 use crate::utils::MapVec;
 use proton_core_api::services::proton::{
     Action as ApiAction, AddressEvent as ApiAddressEvent,
     ContactEmailEvent as ApiContactEmailEvent, ContactEvent as ApiContactEvent,
-    CoreEvent as ApiCoreEvent, EventId, ProtonIdMarker,
+    CoreEvent as ApiCoreEvent, EventId, LabelEvent as ApiLabelEvent, LabelId, ProtonIdMarker,
 };
 use proton_core_api::services::proton::{AddressId, ContactEmailId, ContactId};
 use proton_event_loop::Event;
@@ -150,6 +150,25 @@ impl From<ApiAddressEvent> for AddressEvent {
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LabelEvent {
+    pub remote_id: LabelId,
+
+    pub action: Action,
+
+    pub label: Option<Label>,
+}
+
+impl From<ApiLabelEvent> for LabelEvent {
+    fn from(value: ApiLabelEvent) -> Self {
+        Self {
+            remote_id: value.id,
+            action: value.action.into(),
+            label: value.label.map(Label::from),
+        }
+    }
+}
+
 /// Core event data structure that contains only the core fields from events.
 /// This is identical to `MailEvent` but contains only the core-related fields.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -180,6 +199,8 @@ pub struct CoreEvent {
 
     /// The contact emails events.
     pub contact_emails: Option<Vec<ContactEmailEvent>>,
+
+    pub labels: Option<Vec<LabelEvent>>,
 
     /// Indicates whether we should refresh our data.
     pub refresh: Refresh,
@@ -214,6 +235,7 @@ impl From<ApiCoreEvent> for CoreEvent {
             contacts: value.contacts.map(MapVec::map_vec),
             contact_emails: value.contact_emails.map(MapVec::map_vec),
             refresh: value.refresh.into(),
+            labels: value.labels.map(MapVec::map_vec),
         }
     }
 }
@@ -232,6 +254,7 @@ impl Default for CoreEvent {
             contacts: None,
             contact_emails: None,
             refresh: Refresh::None,
+            labels: None,
         }
     }
 }
