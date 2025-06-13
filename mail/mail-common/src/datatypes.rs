@@ -1672,6 +1672,12 @@ bitflags::bitflags! {
 
         /// Whether the message has been auto-forwarded.
         const FLAG_AUTO_FORWARDEE = 1 << 35;
+
+        /// Message is a reply to an Encrypted-Outside message
+        const FLAG_EO_REPLY = 1 << 36;
+
+        // Safeguard against unknown values
+        const _ = !0;
     }
 }
 
