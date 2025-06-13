@@ -233,7 +233,7 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
             ConversationScrollData::delete_all(tx).await?;
             MessageScrollData::delete_all(tx).await?;
 
-            Label::sync_labels(tx, all_remote_labels)
+            Label::store_labels(tx, all_remote_labels)
                 .await
                 .map_err(|e| {
                     let e = anyhow!("Failed to sync labels: {e}");

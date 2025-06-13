@@ -414,7 +414,7 @@ async fn refresh_core(ctx: Arc<UserContext>) -> Result<(), SubscriberError> {
                 remote_address.save(tx).await?;
             }
 
-            Label::sync_labels(tx, all_remote_labels)
+            Label::store_labels(tx, all_remote_labels)
                 .await
                 .map_err(|e| {
                     let e = anyhow!("Failed to sync labels: {e}");
@@ -471,7 +471,7 @@ async fn refresh_contacts(ctx: Arc<UserContext>) -> Result<(), SubscriberError> 
 
     tether
         .tx::<_, _, SubscriberError>(async |tx| {
-            Label::sync_labels(tx, all_remote_labels)
+            Label::store_labels(tx, all_remote_labels)
                 .await
                 .map_err(|e| {
                     let e = anyhow!("Failed to sync labels: {e}");
