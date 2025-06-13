@@ -5,18 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [mail-uniffi-v0.90.0] - 2025-06-12
+## [Unreleased]
 
 ### Changed
 
 - Move time validation of pin and autolock out of the database and utilize `instant`
 
+### Features
+
+- [ET-3083] Post-login account setup
+
 ### Fixes
 
 - [ET-3300] Dissallow manipiulation of time
-- [ET-3301] Start counting time for autolock when going to background
-- [ET-3212] Mail scroller prevents double pages by marking itself as a dirty
 - [ET-3325] Correctly handle save when already sent
+- [ET-3301] Start counting time for autolock when going to background
+- [ET-3313] Fix draft stuck in sent folder after send externally
+- Change scroller error type from `contexterror` to `mailscrollererror`
+- Fix background crash on ios
+
+
+## [mail-uniffi-v0.90.0] - 2025-06-12
+
+### Fixes
+
+- [ET-3212] Mail scroller prevents double pages by marking itself as a dirty
 - [ET-3212] Add `mailscrollerdirty` error reason on fetch_more when scroller is dirty
 
 
