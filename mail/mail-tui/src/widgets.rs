@@ -1,3 +1,4 @@
+mod backdrop;
 mod centered_throbber;
 mod conversations;
 mod labels;
@@ -8,19 +9,18 @@ mod scrollable_table;
 mod text_input;
 pub mod utils;
 
-pub use centered_throbber::*;
+pub use self::backdrop::*;
+pub use self::centered_throbber::*;
+pub use self::scrollable_list::*;
+pub use self::scrollable_paragraph::*;
+pub use self::scrollable_table::*;
+pub use self::text_input::*;
 use ratatui::widgets::{List, Table};
-pub use scrollable_list::*;
-pub use scrollable_paragraph::*;
-pub use scrollable_table::*;
-pub use text_input::*;
 
-/// Utility trait to convert items into a table.
 pub trait AsTable {
     fn as_table(&self) -> Table<'_>;
 }
 
-/// Utility trait to convert items into a list.
 pub trait AsList {
     fn as_list(&self) -> List<'_>;
 }
