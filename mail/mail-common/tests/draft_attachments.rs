@@ -590,14 +590,6 @@ async fn draft_reply_or_forward_creates_new_attachments() {
     // Execute actions.
     user_ctx.execute_all_send_actions().await.unwrap();
 
-    draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
-        .await
-        .unwrap();
-
-    // Execute actions.
-    user_ctx.execute_all_send_actions().await.unwrap();
-
     // Check attachment states.
     let attachments = DraftAttachmentMetadata::find_by_metadata_id(
         draft.metadata_id,

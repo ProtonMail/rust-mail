@@ -1143,7 +1143,11 @@ impl Draft {
         if self.to_list.is_empty() && self.cc_list.is_empty() && self.bcc_list.is_empty() {
             return Err(SendError::NoRecipients.into());
         }
-        let save_action = Save::new(self, DraftSendResultOrigin::SaveBeforeSend);
+        let save_action = DraftSaveActionQueuer::new(
+            self.metadata_id,
+            self.address_id.clone(),
+            Save::new(self, DraftSendResultOrigin::SaveBeforeSend),
+        );
         let send_action = if let Some(delivery_time) = delivery_time {
             draft::Send::scheduled(self, delivery_time)
         } else {
@@ -1606,35 +1610,61 @@ impl DraftSaveActionQueuer {
         // find all attachments that need to be manually queued.
         let pending_attachment_ids =
             DraftAttachmentMetadata::pending_attachments(self.id, tether).await?;
+
         // We need to be aware of the last save action id to try and replace the existing one.
         // On failure, we only execute after the previous one has finished,
         let last_draft_save_action_id = DraftMetadata::last_save_action_id(self.id, tether).await?;
-        let output =
-            queue_or_replace_draft_save(queue, self.action, self.id, last_draft_save_action_id, [])
-                .await?;
 
-        //TODO: queue batching so we can fail everything together.
-        for attachment_id in pending_attachment_ids {
-            tracing::info!("Queuing attachment upload for pending attachment {attachment_id}");
-            let metadata = MetadataBuilder::new()
-                .with_resource(&self.id)
-                .expect("This should never fail")
-                .with_dependency(output.id)
-                .build();
-            queue
-                .queue_action_with_metadata(
-                    AttachmentUpload::new(
-                        self.id,
-                        self.address_id.clone(),
-                        attachment_id,
-                        AttachmentUploadMode::Create,
-                    ),
-                    metadata,
-                )
-                .await?;
+        // If we have attachments that are still uploading we need to schedule a save after that
+        // again to update the draft status.
+        let mut uploading_attachment_ids =
+            DraftAttachmentMetadata::find_attachment_upload_action_ids(self.id, tether).await?;
+
+        let output = queue_or_replace_draft_save(
+            queue,
+            self.action.clone(),
+            self.id,
+            last_draft_save_action_id,
+            [],
+            uploading_attachment_ids.clone(),
+        )
+        .await?;
+        // Pending attachments require a draft save first so that we can get a remote id to
+        // upload the message.
+        if !pending_attachment_ids.is_empty() {
+            for attachment_id in pending_attachment_ids {
+                tracing::info!("Queuing attachment upload for pending attachment {attachment_id}");
+                let metadata = MetadataBuilder::new()
+                    .with_resource(&self.id)
+                    .expect("This should never fail")
+                    .with_dependency(output.id)
+                    .build();
+                let output = queue
+                    .queue_action_with_metadata(
+                        AttachmentUpload::new(
+                            self.id,
+                            self.address_id.clone(),
+                            attachment_id,
+                            AttachmentUploadMode::Create,
+                        ),
+                        metadata,
+                    )
+                    .await?;
+                uploading_attachment_ids.push(output.id);
+            }
+            // Schedule another save to include the newly scheduled attachments.
+            Ok(queue_or_replace_draft_save(
+                queue,
+                self.action,
+                self.id,
+                Some(output.id),
+                [],
+                uploading_attachment_ids,
+            )
+            .await?)
+        } else {
+            Ok(output)
         }
-
-        Ok(output)
     }
 }
 
@@ -1642,12 +1672,12 @@ impl DraftSaveActionQueuer {
 /// context.
 pub struct DraftSendActionQueuer {
     id: MetadataId,
-    save_action: Save,
+    save_action: DraftSaveActionQueuer,
     send_action: draft::Send,
 }
 
 impl DraftSendActionQueuer {
-    fn new(id: MetadataId, save_action: Save, send_action: draft::Send) -> Self {
+    fn new(id: MetadataId, save_action: DraftSaveActionQueuer, send_action: draft::Send) -> Self {
         Self {
             id,
             save_action,
@@ -1662,17 +1692,7 @@ impl DraftSendActionQueuer {
         queue: &Queue,
         tether: &Tether,
     ) -> Result<QueuedActionOutput<draft::Send>, MailContextError> {
-        let attachment_action_ids =
-            DraftAttachmentMetadata::find_attachment_upload_action_ids(self.id, tether).await?;
-        let last_draft_save_action_id = DraftMetadata::last_save_action_id(self.id, tether).await?;
-        let save_output = queue_or_replace_draft_save(
-            queue,
-            self.save_action,
-            self.id,
-            last_draft_save_action_id,
-            attachment_action_ids,
-        )
-        .await?;
+        let save_output = self.save_action.queue(queue, tether).await?;
         let send_metadata = MetadataBuilder::new()
             .with_resource(&self.id)
             .expect("This should never fail")
@@ -1907,7 +1927,8 @@ async fn queue_or_replace_draft_save(
     save_action: Save,
     metadata_id: MetadataId,
     last_draft_save_action_id: Option<ActionId>,
-    other_dependencies: impl IntoIterator<Item = ActionId>,
+    other_direct_dependencies: impl IntoIterator<Item = ActionId>,
+    other_sequential_dependencies: impl IntoIterator<Item = ActionId>,
 ) -> Result<QueuedActionOutput<Save>, ActionError<Save>> {
     let mut metadata_builder = MetadataBuilder::new()
         .with_resource(&metadata_id)
@@ -1916,7 +1937,8 @@ async fn queue_or_replace_draft_save(
         metadata_builder = metadata_builder.with_dependency(action_id);
     }
     let metadata = metadata_builder
-        .with_dependencies(other_dependencies)
+        .with_dependencies(other_direct_dependencies)
+        .with_sequential_dependencies(other_sequential_dependencies)
         .build();
     if let Some(previous_action_id) = last_draft_save_action_id {
         match queue
