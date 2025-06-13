@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixes
+
+- [ET-3260] Change background color to #191927
+- Allow unknown message flags to be parsed
+
+
+## [mail-uniffi-v0.92.0] - 2025-06-13
+
 ### Changed
 
 - `force_event_loop_pool` action priority
