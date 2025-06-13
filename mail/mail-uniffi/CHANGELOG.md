@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `force_event_loop_pool` action priority
+
+### Fixes
+
+- [ET-3247] Can reply message property
+- Label events not applied before contact events
+- Add missing email field to contact details and change email.name: string to email.email_type: vec<vcardproptype>
+- [ET-3329] Fix save send dependencies
+- [ET-3329] Allow draft to save if attachment upload fails
+
+
+## [mail-uniffi-v0.91.0] - 2025-06-13
+
+### Changed
+
 - Move time validation of pin and autolock out of the database and utilize `instant`
 
 ### Features
