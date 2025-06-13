@@ -124,6 +124,7 @@ mod tests {
         pa::assert_eq!(expected, actual);
     }
 
+    #[allow(clippy::too_many_lines)]
     #[test]
     fn get_calendar_event() {
         let json = r#"
@@ -142,6 +143,14 @@ mod tests {
                                 "Type": 3,
                                 "Data": "0sBEASBA...",
                                 "Signature": "-----BEGIN PGP SIGNATURE-----...",
+                                "Author": "spongebob@squarepants.com"
+                            }
+                        ],
+                        "CalendarEvents": [
+                            {
+                                "Type": 0,
+                                "Data": "BEGIN:VCALENDAR...",
+                                "Signature": null,
                                 "Author": "spongebob@squarepants.com"
                             }
                         ],
@@ -190,6 +199,12 @@ mod tests {
                         author: "spongebob@squarepants.com".into(),
                     },
                 ],
+                calendar_events: vec![CalendarEventPayload {
+                    ty: CalendarEventPayloadType::ClearText,
+                    data: "BEGIN:VCALENDAR...".into(),
+                    signature: None,
+                    author: "spongebob@squarepants.com".into(),
+                }],
                 calendar_id: "HzNtbT1J...".into(),
                 start_time: 1_744_790_400,
                 end_time: 1_744_792_200,

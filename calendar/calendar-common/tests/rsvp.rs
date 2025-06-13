@@ -140,7 +140,13 @@ where
         }
     }
 
-    fn event(&self, mode: &str, shared_event: &str, attendees_event: &str) -> CalendarEvent {
+    fn event(
+        &self,
+        mode: &str,
+        shared_event: &str,
+        attendees_event: &str,
+        calendar_event: Option<&str>,
+    ) -> CalendarEvent {
         let encryptor = match mode {
             "address-key" => {
                 CalendarEventEncryptor::for_address(&self.pgp, &self.address_keys).unwrap()
@@ -166,6 +172,16 @@ where
         let address_key_packet = key_packets.address_key_packet.map(KeyPacket::into_base64);
         let shared_key_packet = key_packets.shared_key_packet.map(KeyPacket::into_base64);
 
+        let calendar_events = calendar_event
+            .into_iter()
+            .map(|data| CalendarEventPayload {
+                ty: CalendarEventPayloadType::ClearText,
+                data: data.into(),
+                signature: None,
+                author: "foo@localhost".into(),
+            })
+            .collect();
+
         CalendarEvent {
             shared_events: vec![CalendarEventPayload {
                 ty: CalendarEventPayloadType::Encrypted,
@@ -173,6 +189,7 @@ where
                 signature: None,
                 author: "foo@localhost".into(),
             }],
+            calendar_events,
             calendar_id: "HzNtbT1J".into(),
             start_time: 1_744_790_400,
             end_time: 1_744_795_800,
@@ -233,6 +250,7 @@ fn expected_event(raw: CalendarEvent) -> RsvpEvent {
             name: "My calendar".into(),
             color: "#273EB2".into(),
         },
+        is_cancelled: false,
         raw: Box::new(raw),
     }
 }

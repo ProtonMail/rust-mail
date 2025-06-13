@@ -94,6 +94,7 @@ pub struct FoundCalendarEvents {
 #[serde(rename_all = "PascalCase")]
 pub struct CalendarEvent {
     pub shared_events: Vec<CalendarEventPayload>,
+    pub calendar_events: Vec<CalendarEventPayload>,
     #[serde(rename = "CalendarID")]
     pub calendar_id: CalendarId,
     pub start_time: i64,
