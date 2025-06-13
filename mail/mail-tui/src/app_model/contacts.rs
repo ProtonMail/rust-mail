@@ -224,8 +224,12 @@ impl OpenedContactState {
                     }
                 }
                 ContactField::Emails(items) => {
-                    for ContactDetailsEmail { name, email } in items {
-                        add_row(name, email);
+                    for ContactDetailsEmail { email_type, email } in items {
+                        let text = format!(
+                            "{} {email}",
+                            email_type.iter().map(ToString::to_string).join(", ")
+                        );
+                        add_row("Email:", &text);
                     }
                 }
                 ContactField::Phones(items) => {
