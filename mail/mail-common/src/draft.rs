@@ -1625,6 +1625,7 @@ impl DraftSaveActionQueuer {
             self.action.clone(),
             self.id,
             last_draft_save_action_id,
+            [],
             uploading_attachment_ids.clone(),
         )
         .await?;
@@ -1657,6 +1658,7 @@ impl DraftSaveActionQueuer {
                 self.action,
                 self.id,
                 Some(output.id),
+                [],
                 uploading_attachment_ids,
             )
             .await?)
@@ -1925,7 +1927,8 @@ async fn queue_or_replace_draft_save(
     save_action: Save,
     metadata_id: MetadataId,
     last_draft_save_action_id: Option<ActionId>,
-    other_dependencies: impl IntoIterator<Item = ActionId>,
+    other_direct_dependencies: impl IntoIterator<Item = ActionId>,
+    other_sequential_dependencies: impl IntoIterator<Item = ActionId>,
 ) -> Result<QueuedActionOutput<Save>, ActionError<Save>> {
     let mut metadata_builder = MetadataBuilder::new()
         .with_resource(&metadata_id)
@@ -1934,7 +1937,8 @@ async fn queue_or_replace_draft_save(
         metadata_builder = metadata_builder.with_dependency(action_id);
     }
     let metadata = metadata_builder
-        .with_dependencies(other_dependencies)
+        .with_dependencies(other_direct_dependencies)
+        .with_sequential_dependencies(other_sequential_dependencies)
         .build();
     if let Some(previous_action_id) = last_draft_save_action_id {
         match queue
