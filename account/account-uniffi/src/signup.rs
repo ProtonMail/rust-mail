@@ -206,13 +206,14 @@ impl SignupFlow {
         &self,
         username: String,
         domain: String,
+        user_behavior: Option<UserBehavior>,
     ) -> Result<SimpleSignupState, SignupError> {
         let flow = self.flow.clone();
 
         uniffi_async(async move {
             flow.lock()
                 .await
-                .submit_internal_username(username, domain)
+                .submit_internal_username(username, domain, user_behavior.map(Into::into))
                 .await
                 .map_err(SignupError::from)
         })
@@ -324,20 +325,11 @@ impl SignupFlow {
     }
 
     /// Create the account.
-    pub async fn create(
-        &self,
-        user_behavior: Option<UserBehavior>,
-    ) -> Result<SimpleSignupState, SignupError> {
+    pub async fn create(&self) -> Result<SimpleSignupState, SignupError> {
         let flow = self.flow.clone();
 
-        uniffi_async(async move {
-            flow.lock()
-                .await
-                .create(user_behavior.map(Into::into))
-                .await
-                .map_err(SignupError::from)
-        })
-        .await?;
+        uniffi_async(async move { flow.lock().await.create().await.map_err(SignupError::from) })
+            .await?;
 
         Ok(self.get_state())
     }

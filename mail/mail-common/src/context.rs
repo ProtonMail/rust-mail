@@ -401,8 +401,9 @@ impl MailContext {
         let challenge_info = ChallengeInfo {
             product_version: self.core_context.get_challenge_product_version(),
             device_info,
-            // Will be populated during the sign up flow (if available)
+            // Behaviours will be populated during the sign up flow (if available)
             recovery_behavior: None,
+            username_behavior: None,
         };
 
         // Create a new signup flow

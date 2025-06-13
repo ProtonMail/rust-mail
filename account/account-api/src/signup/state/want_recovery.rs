@@ -39,7 +39,7 @@ impl WantRecovery {
     pub async fn submit_recovery(
         self,
         recovery: Recovery,
-        recovery_behavior: Option<Behavior>,
+        behavior: Option<Behavior>,
     ) -> StateResult {
         match recovery.clone() {
             Recovery::Email(email) => {
@@ -60,7 +60,7 @@ impl WantRecovery {
         }
 
         let mut data = self.data;
-        data.challenge_info.recovery_behavior = recovery_behavior;
+        data.challenge_info.recovery_behavior = behavior;
 
         Ok(WantCreate::new(self.client, self.username, self.password, recovery, data).into())
     }

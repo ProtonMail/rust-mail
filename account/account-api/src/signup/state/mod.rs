@@ -58,10 +58,14 @@ impl State {
         StateKind::of(self)
     }
 
-    pub async fn submit_username(self, username: Username) -> StateResult {
+    pub async fn submit_username(
+        self,
+        username: Username,
+        behavior: Option<Behavior>,
+    ) -> StateResult {
         let s: WantUsername = self.try_into().map_err(|_| SignupError::InvalidState)?;
 
-        s.submit_username(username).await
+        s.submit_username(username, behavior).await
     }
 
     pub async fn submit_recovery(
@@ -80,10 +84,10 @@ impl State {
         Ok(s.submit_password(password))
     }
 
-    pub async fn create(self, store: DynStore, username_behavior: Option<Behavior>) -> StateResult {
+    pub async fn create(self, store: DynStore) -> StateResult {
         let s: WantCreate = self.try_into().map_err(|_| SignupError::InvalidState)?;
 
-        s.create(store, username_behavior).await
+        s.create(store).await
     }
 
     pub fn complete(self) -> Result<(Client, User, Address), SignupError> {

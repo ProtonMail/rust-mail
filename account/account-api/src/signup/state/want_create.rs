@@ -60,7 +60,7 @@ impl WantCreate {
         }
     }
 
-    pub async fn create(self, store: DynStore, username_behavior: Option<Behavior>) -> StateResult {
+    pub async fn create(self, store: DynStore) -> StateResult {
         let srp = new_srp_provider();
         let pgp = new_pgp_provider();
 
@@ -70,7 +70,7 @@ impl WantCreate {
             .map_err(|_| SignupError::AccountCreationFailed)
             .await?;
 
-        let payload = create_payload(&self.data.challenge_info, username_behavior);
+        let payload = create_payload(&self.data.challenge_info);
 
         let user = self
             .create_user(&auth, payload)
@@ -243,11 +243,8 @@ impl WantCreate {
     }
 }
 
-fn create_payload(
-    challenge_info: &ChallengeInfo,
-    username_behavior: Option<Behavior>,
-) -> Option<HashMap<String, PayloadFrame>> {
-    if username_behavior.is_none() && challenge_info.recovery_behavior.is_none() {
+fn create_payload(challenge_info: &ChallengeInfo) -> Option<HashMap<String, PayloadFrame>> {
+    if challenge_info.recovery_behavior.is_none() && challenge_info.username_behavior.is_none() {
         return None;
     }
 
@@ -262,7 +259,7 @@ fn create_payload(
         );
     }
 
-    if let Some(behavior) = username_behavior {
+    if let Some(behavior) = challenge_info.username_behavior.clone() {
         insert_payload_frame(
             &mut payload,
             PayloadFrameMetadata::Username,
@@ -339,8 +336,9 @@ mod test {
             product_version: "mail-v1".into(),
             device_info: Some(device_info.clone()),
             recovery_behavior: Some(recovery_behavior.clone()),
+            username_behavior: Some(username_behavior.clone()),
         };
-        let payload = create_payload(&challenge_info, Some(username_behavior.clone()));
+        let payload = create_payload(&challenge_info);
         assert_eq!(
             payload,
             Some(HashMap::from_iter([

@@ -1,3 +1,4 @@
+use crate::prelude::Behavior;
 use crate::signup::SignupError;
 use crate::signup::state::want_password::WantPassword;
 use crate::signup::state::{StateData, StateResult, Username};
@@ -23,7 +24,11 @@ impl WantUsername {
     }
 
     /// Submits chosen username, confirming availability with `AccountApi::check_username_availability`.
-    pub async fn submit_username(self, username: Username) -> StateResult {
+    pub async fn submit_username(
+        self,
+        username: Username,
+        behavior: Option<Behavior>,
+    ) -> StateResult {
         info!("Submitting username");
 
         match username.clone() {
@@ -42,6 +47,9 @@ impl WantUsername {
             }
         }
 
-        Ok(WantPassword::new(self.client, username, self.data).into())
+        let mut data = self.data;
+        data.challenge_info.username_behavior = behavior;
+
+        Ok(WantPassword::new(self.client, username, data).into())
     }
 }

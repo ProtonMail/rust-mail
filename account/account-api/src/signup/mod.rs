@@ -110,8 +110,10 @@ pub struct ChallengeInfo {
     pub product_version: String,
     /// Device fingerprint.
     pub device_info: Option<DeviceInfo>,
-    /// User behaviour while entering recovery method (if applicable).
+    /// User behaviour while entering the recovery method (if applicable).
     pub recovery_behavior: Option<Behavior>,
+    /// User behaviour while entering the username (if applicable).
+    pub username_behavior: Option<Behavior>,
 }
 
 /// A signup flow that can be used to sign up a user.
@@ -166,10 +168,11 @@ impl SignupFlow {
         &mut self,
         username: String,
         domain: String,
+        behavior: Option<Behavior>,
     ) -> Result<(), SignupError> {
         let username = Username::Internal { username, domain };
 
-        let next = self.state()?.submit_username(username).await?;
+        let next = self.state()?.submit_username(username, behavior).await?;
 
         self.state.push(next);
 
@@ -180,7 +183,7 @@ impl SignupFlow {
     pub async fn submit_external_username(&mut self, email: String) -> Result<(), SignupError> {
         let username = Username::External { email };
 
-        let next = self.state()?.submit_username(username).await?;
+        let next = self.state()?.submit_username(username, None).await?;
 
         self.state.push(next);
 
@@ -238,10 +241,10 @@ impl SignupFlow {
     }
 
     /// Create the account.
-    pub async fn create(&mut self, username_behavior: Option<Behavior>) -> Result<(), SignupError> {
+    pub async fn create(&mut self) -> Result<(), SignupError> {
         let store = DynStore::clone(&self.store);
 
-        let next = self.state()?.create(store, username_behavior).await?;
+        let next = self.state()?.create(store).await?;
 
         self.state.push(next);
 

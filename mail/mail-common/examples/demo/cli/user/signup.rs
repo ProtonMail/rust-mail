@@ -44,7 +44,7 @@ impl Cmd {
             let username = read("username")?;
             let domain = read("domain")?;
 
-            match flow.submit_internal_username(username, domain).await {
+            match flow.submit_internal_username(username, domain, None).await {
                 Err(SignupError::UsernameUnavailable) => {
                     println!("Username unavailable, try again");
                 }
