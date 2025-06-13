@@ -460,6 +460,12 @@ mod tests {
     #[test]
     fn test_setup_keys_request_serialize_with_all_fields() {
         let request = SetupKeysRequest {
+            auth: AuthInput {
+                version: 2,
+                modulus_id: "modulus_id".to_string(),
+                salt: "auth_salt".to_string(),
+                verifier: "auth_verifier".to_string(),
+            },
             primary_key: "primary_key_example".to_string(),
             key_salt: "random_salt".to_string(),
             org_primary_user_key: Some("encrypted_key".to_string()),
@@ -476,21 +482,15 @@ mod tests {
                 },
                 revision: 3,
             }],
-            auth: AuthInput {
-                version: 2,
-                modulus_id: "modulus_id".to_string(),
-                salt: "auth_salt".to_string(),
-                verifier: "auth_verifier".to_string(),
-            },
             encrypted_secret: Some("base64_encrypted_secret".to_string()),
         };
         let expected_json = r#"{
+            "Auth": { "Version": 2, "ModulusID": "modulus_id", "Salt": "auth_salt", "Verifier": "auth_verifier" },
             "PrimaryKey": "primary_key_example",
             "KeySalt": "random_salt",
             "OrgPrimaryUserKey": "encrypted_key",
             "OrgActivationToken": "32bytehextoken",
             "AddressKeys": [{ "AddressID": "addr_id_1", "PrivateKey": "addr_private_key", "Primary": 1, "Token": "addr_token", "Signature": "addr_signature", "SignedKeyList": { "Data": "data", "Signature": "signature" }, "Revision": 3 }],
-            "Auth": { "Version": 2, "ModulusID": "modulus_id", "Salt": "auth_salt", "Verifier": "auth_verifier" },
             "EncryptedSecret": "base64_encrypted_secret"
         }"#;
 
