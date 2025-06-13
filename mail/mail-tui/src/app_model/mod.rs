@@ -19,6 +19,7 @@ use crate::app_model::path_select_popup::PathSelectPopup;
 use crate::app_model::twofa::TwoFaModel;
 use crate::keychain::AppKeyChain;
 use crate::messages::Messages;
+use crate::widgets::Backdrop;
 use crate::widgets::ScrollableListState;
 use anyhow::anyhow;
 use futures::FutureExt;
@@ -98,19 +99,15 @@ pub trait AppStateHandler {
 ///
 /// Unlike [`AppStateHandler`], popups can only react to input and can not change their state.
 pub trait Popup {
-    // Popups must be Send since they need to be sent as messages.
-    /// Popup title to be drawn around the box.
     fn title(&self) -> Option<String>;
-    /// Handle input event.
     fn handle_event(&mut self, _: Event) -> Command<Messages> {
         Command::None
     }
-    /// Display popup contents.
     fn view(&mut self, frame: &mut Frame, area: Rect);
-    fn vertical_constraint(&self) -> Constraint {
+    fn height(&self) -> Constraint {
         Constraint::Percentage(60)
     }
-    fn horizontal_constraint(&self) -> Constraint {
+    fn width(&self) -> Constraint {
         Constraint::Percentage(60)
     }
 }
@@ -351,9 +348,11 @@ impl Model<Messages> for AppModel {
 
         // Draw status bar
         frame.render_widget(Block::new().style(Style::new().reversed()), status_bar_area);
+
         let [title_area, view_status_area] =
             Layout::horizontal([Constraint::Length(18), Constraint::Fill(1)])
                 .areas(status_bar_area);
+
         let text = Text::from("Proton Mail TUI | ".bold());
         frame.render_widget(text, title_area);
 
@@ -362,6 +361,7 @@ impl Model<Messages> for AppModel {
             frame.render_widget(Text::from("Log"), view_status_area);
             return;
         }
+
         self.state.view_help_bar(frame, help_area);
         self.state.view(frame, view_area);
         self.state.view_status_bar(frame, view_status_area);
@@ -369,23 +369,32 @@ impl Model<Messages> for AppModel {
         if let Some(bg_progress) = &mut self.bg_progress {
             bg_progress.draw(frame);
         }
+
         if let Some(popup) = &mut self.popup {
-            let [box_area] = Layout::vertical([popup.vertical_constraint()])
+            let [box_area] = Layout::vertical([popup.height()])
                 .flex(Flex::Center)
                 .areas(area);
-            let [box_area] = Layout::horizontal([popup.horizontal_constraint()])
+
+            let [box_area] = Layout::horizontal([popup.width()])
                 .flex(Flex::Center)
                 .areas(box_area);
+
             let popup_area = box_area.inner(Margin {
                 horizontal: 1,
                 vertical: 1,
             });
-            frame.render_widget(Clear {}, box_area);
+
+            frame.render_widget(Backdrop, frame.area());
+            frame.render_widget(Clear, box_area);
+
             popup.view(frame, popup_area);
+
             let mut block = Block::new().borders(Borders::ALL);
+
             if let Some(title) = popup.title() {
                 block = block.title(title);
             }
+
             frame.render_widget(block, box_area);
         }
     }
@@ -798,7 +807,7 @@ impl Popup for HelpPopup {
         frame.render_widget(table, area);
     }
 
-    fn vertical_constraint(&self) -> Constraint {
+    fn height(&self) -> Constraint {
         let len: u16 = self.items.len().try_into().unwrap();
         Constraint::Length(len + 2) // +2 to account for margins
     }
