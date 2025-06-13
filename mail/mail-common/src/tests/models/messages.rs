@@ -2997,3 +2997,28 @@ async fn test_deleting_address_will_trigger_message_deletion() {
         .expect("failed to get message");
     assert!(db_message.is_none());
 }
+
+#[test]
+fn message_can_reply_property() {
+    let message_inbox = message! {
+       label_ids: vec![LabelId::inbox(), LabelId::all_mail()]
+    };
+    let message_outbox = message! {
+       label_ids: vec![LabelId::outbox(), LabelId::all_mail()]
+    };
+    let message_scheduled = message! {
+       label_ids: vec![LabelId::all_scheduled(), LabelId::all_mail()]
+    };
+    let message_draft = message! {
+       label_ids: vec![LabelId::drafts(), LabelId::all_mail()]
+    };
+    let message_all_draft = message! {
+       label_ids: vec![LabelId::all_drafts(), LabelId::all_mail()]
+    };
+
+    assert!(message_inbox.can_reply());
+    assert!(!message_outbox.can_reply());
+    assert!(!message_scheduled.can_reply());
+    assert!(!message_draft.can_reply());
+    assert!(!message_all_draft.can_reply());
+}

@@ -2976,11 +2976,11 @@ impl Message {
     }
 
     pub fn can_reply(&self) -> bool {
-        self.label_ids.iter().any(|label_id| {
-            !(*label_id == LabelId::all_scheduled()
+        !self.label_ids.iter().any(|label_id| {
+            *label_id == LabelId::all_scheduled()
                 || *label_id == LabelId::outbox()
                 || *label_id == LabelId::drafts()
-                || *label_id == LabelId::all_drafts())
+                || *label_id == LabelId::all_drafts()
         })
     }
 
