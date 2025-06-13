@@ -36,11 +36,9 @@ mod tests;
 
 use crate::datatypes::{ConversationLabelsCount, MessageLabelsCount};
 use crate::models::{Conversation, MailSettings};
-use proton_core_api::services::proton::LabelEvent as ApiLabelEvent;
-use proton_core_api::services::proton::{EventId, LabelId};
+use proton_core_api::services::proton::EventId;
 use proton_core_common::datatypes::Refresh;
-use proton_core_common::events::Action;
-use proton_core_common::models::Label;
+use proton_core_common::events::{Action, LabelEvent};
 use proton_core_common::utils::MapVec as _;
 use proton_event_loop::Event;
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
@@ -69,29 +67,6 @@ impl From<ApiConversationEvent> for ConversationEvent {
             remote_id: value.id,
             action: value.action.into(),
             conversation: value.conversation.map(Conversation::from),
-        }
-    }
-}
-
-/// TODO: Document this struct.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct LabelEvent {
-    /// TODO: Document this field.
-    pub remote_id: LabelId,
-
-    /// TODO: Document this field.
-    pub action: Action,
-
-    /// TODO: Document this field.
-    pub label: Option<Label>,
-}
-
-impl From<ApiLabelEvent> for LabelEvent {
-    fn from(value: ApiLabelEvent) -> Self {
-        Self {
-            remote_id: value.id,
-            action: value.action.into(),
-            label: value.label.map(Label::from),
         }
     }
 }

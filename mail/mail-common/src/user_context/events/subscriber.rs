@@ -65,7 +65,10 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
                 for event in events {
                     if let Some(labels) = &event.labels {
                         debug!("Handling label events");
-                        handle_label_events(tx, labels).await?;
+                        handle_label_events(tx, labels).await.map_err(|e| {
+                            error!("{e:?}");
+                            SubscriberError::Other(e.into())
+                        })?;
                     }
 
                     if let Some(conversations) = &event.conversations {

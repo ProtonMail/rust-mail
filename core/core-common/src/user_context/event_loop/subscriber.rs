@@ -73,6 +73,7 @@ pub mod macros {
 }
 
 // Re-export macros for easier access
+use crate::events::LabelEvent;
 pub use macros::*;
 
 const CORE_EVENT_TYPE_ID: &str = "proton-core-event";
@@ -252,6 +253,12 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
                     debug!("Handling address event");
                     handle_address_event(tx, addresses).await?;
                 }
+
+                if let Some(labels) = event.labels.as_mut() {
+                    debug!("Handling label event");
+                    handle_label_events(tx, labels).await?;
+                }
+
                 if let Some(contacts) = event.contacts.as_mut() {
                     debug!("Handling contact events");
                     handle_contact_event(tx, contacts).await?;
@@ -583,6 +590,39 @@ async fn handle_contact_email_event(
                 }
             }
             Action::UpdateFlags => (),
+        }
+    }
+    Ok(())
+}
+
+pub async fn handle_label_events(
+    tx: &Bond<'_>,
+    label_events: &[LabelEvent],
+) -> Result<(), StashError> {
+    for label_event in label_events {
+        label_event.action.log_entry(&label_event.remote_id);
+        match label_event.action {
+            Action::Delete => {
+                tx.execute(
+                    "DELETE FROM labels WHERE remote_id = ?",
+                    params![label_event.remote_id.clone()],
+                )
+                .await?;
+            }
+            Action::Create => {
+                if let Some(mut label) = label_event.label.clone() {
+                    label.save(tx).await?;
+                } else {
+                    warn!("Received label create without label");
+                }
+            }
+            Action::Update | Action::UpdateFlags => {
+                if let Some(mut label) = label_event.label.clone() {
+                    label.save(tx).await?;
+                } else {
+                    warn!("Received label update without label");
+                }
+            }
         }
     }
     Ok(())
