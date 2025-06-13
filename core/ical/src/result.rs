@@ -16,6 +16,17 @@ pub enum Error {
     InvalidIcs(Vec<ReadMsg>),
 }
 
+impl Error {
+    #[must_use]
+    pub fn as_invalid_ics(&self) -> Option<&[ReadMsg]> {
+        if let Error::InvalidIcs(msgs) = self {
+            Some(msgs)
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, TError)]
 pub enum Violation {
     #[error("viol: event[{0}]: {1}")]

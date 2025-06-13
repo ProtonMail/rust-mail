@@ -112,10 +112,11 @@ impl<T: PublicKey> AsPublicKeyRef<T> for TestAddressPublicKey<T> {
 }
 
 #[allow(clippy::missing_panics_doc, dead_code)]
-pub fn get_test_address_keys<T: PGPProviderSync>(
-    pgp_provider: &T,
-) -> Vec<TestAddressKey<T::PrivateKey>> {
-    get_test_address_key_source(pgp_provider, TEST_DECRYPTION_KEY, "password")
+pub fn get_test_address_keys<P>(pgp: &P) -> Vec<TestAddressKey<P::PrivateKey>>
+where
+    P: PGPProviderSync,
+{
+    get_test_address_key_source(pgp, TEST_DECRYPTION_KEY, "password")
 }
 
 #[allow(clippy::missing_panics_doc, dead_code)]
@@ -175,54 +176,60 @@ pub fn create_account_unlocked_address_keys_v6<T: PGPProviderSync>(
 }
 
 #[allow(clippy::missing_panics_doc, dead_code)]
-pub fn create_test_recipient_keys<Provider: PGPProviderSync>(
-    pgp_provider: &Provider,
-) -> (Vec<Provider::PrivateKey>, Vec<Provider::PublicKey>) {
-    let r1 = pgp_provider
+pub fn create_test_recipient_keys<P>(pgp: &P) -> (Vec<P::PrivateKey>, Vec<P::PublicKey>)
+where
+    P: PGPProviderSync,
+{
+    let r1 = pgp
         .private_key_import(
             RECIPIENT_ONE.as_bytes(),
             "password".as_bytes(),
             DataEncoding::Armor,
         )
         .unwrap();
-    let r1_pub = pgp_provider.private_key_to_public_key(&r1).unwrap();
-    let r2 = pgp_provider
+    let r1_pub = pgp.private_key_to_public_key(&r1).unwrap();
+    let r2 = pgp
         .private_key_import(
             RECIPIENT_TWO.as_bytes(),
             "password".as_bytes(),
             DataEncoding::Armor,
         )
         .unwrap();
-    let r2_pub = pgp_provider.private_key_to_public_key(&r2).unwrap();
+    let r2_pub = pgp.private_key_to_public_key(&r2).unwrap();
     (vec![r1, r2], vec![r1_pub, r2_pub])
 }
 
 #[allow(clippy::missing_panics_doc, dead_code)]
-pub fn get_test_address_key_source<T: PGPProviderSync>(
-    pgp_provider: &T,
+pub fn get_test_address_key_source<P>(
+    pgp: &P,
     source: &str,
     passphrase: &str,
-) -> Vec<TestAddressKey<T::PrivateKey>> {
-    let decryption_key = pgp_provider
+) -> Vec<TestAddressKey<P::PrivateKey>>
+where
+    P: PGPProviderSync,
+{
+    let decryption_key = pgp
         .private_key_import(source, passphrase, DataEncoding::Armor)
         .unwrap();
     vec![TestAddressKey(decryption_key)]
 }
 
 #[allow(clippy::missing_panics_doc, dead_code)]
-pub fn get_test_public_address_keys<T: PGPProviderSync>(
-    pgp_provider: &T,
-) -> Vec<TestAddressPublicKey<T::PublicKey>> {
-    get_test_public_address_key_source(pgp_provider, TEST_VERIFICATION_KEY)
+pub fn get_test_public_address_keys<P>(pgp: &P) -> Vec<TestAddressPublicKey<P::PublicKey>>
+where
+    P: PGPProviderSync,
+{
+    get_test_public_address_key_source(pgp, TEST_VERIFICATION_KEY)
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub fn get_test_public_address_key_source<T: PGPProviderSync>(
-    pgp_provider: &T,
+pub fn get_test_public_address_key_source<P>(
+    pgp: &P,
     source: &str,
-) -> Vec<TestAddressPublicKey<T::PublicKey>> {
-    let verification_key = pgp_provider
-        .public_key_import(source, DataEncoding::Armor)
-        .unwrap();
+) -> Vec<TestAddressPublicKey<P::PublicKey>>
+where
+    P: PGPProviderSync,
+{
+    let verification_key = pgp.public_key_import(source, DataEncoding::Armor).unwrap();
     vec![TestAddressPublicKey(verification_key)]
 }

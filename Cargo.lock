@@ -5377,6 +5377,7 @@ dependencies = [
  "async-trait",
  "derive_more 2.0.1",
  "futures",
+ "itertools 0.13.0",
  "muon",
  "proton-core-api",
  "proton-core-common",
@@ -5710,7 +5711,7 @@ dependencies = [
 
 [[package]]
 name = "proton-ical"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "criterion",
  "ext-php-rs",
@@ -5899,7 +5900,7 @@ dependencies = [
 
 [[package]]
 name = "proton-mail-uniffi"
-version = "0.89.0"
+version = "0.91.0"
 dependencies = [
  "anyhow",
  "async-trait",

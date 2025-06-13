@@ -5,6 +5,7 @@ mod event_error;
 mod login_error;
 mod pin_error;
 mod proton_error;
+mod scroller_error;
 mod session_error;
 pub(crate) mod unexpected;
 
@@ -17,6 +18,7 @@ pub use self::event_error::*;
 pub use self::login_error::*;
 pub use self::pin_error::*;
 pub use self::proton_error::*;
+pub use self::scroller_error::*;
 pub use self::session_error::*;
 
 #[macro_export]

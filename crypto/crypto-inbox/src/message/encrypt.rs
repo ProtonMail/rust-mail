@@ -53,18 +53,21 @@ pub trait EncryptableDraft {
     ///
     /// # Parameters
     ///
-    /// * `pgp_provider` - The pgp provider instance from [`proton_crypto`].
+    /// * `pgp` - The pgp provider instance from [`proton_crypto`].
     /// * `address_key`  - The encryption keys of the recipients to encrypt the attachment to.
     ///
     /// # Errors
     ///
     /// The encryption or encoding fails.
-    fn encrypt_draft_body<Provider: PGPProviderSync>(
+    fn encrypt_draft_body<P>(
         &self,
-        provider: &Provider,
-        address_key: &PrimaryUnlockedAddressKey<Provider::PrivateKey, Provider::PublicKey>,
-    ) -> Result<EncryptedDraft, MessageError> {
-        let encrypted_draft = provider
+        pgp: &P,
+        address_key: &PrimaryUnlockedAddressKey<P::PrivateKey, P::PublicKey>,
+    ) -> Result<EncryptedDraft, MessageError>
+    where
+        P: PGPProviderSync,
+    {
+        let encrypted_draft = pgp
             .new_encryptor()
             .with_encryption_key(address_key.for_encryption())
             .with_signing_keys(address_key.for_signing())
@@ -73,6 +76,7 @@ pub trait EncryptableDraft {
             .map(String::from_utf8)
             .map_err(MessageError::Encryption)?
             .map(EncryptedDraft)?;
+
         Ok(encrypted_draft)
     }
 }

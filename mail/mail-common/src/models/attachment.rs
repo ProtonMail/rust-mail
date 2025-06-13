@@ -580,12 +580,11 @@ impl Attachment {
         }
 
         let encryptable_attachment = AttachmentData(data.as_ref());
-
-        let pgp_provider = new_pgp_provider();
-
+        let pgp = new_pgp_provider();
         let tether = context.user_stash().connection();
+
         let unlocked_address_keys = context
-            .unlocked_address_keys(&pgp_provider, &tether, address_id)
+            .unlocked_address_keys(&pgp, &tether, address_id)
             .await?;
 
         drop(tether);
@@ -596,7 +595,7 @@ impl Attachment {
         })?;
 
         encryptable_attachment
-            .attachment_encrypt_and_sign(&pgp_provider, &primary_address_key)
+            .attachment_encrypt_and_sign(&pgp, &primary_address_key)
             .map_err(|e| {
                 error!("Failed to encrypt attachment: {e:?}");
                 MailContextError::Crypto
@@ -870,10 +869,11 @@ impl Attachment {
         address: &Address,
         tether: &Tether,
     ) -> Result<PublicKeyAttachment, MailContextError> {
-        let pgp_provider = new_pgp_provider();
+        let pgp = new_pgp_provider();
+
         let unlocked_address = context
             .unlocked_address_keys(
-                &pgp_provider,
+                &pgp,
                 tether,
                 address
                     .remote_id
@@ -889,7 +889,7 @@ impl Attachment {
             .map_err(|_| MailContextError::Crypto)?;
 
         let (fingerprint, key) = mail_key
-            .export_public_key(&pgp_provider)
+            .export_public_key(&pgp)
             .inspect_err(|e| error!("Failed to export public key: {e:?}"))
             .map_err(|_| MailContextError::Crypto)?;
 

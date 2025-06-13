@@ -168,17 +168,16 @@ impl InboxSessionKey {
     ///
     /// # Parameters
     ///
-    /// * `pgp_provider` - The `OpenPGP` provider to export to.
+    /// * `pgp` - The `OpenPGP` provider to export to.
     ///
     /// # Errors
     ///
     /// Returns a [`CryptoError`] if the `OpenPGP` provider fails to accept the key.
-    pub fn export_to_pgp_provider<Provider: PGPProviderSync>(
-        &self,
-        pgp_provider: &Provider,
-    ) -> Result<Provider::SessionKey, SessionKeyError> {
-        pgp_provider
-            .session_key_import(self.session_key_bytes.as_ref(), self.session_key_algorithm)
+    pub fn export_to_pgp_provider<P>(&self, pgp: &P) -> Result<P::SessionKey, SessionKeyError>
+    where
+        P: PGPProviderSync,
+    {
+        pgp.session_key_import(self.session_key_bytes.as_ref(), self.session_key_algorithm)
             .map_err(SessionKeyError::Import)
     }
 
@@ -201,21 +200,24 @@ impl InboxSessionKey {
     ///
     /// # Parameters
     ///
-    /// * `pgp_provider` - The PGP provider instance from [`proton_crypto_account::proton_crypto`].
+    /// * `pgp` - The PGP provider instance from [`proton_crypto_account::proton_crypto`].
     /// * `recipient_key` - The recipient public key to encrypt the key packet to.
     ///
     /// # Errors
     ///
     /// Returns a [`SessionKeyError::KeyPacketEncryption`] error if the encryption fails or
     /// a [`SessionKeyError::InvalidSessionKey`] error if there is an issue with the internal session key.
-    pub fn encrypt_to_recipient<Provider: PGPProviderSync>(
+    pub fn encrypt_to_recipient<P>(
         &self,
-        pgp_provider: &Provider,
-        recipient_key: &impl AsPublicKeyRef<Provider::PublicKey>,
-    ) -> Result<KeyPacket, SessionKeyError> {
-        let session_key = self.export_to_pgp_provider(pgp_provider)?;
-        pgp_provider
-            .new_encryptor()
+        pgp: &P,
+        recipient_key: &impl AsPublicKeyRef<P::PublicKey>,
+    ) -> Result<KeyPacket, SessionKeyError>
+    where
+        P: PGPProviderSync,
+    {
+        let session_key = self.export_to_pgp_provider(pgp)?;
+
+        pgp.new_encryptor()
             .with_encryption_key(recipient_key.as_public_key())
             .encrypt_session_key(&session_key)
             .map(|key_packet| KeyPacket::new_from_bytes(key_packet.as_ref()))
@@ -230,30 +232,37 @@ impl InboxSessionKey {
     ///
     /// # Parameters
     ///
-    /// * `pgp_provider` - The PGP provider instance from [`proton_crypto_account::proton_crypto`].
+    /// * `pgp` - The PGP provider instance from [`proton_crypto_account::proton_crypto`].
     /// * `recipient_keys` - The recipient public keys to encrypt the key packets to.
     ///
     /// # Errors
     ///
     /// Returns a [`SessionKeyError::KeyPacketEncryption`] error if the encryption fails or
     /// a [`SessionKeyError::InvalidSessionKey`] error if there is an issue with the internal session key.
-    pub fn encrypt_to_recipients<Provider: PGPProviderSync>(
+    pub fn encrypt_to_recipients<P>(
         &self,
-        pgp_provider: &Provider,
-        recipient_keys: &[impl AsPublicKeyRef<Provider::PublicKey>],
-    ) -> Result<Vec<KeyPacket>, SessionKeyError> {
-        let session_key = self.export_to_pgp_provider(pgp_provider)?;
+        pgp: &P,
+        recipient_keys: &[impl AsPublicKeyRef<P::PublicKey>],
+    ) -> Result<Vec<KeyPacket>, SessionKeyError>
+    where
+        P: PGPProviderSync,
+    {
+        let session_key = self.export_to_pgp_provider(pgp)?;
+
         // Encrypt the session key to each recipient key.
         let mut key_packets = Vec::with_capacity(recipient_keys.len());
+
         for encryption_key in recipient_keys {
-            let key_packet = pgp_provider
+            let key_packet = pgp
                 .new_encryptor()
                 .with_encryption_key(encryption_key.as_public_key())
                 .encrypt_session_key(&session_key)
                 .map(|key_packet| KeyPacket::new_from_bytes(key_packet.as_ref()))
                 .map_err(SessionKeyError::KeyPacketEncryption)?;
+
             key_packets.push(key_packet);
         }
+
         Ok(key_packets)
     }
 }

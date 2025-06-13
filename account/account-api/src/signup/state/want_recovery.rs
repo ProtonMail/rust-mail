@@ -48,12 +48,14 @@ impl WantRecovery {
                     .map_err(|_| SignupError::RecoveryEmailInvalid)
                     .await?;
             }
+
             Recovery::Phone(phone) => {
                 self.client
                     .validate_phone(ValidatePhoneRequest { phone })
                     .map_err(|_| SignupError::RecoveryPhoneNumberInvalid)
                     .await?;
             }
+
             Recovery::None => {}
         }
 

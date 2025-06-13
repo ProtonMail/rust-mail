@@ -134,11 +134,15 @@ mod tests {
                         "SharedEvents": [
                             {
                                 "Type": 2,
-                                "Data": "BEGIN:VCALENDAR..."
+                                "Data": "BEGIN:VCALENDAR...",
+                                "Signature": "-----BEGIN PGP SIGNATURE-----...",
+                                "Author": "spongebob@squarepants.com"
                             },
                             {
                                 "Type": 3,
-                                "Data": "0sBEASBA..."
+                                "Data": "0sBEASBA...",
+                                "Signature": "-----BEGIN PGP SIGNATURE-----...",
+                                "Author": "spongebob@squarepants.com"
                             }
                         ],
                         "CalendarID": "HzNtbT1J...",
@@ -151,7 +155,9 @@ mod tests {
                         "AttendeesEvents": [
                             {
                                 "Type": 3,
-                                "Data": "0sLJAdwR..."
+                                "Data": "0sLJAdwR...",
+                                "Signature": "-----BEGIN PGP SIGNATURE-----...",
+                                "Author": "spongebob@squarepants.com"
                             }
                         ],
                         "Attendees": [
@@ -174,10 +180,14 @@ mod tests {
                     CalendarEventPayload {
                         ty: CalendarEventPayloadType::Signed,
                         data: "BEGIN:VCALENDAR...".into(),
+                        signature: Some("-----BEGIN PGP SIGNATURE-----...".into()),
+                        author: "spongebob@squarepants.com".into(),
                     },
                     CalendarEventPayload {
                         ty: CalendarEventPayloadType::EncryptedAndSigned,
                         data: "0sBEASBA...".into(),
+                        signature: Some("-----BEGIN PGP SIGNATURE-----...".into()),
+                        author: "spongebob@squarepants.com".into(),
                     },
                 ],
                 calendar_id: "HzNtbT1J...".into(),
@@ -187,9 +197,11 @@ mod tests {
                 recurrence_id: None,
                 address_key_packet: Some("wV4DkxOc...".into()),
                 shared_key_packet: None,
-                attendees_events: vec![CalendarEventPayload {
+                attendees_events: [CalendarEventPayload {
                     ty: CalendarEventPayloadType::EncryptedAndSigned,
                     data: "0sLJAdwR...".into(),
+                    signature: Some("-----BEGIN PGP SIGNATURE-----...".into()),
+                    author: "spongebob@squarepants.com".into(),
                 }],
                 attendees: vec![CalendarAttendee {
                     id: "0FcDfeKS...".into(),

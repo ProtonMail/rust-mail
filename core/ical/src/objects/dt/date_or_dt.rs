@@ -218,7 +218,7 @@ mod tests {
             ";VALUE=DATE:20180101T000000" => ";VALUE=DATE:20180101", yielding [
                 ReadMsg {
                     at: Some(Span::new((1, 21), (1, 27))),
-                    msg: "quirky time component".into(),
+                    body: "quirky time component".into(),
                     kind: ReadMsgKind::Warning,
                     context: Vec::new(),
                 },
@@ -230,7 +230,7 @@ mod tests {
             ";VALUE=DATE:20180101T123456" => ";VALUE=DATE:20180101", yielding [
                 ReadMsg {
                     at: Some(Span::new((1, 21), (1, 21))),
-                    msg: "unexpected time component".into(),
+                    body: "unexpected time component".into(),
                     kind: ReadMsgKind::Error,
                     context: Vec::new(),
                 },

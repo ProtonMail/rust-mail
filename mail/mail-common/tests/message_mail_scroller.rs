@@ -26,7 +26,7 @@ use stash::stash::StashError;
 use stash::{orm::Model, stash::WatcherHandle};
 use std::{collections::HashMap, vec};
 use wiremock::{
-    Mock, ResponseTemplate,
+    Mock, ResponseTemplate, Times,
     matchers::{method, path, query_param_contains},
 };
 
@@ -152,7 +152,7 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     // mocks
     mock_api_sync_prevous_messages_page(&ctx, "mymsg_9", 1).await;
-    let params = setup_api_message_pages(&ctx, page_size, 3).await;
+    let params = setup_api_message_pages(&ctx, page_size, 2..=3).await;
 
     ctx.setup_user(params.clone()).await;
 
@@ -500,7 +500,7 @@ async fn all_scheduled_is_displayed_in_ascending_order() {
 async fn setup_api_message_pages(
     ctx: &MailTestContext,
     page_size: usize,
-    empty_pages_requests: u64,
+    empty_pages_requests: impl Into<Times>,
 ) -> TestParams {
     setup_api_message_pages_ext(
         ctx,
@@ -514,7 +514,7 @@ async fn setup_api_message_pages(
 async fn setup_api_message_pages_ext(
     ctx: &MailTestContext,
     page_size: usize,
-    empty_pages_requests: u64,
+    empty_pages_requests: impl Into<Times>,
     system_label: SystemLabel,
     descending: bool,
 ) -> TestParams {
@@ -589,7 +589,7 @@ async fn setup_api_message_pages_ext(
 pub async fn mock_api_sync_prevous_messages_page(
     ctx: &MailTestContext,
     first_id: &str,
-    expect: u64,
+    expect: impl Into<Times>,
 ) {
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/messages"))
@@ -612,7 +612,7 @@ pub async fn mock_get_messages_page(
     ctx: &MailTestContext,
     messages: Vec<ApiMessageMetadata>,
     last_id: &str,
-    expect: u64,
+    expect: impl Into<Times>,
 ) {
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/messages"))

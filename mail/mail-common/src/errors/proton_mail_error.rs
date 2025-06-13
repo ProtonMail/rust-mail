@@ -6,6 +6,7 @@ use crate::draft::{
 };
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
+use crate::mail_scroller::MailScrollerError;
 use crate::{
     AppError, MailContextError, SidebarError, draft::DiscardError as DraftDiscardError,
     draft::Error as DraftError, draft::OpenError as DraftOpenError,
@@ -113,16 +114,25 @@ impl From<PinError> for ProtonMailError {
 impl From<LoginError> for ProtonMailError {
     fn from(error: LoginError) -> Self {
         match error {
-            LoginError::InvalidState => Self::Unexpected(Unexpected::Internal),
-            LoginError::FlowLogin(api_service_error)
-            | LoginError::FlowTotp(api_service_error)
-            | LoginError::FlowFido(api_service_error)
-            | LoginError::UserFetch(api_service_error) => Self::from(api_service_error),
+            LoginError::WrongMailboxPassword => Self::reason(LoginErrorReason::InvalidCredentials),
+
+            LoginError::FlowLogin(e)
+            | LoginError::FlowTotp(e)
+            | LoginError::FlowFido(e)
+            | LoginError::UserFetch(e) => Self::from(e),
+
+            LoginError::UserKeySetup(_) => Self::reason(LoginErrorReason::UserSetup),
+
+            LoginError::AddressFetch(_)
+            | LoginError::AddressSetup(_)
+            | LoginError::AddressKeySetup(_) => Self::reason(LoginErrorReason::AddressSetup),
+
             LoginError::MissingPrimaryKey
             | LoginError::KeySecretDecryption
             | LoginError::KeySecretDerivation(_) => {
                 Self::reason(LoginErrorReason::CantUnlockUserKey)
             }
+
             LoginError::KeySecretSaltFetch(api_service_error) => match api_service_error {
                 // HTTP code 422
                 ApiServiceError::UnprocessableEntity(_string1, _string2) => {
@@ -131,11 +141,14 @@ impl From<LoginError> for ProtonMailError {
                 }
                 _ => Self::from(api_service_error),
             },
+
             LoginError::ServerProof(_string) | LoginError::SrpProof(_string) => {
                 Self::reason(LoginErrorReason::InvalidCredentials)
             }
-            LoginError::WrongMailboxPassword => Self::Unexpected(Unexpected::Internal),
+
             LoginError::AuthStore(store_error) => Self::from(store_error),
+
+            LoginError::InvalidState => Self::Unexpected(Unexpected::Internal),
         }
     }
 }
@@ -257,6 +270,15 @@ impl From<MailContextError> for ProtonMailError {
                 ContextErrorReason::UserContextNotInitialized(user_id.into_inner()),
             ),
             MailContextError::Rsvp(_) => Self::Unexpected(Unexpected::Unknown),
+            MailContextError::MailScroller(mail_scroller_error) => Self::from(mail_scroller_error),
+        }
+    }
+}
+
+impl From<MailScrollerError> for ProtonMailError {
+    fn from(error: MailScrollerError) -> Self {
+        match error {
+            MailScrollerError::Dirty => Self::reason(MailScrollerErrorReason::Dirty),
         }
     }
 }

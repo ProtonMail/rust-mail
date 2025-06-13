@@ -51,6 +51,50 @@ impl VTimeZone {
         self
     }
 
+    /// Converts given string into a time zone.
+    ///
+    /// This comes handy for parsing externally-provided time zones[1], but note
+    /// that most of the time what you really want is [`VCalendar::from_str()`].
+    ///
+    /// [1] <https://protonmail.gitlab-pages.protontech.ch/Slim-API/calendar/#tag/VTimezone/operation/get_calendar-%7B_version%7D-vtimezones>
+    #[allow(clippy::should_implement_trait)]
+    pub fn from_str(src: &str) -> Result<ParsedVTimeZone> {
+        let mut r = IcsReader::new(src.as_bytes());
+        let mut tz: Option<Self> = None;
+
+        while !r.is_empty() {
+            let Some(e) = r.entry() else {
+                break;
+            };
+
+            if !e.try_comp(&mut r, "VTIMEZONE", &mut tz) {
+                _ = e.burn(&mut r, Kind::Component);
+            }
+        }
+
+        let mut msgs = r.finish();
+
+        let Some(tz) = tz else {
+            if msgs.iter().any(|msg| msg.kind.is_error()) {
+                // If we've already gotten some errors, let's avoid piling up an
+                // extra "missing time zone" - that's because most likely the
+                // reason why we're missing the time zone *is* one of those
+                // other errors (e.g. there's an invalid syntax somewhere)
+            } else {
+                msgs.push(ReadMsg {
+                    at: None,
+                    body: "missing time zone".into(),
+                    kind: ReadMsgKind::Error,
+                    context: Vec::new(),
+                });
+            }
+
+            return Err(Error::InvalidIcs(msgs));
+        };
+
+        Ok(ParsedVTimeZone { tz, msgs })
+    }
+
     #[must_use]
     pub(crate) fn validate(
         &self,
@@ -216,6 +260,15 @@ impl IcsWrite<Component> for TzProps {
         w.prop_opt("RRULE", self.rrule.as_ref());
         w.prop_opt("TZNAME", self.tz_name.as_ref());
     }
+}
+
+/// Outcome of time zone parsing, see [`VTimeZone::from_str()`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ParsedVTimeZone {
+    pub tz: VTimeZone,
+
+    /// Parsing messages (e.g. a syntax error somewhere in the file).
+    pub msgs: Vec<ReadMsg>,
 }
 
 #[cfg(test)]

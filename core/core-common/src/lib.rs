@@ -2,6 +2,7 @@
 pub mod actions;
 pub mod auth_store;
 mod context;
+pub mod core_clock;
 pub mod datatypes;
 #[allow(clippy::unused_async)]
 pub mod db;

@@ -10,6 +10,7 @@ pub struct Attendee {
     pub cn: Option<Cn>,
     pub cutype: Option<CuType>,
     pub role: Option<Role>,
+    pub partstat: Option<PartStat>,
     pub rsvp: Option<Rsvp>,
 
     // TODO(NGC-36) hacky - X- params should be handled separately from the RFC ones
@@ -36,6 +37,12 @@ impl Attendee {
     }
 
     #[must_use]
+    pub fn with_partstat(mut self, partstat: PartStat) -> Self {
+        self.partstat = Some(partstat);
+        self
+    }
+
+    #[must_use]
     pub fn with_rsvp(mut self, rsvp: impl Into<Rsvp>) -> Self {
         self.rsvp = Some(rsvp.into());
         self
@@ -58,6 +65,7 @@ where
             cn: None,
             cutype: None,
             role: None,
+            partstat: None,
             rsvp: None,
             x_pm_token: None,
         }
@@ -69,6 +77,7 @@ impl IcsRead<Property> for Attendee {
         let mut cn = None;
         let mut cutype = None;
         let mut role = None;
+        let mut partstat = None;
         let mut rsvp = None;
         let mut x_pm_token = None;
 
@@ -78,6 +87,7 @@ impl IcsRead<Property> for Attendee {
             if e.try_param(r, "CN", &mut cn)
                 || e.try_param(r, "CUTYPE", &mut cutype)
                 || e.try_param(r, "ROLE", &mut role)
+                || e.try_param(r, "PARTSTAT", &mut partstat)
                 || e.try_param(r, "RSVP", &mut rsvp)
                 || e.try_param(r, "X-PM-TOKEN", &mut x_pm_token)
             {
@@ -96,6 +106,7 @@ impl IcsRead<Property> for Attendee {
             cn,
             cutype,
             role,
+            partstat,
             rsvp,
             x_pm_token,
         })
@@ -107,6 +118,7 @@ impl IcsWrite<Property> for Attendee {
         w.param_opt("CN", self.cn.as_ref());
         w.param_opt("CUTYPE", self.cutype.as_ref());
         w.param_opt("ROLE", self.role.as_ref());
+        w.param_opt("PARTSTAT", self.partstat.as_ref());
         w.param_opt("RSVP", self.rsvp.as_ref());
         w.param_opt("X-PM-TOKEN", self.x_pm_token.as_ref());
         w.raw(":");
@@ -144,6 +156,8 @@ mod tests {
     #[test_case(";CUTYPE=GROUP:mailto:someone@localhost")]
     #[test_case(";ROLE=CHAIR:mailto:someone@localhost")]
     #[test_case(";ROLE=OPT-PARTICIPANT:mailto:someone@localhost")]
+    #[test_case(";PARTSTAT=ACCEPTED:mailto:someone@localhost")]
+    #[test_case(";PARTSTAT=TENTATIVE:mailto:someone@localhost")]
     #[test_case(";RSVP=TRUE:mailto:someone@localhost")]
     #[test_case(";RSVP=FALSE:mailto:someone@localhost")]
     #[test_case(";CUTYPE=ROOM;ROLE=CHAIR;RSVP=TRUE:mailto:someone@localhost")]

@@ -116,23 +116,25 @@ pub fn testdata_address_keys_for_user_address() -> AddressKeys {
 /// Returns the unlocked user keys of the test account.
 ///
 /// # Panics
-pub fn unlocked_user_key<Provider: PGPProviderSync>(
-    pgp_provider: &Provider,
-) -> UnlockedUserKeys<Provider> {
-    let private_key = pgp_provider
+pub fn unlocked_user_key<P>(pgp: &P) -> UnlockedUserKeys<P>
+where
+    P: PGPProviderSync,
+{
+    let private_key = pgp
         .private_key_import(
             TEST_RAW_USER_KEY.as_bytes(),
             "password".as_bytes(),
             DataEncoding::Armor,
         )
         .unwrap();
-    let public_key = pgp_provider
-        .private_key_to_public_key(&private_key)
-        .unwrap();
-    let user_key: UnlockedUserKey<Provider> = DecryptedUserKey {
+
+    let public_key = pgp.private_key_to_public_key(&private_key).unwrap();
+
+    let user_key: UnlockedUserKey<P> = DecryptedUserKey {
         id: KeyId::from(TEST_USER_KEY_ID),
         private_key,
         public_key,
     };
+
     UnlockedUserKeys::from(vec![user_key])
 }

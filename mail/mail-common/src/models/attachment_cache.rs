@@ -358,7 +358,8 @@ impl Attachment {
     /// Fetches and decrypts an attachment from the API.
     pub async fn fetch_data(&self, ctx: &MailUserContext) -> MailContextResult<Vec<u8>> {
         let attachment_id = self.id();
-        let pgp_provider = new_pgp_provider();
+        let pgp = new_pgp_provider();
+
         let remote_attachment_id = match &self.attachment_type {
             crate::models::AttachmentType::Remote(Some(id)) => id,
             crate::models::AttachmentType::Remote(None) => {
@@ -368,14 +369,16 @@ impl Attachment {
                 return Err(MailContextError::CalledFetchedAttachmentOnPgp);
             }
         };
+
         let encrypted_content = Attachment::fetch_content(remote_attachment_id.clone(), ctx.api())
             .await
             .map_err(|e| {
                 error!("Failed to fetch attachment ({attachment_id:?}) from API: {e:?}",);
                 e
             })?;
+
         let (decrypted_content, _verification_result) = self
-            .decrypt_content(ctx, &pgp_provider, encrypted_content.as_ref())
+            .decrypt_content(ctx, &pgp, encrypted_content.as_ref())
             .await
             // There is not much we can do at this point, and we need to convert from a
             // MailboxError
@@ -384,6 +387,7 @@ impl Attachment {
                 error!("{e:?}");
                 MailContextError::Crypto
             })?;
+
         Ok(decrypted_content)
     }
 
@@ -417,12 +421,15 @@ impl Attachment {
     }
 
     /// Decrypt attachment content
-    pub async fn decrypt_content<Provider: PGPProviderSync>(
+    pub async fn decrypt_content<P>(
         &self,
         ctx: &MailUserContext,
-        pgp_provider: &Provider,
+        pgp: &P,
         data: impl Read,
-    ) -> MailContextResult<(Vec<u8>, VerificationResult)> {
+    ) -> MailContextResult<(Vec<u8>, VerificationResult)>
+    where
+        P: PGPProviderSync,
+    {
         // Can't decrypt with the remote address id.
         let Some(remote_address_id) = &self.remote_address_id else {
             return Err(AppError::AttachmentHasNoAddressId(self.id()).into());
@@ -440,23 +447,21 @@ impl Attachment {
         let tether = ctx.user_stash().connection();
 
         let address_keys = ctx
-            .unlocked_address_keys(pgp_provider, &tether, remote_address_id)
+            .unlocked_address_keys(pgp, &tether, remote_address_id)
             .await?;
 
         // TODO: Load the sender verification keys for correct signature verification.
-        let verification_keys: Vec<<Provider as PGPProvider>::PublicKey> = Vec::new();
+        let verification_keys: Vec<<P as PGPProvider>::PublicKey> = Vec::new();
 
         let mut decrypting_reader = self
-            .decrypt_from_reader(
-                pgp_provider,
-                address_keys.as_ref(),
-                &verification_keys,
-                data,
-            )
+            .decrypt_from_reader(pgp, address_keys.as_ref(), &verification_keys, data)
             .map_err(AppError::AttachmentDecryption)?;
+
         std::io::copy(&mut decrypting_reader, &mut result_buffer)
             .map_err(|e| AppError::AttachmentDecryptionIO(e.to_string()))?;
+
         let signature_verification = decrypting_reader.verification_result();
+
         Ok((result_buffer, signature_verification))
     }
 

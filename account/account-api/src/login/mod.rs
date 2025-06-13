@@ -1,11 +1,10 @@
+use crate::DelinquentState;
 use crate::login::state::State;
 use muon::client::flow::{LoginExtraInfo, LoginFlowData};
-use proton_core_api::{
-    service::{ApiServiceError, ServiceError},
-    services::proton::{SessionId, UserId},
-    session::Session,
-    store::{StoreError, UserData},
-};
+use proton_core_api::service::{ApiServiceError, ServiceError};
+use proton_core_api::services::proton::{SessionId, UserId};
+use proton_core_api::session::Session;
+use proton_core_api::store::{StoreError, UserData};
 use secrecy::SecretString;
 use std::fmt::Debug;
 use thiserror::Error;
@@ -39,6 +38,22 @@ pub enum LoginError {
     #[error("Failed to fetch user info: {0}")]
     UserFetch(#[source] ApiServiceError),
 
+    /// Returned if we fail to fetch the user addresses after login.
+    #[error("Failed to fetch user addresses: {0}")]
+    AddressFetch(#[source] ApiServiceError),
+
+    /// Returned if we fail to set up a new address.
+    #[error("Failed to set up new address: {0}")]
+    AddressSetup(String),
+
+    /// Returned if we fail to setup the user key.
+    #[error("Failed to setup user key: {0}")]
+    UserKeySetup(String),
+
+    /// Returned if we fail to set up a new address key.
+    #[error("Failed to set up new address key: {0}")]
+    AddressKeySetup(String),
+
     /// Returned if the user keyring is invalid.
     #[error("Failed to find primary key in user keyring")]
     MissingPrimaryKey,
@@ -49,7 +64,7 @@ pub enum LoginError {
 
     /// TODO: Document this variant.
     #[error("Failed to derive the key secret from the password: {0}")]
-    KeySecretDerivation(#[source] SaltError),
+    KeySecretDerivation(#[from] SaltError),
 
     /// TODO: Document this variant.
     #[error("Failed to fetch salt to derive the key secret: {0}")]
@@ -221,6 +236,24 @@ impl LoginFlow {
     #[must_use]
     pub fn is_logged_in(&self) -> bool {
         matches!(self.state, State::Complete(_))
+    }
+
+    /// Check whether password change is required for a logged in user
+    pub fn password_change_required(&self) -> Result<bool, LoginError> {
+        if let State::Complete(c) = &self.state {
+            c.password_change_required().ok_or(LoginError::InvalidState)
+        } else {
+            Err(LoginError::InvalidState)
+        }
+    }
+
+    /// Return delinquent state of the user
+    pub fn delinquent_state(&self) -> Result<DelinquentState, LoginError> {
+        if let State::Complete(c) = &self.state {
+            c.delinquent_state().ok_or(LoginError::InvalidState)
+        } else {
+            Err(LoginError::InvalidState)
+        }
     }
 
     /// Get the ID of the user that has been (or is about to be) logged in.

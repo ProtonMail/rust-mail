@@ -1,10 +1,8 @@
 use crate::actions::rollback::RollbackAction;
-use crate::user_context::events::subscriber::MailEventSubscriber;
 use crate::{MailContextError, MailUserContext};
 use proton_action_queue::queue::ActionError;
 use proton_core_common::actions::event_poll::EventPoll;
 use proton_event_loop::EventLoopError;
-use std::sync::Weak;
 use std::time::Duration;
 use tracing::{Instrument, error};
 
@@ -114,9 +112,11 @@ impl MailUserContext {
     /// it does not hurt to leave them here as for now.
     ///
     pub(crate) async fn register_subscribers(&self) -> Result<(), EventLoopError> {
-        let mail_subscriber = MailEventSubscriber::new(Weak::clone(&self.this));
+        let mail_subscriber = self.event_subscriber();
 
-        self.event_loop().register(mail_subscriber.boxed()).await?;
+        self.event_loop()
+            .register(Box::new(mail_subscriber))
+            .await?;
 
         Ok(())
     }

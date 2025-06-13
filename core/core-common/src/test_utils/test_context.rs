@@ -1,5 +1,6 @@
 use crate::db::account::{CoreAccount, CoreSession};
 use crate::event_loop::EventPollMode;
+use crate::events::CoreEvent;
 use crate::models::ModelExtension;
 use crate::test_utils::account::{TEST_USER_ID, TEST_USER_MAIL, testdata_user_secret};
 use crate::test_utils::utils::catch_all;
@@ -13,11 +14,11 @@ use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::{Config, Endpoint, EnvId};
 use proton_core_api::status_observer::StatusObserver;
 use proton_core_api::status_watcher::StatusWatcher;
+use proton_event_loop::subscriber::SubscriberError;
 use proton_sqlite3::MigratorError;
 use stash::stash::{Stash, StashError};
 use std::io::stdout;
-use std::sync::Arc;
-use std::sync::Weak;
+use std::sync::{Arc, Weak};
 use tempdir::TempDir;
 use tracing::subscriber::set_global_default;
 use tracing::{Level, info};
@@ -313,6 +314,19 @@ impl TestContext {
     ///
     pub async fn catch_all(&self) {
         catch_all(&self.mock_web_server).await;
+    }
+}
+
+#[allow(async_fn_in_trait)]
+pub trait UserContextTestExtension {
+    async fn apply_event(self: &Arc<Self>, event: CoreEvent) -> Result<(), SubscriberError>;
+}
+
+impl UserContextTestExtension for UserContext {
+    async fn apply_event(self: &Arc<Self>, event: CoreEvent) -> Result<(), SubscriberError> {
+        use proton_event_loop::Subscriber;
+        let subscriber = self.event_subscriber();
+        subscriber.on_events(&mut [event]).await
     }
 }
 

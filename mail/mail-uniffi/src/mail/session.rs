@@ -812,13 +812,12 @@ impl MailSession {
         let ctx = self.mail_ctx.clone();
 
         uniffi_async(async move {
-            let mut tether = ctx.core_context().account_stash().connection();
-            let mut app_settings = RealAppSettings::get_or_default(&tether).await;
+            let tether = ctx.core_context().account_stash().connection();
+            let app_settings = RealAppSettings::get_or_default(&tether).await;
 
-            app_settings
-                .should_auto_lock(&mut tether)
-                .await
-                .map_err(RealProtonMailError::from)
+            Result::<_, RealProtonMailError>::Ok(
+                app_settings.should_auto_lock(ctx.core_context()).await,
+            )
         })
         .await
         .map_err(UserContextError::from)

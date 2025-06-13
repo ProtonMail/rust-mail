@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use clap::Parser;
-use proton_ical::{ReadMsgKind, VCalendar};
+use proton_ical::VCalendar;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::{fmt, fs};
@@ -87,10 +87,7 @@ impl CheckCmd {
 
                     Ok(CheckOutcome::Spotless)
                 } else {
-                    let has_errors = out.msgs.iter().any(|msg| match msg.kind {
-                        ReadMsgKind::Warning => false,
-                        ReadMsgKind::Error => true,
-                    });
+                    let has_errors = out.msgs.iter().any(|msg| msg.kind.is_error());
 
                     if has_errors {
                         println!("meh, dubious:");

@@ -10,7 +10,6 @@ use proton_crypto::crypto::{
 use proton_crypto_account::keys::UnlockedAddressKeys;
 use std::iter;
 
-#[derive(Debug)]
 pub struct CalendarEventDecryptor<'a, P>
 where
     P: PGPProviderSync,
@@ -30,24 +29,41 @@ where
         key_packets: KeyPackets<KeyPacketRef>,
     ) -> Result<Self> {
         if let Some(packet) = key_packets.address_key_packet {
-            Self::new_ex(
-                pgp,
-                packet,
-                address_keys.iter(),
-                address_keys.iter(),
-                "address",
-            )
+            Self::for_address(pgp, address_keys, packet)
         } else if let Some(packet) = key_packets.shared_key_packet {
-            Self::new_ex(
-                pgp,
-                packet,
-                iter::once(calendar_key),
-                address_keys.iter(),
-                "shared",
-            )
+            Self::for_calendar(pgp, address_keys, calendar_key, packet)
         } else {
             Err(Error::BothKeyPacketsAreMissing)
         }
+    }
+
+    pub fn for_address(
+        pgp: &'a P,
+        address_keys: &'a UnlockedAddressKeys<P>,
+        address_key_packet: KeyPacketRef,
+    ) -> Result<Self> {
+        Self::new_ex(
+            pgp,
+            address_key_packet,
+            address_keys.iter(),
+            address_keys.iter(),
+            "address",
+        )
+    }
+
+    pub fn for_calendar(
+        pgp: &'a P,
+        address_keys: &'a UnlockedAddressKeys<P>,
+        calendar_key: &UnlockedCalendarKey<P>,
+        shared_key_packet: KeyPacketRef,
+    ) -> Result<Self> {
+        Self::new_ex(
+            pgp,
+            shared_key_packet,
+            iter::once(calendar_key),
+            address_keys.iter(),
+            "shared",
+        )
     }
 
     fn new_ex<'b, D, V>(
@@ -88,7 +104,7 @@ where
         &self,
         pgp: &P,
         ics: EncryptedIcsRef,
-        sign: Option<SignatureRef>,
+        sig: Option<SignatureRef>,
     ) -> Result<DecryptedIcs>
     where
         P: PGPProviderSync,
@@ -100,11 +116,11 @@ where
         let decryptor = {
             let decryptor = pgp.new_decryptor().with_session_key_ref(&self.session_key);
 
-            if let Some(sign) = sign {
+            if let Some(sig) = sig {
                 decryptor
                     .with_verification_key_refs(&self.verification_keys)
                     .with_detached_signature_ref(
-                        sign.as_armored().as_bytes(),
+                        sig.as_armored().as_bytes(),
                         DetachedSignatureVariant::Plaintext,
                         true,
                     )
@@ -117,7 +133,7 @@ where
             .decrypt(ics, DataEncoding::Bytes)
             .map_err(Error::CouldntDecryptIcs)?;
 
-        if sign.is_some() {
+        if sig.is_some() {
             ics.verification_result().map_err(Error::CouldntVerifyIcs)?;
         }
 

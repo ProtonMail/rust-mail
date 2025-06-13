@@ -105,7 +105,7 @@ mod tests {
             "20180101T123456" => "20180101T123456Z", yielding [
                 ReadMsg {
                     at: Some(Span::new((1, 16), (1, 16))),
-                    msg: "expected utc-date-time (missing `Z` here)".into(),
+                    body: "expected utc-date-time (missing `Z` here)".into(),
                     kind: ReadMsgKind::Warning,
                     context: Vec::new(),
                 },

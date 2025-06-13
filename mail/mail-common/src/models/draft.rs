@@ -227,19 +227,14 @@ impl DraftMetadata {
         Ok(metadata.local_message_id)
     }
 
-    /// Check whether a given message with remote id has an active draft metadata record.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
-    pub async fn exists_for_message_with_remote_id(
+    pub async fn find_by_message_with_remote_id(
         remote_id: MessageId,
         tether: &Tether,
-    ) -> Result<bool, StashError> {
+    ) -> Result<Option<Self>, StashError> {
         let Some(local_id) = Message::remote_id_counterpart(remote_id, tether).await? else {
-            return Ok(false);
+            return Ok(None);
         };
-        Ok(Self::find_by_message_id(local_id, tether).await?.is_some())
+        Self::find_by_message_id(local_id, tether).await
     }
 
     /// Check whether this draft has pending changes that have not been communicated to the server.
@@ -414,8 +409,8 @@ impl DraftSendResult {
 
     pub async fn unseen_with_send_action(tether: &Tether) -> Result<Vec<Self>, StashError> {
         Self::find(
-            "WHERE seen=0 AND has_send_action= 1 ORDER BY timestamp DESC",
-            vec![],
+            "WHERE seen=0 AND (has_send_action= 1 OR origin = ?) ORDER BY timestamp DESC",
+            params![DraftSendResultOrigin::SaveBeforeSend],
             tether,
         )
         .await
@@ -607,10 +602,7 @@ impl DraftSendFailure {
     pub fn is_skippable(&self) -> bool {
         // No connection is handled by external queue code
         // Already sent is an error that is expected to occur
-        matches!(
-            self,
-            Self::NoConnection | Self::Save(DraftSendFailureSave::AlreadySent)
-        )
+        matches!(self, Self::NoConnection)
     }
 
     /// Convert from a draft [`Error`]

@@ -4,6 +4,13 @@
 
 MIN_IOS_VERSION="17.2"
 
+# iOS specific flags
+
+# on iOS file locks when the app is backgrounded cause a crash.
+# Closing a connection causes a WAL checkpoint to occur if SQLite is not compiled with `SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE`.
+# So if a connection is closed when the app is backgrounded, a checkpoint will occur which will lock the db and crash the app.
+LIBSQLITE3_FLAGS="SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE"
+
 function check_exit {
     retVal=$?
     if [ $retVal -ne 0 ]; then

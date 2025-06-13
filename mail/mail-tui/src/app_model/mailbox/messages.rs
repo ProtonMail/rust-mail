@@ -47,7 +47,7 @@ use std::sync::Arc;
 use std::{iter, thread};
 use throbber_widgets_tui::ThrobberState;
 use tokio::fs;
-use tracing::debug;
+use tracing::{debug, warn};
 
 /// Displays a list of messages based of message metadata. If a conversation is opened the message
 /// body will be displayed.
@@ -318,7 +318,7 @@ impl MessagesState {
     #[allow(clippy::too_many_lines)]
     pub fn handle_event(
         &mut self,
-        user_ctx: &Arc<MailUserContext>,
+        ctx: &Arc<MailUserContext>,
         mbox: &Mailbox,
         event: &Event,
     ) -> Command<Messages> {
@@ -391,7 +391,7 @@ impl MessagesState {
                 Command::None
             }
             KeyCode::Char('a') => {
-                let user_ctx = user_ctx.to_owned();
+                let user_ctx = ctx.to_owned();
 
                 let message = self
                     .selected_message()
@@ -444,7 +444,7 @@ impl MessagesState {
             }
             KeyCode::Char('e') => self
                 .selected_message_id()
-                .map(|id| Composer::open(user_ctx.to_owned(), id))
+                .map(|id| Composer::open(ctx.to_owned(), id))
                 .unwrap_or_default(),
             KeyCode::Char('u') => self
                 .selected_message_id()
@@ -455,9 +455,9 @@ impl MessagesState {
                 .map(|id| {
                     if key.modifiers.contains(KeyModifiers::CONTROL) {
                         if key.modifiers.contains(KeyModifiers::SHIFT) {
-                            Composer::reply(user_ctx.to_owned(), id, ReplyMode::All)
+                            Composer::reply(ctx.to_owned(), id, ReplyMode::All)
                         } else {
-                            Composer::reply(user_ctx.to_owned(), id, ReplyMode::Sender)
+                            Composer::reply(ctx.to_owned(), id, ReplyMode::Sender)
                         }
                     } else {
                         Command::message(MessageMessage::MarkMessageRead(id).into())
@@ -467,7 +467,7 @@ impl MessagesState {
             KeyCode::Char('f') => {
                 if key.modifiers.contains(KeyModifiers::CONTROL) {
                     self.selected_message_id()
-                        .map(|id| Composer::reply(user_ctx.to_owned(), id, ReplyMode::Forward))
+                        .map(|id| Composer::reply(ctx.to_owned(), id, ReplyMode::Forward))
                         .unwrap_or_default()
                 } else {
                     self.selected_message_id()
@@ -482,7 +482,7 @@ impl MessagesState {
             KeyCode::Char('t') => {
                 if key.modifiers.contains(KeyModifiers::CONTROL) {
                     self.selected_message_id()
-                        .map(|id| Composer::reply(user_ctx.to_owned(), id, ReplyMode::All))
+                        .map(|id| Composer::reply(ctx.to_owned(), id, ReplyMode::All))
                         .unwrap_or_default()
                 } else {
                     Command::None
@@ -793,6 +793,7 @@ impl DecryptedMessage {
                 .fetch_rsvp(ctx, rsvp, tether)
                 .await
                 .map_err(|err| format!("Can't fetch RSVP: {err}"))
+                .inspect_err(|err| warn!("{err}"))
                 .transpose()
         } else {
             None
@@ -909,10 +910,12 @@ impl DecryptedMessage {
 
     fn lay_rsvp(&self) -> u16 {
         match &self.rsvp {
-            Some(Ok(rsvp)) => (3 + rsvp.attendees.len()).try_into().unwrap(),
-            Some(Err(_)) => 2,
+            Some(Ok(rsvp)) => 4 + rsvp.attendees.len(),
+            Some(Err(msg)) => 1 + msg.lines().count(),
             None => 0,
         }
+        .try_into()
+        .unwrap()
     }
 
     fn draw_rsvp(&self, frame: &mut Frame, area: Rect) {
@@ -938,7 +941,12 @@ impl DecryptedMessage {
 
         // ---
 
+        let rsvp_summary = rsvp.summary.clone().unwrap_or_else(|| "(no title)".into());
+
         let rsvp_occur = match rsvp.occurrence {
+            RsvpOccurrence::Date { starts_at, ends_at } if ends_at == starts_at => {
+                format!("{starts_at}")
+            }
             RsvpOccurrence::Date { starts_at, ends_at } => {
                 format!("{starts_at} - {ends_at}")
             }
@@ -958,7 +966,7 @@ impl DecryptedMessage {
             format!("- <{}> ({status})", att.email)
         });
 
-        let rows = iter::once(rsvp.title.clone())
+        let rows = iter::once(rsvp_summary)
             .chain(iter::once(rsvp_occur))
             .chain(iter::once(String::default()))
             .chain(rsvp_atts);

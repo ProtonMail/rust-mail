@@ -1,4 +1,5 @@
-use chrono::Utc;
+use std::time::Duration;
+
 use derive_more::derive::TryFrom;
 use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
@@ -7,7 +8,7 @@ use stash::macros::Model;
 use stash::orm::Model;
 use stash::stash::{Bond, StashError, Tether};
 
-use crate::datatypes::UnixTimestamp;
+use crate::Context;
 use crate::pin_code::PinCode;
 use smart_default::SmartDefault;
 
@@ -31,10 +32,6 @@ pub struct AppSettings {
     pub auto_lock: ProtectionAutoLock,
 
     #[DbField]
-    #[default(_code = "UnixTimestamp::new(0)")]
-    pub lock_accessed_unixepoch: UnixTimestamp,
-
-    #[DbField]
     pub use_combine_contacts: bool,
 
     #[DbField]
@@ -49,7 +46,6 @@ impl AppSettings {
     pub fn set_biometrics(&mut self) {
         if let AppProtection::None = self.protection {
             self.protection = AppProtection::Biometrics;
-            self.lock_accessed_unixepoch = UnixTimestamp::now();
         }
     }
 
@@ -59,30 +55,16 @@ impl AppSettings {
         }
     }
 
-    /// Returns information if enough amount of time has passed from the autolock setting.
-    ///
-    /// Method automatically stores current time when returning `true`, allowing
-    /// for repetable calls checking if the time has passed since last autolock.
-    ///
-    pub async fn should_auto_lock(&mut self, tether: &mut Tether) -> Result<bool, StashError> {
+    pub async fn should_auto_lock(&self, ctx: &Context) -> bool {
         if self.protection.is_unset() {
-            Ok(false)
+            false
         } else {
-            let now = UnixTimestamp::now();
-            let should_lock = self
-                .auto_lock
-                .should_autolock(now, self.lock_accessed_unixepoch);
+            let lock_elapsed = ctx.clock().auto_lock_elapsed();
 
-            if should_lock {
-                self.lock_accessed_unixepoch = now;
-                tether.tx(async |bond| self.save(bond).await).await?;
-            }
-
-            Ok(should_lock)
+            self.auto_lock.should_autolock(lock_elapsed)
         }
     }
 
-    /// Get the app settings from database
     pub async fn get(tether: &Tether) -> Result<Option<Self>, StashError> {
         Self::load(SingleEntryId, tether).await
     }
@@ -198,13 +180,12 @@ impl Default for ProtectionAutoLock {
 
 impl ProtectionAutoLock {
     #[must_use]
-    pub fn should_autolock(&self, now: UnixTimestamp, last_lock: UnixTimestamp) -> bool {
+    pub fn should_autolock(&self, last_lock: Duration) -> bool {
         match self {
             Self::Always => true,
             Self::Minutes(minutes) => {
                 let seconds = u64::from(*minutes) * 60;
-
-                last_lock.as_u64().saturating_add(seconds) < now.as_u64()
+                last_lock.as_secs() > seconds
             }
             Self::Never => false,
         }
@@ -258,9 +239,6 @@ pub struct PinProtection {
     #[DbField]
     pub attempts: u8,
 
-    #[DbField]
-    pub last_access_unixepoch: i64,
-
     #[RowIdField]
     pub row_id: Option<u64>,
 }
@@ -274,7 +252,6 @@ impl PinProtection {
         Self {
             local_id: SingleEntryId,
             attempts: 0,
-            last_access_unixepoch: Utc::now().timestamp(),
             row_id: None,
         }
     }
@@ -304,7 +281,7 @@ impl PinProtection {
     /// Returns an error if the query fails
     ///
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        // // Make sure there will be only one row.
+        // Make sure there will be only one row.
         if let Some(existing) = Self::get(bond).await? {
             self.row_id = existing.row_id;
             self.local_id = SingleEntryId;
@@ -356,8 +333,11 @@ impl ToSql for SingleEntryId {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
+    use crate::test_utils::test_context::TestContext;
+
     use super::*;
-    use crate::{db::migrations::migrate_account_db, tests::common::new_core_test_connection};
     use test_case::test_case;
 
     #[test_case(0, ProtectionAutoLock::Always)]
@@ -393,7 +373,6 @@ mod tests {
         let pinpro = PinProtection {
             local_id: SingleEntryId,
             attempts,
-            last_access_unixepoch: 0,
             row_id: None,
         };
 
@@ -402,63 +381,57 @@ mod tests {
 
     const ONE_HOUR: u64 = 3600;
     const ONE_MINUTE: u64 = 60;
-    const TWO_MINUTES: u64 = 120;
 
-    #[test_case(ProtectionAutoLock::Always, 0, 0 => true; "TEST 0 AutoLock::Always returns true")]
-    #[test_case(ProtectionAutoLock::Always, ONE_HOUR, 0 => true; "TEST 1 AutoLock::Always returns true")]
-    #[test_case(ProtectionAutoLock::Always, 0, ONE_HOUR => true; "TEST 2 AutoLock::Always returns true")]
-    #[test_case(ProtectionAutoLock::Minutes(1), ONE_MINUTE, 0 => false; "TEST 3 When minutes passed are equal to allowed")]
-    #[test_case(ProtectionAutoLock::Minutes(1), ONE_MINUTE + 1, 0 => true; "TEST 4 When minutes passed from lock are more than allowed")]
-    #[test_case(ProtectionAutoLock::Minutes(1), TWO_MINUTES + 1, ONE_MINUTE => true; "TEST 5 When minutes passed from lock are more than allowed but last lock is not 0")]
-    #[test_case(ProtectionAutoLock::Minutes(60), ONE_HOUR, 0 => false; "TEST 6 When 60 minutes equal")]
-    #[test_case(ProtectionAutoLock::Minutes(60), ONE_HOUR + 1, 0 => true; "TEST 6 When 60 minutes passed")]
-    #[test_case(ProtectionAutoLock::Never, 0, 0 => false; "TEST 7 AutoLock::Never returns false")]
-    #[test_case(ProtectionAutoLock::Never, ONE_HOUR, 0 => false; "TEST 8 AutoLock::Never returns false")]
-    #[test_case(ProtectionAutoLock::Never, 0, ONE_HOUR => false; "TEST 9 AutoLock::Never returns false")]
-    fn should_autolock(autolock: ProtectionAutoLock, now: u64, last_lock: u64) -> bool {
-        autolock.should_autolock(UnixTimestamp::new(now), UnixTimestamp::new(last_lock))
+    #[test_case(ProtectionAutoLock::Always, 0 => true; "TEST 0 AutoLock::Always returns true")]
+    #[test_case(ProtectionAutoLock::Always, ONE_HOUR => true; "TEST 1 AutoLock::Always returns true")]
+    #[test_case(ProtectionAutoLock::Minutes(1), 0 => false; "TEST 2 When minutes passed are equal to allowed")]
+    #[test_case(ProtectionAutoLock::Minutes(1), ONE_MINUTE => false; "TEST 3 When minutes passed are equal to allowed")]
+    #[test_case(ProtectionAutoLock::Minutes(1), ONE_MINUTE + 1 => true; "TEST 4 When minutes passed from lock are more than allowed")]
+    #[test_case(ProtectionAutoLock::Minutes(60), ONE_HOUR => false; "TEST 6 When 60 minutes equal")]
+    #[test_case(ProtectionAutoLock::Minutes(60), ONE_HOUR + 1 => true; "TEST 6 When 60 minutes passed")]
+    #[test_case(ProtectionAutoLock::Never,  0 => false; "TEST 7 AutoLock::Never returns false")]
+    #[test_case(ProtectionAutoLock::Never, ONE_HOUR => false; "TEST 8 AutoLock::Never returns false")]
+    fn should_autolock(autolock: ProtectionAutoLock, last_lock: u64) -> bool {
+        let last_lock = Duration::from_secs(last_lock);
+        autolock.should_autolock(last_lock)
     }
 
     #[tokio::test]
     async fn app_settings_autolock() {
-        let stash = new_core_test_connection().await;
-        migrate_account_db(&stash).await.unwrap();
-        let mut tether = stash.connection();
+        let test_ctx = TestContext::new().await;
+        let core_ctx = test_ctx.core_context();
+        let tether = core_ctx.account_stash().connection();
         let mut app_settings = AppSettings::get_or_default(&tether).await;
 
         app_settings.set_biometrics();
         app_settings.auto_lock = ProtectionAutoLock::Minutes(10);
 
-        tether
-            .tx(async |tx| {
-                app_settings.save(tx).await?;
-                Result::<(), StashError>::Ok(())
-            })
-            .await
-            .unwrap();
-
         // Last lock defaults no longer defaults to 0, so it will return `false`
-        assert!(!app_settings.should_auto_lock(&mut tether).await.unwrap());
-        let last_lock_1 = app_settings.lock_accessed_unixepoch;
-        // Last lock was updated in last call, it will return `false`
-        assert!(!app_settings.should_auto_lock(&mut tether).await.unwrap());
+        assert!(!app_settings.should_auto_lock(core_ctx).await);
+        let last_lock_1 = core_ctx.clock().auto_lock_elapsed();
         // and any subsequent call for next 10 minutes will also return `false`
-        assert!(!app_settings.should_auto_lock(&mut tether).await.unwrap());
-        let last_lock_2 = app_settings.lock_accessed_unixepoch;
+        assert!(!app_settings.should_auto_lock(core_ctx).await);
+        assert!(!app_settings.should_auto_lock(core_ctx).await);
+        let last_lock_2 = core_ctx.clock().auto_lock_elapsed();
 
-        assert_eq!(last_lock_1, last_lock_2);
+        assert!(last_lock_1 < last_lock_2);
+
+        let ten_minutes_one_second = Duration::from_secs(10 * 60 + 1);
 
         // After 10 minutes, it will return `true`
         // We need to subtract 10 minutes from the last lock time
         // as we cannot move time backwards
-        app_settings.lock_accessed_unixepoch = last_lock_2.saturating_sub(10 * 60 + 1);
-
-        tether
-            .tx(async |tx| app_settings.save(tx).await)
-            .await
-            .unwrap();
+        core_ctx
+            .clock()
+            .auto_lock_duration_sub(ten_minutes_one_second);
 
         // After 10 minutes, it will return `true`
-        assert!(app_settings.should_auto_lock(&mut tether).await.unwrap());
+        assert!(app_settings.should_auto_lock(core_ctx).await);
+        // Till the auto lock is not accessed it will return `true`
+        assert!(app_settings.should_auto_lock(core_ctx).await);
+
+        // Now it will return `false` as we have accessed the app
+        core_ctx.clock().auto_lock_tick();
+        assert!(!app_settings.should_auto_lock(core_ctx).await);
     }
 }

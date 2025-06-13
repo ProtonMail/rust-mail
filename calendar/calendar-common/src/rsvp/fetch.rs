@@ -1,47 +1,47 @@
-use crate::{RsvpAttendee, RsvpCalendar, RsvpEvent, RsvpEventId, RsvpOccurrence, RsvpResult};
+use crate::{
+    CalendarBootstrapExt, CalendarEventPayloadExt, RsvpAttendee, RsvpCalendar, RsvpError,
+    RsvpEvent, RsvpEventId, RsvpOccurrence, RsvpOrganizer, RsvpResult,
+};
 use chrono::DateTime;
 use proton_calendar_api::{
-    CalendarAttendeeStatus, CalendarBootstrap, CalendarEvent, CalendarEventPayload, ProtonCalendar,
+    CalendarAttendeeId, CalendarAttendeeStatus, CalendarBootstrap, CalendarEvent, ProtonCalendar,
 };
 use proton_core_api::services::proton::Proton;
 use proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::keys::UnlockedAddressKeys;
-use proton_crypto_calendar::{
-    CalendarEventDecryptor, EncryptedIcsRef, KeyPacketRef, KeyPackets, LockedCalendarKey,
-};
+use proton_crypto_calendar::CalendarEventDecryptor;
 use proton_ical as ical;
-use std::{borrow::Cow, collections::HashMap};
-use tracing::{debug, info};
+use std::collections::HashMap;
+use tracing::{debug, info, instrument};
 
-use super::RsvpError;
-
-pub(super) async fn fetch<P>(
+pub(super) async fn exec<P>(
     api: &Proton,
     pgp: &P,
     keys: &UnlockedAddressKeys<P>,
-    event: &RsvpEventId,
+    id: &RsvpEventId,
 ) -> RsvpResult<Option<RsvpEvent>>
 where
     P: PGPProviderSync,
 {
-    let Some((calendar, event)) = fetch_encrypted(api, event).await? else {
+    let Some((calendar, event)) = fetch(api, id).await? else {
         return Ok(None);
     };
 
-    let decryptor = create_decryptor(pgp, keys, &calendar, &event)?;
-    let event = extract(pgp, calendar, &event, &decryptor)?;
+    let decryptor = calendar.create_decryptor(pgp, keys, &event)?;
+    let event = extract(pgp, calendar, event, &decryptor)?;
 
     Ok(Some(event))
 }
 
-async fn fetch_encrypted(
+#[instrument(skip_all)]
+async fn fetch(
     api: &Proton,
-    event: &RsvpEventId,
+    id: &RsvpEventId,
 ) -> RsvpResult<Option<(CalendarBootstrap, CalendarEvent)>> {
     info!("Fetching event data");
 
     let event = api
-        .get_calendar_event(&event.uid, event.recurrence_id.as_ref())
+        .get_calendar_event(&id.uid, id.recurrence_id.as_ref())
         .await?;
 
     if let Some(event) = event {
@@ -58,105 +58,31 @@ async fn fetch_encrypted(
     }
 }
 
-fn create_decryptor<'a, P>(
-    pgp: &'a P,
-    address_keys: &'a UnlockedAddressKeys<P>,
-    calendar: &CalendarBootstrap,
-    event: &CalendarEvent,
-) -> RsvpResult<CalendarEventDecryptor<'a, P>>
-where
-    P: PGPProviderSync,
-{
-    let calendar_key = LockedCalendarKey::from_bootstrap(calendar)?.import(pgp, address_keys)?;
-
-    let key_packets = {
-        let address_key_packet = event
-            .address_key_packet
-            .as_deref()
-            .map(KeyPacketRef::from_base64);
-
-        let shared_key_packet = event
-            .shared_key_packet
-            .as_deref()
-            .map(KeyPacketRef::from_base64);
-
-        KeyPackets {
-            address_key_packet,
-            shared_key_packet,
-        }
-    };
-
-    CalendarEventDecryptor::new(pgp, address_keys, &calendar_key, key_packets).map_err(Into::into)
-}
-
 fn extract<P>(
     pgp: &P,
     calendar: CalendarBootstrap,
-    event: &CalendarEvent,
+    event: CalendarEvent,
     decryptor: &CalendarEventDecryptor<P>,
 ) -> RsvpResult<RsvpEvent>
 where
     P: PGPProviderSync,
 {
-    let meta = extract_metadata(pgp, event, decryptor)?;
-    let occurrence = extract_occurrence(event)?;
-    let attendees = extract_attendees(pgp, event, decryptor)?;
-    let calendar = extract_calendar(calendar);
+    let meta = extract_metadata(pgp, &event, decryptor)?;
+    let occurrence = extract_occurrence(&event)?;
+    let attendees = extract_attendees(pgp, &event, decryptor)?;
+    let organizer = extract_organizer(&event)?;
+    let calendar = extract_calendar(calendar, &event);
 
     Ok(RsvpEvent {
-        title: meta.title,
+        summary: meta.summary,
         location: meta.location,
         description: meta.description,
         occurrence,
         attendees,
+        organizer,
         calendar,
+        raw: Box::new(event),
     })
-}
-
-fn decrypt_and_parse<P>(
-    pgp: &P,
-    event: &CalendarEventPayload,
-    decryptor: &CalendarEventDecryptor<P>,
-) -> RsvpResult<ical::VEvent>
-where
-    P: PGPProviderSync,
-{
-    let ics = if event.ty.is_encrypted() {
-        let ics = EncryptedIcsRef::from_base64(&event.data);
-        let ics = decryptor.decrypt(pgp, ics, None)?.into_bytes();
-
-        Cow::Owned(ics)
-    } else {
-        let ics = event.data.as_bytes();
-
-        Cow::Borrowed(ics)
-    };
-
-    let out = ical::VCalendar::from_bytes(&ics)?;
-
-    // Since clients are not necessarily 100% RFC-compliant, it's expected that
-    // we'll get some parser or validator messages here.
-    //
-    // Those messages are not errors per se, because if we got to this point, we
-    // were able to successfully recover some useful information from the *.ics,
-    // so there's no point in bailing out with an error.
-    for msg in out.msgs {
-        debug!("ics-parser said: {msg}");
-    }
-    for viol in out.viols {
-        debug!("ics-validator said: {viol}");
-    }
-
-    let cal = out.cal;
-
-    if cal.events.len() > 1 {
-        return Err(RsvpError::IcsContainsMoreThanOneEvent);
-    }
-
-    cal.events
-        .into_iter()
-        .next()
-        .ok_or(RsvpError::IcsContainsNoEvents)
 }
 
 fn extract_metadata<P>(
@@ -175,19 +101,13 @@ where
         .find(|event| event.ty.is_encrypted())
         .ok_or(RsvpError::CouldntFindSharedEvent)?;
 
-    let event = decrypt_and_parse(pgp, event, decryptor)?;
-
-    let title = event
-        .summary
-        .ok_or(RsvpError::IcsEventHasNoSummary)?
-        .value
-        .into_string();
-
+    let event = event.decrypt_and_parse(pgp, decryptor)?;
+    let summary = event.summary.map(|sum| sum.value.into_string());
     let location = event.location.map(|loc| loc.value.into_string());
     let description = event.description.map(|desc| desc.value.into_string());
 
     Ok(Metadata {
-        title,
+        summary,
         location,
         description,
     })
@@ -222,34 +142,31 @@ where
 {
     debug!("Extracting event's attendees");
 
-    // Attendees data are split between `event.attendees` (which contains
-    // just the rsvp statuses) and `event.attendees_events` (which contains
-    // just the e-mail addresses and tokens), so we must join both
-    let statuses: HashMap<_, _> = event
+    // Attendees are split between `event.attendees` (which contains statuses
+    // and ids used by the API) and `event.attendees_event` (which contains
+    // just the e-mail addresses and tokens)
+    let attendees: HashMap<_, _> = event
         .attendees
         .iter()
-        .map(|att| (att.token.as_str(), att.status))
+        .map(|att| (att.token.as_str(), (&att.id, att.status)))
         .collect();
 
-    let mut attendees = Vec::new();
+    let event = event.attendees_event().decrypt_and_parse(pgp, decryptor)?;
 
-    for (idx, event) in event.attendees_events.iter().enumerate() {
-        debug!(?idx, "Processing attendee event");
+    event
+        .attendees
+        .into_iter()
+        .enumerate()
+        .map(|(idx, attendee)| {
+            debug!(?idx, "Processing attendee");
 
-        let event = decrypt_and_parse(pgp, event, decryptor)?;
-
-        for (aidx, attendee) in event.attendees.into_iter().enumerate() {
-            debug!(?aidx, "Processing attendee");
-
-            attendees.push(map_attendee(&statuses, attendee)?);
-        }
-    }
-
-    Ok(attendees)
+            extract_attendee(&attendees, attendee)
+        })
+        .collect()
 }
 
-fn map_attendee(
-    statuses: &HashMap<&str, CalendarAttendeeStatus>,
+fn extract_attendee(
+    attendees: &HashMap<&str, (&CalendarAttendeeId, CalendarAttendeeStatus)>,
     attendee: ical::Attendee,
 ) -> RsvpResult<RsvpAttendee> {
     #[allow(clippy::match_wildcard_for_single_variants)]
@@ -265,25 +182,50 @@ fn map_attendee(
         .ok_or(RsvpError::AttendeeHasNoXPmToken)?
         .into_string();
 
-    let status = *statuses
+    let (id, status) = attendees
         .get(&token.as_str())
-        .ok_or(RsvpError::AttendeeHasUnknownStatus)?;
+        .ok_or(RsvpError::AttendeeIsNotKnown)?;
 
-    Ok(RsvpAttendee { email, status })
+    Ok(RsvpAttendee {
+        id: (*id).clone(),
+        email,
+        status: *status,
+        token: token.into(),
+    })
 }
 
-fn extract_calendar(cal: CalendarBootstrap) -> RsvpCalendar {
-    let cal = cal.into_member();
+fn extract_organizer(event: &CalendarEvent) -> RsvpResult<RsvpOrganizer> {
+    // All shared events come from the same author (the event organizer), so
+    // let's just pick any and call it a day.
+    //
+    // Alternatively we could actually go through all of the *.ics payloads and
+    // look for `ORGANIZER:...`, but no need to go this crazy for the same piece
+    // of information.
+    let email = event
+        .shared_events
+        .first()
+        .ok_or(RsvpError::OrganizerIsNotKnown)?
+        .author
+        .clone();
+
+    Ok(RsvpOrganizer { email })
+}
+
+fn extract_calendar(calendar: CalendarBootstrap, event: &CalendarEvent) -> RsvpCalendar {
+    let CalendarBootstrap {
+        members: [member], ..
+    } = calendar;
 
     RsvpCalendar {
-        name: cal.name,
-        color: cal.color,
+        id: event.calendar_id.clone(),
+        name: member.name,
+        color: member.color,
     }
 }
 
 #[derive(Debug)]
 struct Metadata {
-    title: String,
+    summary: Option<String>,
     location: Option<String>,
     description: Option<String>,
 }
@@ -292,20 +234,35 @@ struct Metadata {
 mod tests {
     use super::*;
     use chrono::NaiveDate;
+    use proton_calendar_api::{CalendarEventPayload, CalendarEventPayloadType};
+
+    fn event() -> CalendarEvent {
+        CalendarEvent {
+            shared_events: Vec::default(),
+            calendar_id: "xxx".into(),
+            start_time: 0,
+            end_time: 0,
+            full_day: false,
+            recurrence_id: None,
+            address_key_packet: None,
+            shared_key_packet: None,
+            attendees_events: [CalendarEventPayload {
+                ty: CalendarEventPayloadType::ClearText,
+                data: String::default(),
+                signature: None,
+                author: "spongebob@squarepants.com".into(),
+            }],
+            attendees: Vec::default(),
+        }
+    }
 
     #[test]
     fn extract_occurrence_date() {
         let actual = extract_occurrence(&CalendarEvent {
-            shared_events: Vec::default(),
-            calendar_id: "xxx".into(),
             start_time: 1_745_366_400,
             end_time: 1_745_452_800,
             full_day: true,
-            recurrence_id: None,
-            address_key_packet: None,
-            shared_key_packet: None,
-            attendees_events: Vec::default(),
-            attendees: Vec::default(),
+            ..event()
         })
         .unwrap();
 
@@ -320,16 +277,10 @@ mod tests {
     #[test]
     fn extract_occurrence_datetime() {
         let actual = extract_occurrence(&CalendarEvent {
-            shared_events: Vec::default(),
-            calendar_id: "xxx".into(),
             start_time: 1_528_972_200,
             end_time: 1_528_976_700,
             full_day: false,
-            recurrence_id: None,
-            address_key_packet: None,
-            shared_key_packet: None,
-            attendees_events: Vec::default(),
-            attendees: Vec::default(),
+            ..event()
         })
         .unwrap();
 

@@ -453,8 +453,8 @@ impl Message {
             .query_values(
                 formatdoc! {"
                 SELECT local_label_id AS value
-                FROM message_labels 
-                WHERE 
+                FROM message_labels
+                WHERE
                     local_message_id in ({})"
                     , placeholders(ids)
                 },
@@ -1785,7 +1785,7 @@ impl Message {
     ///
     /// * `cache_path`   - TODO: Document this parameter.
     /// * `address_keys` - The address keys to use for decryption.
-    /// * `pgp_provider` - The PGP provider to use for decryption.
+    /// * `pgp`          - The PGP provider to use for decryption.
     /// * `api`          - The API instance to use.
     /// * `interface`    - The database interface, i.e. [`Stash`] or [`Tether`],
     ///                    to use for finding the records.
@@ -2149,7 +2149,7 @@ impl Message {
                 .query_value_opt::<LocalConversationId>(
                     indoc::indoc! {
                     "INSERT OR IGNORE INTO message_labels
-                    VALUES (?,?) 
+                    VALUES (?,?)
                     RETURNING local_message_id AS value",
                     },
                     params![id, local_label_id],
@@ -2223,8 +2223,8 @@ impl Message {
                 .query_value_opt::<LocalMessageId>(
                     indoc::indoc! {"
                     DELETE FROM message_labels
-                    WHERE local_label_id=? 
-                      AND local_message_id=? 
+                    WHERE local_label_id=?
+                      AND local_message_id=?
                     RETURNING local_message_id AS value
                     "},
                     params![local_label_id, id],
@@ -2331,8 +2331,8 @@ impl Message {
                         .query_value_opt::<u64>(
                             indoc::indoc! {"
                             DELETE FROM conversation_labels
-                            WHERE local_label_id=? 
-                              AND local_conversation_id=? 
+                            WHERE local_label_id=?
+                              AND local_conversation_id=?
                             RETURNING local_conversation_id AS value
                             "},
                             params![local_label_id, conversation_id],
@@ -2662,13 +2662,11 @@ impl Message {
         tether: &Tether,
         attachment_prefetch: bool,
     ) -> Result<DecryptedMessageBody, MailContextError> {
-        let pgp_provider = proton_crypto::new_pgp_provider();
+        let pgp = proton_crypto::new_pgp_provider();
+        let address_keys = ctx.unlocked_address_keys(&pgp, tether, address_id).await?;
 
-        let address_keys = ctx
-            .unlocked_address_keys(&pgp_provider, tether, address_id)
-            .await?;
         encrypted_message_body
-            .into_decrypted_message(ctx, address_keys, pgp_provider, attachment_prefetch)
+            .into_decrypted_message(ctx, address_keys, pgp, attachment_prefetch)
             .await
             .map_err(|e| {
                 error!("Failed to decrypt message body: {e:?}");
@@ -2896,18 +2894,20 @@ impl Message {
         self.rsvp_attachment_id().is_some()
     }
 
-    /// Checks if given attachment is an RSVP invitation and, if so, fetches its
-    /// accompanying event from the calendar and returns it.
+    /// Checks if given attachment is an RSVP and, if so, fetches its event from
+    /// the calendar and returns it.
     ///
-    /// TODO (NGC-57) this function works only in online mode for now
-    #[tracing::instrument(skip_all)]
+    /// See: [`RsvpEvent::fetch()`].
+    ///
+    /// TODO (NGC-57) implement support for offline-mode
+    #[tracing::instrument(skip(self, ctx, tether))]
     pub async fn fetch_rsvp(
         &self,
         ctx: &MailUserContext,
         rsvp: LocalAttachmentId,
         tether: &mut Tether,
     ) -> MailContextResult<Option<RsvpEvent>> {
-        debug!(?rsvp, "Fetching RSVP");
+        debug!("Fetching RSVP");
 
         let ics = Attachment::get_attachment(ctx, rsvp).await.map_err(|err| {
             warn!(?err, "Couldn't get the RSVP attachment");
@@ -2982,6 +2982,34 @@ impl Message {
                 || *label_id == LabelId::drafts()
                 || *label_id == LabelId::all_drafts())
         })
+    }
+
+    pub(crate) async fn can_update_from_event_loop(
+        message_id: MessageId,
+        message_flags: MessageFlags,
+        tx: &Bond<'_>,
+    ) -> Result<bool, StashError> {
+        if DraftMetadata::find_by_message_with_remote_id(message_id.clone(), tx)
+            .await?
+            .is_some()
+        {
+            // We have a message that has been opened as a draft, but it is possible that
+            // another session has sent this draft. Deleting the metadata at this point in
+            // time can trigger the composer to display a collection of metadata not found errors
+            // that can be very confusing for the user.
+            // We let the update progress and the next action that executes for that
+            // draft will trigger a failure and clean itself up.
+            // It's possible that some messages will never properly clean up this way, but
+            // this should happen very often and the associated metadata is not very large
+            // with each draft. Correctly solving this requires knowledge of active composer
+            // states on the rust side.
+            tracing::info!(
+                "Message {message_id} has draft metadata but was already sent, update will be allowed"
+            );
+            return Ok(message_flags.is_schedule_send() || message_flags.is_sent());
+        }
+
+        Ok(true)
     }
 }
 

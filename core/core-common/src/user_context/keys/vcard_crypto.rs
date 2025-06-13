@@ -35,13 +35,16 @@ pub const X_PM_SIGN: &str = "X-PM-SIGN";
 ///
 /// # Parameters
 ///
-/// * `pgp_provider` - The pgp provider instance from `proton_crypto`.
+/// * `pgp` - The pgp provider instance from `proton_crypto`.
 /// * `email` - the email address that keys are being searched for in the `VCard`.
-pub fn pinned_keys_for_mail<Provider: PGPProviderSync>(
+pub fn pinned_keys_for_mail<P>(
     vcard: &VCard,
-    pgp_provider: &Provider,
+    pgp: &P,
     email: &str,
-) -> Option<PinnedPublicKeys<<Provider>::PublicKey>> {
+) -> Option<PinnedPublicKeys<<P>::PublicKey>>
+where
+    P: PGPProviderSync,
+{
     let group = vcard
         .get_all_email()
         .into_iter()
@@ -49,18 +52,21 @@ pub fn pinned_keys_for_mail<Provider: PGPProviderSync>(
         .1
         .group?;
 
-    let mut pinned_keys = pinned_keys_for_group(vcard, pgp_provider, &group);
+    let mut pinned_keys = pinned_keys_for_group(vcard, pgp, &group);
     update_pinned_keys_with_extended_preferences(vcard, &group, &mut pinned_keys);
     Some(pinned_keys)
 }
 
 /// Collect all the keys for the `selected_group` and return them in order of preference.
 /// A lower value for preference indicates a higher priority for that key
-fn pinned_keys_for_group<Provider: PGPProviderSync>(
+fn pinned_keys_for_group<P>(
     vcard: &VCard,
-    pgp_provider: &Provider,
+    pgp: &P,
     selected_group: &str,
-) -> PinnedPublicKeys<<Provider>::PublicKey> {
+) -> PinnedPublicKeys<<P>::PublicKey>
+where
+    P: PGPProviderSync,
+{
     let mut preference_keys = vcard
         .get_all_key()
         .into_iter()
@@ -70,7 +76,7 @@ fn pinned_keys_for_group<Provider: PGPProviderSync>(
                 let key_data = key.value.to_string();
 
                 let pref = unwrap_preference(key.preference);
-                let public_key_res = parse_and_import_pgp_key(pgp_provider, &key_data);
+                let public_key_res = parse_and_import_pgp_key(pgp, &key_data);
 
                 match public_key_res {
                     Err(e) => {
@@ -158,16 +164,21 @@ fn parse_pgp_scheme(value: Option<&str>) -> Option<PGPScheme> {
 /// Helper function to parse and import a PGP key from a property value.
 ///
 /// Returns [`None`] if parsing or input fails.
-fn parse_and_import_pgp_key<Provider: PGPProviderSync>(
-    pgp_provider: &Provider,
+fn parse_and_import_pgp_key<P>(
+    pgp: &P,
     value: &str,
-) -> Result<Option<<Provider>::PublicKey>, PGPKeyImportError> {
+) -> Result<Option<<P>::PublicKey>, PGPKeyImportError>
+where
+    P: PGPProviderSync,
+{
     let base64_encoded_key = value
         .split(',')
         .next_back()
         .ok_or(PGPKeyImportError::NoData)?;
+
     let binary_key = BASE_64.decode(base64_encoded_key)?;
+
     Ok(Some(
-        pgp_provider.public_key_import(binary_key, DataEncoding::Bytes)?,
+        pgp.public_key_import(binary_key, DataEncoding::Bytes)?,
     ))
 }

@@ -50,32 +50,32 @@ impl<'a> IcsReader<'a> {
         self.msgs
     }
 
-    fn msg<M>(&mut self, at: impl Into<Option<Span>>, msg: M, kind: ReadMsgKind)
+    fn msg<M>(&mut self, at: impl Into<Option<Span>>, body: M, kind: ReadMsgKind)
     where
         M: fmt::Display,
     {
         self.msgs.push(ReadMsg {
             at: at.into(),
-            msg: msg.to_string(),
+            body: body.to_string(),
             kind,
             context: self.context.clone(),
         });
     }
 
     /// Reports a warning.
-    pub fn warn<M>(&mut self, at: impl Into<Option<Span>>, msg: M)
+    pub fn warn<M>(&mut self, at: impl Into<Option<Span>>, body: M)
     where
         M: fmt::Display,
     {
-        self.msg(at, msg, ReadMsgKind::Warning);
+        self.msg(at, body, ReadMsgKind::Warning);
     }
 
     /// Reports an error.
-    pub fn error<M>(&mut self, at: impl Into<Option<Span>>, msg: M)
+    pub fn error<M>(&mut self, at: impl Into<Option<Span>>, body: M)
     where
         M: fmt::Display,
     {
-        self.msg(at, msg, ReadMsgKind::Error);
+        self.msg(at, body, ReadMsgKind::Error);
     }
 
     /// Runs `f` under a parser with modified hints.
@@ -563,7 +563,7 @@ impl<'a> IcsReader<'a> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReadMsg {
     pub at: Option<Span>,
-    pub msg: String,
+    pub body: String,
     pub kind: ReadMsgKind,
     pub context: Vec<Spanned<String>>,
 }
@@ -579,7 +579,7 @@ impl fmt::Display for ReadMsg {
             }
         )?;
 
-        write!(f, "{}", self.msg)?;
+        write!(f, "{}", self.body)?;
 
         if let Some(at) = self.at {
             writeln!(f)?;
@@ -604,6 +604,18 @@ pub enum ReadMsgKind {
     /// An error - the calendar has been parsed *partially*, some parts of it
     /// might be missing.
     Error,
+}
+
+impl ReadMsgKind {
+    #[must_use]
+    pub fn is_warning(&self) -> bool {
+        matches!(self, ReadMsgKind::Warning)
+    }
+
+    #[must_use]
+    pub fn is_error(&self) -> bool {
+        matches!(self, ReadMsgKind::Error)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -1025,13 +1037,13 @@ mod tests {
         let expected = vec![
             ReadMsg {
                 at: Some(Span::new((1, 7), (1, 12))),
-                msg: "unknown component `VEVENT`".into(),
+                body: "unknown component `VEVENT`".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             },
             ReadMsg {
                 at: Some(Span::new((4, 11), (4, 11))),
-                msg: "incomplete source".into(),
+                body: "incomplete source".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             },
@@ -1061,31 +1073,31 @@ mod tests {
         let expected = vec![
             ReadMsg {
                 at: Some(Span::new((1, 1), (1, 3))),
-                msg: "unknown property `FOO`".into(),
+                body: "unknown property `FOO`".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             },
             ReadMsg {
                 at: Some(Span::new((2, 1), (2, 3))),
-                msg: "unknown property `BAR`".into(),
+                body: "unknown property `BAR`".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             },
             ReadMsg {
                 at: Some(Span::new((3, 1), (3, 3))),
-                msg: "unknown property `ZAR`".into(),
+                body: "unknown property `ZAR`".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             },
             ReadMsg {
                 at: Some(Span::new((4, 1), (4, 6))),
-                msg: "unknown property `X-TEST`".into(),
+                body: "unknown property `X-TEST`".into(),
                 kind: ReadMsgKind::Warning,
                 context: Vec::new(),
             },
             ReadMsg {
                 at: Some(Span::new((4, 11), (4, 11))),
-                msg: "incomplete source".into(),
+                body: "incomplete source".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             },
@@ -1111,25 +1123,25 @@ mod tests {
         let expected = vec![
             ReadMsg {
                 at: Some(Span::new((1, 2), (1, 4))),
-                msg: "unknown parameter `FOO`".into(),
+                body: "unknown parameter `FOO`".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             },
             ReadMsg {
                 at: Some(Span::new((1, 10), (1, 12))),
-                msg: "unknown parameter `BAR`".into(),
+                body: "unknown parameter `BAR`".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             },
             ReadMsg {
                 at: Some(Span::new((1, 30), (1, 32))),
-                msg: "unknown parameter `ZAR`".into(),
+                body: "unknown parameter `ZAR`".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             },
             ReadMsg {
                 at: Some(Span::new((1, 38), (1, 38))),
-                msg: "incomplete source".into(),
+                body: "incomplete source".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             },

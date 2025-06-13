@@ -105,7 +105,7 @@ mod tests {
         assert_eq!(
             vec![ReadMsg {
                 at: Some(Span::one((1, 11))),
-                msg: "expected an email address (mailto:)".into(),
+                body: "expected an email address (mailto:)".into(),
                 kind: ReadMsgKind::Error,
                 context: vec![
                     Spanned {

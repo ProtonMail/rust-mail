@@ -1,23 +1,30 @@
-use proton_core_api::{
-    services::proton::{SessionId, UserId},
-    session::Session,
-};
-
+use crate::DelinquentState;
 use crate::login::state::{HasSessionId, HasUserId, StateData};
+use proton_core_api::services::proton::prelude::*;
+use proton_core_api::session::Session;
 
 /// Represents a completed login flow.
 pub struct Complete {
-    client: muon::Client,
-    data: StateData,
+    pub client: muon::Client,
+    pub data: StateData,
+    pub user: Option<User>,
 }
 
 impl Complete {
-    pub fn new(client: muon::Client, data: StateData) -> Self {
-        Self { client, data }
+    pub fn new(client: muon::Client, data: StateData, user: Option<User>) -> Self {
+        Self { client, data, user }
     }
 
     pub fn into_session(self) -> Session {
         Session::from_parts(self.client, self.data.parts)
+    }
+
+    pub fn password_change_required(&self) -> Option<bool> {
+        Some(self.user.as_ref()?.flags.has_temporary_password)
+    }
+
+    pub fn delinquent_state(&self) -> Option<DelinquentState> {
+        Some(self.user.as_ref()?.delinquent.into())
     }
 }
 

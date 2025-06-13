@@ -13,7 +13,8 @@ async fn load_sending_preferences() {
     ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
 
-    let pgp_provider = proton_crypto::new_pgp_provider();
+    let pgp = proton_crypto::new_pgp_provider();
+
     let recipient_email = params
         .recipient_keys
         .first()
@@ -22,6 +23,7 @@ async fn load_sending_preferences() {
         .as_str();
 
     let mut tether = user_ctx.user_stash().connection();
+
     let mail_settings = MailSettings::get(&tether)
         .await
         .expect("Failed to get mail settings")
@@ -29,7 +31,7 @@ async fn load_sending_preferences() {
 
     let recipient_preferences = user_ctx
         .recipient_send_preferences(
-            &pgp_provider,
+            &pgp,
             &mut tether,
             recipient_email,
             mail_settings.crypto_mail_settings(),
@@ -58,9 +60,10 @@ async fn load_sending_preferences_for_self() {
     ctx.catch_all().await;
     let user_ctx = ctx.mail_user_context().await;
 
-    let pgp_provider = proton_crypto::new_pgp_provider();
+    let pgp = proton_crypto::new_pgp_provider();
     let self_address = params.addresses.first().unwrap().email.as_str();
     let mut tether = user_ctx.user_stash().connection();
+
     let mail_settings = MailSettings::get(&tether)
         .await
         .expect("Failed to get mail settings")
@@ -68,7 +71,7 @@ async fn load_sending_preferences_for_self() {
 
     let recipient_preferences = user_ctx
         .recipient_send_preferences(
-            &pgp_provider,
+            &pgp,
             &mut tether,
             self_address,
             mail_settings.crypto_mail_settings(),

@@ -10,6 +10,7 @@ use proton_mail_common::errors::{
     DraftSenderAddressChangeErrorReason as RealDraftSenderAddressChangeErrorReason,
     DraftUndoSendErrorReason as RealDraftUndoSendErrorReason,
     EventErrorReason as RealEventErrorReason, LoginErrorReason as RealLoginErrorReason,
+    MailScrollerErrorReason as RealMailScrollerErrorReason,
     OtherErrorReason as RealOtherErrorReason, PinAuthErrorReason as RealPinAuthErrorReason,
     PinSetErrorReason as RealPinSetErrorReason,
 };
@@ -68,6 +69,8 @@ pub enum LoginErrorReason {
     InvalidCredentials,
     UnsupportedTfa,
     CantUnlockUserKey,
+    UserSetup,
+    AddressSetup,
 }
 
 impl From<RealLoginErrorReason> for LoginErrorReason {
@@ -75,6 +78,8 @@ impl From<RealLoginErrorReason> for LoginErrorReason {
         match reason {
             RealLoginErrorReason::InvalidCredentials => LoginErrorReason::InvalidCredentials,
             RealLoginErrorReason::CantUnlockUserKey => LoginErrorReason::CantUnlockUserKey,
+            RealLoginErrorReason::UserSetup => LoginErrorReason::UserSetup,
+            RealLoginErrorReason::AddressSetup => LoginErrorReason::AddressSetup,
         }
     }
 }
@@ -380,6 +385,19 @@ impl From<RealPinAuthErrorReason> for PinAuthErrorReason {
             RealPinAuthErrorReason::TooManyAttempts => Self::TooManyAttempts,
             RealPinAuthErrorReason::TooFrequentAttempts => Self::TooFrequentAttempts,
             RealPinAuthErrorReason::IncorrectPin => Self::IncorrectPin,
+        }
+    }
+}
+
+#[derive(Debug, UniffiEnum)]
+pub enum MailScrollerErrorReason {
+    Dirty,
+}
+
+impl From<RealMailScrollerErrorReason> for MailScrollerErrorReason {
+    fn from(value: RealMailScrollerErrorReason) -> Self {
+        match value {
+            RealMailScrollerErrorReason::Dirty => Self::Dirty,
         }
     }
 }

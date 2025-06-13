@@ -2,6 +2,7 @@
 
 use crate::action_queue::CoreActionError;
 use crate::auth_store::{AuthStore, DecryptExt};
+use crate::core_clock::CoreClock;
 use crate::datatypes::{
     LocalContactId, PasswordMode, StoredDevicePrivateKey, StoredDevicePublicKey, TfaStatus,
 };
@@ -260,6 +261,7 @@ pub struct Context {
     task_service: BackgroundAwareTaskService,
     on_session_deleted_broadcast: broadcast::Sender<(SessionId, UserId)>,
     pub event_poll_mode: EventPollMode,
+    clock: CoreClock,
 }
 
 const SESSION_OBSERVER_BROADCAST_CAPACITY: usize = 8;
@@ -344,6 +346,7 @@ impl Context {
             task_service: BackgroundAwareTaskService::new(task_service),
             on_session_deleted_broadcast: broadcast_sender,
             event_poll_mode,
+            clock: CoreClock::new(),
         });
 
         let ctx_weak = ctx.this.clone();
@@ -852,17 +855,20 @@ impl Context {
     ///
     /// It may return an error if crypto operation fails or if it fails to store key in the keychain.
     ///
-    pub fn gen_device_key_pair<Provider: PGPProviderSync>(
-        &self,
-        pgp_provider: &Provider,
-    ) -> CoreContextResult<StoredDevicePublicKey> {
-        let key = PGPDeviceKey::generate(pgp_provider).map_err(|_| CoreContextError::Crypto)?;
+    pub fn gen_device_key_pair<P>(&self, pgp: &P) -> CoreContextResult<StoredDevicePublicKey>
+    where
+        P: PGPProviderSync,
+    {
+        let key = PGPDeviceKey::generate(pgp).map_err(|_| CoreContextError::Crypto)?;
+
         let private_key = key
-            .serialize_to_secure_storage(pgp_provider)
+            .serialize_to_secure_storage(pgp)
             .map_err(|_| CoreContextError::Crypto)?;
+
         let private_key = StoredDevicePrivateKey::with_bytes(private_key.as_bytes().to_vec());
+
         let public_key = key
-            .export_public_key(pgp_provider)
+            .export_public_key(pgp)
             .map_err(|_| CoreContextError::Crypto)?;
 
         self.key_chain
@@ -1044,6 +1050,10 @@ impl Context {
 
     pub fn task_service(&self) -> &BackgroundAwareTaskService {
         &self.task_service
+    }
+
+    pub fn clock(&self) -> &CoreClock {
+        &self.clock
     }
 
     /// Subscribes for the event of closing the session. Use it to cleanup any remaining tasks
