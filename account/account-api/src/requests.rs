@@ -319,7 +319,7 @@ serde_with::with_suffix!(suffix_username "Username");
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Behavior {
-    /// Time from form load to user providing input (in seconds).
+    /// Durations (in seconds) of each focus session on the text field.
     pub time: Vec<u32>,
     /// Number of clicks / taps during user input.
     pub click: u32,
