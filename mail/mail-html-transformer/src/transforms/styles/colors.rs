@@ -212,7 +212,7 @@ mod tests {
     #[test_case(
         "hsla(0, 0%, 100%, 1.0)",
         ColorPurpose::Background,
-        "#1c1b24"; // Our Dark mode background color. Hardcoded value
+        "#191927"; // Our Dark mode background color. Hardcoded value
         "case 7"
     )]
     #[test_case(

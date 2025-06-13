@@ -10,7 +10,7 @@ expression: html.to_string()
 background-color: #3e6b2e !important
  }
 [data-protonmail-message] div[class="a"][style*="background-color: #fff"] {
- background-color: #1c1b24 !important
+ background-color: #191927 !important
  }[data-protonmail-message] div[class="a"][style*="color: #000"] {
  color: #fff !important
  }[data-protonmail-message] div[class="b"][style*="color: #000"] {

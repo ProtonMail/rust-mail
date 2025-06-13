@@ -286,11 +286,11 @@ fn sanitize_dark_mode(document: &NodeRef, root_selector: String) -> Option<Strin
 }
 
 // Not using `RGBA::new` because it contains clamping which is not const-friendly.
-/// Hex representation: #1C1B24
+/// Hex representation: #191927
 pub const DARK_MODE_BACKGROUND_COLOR: RGBA = RGBA {
-    red: 0x1C,
-    green: 0x1B,
-    blue: 0x24,
+    red: 0x19,
+    green: 0x19,
+    blue: 0x27,
     alpha: 0xFF,
 };
 
@@ -893,7 +893,7 @@ mod tests {
                     "background-color: #fff".to_string(),
                 ],
                 vec![
-                    "background-color: #1c1b24 !important".to_string(),
+                    "background-color: #191927 !important".to_string(),
                     "color: #fff !important".to_string(),
                 ],
             )

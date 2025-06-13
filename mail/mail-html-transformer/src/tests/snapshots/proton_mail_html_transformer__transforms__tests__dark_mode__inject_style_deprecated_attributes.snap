@@ -13,9 +13,9 @@ background-color: #3e6b2e !important
 [data-protonmail-message] font[color="black"] {
  color: #fff;
  }[data-protonmail-message] table[bgcolor="ffffff"] {
- background-color: #1c1b24;
+ background-color: #191927;
  }[data-protonmail-message] td[bgcolor="white"] {
- background-color: #1c1b24;
+ background-color: #191927;
  }
                   }
                 </style></head>
