@@ -20,6 +20,7 @@ pub enum MailErrorReason {
     EventReason(EventErrorReason),
     PinSetReason(PinSetErrorReason),
     PinAuthReason(PinAuthErrorReason),
+    MailScrollerReason(MailScrollerErrorReason),
     OtherReason(OtherErrorReason),
 }
 
@@ -83,6 +84,12 @@ impl From<PinAuthErrorReason> for MailErrorReason {
     }
 }
 
+impl From<MailScrollerErrorReason> for MailErrorReason {
+    fn from(reason: MailScrollerErrorReason) -> Self {
+        Self::MailScrollerReason(reason)
+    }
+}
+
 impl From<OtherErrorReason> for MailErrorReason {
     fn from(reason: OtherErrorReason) -> Self {
         Self::OtherReason(reason)
@@ -107,7 +114,6 @@ pub enum ActionErrorReason {
 /// as the session is nomenclature used in the client library.
 #[derive(Debug)]
 pub enum ContextErrorReason {
-    MailScrollerDirty,
     DuplicateContext,
     UserContextNotInitialized(String),
 }
@@ -286,6 +292,16 @@ pub enum PinAuthErrorReason {
     TooManyAttempts,
     TooFrequentAttempts,
     IncorrectPin,
+}
+
+/// Specific Reason for error occurrence within Mail Scroller.
+///
+/// This enum is used to represent the specific reason for an error that occurred
+/// in handling mail scroller related operations in order to provide only the necessary
+/// information to the user.
+#[derive(Debug)]
+pub enum MailScrollerErrorReason {
+    Dirty,
 }
 
 /// Specific Reason for error occurrence within the application.

@@ -10,6 +10,7 @@ use proton_mail_common::errors::{
     DraftSenderAddressChangeErrorReason as RealDraftSenderAddressChangeErrorReason,
     DraftUndoSendErrorReason as RealDraftUndoSendErrorReason,
     EventErrorReason as RealEventErrorReason, LoginErrorReason as RealLoginErrorReason,
+    MailScrollerErrorReason as RealMailScrollerErrorReason,
     OtherErrorReason as RealOtherErrorReason, PinAuthErrorReason as RealPinAuthErrorReason,
     PinSetErrorReason as RealPinSetErrorReason,
 };
@@ -42,7 +43,6 @@ impl From<RealActionErrorReason> for ActionErrorReason {
 /// as context is nomenclature used in the common library.
 #[derive(Debug, UniffiEnum)]
 pub enum ContextReason {
-    MailScrollerDirty,
     UnknownLabel,
     DuplicateContext,
     UserContextNotInitialized,
@@ -51,7 +51,6 @@ pub enum ContextReason {
 impl From<RealContextErrorReason> for ContextReason {
     fn from(reason: RealContextErrorReason) -> Self {
         match reason {
-            RealContextErrorReason::MailScrollerDirty => ContextReason::MailScrollerDirty,
             RealContextErrorReason::DuplicateContext => ContextReason::DuplicateContext,
             RealContextErrorReason::UserContextNotInitialized(_) => {
                 ContextReason::UserContextNotInitialized
@@ -382,6 +381,19 @@ impl From<RealPinAuthErrorReason> for PinAuthErrorReason {
             RealPinAuthErrorReason::TooManyAttempts => Self::TooManyAttempts,
             RealPinAuthErrorReason::TooFrequentAttempts => Self::TooFrequentAttempts,
             RealPinAuthErrorReason::IncorrectPin => Self::IncorrectPin,
+        }
+    }
+}
+
+#[derive(Debug, UniffiEnum)]
+pub enum MailScrollerErrorReason {
+    Dirty,
+}
+
+impl From<RealMailScrollerErrorReason> for MailScrollerErrorReason {
+    fn from(value: RealMailScrollerErrorReason) -> Self {
+        match value {
+            RealMailScrollerErrorReason::Dirty => Self::Dirty,
         }
     }
 }
