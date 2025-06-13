@@ -964,15 +964,23 @@ impl DecryptedMessage {
 
         let rsvp_summary = rsvp.summary.as_deref().unwrap_or("(no title)");
 
-        let rsvp_occur = match rsvp.occurrence {
-            RsvpOccurrence::Date { starts_at, ends_at } if ends_at == starts_at => {
-                format!("{starts_at}")
-            }
-            RsvpOccurrence::Date { starts_at, ends_at } => {
-                format!("{starts_at} - {ends_at}")
-            }
-            RsvpOccurrence::DateTime { starts_at, ends_at } => {
-                format!("{starts_at} - {ends_at}")
+        let rsvp_occur = {
+            let when = match rsvp.occurrence {
+                RsvpOccurrence::Date { starts_at, ends_at } if ends_at == starts_at => {
+                    format!("{starts_at}")
+                }
+                RsvpOccurrence::Date { starts_at, ends_at } => {
+                    format!("{starts_at} - {ends_at}")
+                }
+                RsvpOccurrence::DateTime { starts_at, ends_at } => {
+                    format!("{starts_at} - {ends_at}")
+                }
+            };
+
+            if let Some(loc) = &rsvp.location {
+                format!("{when} @ {loc}")
+            } else {
+                when
             }
         };
 
