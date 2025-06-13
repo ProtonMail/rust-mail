@@ -14,6 +14,7 @@ pub mod login;
 pub mod prelude;
 pub mod requests;
 pub mod responses;
+pub mod shared;
 pub mod signup;
 
 /// The Proton Core API base path (v4).
@@ -158,7 +159,7 @@ pub trait AccountApi {
     /// An `ApiServiceResult` containing the setup response with user and key details or an error.
     ///
     /// [API doc](https://protonmail.gitlab-pages.protontech.ch/Slim-API/core/#tag/Keys/operation/post_core-%7B_version%7D-keys-setup)
-    async fn setup_keys_for_new_account(
+    async fn setup_keys(
         &self,
         user_init_flag: AsyncUserInitialization,
         request: SetupKeysRequest,
@@ -176,10 +177,10 @@ pub trait AccountApi {
     /// An `ApiServiceResult` containing the response with the created address details or an error.
     ///
     /// [API doc](https://protonmail.gitlab-pages.protontech.ch/Slim-API/core/#tag/Address/operation/post_core-%7B_version%7D-addresses-setup)
-    async fn setup_new_nonsubuser_address(
+    async fn setup_address(
         &self,
-        request: PostSetupNewNonSubuserAddressRequest,
-    ) -> ApiServiceResult<PostSetupNewNonSubuserAddressResponse>;
+        request: PostAddressesSetupRequest,
+    ) -> ApiServiceResult<PostAddressesSetupResponse>;
 
     async fn auth_request(&self, request: PostAuthRequest) -> ApiServiceResult<AuthResponse>;
 
@@ -196,6 +197,38 @@ pub trait AccountApi {
         &self,
         request: ValidatePhoneRequest,
     ) -> ApiServiceResult<SimpleResponse>;
+
+    /// Creates a new user key.
+    ///
+    /// This method sends a request to create a new encryption key for the user.
+    ///
+    /// # Arguments
+    /// * `request` - The request containing the private key and primary flag.
+    ///
+    /// # Returns
+    /// An `ApiServiceResult` containing the response with the created key ID or an error.
+    ///
+    /// [API doc](https://protonmail.gitlab-pages.protontech.ch/Slim-API/core/#tag/Keys/operation/post_core-{_version}-keys-user)
+    async fn create_user_key(
+        &self,
+        request: CreateUserKeyRequest,
+    ) -> ApiServiceResult<CreateUserKeyResponse>;
+
+    /// Creates a new address key.
+    ///
+    /// This method sends a request to create a new encryption key for an address.
+    ///
+    /// # Arguments
+    /// * `request` - The request containing the address key details.
+    ///
+    /// # Returns
+    /// An `ApiServiceResult` containing the response with the created key details or an error.
+    ///
+    /// [API doc](https://protonmail.gitlab-pages.protontech.ch/Slim-API/core/#tag/Keys/operation/post_core-{_version}-keys-address)
+    async fn create_address_key(
+        &self,
+        request: CreateAddressKeyRequest,
+    ) -> ApiServiceResult<CreateAddressKeyResponse>;
 }
 
 impl AccountApi for muon::Client {
@@ -250,10 +283,10 @@ impl AccountApi for muon::Client {
         Ok(request.send_with(self).await?.ok()?.into_body_json()?)
     }
 
-    async fn setup_new_nonsubuser_address(
+    async fn setup_address(
         &self,
-        request: PostSetupNewNonSubuserAddressRequest,
-    ) -> ApiServiceResult<PostSetupNewNonSubuserAddressResponse> {
+        request: PostAddressesSetupRequest,
+    ) -> ApiServiceResult<PostAddressesSetupResponse> {
         Ok(POST!("{CORE_V4}/addresses/setup")
             .body_json(request)?
             .send_with(self)
@@ -298,7 +331,7 @@ impl AccountApi for muon::Client {
             .into_body_json()?)
     }
 
-    async fn setup_keys_for_new_account(
+    async fn setup_keys(
         &self,
         user_init_flag: AsyncUserInitialization,
         request: SetupKeysRequest,
@@ -341,6 +374,30 @@ impl AccountApi for muon::Client {
         // We need an unauth session for this call so we the request through the client send function.
         Ok(self
             .send(POST!("{CORE_V4}/validate/phone").body_json(request)?)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn create_user_key(
+        &self,
+        request: CreateUserKeyRequest,
+    ) -> ApiServiceResult<CreateUserKeyResponse> {
+        Ok(POST!("{CORE_V4}/keys/user")
+            .body_json(request)?
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn create_address_key(
+        &self,
+        request: CreateAddressKeyRequest,
+    ) -> ApiServiceResult<CreateAddressKeyResponse> {
+        Ok(POST!("{CORE_V4}/keys/address")
+            .body_json(request)?
+            .send_with(self)
             .await?
             .ok()?
             .into_body_json()?)

@@ -127,6 +127,8 @@ pub enum ContextErrorReason {
 pub enum LoginErrorReason {
     InvalidCredentials,
     CantUnlockUserKey,
+    UserSetup,
+    AddressSetup,
 }
 
 /// Specific Reason for error occurrence within Signup Flow.

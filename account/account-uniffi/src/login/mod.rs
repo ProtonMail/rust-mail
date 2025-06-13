@@ -1,8 +1,8 @@
-use std::sync::Arc;
-
 use datatypes::MigrationData;
 use muon::client::flow::LoginExtraInfo;
 use proton_account_api::login as login_api;
+use proton_account_api::responses as responses_api;
+use std::sync::Arc;
 use tokio::{sync::Mutex, task::JoinError};
 use uniffi::Enum as UniffiEnum;
 use uniffi_common::errors::UserApiServiceError;
@@ -127,6 +127,31 @@ impl LoginFlow {
         async_runtime().block_on(async { self.flow.lock().await.is_logged_in() })
     }
 
+    /// Check whether password change is required for a logged in user
+    #[must_use]
+    pub fn password_change_required(&self) -> Result<bool, LoginError> {
+        async_runtime().block_on(async {
+            self.flow
+                .lock()
+                .await
+                .password_change_required()
+                .map_err(LoginError::from)
+        })
+    }
+
+    /// Return delinquent state of the user
+    #[must_use]
+    pub fn delinquent_state(&self) -> Result<DelinquentState, LoginError> {
+        async_runtime().block_on(async {
+            self.flow
+                .lock()
+                .await
+                .delinquent_state()
+                .map_err(LoginError::from)
+                .map(DelinquentState::from)
+        })
+    }
+
     /// Get the user ID of the user that has (or is in the process of) logging in.
     ///
     /// This can be used to resume a login flow.
@@ -193,6 +218,18 @@ pub enum LoginError {
     /// Returned if we fail to fetch the user info after login.
     UserFetch(UserApiServiceError),
 
+    /// Returned if we fail to setup the user key.
+    UserKeySetup(String),
+
+    /// Returned if we fail to fetch the user's addresses after login.
+    AddressFetch(UserApiServiceError),
+
+    /// Returned if we fail to set up a new address.
+    AddressSetup(String),
+
+    /// Returned if we fail to set up a new address key.
+    AddressKeySetup(String),
+
     /// Returned if the user keyring is invalid.
     MissingPrimaryKey,
 
@@ -228,6 +265,10 @@ impl From<login_api::LoginError> for LoginError {
             login_api::LoginError::FlowTotp(e) => LoginError::FlowTotp(e.into()),
             login_api::LoginError::FlowFido(e) => LoginError::FlowFido(e.into()),
             login_api::LoginError::UserFetch(e) => LoginError::UserFetch(e.into()),
+            login_api::LoginError::AddressFetch(e) => LoginError::AddressFetch(e.into()),
+            login_api::LoginError::AddressSetup(e) => LoginError::AddressSetup(e),
+            login_api::LoginError::UserKeySetup(e) => LoginError::UserKeySetup(e),
+            login_api::LoginError::AddressKeySetup(e) => LoginError::AddressKeySetup(e),
             login_api::LoginError::MissingPrimaryKey => LoginError::MissingPrimaryKey,
             login_api::LoginError::KeySecretDecryption => LoginError::KeySecretDecryption,
             login_api::LoginError::KeySecretDerivation(salt_error) => {
@@ -247,5 +288,34 @@ impl From<login_api::LoginError> for LoginError {
 impl From<JoinError> for LoginError {
     fn from(value: JoinError) -> Self {
         Self::Other(value.to_string())
+    }
+}
+
+/// Represents the delinquent state of the user.
+///
+/// This enum indicates the payment status of the user's account.
+#[derive(UniffiEnum)]
+pub enum DelinquentState {
+    /// The user's account is fully paid.
+    Paid = 0,
+    /// The user's account is available but not yet paid.
+    Available = 1,
+    /// The user's account has an overdue payment.
+    Overdue = 2,
+    /// The user's account is delinquent due to unpaid dues.
+    Delinquent = 3,
+    /// The user's payment has not been received.
+    NotReceived = 4,
+}
+
+impl From<responses_api::DelinquentState> for DelinquentState {
+    fn from(value: responses_api::DelinquentState) -> Self {
+        match value {
+            responses_api::DelinquentState::Paid => DelinquentState::Paid,
+            responses_api::DelinquentState::Available => DelinquentState::Available,
+            responses_api::DelinquentState::Overdue => DelinquentState::Overdue,
+            responses_api::DelinquentState::Delinquent => DelinquentState::Delinquent,
+            responses_api::DelinquentState::NotReceived => DelinquentState::NotReceived,
+        }
     }
 }
