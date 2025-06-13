@@ -16,7 +16,7 @@ expression: html.to_string()
                       [data-protonmail-message] .main {
 color: #fff !important
  }html[data-protonmail-message] {
-background-color: #1c1b24 !important
+background-color: #191927 !important
  }
 
 

@@ -8,7 +8,7 @@ expression: html.to_string()
                   @media ( prefers-color-scheme: dark ) {
                       
 [data-protonmail-message] table[class="container float-center"][style*="background: #fff"] {
- background: #1c1b24 !important
+ background: #191927 !important
  }
 
                   }

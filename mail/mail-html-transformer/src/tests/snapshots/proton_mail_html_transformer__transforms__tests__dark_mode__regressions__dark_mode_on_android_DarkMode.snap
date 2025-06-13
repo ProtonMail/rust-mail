@@ -308,7 +308,7 @@ img {
 }
 :root {
   --text-norm: #D1D1D4;
-  --background-norm: #1C1B24;
+  --background-norm: #191927;
   --primary: #7777F8;
 }
 
