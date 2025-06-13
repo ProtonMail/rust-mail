@@ -106,8 +106,8 @@ impl From<SharedCryptoError> for SignupError {
 /// Info needed to construct the challenge payload.
 #[derive(Debug, Clone)]
 pub struct ChallengeInfo {
-    /// Client version to be used for a challenge (e.g. `mail-ios-v4`).
-    pub product_version: String,
+    /// Product name to be used in a challenge payload (e.g. `mail`).
+    pub product_name: String,
     /// Device fingerprint.
     pub device_info: Option<DeviceInfo>,
     /// User behaviour while entering the recovery method (if applicable).

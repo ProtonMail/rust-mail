@@ -256,7 +256,7 @@ pub struct Context {
     api_config: ApiConfig,
     hv_notifier: Option<DynChallengeNotifier>,
     device_info_provider: Option<DynDeviceInfoProvider>,
-    challenge_product_version: String,
+    product_name: String,
     cancellation_token: CancellationToken,
     task_service: BackgroundAwareTaskService,
     on_session_deleted_broadcast: broadcast::Sender<(SessionId, UserId)>,
@@ -294,7 +294,7 @@ impl Context {
         api_config: ApiConfig,
         hv_notifier: Option<DynChallengeNotifier>,
         device_info_provider: Option<DynDeviceInfoProvider>,
-        challenge_product_version: impl Into<String>,
+        product_name: impl Into<String>,
         cache_path: impl Into<PathBuf>,
         connection_pool_size: Option<u32>,
         log_path: Option<PathBuf>,
@@ -341,7 +341,7 @@ impl Context {
             api_config,
             hv_notifier,
             device_info_provider,
-            challenge_product_version: challenge_product_version.into(),
+            product_name: product_name.into(),
             cancellation_token: CancellationToken::new(),
             task_service: BackgroundAwareTaskService::new(task_service),
             on_session_deleted_broadcast: broadcast_sender,
@@ -1088,11 +1088,11 @@ impl Context {
         Some(provider.get_device_info().await)
     }
 
-    /// Returns the client version to be used for a Challenge (e.g. `mail-ios-v4`)
+    /// Returns the product name to be used in a challenge payload (e.g. `mail`)
     ///
     #[must_use]
-    pub fn get_challenge_product_version(&self) -> String {
-        self.challenge_product_version.clone()
+    pub fn get_product_name(&self) -> String {
+        self.product_name.clone()
     }
 }
 

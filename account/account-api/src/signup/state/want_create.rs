@@ -278,7 +278,7 @@ fn insert_payload_frame(
     behavior: PayloadFrameBehavior,
 ) {
     let id = payload.len();
-    let name = format!("{}-challenge-{id}", challenge_info.product_version);
+    let name = format!("{}-v4-challenge-{id}", challenge_info.product_name);
     payload.insert(
         name,
         PayloadFrameV2_2 {
@@ -333,7 +333,7 @@ mod test {
             keydown: vec!["rec_kdf".into()],
         };
         let challenge_info = ChallengeInfo {
-            product_version: "mail-v1".into(),
+            product_name: "mail-ios".into(),
             device_info: Some(device_info.clone()),
             recovery_behavior: Some(recovery_behavior.clone()),
             username_behavior: Some(username_behavior.clone()),
@@ -343,7 +343,7 @@ mod test {
             payload,
             Some(HashMap::from_iter([
                 (
-                    "mail-v1-challenge-0".to_string(),
+                    "mail-ios-v4-challenge-0".to_string(),
                     PayloadFrameV2_2 {
                         metadata: PayloadFrameMetadata::Recovery,
                         device_info: Some(device_info.clone()),
@@ -352,7 +352,7 @@ mod test {
                     .into(),
                 ),
                 (
-                    "mail-v1-challenge-1".to_string(),
+                    "mail-ios-v4-challenge-1".to_string(),
                     PayloadFrameV2_2 {
                         metadata: PayloadFrameMetadata::Username,
                         device_info: Some(device_info.clone()),

@@ -91,7 +91,7 @@ pub fn create_mail_session(
     key_chain: Box<dyn OSKeyChain>,
     hv_notifier: Option<DynChallengeNotifier>,
     device_info_provider: Option<DynDeviceInfoProvider>,
-    challenge_product_version: String,
+    product_name: String,
 ) -> Result<Arc<MailSession>, UserContextError> {
     async_runtime()
         .block_on(async move {
@@ -101,7 +101,7 @@ pub fn create_mail_session(
                 key_chain,
                 hv_notifier,
                 device_info_provider,
-                challenge_product_version,
+                product_name,
             )
             .await
         })
@@ -168,7 +168,7 @@ async fn create_mail_session_inner(
     key_chain: Box<dyn OSKeyChain>,
     hv_notifier: Option<DynChallengeNotifier>,
     device_info_provider: Option<DynDeviceInfoProvider>,
-    challenge_product_version: impl Into<String>,
+    product_name: impl Into<String>,
 ) -> Result<Arc<MailSession>, RealProtonMailError> {
     let mut log_path = PathBuf::from(&params.log_dir);
     std::fs::create_dir_all(&log_path)?;
@@ -228,7 +228,7 @@ async fn create_mail_session_inner(
         api_env_config,
         hv_notifier,
         device_info_provider,
-        challenge_product_version,
+        product_name,
         Some(log_path),
         EventPollMode::Automatic(Duration::from_secs(30)),
     )
