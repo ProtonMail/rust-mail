@@ -1,5 +1,6 @@
 use crate::UserContext;
 use crate::actions::event_poll;
+use proton_action_queue::action::{Metadata, Priority};
 use proton_action_queue::{action::ActionId, queue::ActionError};
 use std::time::Duration;
 use tracing::warn;
@@ -51,7 +52,12 @@ impl UserContext {
     ///
     pub async fn force_event_loop_poll(&self) -> Result<(), ActionError<event_poll::EventPoll>> {
         let event_poll_action = event_poll::EventPoll {};
-        self.queue().queue_action(event_poll_action).await?;
+        let metadata = Metadata::builder()
+            .with_priority_override(Priority::Highest)
+            .build();
+        self.queue()
+            .queue_action_with_metadata(event_poll_action, metadata)
+            .await?;
         Ok(())
     }
 
