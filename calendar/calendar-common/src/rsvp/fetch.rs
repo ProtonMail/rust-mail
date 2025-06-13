@@ -81,6 +81,7 @@ where
         attendees,
         organizer,
         calendar,
+        is_cancelled: meta.is_cancelled,
         raw: Box::new(event),
     })
 }
@@ -95,21 +96,35 @@ where
 {
     debug!("Extracting event's metadata");
 
-    let event = event
+    let mut summary = None;
+    let mut location = None;
+    let mut description = None;
+    let mut is_cancelled = false;
+
+    // Event data is split between shared events (which contain summary,
+    // location and description) and calendar event (which contains the status)
+    let events = event
         .shared_events
         .iter()
-        .find(|event| event.ty.is_encrypted())
-        .ok_or(RsvpError::CouldntFindSharedEvent)?;
+        .chain(event.calendar_events.iter());
 
-    let event = event.decrypt_and_parse(pgp, decryptor)?;
-    let summary = event.summary.map(|sum| sum.value.into_string());
-    let location = event.location.map(|loc| loc.value.into_string());
-    let description = event.description.map(|desc| desc.value.into_string());
+    for event in events {
+        let event = event.decrypt_and_parse(pgp, decryptor)?;
+
+        summary = summary.or_else(|| event.summary.map(|sum| sum.value.into_string()));
+        location = location.or_else(|| event.location.map(|loc| loc.value.into_string()));
+
+        description =
+            description.or_else(|| event.description.map(|desc| desc.value.into_string()));
+
+        is_cancelled |= event.status == Some(ical::Status::Cancelled);
+    }
 
     Ok(Metadata {
         summary,
         location,
         description,
+        is_cancelled,
     })
 }
 
@@ -228,6 +243,7 @@ struct Metadata {
     summary: Option<String>,
     location: Option<String>,
     description: Option<String>,
+    is_cancelled: bool,
 }
 
 #[cfg(test)]
@@ -239,6 +255,7 @@ mod tests {
     fn event() -> CalendarEvent {
         CalendarEvent {
             shared_events: Vec::default(),
+            calendar_events: Vec::default(),
             calendar_id: "xxx".into(),
             start_time: 0,
             end_time: 0,

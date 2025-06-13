@@ -11,7 +11,7 @@ use proton_calendar_common::{RsvpError, RsvpEventId};
 #[tokio::test]
 async fn using_address_key() {
     let world = world().await;
-    let event = world.event("address-key", SHARED_EVENT, ATTENDEES_EVENT);
+    let event = world.event("address-key", SHARED_EVENT, ATTENDEES_EVENT, None);
 
     world
         .ctx
@@ -40,7 +40,7 @@ async fn using_address_key() {
 #[tokio::test]
 async fn using_shared_key() {
     let world = world().await;
-    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT);
+    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
 
     world
         .ctx
@@ -67,7 +67,7 @@ async fn using_shared_key() {
 #[tokio::test]
 async fn recurring() {
     let world = world().await;
-    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT);
+    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
 
     world
         .ctx
@@ -87,6 +87,53 @@ async fn recurring() {
         .unwrap();
 
     pa::assert_eq!(Some(expected_event(event)), actual);
+}
+
+/// Make sure we can fetch cancelled events *and* mark them as such; this
+/// requires parsing `Event.CalendarEvents[]`.
+#[tokio::test]
+async fn cancelled() {
+    const CALENDAR_EVENT: &str = indoc! {"
+        BEGIN:VCALENDAR
+        VERSION:2.0
+        PRODID:-//Proton AG//web-calendar 5.0.48.1//EN
+        BEGIN:VEVENT
+        UID:1Gax95xN@proton.me
+        DTSTAMP:20250423T082009Z
+        STATUS:CANCELLED
+        TRANSP:OPAQUE
+        END:VEVENT
+        END:VCALENDAR
+    "};
+
+    let world = world().await;
+
+    let event = world.event(
+        "calendar-key",
+        SHARED_EVENT,
+        ATTENDEES_EVENT,
+        Some(CALENDAR_EVENT),
+    );
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_bootstrap("HzNtbT1J", world.bootstrap())
+        .await;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_event("8maQ3qBa", Some("Lm9wZW5w"), Some(event.clone()))
+        .await;
+
+    let actual = RsvpEventId::new("8maQ3qBa", Some("Lm9wZW5w"))
+        .fetch(&world.sess, &world.pgp, &world.address_keys)
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert!(actual.is_cancelled);
 }
 
 /// Make sure that asking for a non-imported event doesn't end up as error.
@@ -128,7 +175,7 @@ async fn err_unknown_attendee_status() {
     "};
 
     let world = world().await;
-    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT);
+    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
 
     world
         .ctx
@@ -168,7 +215,7 @@ async fn err_missing_x_pm_token() {
     "};
 
     let world = world().await;
-    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT);
+    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
 
     world
         .ctx
@@ -209,7 +256,7 @@ async fn err_many_events_in_ics() {
     "};
 
     let world = world().await;
-    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT);
+    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
 
     world
         .ctx

@@ -910,7 +910,13 @@ impl DecryptedMessage {
 
     fn lay_rsvp(&self) -> u16 {
         match &self.rsvp {
-            Some(Ok(rsvp)) => 4 + rsvp.attendees.len(),
+            Some(Ok(rsvp)) => {
+                let status = if rsvp.is_cancelled { 2 } else { 0 };
+                let header = 4;
+                let atts = rsvp.attendees.len();
+
+                status + header + atts
+            }
             Some(Err(msg)) => 1 + msg.lines().count(),
             None => 0,
         }
@@ -941,17 +947,40 @@ impl DecryptedMessage {
 
         // ---
 
-        let rsvp_summary = rsvp.summary.clone().unwrap_or_else(|| "(no title)".into());
+        let rsvp_status = if rsvp.is_cancelled {
+            vec![
+                Text::raw("! Event was cancelled").fg(Color::Yellow),
+                Text::raw(""),
+            ]
+        } else {
+            vec![]
+        };
 
-        let rsvp_occur = match rsvp.occurrence {
-            RsvpOccurrence::Date { starts_at, ends_at } if ends_at == starts_at => {
-                format!("{starts_at}")
-            }
-            RsvpOccurrence::Date { starts_at, ends_at } => {
-                format!("{starts_at} - {ends_at}")
-            }
-            RsvpOccurrence::DateTime { starts_at, ends_at } => {
-                format!("{starts_at} - {ends_at}")
+        let fg = if rsvp.is_cancelled {
+            Color::DarkGray
+        } else {
+            Color::White
+        };
+
+        let rsvp_summary = rsvp.summary.as_deref().unwrap_or("(no title)");
+
+        let rsvp_occur = {
+            let when = match rsvp.occurrence {
+                RsvpOccurrence::Date { starts_at, ends_at } if ends_at == starts_at => {
+                    format!("{starts_at}")
+                }
+                RsvpOccurrence::Date { starts_at, ends_at } => {
+                    format!("{starts_at} - {ends_at}")
+                }
+                RsvpOccurrence::DateTime { starts_at, ends_at } => {
+                    format!("{starts_at} - {ends_at}")
+                }
+            };
+
+            if let Some(loc) = &rsvp.location {
+                format!("{when} @ {loc}")
+            } else {
+                when
             }
         };
 
@@ -966,9 +995,15 @@ impl DecryptedMessage {
             format!("- <{}> ({status})", att.email)
         });
 
-        let rows = iter::once(rsvp_summary)
+        let rsvp_summary = Text::from(rsvp_summary).fg(fg);
+        let rsvp_occur = Text::from(rsvp_occur).fg(fg);
+        let rsvp_atts = rsvp_atts.map(|att| Text::from(att).fg(fg));
+
+        let rows = rsvp_status
+            .into_iter()
+            .chain(iter::once(rsvp_summary))
             .chain(iter::once(rsvp_occur))
-            .chain(iter::once(String::default()))
+            .chain(iter::once(Text::raw("")))
             .chain(rsvp_atts);
 
         frame.render_widget(List::new(rows), body_area);

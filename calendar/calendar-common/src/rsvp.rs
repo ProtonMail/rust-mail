@@ -122,6 +122,7 @@ pub struct RsvpEvent {
     pub attendees: Vec<RsvpAttendee>,
     pub organizer: RsvpOrganizer,
     pub calendar: RsvpCalendar,
+    pub is_cancelled: bool,
     pub raw: Box<CalendarEvent>,
 }
 
