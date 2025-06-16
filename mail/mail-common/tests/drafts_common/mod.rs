@@ -115,7 +115,7 @@ pub fn expected_create_reply_draft_params(
     let address = message_body_test_addresses();
     let mut params = DraftParams {
         subject: format!(
-            "{} {}",
+            "{}{}",
             if reply_mode == ReplyMode::Forward {
                 FORWARD_PREFIX
             } else {
