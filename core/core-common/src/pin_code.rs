@@ -142,6 +142,7 @@ impl PinCode {
                     ctx.clock().pin_code_tick();
 
                     if success {
+                        ctx.clock().auto_lock_accessed();
                         pin_protection.attempts = 0;
                         pin_protection.save(bond).await?;
                     } else {
