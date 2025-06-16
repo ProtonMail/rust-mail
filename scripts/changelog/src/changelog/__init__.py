@@ -36,10 +36,10 @@ def main(
 
 
 def collect_commits(tags: Tags, head: Commit, over: set[Commit]) -> Commits:
-    cmts, jobs, seen = OrderedDict(), OrderedDict({head: tags.get(head)}), set()
+    cmts, jobs, seen = OrderedDict(), [(head, tags.get(head))], set()
 
     def pop_job() -> tuple[Commit, Tag | None] | None:
-        return jobs.popitem(False) if jobs else None
+        return jobs.pop(0) if jobs else None
 
     for c, t in iter(pop_job, None):
         if (c, t) in seen:
@@ -47,7 +47,7 @@ def collect_commits(tags: Tags, head: Commit, over: set[Commit]) -> Commits:
 
         if not over or c in over:
             cmts.setdefault(t, []).append(c)
-            jobs.update({p: tags.get(p) or t for p in c.parents})
+            jobs.extend((p, tags.get(p) or t) for p in c.parents)
             seen.add((c, t))
 
     return cmts

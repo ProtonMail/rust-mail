@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Features
+
+- [ET-1969] Construct and send challenge payload
+- [ET-1969] Add payload version
+- [ET-1969] Use different payload for username and recovery frames
+- [ET-1969] Make clippy happy again
+- [ET-1969] Encapsulate challenge info in statedata object
+- [ET-1969] Use tagged enums
+- [ET-1969] Convert nested type to payloadframe idiomatically
+- [ET-1969] Avoid behaviour type duplication
+- [ET-1969] Clarify field purpose
+- [ET-1969] Attach user behaviour to submit_internal_username
+- [ET-1969] Provide challenge version from rust
+
+### Fixes
+
+- Extra space between subject and reply/forward prefix
+
+
+## [mail-uniffi-v0.93.1] - 2025-06-16
+
 ### Fixes
 
 - [ET-3307] Disable wal checkpoint on close
@@ -21,6 +42,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Allow unknown message flags to be parsed
 
 
+## [mail-uniffi-v0.91.0] - 2025-06-13
+
+### Features
+
+- [ET-3083] Post-login account setup
+
+### Fixes
+
+- Change scroller error type from `contexterror` to `mailscrollererror`
+- Fix background crash on ios
+
+
 ## [mail-uniffi-v0.92.0] - 2025-06-13
 
 ### Changed
@@ -29,6 +62,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- [ET-3313] Fix draft stuck in sent folder after send externally
 - [ET-3247] Can reply message property
 - Label events not applied before contact events
 - Add missing email field to contact details and change email.name: string to email.email_type: vec<vcardproptype>
@@ -36,31 +70,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-3329] Allow draft to save if attachment upload fails
 
 
-## [mail-uniffi-v0.91.0] - 2025-06-13
+## [mail-uniffi-v0.90.0] - 2025-06-12
 
 ### Changed
 
 - Move time validation of pin and autolock out of the database and utilize `instant`
 
-### Features
-
-- [ET-3083] Post-login account setup
-
 ### Fixes
 
 - [ET-3300] Dissallow manipiulation of time
-- [ET-3325] Correctly handle save when already sent
 - [ET-3301] Start counting time for autolock when going to background
-- [ET-3313] Fix draft stuck in sent folder after send externally
-- Change scroller error type from `contexterror` to `mailscrollererror`
-- Fix background crash on ios
-
-
-## [mail-uniffi-v0.90.0] - 2025-06-12
-
-### Fixes
-
 - [ET-3212] Mail scroller prevents double pages by marking itself as a dirty
+- [ET-3325] Correctly handle save when already sent
 - [ET-3212] Add `mailscrollerdirty` error reason on fetch_more when scroller is dirty
 
 
@@ -68,21 +89,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-- [ET-3247] Message `is_scheduled` and `can_reply` properties
 - [ET-3101] Breaking change - replace `html_head_content_for_composer()` with `html_for_composer()`
 - [ET-3101] Introduce list of **trusted** senders
 - [ET-3101] Lower tracing level when transforming hsl, add support for light-dark
 
 ### Fixes
 
-- [ET-3126] Check if online before attempting to cancel scheduled msg
-- [ET-3125] Only allow up to 100 scheduled send messages
-- [ET-3212] Event loop should be requested with option to get counters back
 - [ET-3178] Fix editor id in composer
 - [ET-3169] Replace path separators from attachment file name
 - Save draft after address change
 - [ET-3211] Scheduled send messages should be sorted ascending
 - Signatures are always stored in html
+
+
+## [mail-uniffi-v0.88.0] - 2025-06-10
+
+### Features
+
+- [ET-3247] Message `is_scheduled` and `can_reply` properties
+
+### Fixes
+
+- [ET-3126] Check if online before attempting to cancel scheduled msg
+- [ET-3125] Only allow up to 100 scheduled send messages
+- [ET-3212] Event loop should be requested with option to get counters back
 
 
 ## [mail-uniffi-v0.87.0] - 2025-06-09
@@ -143,8 +173,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Et-3080 fix build errors
 - Et-3080 fixes
 - Et-3080 run cargo fmt
-- Et-3080 fix clippy issues
 - [ET-3101] Do not remove !important flag from stylesheets
+- Et-3080 fix clippy issues
 - [ET-3101] Insert extra id to the html root
 - [ET-3101] Expose `html_head_content_for_composer()` method in drafts
 - [ET-3101] Removing !important from style attributes is reversible
@@ -182,8 +212,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
-- [ET-3021] Add default implementation for avatar information (e.g. draft)
 - [ET-2742] Replies to html messages should always be in html
+- [ET-3021] Add default implementation for avatar information (e.g. draft)
 
 
 ## [mail-uniffi-v0.81.0] - 2025-05-26
@@ -254,16 +284,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-- [ET-2632] Add sign out flow which removes all user & account data in controlled fashion
-- Ical: build for all backend variants
 - [ET-2892] Mailbox::recipient_display_mode
 - [ET-619] Add support for schedule send
 
 ### Fixes
 
-- Prefetch is now integrated with event loop and will download any new cnv & msg
-- Ical/ci: sync rules of build and publish jobs
-- Ical/ci: fix the publish job
 - Outbox should have message view mode.
 - Injecting style should not escape gt and lt signs
 
