@@ -1,4 +1,5 @@
-use crate::prelude::Address;
+use crate::prelude::{Address, Behavior};
+use crate::signup::ChallengeInfo;
 use crate::signup::state::want_create::WantCreate;
 use crate::signup::state::want_password::WantPassword;
 use crate::signup::state::want_recovery::WantRecovery;
@@ -44,10 +45,12 @@ pub enum State {
 impl State {
     /// Creates a new signup flow state, starting at `WantUsername`.
     #[must_use]
-    pub fn new(client: Client) -> Self {
+    pub fn new(client: Client, challenge_info: ChallengeInfo) -> Self {
         info!("Signup flow starts");
 
-        WantUsername::new(client).into()
+        let data = StateData { challenge_info };
+
+        WantUsername::new(client, data).into()
     }
 
     #[must_use]
@@ -55,16 +58,24 @@ impl State {
         StateKind::of(self)
     }
 
-    pub async fn submit_username(self, username: Username) -> StateResult {
+    pub async fn submit_username(
+        self,
+        username: Username,
+        behavior: Option<Behavior>,
+    ) -> StateResult {
         let s: WantUsername = self.try_into().map_err(|_| SignupError::InvalidState)?;
 
-        s.submit_username(username).await
+        s.submit_username(username, behavior).await
     }
 
-    pub async fn submit_recovery(self, recovery: Recovery) -> StateResult {
+    pub async fn submit_recovery(
+        self,
+        recovery: Recovery,
+        recovery_behavior: Option<Behavior>,
+    ) -> StateResult {
         let s: WantRecovery = self.try_into().map_err(|_| SignupError::InvalidState)?;
 
-        s.submit_recovery(recovery).await
+        s.submit_recovery(recovery, recovery_behavior).await
     }
 
     pub fn submit_password(self, password: String) -> StateResult {
@@ -105,4 +116,9 @@ impl StateKind {
             State::Complete(_) => Self::Complete,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct StateData {
+    pub challenge_info: ChallengeInfo,
 }

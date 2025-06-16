@@ -1,6 +1,9 @@
+use derive_more::From;
+use proton_core_common::device::DeviceInfo;
 use proton_crypto_account::keys::{LocalAddressKey, LocalSignedKeyList};
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use std::collections::HashMap;
 
 /// The type of account to create.
 #[derive(Clone, Copy, Debug, Serialize_repr, Deserialize_repr, Eq, Hash, PartialEq)]
@@ -36,6 +39,10 @@ pub struct CreateUserRequest {
 
     /// The referrer for the user, if any.
     pub referrer: Option<String>,
+
+    /// The challenge payload, if any.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub payload: Option<HashMap<String, PayloadFrame>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -258,6 +265,70 @@ pub struct AuthInput {
 
     /// The verifier for authentication.
     pub verifier: String,
+}
+
+/// Challenge payload frame containing device fingerprint and user behaviour.
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize, From)]
+#[serde(tag = "v")]
+#[serde(rename_all = "PascalCase")]
+pub enum PayloadFrame {
+    #[serde(rename = "2.2.0")]
+    V2_2(PayloadFrameV2_2),
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PayloadFrameV2_2 {
+    /// Frame's metadata.
+    #[serde(rename = "frame")]
+    pub metadata: PayloadFrameMetadata,
+    /// Device fingerprint.
+    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    pub device_info: Option<DeviceInfo>,
+    /// User behaviour on a sign up screen.
+    #[serde(flatten, skip_serializing_if = "Option::is_none")]
+    pub user_behavior: Option<PayloadFrameBehavior>,
+}
+
+/// Challenge payload frame's metadata.
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(tag = "name", rename_all = "camelCase")]
+pub enum PayloadFrameMetadata {
+    /// Frame built while user was entering the recovery method.
+    Recovery,
+    /// Frame built while user was entering the username.
+    Username,
+}
+
+/// User activity during text input.
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum PayloadFrameBehavior {
+    /// User activity while entering the recovery method.
+    #[serde(with = "suffix_recovery")]
+    Recovery(Behavior),
+    /// User activity while entering the username.
+    #[serde(with = "suffix_username")]
+    Username(Behavior),
+}
+
+serde_with::with_suffix!(suffix_recovery "Recovery");
+serde_with::with_suffix!(suffix_username "Username");
+
+/// User activity while entering the recovery method.
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Behavior {
+    /// Durations (in seconds) of each focus session on the text field.
+    pub time: Vec<u32>,
+    /// Number of clicks / taps during user input.
+    pub click: u32,
+    /// Text chunks copied during user input.
+    pub copy: Vec<String>,
+    /// Text chunks pasted during user input.
+    pub paste: Vec<String>,
+    /// Characters entered during user input.
+    pub keydown: Vec<String>,
 }
 
 pub enum AsyncUserInitialization {
@@ -592,5 +663,77 @@ mod tests {
 
         let serialized = serde_json::to_string(&request).expect("Failed to serialize");
         assert_eq!(serialized, expected_json);
+    }
+
+    #[test]
+    fn test_create_user_payload_serialization() {
+        let request = CreateUserRequest {
+            user_type: CreateUserType::Normal,
+            username: "name".into(),
+            domain: None,
+            auth: AuthInput {
+                version: 123,
+                modulus_id: "mod".into(),
+                salt: "salt".into(),
+                verifier: "ver".into(),
+            },
+            email: None,
+            phone: None,
+            referrer: None,
+            payload: Some(HashMap::from_iter([(
+                "frame-1".into(),
+                create_payload_frame(
+                    "lang-1",
+                    PayloadFrameMetadata::Recovery,
+                    PayloadFrameBehavior::Recovery(Behavior {
+                        time: vec![123],
+                        click: 42,
+                        copy: vec!["copy".into()],
+                        paste: vec!["paste".into()],
+                        keydown: vec!["key".into()],
+                    }),
+                ),
+            )])),
+        };
+        let serialized = serde_json::to_string(&request).expect("Failed to serialize");
+        assert_eq!(
+            serialized,
+            concat!(
+                r#"{"Type":1,"Username":"name","Domain":null,"#,
+                r#""Auth":{"Version":123,"ModulusID":"mod","Salt":"salt","Verifier":"ver"},"#,
+                r#""Email":null,"Phone":null,"Referrer":null,"Payload":{"#,
+                r#""frame-1":{"v":"2.2.0","frame":{"name":"recovery"},"appLang":"lang-1","timezone":"tz","timezoneOffset":-60,"#,
+                r#""deviceName":"model","deviceBrand":"brand","deviceCodename":"code","uuid":"uuid","regionCode":"country","#,
+                r#""isJailbreak":false,"preferredContentSize":"scale","storageCapacity":123.0,"isDarkmodeOn":true,"#,
+                r#""keyboards":["kb"],"timeRecovery":[123],"clickRecovery":42,"copyRecovery":["copy"],"pasteRecovery":["paste"],"keydownRecovery":["key"]}}}"#,
+            )
+        );
+    }
+
+    fn create_payload_frame(
+        language: impl Into<String>,
+        metadata: PayloadFrameMetadata,
+        user_behavior: PayloadFrameBehavior,
+    ) -> PayloadFrame {
+        PayloadFrameV2_2 {
+            metadata,
+            device_info: Some(DeviceInfo {
+                language: language.into(),
+                timezone: "tz".into(),
+                timezone_offset: -60,
+                model: "model".into(),
+                brand: "brand".into(),
+                codename: "code".into(),
+                uuid: "uuid".into(),
+                country: "country".into(),
+                rooted: false,
+                font_scale: "scale".into(),
+                storage: 123.0,
+                dark_mode: true,
+                keyboards: vec!["kb".into()],
+            }),
+            user_behavior: Some(user_behavior),
+        }
+        .into()
     }
 }

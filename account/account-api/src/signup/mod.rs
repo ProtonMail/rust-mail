@@ -1,9 +1,10 @@
 use crate::countries::{COUNTRIES, Country};
-use crate::prelude::{Address, User};
+use crate::prelude::{Address, Behavior, User};
 use crate::shared::crypto::SharedCryptoError;
 use crate::signup::state::{Recovery, StateKind, Username};
 use crate::{AccountApi, ApiError};
 use proton_core_api::store::{DynStore, StoreError};
+use proton_core_common::device::DeviceInfo;
 use proton_crypto_account::errors::{AccountCryptoError, SKLError};
 use proton_crypto_account::{proton_crypto::CryptoError, salts::SaltError};
 use state::State;
@@ -102,6 +103,19 @@ impl From<SharedCryptoError> for SignupError {
     }
 }
 
+/// Info needed to construct the challenge payload.
+#[derive(Debug, Clone)]
+pub struct ChallengeInfo {
+    /// Product name to be used in a challenge payload (e.g. `mail`).
+    pub product_name: String,
+    /// Device fingerprint.
+    pub device_info: Option<DeviceInfo>,
+    /// User behaviour while entering the recovery method (if applicable).
+    pub recovery_behavior: Option<Behavior>,
+    /// User behaviour while entering the username (if applicable).
+    pub username_behavior: Option<Behavior>,
+}
+
 /// A signup flow that can be used to sign up a user.
 ///
 /// The flow guides the user through the signup process, ensuring all necessary steps
@@ -115,10 +129,14 @@ pub struct SignupFlow {
 
 impl SignupFlow {
     /// Create a new signup flow, implicitly fetching available domains.
-    pub async fn new(client: muon::Client, store: DynStore) -> Result<Self, SignupError> {
+    pub async fn new(
+        client: muon::Client,
+        store: DynStore,
+        challenge_info: ChallengeInfo,
+    ) -> Result<Self, SignupError> {
         let domains = client.get_available_domains(None).await?.domains;
         let countries = COUNTRIES.to_owned();
-        let state = vec![State::new(client)];
+        let state = vec![State::new(client, challenge_info)];
 
         Ok(Self {
             store,
@@ -150,10 +168,11 @@ impl SignupFlow {
         &mut self,
         username: String,
         domain: String,
+        behavior: Option<Behavior>,
     ) -> Result<(), SignupError> {
         let username = Username::Internal { username, domain };
 
-        let next = self.state()?.submit_username(username).await?;
+        let next = self.state()?.submit_username(username, behavior).await?;
 
         self.state.push(next);
 
@@ -164,7 +183,7 @@ impl SignupFlow {
     pub async fn submit_external_username(&mut self, email: String) -> Result<(), SignupError> {
         let username = Username::External { email };
 
-        let next = self.state()?.submit_username(username).await?;
+        let next = self.state()?.submit_username(username, None).await?;
 
         self.state.push(next);
 
@@ -181,10 +200,14 @@ impl SignupFlow {
     }
 
     /// Submit a recovery email.
-    pub async fn submit_recovery_email(&mut self, email: String) -> Result<(), SignupError> {
+    pub async fn submit_recovery_email(
+        &mut self,
+        email: String,
+        behavior: Option<Behavior>,
+    ) -> Result<(), SignupError> {
         let recovery = Recovery::Email(email);
 
-        let next = self.state()?.submit_recovery(recovery).await?;
+        let next = self.state()?.submit_recovery(recovery, behavior).await?;
 
         self.state.push(next);
 
@@ -192,10 +215,14 @@ impl SignupFlow {
     }
 
     /// Submit a recovery phone number.
-    pub async fn submit_recovery_phone(&mut self, phone: String) -> Result<(), SignupError> {
+    pub async fn submit_recovery_phone(
+        &mut self,
+        phone: String,
+        behavior: Option<Behavior>,
+    ) -> Result<(), SignupError> {
         let recovery = Recovery::Phone(phone);
 
-        let next = self.state()?.submit_recovery(recovery).await?;
+        let next = self.state()?.submit_recovery(recovery, behavior).await?;
 
         self.state.push(next);
 
@@ -206,7 +233,7 @@ impl SignupFlow {
     pub async fn skip_recovery(&mut self) -> Result<(), SignupError> {
         let recovery = Recovery::None;
 
-        let next = self.state()?.submit_recovery(recovery).await?;
+        let next = self.state()?.submit_recovery(recovery, None).await?;
 
         self.state.push(next);
 

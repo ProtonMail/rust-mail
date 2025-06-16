@@ -44,7 +44,7 @@ impl Cmd {
             let username = read("username")?;
             let domain = read("domain")?;
 
-            match flow.submit_internal_username(username, domain).await {
+            match flow.submit_internal_username(username, domain, None).await {
                 Err(SignupError::UsernameUnavailable) => {
                     println!("Username unavailable, try again");
                 }
@@ -66,13 +66,13 @@ impl Cmd {
     async fn on_want_recovery(flow: &mut SignupFlow) -> Result<()> {
         let email = read("recovery email")?;
 
-        flow.submit_recovery_email(email).await?;
+        flow.submit_recovery_email(email, None).await?;
 
         Ok(())
     }
 
     async fn on_want_create(flow: &mut SignupFlow) -> Result<()> {
-        flow.create().await?;
+        flow.create(None).await?;
 
         Ok(())
     }

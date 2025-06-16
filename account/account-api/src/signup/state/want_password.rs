@@ -1,5 +1,5 @@
 use crate::signup::state::want_recovery::WantRecovery;
-use crate::signup::state::{State, Username};
+use crate::signup::state::{State, StateData, Username};
 use derive_more::Display;
 use muon::Client;
 use tracing::info;
@@ -10,13 +10,18 @@ use tracing::info;
 pub struct WantPassword {
     client: Client,
     username: Username,
+    data: StateData,
 }
 
 impl WantPassword {
-    pub fn new(client: Client, username: Username) -> Self {
+    pub fn new(client: Client, username: Username, data: StateData) -> Self {
         info!("Signup flow wants password");
 
-        Self { client, username }
+        Self {
+            client,
+            username,
+            data,
+        }
     }
 
     /// Submits chosen password
@@ -24,6 +29,6 @@ impl WantPassword {
         info!("Submitting password");
 
         // Asking for recovery is a default and always after password
-        WantRecovery::new(self.client, self.username, password).into()
+        WantRecovery::new(self.client, self.username, password, self.data).into()
     }
 }

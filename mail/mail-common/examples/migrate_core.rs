@@ -47,6 +47,7 @@ async fn prepare_context(tmp_dir: &TempDir) -> (Arc<MailContext>, Arc<dyn KeyCha
         Config::atlas(),
         None,
         None,
+        "",
         None,
         EventPollMode::Manual,
     )
