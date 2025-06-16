@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- [ET-3307] Disable wal checkpoint on close
+- [ET-3351] Out of bounds access in draft::save
+
+
+## [mail-uniffi-v0.93.0] - 2025-06-13
+
+### Fixes
+
 - [ET-3260] Change background color to #191927
 - Allow unknown message flags to be parsed
 
