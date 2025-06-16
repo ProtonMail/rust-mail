@@ -193,7 +193,7 @@ impl ProtectionAutoLock {
             Self::Always => true,
             Self::Minutes(minutes) => {
                 let seconds = u64::from(*minutes) * 60;
-                last_lock.as_secs() > seconds
+                last_lock.as_secs() > seconds || last_lock == Duration::ZERO
             }
             Self::Never => false,
         }
@@ -392,7 +392,7 @@ mod tests {
 
     #[test_case(ProtectionAutoLock::Always, 0 => true; "TEST 0 AutoLock::Always returns true")]
     #[test_case(ProtectionAutoLock::Always, ONE_HOUR => true; "TEST 1 AutoLock::Always returns true")]
-    #[test_case(ProtectionAutoLock::Minutes(1), 0 => false; "TEST 2 When minutes passed are equal to allowed")]
+    #[test_case(ProtectionAutoLock::Minutes(1), 1 => false; "TEST 2 When minutes passed are equal to allowed")]
     #[test_case(ProtectionAutoLock::Minutes(1), ONE_MINUTE => false; "TEST 3 When minutes passed are equal to allowed")]
     #[test_case(ProtectionAutoLock::Minutes(1), ONE_MINUTE + 1 => true; "TEST 4 When minutes passed from lock are more than allowed")]
     #[test_case(ProtectionAutoLock::Minutes(60), ONE_HOUR => false; "TEST 6 When 60 minutes equal")]
@@ -414,8 +414,9 @@ mod tests {
         app_settings.set_biometrics();
         app_settings.auto_lock = ProtectionAutoLock::Minutes(10);
 
-        // Last lock defaults no longer defaults to 0, so it will return `false`
-        assert!(!app_settings.should_auto_lock(core_ctx).await);
+        // Last lock defaults to true
+        assert!(app_settings.should_auto_lock(core_ctx).await);
+        core_ctx.clock().auto_lock_tick();
         let last_lock_1 = core_ctx.clock().auto_lock_elapsed();
         // and any subsequent call for next 10 minutes will also return `false`
         assert!(!app_settings.should_auto_lock(core_ctx).await);
