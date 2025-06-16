@@ -1,9 +1,9 @@
-use crate::prelude::{Address, Behavior};
-use crate::signup::ChallengeInfo;
+use crate::prelude::Address;
 use crate::signup::state::want_create::WantCreate;
 use crate::signup::state::want_password::WantPassword;
 use crate::signup::state::want_recovery::WantRecovery;
 use crate::signup::state::want_username::WantUsername;
+use crate::signup::{Behavior, ChallengeInfo};
 use crate::{prelude::User, signup::SignupError};
 use complete::Complete;
 use derive_more::{Display, From, TryInto};

@@ -1,4 +1,4 @@
-use crate::prelude::Behavior;
+use crate::shared::challenge::Behavior;
 use crate::signup::SignupError;
 use crate::signup::state::want_password::WantPassword;
 use crate::signup::state::{StateData, StateResult, Username};

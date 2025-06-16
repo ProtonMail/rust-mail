@@ -4,7 +4,8 @@ use crate::{AppError, MailUserContext, draft};
 use anyhow::anyhow;
 use futures::executor::block_on;
 use proton_account_api::login::LoginFlow;
-use proton_account_api::signup::{ChallengeInfo, SignupFlow};
+use proton_account_api::shared::challenge::ChallengeInfo;
+use proton_account_api::signup::SignupFlow;
 use proton_action_queue::action::{Action, WriterGuardError};
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
 use proton_calendar_common::RsvpError;
@@ -315,8 +316,18 @@ impl MailContext {
         let _ = self.core_context.get_encryption_key()?;
         // Create a new API session
         let session = self.core_context.new_api_session(None, None).await?;
+        // Obtain device info (if possible)
+        let device_info = self.core_context.get_device_info().await;
+        // Build challenge info
+        let challenge_info = ChallengeInfo {
+            product_name: self.core_context.get_product_name(),
+            device_info,
+            // Behaviours will be populated during the login flow (if available)
+            recovery_behavior: None,
+            username_behavior: None,
+        };
         // Create a new login flow
-        Ok(LoginFlow::new(session))
+        Ok(LoginFlow::new(session, challenge_info))
     }
 
     /// Create a new login flow for an existing user.

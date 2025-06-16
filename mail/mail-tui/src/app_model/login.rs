@@ -8,7 +8,6 @@ use anyhow::anyhow;
 use copypasta::{ClipboardContext, ClipboardProvider as _};
 use proton_account_api::login::{LoginError, LoginFlow};
 use proton_mail_common::MailContext;
-use proton_mail_common::proton_mail_api::proton_core_api::services::proton::muon::client::flow::LoginExtraInfo;
 use qrcode::QrCode;
 use qrcode::render::unicode;
 use ratatui::crossterm::event::{Event, KeyCode};
@@ -193,7 +192,7 @@ impl AppStateHandler for LoginModel {
                             .login_with_credentials(
                                 email.clone(),
                                 password.expose_secret().to_owned(),
-                                LoginExtraInfo::default(),
+                                None,
                             )
                             .await
                         {

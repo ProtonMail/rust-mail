@@ -1,5 +1,6 @@
 use crate::login::state::StateData;
 use crate::login::{LoginError, state::State};
+use crate::shared::challenge::{Behavior, ChallengeInfo, ChallengePayload};
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
 use futures::TryFutureExt;
@@ -17,6 +18,7 @@ use proton_core_api::session::SessionParts;
 use proton_core_api::store::{AuthInfo, MbpMode, TfaMode, UserData};
 use proton_crypto_account::proton_crypto::generate_secure_random_bytes;
 use secrecy::{ExposeSecret, SecretString};
+use serde_json::to_value;
 use tracing::info;
 
 use super::want_qr_confirmation::WantQrConfirmation;
@@ -28,10 +30,15 @@ pub struct WantLogin {
     flow: AuthFlow,
     parts: SessionParts,
     observability: ObservabilityRecorder,
+    challenge_info: Option<ChallengeInfo>,
 }
 
 impl WantLogin {
-    pub fn new(client: muon::Client, parts: SessionParts) -> Self {
+    pub fn new(
+        client: muon::Client,
+        parts: SessionParts,
+        challenge_info: Option<ChallengeInfo>,
+    ) -> Self {
         info!("Login flow wants login");
         let flow = client.clone().auth();
         Self {
@@ -39,16 +46,30 @@ impl WantLogin {
             flow,
             parts,
             observability: ObservabilityRecorder::default(),
+            challenge_info,
         }
     }
 
     pub async fn login_with_credentials(
-        self,
+        mut self,
         user: String,
         pass: String,
-        info: LoginExtraInfo,
+        user_behavior: Option<Behavior>,
     ) -> Result<State, (State, LoginError)> {
         self.parts.store.write().await.set_name_or_addr(&user);
+
+        let info = self
+            .challenge_info
+            .as_mut()
+            .and_then(|ci| {
+                ci.username_behavior = user_behavior;
+                ChallengePayload::new(ci).and_then(|payload| to_value(payload).ok())
+            })
+            .map_or_else(LoginExtraInfo::default, |json_value| {
+                LoginExtraInfo::builder()
+                    .with_fingerprint(json_value.into())
+                    .build()
+            });
 
         self.try_login(user, pass, info)
             .map_err(|err| (State::LoginRetry, err))

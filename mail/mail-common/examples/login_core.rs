@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use proton_core_api::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_core_api::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::event_loop::EventPollMode;
@@ -59,7 +58,7 @@ async fn main() {
 
     let user_email = std::env::var("PAPI_USER_EMAIL").unwrap();
     let user_password = std::env::var("PAPI_USER_PASSWORD").unwrap();
-    flow.login_with_credentials(user_email, user_password, LoginExtraInfo::default())
+    flow.login_with_credentials(user_email, user_password, None)
         .await
         .unwrap();
 

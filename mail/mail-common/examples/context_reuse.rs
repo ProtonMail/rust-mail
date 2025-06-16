@@ -1,7 +1,6 @@
 // cargo run --example context_reuse -- --username free --password free
 
 use clap::Parser;
-use proton_core_api::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_core_api::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::event_loop::EventPollMode;
@@ -66,13 +65,9 @@ async fn main() {
 
     let mut flow = context.new_login_flow().await.unwrap();
 
-    flow.login_with_credentials(
-        username.clone(),
-        password.clone(),
-        LoginExtraInfo::default(),
-    )
-    .await
-    .unwrap();
+    flow.login_with_credentials(username.clone(), password.clone(), None)
+        .await
+        .unwrap();
 
     let ctx = context
         .user_context_from_login_flow(&mut flow)
@@ -82,7 +77,7 @@ async fn main() {
     // Create a new login for this context will fail.
     let mut flow = context.new_login_flow().await.unwrap();
 
-    flow.login_with_credentials(username, password, LoginExtraInfo::default())
+    flow.login_with_credentials(username, password, None)
         .await
         .unwrap();
 

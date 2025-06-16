@@ -3,7 +3,6 @@ use std::sync::Arc;
 use clap::Parser;
 use proton_action_queue::observers::ActionAwaiter;
 use proton_action_queue::queue::BroadcastMessage;
-use proton_core_api::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_core_api::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::event_loop::EventPollMode;
@@ -83,7 +82,7 @@ async fn main() {
 
     let mut flow = ctx.new_login_flow().await.unwrap();
 
-    flow.login_with_credentials(username, password, LoginExtraInfo::default())
+    flow.login_with_credentials(username, password, None)
         .await
         .unwrap();
 

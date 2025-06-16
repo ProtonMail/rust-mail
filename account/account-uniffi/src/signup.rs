@@ -2,9 +2,9 @@
 
 //! Implements the sign-up flow.
 
+use crate::user_behavior::UserBehavior;
 use itertools::Itertools;
 use proton_account_api::countries::Country as RealCountry;
-use proton_account_api::requests::Behavior;
 use proton_account_api::signup::SignupError as RealSignupError;
 use proton_account_api::signup::SignupFlow as RealSignupFlow;
 use proton_account_api::signup::state::StateKind;
@@ -144,33 +144,6 @@ impl From<&RealCountry> for Country {
 pub struct Countries {
     pub countries: Vec<Country>,
     pub default_country: Option<Country>,
-}
-
-/// User activity during text input.
-#[derive(uniffi::Record, Clone)]
-pub struct UserBehavior {
-    /// Time from form load to user providing input (in seconds).
-    pub time_on_field: Vec<u32>,
-    /// Number of clicks / taps during user input.
-    pub click_on_field: u32,
-    /// Text chunks copied during user input.
-    pub copy_field: Vec<String>,
-    /// Text chunks pasted during user input.
-    pub paste_field: Vec<String>,
-    /// Characters entered during user input.
-    pub key_down_field: Vec<String>,
-}
-
-impl From<UserBehavior> for Behavior {
-    fn from(value: UserBehavior) -> Self {
-        Self {
-            time: value.time_on_field,
-            click: value.click_on_field,
-            copy: value.copy_field,
-            paste: value.paste_field,
-            keydown: value.key_down_field,
-        }
-    }
 }
 
 /// Manages the state and transitions for the user signup process.

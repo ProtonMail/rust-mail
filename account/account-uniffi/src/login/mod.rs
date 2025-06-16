@@ -1,5 +1,5 @@
+use crate::user_behavior::UserBehavior;
 use datatypes::MigrationData;
-use muon::client::flow::LoginExtraInfo;
 use proton_account_api::login as login_api;
 use proton_account_api::login::state::want_qr_confirmation::ProcessTargetDeviceQrError as RealProcessTargetDeviceQrError;
 use proton_account_api::responses as responses_api;
@@ -50,21 +50,14 @@ impl LoginFlow {
         &self,
         email: String,
         password: String,
-        fingerprint_payload: Option<String>,
+        user_behavior: Option<UserBehavior>,
     ) -> Result<(), LoginError> {
         let flow = self.flow.clone();
-
-        let fingerprint_result = fingerprint_payload.as_ref().map(|f| f.parse()).transpose();
-        let extra_info = match fingerprint_result {
-            Ok(Some(f)) => LoginExtraInfo::builder().with_fingerprint(f).build(),
-            Ok(None) => LoginExtraInfo::default(),
-            Err(_) => todo!(),
-        };
 
         uniffi_async::<_, LoginError, _>(async move {
             let mut guard = flow.lock().await;
             guard
-                .login_with_credentials(email, password, extra_info)
+                .login_with_credentials(email, password, user_behavior.map(Into::into))
                 .await
                 .map_err(LoginError::from)
         })

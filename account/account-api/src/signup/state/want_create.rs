@@ -4,8 +4,8 @@
 use crate::AccountApi;
 use crate::requests::*;
 use crate::responses::*;
+use crate::shared::challenge::ChallengePayload;
 use crate::shared::crypto::NewUserKey;
-use crate::signup::ChallengeInfo;
 use crate::signup::SignupError;
 use crate::signup::state::Recovery;
 use crate::signup::state::StateData;
@@ -28,7 +28,6 @@ use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use proton_crypto_account::proton_crypto::{new_pgp_provider, new_srp_provider};
 use proton_crypto_account::salts::KeySecret;
-use std::collections::HashMap;
 
 /// Represents the state where the user can provide recovery information.
 #[derive(Debug, Display, Clone)]
@@ -70,7 +69,7 @@ impl WantCreate {
             .map_err(|_| SignupError::AccountCreationFailed)
             .await?;
 
-        let payload = create_payload(&self.data.challenge_info);
+        let payload = ChallengePayload::new(&self.data.challenge_info);
 
         let user = self
             .create_user(&auth, payload)
@@ -169,7 +168,7 @@ impl WantCreate {
     async fn create_user(
         &self,
         auth: &AuthInput,
-        payload: Option<HashMap<String, PayloadFrame>>,
+        payload: Option<ChallengePayload>,
     ) -> Result<User, SignupError> {
         let (email, phone) = match &self.recovery {
             Recovery::Email(email) => (Some(email), None),
@@ -240,127 +239,5 @@ impl WantCreate {
             .await?;
 
         Ok((res.user, user_key.pass))
-    }
-}
-
-fn create_payload(challenge_info: &ChallengeInfo) -> Option<HashMap<String, PayloadFrame>> {
-    if challenge_info.recovery_behavior.is_none() && challenge_info.username_behavior.is_none() {
-        return None;
-    }
-
-    let mut payload = HashMap::with_capacity(2);
-
-    if let Some(behavior) = challenge_info.recovery_behavior.clone() {
-        insert_payload_frame(
-            &mut payload,
-            PayloadFrameMetadata::Recovery,
-            challenge_info,
-            PayloadFrameBehavior::Recovery(behavior),
-        );
-    }
-
-    if let Some(behavior) = challenge_info.username_behavior.clone() {
-        insert_payload_frame(
-            &mut payload,
-            PayloadFrameMetadata::Username,
-            challenge_info,
-            PayloadFrameBehavior::Username(behavior),
-        );
-    }
-
-    Some(payload)
-}
-
-fn insert_payload_frame(
-    payload: &mut HashMap<String, PayloadFrame>,
-    metadata: PayloadFrameMetadata,
-    challenge_info: &ChallengeInfo,
-    behavior: PayloadFrameBehavior,
-) {
-    let id = payload.len();
-    let name = format!("{}-v4-challenge-{id}", challenge_info.product_name);
-    payload.insert(
-        name,
-        PayloadFrameV2_2 {
-            metadata,
-            device_info: challenge_info.device_info.clone(),
-            user_behavior: Some(behavior),
-        }
-        .into(),
-    );
-}
-
-#[cfg(test)]
-mod test {
-    use std::collections::HashMap;
-
-    use proton_core_common::device::DeviceInfo;
-
-    use crate::{
-        prelude::{Behavior, PayloadFrameBehavior, PayloadFrameMetadata, PayloadFrameV2_2},
-        signup::{ChallengeInfo, state::want_create::create_payload},
-    };
-
-    #[test]
-    fn test_create_payload() {
-        let device_info = DeviceInfo {
-            language: "lang".into(),
-            timezone: "tz".into(),
-            timezone_offset: -60,
-            model: "model".into(),
-            brand: "brand".into(),
-            codename: "code".into(),
-            uuid: "uuid".into(),
-            country: "country".into(),
-            rooted: false,
-            font_scale: "2.0".into(),
-            storage: 42.0,
-            dark_mode: true,
-            keyboards: vec!["kb_1".into()],
-        };
-        let username_behavior = Behavior {
-            time: vec![123],
-            click: 12,
-            copy: vec!["usr_cf".into()],
-            paste: vec!["usr_pf".into()],
-            keydown: vec!["usr_kdf".into()],
-        };
-        let recovery_behavior = Behavior {
-            time: vec![456],
-            click: 34,
-            copy: vec!["rec_cf".into()],
-            paste: vec!["rec_pf".into()],
-            keydown: vec!["rec_kdf".into()],
-        };
-        let challenge_info = ChallengeInfo {
-            product_name: "mail-ios".into(),
-            device_info: Some(device_info.clone()),
-            recovery_behavior: Some(recovery_behavior.clone()),
-            username_behavior: Some(username_behavior.clone()),
-        };
-        let payload = create_payload(&challenge_info);
-        assert_eq!(
-            payload,
-            Some(HashMap::from_iter([
-                (
-                    "mail-ios-v4-challenge-0".to_string(),
-                    PayloadFrameV2_2 {
-                        metadata: PayloadFrameMetadata::Recovery,
-                        device_info: Some(device_info.clone()),
-                        user_behavior: Some(PayloadFrameBehavior::Recovery(recovery_behavior)),
-                    }
-                    .into(),
-                ),
-                (
-                    "mail-ios-v4-challenge-1".to_string(),
-                    PayloadFrameV2_2 {
-                        metadata: PayloadFrameMetadata::Username,
-                        device_info: Some(device_info.clone()),
-                        user_behavior: Some(PayloadFrameBehavior::Username(username_behavior)),
-                    }
-                    .into(),
-                )
-            ]))
-        );
     }
 }

@@ -1,6 +1,7 @@
 use crate::AccountApi;
 use crate::countries::{COUNTRIES, Country};
-use crate::prelude::{Behavior, ValidateEmailRequest, ValidatePhoneRequest};
+use crate::prelude::{ValidateEmailRequest, ValidatePhoneRequest};
+use crate::shared::challenge::Behavior;
 use crate::signup::SignupError;
 use crate::signup::state::want_create::WantCreate;
 use crate::signup::state::{Recovery, StateData, StateResult, Username};

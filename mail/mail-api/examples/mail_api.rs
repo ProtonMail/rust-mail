@@ -1,6 +1,6 @@
 #![allow(clippy::print_stdout)]
-use muon::client::flow::LoginExtraInfo;
 use proton_account_api::login::LoginFlow;
+use proton_account_api::shared::challenge::ChallengeInfo;
 use proton_core_api::services::proton::LabelId;
 use proton_core_api::session::{CoreSession, Session};
 use proton_mail_api::services::proton::ProtonMail;
@@ -28,9 +28,9 @@ async fn main() {
     let user_password = std::env::var("USER_PASSWORD").unwrap();
     let session = Session::new().await.unwrap();
 
-    let mut login_flow = LoginFlow::new(session.clone());
+    let mut login_flow = LoginFlow::new(session.clone(), ChallengeInfo::default());
     login_flow
-        .login_with_credentials(user_email, user_password, LoginExtraInfo::default())
+        .login_with_credentials(user_email, user_password, None)
         .await
         .unwrap();
 
