@@ -438,7 +438,24 @@ impl Save {
         let mut attachments =
             Attachment::find_by_ids(action.attachment_ids.iter().cloned(), guard.tether())
                 .await
-                .inspect_err(|e| error!("Failed to load attachments: {e:?}"))?;
+                .inspect_err(|e| error!("Failed to load attachments: {e:?}"))?
+                .into_iter()
+                .filter(|a| {
+                    if a.remote_id().is_none() {
+                        // When adding new attachment to a draft, we reflect the state correctly offline
+                        // but we can not attach an attachment until it has a remote id. We skip attachments
+                        // that still does not have a remote id. Since we always save before send and send
+                        // also requires all attachments to be uploaded this will correct itself.
+                        tracing::warn!(
+                            "Attachment {} does not have a remote id, skipping",
+                            a.local_id.unwrap()
+                        );
+                        false
+                    } else {
+                        true
+                    }
+                })
+                .collect::<Vec<_>>();
 
         // Create draft on the server.
         let new_message = if let Some(remote_message_id) = remote_message_id.clone() {
@@ -585,7 +602,6 @@ impl Save {
                     for (index, original_attachment) in attachments
                         .iter_mut()
                         .enumerate()
-                        .filter(|(_, a)| a.remote_id().is_some())
                     {
                         let Some(remote_id) = &original_attachment.remote_id() else {
                             // We can't do this if the attachment has no remote id.
@@ -683,8 +699,7 @@ impl Save {
                 // reset the signatures and update the key packets so that send works correctly.
                 for (index, original_attachment) in attachments
                     .iter()
-                    .enumerate()
-                    .filter(|(_, a)| a.remote_id().is_some()) {
+                    .enumerate(){
                     let new_attachment = &mut new_message_body_metadata.attachments[index];
                     if original_attachment.remote_address_id != new_attachment.remote_address_id || original_attachment.key_packets!= new_attachment.key_packets {
                         tracing::info!("Detected address change on attachment ({}/{})", original_attachment.local_id.unwrap(), original_attachment.remote_id().as_ref().unwrap());
