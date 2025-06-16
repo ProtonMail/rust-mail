@@ -1,1 +1,1 @@
-//! Placeholder for `account-common`.
+pub mod password_validator;
