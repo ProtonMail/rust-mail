@@ -405,7 +405,7 @@ fn apply_prefix_to_subject(prefix: &str, subject: &str) -> String {
     if trimmed_subject.starts_with(prefix) {
         trimmed_subject.to_string()
     } else {
-        format!("{prefix} {trimmed_subject}")
+        format!("{prefix}{trimmed_subject}")
     }
 }
 
