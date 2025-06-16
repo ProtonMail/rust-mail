@@ -1,4 +1,7 @@
-use std::time::{Duration, Instant};
+use std::{
+    sync::atomic::{AtomicBool, Ordering},
+    time::{Duration, Instant},
+};
 
 use parking_lot::Mutex;
 
@@ -43,6 +46,15 @@ impl CoreClock {
 
     pub fn pin_code_tick(&self) {
         self.pin_code_accessed.tick();
+        self.pin_code_accessed
+            .accessed
+            .store(true, Ordering::Release);
+    }
+
+    pub fn auto_lock_accessed(&self) {
+        self.auto_lock_accessed
+            .accessed
+            .store(true, Ordering::Release);
     }
 }
 
@@ -59,6 +71,7 @@ impl CoreClock {
 
 pub struct ActivityClock {
     last_activity: Mutex<Instant>,
+    accessed: AtomicBool,
 }
 
 impl ActivityClock {
@@ -66,11 +79,14 @@ impl ActivityClock {
     pub fn new(now: Instant) -> Self {
         Self {
             last_activity: Mutex::new(now),
+            accessed: AtomicBool::new(true),
         }
     }
 
     pub fn tick(&self) {
-        *self.last_activity.lock() = Instant::now();
+        if self.accessed.swap(false, Ordering::Acquire) {
+            *self.last_activity.lock() = Instant::now();
+        }
     }
 
     pub fn elapsed(&self) -> Duration {

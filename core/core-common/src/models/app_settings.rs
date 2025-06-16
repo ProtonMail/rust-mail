@@ -61,7 +61,15 @@ impl AppSettings {
         } else {
             let lock_elapsed = ctx.clock().auto_lock_elapsed();
 
-            self.auto_lock.should_autolock(lock_elapsed)
+            let should_lock = self.auto_lock.should_autolock(lock_elapsed);
+
+            // If the app is not supposed to lock, we need to mark that the auto lock has been accessed
+            // so that the timer is reset. So that the next time the app is opened, it will not lock.
+            if !should_lock {
+                ctx.clock().auto_lock_accessed();
+            }
+
+            should_lock
         }
     }
 
