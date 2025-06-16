@@ -26,7 +26,7 @@ use std::sync::{Arc, Weak};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use topological_sort::TopologicalSort;
-use tracing::{Level, debug, error, trace};
+use tracing::{Instrument, Level, debug, error, info};
 use uuid::Uuid;
 
 /// Execution context errors
@@ -391,42 +391,45 @@ impl Queue {
     /// # Errors
     ///
     /// Returns error if action could not be executed locally.
-    #[tracing::instrument(level = Level::DEBUG, skip(self, metadata, action), name =
-    "QueueAction")]
     pub async fn queue_action_with_metadata<T: Action>(
         &self,
         mut action: T,
         metadata: Metadata,
     ) -> Result<QueuedActionOutput<T>, ActionError<T>> {
-        debug!("Queueing action: {} {:?}", T::TYPE, metadata);
-        if !self.shared.has_action::<T>() {
-            error!("Unknown action queued: {}", T::TYPE);
-            return Err(Error::UnknownAction(T::TYPE.to_string()).into());
+        let span = tracing::debug_span!("queue::queue", type=T::TYPE.0);
+        async {
+            debug!("Dependencies: {:?}", metadata.dependencies);
+            if !self.shared.has_action::<T>() {
+                error!("Unknown action queued: {}", T::TYPE);
+                return Err(Error::UnknownAction(T::TYPE.to_string()).into());
+            }
+            let handler = T::Handler::default();
+            let context = self
+                .shared
+                .resolve_execution_context::<T>()
+                .map_err(|e| ActionError::Queue(e.into()))?;
+
+            let (local_output, id) = execute_action_local(
+                &self.shared,
+                context.as_ref(),
+                &handler,
+                &mut action,
+                metadata,
+                None,
+            )
+            .await?;
+            info!("Action queued with id={id}");
+
+            // Notify executors.
+            self.shared.queued_action_notifier.notify_waiters();
+
+            Ok(QueuedActionOutput {
+                local: local_output,
+                id,
+            })
         }
-        let handler = T::Handler::default();
-        let context = self
-            .shared
-            .resolve_execution_context::<T>()
-            .map_err(|e| ActionError::Queue(e.into()))?;
-
-        let (local_output, id) = execute_action_local(
-            &self.shared,
-            context.as_ref(),
-            &handler,
-            &mut action,
-            metadata,
-            None,
-        )
-        .await?;
-        debug!("Action queued with id={id}");
-
-        // Notify executors.
-        self.shared.queued_action_notifier.notify_waiters();
-
-        Ok(QueuedActionOutput {
-            local: local_output,
-            id,
-        })
+        .instrument(span)
+        .await
     }
 
     /// Attempt to replace an existing action with an updated version. If the action no longer
@@ -460,46 +463,49 @@ impl Queue {
         mut action: T,
         metadata: Metadata,
     ) -> Result<QueuedActionOutput<T>, ActionError<T>> {
-        debug!(
-            "Replacing {existing_id:?} or Queueing action: {} {metadata:?}",
-            T::TYPE,
-        );
+        let span = tracing::trace_span!("queue::replace", type=T::TYPE.0);
+        async {
+            info!("Replacing {existing_id:?}");
+            debug!("Dependencies: {:?}", metadata.dependencies);
 
-        if !self.shared.has_action::<T>() {
-            error!("Unknown action queued: {}", T::TYPE);
-            return Err(Error::UnknownAction(T::TYPE.to_string()).into());
+            if !self.shared.has_action::<T>() {
+                error!("Unknown action queued: {}", T::TYPE);
+                return Err(Error::UnknownAction(T::TYPE.to_string()).into());
+            }
+
+            let handler = T::Handler::default();
+            let context = self
+                .shared
+                .resolve_execution_context::<T>()
+                .map_err(|e| ActionError::Queue(e.into()))?;
+
+            let shared = Arc::clone(&self.shared);
+
+            let (local_output, id) = execute_action_local(
+                &shared,
+                context.as_ref(),
+                &handler,
+                &mut action,
+                metadata,
+                Some(existing_id),
+            )
+            .await?;
+            if existing_id == id {
+                info!("Action has been updated");
+                // We don't want to notify executors in this case.
+            } else {
+                info!("Action queued with id={id}");
+                // Notify executors.
+                self.shared.queued_action_notifier.notify_waiters();
+            }
+
+            Ok(QueuedActionOutput {
+                local: local_output,
+                id,
+            })
         }
-
-        let handler = T::Handler::default();
-        let context = self
-            .shared
-            .resolve_execution_context::<T>()
-            .map_err(|e| ActionError::Queue(e.into()))?;
-
-        let shared = Arc::clone(&self.shared);
-
-        let (local_output, id) = execute_action_local(
-            &shared,
-            context.as_ref(),
-            &handler,
-            &mut action,
-            metadata,
-            Some(existing_id),
-        )
-        .await?;
-        if existing_id == id {
-            debug!("Action has been updated");
-            // We don't want to notify executors in this case.
-        } else {
-            debug!("Action queued with id={id}");
-            // Notify executors.
-            self.shared.queued_action_notifier.notify_waiters();
-        }
-
-        Ok(QueuedActionOutput {
-            local: local_output,
-            id,
-        })
+        .instrument(span)
+        .await
     }
 
     /// Delete an action with `action_id` from the queue *without reverting local state*.
@@ -712,31 +718,31 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
         metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>> {
         let result = shared.resolve_execution_context::<T>();
-        Box::pin(async move {
-            let context = result?;
-            // Can't return result here as there is no one to consume it.
-            debug!(
-                "Reverting local state for {} type={}",
-                self.action_id,
-                T::TYPE
-            );
-            // Revert local changes and remove action from queue.
-            if let Err(e) = self
-                .handler
-                .revert_local(self.action_id, &context, &mut self.action, tx)
-                .await
-            {
-                error!("Failed to revert local changes: {e:?}");
+        let span = tracing::trace_span!("queue::revert", id=self.action_id.0, type=T::TYPE.0);
+        Box::pin(
+            async move {
+                let context = result?;
+                // Can't return result here as there is no one to consume it.
+                info!("Reverting local state");
+                // Revert local changes and remove action from queue.
+                if let Err(e) = self
+                    .handler
+                    .revert_local(self.action_id, &context, &mut self.action, tx)
+                    .await
+                {
+                    error!("Failed to revert local changes: {e:?}");
+                }
+                StoredAction::delete(tx, self.action_id)
+                    .await
+                    .map_err(|e| {
+                        error!("Failed to delete action: {e:?}");
+                        e
+                    })
+                    .map_err(|e| QueuedError::Action(Arc::new(anyhow::Error::new(e)), metadata))?;
+                Ok(())
             }
-            StoredAction::delete(tx, self.action_id)
-                .await
-                .map_err(|e| {
-                    error!("Failed to delete action: {e:?}");
-                    e
-                })
-                .map_err(|e| QueuedError::Action(Arc::new(anyhow::Error::new(e)), metadata))?;
-            Ok(())
-        })
+            .instrument(span),
+        )
     }
 }
 
@@ -817,7 +823,6 @@ impl QueueExecutor {
     ///
     /// If no action is found, this method returns `None`. Otherwise, we
     /// return the id of the executed action.
-    #[tracing::instrument(level = Level::DEBUG, skip_all)]
     async fn execute_impl(&self, tether: &mut Tether) -> QueuedResult<Option<QueuedActionState>> {
         let Some((exec_guard, action)) = self.next_action(tether).await.map_err(|e| {
             error!("Failed to retrieve action: {e:?}");
@@ -828,17 +833,12 @@ impl QueueExecutor {
         };
 
         let action_id = action.id.unwrap();
-
         let action_type = action.action_type.clone();
-        debug!(
-            "Next Action: id={} type={} debug={}",
-            action_id,
-            action_type,
-            action.short_dbg_str()
-        );
+        let debug_span = tracing::debug_span!("queue::execute",id=action_id.0, type=action_type);
 
         async {
-            trace!(id=?action_id, type=?action_type);
+            info!("Executing action");
+            debug!("{}", action.short_dbg_str());
             let (mut decoded, metadata) = match decode_action(&self.shared.factory, action) {
                 Ok(v) => v,
                 Err(e) => {
@@ -878,6 +878,7 @@ impl QueueExecutor {
 
             Ok(Some(exec_output))
         }
+        .instrument(debug_span)
         .await
     }
 
@@ -1253,7 +1254,7 @@ async fn execute_action_remote<T: Action>(
                     Ok(result) => {
                         StoredAction::delete(tx, id).await?;
 
-                        debug!("Action executed");
+                        info!("Action executed");
                         Ok(ActionRemoteOutput::Executed(result))
                     }
                     Err(e) => {
@@ -1269,7 +1270,6 @@ async fn execute_action_remote<T: Action>(
                                 QueuedActionReason::GuardExpired,
                             ));
                         }
-                        debug!("Reverting self and dependees");
                         match cancel_action_with_dependees(shared, tx, id).await {
                             Ok(ids) => {
                                 cancelled_actions = ids;
@@ -1279,6 +1279,7 @@ async fn execute_action_remote<T: Action>(
                             }
                         }
 
+                        info!("Action Reverted");
                         Err(ActionError::Action(e))
                     }
                 }
