@@ -400,7 +400,7 @@ pub struct StashConfiguration<'a> {
     /// The path to the SQLite database file. If `None`, an in-memory
     /// database is created.
     pub path: Option<&'a Path>,
-    /// How many conections are used. If `None`, [`MAX_CONNECTIONS`] is used.
+    /// How many connections are used. If `None`, [`MAX_CONNECTIONS`] is used.
     pub pool_size: Option<u32>,
     /// How many idle connections are allowed to be maintained before new connections are established
     /// For `None` the default of [`IDLE_CONNECTIONS`]  or [`pool_size`] will be used whichever is lower.
@@ -511,6 +511,18 @@ impl Stash {
                         PRAGMA temp_store = MEMORY;        -- Allows temporary storage for watcher
                         PRAGMA recursive_triggers='ON';    -- Allows recursive triggers for watcher
                     ", BUSY_TIMEOUT.as_millis()))?;
+            // Ensure on iOS wall checkpointing is disabled on close. We could have set this
+            // up as a configuration option, but we may forget to set this correctly in the
+            // future and re-introduce this bug.
+            #[cfg(target_os = "ios")]
+            if !c.set_db_config(
+                rusqlite::config::DbConfig::SQLITE_DBCONFIG_NO_CKPT_ON_CLOSE,
+                true,
+            )? {
+                return Err(SqliteError::UserFunctionError(
+                    "Failed to set wal checkpoint on close".into(),
+                ));
+            }
             Ok(())
         });
 
