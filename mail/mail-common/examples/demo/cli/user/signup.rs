@@ -72,7 +72,7 @@ impl Cmd {
     }
 
     async fn on_want_create(flow: &mut SignupFlow) -> Result<()> {
-        flow.create(None).await?;
+        flow.create().await?;
 
         Ok(())
     }
