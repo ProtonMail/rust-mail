@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- [ET-3026] Improve action queue logs
+
+### Fixes
+
+- [ET-3301] Add `biometrics_check_passed` for invokation after biometrics protection was verified by the client
+- [ET-3301] Reset the access when auto lock is not invoked
+
+
+## [mail-uniffi-v0.93.1] - 2025-06-16
+
 ### Fixes
 
 - [ET-3307] Disable wal checkpoint on close
