@@ -13,8 +13,6 @@ use crate::{
     draft::SaveError as DraftSaveError, draft::SendError as DraftSendError,
     draft::UndoError as DraftUndoError,
 };
-use proton_account_api::login::LoginError;
-use proton_account_api::signup::SignupError;
 use proton_action_queue::action::Action;
 use proton_action_queue::queue::ActionError as InternalActionError;
 use proton_core_api::service::ApiServiceError;
@@ -168,76 +166,6 @@ impl From<PinError> for ProtonMailError {
     }
 }
 
-impl From<LoginError> for ProtonMailError {
-    fn from(error: LoginError) -> Self {
-        let _guard = log_error(&error);
-        match error {
-            LoginError::WrongMailboxPassword => Self::reason(LoginErrorReason::InvalidCredentials),
-
-            LoginError::FlowLogin(e)
-            | LoginError::FlowTotp(e)
-            | LoginError::FlowFido(e)
-            | LoginError::UserFetch(e) => Self::from(e),
-
-            LoginError::UserKeySetup(_) => Self::reason(LoginErrorReason::UserSetup),
-            LoginError::UserKeySetupNonPrivate => Self::reason(LoginErrorReason::UserSetup),
-
-            LoginError::AddressFetch(_)
-            | LoginError::AddressSetup(_)
-            | LoginError::AddressKeySetup(_) => Self::reason(LoginErrorReason::AddressSetup),
-
-            LoginError::MissingPrimaryKey
-            | LoginError::KeySecretDecryption
-            | LoginError::KeySecretDerivation(_) => {
-                Self::reason(LoginErrorReason::CantUnlockUserKey)
-            }
-
-            LoginError::KeySecretSaltFetch(api_service_error) => match api_service_error {
-                // HTTP code 422
-                ApiServiceError::UnprocessableEntity(_string1, _string2) => {
-                    // TODO(ET-1076): use api_code: 8002 -> InvalidCredentials ; 2005 -> EmptyInput ; other -> Self::from(api_service_error)
-                    Self::reason(LoginErrorReason::InvalidCredentials)
-                }
-                _ => Self::from(api_service_error),
-            },
-
-            LoginError::ServerProof(_string) | LoginError::SrpProof(_string) => {
-                Self::reason(LoginErrorReason::InvalidCredentials)
-            }
-
-            LoginError::AuthStore(store_error) => Self::from(store_error),
-
-            LoginError::InvalidState => Self::Unexpected(Unexpected::Internal),
-        }
-    }
-}
-
-impl From<SignupError> for ProtonMailError {
-    fn from(error: SignupError) -> Self {
-        let _guard = log_error(&error);
-        match error {
-            SignupError::Api(e) => Self::from(e),
-            SignupError::Crypto(_) => Self::Unexpected(Unexpected::Crypto),
-            SignupError::SignupBlockedByServer => {
-                Self::reason(SignupErrorReason::SignupBlockedByServer)
-            }
-            SignupError::UsernameUnavailable => {
-                Self::reason(SignupErrorReason::UsernameUnavailable)
-            }
-            SignupError::AccountCreationFailed => {
-                Self::reason(SignupErrorReason::AccountCreationFailed)
-            }
-            SignupError::AddressSetupFailed => Self::reason(SignupErrorReason::AddressSetupFailed),
-            SignupError::KeySetupFailed => Self::reason(SignupErrorReason::KeySetupFailed),
-            SignupError::SetAuthInfoFailed(_) => Self::Unexpected(Unexpected::Internal),
-            SignupError::SetUserDataFailed(_) => Self::Unexpected(Unexpected::Internal),
-            SignupError::InvalidState => Self::Unexpected(Unexpected::Internal),
-            SignupError::RecoveryEmailInvalid => Self::Unexpected(Unexpected::Internal),
-            SignupError::RecoveryPhoneNumberInvalid => Self::Unexpected(Unexpected::Internal),
-        }
-    }
-}
-
 impl From<AppError> for ProtonMailError {
     fn from(error: AppError) -> Self {
         log_error(&error);
@@ -291,8 +219,6 @@ impl From<MailContextError> for ProtonMailError {
             MailContextError::Crypto | MailContextError::KeyChainHasNoKey => {
                 Self::Unexpected(Unexpected::Crypto)
             }
-            MailContextError::Login(login_error) => Self::from(login_error),
-            MailContextError::Signup(signup_error) => Self::from(signup_error),
             MailContextError::Pin(pin_error) => Self::from(pin_error),
             MailContextError::KeyChain(key_chain_error) => Self::from(key_chain_error),
             MailContextError::IO(io_error) => Self::from(io_error),

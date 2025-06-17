@@ -3,8 +3,8 @@ use crate::mail_scroller::MailScrollerError;
 use crate::{AppError, MailUserContext, draft};
 use anyhow::anyhow;
 use futures::executor::block_on;
-use proton_account_api::login::{LoginError, LoginFlow};
-use proton_account_api::signup::{SignupError, SignupFlow};
+use proton_account_api::login::LoginFlow;
+use proton_account_api::signup::SignupFlow;
 use proton_action_queue::action::{Action, WriterGuardError};
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
 use proton_calendar_common::RsvpError;
@@ -22,8 +22,8 @@ use proton_core_common::models::{LabelError, ModelExtension};
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::pin_code::{PinCode, PinError};
 use proton_core_common::{
-    ContactError, Context, CoreAccountState, CoreContextError, CoreSessionState, KeyHandlingError,
-    UserContext,
+    ContactError, Context, CoreAccountState, CoreContextError, CoreContextResult, CoreSessionState,
+    KeyHandlingError, UserContext,
 };
 use proton_core_common::{OnSessionDeletedResponse, UserDatabaseInitializer};
 use proton_crypto_inbox::attachment::AttachmentEncryptionError;
@@ -95,10 +95,6 @@ pub enum MailContextError {
     App(#[from] AppError),
     #[error("Stash Error: {0}")]
     Stash(#[from] StashError),
-    #[error("Login Error: {0}")]
-    Login(#[from] LoginError),
-    #[error("Signup Error: {0}")]
-    Signup(#[from] SignupError),
     #[error("Pin Error: {0}")]
     Pin(#[from] PinError),
     #[error("API Error: {0}")]
@@ -312,7 +308,7 @@ impl MailContext {
     /// # Errors
     ///
     /// See [`Context::new_login_flow`].
-    pub async fn new_login_flow(&self) -> MailContextResult<LoginFlow> {
+    pub async fn new_login_flow(&self) -> CoreContextResult<LoginFlow> {
         // Ensure we have an encryption key
         let _ = self.core_context.get_encryption_key()?;
         // Create a new API session
@@ -383,7 +379,7 @@ impl MailContext {
     /// # Errors
     ///
     /// See [`Context::new_signup_flow`].
-    pub async fn new_signup_flow(&self) -> MailContextResult<SignupFlow> {
+    pub async fn new_signup_flow(&self) -> Result<SignupFlow, CoreContextError> {
         // Ensure we have an encryption key
         let _ = self.core_context.get_encryption_key()?;
 
@@ -393,7 +389,9 @@ impl MailContext {
         let store = session.store().to_owned();
 
         // Create a new signup flow
-        Ok(SignupFlow::new(client, store).await?)
+        Ok(SignupFlow::new(client, store)
+            .await
+            .map_err(|api_err| anyhow!(api_err.to_string()))?)
     }
 
     /// Verify the PIN code.
@@ -447,9 +445,17 @@ impl MailContext {
             return Err(MailContextError::Other(anyhow!("invalid login state")));
         }
 
-        let user_id: UserId = flow.user_id()?.to_owned();
-        let session_id: SessionId = flow.session_id()?.to_owned();
-        let session = flow.take_session()?;
+        let user_id: UserId = flow
+            .user_id()
+            .map_err(|_| MailContextError::Other(anyhow!("invalid login state")))?
+            .to_owned();
+        let session_id: SessionId = flow
+            .session_id()
+            .map_err(|_| MailContextError::Other(anyhow!("invalid login state")))?
+            .to_owned();
+        let session = flow
+            .take_session()
+            .map_err(|_| MailContextError::Other(anyhow!("invalid login state")))?;
 
         let user_ctx = self
             .core_context

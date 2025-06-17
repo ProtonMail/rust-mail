@@ -115,7 +115,7 @@ pub struct SignupFlow {
 
 impl SignupFlow {
     /// Create a new signup flow, implicitly fetching available domains.
-    pub async fn new(client: muon::Client, store: DynStore) -> Result<Self, SignupError> {
+    pub async fn new(client: muon::Client, store: DynStore) -> Result<Self, ApiError> {
         let domains = client.get_available_domains(None).await?.domains;
         let countries = COUNTRIES.to_owned();
         let state = vec![State::new(client)];

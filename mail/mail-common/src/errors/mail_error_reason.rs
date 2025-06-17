@@ -7,8 +7,6 @@ use proton_core_api::services::proton::AddressId;
 pub enum MailErrorReason {
     ActionReason(ActionErrorReason),
     ContextReason(ContextErrorReason),
-    LoginReason(LoginErrorReason),
-    SignupReason(SignupErrorReason),
     DraftOpenReason(DraftOpenErrorReason),
     DraftSaveReason(DraftSaveErrorReason),
     DraftSendReason(DraftSendErrorReason),
@@ -33,18 +31,6 @@ impl From<ActionErrorReason> for MailErrorReason {
 impl From<ContextErrorReason> for MailErrorReason {
     fn from(reason: ContextErrorReason) -> Self {
         Self::ContextReason(reason)
-    }
-}
-
-impl From<LoginErrorReason> for MailErrorReason {
-    fn from(reason: LoginErrorReason) -> Self {
-        Self::LoginReason(reason)
-    }
-}
-
-impl From<SignupErrorReason> for MailErrorReason {
-    fn from(reason: SignupErrorReason) -> Self {
-        Self::SignupReason(reason)
     }
 }
 
@@ -116,33 +102,6 @@ pub enum ActionErrorReason {
 pub enum ContextErrorReason {
     DuplicateContext,
     UserContextNotInitialized(String),
-}
-
-/// Specific Reason for error occurrence within Login Flow.
-///
-/// This enum is used to represent the specific reason for an error that occurred
-/// in handling login related operations in order to provide only the necessary
-/// information to the user.
-#[derive(Debug)]
-pub enum LoginErrorReason {
-    InvalidCredentials,
-    CantUnlockUserKey,
-    UserSetup,
-    AddressSetup,
-}
-
-/// Specific Reason for error occurrence within Signup Flow.
-///
-/// This enum is used to represent the specific reason for an error that occurred
-/// in handling signup related operations in order to provide only the necessary
-/// information to the user.
-#[derive(Debug)]
-pub enum SignupErrorReason {
-    SignupBlockedByServer,
-    UsernameUnavailable,
-    AccountCreationFailed,
-    AddressSetupFailed,
-    KeySetupFailed,
 }
 
 /// Specific Reason when opening a draft fails.
