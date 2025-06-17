@@ -268,7 +268,6 @@ impl Contact {
     ///
     #[tracing::instrument(skip(api))]
     #[allow(clippy::too_many_lines)]
-    #[must_use]
     pub async fn sync(api: &Proton) -> Result<SyncedContacts, ApiServiceError> {
         // In order to maximize throughput we do as follows:
         // 1. We download the first batch
