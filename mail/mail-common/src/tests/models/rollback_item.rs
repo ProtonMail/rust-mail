@@ -7,6 +7,7 @@ use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_common::models::ModelExtension;
 use proton_core_common::models::ModelIdExtension;
 use proton_core_common::test_utils::test_context::MockApiEnv;
+use proton_core_common::test_utils::utils::mock_auth_endpoints;
 use proton_mail_api::services::proton::common::ConversationId;
 use proton_mail_api::services::proton::responses::{GetConversationsResponse, GetMessagesResponse};
 use proton_mail_common::test_utils::db::new_test_connection_file;
@@ -244,6 +245,7 @@ async fn labels(tether: &Tether) -> Vec<Label> {
 
 async fn start_server(tether: &Tether, batch_size: usize) -> (MockServer, Session) {
     let mock_server = MockServer::start().await;
+    mock_auth_endpoints(&mock_server).await;
     let api_config = Config {
         env_id: EnvId::new_custom(MockApiEnv::new(mock_server.uri()).with_path("/api")),
         ..Default::default()

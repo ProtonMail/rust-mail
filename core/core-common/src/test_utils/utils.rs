@@ -17,6 +17,44 @@ pub fn random_string(length: usize) -> String {
         .collect()
 }
 
+/// Set up mock endpoints for auth sessions and token refresh.
+///
+/// This should be called for any `MockServer` that will handle Session creation
+/// to ensure the muon client's automatic auth session and token refresh requests
+/// are properly mocked.
+pub async fn mock_auth_endpoints(mock_server: &MockServer) {
+    use wiremock::matchers::{method, path_regex};
+    use wiremock::{Mock, ResponseTemplate};
+
+    let session_response = serde_json::json!({
+        "ServerProof": "dummy",
+        "UID": "dummy",
+        "AccessToken": "dummy",
+        "RefreshToken": "dummy",
+        "Scopes": ["dummy"],
+        "2FA": { "Enabled": 0 },
+        "PasswordMode": 1,
+    });
+
+    Mock::given(method("POST"))
+        .and(path_regex(r".*/auth/v4/sessions$"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(session_response))
+        .mount(mock_server)
+        .await;
+
+    let refresh_response = serde_json::json!({
+        "AccessToken": "dummy",
+        "RefreshToken": "dummy",
+        "Scopes": ["dummy"],
+    });
+
+    Mock::given(method("POST"))
+        .and(path_regex(r".*/auth/v4/refresh$"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(refresh_response))
+        .mount(mock_server)
+        .await;
+}
+
 /// Set up a catch-all mock for the mock server.
 ///
 /// Calls to this function need to come at the END of the test setup, AFTER

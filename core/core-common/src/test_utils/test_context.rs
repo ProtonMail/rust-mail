@@ -3,7 +3,7 @@ use crate::event_loop::EventPollMode;
 use crate::events::CoreEvent;
 use crate::models::ModelExtension;
 use crate::test_utils::account::{TEST_USER_ID, TEST_USER_MAIL, testdata_user_secret};
-use crate::test_utils::utils::catch_all;
+use crate::test_utils::utils::{catch_all, mock_auth_endpoints};
 use crate::{
     Context, UserContext, UserDatabaseInitializer,
     db::account::SessionEncryptionKey,
@@ -164,7 +164,7 @@ impl TestContext {
         }));
 
         let mock_web_server = Arc::new(MockServer::start().await);
-        mock_web_server.mock_post_auth_session().await;
+        mock_auth_endpoints(&mock_web_server).await;
         let tmp_dir = TempDir::new("account_test").expect("failed to create temp dir");
         info!("CORE TMP DIR = {:?}", tmp_dir.path());
         let keychain = Self::keychain();
@@ -363,32 +363,3 @@ const _: () = {
         }
     }
 };
-
-trait ProtonCoreMock {
-    fn mock_post_auth_session(&self) -> impl Future<Output = ()> + Send;
-}
-
-impl ProtonCoreMock for MockServer {
-    #[function_name::named]
-    async fn mock_post_auth_session(&self) {
-        use wiremock::matchers::{method, path};
-        use wiremock::{Mock, ResponseTemplate};
-
-        let response = serde_json::json!({
-            "ServerProof": "dummy",
-            "UID": "dummy",
-            "AccessToken": "dummy",
-            "RefreshToken": "dummy",
-            "Scopes": ["dummy"],
-            "2FA": { "Enabled": 0 },
-            "PasswordMode": 1,
-        });
-
-        Mock::given(method("POST"))
-            .and(path("/api/auth/v4/sessions"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(response))
-            .named(function_name!())
-            .mount(self)
-            .await;
-    }
-}
