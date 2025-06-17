@@ -42,10 +42,6 @@ pub trait ProtonMail {
     ///
     /// For more details see [the API documentation](https://protonmail.gitlab-pages.protontech.ch/Slim-API/mail/#tag/Attachment).
     ///
-    /// # Parameters
-    ///
-    /// * `attachment_id` - The ID of the attachment to get.
-    ///
     /// # Errors
     ///
     /// This method will return an error if the request fails.
@@ -58,10 +54,6 @@ pub trait ProtonMail {
     /// content.
     ///
     /// For more details see [the API documentation](https://protonmail.gitlab-pages.protontech.ch/Slim-API/mail/#tag/Attachment).
-    ///
-    /// # Parameters
-    ///
-    /// * `attachment_id` - The ID of the attachment to get metadata for.
     ///
     /// # Errors
     ///
@@ -119,10 +111,6 @@ pub trait ProtonMail {
 
     /// TODO: Document this method.
     ///
-    /// # Parameters
-    ///
-    /// * `conversation_id` - The ID of the conversation to get
-    ///
     /// # Errors
     ///
     /// This method will return an error if the request fails.
@@ -133,10 +121,6 @@ pub trait ProtonMail {
     ) -> ApiServiceResult<GetConversationResponse>;
 
     /// TODO: Document this method.
-    ///
-    /// # Parameters
-    ///
-    /// * `options` - The options to use for the request.
     ///
     /// # Errors
     ///
@@ -157,10 +141,6 @@ pub trait ProtonMail {
 
     /// TODO: Document this method.
     ///
-    /// # Parameters
-    ///
-    /// * `message_id` - The ID of the message to get
-    ///
     /// # Errors
     ///
     /// This method will return an error if the request fails.
@@ -168,10 +148,6 @@ pub trait ProtonMail {
     async fn get_message(&self, message_id: MessageId) -> ApiServiceResult<GetMessageResponse>;
 
     /// TODO: Document this method.
-    ///
-    /// # Parameters
-    ///
-    /// * `options` - The options to use for the request.
     ///
     /// # Errors
     ///
@@ -200,11 +176,6 @@ pub trait ProtonMail {
 
     /// TODO: Document this method.
     ///
-    /// # Parameters
-    ///
-    /// * `conversation_ids` - TODO: Document this parameter.
-    /// * `label_id`         - TODO: Document this parameter.
-    ///
     /// # Errors
     ///
     /// This method will return an error if the request fails.
@@ -216,12 +187,6 @@ pub trait ProtonMail {
     ) -> ApiServiceResult<PutConversationsDeleteResponse>;
 
     /// TODO: Document this method.
-    ///
-    /// # Parameters
-    ///
-    /// * `conversation_ids` - TODO: Document this parameter.
-    /// * `label_id`         - TODO: Document this parameter.
-    /// * `spam_action`      - TODO: Document this parameter.
     ///
     /// # Errors
     ///
@@ -236,10 +201,6 @@ pub trait ProtonMail {
 
     /// TODO: Document this method.
     ///
-    /// # Parameters
-    ///
-    /// * `conversation_ids` - TODO: Document this parameter.
-    ///
     /// # Errors
     ///
     /// This method will return an error if the request fails.
@@ -250,11 +211,6 @@ pub trait ProtonMail {
     ) -> ApiServiceResult<PutConversationsReadResponse>;
 
     /// TODO: Document this method.
-    ///
-    /// # Parameters
-    ///
-    /// * `conversation_ids` - TODO: Document this parameter.
-    /// * `label_id`         - TODO: Document this parameter.
     ///
     /// # Errors
     ///
@@ -268,10 +224,6 @@ pub trait ProtonMail {
 
     /// TODO: Document this method.
     ///
-    /// # Parameters
-    ///
-    /// * `conversation_ids` - TODO: Document this parameter.
-    ///
     /// # Errors
     ///
     /// This method will return an error if the request fails.
@@ -282,11 +234,6 @@ pub trait ProtonMail {
     ) -> ApiServiceResult<PutConversationsUnreadResponse>;
 
     /// TODO: Document this method.
-    ///
-    /// # Parameters
-    ///
-    /// * `message_ids` - TODO: Document this parameter.
-    /// * `label_id`    - TODO: Document this parameter.
     ///
     /// # Errors
     ///
@@ -299,12 +246,6 @@ pub trait ProtonMail {
     ) -> ApiServiceResult<PutMessagesDeleteResponse>;
 
     /// Put a label on some messages.
-    ///
-    /// # Parameters
-    ///
-    /// * `message_ids` - Ids of the messages.
-    /// * `label_id`    - Id of the label to set.
-    /// * `spam_action` - TODO: Document this parameter.
     ///
     /// # Errors
     ///
@@ -319,10 +260,6 @@ pub trait ProtonMail {
 
     /// TODO: Document this method.
     ///
-    /// # Parameters
-    ///
-    /// * `message_ids` - TODO: Document this parameter.
-    ///
     /// # Errors
     ///
     /// This method will return an error if the request fails.
@@ -333,11 +270,6 @@ pub trait ProtonMail {
     ) -> ApiServiceResult<PutMessagesReadResponse>;
 
     /// Remove a label from some messages.
-    ///
-    /// # Parameters
-    ///
-    /// * `message_ids` - Ids of the messages.
-    /// * `label_id`    - Id of the label to remove.
     ///
     /// # Errors
     ///
@@ -350,10 +282,6 @@ pub trait ProtonMail {
     ) -> ApiServiceResult<PutMessagesUnlabelResponse>;
 
     /// TODO: Document this method.
-    ///
-    /// # Parameters
-    ///
-    /// * `message_ids` - TODO: Document this parameter.
     ///
     /// # Errors
     ///
@@ -377,11 +305,6 @@ pub trait ProtonMail {
     /// Set the message to have the labels passed in the request. The labels are added and removed as necessary.
     /// If either INBOX, SENT or DRAFT are supposed to be added. The correct one according to the message flags will be added.
     /// Note that a maximum of 150 labels IDs can be passed by request.
-    ///
-    /// # Parameters
-    ///
-    /// * `message_id` - Id of the message to relabel.
-    /// * `label_ids`  - List of labels that must be set.
     ///
     /// # Errors
     ///

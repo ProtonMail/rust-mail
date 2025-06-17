@@ -163,11 +163,6 @@ pub use sql_using_serde;
 /// This function converts a value to a SQLite value using [`serde_json`]. The
 /// type is expected to be text, and serialisable to JSON.
 ///
-/// # Parameters
-///
-/// * `value` - The value to convert to a SQLite value by serialising it to
-///   JSON.
-///
 /// # Errors
 ///
 /// This function will return a [`SqliteError::ToSqlConversionFailure`] if the
@@ -183,11 +178,6 @@ pub fn to_sql_using_serialize<T: Serialize>(value: &T) -> Result<ToSqlOutput<'_>
 ///
 /// This function converts a SQLite value to a value using [`serde_json`]. The
 // /// type is expected to be text, and serialisable to JSON.
-///
-/// # Parameters
-///
-/// * `value` - The SQLite value to convert to a value by deserialising it from
-///   JSON.
 ///
 /// # Errors
 ///

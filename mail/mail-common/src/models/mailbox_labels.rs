@@ -37,9 +37,6 @@ pub struct MailboxLabels {
 
 impl MailboxLabels {
     /// Constructor - note: [`MailboxLabels`] does not implement [`Default`] trait
-    ///
-    /// # Parameters
-    /// * `local_label_id` - local id of the label
     pub fn new(local_label_id: LocalLabelId) -> Self {
         Self {
             local_label_id,
@@ -52,10 +49,6 @@ impl MailboxLabels {
     ///
     /// It's imperative that you use this method over [`Model::save()`] to ensure
     /// that if the mailbox label already exists it is updated, and not inserted with a conflict.
-    ///
-    /// # Parameters
-    /// * `local_label_id` - local id of the label
-    /// * `tx` - transaction used to modify DB
     ///
     /// # Errors
     ///

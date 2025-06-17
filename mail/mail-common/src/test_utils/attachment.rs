@@ -81,10 +81,6 @@ impl MailTestContext {
     ///
     /// This function will mock the response for the give attachment metadata.
     ///
-    /// # Parameters
-    ///
-    /// * `attachment` - The metadata to return as a response.
-    ///
     #[function_name::named]
     pub async fn mock_get_attachment_metadata(
         &self,
@@ -108,11 +104,6 @@ impl MailTestContext {
     /// This function will mock the response for the attachment content request
     /// for the given `attachment_id`.
     ///
-    /// # Parameters
-    ///
-    /// * `attachment_id`      - The attachment id the content should correspond to.
-    /// * `attachment_content` - The attachment content the mock replies with.
-    ///
     #[function_name::named]
     pub async fn mock_get_attachment_data(
         &self,
@@ -135,11 +126,6 @@ impl MailTestContext {
     /// This function will mock the response for the attachment content request
     /// for the given `attachment_id`.
     ///
-    /// # Parameters
-    ///
-    /// * `attachment_id`      - The attachment id the content should correspond to.
-    /// * `attachment_content` - The attachment content the mock replies with.
-    ///
     #[function_name::named]
     pub async fn mock_maybe_get_attachment_data(
         &self,
@@ -158,10 +144,6 @@ impl MailTestContext {
 
     /// Generate new mock for deleting an attachment on the server.
     ///
-    /// # Parameters
-    ///
-    /// * `attachment_id`      - The id of the attachment.
-    ///
     #[function_name::named]
     pub async fn mock_delete_attachment(&self, attachment_id: AttachmentId) {
         let path_for_attachment = format!("api/mail/v4/attachments/{attachment_id}");
@@ -178,11 +160,6 @@ impl MailTestContext {
     ///
     /// Note that encrypted parts of the data are not checked as they are prone to change
     /// on every run. We only validate that the corresponding part is there.
-    ///
-    /// # Parameters
-    ///
-    /// * `attachment_id`      - The attachment id the content should correspond to.
-    /// * `attachment_content` - The attachment content the mock replies with.
     ///
     #[function_name::named]
     pub async fn mock_create_attachment(

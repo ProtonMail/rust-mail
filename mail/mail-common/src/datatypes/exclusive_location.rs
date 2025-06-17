@@ -72,10 +72,6 @@ impl ExclusiveLocation {
 
     /// Calculate exclusive location from a list of label ids.
     ///
-    /// # Parameters:
-    /// * `label_ids` - list of label ids.
-    /// * `interface` - The interface to use for the database connection.
-    ///
     /// # Errors
     ///
     /// Returns error if the database request fail.

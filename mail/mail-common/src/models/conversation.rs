@@ -158,13 +158,6 @@ impl Conversation {
     }
     /// Label multiple conversations.
     ///
-    /// # Parameters
-    ///
-    /// * `session`          - The session.
-    /// * `queue`            - The action queue.
-    /// * `label_id`         - The ID of the label to apply to the conversations.
-    /// * `conversation_ids` - The IDs of the conversations to label.
-    ///
     /// # Errors
     ///
     /// Returns an error if the action failed.
@@ -179,11 +172,6 @@ impl Conversation {
     }
 
     /// Star multiple conversations.
-    ///
-    /// # Parameters
-    ///
-    /// * `queue`            - The action queue.
-    /// * `conversation_ids` - The IDs of the conversations to star.
     ///
     /// # Errors
     ///
@@ -204,11 +192,6 @@ impl Conversation {
 
     /// Unstar multiple conversations.
     ///
-    /// # Parameters
-    ///
-    /// * `queue`            - The action queue.
-    /// * `conversation_ids` - The IDs of the conversations to unstar.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed.
@@ -227,12 +210,6 @@ impl Conversation {
 
     /// Unlabel multiple conversations.
     ///
-    /// # Parameters
-    ///
-    /// * `queue`            - The action queue.
-    /// * `label_id`         - The ID of the label to apply to the conversations.
-    /// * `conversation_ids` - The IDs of the conversations to unlabel.
-    ///
     /// # Errors
     ///
     /// Returns an error if the action failed.
@@ -247,13 +224,6 @@ impl Conversation {
     }
 
     /// Mark multiple conversations as read.
-    ///
-    /// # Parameters
-    ///
-    /// * `session`          - The session.
-    /// * `queue`            - The action queue.
-    /// * `label_id`         - The ID of the label to apply to the conversations.
-    /// * `conversation_ids` - The IDs of the target conversations.
     ///
     /// # Errors
     ///
@@ -273,12 +243,6 @@ impl Conversation {
 
     /// Mark multiple conversations as unread.
     ///
-    /// # Parameters
-    ///
-    /// * `queue`            - The action queue.
-    /// * `label_id`         - The ID of the label to apply to the conversations.
-    /// * `conversation_ids` - The IDs of the target conversations.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed.
@@ -297,12 +261,6 @@ impl Conversation {
 
     /// Delete multiple conversations.
     ///
-    /// # Parameters
-    ///
-    /// * `queue`            - The action queue.
-    /// * `label_id`         - The ID of the label to apply to the conversations.
-    /// * `conversation_ids` - The IDs of the target conversations.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed.
@@ -317,13 +275,6 @@ impl Conversation {
     }
 
     /// Move multiple conversations.
-    ///
-    /// # Parameters
-    ///
-    /// * `queue`          - The action queue.
-    /// * `source_id`      - The ID of the label where the conversations are.
-    /// * `destination_id` - The ID of the label where the conversations go.
-    /// * `target_ids`     - The IDs of the conversations to move.
     ///
     /// # Errors
     ///
@@ -340,12 +291,6 @@ impl Conversation {
     }
 
     /// Soft delete multiple conversations.
-    ///
-    /// # Parameters
-    ///
-    /// * `queue`            - The action queue.
-    /// * `label_id`         - The ID of the current view.
-    /// * `conversation_ids` - The IDs of the conversations to delete.
     ///
     /// # Errors
     ///
@@ -365,15 +310,6 @@ impl Conversation {
     /// All given conversations will get the selected labels.
     /// All given conversations will keep the partially selected labels.
     /// All given conversations will lose any other labels.
-    ///
-    /// # Parameters
-    ///
-    /// * `queue`                        - The action queue.
-    /// * `source_label_id`              - Id of the currently used label.
-    /// * `conversation_ids`             - List of ids of the conversations to label.
-    /// * `selected_label_ids`           - List of ids of the Labels to set.
-    /// * `partially_selected_label_ids` - List of ids of the Labels to keep as is.
-    /// * `must_archive`                 - If true, the given conversations must be archived.
     ///
     /// # Errors
     ///
@@ -546,11 +482,6 @@ impl Conversation {
 
     /// Find a group of Conversations by their IDs.
     ///
-    /// # Parameters
-    ///
-    /// * `conversation_ids` - The IDs of the conversations to find.
-    /// * `interface`        - The database interface.
-    ///
     /// # Errors
     ///
     /// When database request fail.
@@ -598,10 +529,6 @@ impl Conversation {
     /// It's imperative that you use this method over [`Model::save()`] to
     /// ensure that existing conversations are updated.
     ///
-    /// # Parameters
-    ///
-    /// * `bond` - The database transaction, used for writing changes to storage
-    ///
     /// # Errors
     ///
     /// Returns an error if the local conversation id is not set or the query
@@ -629,10 +556,6 @@ impl Conversation {
     /// view mailboxes without interfering with processes triggered by the user.
     ///
     /// Method also gives back existing conversation if it was not saved.
-    ///
-    /// # Parameters
-    ///
-    /// * `bond` - The database transaction, used for writing changes to storage
     ///
     /// # Errors
     ///
@@ -668,12 +591,6 @@ impl Conversation {
     }
 
     /// Label multiple conversations.
-    ///
-    /// # Parameters
-    ///
-    /// * `label_id`    - Id of the label to assign
-    /// * `ids`         - The IDs of the conversations to label.
-    /// * `interface`   - The interface to use for the database connection.
     ///
     /// # Errors
     ///
@@ -778,13 +695,6 @@ impl Conversation {
 
     /// Label multiple conversations.
     ///
-    /// # Parameters
-    ///
-    /// * `label_id`    - The ID of the label to apply to the conversations.
-    /// * `ids`         - The IDs of the conversations to unlabel.
-    /// * `spam_action` - TODO: Document this parameter.
-    /// * `api`         - The API instance to use.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed.
@@ -807,11 +717,6 @@ impl Conversation {
     }
 
     /// TODO: Document this method.
-    ///
-    /// # Parameters
-    ///
-    /// * `conversations` - TODO: Document this parameter.
-    /// * `interface`     - The interface to use for the database connection.
     ///
     /// # Errors
     ///
@@ -841,12 +746,6 @@ impl Conversation {
     /// moreover the conversation will be removed from all labels as well as deleted field will
     /// be set to true.
     ///
-    /// # Parameters
-    ///
-    /// * `label_id`  - Label ID where the action is performed
-    /// * `ids`       - The IDs of the conversations to delete.
-    /// * `interface` - The interface to use for the database connection.
-    ///
     /// # Errors
     ///
     /// Returns an error if the data could not be written to the database.
@@ -872,11 +771,6 @@ impl Conversation {
 
     /// Mark conversations as deleted for `AllMail` label.
     /// More information can be found in [`Conversation::mark_deleted`].
-    ///
-    /// # Parameters
-    ///
-    /// * `ids`       - The IDs of the conversations to delete.
-    /// * `interface` - The interface to use for the database connection.
     ///
     /// # Errors
     ///
@@ -927,11 +821,6 @@ impl Conversation {
 
     /// Updates all labels counters after soft delete of conversation in active view `AllMail`.
     ///
-    /// # Parameters
-    ///
-    /// * `all_stats`  - The stats of the messages that were deleted.
-    /// * `interface`  - The interface to use for the database connection.
-    ///
     /// # Errors
     ///
     /// Will return an error if the data could not be written to the database.
@@ -972,12 +861,6 @@ impl Conversation {
 
     /// Mark conversations as deleted in active label.
     /// More information can be found in [`Conversation::mark_deleted`].
-    ///
-    /// # Parameters
-    ///
-    /// * `label_id`  - Label ID where the action is performed
-    /// * `ids`       - The IDs of the conversations to delete.
-    /// * `interface` - The interface to use for the database connection.
     ///
     /// # Errors
     ///
@@ -1035,12 +918,6 @@ impl Conversation {
 
     /// Updates active label counters after soft delete of conversation.
     ///
-    /// # Parameters
-    ///
-    /// * `label_id`   - The ID of the label to update.
-    /// * `all_stats`  - The stats of the messages that were deleted.
-    /// * `interface`  - The interface to use for the database connection.
-    ///
     /// # Errors
     ///
     /// Will return an error if the data could not be written to the database.
@@ -1083,12 +960,6 @@ impl Conversation {
     /// moreover the conversation will be assigned to all labels as well as deleted field will
     /// be set to false.
     ///
-    /// # Parameters
-    ///
-    /// * `label_id`  - Label ID where the action is performed
-    /// * `ids`       - The IDs of the conversations to delete.
-    /// * `interface` - The interface to use for the database connection.
-    ///
     /// # Errors
     ///
     /// Returns an error if the data could not be written to the database.
@@ -1114,11 +985,6 @@ impl Conversation {
 
     /// Mark conversations as undeleted for `AllMail` label.
     /// More information can be found in [`Conversation::mark_undeleted`].
-    ///
-    /// # Parameters
-    ///
-    /// * `ids`       - The IDs of the conversations to undelete.
-    /// * `interface` - The interface to use for the database connection.
     ///
     /// # Errors
     ///
@@ -1182,11 +1048,6 @@ impl Conversation {
 
     /// Updates all labels counters after undelete of conversation in active view `AllMail`.
     ///
-    /// # Parameters
-    ///
-    /// * `all_stats`  - The stats of the messages that were undeleted.
-    /// * `interface`  - The interface to use for the database connection.
-    ///
     /// # Errors
     ///
     /// Will return an error if the data could not be written to the database.
@@ -1227,12 +1088,6 @@ impl Conversation {
 
     /// Mark conversations as undeleted in active label.
     /// More information can be found in [`Conversation::mark_undeleted`].
-    ///
-    /// # Parameters
-    ///
-    /// * `label_id`  - Label ID where the action is performed
-    /// * `ids`       - The IDs of the conversations to undelete.
-    /// * `interface` - The interface to use for the database connection.
     ///
     /// # Errors
     ///
@@ -1288,12 +1143,6 @@ impl Conversation {
 
     /// Updates active label counters after undelete of conversation.
     ///
-    /// # Parameters
-    ///
-    /// * `label_id`   - The ID of the label to update.
-    /// * `stats`      - The stats of the messages that were undeleted.
-    /// * `interface`  - The interface to use for the database connection.
-    ///
     /// # Errors
     ///
     /// Will return an error if the data could not be written to the database.
@@ -1331,11 +1180,6 @@ impl Conversation {
     }
     /// Updates conversation counters after delete of conversation.
     ///
-    /// # Parameters
-    ///
-    /// * `stats`      - The stats of the messages that were undeleted.
-    /// * `interface`  - The interface to use for the database connection.
-    ///
     /// # Errors
     ///
     /// Will return an error if the data could not be written to the database.
@@ -1370,11 +1214,6 @@ impl Conversation {
 
     /// Updates conversation counters after undelete of conversation.
     ///
-    /// # Parameters
-    ///
-    /// * `stats`      - The stats of the messages that were undeleted.
-    /// * `interface`  - The interface to use for the database connection.
-    ///
     /// # Errors
     ///
     /// Will return an error if the data could not be written to the database.
@@ -1398,12 +1237,6 @@ impl Conversation {
 
     /// Delete multiple conversations.
     ///
-    /// # Parameters
-    ///
-    /// * `ids`      - The IDs of the conversations to delete.
-    /// * `label_id` - TODO: Document this parameter.
-    /// * `api`      - The API instance to use.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed.
@@ -1426,10 +1259,6 @@ impl Conversation {
 
     /// Get the conversation counts.
     ///
-    /// # Parameters
-    ///
-    /// * `api` - The API instance to use.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed.
@@ -1447,12 +1276,6 @@ impl Conversation {
     ///
     /// The returned message will depend on the `label` where the conversation
     /// is returned.
-    ///
-    /// # Parameters
-    ///
-    /// * `local_id` - local ID of the conversation.
-    /// * `label`    - label model from where the conversation is being viewed.
-    /// * `messages` - Array of message models for the conversation.
     ///
     /// # Errors
     ///
@@ -1475,11 +1298,6 @@ impl Conversation {
     ///
     /// The returned message will depend on the `label` where the conversation
     /// is returned.
-    ///
-    /// # Parameters
-    ///
-    /// * `label`    - label model from where the conversation is being viewed.
-    /// * `messages` - Array of message models for the conversation.
     ///
     pub fn first_unread_message(label: &Label, messages: &[Message]) -> Option<LocalMessageId> {
         if messages.is_empty() {
@@ -1712,11 +1530,6 @@ impl Conversation {
 
     /// Mark multiple conversations as read.
     ///
-    /// # Parameters
-    ///
-    /// * `ids`   - The IDs of the conversations to mark as read.
-    /// * `tether` - The tether to use for the database connection.
-    ///
     /// # Errors
     ///
     /// Returns an error if the data could not be written to the database.
@@ -1813,11 +1626,6 @@ impl Conversation {
 
     /// Mark multiple conversations as read.
     ///
-    /// # Parameters
-    ///
-    /// * `ids` - The IDs of the conversations to mark as read.
-    /// * `api` - The API instance to use.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed.
@@ -1834,12 +1642,6 @@ impl Conversation {
 
     /// Mark multiple conversations as unread.
     /// For each conversation only the last read message gets marked as unread.
-    ///
-    /// # Parameters
-    ///
-    /// * `local_label_id`  - Label id where the operation is being applied.
-    /// * `ids`             - The IDs of the conversations to mark as unread.
-    /// * `tether`          - The tether to use for the database connection.
     ///
     /// # Errors
     ///
@@ -1950,11 +1752,6 @@ impl Conversation {
 
     /// Mark multiple conversations as unread.
     ///
-    /// # Parameters
-    ///
-    /// * `ids` - The IDs of the conversations to mark as unread.
-    /// * `api` - The API instance to use.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed.
@@ -1970,12 +1767,6 @@ impl Conversation {
     }
 
     /// Unlabel multiple conversations.
-    ///
-    /// # Parameters
-    ///
-    /// * `label_id`    - Id of the label to remove.
-    /// * `ids`         - The IDs of the conversations to unlabel.
-    /// * `interface`   - The interface to use for the database connection.
     ///
     /// # Errors
     ///
@@ -2068,12 +1859,6 @@ impl Conversation {
 
     /// Unlabel multiple conversations.
     ///
-    /// # Parameters
-    ///
-    /// * `label_id` - The ID of the label to apply to the conversations.
-    /// * `ids`      - The IDs of the conversations to unlabel.
-    /// * `api`      - The API instance to use.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed.
@@ -2097,12 +1882,6 @@ impl Conversation {
     /// Given a list of conversations check if there are any missing dependencies like undownloaded
     /// labels.
     ///
-    ///
-    /// # Parameters
-    ///
-    /// * `conversations` - The conversations to check.
-    /// * `api`           - The API instance to use.
-    /// * `stash`         - The stash to use for the database connection.
     ///
     /// # Errors
     ///
@@ -2142,12 +1921,6 @@ impl Conversation {
     /// conversations that fit the criteria. It operates globally and is not
     /// based on a particular mailbox; this restriction can be applied via the
     /// options.
-    ///
-    /// # Parameters
-    ///
-    /// * `options` - The search options to use.
-    /// * `api`     - The API instance to use.
-    /// * `stash`   - The stash to use for the database connection.
     ///
     /// # Errors
     ///
@@ -2213,13 +1986,6 @@ impl Conversation {
 
     /// Synchronize the first `count` conversations of the label with `label_id`.
     ///
-    /// # Parameters
-    ///
-    /// * `label_id` - The ID of the label to sync.
-    /// * `count`    - TODO: Document this parameter.
-    /// * `api`      - The API instance to use.
-    /// * `stash`    - The stash to use for the database connection.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed or the data could not be
@@ -2263,12 +2029,6 @@ impl Conversation {
     }
 
     /// Undelete multiple conversations.
-    ///
-    /// # Parameters
-    ///
-    /// * `ids`      - The IDs of the conversations to undelete.
-    /// * `label_id` - TODO: Document this parameter.
-    /// * `api`      - The API instance to use.
     ///
     /// # Errors
     ///
@@ -2395,12 +2155,6 @@ impl Conversation {
     /// Get the available actions for conversations depending on current view and stats of the given
     /// conversations.
     ///
-    /// # Parameters
-    ///
-    /// * `view` - The label from which conversation is viewed.
-    /// * `local_ids` - The IDs of the conversations to get the actions for.
-    /// * `interface` - The interface to use for the database connection.
-    ///
     /// # Errors
     ///
     /// Returns error if
@@ -2451,11 +2205,6 @@ impl Conversation {
 
     /// Get the available `label as` actions for conversations
     ///
-    /// # Parameters
-    ///
-    /// * `local_ids` - The IDs of the conversations to get the actions for.
-    /// * `interface` - The interface to use for the database connection.
-    ///
     /// # Errors
     ///
     /// Returns error if the database request fail.
@@ -2494,12 +2243,6 @@ impl Conversation {
 
     /// Watches `label as` actions for conversations
     ///
-    /// # Parameters
-    ///
-    /// * `local_ids` - The IDs of the conversations to get the actions for.
-    /// * `interface` - The interface to use for the database connection.
-    /// * `sender`    - The sender for the channel to receive updates on.
-    ///
     /// # Errors
     ///
     /// Returns error if the database request fail.
@@ -2534,12 +2277,6 @@ impl Conversation {
     }
 
     /// Get the available move actions for conversations
-    ///
-    /// # Parameters
-    ///
-    /// * `view` - The label from which conversation is viewed.
-    /// * `local_ids` - The IDs of the conversations to get the actions for.
-    /// * `interface` - The interface to use for the database connection.
     ///
     /// # Errors
     ///
@@ -3152,11 +2889,6 @@ impl ConversationLabel {
 
     /// Get all local label with given label IDs.
     ///
-    /// # Parameters
-    ///
-    /// * `label_ids` - List of ids we want to find the corresponding `ConversationLabel`.
-    /// * `interface` - The database interface.
-    ///
     /// # Errors
     ///
     /// Returns an error if the query failed.
@@ -3225,11 +2957,6 @@ impl ConversationLabel {
     /// Adjust the stats of the conversation label when
     /// a message is marked as deleted.
     ///
-    /// ## Parameters
-    ///
-    /// * `stats` - The stats of the message that was deleted.
-    /// * `interface` - The interface to use for the database connection.
-    ///
     /// ## Errors
     ///
     /// Returns error if the query fails.
@@ -3254,11 +2981,6 @@ impl ConversationLabel {
 
     /// Adjust the stats of the conversation label when
     /// a message is marked as undeleted.
-    ///
-    /// ## Parameters
-    ///
-    /// * `stats` - The stats of the message that was undeleted.
-    /// * `interface` - The interface to use for the database connection.
     ///
     /// ## Errors
     ///
@@ -3460,8 +3182,6 @@ pub struct ConversationCounters {
 impl ConversationCounters {
     /// Constructor - note: [`ConversationCounters`] does not implement [`Default`] trait
     ///
-    /// # Parameters
-    /// * `local_label_id` - local id of the label
     pub fn new(local_label_id: LocalLabelId) -> Self {
         Self {
             local_label_id,
@@ -3476,10 +3196,6 @@ impl ConversationCounters {
     /// It's imperative that you use this method over [`Model::save()`] to ensure
     /// that if the counter already exists it is updated, and not inserted with a conflict.
     ///
-    /// # Parameters
-    /// * `local_label_id` - local id of the label
-    /// * `tx` - transaction used to modify DB
-    ///
     /// # Errors
     ///
     /// Returns an error if the query fails.
@@ -3493,11 +3209,6 @@ impl ConversationCounters {
     }
 
     /// Get all conversation counters linked to labels with given kind
-    ///
-    /// # Parameters
-    ///
-    /// * `kind` - The kind of the label, eg. System, Folder etc.
-    /// * `tether` - The tether to use for the database connection.
     ///
     /// # Errors
     ///

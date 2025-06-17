@@ -39,12 +39,6 @@ use super::messages::WatchedLabelAs;
 
 /// Label the given conversations with the given label id.
 ///
-/// # Parameters
-///
-/// * `session`  - The session to use for the request.
-/// * `label_id` - The local ID of the label to apply.
-/// * `ids`      - The local IDs of the conversations to apply the label to.
-///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
@@ -73,11 +67,6 @@ pub async fn apply_label_to_conversations(
 }
 
 /// Delete the given conversations.
-///
-/// # Parameters
-///
-/// * `mailbox` - The mailbox to use for the request.
-/// * `ids`     - The local IDs of the conversations to delete.
 ///
 /// # Errors
 ///
@@ -109,12 +98,6 @@ pub async fn delete_conversations(
 
 /// Returns available actions for conversations.
 /// Any action returned here should reflect the display needs.
-///
-/// # Parameters
-///
-/// * `session` - The session to use for the request.
-/// * `view`    - The local ID of the label which conversations are viewed in.
-/// * `ids`     - The local IDs of the conversations to calcualte available actions for.
 ///
 /// # Errors
 ///
@@ -148,11 +131,6 @@ pub async fn available_actions_for_conversations(
 /// Returns available label_as actions for conversations.
 /// Any action returned here should reflect the display needs.
 ///
-/// # Parameters
-///
-/// * `session` - The session to use for the request.
-/// * `ids`     - The local IDs of the conversations to calcualte available actions for.
-///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
@@ -177,12 +155,6 @@ pub async fn available_label_as_actions_for_conversations(
 
 /// Watches label_as actions for conversations.
 /// Any action returned here should reflect the display needs.
-///
-/// # Parameters
-///
-/// * `session`  - The session to use for the request.
-/// * `ids`      - The local IDs of the conversations to calcualte available actions for.
-/// * `callback` - The callback to use for updates.
 ///
 /// # Errors
 ///
@@ -215,12 +187,6 @@ pub async fn watch_available_label_as_actions_for_conversations(
 // Returns available move_to actions for conversations.
 /// Any action returned here should reflect the display needs.
 ///
-/// # Parameters
-///
-/// * `session` - The session to use for the request.
-/// * `view`    - The local ID of the label which conversations are viewed in.
-/// * `ids`     - The local IDs of the conversations to calcualte available actions for.
-///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
@@ -249,11 +215,6 @@ pub async fn available_move_to_actions_for_conversations(
 
 /// Returns available actions for conversation bottom bar.
 ///
-/// # Parameters
-///
-/// * `mailbox`          - The current Mailbox.
-/// * `conversation_ids` - The local IDs of the conversations to calculate available actions for.
-///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
@@ -281,11 +242,6 @@ pub async fn all_available_bottom_bar_actions_for_conversations(
 }
 
 /// Get a specified conversation.
-///
-/// # Parameters
-///
-/// * `mailbox`  - The mailbox to use for the request.
-/// * `id`       - The local ID of the conversation to get.
 ///
 /// This function syncs the conversation's messages from the server at least
 /// once.
@@ -355,11 +311,6 @@ impl From<ContextualConversationAndMessages> for ConversationAndMessages {
 
 /// Get conversations for the given label.
 ///
-/// # Parameters
-///
-/// * `session`  - The session to use for the request.
-/// * `label_id` - The local ID of the label to get conversations for.
-///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
@@ -388,13 +339,6 @@ pub async fn conversations_for_label(
 /// Notably, this retrieves a local conversation that has been saved in the
 /// database. It does not use the network.
 ///
-/// # Parameters
-///
-/// * `session`         - The session to use for the request.
-/// * `id`              - The local ID of the conversation to retrieve.
-/// * `local_label_id`  - Local label id of the label context in which to
-///                       display the conversation.
-///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
@@ -422,11 +366,6 @@ pub async fn load_conversation(
 
 /// Mark the given conversations as read.
 ///
-/// # Parameters
-///
-/// * `mailbox` - The mailbox to use for the request.
-/// * `ids`     - The local IDs of the conversations to mark as read.
-///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
@@ -453,11 +392,6 @@ pub async fn mark_conversations_as_read(
 }
 
 /// Mark the given conversations as unread.
-///
-/// # Parameters
-///
-/// * `mailbox` - The mailbox to use for the request.
-/// * `ids`     - The local IDs of the conversations to mark as unread.
 ///
 /// # Errors
 ///
@@ -489,12 +423,6 @@ pub async fn mark_conversations_as_unread(
 /// Move the conversations with the specified IDs from the current mailbox to
 /// the label with specified label ID. If the current mailbox is not a folder,
 /// the conversation will not be moved.
-///
-/// # Parameters
-///
-/// * `mailbox` - The mailbox to use for the request.
-/// * `label_id` - The local ID of the label to move to.
-/// * `ids`      - The local IDs of the conversations to move.
 ///
 /// # Errors
 ///
@@ -530,14 +458,6 @@ pub async fn move_conversations(
 /// allows navigation through the conversations by page/window, and watches for
 /// changes. When the conversations change, the callback will be invoked.
 ///
-/// # Parameters
-///
-/// * `session`  - The session to use for the request.
-/// * `label_id` - The local ID of the label to watch.
-/// * `filter`   - The filter options for pagination.
-/// * `callback` - The callback to use for updates. When the specified
-///                conversations change, the callback will be invoked.
-///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
@@ -567,12 +487,6 @@ pub async fn scroll_conversations_for_label(
 }
 
 /// Unlabel the given conversations with the given label id.
-///
-/// # Parameters
-///
-/// * `session`  - The session to use for the request.
-/// * `label_id` - The local ID of the label to remove.
-/// * `ids`      - The local IDs of the conversations to remove the label from.
 ///
 /// # Errors
 ///
@@ -604,13 +518,6 @@ pub async fn remove_label_from_conversations(
 /// Filter or search conversations which match the specified options.
 ///
 /// Note that search results are inserted into the database.
-///
-/// # Parameters
-///
-/// * `session`         - The session to use for the request.
-/// * `local_label_id`  - Local label id of the label context in which to
-///                       display the results.
-/// * `options`         - The search options to use.
 ///
 /// # Errors
 ///
@@ -645,11 +552,6 @@ pub async fn search_for_conversations(
 
 /// Star the given conversations.
 ///
-/// # Parameters
-///
-/// * `session` - The session to use for the request.
-/// * `ids`     - The local IDs of the conversations to mark as starred.
-///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
@@ -673,11 +575,6 @@ pub async fn star_conversations(
 }
 
 /// Unstar the given conversations.
-///
-/// # Parameters
-///
-/// * `session` - The session to use for the request.
-/// * `ids`     - The local IDs of the conversations to mark as unstarred.
 ///
 /// # Errors
 ///
@@ -721,14 +618,6 @@ pub struct WatchedConversation {
 ///
 /// Watches the specified conversation for changes. When the conversation's
 /// messages change, the callback will be invoked.
-///
-/// # Parameters
-///
-/// * `mailbox`  - The mailbox to use for the request.
-/// * `id`       - The local ID of the conversation to watch.
-/// * `callback` - The callback to use for updates. When the specified
-///                conversation's messages change, the callback will be
-///                invoked.
 ///
 /// # Errors
 ///
@@ -779,13 +668,6 @@ pub struct WatchedConversations {
 /// Watches conversations with the specified label for changes. When the
 /// conversations change, the callback will be invoked.
 ///
-/// # Parameters
-///
-/// * `session`  - The session to use for the request.
-/// * `label_id` - The local ID of the label to watch.
-/// * `callback` - The callback to use for updates. When the specified
-///                conversations change, the callback will be invoked.
-///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
@@ -822,14 +704,6 @@ pub async fn watch_conversations_for_label(
 /// All given conversations will get the selected labels.
 /// All given conversations will keep the partially selected labels.
 /// All given conversations will lose any other labels.
-///
-/// # Parameters
-///
-/// * `mailbox`                      - The current mailbox.
-/// * `conversation_ids`             - List of ids of the conversations to label.
-/// * `selected_label_ids`           - List of ids of the Labels to set.
-/// * `partially_selected_label_ids` - List of ids of the Labels to keep as is.
-/// * `must_archive`                 - If true, the given conversations must be archived.
 ///
 /// # Errors
 ///
@@ -868,12 +742,6 @@ pub async fn label_conversations_as(
 /// watches available move_to actions for conversations or messages.
 /// Any action returned here should reflect the display needs.
 ///
-/// # Parameters
-///
-/// * `session` - The session to use for the request.
-/// * `view`    - The local ID of the label which conversations are viewed in.
-/// * `ids`     - The local IDs of the conversations to calcualte available actions for.
-///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
@@ -896,11 +764,6 @@ pub async fn watch_available_move_to_actions(
 
 /// Gets whether or not to display the `AutoDelete` banner.
 /// Any action returned here should reflect the display needs.
-///
-/// # Parameters
-///
-/// * `session`     - The session to use for the request.
-/// * `label_id`    - The local ID of the label of the folder we're in.
 ///
 /// # Errors
 ///

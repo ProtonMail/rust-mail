@@ -94,11 +94,6 @@ impl UserSettings {
     /// It's imperative that you use this method over [`Model::save()`] to
     /// ensure that existing conversations are updated.
     ///
-    /// # Parameters
-    ///
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for finding the records.
-    ///
     /// # Errors
     ///
     /// Returns an error if the local conversation id is not set or the query

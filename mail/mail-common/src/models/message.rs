@@ -186,12 +186,6 @@ impl ModelIdExtension for Message {
 impl Message {
     /// Label multiple messages.
     ///
-    /// # Parameters
-    ///
-    /// * `queue`       - The action queue.
-    /// * `label_id`    - The ID of the label to apply to the messages.
-    /// * `message_ids` - The IDs of the messages to label.
-    ///
     /// # Errors
     ///
     /// Returns an error if the action failed.
@@ -206,12 +200,6 @@ impl Message {
     }
 
     /// Star multiple messages.
-    ///
-    /// # Parameters
-    ///
-    /// * `session`     - The session.
-    /// * `queue`       - The action queue.
-    /// * `message_ids` - The IDs of the messages to star.
     ///
     /// # Errors
     ///
@@ -232,11 +220,6 @@ impl Message {
 
     /// Unstar multiple messages.
     ///
-    /// # Parameters
-    ///
-    /// * `queue`       - The action queue.
-    /// * `message_ids` - The IDs of the messages to unstar.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed.
@@ -255,12 +238,6 @@ impl Message {
 
     /// Unlabel multiple messages.
     ///
-    /// # Parameters
-    ///
-    /// * `queue`       - The action queue.
-    /// * `label_id`    - The ID of the label to apply to the messages.
-    /// * `message_ids` - The IDs of the messages to unlabel.
-    ///
     /// # Errors
     ///
     /// Returns an error if the action failed.
@@ -275,11 +252,6 @@ impl Message {
     }
 
     /// Mark multiple messages as read.
-    ///
-    /// # Parameters
-    ///
-    /// * `queue`       - The action queue.
-    /// * `message_ids` - The IDs of the target messages.
     ///
     /// # Errors
     ///
@@ -298,12 +270,6 @@ impl Message {
 
     /// Mark multiple messages as unread.
     ///
-    /// # Parameters
-    ///
-    /// * `session`     - The session.
-    /// * `queue`       - The action queue.
-    /// * `message_ids` - The IDs of the target messages.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed.
@@ -321,12 +287,6 @@ impl Message {
 
     /// Mark multiple messages as read.
     ///
-    /// # Parameters
-    ///
-    /// * `queue`       - The action queue.
-    /// * `label_id`    - The ID of the label to apply to the messages.
-    /// * `message_ids` - The IDs of the target messages.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed.
@@ -341,13 +301,6 @@ impl Message {
     }
 
     /// Move multiple messages.
-    ///
-    /// # Parameters
-    ///
-    /// * `queue`          - The action queue.
-    /// * `source_id`      - The ID of the label where the messages are.
-    /// * `destination_id` - The ID of the label where the messages go.
-    /// * `target_ids`     - The IDs of the messages to move.
     ///
     /// # Errors
     ///
@@ -364,11 +317,6 @@ impl Message {
     }
 
     /// Mark multiple messages as read.
-    ///
-    /// # Parameters
-    ///
-    /// * `ids`    - The IDs of the messages to mark as read.
-    /// * `tether` - The tether to use for the database connection.
     ///
     /// # Errors
     ///
@@ -389,12 +337,6 @@ impl Message {
 
     /// Mark multiple messages as ham (not spam).
     ///
-    /// # Parameters
-    ///
-    /// * `queue`       - The action queue.
-    /// * `label_id`    - The ID of the label to apply to the messages.
-    /// * `message_ids` - The IDs of the target messages.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed.
@@ -408,12 +350,6 @@ impl Message {
     }
 
     /// Mark multiple messages as ham (not spam).
-    ///
-    /// # Parameters
-    ///
-    /// * `queue`       - The action queue.
-    /// * `label_id`    - The ID of the label to apply to the messages.
-    /// * `message_ids` - The IDs of the target messages.
     ///
     /// # Errors
     ///
@@ -548,14 +484,6 @@ impl Message {
     /// Set Labels from `selected_label_ids` while unsetting all those that are not in
     /// `partially_selected_label_ids`.
     ///
-    /// # Parameters
-    ///
-    /// * `source_label_id`              - Id of the Label containing the messages to label.
-    /// * `message_ids`                  - List the ids of the messages to label.
-    /// * `selected_label_ids`           - List the ids of the Labels to set.
-    /// * `partially_selected_label_ids` - List the ids of the Labels to keep as is.
-    /// * `must_archive`                 - If true, the given messages will me move into Archive.
-    ///
     /// # Errors
     ///
     /// Returns errors if the operation failed.
@@ -588,15 +516,6 @@ impl Message {
     }
 
     /// Action to change labels of a group of messages and optionally archive them.
-    ///
-    /// # Parameters
-    ///
-    /// * `session`                      - The session.
-    /// * `queue`                        - The action queue.
-    /// * `message_ids`                  - List the ids of the messages to label.
-    /// * `selected_label_ids`           - List the ids of the Labels to set.
-    /// * `partially_selected_label_ids` - List the ids of the Labels to keep as is.
-    /// * `must_archive`                 - If true, the given messages will me move into Archive.
     ///
     /// # Errors
     ///
@@ -700,11 +619,6 @@ impl Message {
 
     /// Find a group of Messages by their IDs.
     ///
-    /// # Parameters
-    ///
-    /// * `message_ids` - The IDs of the messages to find.
-    /// * `interface`   - The database interface.
-    ///
     /// # Errors
     ///
     /// When database request fail.
@@ -718,12 +632,6 @@ impl Message {
     }
 
     /// Get the available actions from bottom bar for given messages
-    ///
-    /// # Parameters
-    ///
-    /// * `current_label_id`  - Id of the current mailbox.
-    /// * `message_ids` - List of the messages IDs.
-    /// * `interface`   - The database interface.
     ///
     #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
     pub async fn all_available_bottom_bar_actions_for_messages(
@@ -851,10 +759,6 @@ impl Message {
     /// ensure that local ids are resolved before they can be written
     /// to the database.
     ///
-    /// # Parameters
-    ///
-    /// * `bond` - The database transaction, used for writing changes to storage
-    ///
     /// # Errors
     ///
     /// Returns an error if the local conversation id is not set or the query
@@ -881,10 +785,6 @@ impl Message {
     /// view mailboxes without interfering with processes triggered by the user.
     ///
     /// Method also gives back existing message if it was not saved.
-    ///
-    /// # Parameters
-    ///
-    /// * `bond` - The database transaction, used for writing changes to storage
     ///
     /// # Errors
     ///
@@ -933,12 +833,6 @@ impl Message {
 
     /// Given a vec of message metadatas tries to create them in the database
     ///
-    /// # Parameters
-    ///
-    /// * `metadata`  - The message metadata returned from the API
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for accessing the database.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed, or the data could not be
@@ -961,12 +855,6 @@ impl Message {
 
     /// Given a message metadata tries to create it in the database
     ///
-    /// # Parameters
-    ///
-    /// * `metadata`  - The message metadata returned from the API
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for accessing the database.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed, or the data could not be
@@ -986,12 +874,6 @@ impl Message {
     }
 
     /// Delete multiple messages.
-    ///
-    /// # Parameters
-    ///
-    /// * `ids`      - The IDs of the messages to delete.
-    /// * `label_id` - TODO: Document this parameter.
-    /// * `api`      - The API instance to use.
     ///
     /// # Errors
     ///
@@ -1019,11 +901,6 @@ impl Message {
     /// Adjust labels, conversations and conversation labels stats.
     /// Morover if all messages within a conversation were deleted, the conversation
     /// will be deleted as well.
-    ///
-    /// # Parameters
-    ///
-    /// * `ids`       - The IDs of the conversations to delete.
-    /// * `interface` - The interface to use for the database connection.
     ///
     /// # Errors
     ///
@@ -1097,11 +974,6 @@ impl Message {
     /// Adjust labels, conversations and conversation labels stats.
     /// Morover if conversation was deleted it will be restored.
     ///
-    /// # Parameters
-    ///
-    /// * `ids`       - The IDs of the messages to undelete.
-    /// * `interface` - The interface to use for the database connection.
-    ///
     /// # Errors
     ///
     /// Returns an error if the data could not be written to the database.
@@ -1168,10 +1040,6 @@ impl Message {
 
     /// Get the message counts.
     ///
-    /// # Parameters
-    ///
-    /// * `api` - The API instance to use.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed.
@@ -1183,11 +1051,6 @@ impl Message {
     }
 
     /// Get message metadata.
-    ///
-    /// # Parameters
-    ///
-    /// * `filter` - The filter to use.
-    /// * `api`    - The API instance to use.
     ///
     /// # Errors
     ///
@@ -1380,12 +1243,6 @@ impl Message {
     /// undownloaded labels or addresses.
     ///
     ///
-    /// # Parameters
-    ///
-    /// * `messages`  - The messages to check.
-    /// * `api`       - The API instance to use.
-    /// * `stash`     - The stash to use for the database connection.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed or the data could not be
@@ -1451,12 +1308,6 @@ impl Message {
     /// messages that fit the criteria. It operates globally and is not based on
     /// a particular mailbox; this restriction can be applied via the options.
     ///
-    /// # Parameters
-    ///
-    /// * `options` - The search options to use.
-    /// * `api`     - The API instance to use.
-    /// * `stash`   - The stash to use for the database connection.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed or the data could not be
@@ -1495,13 +1346,6 @@ impl Message {
 
     /// Synchronize the first `count` messages of the label with `label_id`.
     ///
-    /// # Parameters
-    ///
-    /// * `label_id`  - The ID of the label to sync.
-    /// * `count`     - TODO: Document this parameter.
-    /// * `api`       - The API instance to use.
-    /// * `stash`     - The stash to use for the database connection.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed or the data could not be
@@ -1538,12 +1382,6 @@ impl Message {
     }
 
     /// Get the available actions for message excluding move to the current view.
-    ///
-    /// # Parameters
-    ///
-    /// * `view` - The label from which conversation is viewed.
-    /// * `local_id` - The ID of the message to get the actions for.
-    /// * `interface` - The interface to use for the database connection.
     ///
     /// # Errors
     ///
@@ -1610,11 +1448,6 @@ impl Message {
 
     /// Get the available `label as` actions for conversations
     ///
-    /// # Parameters
-    ///
-    /// * `local_ids` - The IDs of the conversations to get the actions for.
-    /// * `interface` - The interface to use for the database connection.
-    ///
     /// # Errors
     ///
     /// Returns error if the database request fail.
@@ -1660,12 +1493,6 @@ impl Message {
 
     /// Watches available `label as` actions for messages
     ///
-    /// # Parameters
-    ///
-    /// * `local_ids` - The IDs of the conversations to get the actions for.
-    /// * `interface` - The interface to use for the database connection.
-    /// * `sender`    - The sender for the channel to receive updates on.
-    ///
     /// # Errors
     ///
     /// Returns error if the database request fail.
@@ -1699,12 +1526,6 @@ impl Message {
     }
 
     /// Get the available move actions for messages.
-    ///
-    /// # Parameters
-    ///
-    /// * `view` - The label from which conversation is viewed.
-    /// * `local_ids` - The IDs of the conversations to get the actions for.
-    /// * `interface` - The interface to use for the database connection.
     ///
     /// # Errors
     ///
@@ -1782,15 +1603,6 @@ impl Message {
     ///
     /// This will attempt to fetch the message data from the servers if it has
     /// not yet been downloaded before.
-    ///
-    /// # Parameters
-    ///
-    /// * `cache_path`   - TODO: Document this parameter.
-    /// * `address_keys` - The address keys to use for decryption.
-    /// * `pgp`          - The PGP provider to use for decryption.
-    /// * `api`          - The API instance to use.
-    /// * `interface`    - The database interface, i.e. [`Stash`] or [`Tether`],
-    ///                    to use for finding the records.
     ///
     /// # Errors
     ///
@@ -2028,12 +1840,6 @@ impl Message {
     /// * [`MessageBodyMetadata`]: Messge body metadata
     /// * Message body
     ///
-    /// # Parameters
-    ///
-    /// * `value`     - The [`ApiMessage`] to convert.
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for finding the records.
-    ///
     pub async fn from_api_data(
         value: ApiMessage,
         tether: &Tether,
@@ -2053,12 +1859,6 @@ impl Message {
     }
 
     /// Converts an [`ApiMessageMetadata`] into a [`Message`].
-    ///
-    /// # Parameters
-    ///
-    /// * `value`     - The [`ApiMessage`] to convert.
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for finding the records.
     ///
     pub async fn from_api_metadata(
         value: ApiMessageMetadata,
@@ -2833,10 +2633,6 @@ impl Message {
     /// - trash
     /// - custom labels
     /// - custom folders
-    /// # Parameters
-    ///
-    /// * `queue`       - The action queue.
-    /// * `label_id`    - The ID of the label to empty
     ///
     /// # Errors
     ///
@@ -3140,11 +2936,6 @@ impl MessageBodyMetadata {
     /// There is currently no way to handle this in stash directly, so we have
     /// to manually perform this check.
     ///
-    /// # Parameters
-    ///
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for finding the records.
-    ///
     /// # Errors
     ///
     /// Returns an error if the query failed.
@@ -3397,8 +3188,6 @@ pub struct MessageCounters {
 impl MessageCounters {
     /// Constructor - note: [`MessageCounters`] does not implement [`Default`] trait
     ///
-    /// # Parameters
-    /// * `local_label_id` - local id of the label
     pub fn new(local_label_id: LocalLabelId) -> Self {
         Self {
             local_label_id,
@@ -3413,10 +3202,6 @@ impl MessageCounters {
     /// It's imperative that you use this method over [`Model::save()`] to ensure
     /// that if the counter already exists it is updated, and not inserted with a conflict.
     ///
-    /// # Parameters
-    /// * `local_label_id` - local id of the label
-    /// * `tx` - transaction used to modify DB
-    ///
     /// # Errors
     ///
     /// Returns an error if the query fails.
@@ -3430,11 +3215,6 @@ impl MessageCounters {
     }
 
     /// Get all message counters linked to labels with given kind
-    ///
-    /// # Parameters
-    ///
-    /// * `kind` - The kind of the label, eg. System, Folder etc.
-    /// * `tether` - The tether to use for the database connection.
     ///
     /// # Errors
     ///

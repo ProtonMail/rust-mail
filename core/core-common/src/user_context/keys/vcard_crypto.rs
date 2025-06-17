@@ -33,10 +33,6 @@ pub const X_PM_SIGN: &str = "X-PM-SIGN";
 ///
 /// If no crypto information for this email is found in the vcard, the method returns [`None`].
 ///
-/// # Parameters
-///
-/// * `pgp` - The pgp provider instance from `proton_crypto`.
-/// * `email` - the email address that keys are being searched for in the `VCard`.
 pub fn pinned_keys_for_mail<P>(
     vcard: &VCard,
     pgp: &P,

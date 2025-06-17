@@ -39,7 +39,6 @@ const MISSING_SCOPES_ERROR_CODE: u32 = 9100;
 ///
 /// # Parameters
 ///
-/// * `ctx` - core context.
 /// * `device_rx` - stream of device registration details. If changed it must contain `Some`
 ///
 #[tracing::instrument(err, skip_all)]

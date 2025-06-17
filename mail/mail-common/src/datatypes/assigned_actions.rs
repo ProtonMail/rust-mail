@@ -26,11 +26,6 @@ pub struct AssignedSwipeActions {
 impl AssignedSwipeActions {
     /// Get assigned swipe actions by fetching user settings
     ///
-    /// # Parameters
-    ///
-    /// * `current_folder` - local label ID of currently opened folder
-    /// * `tether` - connection to the database
-    ///
     /// # Errors
     ///
     /// Returns an error if query fails
@@ -70,12 +65,6 @@ pub enum AssignedSwipeAction {
 
 impl AssignedSwipeAction {
     /// Loads assigned swipe action based on the swipe action stored in the mail settings.
-    ///
-    /// # Parameters
-    ///
-    /// * `swipe_action` - action stored in mail settings,
-    /// * `current_folder` - which folder is currently opened in the application
-    /// * `tether` - connection to stash.
     ///
     /// # Errors
     ///

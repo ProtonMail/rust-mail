@@ -139,10 +139,6 @@ impl<'x> InboxMimeBuilder<'x> {
     }
 
     /// Sets the plain text body of the email.
-    ///
-    /// # Parameters
-    ///
-    /// * `text_body` - The plain text body of the email.
     #[must_use]
     pub fn text_body(mut self, text_body: &'x str) -> Self {
         self.text_body = Some(encode_text_plain_body(text_body));
@@ -152,10 +148,6 @@ impl<'x> InboxMimeBuilder<'x> {
     /// Sets the HTML body of the message without adding HTML-only inline attachments.
     ///
     /// If inline attachments are needed, use [`InboxMimeBuilder::begin_html_body`].
-    ///
-    /// # Parameters
-    ///
-    /// * `html_body` - The HTML content of the email message.
     #[must_use]
     pub fn html_body(self, html_body: &'x str) -> InboxMimeBuilder<'x> {
         self.begin_html_body(html_body).end_html_body()
@@ -165,10 +157,6 @@ impl<'x> InboxMimeBuilder<'x> {
     ///
     /// Creates a builder that allows specifying HTML-specific inline attachments.
     /// Once the body is complete, call [`HtmlMimeBuilder::end_html_body`].
-    ///
-    /// # Parameters
-    ///
-    /// * `html_body` - The HTML content of the email message.
     #[must_use]
     pub fn begin_html_body(self, html_body: &'x str) -> HtmlBodyPartBuilder<'x> {
         let mut data = Vec::with_capacity(html_body.len());
@@ -188,12 +176,6 @@ impl<'x> InboxMimeBuilder<'x> {
     }
 
     /// Adds an attachment to the message.
-    ///
-    /// # Parameters
-    ///
-    /// * `filename`  - The filename of the attachment.
-    /// * `mime_type` - The MIME type of the attachment, if any.
-    /// * `content`   - The content of the attachment.
     #[must_use]
     pub fn attachment(
         mut self,
@@ -218,13 +200,6 @@ impl<'x> InboxMimeBuilder<'x> {
     /// be displayed within the text. The builder also provides a method to add inline
     /// attachments specifically to the HTML part, in which case the inline image may only
     /// appear in the HTML version of the email and be hidden in the plain text version.
-    ///
-    /// # Parameters
-    ///
-    /// * `content_id`  - The content ID, used as a reference in the email body.
-    /// * `filename`    - The filename of the attachment.
-    /// * `mime_type`   - The MIME type of the attachment, if any.
-    /// * `content`     - The content of the attachment.
     #[must_use]
     pub fn inline_attachment(
         mut self,
@@ -247,10 +222,6 @@ impl<'x> InboxMimeBuilder<'x> {
     }
 
     /// Writes the multipart MIME message to the provided output writer.
-    ///
-    /// # Parameters
-    ///
-    /// * `output` - The output writer to which the data is written.
     ///
     /// # Errors
     /// Returns an error if writing to the output fails.
@@ -330,13 +301,6 @@ impl<'x> HtmlBodyPartBuilder<'x> {
     /// Adds an inline attachment that is only relevant in the HTML body.
     ///
     /// The inline attachment is considered relevant only to the HTML part and may be hidden in the text version.
-    ///
-    /// # Parameters
-    ///
-    /// * `content_id`  - The content ID, used as a reference in the email body.
-    /// * `filename`    - The filename of the attachment.
-    /// * `mime_type`   - The MIME type of the attachment, if any.
-    /// * `content`     - The content of the attachment.
     #[must_use]
     pub fn inline_attachment(
         mut self,

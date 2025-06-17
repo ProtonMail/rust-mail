@@ -206,11 +206,6 @@ pub trait DecryptableAttachment {
     /// [`ExtractedAttachmentInfo`] allows re-encrypting the data for new recipients.
     /// This is useful when converting a draft to a sent message.
     ///
-    /// # Parameters
-    ///
-    /// * `pgp` - The PGP provider instance from [`proton_crypto_account::proton_crypto`].
-    /// * `decryption_keys` - The `OpenPGP` decryption keys used to decrypt the attachment metadata.
-    ///
     /// # Errors
     ///
     /// Returns an [`AttachmentDecryptionError`] if decryption fails.

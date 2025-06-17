@@ -43,11 +43,6 @@ pub trait ProtonCore {
 
     /// GETs Captcha details.
     ///
-    /// # Parameters
-    ///
-    /// * `token`     - The Captcha token to use.
-    /// * `force_web` - TODO: Document this parameter.
-    ///
     /// # Errors
     ///
     /// This method will return an error if the request fails.
@@ -58,10 +53,6 @@ pub trait ProtonCore {
     ///
     /// This returns the full contact record.
     ///
-    /// # Parameters
-    ///
-    /// * `contact_id` - The ID of the contact to get.
-    ///
     /// # Errors
     ///
     /// This method will return an error if the request fails.
@@ -71,10 +62,6 @@ pub trait ProtonCore {
     /// GETs a list of contacts.
     ///
     /// This returns basic information — not the full contact record.
-    ///
-    /// # Parameters
-    ///
-    /// * `options` - The options to use for the request.
     ///
     /// # Errors
     ///
@@ -89,10 +76,6 @@ pub trait ProtonCore {
     ///
     /// This returns basic information — not the full contact record.
     ///
-    /// # Parameters
-    ///
-    /// * `options` - The options to use for the request.
-    ///
     /// # Errors
     ///
     /// This method will return an error if the request fails.
@@ -103,12 +86,6 @@ pub trait ProtonCore {
     ) -> ApiServiceResult<GetContactsEmailsResponse>;
 
     /// TODO: Document this method.
-    ///
-    /// # Parameters
-    ///
-    /// * `event_id`            - The ID of the event to get.
-    /// * `conversation_counts` - TODO: Document this parameter.
-    /// * `message_counts`      - TODO: Document this parameter.
     ///
     /// # Errors
     ///
@@ -135,11 +112,6 @@ pub trait ProtonCore {
     async fn get_images_logo(&self, options: GetImagesLogoOptions) -> ApiServiceResult<Bytes>;
 
     /// TODO: Document this method.
-    ///
-    /// # Parameters
-    ///
-    /// * `email`         - The email address to get keys for.
-    /// * `internal_only` - Whether to only get internal keys.
     ///
     /// # Errors
     ///
@@ -199,10 +171,6 @@ pub trait ProtonCore {
 
     /// Method requests to delete label
     ///
-    /// # Parameters
-    ///
-    /// * `label_id` - The ID of the label to delete.
-    ///
     /// # Errors
     ///
     /// This method will return an error if the request fails.
@@ -210,10 +178,6 @@ pub trait ProtonCore {
     async fn delete_label(&self, label_id: LabelId) -> ApiServiceResult<()>;
 
     /// Method requests all labels with given label type
-    ///
-    /// # Parameters
-    ///
-    /// * `label_type` - TODO: Document this parameter.
     ///
     /// # Errors
     ///
@@ -228,10 +192,6 @@ pub trait ProtonCore {
     /// so POST method is used instead.
     ///
     ///
-    /// # Parameters
-    ///
-    /// * `label_ids` - List of label IDs to get.
-    ///
     /// # Errors
     ///
     /// This method will return an error if the request fails.
@@ -243,10 +203,6 @@ pub trait ProtonCore {
 
     /// TODO: Document this method.
     ///
-    /// # Parameters
-    ///
-    /// * `body` - The body to use for the request.
-    ///
     /// # Errors
     ///
     /// This method will return an error if the request fails.
@@ -254,11 +210,6 @@ pub trait ProtonCore {
     async fn post_labels(&self, body: PostLabelsRequest) -> ApiServiceResult<PostLabelsResponse>;
 
     /// TODO: Document this method.
-    ///
-    /// # Parameters
-    ///
-    /// * `label_id` - The ID of the label to update.
-    /// * `body`     - The body to use for the request.
     ///
     /// # Errors
     ///
@@ -278,11 +229,6 @@ pub trait ProtonCore {
     /// Notify is a boolean that indicates if the user should be notified
     /// about new messages in the label. By default both of them are disabled.
     ///
-    /// # Parameters
-    ///
-    /// * `label_id` - The ID of the label to patch.
-    /// * `body` - Json body to use in the patch request.
-    ///
     /// # Errors
     ///
     /// This method will return an error if the request fails.
@@ -297,10 +243,6 @@ pub trait ProtonCore {
     /// The registering will delete any duplicate having the same (User ID, Product, Device Token) from different sessions.
     /// If the registering is done from a session already having a registered device, the existing device will be replaced with the new one.
     ///
-    /// # Parameters
-    ///
-    /// * `body` - Json body to use in the post request.
-    ///
     /// # Errors
     ///
     /// This method will return an error if the request fails.
@@ -309,10 +251,6 @@ pub trait ProtonCore {
 
     /// This method allows to create a ticket for bug in API (and in zendesk)
     /// for support team to review issue reported by a user.
-    ///
-    /// # Parameters
-    ///
-    /// * `body` - Struct converted to multipart request.
     ///
     /// # Errors
     ///

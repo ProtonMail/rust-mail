@@ -16,11 +16,6 @@ pub enum NotificationError {
 /// Notification stored as generic JSON object.
 /// Because push notifications are BU independent, we do not assume its content at the
 /// decryption stage
-///
-/// # Parameters
-///
-/// * `T` - your BU message format.
-///
 #[derive(Deserialize, Clone, Debug)]
 #[serde(transparent)]
 #[serde(bound(deserialize = "T: Deserialize<'de>"))]

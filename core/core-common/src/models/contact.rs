@@ -97,11 +97,6 @@ impl Contact {
     /// It's imperative that you use this method over [`Model::save()`] to
     /// ensure that existing conversations are updated.
     ///
-    /// # Parameters
-    ///
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for finding the records.
-    ///
     /// # Errors
     ///
     /// Returns an error if the local conversation id is not set or the query
@@ -266,11 +261,6 @@ impl Contact {
     /// Updates all user contacts including their emails without their cards.
     ///
     /// The result of this function MUST ONLY be used (as in [`SyncedContacts::store`]) after syncing contact labels.
-    ///
-    /// # Parameters
-    ///
-    /// * `api`   - The API instance to use to download the addresses.
-    /// * `stash` - The database instance to store the addresses.
     ///
     /// # Errors
     ///
@@ -474,10 +464,6 @@ impl Contact {
 
     /// Returns a list of contacts grouped by the first letter of their name.
     ///
-    /// # Parameters
-    ///
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///
     /// # Errors
     ///
     /// when querying the database fails.
@@ -504,7 +490,6 @@ impl Contact {
     /// # Parameters
     ///
     /// * `device_contacts` - contacts stored in the device storage, not shared between proton clients.
-    /// * `tether` - The database interface
     ///
     /// # Errors
     ///

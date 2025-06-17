@@ -73,11 +73,6 @@ pub trait EncryptableAttachment {
     /// The output [`EncryptedAttachment`] consists of the encrypted attachment and the [`EncryptedAttachmentMetadata`]
     /// containing the key packets, signatures, and encrypted signature.
     ///
-    /// # Parameters
-    ///
-    /// * `pgp`        - The pgp provider instance from `proton_crypto`.
-    /// * `primary_address_key` - The primary address key to encrypt and sign with.
-    ///
     /// # Errors
     ///
     /// One of encryption, signing, or encoding steps fails.
@@ -97,12 +92,6 @@ pub trait EncryptableAttachment {
 ///
 /// The output [`EncryptedAttachment`] consists of the encrypted attachment and the [`EncryptedAttachmentMetadata`]
 /// containing the key packets, signatures, and encrypted signature.
-///
-/// # Parameters
-///
-/// * `pgp`        - The pgp provider instance from `proton_crypto`.
-/// * `primary_address_key` - The primary address key to encrypt and sign with.
-/// * `attachment_data`     - The attachment data to encrypt.
 ///
 /// # Errors
 ///
@@ -128,13 +117,6 @@ where
 /// The output [`EncryptedAttachment`] consists of the encrypted attachment and the [`EncryptedAttachmentMetadata`]
 /// containing the key packets, signatures, and encrypted signature.
 /// If no signing keys are provided, i.e., a zero length slice, no signatures are produced.
-///
-/// # Parameters
-///
-/// * `pgp`    - The pgp provider instance from `proton_crypto`.
-/// * `encryption_keys` - The encryption keys of the recipients to encrypt the attachment to.
-/// * `signing_keys`    - The signing keys of the user that the attachment is signed with.
-/// * `attachment_data` - The attachment data to encrypt.
 ///
 /// # Errors
 ///
@@ -189,12 +171,6 @@ where
 ///
 /// The key packets and signatures (i.e., attachment metadata) can be accessed with [`SigncryptedAttachmentWriter::finalize`]
 /// once all data has been written.
-///
-/// # Parameters
-///
-/// * `pgp`         - The pgp provider instance from `proton_crypto`.
-/// * `primary_address_key`  - The encryption key of the recipients to encrypt the attachment to.
-/// * `attachment_data`      - A writer where the encrypted attachment is written to.
 ///
 /// # Errors
 ///
@@ -418,11 +394,6 @@ impl ExtractedAttachmentInfo {
     /// Encrypts the internal symmetric session key with the provided public key
     /// using `OpenPGP`. The output is an `OpenPGP` PKESK packet (referred to as a key packet in the Proton context).
     ///
-    /// # Parameters
-    ///
-    /// * `pgp` - The PGP provider instance from [`proton_crypto_account::proton_crypto`].
-    /// * `recipient_key` - The recipient public key to encrypt the key packet to.
-    ///
     /// # Errors
     ///
     /// Returns a [`SessionKeyError::KeyPacketEncryption`] error if the encryption fails or
@@ -439,11 +410,6 @@ impl ExtractedAttachmentInfo {
     }
 
     /// Encrypts the internal signature towards a new recipient if present.
-    ///
-    /// # Parameters
-    ///
-    /// * `pgp` - The pgp provider instance from [`proton_crypto_account::proton_crypto`].
-    /// * `recipient`    - The recipient's `OpenPGP` encryption key to encrypt the signature to.
     ///
     /// # Errors
     ///

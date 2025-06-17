@@ -2,8 +2,6 @@ use rand::{Rng, distributions::Uniform};
 use wiremock::{Mock, MockServer, Request, matchers::any};
 /// Generates a random string of the specified length, including alphanumeric and special characters.
 ///
-/// # Parameters
-/// - `length`: The length of the string to generate.
 #[must_use]
 pub fn random_string(length: usize) -> String {
     let charset: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ\

@@ -199,10 +199,6 @@ impl MailSettings {
 
     /// TODO: Document this function.
     ///
-    /// # Parameters
-    ///
-    /// * `api` - The API instance to use.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed, or the data could not be

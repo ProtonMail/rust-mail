@@ -85,11 +85,6 @@ impl UserContext {
     /// First tries to retrieve them from the cache else
     /// it loads and unlocks them from the database.
     ///
-    /// # Parameters
-    ///
-    /// * `pgp`           - The pgp provider instance from `proton_crypto`.
-    /// * `conn`          - The database connection to load the keys from database.
-    /// * `secret_loader` - The struct providing the access to the secret needed to unlock the user keys
     ///
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
@@ -112,12 +107,6 @@ impl UserContext {
     ///
     /// Loads the address keys from the database and unlocks them with the user keys.
     ///
-    /// # Parameters
-    ///
-    /// * `pgp`            - The pgp provider instance from `proton_crypto`.
-    /// * `conn`           - The database connection to load the keys from database.
-    /// * `secret_load_fn` - The struct providing the access to the secret needed to unlock the user keys
-    /// * `address_id`     - The ID of the address key
     ///
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
@@ -142,11 +131,6 @@ impl UserContext {
     /// Imports the keys with the PGP provider. In the future, this function will also
     /// verify the keys with key transparency.
     ///
-    /// # Parameters
-    ///
-    /// * `pgp` - The pgp provider instance from `proton_crypto`.
-    /// * `email` - The email address the public address keys are being requested for.
-    /// * `internal_only` - A flag used to indicate if the keys requested are internal-only, i.e. keys for a Proton user.
     ///
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
@@ -173,12 +157,6 @@ impl UserContext {
     /// - Verifies the signature of the `VCard` with the unlocked user keys
     /// - Returns the pinned keys if any else None
     ///
-    /// Parameters
-    ///
-    /// * `pgp`                - The pgp provider instance from `proton_crypto`.
-    /// * `db_interface`       - The database interface to query from.
-    /// * `unlocked_user_keys` - Unlocked keys for the current user, these are used to decrypt and verify the contact cards.
-    /// * `email`              - the email address that keys are being sought for.
     ///
     /// # Errors
     /// Returns an error on a database or sync failure.

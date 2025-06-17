@@ -240,12 +240,6 @@ impl ContextualConversation {
 
     /// Get the available actions from bottom bar for given conversations
     ///
-    /// # Parameters
-    ///
-    /// * `current_label_id`  - Id of the current mailbox.
-    /// * `conversations_ids` - List of the conversations IDs.
-    /// * `interface`         - The database interface.
-    ///
     #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
     pub async fn all_available_bottom_bar_actions_for_conversations(
         current_label_id: LocalLabelId,

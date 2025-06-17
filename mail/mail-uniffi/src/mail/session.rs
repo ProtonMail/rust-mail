@@ -73,11 +73,6 @@ pub struct MailSessionParams {
 // constructor.
 /// Create a new mail session.
 ///
-/// # Parameters
-///
-/// * `params`: See [`MailSessionParams`] for parameter details.
-/// * `key_chain`: Keychain implementation.
-///
 /// # Panics
 ///
 /// Panics if the API URL is invalid. In this situation we cannot proceed.
@@ -120,11 +115,6 @@ pub fn create_mail_session(
 ///
 /// This function is designed for extension. Do not use it in the main application without thorough testing!
 ///
-/// # Parameters
-///
-/// * `params`: See [`MailSessionParams`] for parameter details.
-/// * `key_chain`: Keychain implementation.
-///
 /// # Panics
 ///
 /// Panics if the API URL is invalid. In this situation we cannot proceed.
@@ -148,13 +138,6 @@ pub fn create_mail_ios_extension_session(
 // NOTE: Callbacks can not be stored in record types, which is why they are still in the
 // constructor.
 /// Create a new mail session.
-///
-/// # Parameters
-///
-/// * `params`: See [`MailSessionParams`] for parameter details.
-/// * `connection_pool_size`: Maximum number of connections for account DB. If `None`,
-///   then default value is used
-/// * `key_chain`: Keychain implementation.
 ///
 /// # Panics
 ///

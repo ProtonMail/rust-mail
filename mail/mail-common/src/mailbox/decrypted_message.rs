@@ -342,9 +342,7 @@ impl DecryptedMessageBody {
     ///
     /// # Parameters
     ///
-    /// * `sender`         - the email address of the sender. Example: `test@pm.me`
-    /// * `opts`           - Transform Options.
-    /// * `tether`         - database connection.
+    /// * `sender` - the email address of the sender. Example: `test@pm.me`
     ///
     /// # Errors
     ///

@@ -74,11 +74,6 @@ impl RollbackItem {
     /// do so, but in practice, and especially for alpha release, it is useful
     /// to have a way to recover from malfunctions.
     ///
-    /// ## Parameters
-    /// * `session`   - The API client to use for syncing.
-    /// * `tx_runner` - Transaction runner implementor.
-    /// * `batch`     - The number of items to sync in a single batch.
-    ///
     /// ## Errors
     ///
     /// This method will return an error if any of the API requests fail.
@@ -104,10 +99,6 @@ impl RollbackItem {
 
     /// Synchronize all labels with remote counterparts.
     ///
-    /// ## Parameters & Errors
-    ///
-    /// Look at the documentation of the `sync_all` method.
-    ///
     #[tracing::instrument(level = "debug", skip_all)]
     pub async fn sync_labels<I>(
         session: &Session,
@@ -121,10 +112,6 @@ impl RollbackItem {
     }
 
     /// Synchronize all messages with remote counterparts.
-    ///
-    /// ## Parameters & Errors
-    ///
-    /// Look at the documentation of the `sync_all` method.
     ///
     #[tracing::instrument(level = "debug", skip_all)]
     pub async fn sync_messages<I>(
@@ -140,10 +127,6 @@ impl RollbackItem {
 
     /// Synchronize all conversations with remote counterparts.
     ///
-    /// ## Parameters & Errors
-    ///
-    /// Look at the documentation of the `sync_all` method.
-    ///
     #[tracing::instrument(level = "debug", skip_all)]
     pub async fn sync_conversations<I>(
         session: &Session,
@@ -158,11 +141,6 @@ impl RollbackItem {
 
     /// This helper method is used to find all rollback items of a specific kind.
     ///
-    /// ## Parameters
-    ///
-    /// * `kind` - The kind of the rollback item to find.
-    /// * `interface` - The interface to use for the database operations.
-    ///
     /// ## Errors
     ///
     /// This method will return an error if the database operation fails.
@@ -176,11 +154,6 @@ impl RollbackItem {
     }
 
     /// This helper method is used to find all rollback items of a specific kind.
-    ///
-    /// ## Parameters
-    ///
-    /// * `kind` - The kind of the rollback item to find.
-    /// * `interface` - The interface to use for the database operations.
     ///
     /// ## Errors
     ///
@@ -202,12 +175,6 @@ impl RollbackItem {
     }
 
     /// This helper method is used to delete rollback item of a specific kind & remote_id.
-    ///
-    /// ## Parameters
-    ///
-    /// * `remote_id` - The remote ID of the rollback item to delete.
-    /// * `kind` - The kind of the rollback item to delete.
-    /// * `tether` - The interface to use for the database operations.
     ///
     /// ## Errors
     ///

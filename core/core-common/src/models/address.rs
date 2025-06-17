@@ -87,11 +87,6 @@ impl Address {
     /// It's imperative that you use this method over [`Model::save()`] to
     /// ensure that existing conversations are updated.
     ///
-    /// # Parameters
-    ///
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for finding the records.
-    ///
     /// # Errors
     ///
     /// Returns an error if the local conversation id is not set or the query
@@ -141,10 +136,6 @@ impl Address {
 
     /// Download user addresses. Returns an object that can be stored in DB.
     ///
-    /// # Parameters
-    ///
-    /// * `api`   - The API instance to use to download the addresses.
-    ///
     /// # Errors
     ///
     /// TODO: Document the errors.
@@ -165,11 +156,6 @@ impl Address {
     ///
     /// Returns [`None`] if no address with the given email is found.
     ///
-    /// # Parameters
-    ///
-    /// * `email`     - The e-mail address to search for.
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for finding the records.
     /// # Errors
     ///
     /// Returns a [`StashError`] if the database access fails.

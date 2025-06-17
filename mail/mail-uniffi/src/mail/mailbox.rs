@@ -77,11 +77,6 @@ pub async fn new_mailbox(
 /// This mailbox will contain mail items from the Inbox alone, which is a
 /// special system label.
 ///
-/// # Parameters
-///
-/// * `ctx` - The mail user session. Note that this is a session that is
-///           already authenticated and has a valid user context.
-///
 /// # Errors
 ///
 /// Returns an error if the mailbox could not be created or synced.

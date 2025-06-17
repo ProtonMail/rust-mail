@@ -18,12 +18,6 @@ pub mod system_labels;
 
 /// Get the the counts (first unread, second total) depending on the [`ViewMode`].
 ///
-/// # Parameters
-///
-/// * `label`    - The [`Label`]
-/// * `inteface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-///   use for finding the records.
-///
 /// # Panics
 /// If label provided does not have Local ID
 pub async fn messages_counts(label: &Label, tether: &Tether) -> Result<(u64, u64), AppError> {
@@ -45,11 +39,6 @@ pub async fn messages_counts(label: &Label, tether: &Tether) -> Result<(u64, u64
 ///
 /// The color depends on [`MailSettings`] `enable_folder_color` and `inherit_parent_folder_color`
 ///
-/// # Parameters
-///
-/// * `value`     - The [`Label`]
-/// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-///   use for finding the records.
 ///
 /// # Panics
 ///

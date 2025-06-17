@@ -50,11 +50,6 @@ impl TestContext {
     /// This function creates a mock response to simulate the retrieval of
     /// public address keys for a specified user.
     ///
-    /// # Parameters
-    ///
-    /// * `email`              - The email of the other user to retrieve the keys for.
-    /// * `response`           - The response to mock.
-    ///
     pub async fn mock_get_keys_all(&self, email: &str, response: GetKeysAllResponse) {
         self.mock_get_keys_all_with_internal_param(email, None, response)
             .await;
@@ -64,12 +59,6 @@ impl TestContext {
     ///
     /// This function creates a mock response to simulate the retrieval of
     /// public address keys for a specified user.
-    ///
-    /// # Parameters
-    ///
-    /// * `email`              - The email of the other user to retrieve the keys for.
-    /// * `internal_only`      - Whether the search should be performed only for proton addresses.
-    /// * `response`           - The response to mock.
     ///
     #[function_name::named]
     pub async fn mock_get_keys_all_with_internal_param(
@@ -91,11 +80,6 @@ impl TestContext {
     }
 
     /// Generates a mock failure response for retrieving another user's public address keys.
-    ///
-    /// # Parameters
-    ///
-    /// * `email`              - The email of the other user to retrieve the keys for.
-    /// * `response`           - The response to mock.
     ///
     #[function_name::named]
     pub async fn mock_get_keys_all_failure(

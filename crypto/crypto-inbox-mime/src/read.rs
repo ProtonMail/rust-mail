@@ -28,11 +28,6 @@ pub trait ProcessMime {
     ///
     /// Extracts the message body, extracts/normalizes the attachments, and collects the signatures.
     ///
-    /// # Parameters
-    ///
-    /// * `message_id`      - The message ID that should be assigned to the output message.
-    /// * `decrypted_body`  - The raw decrypted body of a `PGP/MIME` message.
-    ///
     /// # Errors
     /// A [`ProcessMimeError`] if parsing error occurs or if no body and attachments are found.
     fn process_mime(message_id: &str, decrypted_body: &[u8]) -> ProcessedMimeResult;

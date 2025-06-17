@@ -119,11 +119,6 @@ type ZippedFile = (String, Vec<u8>);
 
 /// Report an issue functionality.
 ///
-/// # Parameters
-///
-/// * `report` - representation of the form filled in by user,
-/// * `user_ctx` - need for request making
-///
 /// # Errors
 ///
 /// When logs cannot be zipped or API request fail
@@ -216,8 +211,6 @@ fn create_bug_report_payload(
 ///
 /// # Parameters
 ///
-/// * `path` - path to the file
-/// * `now` - the current time in Utc, used for file creation time & as a prefix for zipped file name.
 /// * `max_bytes` - how many bytes should be written to the zip if the file size exceeds the `max_byte` value.
 ///   Value is not verified but it is not recomended exceeding `MAX_LOG_BYTES` value as 50 Mb.
 ///

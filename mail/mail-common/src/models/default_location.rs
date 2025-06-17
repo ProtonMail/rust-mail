@@ -152,11 +152,6 @@ impl IncomingDefaultLocation {
 
     /// Blocks an address
     ///
-    /// # Parameters
-    ///
-    /// * `queue`       - The action queue.
-    /// * `email`       - The email of the address to block
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed.
@@ -170,11 +165,6 @@ impl IncomingDefaultLocation {
     }
 
     /// Unblocks an address
-    ///
-    /// # Parameters
-    ///
-    /// * `queue`       - The action queue.
-    /// * `email`       - The email of the address to block
     ///
     /// # Errors
     ///

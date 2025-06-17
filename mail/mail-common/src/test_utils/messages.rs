@@ -108,14 +108,6 @@ impl MailTestContext {
     /// This function will mock the response for the given `ids` and `failed`
     /// messages.
     ///
-    /// # Parameters
-    ///
-    /// * `label_id`    - The label ID to use for the request.
-    /// * `message_ids` - The list of message IDs to label.
-    /// * `spam_action` - The spam action to use for the request.
-    /// * `failed`      - The list of message IDs for which we want to
-    ///                   simulate failure.
-    ///
     #[function_name::named]
     pub async fn mock_label_messages(&self, label_id: &LabelId, message_ids: Vec<MessageId>) {
         let ids = message_ids.clone();
@@ -234,12 +226,6 @@ impl MailTestContext {
     /// This function will mock the response for the given `ids` and `failed`
     /// messages.
     ///
-    /// # Parameters
-    ///
-    /// * `message_ids` - The list of message IDs to mark read.
-    /// * `failed_ids`  - The list of message IDs for which we want to
-    ///                   simulate failure.
-    ///
     #[function_name::named]
     pub async fn mock_put_messages_read(
         &self,
@@ -269,11 +255,6 @@ impl MailTestContext {
     /// This function will mock the response for the given `ids` and `failed`
     /// messages.
     ///
-    /// # Parameters
-    ///
-    /// * `message_ids` - The list of message IDs to mark unread.
-    /// * `failed_ids`  - The list of message IDs for which we want to
-    ///                   simulate failure.
     #[function_name::named]
     pub async fn mock_put_messages_unread(
         &self,
@@ -302,14 +283,6 @@ impl MailTestContext {
     ///
     /// This function will mock the response for the given `ids` and `failed`
     /// messages.
-    ///
-    /// # Parameters
-    ///
-    /// * `label_id`    - The label ID to use for the request.
-    /// * `message_ids` - The list of message IDs to label.
-    /// * `spam_action` - The spam action to use for the request.
-    /// * `failed`      - The list of message IDs for which we want to
-    ///                   simulate failure.
     ///
     #[function_name::named]
     pub async fn mock_unlabel_messages(
@@ -340,11 +313,6 @@ impl MailTestContext {
 
     /// Generate new mock expectations for relabel message.
     ///
-    /// # Parameters
-    ///
-    /// * `id`      - ID of the message to relabel.
-    /// * `message` - modified message as response.
-    ///
     #[function_name::named]
     pub async fn mock_relabel_message(&self, id: &MessageId, message: MessageMetadata) {
         let response = PostMessagesRelabelResponse { message };
@@ -361,15 +329,6 @@ impl MailTestContext {
     ///
     /// Note that this mock does not valid the draft body.
     ///
-    /// # Parameters
-    ///
-    /// * `params`                 - Expected draft params.
-    /// * `action`                 - Draft action (Reply, ReplyAll, Forward)
-    /// * `reply`                  - Expected server reply.
-    /// * `parent_id`              - Parent id to from which we are
-    ///                              replying/forwarding to/from
-    /// * `attachment_key_packets` - Attachment key packets for the attachment.
-    ///                              included in this request.
     #[allow(clippy::doc_markdown)]
     #[function_name::named]
     pub async fn mock_create_draft(
@@ -402,15 +361,6 @@ impl MailTestContext {
     ///
     /// Note that this mock does not valid the draft body.
     ///
-    /// # Parameters
-    ///
-    /// * `params`                 - Expected draft params.
-    /// * `action`                 - Draft action (Reply, ReplyAll, Forward)
-    /// * `reply`                  - Expected server reply.
-    /// * `parent_id`              - Parent id to from which we are
-    ///                              replying/forwarding to/from
-    /// * `attachment_key_packets` - Attachment key packets for the attachment.
-    ///                              included in this request.
     #[allow(clippy::doc_markdown)]
     #[function_name::named]
     pub async fn mock_create_draft_failure(
@@ -448,13 +398,6 @@ impl MailTestContext {
     /// Note that this mock does not validate parameters that are cryptographically
     /// generated.
     ///
-    /// # Parameters
-    ///
-    /// * `message_id`          - Message to send
-    /// * `pramas`              - Expected send api parameters
-    /// * `result_message`      - Updated message returned by the API.
-    /// * `result_conversation` - Updated conversation returned by API.
-    ///
     #[allow(clippy::doc_markdown)]
     #[function_name::named]
     pub async fn mock_send_draft(
@@ -482,11 +425,6 @@ impl MailTestContext {
 
     /// Generate a new mock for draft send failures.
     ///
-    /// # Parameters
-    ///
-    /// * `message_id` - Message to send
-    /// * `error`      - Api Error
-    ///
     #[allow(clippy::doc_markdown)]
     #[function_name::named]
     pub async fn mock_send_draft_failure(&self, message_id: MessageId, error: ApiErrorInfo) {
@@ -503,13 +441,6 @@ impl MailTestContext {
     ///
     /// Note that this mock does not valid the draft body.
     ///
-    /// # Parameters
-    ///
-    /// * `message_id`             - Message id to update.
-    /// * `params`                 - Expected draft params.
-    /// * `reply`                  - Expected server reply.
-    /// * `attachment_key_packets` - Attachment key packets for the attachment.
-    ///                              included in this request.
     #[allow(clippy::doc_markdown)]
     #[function_name::named]
     pub async fn mock_update_draft(
@@ -539,13 +470,6 @@ impl MailTestContext {
     ///
     /// Note that this mock does not valid the draft body.
     ///
-    /// # Parameters
-    ///
-    /// * `message_id`             - Message id to update.
-    /// * `params`                 - Expected draft params.
-    /// * `reply`                  - Expected server reply.
-    /// * `attachment_key_packets` - Attachment key packets for the attachment.
-    ///                              included in this request.
     #[allow(clippy::doc_markdown)]
     #[function_name::named]
     pub async fn mock_update_draft_failure(
@@ -574,11 +498,6 @@ impl MailTestContext {
     ///
     /// Note that this mock does not validate parameters that are cryptographically
     /// generated.
-    ///
-    /// # Parameters
-    ///
-    /// * `message_id` - Id of the sent message
-    /// * `result`     - Success or failure response
     ///
     #[allow(clippy::doc_markdown)]
     #[function_name::named]
@@ -647,11 +566,6 @@ impl MailTestContext {
 ///
 /// This function builds a list of message responses for the given `ids`
 /// and `failed` messages.
-///
-/// # Parameters
-///
-/// * `ids`    - The list of message IDs to build responses for.
-/// * `failed` - The list of message IDs for which we want to simulate failure.
 ///
 fn build_message_responses(
     ids: &[MessageId],

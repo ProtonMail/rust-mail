@@ -99,10 +99,6 @@ impl InboxSessionKey {
     /// Imports an inbox session key from a session key used by an `OpenPGP` provider
     /// (See [`proton_crypto_account::proton_crypto`]).
     ///
-    /// # Parameters
-    ///
-    /// * `session_key` - The session key to import.
-    ///
     /// # Errors
     ///
     /// Returns a [`SessionKeyError::InvalidSessionKey`] if the session key is invalid.
@@ -128,11 +124,6 @@ impl InboxSessionKey {
 
     /// Imports an inbox session key from a session key used by an `OpenPGP` provider
     /// (See [`proton_crypto_account::proton_crypto`]).
-    ///
-    /// # Parameters
-    ///
-    /// * `session_key` - The session key to import.
-    /// * `algorithm`   - The expected session key algorithm the session key belongs to.
     ///
     /// # Errors
     ///
@@ -166,10 +157,6 @@ impl InboxSessionKey {
     /// Exports the inbox session key to a session key for an `OpenPGP` provider
     /// (See [`proton_crypto_account::proton_crypto`]).
     ///
-    /// # Parameters
-    ///
-    /// * `pgp` - The `OpenPGP` provider to export to.
-    ///
     /// # Errors
     ///
     /// Returns a [`CryptoError`] if the `OpenPGP` provider fails to accept the key.
@@ -198,11 +185,6 @@ impl InboxSessionKey {
     /// Encrypts the internal symmetric session key with the provided public key
     /// using `OpenPGP`. The output is an `OpenPGP` PKESK packet (referred to as a key packet in the Proton context).
     ///
-    /// # Parameters
-    ///
-    /// * `pgp` - The PGP provider instance from [`proton_crypto_account::proton_crypto`].
-    /// * `recipient_key` - The recipient public key to encrypt the key packet to.
-    ///
     /// # Errors
     ///
     /// Returns a [`SessionKeyError::KeyPacketEncryption`] error if the encryption fails or
@@ -229,11 +211,6 @@ impl InboxSessionKey {
     /// Encrypts the internal symmetric session key with the provided public keys
     /// using `OpenPGP`. The output is an `OpenPGP` PKESK packet (referred to as a key packet in the Proton context).
     /// The key packets are returned in the order of the provided recipient public keys.
-    ///
-    /// # Parameters
-    ///
-    /// * `pgp` - The PGP provider instance from [`proton_crypto_account::proton_crypto`].
-    /// * `recipient_keys` - The recipient public keys to encrypt the key packets to.
     ///
     /// # Errors
     ///

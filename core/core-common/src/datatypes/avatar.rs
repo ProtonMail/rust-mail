@@ -34,10 +34,6 @@ impl AvatarInformation {
 
     /// Returns a new `AvatarInformation` with the given value if the text is empty.
     ///
-    /// # Parameters
-    ///
-    /// * `value` - The value to use if the text is empty.
-    ///
     #[must_use]
     pub fn or_else<I>(self, value: I) -> Self
     where
@@ -49,10 +45,6 @@ impl AvatarInformation {
     /// Returns a new `AvatarInformation` with the given value if the text is empty.
     /// Provided value is taken as is, not trimmed nor manipulated in any way, use with causation.
     /// Ideal input for this function would be a string that is one grapheme long.
-    ///
-    /// # Parameters
-    ///
-    /// * `value` - The value to use if the text is empty.
     ///
     pub(crate) fn or_else_unchecked<S: AsRef<str>>(self, value: S) -> Self {
         if self.is_empty() {

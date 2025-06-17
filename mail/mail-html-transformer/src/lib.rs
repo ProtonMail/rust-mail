@@ -161,10 +161,6 @@ impl Transformer {
     }
 
     /// This function adds dark mode support. This fails if the html doesn't have a head tag.
-    ///
-    /// # Parameters
-    /// * `sender` - the email address of the sender. Example: `test@pm.me`
-    /// * `trusted_senders` - list of senders (email addresses, example: `test@pm.me`) that we trust that they support dark mode natively.
     #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
     pub fn inject_dark_mode(
         &mut self,

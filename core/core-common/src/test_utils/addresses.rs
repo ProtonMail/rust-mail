@@ -51,7 +51,6 @@ impl TestContext {
     /// # Parameters
     ///
     /// * `addresses` - The addresses to respond with. If `None`, an empty list will be used.
-    /// * `expect`    - How many times the endpoint should be called.
     ///
     #[function_name::named]
     pub async fn mock_get_addresses(

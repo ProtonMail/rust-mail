@@ -74,15 +74,6 @@ pub trait ModelExtension: Model {
     /// without any criteria. This happens remarkably often, and centralises the
     /// functionality, plus makes the intent clear.
     ///
-    /// # Parameters
-    ///
-    /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
-    ///   to use for finding the records.
-    /// * `queue`       - An optional queue to send changes to. If this is
-    ///   provided, the function will listen for changes to the
-    ///   result set and send them to the queue. This is useful
-    ///   for live updates.
-    ///
     /// # Errors
     ///
     /// See [`Model::find()`].
@@ -113,12 +104,6 @@ pub trait ModelExtension: Model {
     /// out this process, for uniformity and centralisation of this common
     /// operation.
     ///
-    /// # Parameters
-    ///
-    /// * `id`        - The ID of the record to find.
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for finding the record.
-    ///
     /// # Errors
     ///
     /// See [`Model::find_first()`].
@@ -139,12 +124,6 @@ pub trait ModelExtension: Model {
 
     /// Finds a records by its IDs.
     /// Work with `local_id` field or `remote_id` field.
-    ///
-    /// # Parameters
-    ///
-    /// * `ids`         - The IDs of the records to find
-    /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for finding the record.
     ///
     /// # Errors
     ///
@@ -253,11 +232,6 @@ pub trait ModelExtension: Model {
     ///   required. It can be empty. Note that each part of the
     ///   logic is optional — so if conditions are passed, for
     ///   instance, the `WHERE` keyword needs to be included.
-    /// * `params`      - The parameters to use in the query. These should be in
-    ///   the order they are expected in the query logic, and
-    ///   match with any expectations set in the query logic.
-    /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
-    ///   to use for finding the records.
     ///
     /// # Errors
     ///
@@ -402,12 +376,6 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
     /// out this process, for uniformity and centralisation of this common
     /// operation.
     ///
-    /// # Parameters
-    ///
-    /// * `id`        - The ID of the record to find.
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for finding the record.
-    ///
     /// # Errors
     ///
     /// See [`Model::find_first()`].
@@ -430,12 +398,6 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
     }
 
     /// Finds records by its remote IDs.
-    ///
-    /// # Parameters
-    ///
-    /// * `ids`         - The IDs of the records to find
-    /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for finding the record.
     ///
     /// # Errors
     ///
@@ -654,11 +616,6 @@ pub trait ModelIdExtension: ModelExtension + Model<IdType: LocalIdMarker> {
     ///   required. It can be empty. Note that each part of the
     ///   logic is optional — so if conditions are passed, for
     ///   instance, the `WHERE` keyword needs to be included.
-    /// * `params`      - The parameters to use in the query. These should be in
-    ///   the order they are expected in the query logic, and
-    ///   match with any expectations set in the query logic.
-    /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
-    ///   to use for finding the records.
     ///
     /// # Errors
     ///
