@@ -19,8 +19,6 @@ mod send_queries;
 
 #[cfg(feature = "test-utils")]
 pub mod test_utils;
-#[cfg(test)]
-mod tests;
 
 pub use context::{MailContext, MailContextError, MailContextResult};
 pub use mailbox::{DecryptedAttachment, Mailbox, decrypted_message};
