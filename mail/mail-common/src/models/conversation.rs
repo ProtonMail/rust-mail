@@ -1858,10 +1858,12 @@ impl Conversation {
             };
             // Find all messages that need to be marked as read.
             let message = Message::find_first(
-                "WHERE local_conversation_id=?
+                "
+                JOIN message_labels AS ml ON messages.local_id = ml.local_message_id AND local_label_id=?
+                WHERE local_conversation_id=?
                 AND unread=0
                 ORDER BY time DESC",
-                params![conversation_id],
+                params![local_label_id, conversation_id],
                 bond,
             )
             .await?;
