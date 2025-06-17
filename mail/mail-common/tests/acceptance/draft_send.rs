@@ -1,5 +1,4 @@
-mod drafts_common;
-use crate::drafts_common::draft_message;
+use super::drafts_common::{self, draft_message};
 use chrono::{Days, Local, Months, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
 use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
 use proton_core_api::consts::{CoreBundle, Mail};

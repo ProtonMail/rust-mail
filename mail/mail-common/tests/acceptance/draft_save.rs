@@ -1,5 +1,4 @@
-mod drafts_common;
-use drafts_common::*;
+use super::drafts_common::*;
 use itertools::Itertools;
 use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
 use proton_core_api::consts::{CoreBundle, Mail};

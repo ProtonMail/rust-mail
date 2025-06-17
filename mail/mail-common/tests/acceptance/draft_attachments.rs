@@ -1,4 +1,4 @@
-use crate::drafts_common::{
+use super::drafts_common::{
     draft_message, draft_test_params, draft_test_params_with_mime_type,
     expected_create_draft_params, expected_create_reply_draft_params,
 };
@@ -31,8 +31,6 @@ use proton_mail_common::{MailContextError, MailUserContext, draft};
 use stash::orm::Model;
 use stash::stash::Tether;
 use std::path::Path;
-
-mod drafts_common;
 
 #[tokio::test]
 async fn attachment_not_removed_on_error() {
