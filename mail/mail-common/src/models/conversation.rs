@@ -689,13 +689,13 @@ impl Conversation {
                 .query_values::<_, LocalMessageId>(
                     indoc::indoc! {"
                     WITH conv_msgs AS (
-                        SELECT local_id, ? AS label_id 
-                        FROM messages 
+                        SELECT local_id, ? AS label_id
+                        FROM messages
                         WHERE local_conversation_id=?
                     )
                     INSERT OR IGNORE INTO
                         message_labels (local_message_id, local_label_id)
-                    SELECT * FROM conv_msgs 
+                    SELECT * FROM conv_msgs
                     RETURNING local_message_id AS value
                     "},
                     params![label_id, id],
@@ -2008,7 +2008,7 @@ impl Conversation {
                     DELETE FROM message_labels
                     WHERE local_message_id IN (
                         SELECT local_id
-                        FROM messages 
+                        FROM messages
                         WHERE local_conversation_id=?1
                     ) AND message_labels.local_label_id=?2
                     RETURNING local_message_id AS value
@@ -2302,8 +2302,8 @@ impl Conversation {
             .query_values(
                 formatdoc! {"
                 SELECT local_label_id AS value
-                FROM conversation_labels 
-                WHERE 
+                FROM conversation_labels
+                WHERE
                     local_conversation_id in ({})"
                     , placeholders(ids)
                 },
@@ -2824,12 +2824,13 @@ impl Conversation {
         tx: &mut impl RunTransaction,
         session: &Session,
     ) -> Result<(), AppError> {
-        let Some(conversation) = Self::find_by_id(local_conversation_id, tx.tether()).await? else {
+        let Some(mut conversation) = Self::find_by_id(local_conversation_id, tx.tether()).await?
+        else {
             return Err(AppError::ConversationNotFound(local_conversation_id));
         };
 
         if !conversation.has_messages {
-            let Some(rid) = conversation.remote_id else {
+            let Some(ref rid) = conversation.remote_id else {
                 return Err(AppError::ConversationHasNoRemoteId(local_conversation_id));
             };
             debug!("Syncing conversation messages");
@@ -2841,14 +2842,18 @@ impl Conversation {
                 )));
             }
 
-            let conversation_response = session.api().get_conversation(rid).await.map_err(|e| {
-                error!("failed to download conversation messages: {e:?}");
-                AppError::from(e)
-            })?;
+            let conversation_response =
+                session
+                    .api()
+                    .get_conversation(rid.clone())
+                    .await
+                    .map_err(|e| {
+                        error!("failed to download conversation messages: {e:?}");
+                        AppError::from(e)
+                    })?;
 
-            tx.run_tx::<_, _>(async |tx| {
+            tx.run_tx::<_, _>(async move |tx| {
                 let message_metadata: Vec<ApiMessageMetadata> = conversation_response.messages;
-                let mut new_conversation: Conversation = conversation_response.conversation.into();
 
                 Message::create_or_update_messages_from_metadata(message_metadata, tx)
                     .await
@@ -2857,11 +2862,8 @@ impl Conversation {
                         e
                     })?;
 
-                new_conversation.local_id = conversation.local_id;
-                new_conversation.row_id = conversation.row_id;
-                new_conversation.has_messages = true;
-
-                new_conversation.save(tx).await.map_err(|e| {
+                conversation.has_messages = true;
+                conversation.save(tx).await.map_err(|e| {
                     error!("Failed to write conversation: {e:?}");
                     e
                 })?;
@@ -3369,7 +3371,7 @@ impl ConversationMessageLabelStats {
                 JOIN message_labels AS ML ON
                     ML.local_message_id = messages.local_id AND
                     ML.local_label_id = ?
-                WHERE 
+                WHERE
                     messages.local_conversation_id = ? AND
                     messages.local_id IN ({})
             ",
