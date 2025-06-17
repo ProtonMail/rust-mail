@@ -1,14 +1,8 @@
-use crate::service::ApiServiceResult;
-
-export! {
-    mod common (as pub);
-    mod request_data (as pub);
-    mod requests (as pub);
-    mod response_data (as pub);
-    mod responses (as pub);
-}
-
 mod auth_impl;
+mod responses;
+
+pub use self::responses::*;
+use crate::service::ApiServiceResult;
 
 /// The Proton Auth API base path (v4).
 pub const AUTH_V4: &str = "/auth/v4";
