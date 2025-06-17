@@ -1487,7 +1487,7 @@ impl Conversation {
         }
 
         fn first_consecutive_unread_msg(
-            label_id: &LabelId,
+            label_id: Option<&LabelId>,
             messages: &[Message],
             filter: impl Fn(&Message) -> bool,
         ) -> Option<LocalMessageId> {
@@ -1505,7 +1505,9 @@ impl Conversation {
                 messages
                     .iter()
                     .rev()
-                    .find(|m| filter(m) && m.label_ids.contains(label_id))
+                    .find(|m| {
+                        filter(m) && label_id.is_none_or(|label_id| m.label_ids.contains(label_id))
+                    })
                     .and_then(|m| m.local_id)
             })
         }
@@ -1513,7 +1515,13 @@ impl Conversation {
         let view_is_starred_label_or_folder = label.label_type == LabelType::Label
             || label.label_type == LabelType::Folder
             || label.remote_id == Some(LabelId::starred());
-        let label_id = label.remote_id.as_ref()?;
+        // If this is not a custom label or a folder we don't want to match against
+        // label id.
+        let label_id = if label.label_type != LabelType::System {
+            Some(label.remote_id.as_ref()?)
+        } else {
+            None
+        };
 
         if view_is_starred_label_or_folder {
             first_consecutive_unread_msg(label_id, messages, |msg| !msg.flags.is_draft())

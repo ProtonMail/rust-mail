@@ -234,7 +234,7 @@ mod first_unread_message {
         (MessageFlags::RECEIVED, false, &[&INBOX]),
         (MessageFlags::RECEIVED, false, &[&INBOX]),
         (MessageFlags::RECEIVED, false, &[&FOLDER]),
-    ], Some(1.into()); "TEST26 - different view labels"
+    ], Some(2.into()); "TEST26 - different view labels"
 )]
     #[test_case(
     &[&INBOX], &[
@@ -250,6 +250,13 @@ mod first_unread_message {
         (MessageFlags::RECEIVED, false, &[&INBOX]),
     ], Some(2.into()); "TEST28 - different view labels"
 )]
+    #[test_case(
+    &[&FOLDER], &[
+        (MessageFlags::RECEIVED, false, &[&INBOX]),
+        (MessageFlags::RECEIVED, false, &[&FOLDER]),
+        (MessageFlags::RECEIVED, false, &[&INBOX]),
+    ], Some(1.into()); "TEST29 - different view labels in custom folder"
+    )]
     fn first_unread_message(
         labels: &[&Label],
         messages: &[(MessageFlags, bool, &[&Label])],
