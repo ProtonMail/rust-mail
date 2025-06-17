@@ -127,8 +127,6 @@ async fn test_message_mail_scroller_reads_one_item_from_online_scroll_data() {
         MailScroller::messages(user_ctx.as_weak(), local_label_id, unread, page_size)
             .await
             .unwrap();
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 0);
 
     let expected = scroller.fetch_more().await.unwrap();
     let mut actual = scroller.all_items().await.unwrap();

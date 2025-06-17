@@ -304,7 +304,7 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
 
             info!(
                 "Queue conversations to refresh, count: {}",
-                conv_scroll_cursor.all_element_count(&tether).await?
+                conv_scroll_cursor.synced_count(&tether).await?
             );
 
             while let Some(page) = conv_scroll_cursor.while_fetch_more(&tether).await? {
@@ -326,7 +326,7 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
 
             info!(
                 "Queue messages to refresh, count: {}",
-                msg_scroll_cursor.all_element_count(&tether).await?
+                msg_scroll_cursor.synced_count(&tether).await?
             );
 
             while let Some(page) = msg_scroll_cursor.while_fetch_more(&tether).await? {

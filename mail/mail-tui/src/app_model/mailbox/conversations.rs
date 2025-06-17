@@ -257,7 +257,7 @@ impl ConversationsState {
                         Command::task(async move {
                             let paginator = paginator_clone.lock().await;
                             let has_more = paginator.has_more().await.unwrap();
-                            let total = paginator.total();
+                            let total = paginator.total().await.unwrap();
                             let seen = paginator.seen().await.unwrap();
                             Command::message(Messages::DisplayInfo(
                                 Some("Has more".to_owned()),
