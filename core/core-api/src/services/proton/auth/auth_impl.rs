@@ -1,8 +1,8 @@
 use crate::service::ApiServiceResult;
-use crate::services::proton::auth::{ProtonAuth, AUTH_V4};
-use crate::services::proton::prelude::*;
 use crate::services::proton::Proton;
-use muon::{util::ProtonRequestExt, GET};
+use crate::services::proton::auth::{AUTH_V4, ProtonAuth};
+use crate::services::proton::prelude::*;
+use muon::{GET, util::ProtonRequestExt};
 
 impl ProtonAuth for Proton {
     async fn get_sessions_uuid(&self) -> ApiServiceResult<GetSessionsUuidResponse> {

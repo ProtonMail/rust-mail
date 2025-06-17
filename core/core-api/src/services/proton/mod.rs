@@ -70,43 +70,25 @@ use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::RwLock;
 
-/// Re-export muon for downstream convenience.
-pub extern crate muon;
-
-/// The Proton type is just an alias for the muon client.
-pub type Proton = muon::Client;
-
-/// The prelude for the Proton API service.
-pub mod prelude;
-
-/// Common types used by the Proton API.
-pub mod common;
-
-/// Defines helper traits.
-pub mod traits;
-
-export! {
-    /// Defines and implements the `ProtonAuth` trait.
-    mod auth (as pub);
-
-    /// Defines and implements the `ProtonCore` trait.
-    mod core (as pub);
-
-    /// Defines and implements the `ProtonData` trait.
-    mod data (as pub);
-
-    /// Defines and implements the `ProtonPayments` trait.
-    mod payments (as pub);
-}
-
-/// Implements the auth store wrapper for the client.
+mod auth;
+mod core;
+mod data;
+mod layers;
+mod macros;
+mod payments;
 mod store;
 
-/// Defines marker traits.
-mod layers;
+pub type Proton = muon::Client;
 
-/// Defines helper macros.
-mod macros;
+pub mod common;
+pub mod prelude;
+pub mod traits;
+
+pub use self::auth::*;
+pub use self::core::*;
+pub use self::data::*;
+pub use self::payments::*;
+pub use muon;
 
 /// An error that can occur when building a Proton client.
 #[derive(Debug, Error)]

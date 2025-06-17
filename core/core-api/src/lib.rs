@@ -4,9 +4,6 @@
 
 //! Rust bindings for the REST API for Proton
 
-#[macro_use]
-mod macros;
-
 pub mod auth;
 pub mod connection_status;
 pub mod consts;

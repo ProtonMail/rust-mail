@@ -1,16 +1,15 @@
-use bytes::Bytes;
-
-use crate::service::ApiServiceResult;
-
-export! {
-    mod common (as pub);
-    mod request_data (as pub);
-    mod requests (as pub);
-    mod response_data (as pub);
-    mod responses (as pub);
-}
-
+mod common;
 mod payments_impl;
+mod request_data;
+mod requests;
+mod responses;
+
+pub use self::common::*;
+pub use self::request_data::*;
+pub use self::requests::*;
+pub use self::responses::*;
+use crate::service::ApiServiceResult;
+use bytes::Bytes;
 
 /// The Proton Payments API base path (v5).
 pub const PAYMENTS_V5: &str = "/payments/v5";

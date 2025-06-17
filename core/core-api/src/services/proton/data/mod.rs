@@ -1,14 +1,10 @@
-use crate::service::ApiServiceResult;
-
-export! {
-    mod common (as pub);
-    mod request_data (as pub);
-    mod requests (as pub);
-    mod response_data (as pub);
-    mod responses (as pub);
-}
-
 mod data_impl;
+mod request_data;
+mod requests;
+
+pub use self::request_data::*;
+pub use self::requests::*;
+use crate::service::ApiServiceResult;
 
 /// The Proton Data API base path (v1).
 pub const DATA_V1: &str = "/data/v1";

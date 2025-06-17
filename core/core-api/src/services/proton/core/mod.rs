@@ -1,21 +1,21 @@
-use std::future::Future;
-use std::time::Duration;
+mod common;
+mod core_impl;
+mod request_data;
+mod requests;
+mod response_data;
+mod responses;
 
+pub use self::common::*;
+pub use self::request_data::*;
+pub use self::requests::*;
+pub use self::response_data::*;
+pub use self::responses::*;
+use crate::service::ApiServiceResult;
 use bytes::Bytes;
 use muon::common::RetryPolicy;
 use proton_crypto_account::keys::APIPublicAddressKeys;
-
-use crate::service::ApiServiceResult;
-
-export! {
-    mod common (as pub);
-    mod request_data (as pub);
-    mod requests (as pub);
-    mod response_data (as pub);
-    mod responses (as pub);
-}
-
-mod core_impl;
+use std::future::Future;
+use std::time::Duration;
 
 /// The Proton Core API base path (v4).
 pub const CORE_V4: &str = "/core/v4";
