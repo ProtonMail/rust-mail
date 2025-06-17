@@ -60,11 +60,6 @@ impl CustomFolder {
     ///
     /// Note: The field `children` is created empty, if needed it must be filled later.
     ///
-    /// # Parameters
-    ///
-    /// * `label`     - the original [`Label`].
-    /// * `interface` - a connexion to the database
-    ///
     pub fn new(
         label: &Label,
         color: Option<LabelColor>,
@@ -91,11 +86,6 @@ impl CustomFolder {
     }
 
     /// Create a vec of `CustomFolder` from a vec of [`Label`]
-    ///
-    /// # Parameters
-    ///
-    /// * `labels`    - the original [`Label`]s to convert in `CustomFolder`.
-    /// * `interface` - a connexion to the database
     ///
     pub async fn from_labels(labels: &[Label], tether: &Tether) -> Result<Vec<Self>, AppError> {
         let mut result = Vec::with_capacity(labels.len());

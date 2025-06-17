@@ -303,11 +303,6 @@ impl MailUserContext {
 
     /// Returns the unlocked user keys of this user.
     ///
-    /// # Parameters
-    ///
-    /// * `pgp`          - The `OpenPGP` crypto provider from [`proton_crypto_inbox::proton_crypto`].
-    /// * `conn`         - The database connection to load the keys from database.
-    ///
     /// # Errors
     /// Returns a wrapped [`MailContextError::KeyHandlingError`] if the operation fails.
     ///
@@ -327,12 +322,6 @@ impl MailUserContext {
     }
 
     /// Returns the unlocked address keys of this user for the provided address.
-    ///
-    /// # Parameters
-    ///
-    /// * `pgp`          - The `OpenPGP` crypto provider from [`proton_crypto_inbox::proton_crypto`].
-    /// * `conn`         - The database connection to load the keys from database.
-    /// * `address_id`   - The address identifier to load the keys for.
     ///
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
@@ -361,14 +350,6 @@ impl MailUserContext {
     /// [internal confluence docs](https://protonag.atlassian.net/wiki/spaces/MAILFE/pages/53117391/Send+preferences+for+outgoing+email)
     /// This information is collected from the keys returned by the API, contact vCard data,
     /// sender mail settings, and composer preferences.
-    ///
-    /// # Parameters
-    ///
-    /// * `pgp`                 - The `OpenPGP` crypto provider from [`proton_crypto_inbox::proton_crypto`].
-    /// * `tx `                 - The transaction to query from.
-    /// * `email`               - The email address of the recipient.
-    /// * `settings`            - The [`CryptoMailSettings`] extracted from the mail settings [`super::models::MailSettings::crypto_mail_settings`]
-    /// * `composer_preference` - (currently unused) The composer preferences, use [`ComposerPreference::default()`].
     ///
     /// # Errors
     /// Returns a wrapped [`KeyHandlingError`] or [`proton_crypto_inbox::keys::EncryptionPreferencesError`] if the operation fails.

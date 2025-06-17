@@ -22,11 +22,6 @@ impl TestContext {
     ///
     /// This function will mock the response for the given user settings.
     ///
-    /// # Parameters
-    ///
-    /// * `settings` - The user settings to respond with. If `None`, default values will be used.
-    /// * `expect`   - How many times the endpoint should be called.
-    ///
     #[function_name::named]
     pub async fn mock_get_user_settings(
         &self,
@@ -49,11 +44,6 @@ impl TestContext {
     /// Generate new mock expectations for retrieving user information.
     ///
     /// This function will mock the response for the given user.
-    ///
-    /// # Parameters
-    ///
-    /// * `user`   - The user to respond with. If `None`, default values will be used.
-    /// * `expect` - How many times the endpoint should be called.
     ///
     #[function_name::named]
     pub async fn mock_get_user(&self, user: Option<ApiUser>, expect: impl Into<Times>) {

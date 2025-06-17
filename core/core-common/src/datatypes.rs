@@ -952,10 +952,6 @@ pub struct ContactTypes(Vec<String>);
 impl ContactTypes {
     /// Create a new [`ContactTypes`] instance from a list of [`String`]s.
     ///
-    /// # Parameters
-    ///
-    /// * `types` - The types to wrap.
-    ///
     #[must_use]
     pub fn new(types: Vec<String>) -> Self {
         Self(types)
@@ -1084,10 +1080,6 @@ pub struct Labels(Vec<LabelId>);
 
 impl Labels {
     /// Create a new [`Labels`] instance from a list of [`LabelId`]s.
-    ///
-    /// # Parameters
-    ///
-    /// * `ids` - The IDs to wrap.
     ///
     #[must_use]
     pub fn new(ids: Vec<LabelId>) -> Self {
@@ -1373,10 +1365,6 @@ pub struct AuthScopes(Vec<String>);
 
 impl AuthScopes {
     /// Create a new [`AuthScopes`] instance from a list of [`String`]s.
-    ///
-    /// # Parameters
-    ///
-    /// * `scopes` - The scopes to wrap.
     ///
     /// TODO: Might be better to have a `From<Vec<String>>` implementation.
     ///

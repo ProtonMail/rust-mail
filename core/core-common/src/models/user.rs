@@ -141,11 +141,6 @@ impl User {
     /// It's imperative that you use this method over [`Model::save()`] to
     /// ensure that existing conversations are updated.
     ///
-    /// # Parameters
-    ///
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for finding the records.
-    ///
     /// # Errors
     ///
     /// Returns an error if the local conversation id is not set or the query
@@ -162,11 +157,6 @@ impl User {
     }
 
     /// Download and store user info and settings into the database
-    ///
-    /// # Parameters
-    ///
-    /// * `stash` - The database instance to store the addresses.
-    /// * `api`   - The API instance to use to download the addresses.
     ///
     /// # Errors
     ///

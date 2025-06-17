@@ -42,11 +42,6 @@ impl SystemLabel {
     /// Create a view on a [`Label`] keeping and transforming the field, so they contain the data
     /// needed by UI.
     ///
-    /// # Parameters
-    ///
-    /// * `label`     - the original [`Label`].
-    /// * `interface` - a connexion to the database
-    ///
     pub async fn new(label: &Label, tether: &Tether) -> Result<Self, AppError> {
         let (unread, total) = messages_counts(label, tether).await?;
         let label_description = LabelDescription::new(label);
@@ -65,11 +60,6 @@ impl SystemLabel {
 
     /// Create a vec of `SystemLabel` from a vec of [`Label`]
     ///
-    /// # Parameters
-    ///
-    /// * `labels`    - the original [`Label`]s to convert in `SystemLabel`.
-    /// * `interface` - a connexion to the database
-    //
     pub async fn from_labels(labels: &[Label], tether: &Tether) -> Result<Vec<Self>, AppError> {
         let mut result = Vec::with_capacity(labels.len());
         for label in labels {

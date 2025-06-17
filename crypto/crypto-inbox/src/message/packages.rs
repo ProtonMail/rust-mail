@@ -83,13 +83,6 @@ impl EncryptedPackageBody {
     /// This function attempts to extract the session key from the provided draft using the given `decryption_keys`.
     /// If successful, it constructs an [`EncryptedPackageBody`] with the specified `mime_type`.
     ///
-    /// # Parameters
-    ///
-    /// * `provider` - The PGP implementation providing the functions required for message importing, separation, and decryption.
-    /// * `draft`: A reference to a type that implements the [`SessionKeyAndDataPacketsExtractable`] trait. This draft contains the PGP message from which the session key and data packets will be extracted.
-    /// * `mime_type`: The MIME type of the package to be created.
-    /// * `decryption_keys`: A slice of `OpenPGP `decryption private keys. These keys are used to attempt decryption of the session key contained within the draft.
-    ///
     /// # Errors
     ///
     /// Returns a [`MessageError`] if the PGP message may not be imported (if it is malformed), or if decrypting the session key packet
@@ -125,11 +118,6 @@ pub trait EncryptablePackage {
     /// for each recipient address of the package. It also allows extraction of the message
     /// session key to enable the server to decrypt the content for cleartext recipients.
     ///
-    /// # Parameters
-    ///
-    /// * `pgp` - The PGP provider instance from [`proton_crypto_account::proton_crypto`].
-    /// * `address_key` - The user's address key with which the body is signed.
-    ///
     /// # Errors
     ///
     /// Returns a [`MessageError::Encryption`] error if the encryption fails.
@@ -155,13 +143,6 @@ pub trait EncryptablePackage {
 /// The returned [`EncryptedPackageBody`] can be used to create individual key packets
 /// for each recipient address of the package. It also allows extraction of the message
 /// session key to enable the server to decrypt the content for cleartext recipients.
-///
-/// # Parameters
-///
-/// * `pgp` - The PGP provider instance from [`proton_crypto_account::proton_crypto`].
-/// * `address_key`  - The user's address key with which the body is signed.
-/// * `mime_type`    - The mime type of the content.
-/// * `body`         - The body to encrypt.
 ///
 /// # Errors
 ///

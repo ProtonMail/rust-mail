@@ -139,12 +139,6 @@ where
     /// SQL types into a Rust record type. It is used to convert the results of
     /// a query into a specific type `T`.
     ///
-    /// # Parameters
-    ///
-    /// * `row`     - The row from the database to convert into a record.
-    /// * `columns` - The names of the columns in the row.
-    /// * `stash`   - The associated [`Stash`] instance for the operation.
-    ///
     /// # Errors
     ///
     /// This function will return a [`ConversionError`] if there is a problem
@@ -273,15 +267,7 @@ where
     ///   required. It can be empty. Note that each part of the
     ///   logic is optional — so if conditions are passed, for
     ///   instance, the `WHERE` keyword needs to be included.
-    /// * `params`      - The parameters to use in the query. These should be in
-    ///   the order they are expected in the query logic, and
-    ///   match with any expectations set in the query logic.
-    /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
-    ///   to use for finding the records.
-    /// * `queue`       - An optional queue to send changes to. If this is
-    ///   provided, the function will listen for changes to the
-    ///   result set and send them to the queue. This is useful
-    ///   for live updates.
+    ///
     fn find<Q>(
         query_logic: Q,
         params: Vec<Box<dyn ToSql + Send>>,
@@ -317,11 +303,6 @@ where
     ///   required. It can be empty. Note that each part of the
     ///   logic is optional — so if conditions are passed, for
     ///   instance, the `WHERE` keyword needs to be included.
-    /// * `params`      - The parameters to use in the query. These should be in
-    ///   the order they are expected in the query logic, and
-    ///   match with any expectations set in the query logic.
-    /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
-    ///   to use for finding the records.
     ///
     /// # Errors
     ///
@@ -378,13 +359,6 @@ where
     ///
     /// After loading, the [`Stash`] will be set against the record instance, so
     /// that instance-based operations have the correct context.
-    ///
-    /// # Parameters
-    ///
-    /// * `id`        - The ID of the record to load.
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for loading the record. It is necessary to provide
-    ///   this in order to know where to load the record from.
     ///
     /// # Errors
     ///
@@ -474,11 +448,6 @@ where
     ///   required. It can be empty. Note that each part of the
     ///   logic is optional — so if conditions are passed, for
     ///   instance, the `WHERE` keyword needs to be included.
-    /// * `params`      - The parameters to use in the query. These should be in
-    ///   the order they are expected in the query logic, and
-    ///   match with any expectations set in the query logic.
-    /// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
-    ///   to use for finding the records.
     ///
     /// # Errors
     ///
@@ -567,11 +536,6 @@ impl IntoIterator for DbRecords {
 /// The key point of this function is to provide contextual information in the
 /// form of columns along with the row data.
 ///
-/// # Parameters
-///
-/// * `rows`  - The query results to convert into records.
-/// * `stash` - The associated [`Stash`] instance for the operation.
-///
 /// # Errors
 ///
 /// This function will return a [`ConversionError`] if there is a problem
@@ -614,14 +578,6 @@ pub fn from_rows<T: DbRecord>(mut rows: Rows<'_>) -> Result<Vec<T>, ConversionEr
 ///   required. It can be empty. Note that each part of the
 ///   logic is optional — so if conditions are passed, for
 ///   instance, the `WHERE` keyword needs to be included.
-/// * `params`      - The parameters to use in the query. These should be in the
-///   order they are expected in the query logic, and match with
-///   any expectations set in the query logic.
-/// * `interface`   - The database interface, i.e. [`Stash`] or [`Tether`],
-///   to use for finding the records.
-/// * `queue`       - An optional queue to send changes to. If this is provided,
-///   the function will listen for changes to the result set and
-///   send them to the queue. This is useful for live updates.
 ///
 /// # Errors
 ///
@@ -671,12 +627,6 @@ where
 ///
 /// For full usage details, see [`Model::load()`].
 ///
-/// # Parameters
-///
-/// * `id`        - The ID of the record to load.
-/// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-///   use for loading the record.
-///
 /// # Errors
 ///
 /// See [`Model::load()`].
@@ -723,12 +673,6 @@ where
 /// [`save()`](Model::save())
 ///
 /// For full usage details, see [`save()`](Model::save()).
-///
-/// # Parameters
-///
-/// * `model`     - The [`Model`] instance.
-/// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to use
-///   for saving the record.
 ///
 /// # Errors
 ///

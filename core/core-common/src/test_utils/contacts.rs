@@ -19,10 +19,6 @@ use wiremock::{
 impl TestContext {
     /// Generate new mock for retrieving contacts without emails and cards from the API.
     ///
-    /// # Parameters
-    ///
-    /// * `contacts` - The contacts that should be in the mocked return.
-    ///
     #[function_name::named]
     pub async fn mock_get_all_contacts_partial_request(&self, contacts: Vec<ApiContactBasic>) {
         let num_contacts = contacts.len() as u64;
@@ -42,11 +38,6 @@ impl TestContext {
     /// Generate new mock expectations for retrieving contacts.
     ///
     /// This function will mock the response for the given contacts.
-    ///
-    /// # Parameters
-    ///
-    /// * `contacts` - The list of contacts to respond with. If `None`, an empty list will be used.
-    /// * `expect`   - How many times the endpoint should be called.
     ///
     #[function_name::named]
     pub async fn mock_get_contacts(
@@ -80,11 +71,6 @@ impl TestContext {
     ///
     /// This function will mock the response for the given contact emails.
     ///
-    /// # Parameters
-    ///
-    /// * `contact_emails` - The list of contact emails to respond with. If `None`, an empty list will be used.
-    /// * `expect`         - How many times the endpoint should be called.
-    ///
     #[function_name::named]
     pub async fn mock_get_contacts_emails(
         &self,
@@ -108,10 +94,6 @@ impl TestContext {
 
     /// Generate new mock for retrieving contacts without emails and cards from the API.
     ///
-    /// # Parameters
-    ///
-    /// * `contacts` - The contacts that should be in the mocked return.
-    ///
     #[function_name::named]
     pub async fn mock_get_all_contact_emails_request(&self, contact_emails: Vec<ApiContactEmail>) {
         let num_contacts = contact_emails.len() as u64;
@@ -130,10 +112,6 @@ impl TestContext {
 
     /// Generate new mock for retrieving a full contact with emails and cards from the API.
     ///
-    /// # Parameters
-    ///
-    /// * `contacts` - The contacts that should be in the mocked return.
-    ///
     #[function_name::named]
     pub async fn mock_get_full_contact(&self, contact: ApiContactFull) {
         Mock::given(method("GET"))
@@ -146,10 +124,6 @@ impl TestContext {
     }
 
     /// Generate new mock for deleting contacts from the API.
-    ///
-    /// # Parameters
-    ///
-    /// * `contact_ids` - The contacts that should be delted.
     ///
     #[function_name::named]
     pub async fn mock_delete_contacts(&self, contact_ids: Vec<ContactId>) {

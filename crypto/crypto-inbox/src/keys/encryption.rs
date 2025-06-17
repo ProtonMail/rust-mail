@@ -199,15 +199,6 @@ impl<Pub: PublicKey> EncryptionPreferences<Pub> {
     /// encryption, if applicable.
     /// See [confluence](https://confluence.protontech.ch/display/MAILFE/Send+preferences+for+outgoing+email) for more details on the logic.
     ///
-    /// # Parameters
-    ///
-    /// - `recipient_key_model`: A `RecipientPublicKeyModel<Pub>` containing the recipient's public key
-    ///   information, contact type, and other relevant details. This model is used to determine the best
-    ///   encryption key and preferences for the recipient.
-    /// - `crypto_mail_settings`: A reference to `CryptoMailSettings` that holds the user's default settings
-    ///   for signing and PGP scheme. These settings are used as fallbacks when the recipient-specific preferences
-    ///   are not fully defined.
-    ///
     /// # Errors
     ///
     /// An [`EncryptionPreferencesError`] if the key selection fails.
@@ -269,15 +260,6 @@ impl<Pub: PublicKey> EncryptionPreferences<Pub> {
     /// from the user's own address keys. The selected key must be capable of encryption, not compromised,
     /// and not obsolete. The function uses the user's mail settings to configure the PGP scheme and MIME type
     /// for the email.
-    ///
-    /// # Parameters
-    ///
-    /// - `address_keys`: A slice of `DecryptedAddressKey<Priv, Pub>` representing the user's own address keys.
-    ///   The function iterates through these keys to find a valid primary key for encryption.
-    /// - `mail_settings`: A reference to `CryptoMailSettings` containing the user's default settings for PGP
-    ///   scheme and MIME type. These settings are applied to the generated `EncryptionPreferences`.
-    /// - `encryption_time`: A `UnixTimestamp` representing the current time used to validate the encryption
-    ///   capability of the keys.
     ///
     /// # Errors
     ///
@@ -464,14 +446,6 @@ impl<Pub: PublicKey> SendPreferences<Pub> {
     /// preferences with additional settings from the composer. It derives the package mode of encryption and the
     /// MIME type of the package body.
     /// See [confluence](https://confluence.protontech.ch/display/MAILFE/Send+preferences+for+outgoing+email) for more details on the logic.
-    ///
-    /// # Parameters
-    ///
-    /// - `encryption_preferences`: An `EncryptionPreferences<Pub>` instance that contains the initial encryption
-    ///   and signing preferences, PGP scheme, MIME type, and details about the selected public key and key
-    ///   transparency verification.
-    /// - `encrypt_to_outside`: A `bool` indicating that the user has enable encrypt to outside in the composer.
-    /// - `composer_sign`: A `bool` indicating whether the email should be signed based on the user's choice in the composer.
     pub fn from_preferences(
         encryption_preferences: EncryptionPreferences<Pub>,
         composer_preferences: ComposerPreference,
@@ -531,15 +505,6 @@ impl<Pub: PublicKey> SendPreferences<Pub> {
     /// and signing.
     /// See [confluence](https://confluence.protontech.ch/display/MAILFE/Send+preferences+for+outgoing+email) for more details on the logic.
     ///
-    /// # Parameters
-    ///
-    /// - `api_keys`: The `InboxPublicKeys<Pub>` containing the recipient's public keys.
-    /// - `pinned_keys`: An optional `PinnedPublicKeys<Pub>` representing additional encryption key preferences from a v-card.
-    /// - `encryption_time`: The `UnixTimestamp` representing the current time for validating the `OpenPGP` keys.
-    /// - `crypto_mail_settings`: A reference to `CryptoMailSettings` defining the user's default encryption and signing settings.
-    /// - `encrypt_to_outside`: A `bool` indicating that the user has enabled encrypt to outside explicitly in the composer. `false` is default.
-    /// - `composer_sign`: A `bool` indicating whether the email should be signed based on the user's choice in the composer. `false` is default.
-    ///
     /// # Errors
     ///
     /// An [`EncryptionPreferencesError`] if the key selection fails.
@@ -575,12 +540,6 @@ impl<Pub: PublicKey> SendPreferences<Pub> {
     ///
     /// This function is specifically designed for creating send preferences for users sending to themselves, where encryption and
     /// signing are generally enabled by default.
-    ///
-    /// # Parameters
-    ///
-    /// - `address_keys`: A slice of `DecryptedAddressKey<Priv, Pub>` containing the decrypted address keys of the user.
-    /// - `encryption_time`: A `UnixTimestamp` representing the current time, used to validate the `OpenPGP` key.
-    /// - `crypto_mail_settings`: A reference to `CryptoMailSettings` defining the user's default encryption and signing settings.
     ///
     /// # Errors
     ///

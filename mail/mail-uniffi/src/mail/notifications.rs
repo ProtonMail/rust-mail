@@ -186,12 +186,6 @@ impl From<RealNotificationSender> for NotificationSender {
 /// Decrypt and deserialize Push notification.
 /// This function is mail (inbox) specific
 ///
-/// # Parameters
-///
-/// * `session` - a mail session, used before logging in. Based on the notification payload, the SDK will find
-///   user session accordingly.
-/// * `encrypted` - encrypted message received from the Push API
-///
 /// # Errors
 ///
 /// This function may return an error if decryption fails, or it the decrypted message is not in the expected

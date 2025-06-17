@@ -986,13 +986,6 @@ pub struct ConversationCount {
 
 impl ConversationCount {
     /// Converts a [`RealConversationCount`] into a [`ConversationCount`].
-    ///
-    /// # Parameters
-    ///
-    /// * `value`     - The [`RealConversationCount`] to convert.
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for finding the records.
-    ///
     pub async fn try_from_real(
         value: RealConversationCount,
         tether: &Tether,
@@ -1085,12 +1078,6 @@ pub struct ConversationSearchOptions {
 
 impl ConversationSearchOptions {
     /// Converts incoming client options to API options.
-    ///
-    /// # Parameters
-    ///
-    /// * `interface` - The database interface, i.e. [`Stash`](stash::stash::Stash)
-    ///   or [`Tether`](tether::tether::Tether) to use for finding
-    ///   the records.
     ///
     /// # Errors
     ///
@@ -1716,13 +1703,6 @@ pub struct MessageCount {
 
 impl MessageCount {
     /// Converts a [`RealMessageCount`] into a [`MessageCount`].
-    ///
-    /// # Parameters
-    ///
-    /// * `value`     - The [`RealMessageCount`] to convert.
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for finding the records.
-    ///
     pub async fn try_from_real(value: RealMessageCount, tether: &Tether) -> Result<Self, AppError> {
         Ok(Self {
             label_id: RealLabel::remote_id_counterpart(value.label_id.clone(), tether)
@@ -1842,12 +1822,6 @@ pub struct MessageSearchOptions {
 
 impl MessageSearchOptions {
     /// Converts incoming client options to API options.
-    ///
-    /// # Parameters
-    ///
-    /// * `interface` - The database interface, i.e. [`Stash`](stash::stash::Stash)
-    ///   or [`Tether`](tether::tether::Tether) to use for finding
-    ///   the records.
     ///
     /// # Errors
     ///

@@ -467,11 +467,6 @@ impl Stash {
     // managed by it, as there can only be one worker per [`Stash`] instance
     // and database operations need to be executed sequentially.
     ///
-    /// # Parameters
-    ///
-    /// * `path` - The path to the SQLite database file. If `None`, an in-memory
-    ///   database is created.
-    ///
     /// # Errors
     ///
     /// A [`StashError::TetherError`] is returned if there is a problem creating
@@ -685,11 +680,6 @@ impl Tether {
     /// module. The [`rusqlite`] library will handle the distinction as
     /// necessary.
     ///
-    /// # Parameters
-    ///
-    /// * `query`  - The query to execute.
-    /// * `params` - The parameters to pass to the query.
-    ///
     /// # Errors
     ///
     /// The following [`StashError`] variants can be returned:
@@ -764,10 +754,6 @@ impl Tether {
     ///
     /// For full usage details, see [`Model::load()`].
     ///
-    /// # Parameters
-    ///
-    /// * `id` - The ID of the record to load.
-    ///
     /// # Errors
     ///
     /// See [`Model::load()`].
@@ -806,11 +792,6 @@ impl Tether {
     /// too, and indeed serialise types into queries, but those use cases are
     /// unlikely to be needed, or at least not common, and so are not provided
     /// by this module. No interface is currently provided to achieve this.
-    ///
-    /// # Parameters
-    ///
-    /// * `query`  - The query to execute.
-    /// * `params` - The parameters to pass to the query.
     ///
     /// # Errors
     ///
@@ -1078,17 +1059,6 @@ impl Tether {
     /// non-blocking manner. The worker will execute queries sequentially, as
     /// they are received, and return the results via oneshot channels. In this
     /// way, it is very similar to the main worker, but is connection-specific.
-    ///
-    /// # Parameters
-    ///
-    /// * `conn_handle` - The handle of the connection to use for the queries. A
-    ///   connection-specific worker in its own dedicated thread
-    ///   will be created and associated, storing this weak
-    ///   reference internally.
-    /// * `pool`        - The SQLite connection pool to use for the queries.
-    /// * `queue`       - The main operations queue, shared with the main
-    ///   worker and other tethered workers.
-    /// * `stash`       - The associated [`Stash`] instance for the operations.
     ///
     fn new(stash: &Stash) -> Self {
         // We either receive a command from the `Tether` or from the connection pool, so we only need
@@ -1402,18 +1372,6 @@ impl<'a> TetheredWorkerStateMachine<'a> {
     /// is responsible for managing the connection and transaction state, and
     /// executing the queries.
     ///
-    /// # Parameters
-    ///
-    /// * `operation`   - The database operation to handle.
-    /// * `connection`  - The database connection to use for the operation. This
-    ///   is used to run queries when there is no transaction
-    ///   currently active.
-    /// * `transaction` - The active transaction, if any. Notably, ownership is
-    ///   taken and returned, to avoid borrowing issues in the
-    ///   main loop that calls this function.
-    /// * `stash`       - The associated [`Stash`] instance for the operation.
-    /// * `queue`       - The main operations queue for the central worker.
-    ///
     fn handle_operation(&mut self, operation: Operation, pool: &StashConnectionPool) -> bool {
         // If we were interrupted during a transaction, this value will be true.
         let mut should_quit = false;
@@ -1675,10 +1633,6 @@ impl<'a> TetheredWorkerStateMachine<'a> {
 /// This function prepares the parameters for a query, converting them into
 /// a form that can be used with the [`rusqlite`] library.
 ///
-/// # Parameters
-///
-/// * `params` - The parameters to prepare.
-///
 fn prepare_params(params: &[Box<dyn ToSql + Send>]) -> Vec<&dyn ToSql> {
     params
         .iter()
@@ -1710,13 +1664,6 @@ fn prepare_params(params: &[Box<dyn ToSql + Send>]) -> Vec<&dyn ToSql> {
 /// option we can choose, and bears a very slight overhead of type manipulation,
 /// but does not introduce any wider dynamic dispatch or unnecessary byte
 /// manipulation (as the deserialisation happens exactly once).
-///
-/// # Parameters
-///
-/// * `rows`  - The rows of data returned by the query. These will be converted
-///   to the type specified by `T`.
-/// * `stash` - The associated [`Stash`] instance from which the rows were
-///   obtained.
 ///
 /// # Errors
 ///

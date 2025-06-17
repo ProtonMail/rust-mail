@@ -67,10 +67,6 @@ impl DecryptedMessage {
     /// Gets the message body as an HTML. This does all of the transformations that are
     /// required based on the options and the user settings.
     ///
-    /// # Parameters
-    ///
-    /// * `opts`: Which transform to apply to the html.
-    ///
     /// # Errors
     ///
     /// Returns an error if the network request, the database query, reading/writing
@@ -383,11 +379,6 @@ impl From<RealMessageBanner> for MessageBanner {
 
 /// Get a specified message.
 ///
-/// # Parameters
-///
-/// * `session`  - The session to use for the request.
-/// * `id`       - The local ID of the message to get.
-///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
@@ -425,13 +416,6 @@ pub struct WatchedMessage {
 ///
 /// Returns `None` if the message could not be found.
 ///
-/// # Parameters
-///
-/// * `session`    - The session to use for the request.
-/// * `message_id` - The local ID of the message to watch.
-/// * `callback`   - The callback to use for updates. When the specified messages
-///                change, the callback will be invoked.
-///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
@@ -463,11 +447,6 @@ pub async fn watch_message(
 
 /// Get messages for the given conversation.
 ///
-/// # Parameters
-///
-/// * `session`         - The session to use for the request.
-/// * `conversation_id` - The local ID of the conversation to get messages for.
-///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
@@ -492,11 +471,6 @@ pub async fn messages_for_conversation(
 }
 
 /// Get messages for the given label.
-///
-/// # Parameters
-///
-/// * `session`  - The session to use for the request.
-/// * `label_id` - The local ID of the label to get messages for.
 ///
 /// # Errors
 ///
@@ -526,14 +500,6 @@ pub async fn messages_for_label(
 /// Gets a paginator for messages belonging to the specified label, which allows
 /// navigation through the messages by page/window, and watches for changes.
 /// When the messages change, the callback will be invoked.
-///
-/// # Parameters
-///
-/// * `session`  - The session to use for the request.
-/// * `label_id` - The local ID of the label to watch.
-/// * `filter`   - The filter options for pagination.
-/// * `callback` - The callback to use for updates. When the specified messages
-///                change, the callback will be invoked.
 ///
 /// # Errors
 ///
@@ -568,14 +534,6 @@ pub async fn scroll_messages_for_label(
 /// navigation through the messages by page/window, and watches for changes.
 /// When the messages change, the callback will be invoked.
 ///
-/// # Parameters
-///
-/// * `session`  - The session to use for the request.
-/// * `label_id` - The local ID of the label to watch.
-/// * `filter`   - The filter options for pagination.
-/// * `callback` - The callback to use for updates. When the specified messages
-///                change, the callback will be invoked.
-///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
@@ -604,11 +562,6 @@ pub async fn scroller_search(
 /// Filter or search messages which match the specified options.
 ///
 /// Note that search results are inserted into the database.
-///
-/// # Parameters
-///
-/// * `session` - The session to use for the request.
-/// * `options` - The search options to use.
 ///
 /// # Errors
 ///
@@ -642,12 +595,6 @@ pub async fn search_for_messages(
 /// Returns available actions for message.
 /// Any action returned here should reflect the display needs.
 ///
-/// # Parameters
-///
-/// * `mailbox` - A reference to the mailbox object,
-/// * `theme`   - Information about what is the current theme,
-/// * `id`      - The local ID of the message to calcualte available actions for.
-///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
@@ -677,11 +624,6 @@ pub async fn available_actions_for_message(
 /// Returns available label_as actions for messages.
 /// Any action returned here should reflect the display needs.
 ///
-/// # Parameters
-///
-/// * `session` - The session to use for the request.
-/// * `ids`     - The local IDs of the messages to calcualte available actions for.
-///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
@@ -706,12 +648,6 @@ pub async fn available_label_as_actions_for_messages(
 
 /// Watches label_as actions for messages.
 /// Any action returned here should reflect the display needs.
-///
-/// # Parameters
-///
-/// * `session`  - The session to use for the request.
-/// * `ids`      - The local IDs of the messages to calcualte available actions for.
-/// * `callback` - The callback to use for updates.
 ///
 /// # Errors
 ///
@@ -747,11 +683,6 @@ pub struct WatchedLabelAs {
 /// Returns available move_to actions for messages.
 /// Any action returned here should reflect the display needs.
 ///
-/// # Parameters
-///
-/// * `mailbox` - The current Mailbox.
-/// * `ids`     - The local IDs of the messages to calcualte available actions for.
-///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
@@ -785,11 +716,6 @@ pub async fn available_move_to_actions_for_messages(
 }
 
 /// Returns available actions for messages bottom bar.
-///
-/// # Parameters
-///
-/// * `mailbox`     - The current Mailbox.
-/// * `message_ids` - The local IDs of the messages to calculate available actions for.
 ///
 /// # Errors
 ///
@@ -854,13 +780,6 @@ pub struct WatchedMessages {
 /// Watches messages with the specified label for changes. When the messages
 /// change, the callback will be invoked.
 ///
-/// # Parameters
-///
-/// * `session`  - The session to use for the request.
-/// * `label_id` - The local ID of the label to watch.
-/// * `callback` - The callback to use for updates. When the specified messages
-///                change, the callback will be invoked.
-///
 /// # Errors
 ///
 /// Returns an error if the database query fails.
@@ -889,12 +808,6 @@ pub async fn watch_messages_for_label(
 }
 
 /// Label the given messages with the given label id.
-///
-/// # Parameters
-///
-/// * `session`     - The session to use for the request.
-/// * `label_id`    - The local ID of the label to apply.
-/// * `message_ids` - The local IDs of the messages to apply the label to.
 ///
 /// # Errors
 ///
@@ -925,11 +838,6 @@ pub async fn apply_label_to_messages(
 
 /// Star the given messages.
 ///
-/// # Parameters
-///
-/// * `session`  - The session to use for the request.
-/// * `ids`      - The local IDs of the messages to apply the label to.
-///
 /// # Errors
 ///
 /// Returns an error if the action can not be executed.
@@ -954,11 +862,6 @@ pub async fn star_messages(
 
 /// Unstar the given messages.
 ///
-/// # Parameters
-///
-/// * `session`  - The session to use for the request.
-/// * `ids`      - The local IDs of the messages to apply the label to.
-///
 /// # Errors
 ///
 /// Returns an error if the action can not be executed.
@@ -982,12 +885,6 @@ pub async fn unstar_messages(
 }
 
 /// Remove label from the given messages with the given label id.
-///
-/// # Parameters
-///
-/// * `session`     - The session to use for the request.
-/// * `label_id`    - The local ID of the label to remove.
-/// * `message_ids` - The local IDs of the messages to remove the label from.
 ///
 /// # Errors
 ///
@@ -1018,11 +915,6 @@ pub async fn remove_label_from_messages(
 
 /// Mark multiple messages as read.
 ///
-/// # Parameters
-///
-/// * `session`  - The session to use for the request.
-/// * `ids`      - The local IDs of the messages to mark as read.
-///
 /// # Errors
 ///
 /// Returns an error if the action can not be executed.
@@ -1046,11 +938,6 @@ pub async fn mark_messages_read(
 
 /// Mark multiple messages as unread.
 ///
-/// # Parameters
-///
-/// * `session`  - The session to use for the request.
-/// * `ids`      - The local IDs of the messages to mark as unread.
-///
 /// # Errors
 ///
 /// Returns an error if the action can not be executed.
@@ -1073,11 +960,6 @@ pub async fn mark_messages_unread(
 }
 
 /// Delete multiple messages
-///
-/// # Parameters
-///
-/// * `session`  - The session to use for the request.
-/// * `ids`      - The local IDs of the messages to delete.
 ///
 /// # Errors
 ///
@@ -1108,11 +990,6 @@ pub async fn delete_messages(
 
 /// Mark multiple messages as ham (not spam) AKA as legitimate
 ///
-/// # Parameters
-///
-/// * `session`  - The session to use for the request.
-/// * `ids`      - The local IDs of the messages to delete.
-///
 /// # Errors
 ///
 /// Returns an error if the action can not be executed.
@@ -1133,11 +1010,6 @@ pub async fn mark_messages_ham(mailbox: Arc<Mailbox>, message_id: Id) -> Result<
 }
 
 /// Blocks an address.
-///
-/// # Parameters
-///
-/// * `session`    - The session to use for the request.
-/// * `address_id` - The id of the address to block.
 ///
 /// # Errors
 ///
@@ -1164,11 +1036,6 @@ pub async fn block_address(
 /// Unblocks an address.
 /// This should not be used on addresses that aren't blocked.
 ///
-/// # Parameters
-///
-/// * `mailbox`    - The session to use for the request.
-/// * `address_id` - The id of the address to block.
-///
 /// # Errors
 ///
 /// Returns an error if the action can not be executed.
@@ -1189,11 +1056,6 @@ pub async fn unblock_address(mailbox: Arc<Mailbox>, email: String) -> Result<(),
 }
 
 /// Mark message as phishing
-///
-/// # Parameters
-///
-/// * `session`  - The session to use for the request.
-/// * `id`       - The local ID of the message to mark as spam
 ///
 /// # Errors
 ///
@@ -1236,14 +1098,6 @@ pub struct EmbeddedAttachmentInfo {
 /// Set Labels from `selected_label_ids` while unsetting all those that are not in
 /// `partially_selected_label_ids`.
 ///
-/// # Parameters
-///
-/// * `mailbox`                      - Mailbox containing the messages.
-/// * `message_ids`                  - List the ids of the messages to label.
-/// * `selected_label_ids`           - List the ids of the Labels to set.
-/// * `partially_selected_label_ids` - List the ids of the Labels to keep as is.
-/// * `must_archive`                 - If true, the given messages will me move into Archive.
-///
 /// # Errors
 ///
 /// Returns an error if the action can not be executed.
@@ -1279,12 +1133,6 @@ pub async fn label_messages_as(
 }
 
 /// Move given messages from a label into another.
-///
-/// # Parameters
-///
-/// * `mailbox`        - Mailbox containing the messages.
-/// * `destination_id` - The local ID of the destination label.
-/// * `message_ids`    - The local IDs of the messages to move.
 ///
 /// # Errors
 ///
@@ -1349,11 +1197,6 @@ pub async fn resolve_message_id(
 /// - trash
 /// - custom labels
 /// - custom folders
-///
-/// # Parameters
-///
-/// * `session`     - The session to use for the request.
-/// * `label_id`    - The local ID of the label to empty.
 ///
 /// # Errors
 ///

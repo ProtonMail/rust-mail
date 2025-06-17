@@ -166,12 +166,6 @@ impl Sidebar {
     /// Watches labels of a specified label type for changes. When the labels
     /// change, the callback will be invoked.
     ///
-    /// # Parameters
-    ///
-    /// * `label_type` - an enum value from `System`, `Folder` and `Label`.
-    /// * `callback`   - The callback to use for updates. When the specified label
-    ///                  list changes, the callback will be invoked.
-    ///
     /// # Errors
     ///
     /// Returns an error if the database query fails.

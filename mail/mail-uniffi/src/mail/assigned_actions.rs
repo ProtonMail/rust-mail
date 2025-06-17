@@ -108,11 +108,6 @@ impl From<RealSwipeActionMoveToTarget> for SwipeActionMoveToTarget {
 
 /// Returns assigned swipe actions based on user's mail settings.
 ///
-/// # Parameters
-///
-/// * `current_folder` - local label ID of currently opened folder
-/// * `sesion` - user session
-///
 /// # Errors
 ///
 /// Returns an error if the database query fails.

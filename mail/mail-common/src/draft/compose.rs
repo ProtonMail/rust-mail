@@ -336,10 +336,6 @@ pub fn maybe_sanitize(mime_type: MimeType, body: &str) -> String {
 
 /// Used only when creating a draft from existing message.
 /// Extracts `<body>` innerHTML from the message.
-///
-/// # Parameters
-///
-/// * `body` - message body, containing full `<html>`
 fn sanitize_reply(body: &str) -> String {
     let mut html = Transformer::new(body);
     html.move_styles_to_body();

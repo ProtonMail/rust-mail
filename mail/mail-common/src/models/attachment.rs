@@ -241,11 +241,6 @@ impl Attachment {
     /// There is currently no way to handle this in stash directly, so we have
     /// to manually perform this check.
     ///
-    /// # Parameters
-    ///
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for finding the records.
-    ///
     /// # Errors
     ///
     /// Returns an error if the query failed.
@@ -314,11 +309,6 @@ impl Attachment {
     ///
     /// For more details see [the API documentation](https://protonmail.gitlab-pages.protontech.ch/Slim-API/mail/#tag/Attachment).
     ///
-    /// # Parameters
-    ///
-    /// * `id`  - The ID of the attachment to fetch.
-    /// * `api` - The API instance to use.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed.
@@ -336,11 +326,6 @@ impl Attachment {
     /// content.
     ///
     /// For more details see [the API documentation](https://protonmail.gitlab-pages.protontech.ch/Slim-API/mail/#tag/Attachment).
-    ///
-    /// # Parameters
-    ///
-    /// * `id`  - The ID of the attachment to fetch.
-    /// * `api` - The API instance to use.
     ///
     /// # Errors
     ///
@@ -371,10 +356,6 @@ impl Attachment {
     /// The database might contain partial attachment metadata missing the
     /// relevant information for decryption. To synchronize the full attachment
     /// metadata this method must be called.
-    ///
-    /// # Parameters
-    ///
-    /// * `api` - The API instance to use.
     ///
     /// # Errors
     ///
@@ -532,11 +513,6 @@ impl Attachment {
     }
 
     /// Get all attachments with the given IDs.
-    ///
-    /// # Parameters
-    ///
-    /// * `attachment_ids` - List of local attachment ids.
-    /// * `interface` - The database interface.
     ///
     /// # Errors
     ///

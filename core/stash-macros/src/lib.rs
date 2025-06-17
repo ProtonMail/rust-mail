@@ -443,12 +443,6 @@ impl ToTokens for ViaIntermediary {
 /// the `DbField` attribute, optionally also including the field with the
 /// `IdField` attribute.
 ///
-/// # Parameters
-///
-/// * `fields`           - The fields of the struct. Specifically, *all* the
-///   fields that the struct has.
-/// * `include_id_field` - Allow an `IdField` in addition to `DbField`s.
-///
 fn extract_db_fields(fields: &[&Field], include_id_field: bool) -> Vec<Ident> {
     fields
         .iter()
@@ -476,11 +470,6 @@ fn extract_db_fields(fields: &[&Field], include_id_field: bool) -> Vec<Ident> {
 /// This function extracts the fields of a struct, ensuring that the struct is
 /// indeed a struct with named fields.
 ///
-/// # Parameters
-///
-/// * `input`      - The input from the derive macro, which should be a struct.
-/// * `macro_name` - The name of the macro that is being derived.
-///
 /// # Panics
 ///
 /// This function panics if the input is not a struct with named fields.
@@ -502,11 +491,6 @@ fn extract_fields<'a>(input: &'a DeriveInput, macro_name: &'a str) -> Vec<&'a Fi
 /// This function extracts the field that is marked as the primary key from the
 /// struct fields. It is expected that there is exactly one field marked with
 /// the `IdField` attribute.
-///
-/// # Parameters
-///
-/// * `fields` - The fields of the struct. Specifically, *all* the fields that
-///   the struct has.
 ///
 /// # Panics
 ///
@@ -592,10 +576,6 @@ fn extract_id_field(fields: &[&Field]) -> (Ident, Type, bool, bool) {
 /// expected that there is no more than one attribute with the name
 /// `ModelActions`, but it can be omitted.
 ///
-/// # Parameters
-///
-/// * `input` - The input from the derive macro, which should be a struct.
-///
 /// # Panics
 ///
 /// This function panics if the `TableName` attribute is missing.
@@ -637,11 +617,6 @@ fn extract_model_actions(input: &DeriveInput) -> (bool, bool) {
 /// row ID (a [`u64`]) for the record. This is not the same as the primary key
 /// field represented by the `IdField` attribute.
 ///
-/// # Parameters
-///
-/// * `fields` - The fields of the struct. Specifically, *all* the fields that
-///   the struct has.
-///
 /// # Panics
 ///
 /// This function panics if the `RowIdField` attribute is missing, or does not
@@ -666,10 +641,6 @@ fn extract_row_id_field(fields: &[&Field]) -> Ident {
 ///
 /// This function extracts the table name from the struct attributes. It is
 /// expected that there is exactly one attribute with the name `TableName`.
-///
-/// # Parameters
-///
-/// * `input` - The input from the derive macro, which should be a struct.
 ///
 /// # Panics
 ///
@@ -697,15 +668,6 @@ fn extract_table_name(input: &DeriveInput) -> LitStr {
 ///
 /// Note that the `via` argument only applies to `DbField` attributes, and not
 /// to `IdField` attributes.
-///
-/// # Parameters
-///
-/// * `fields`           - The fields of the struct. Specifically, *all* the
-///   fields that the struct has.
-/// * `include_id_field` - Allow an `IdField` in addition to `DbField`s. Note
-///   that if this is `true`, then the entry will be
-///   present but always [`None`], as the `via` argument
-///   does not apply to `IdField`s.
 ///
 /// # Panics
 ///
@@ -764,13 +726,6 @@ fn extract_via_attrs(fields: &[&Field], include_id_field: bool) -> Vec<Option<Vi
 /// Note: Any fields using an intermediary type (i.e. specified with the `via`
 /// attribute argument) will be converted to that type before being returned.
 ///
-/// # Parameters
-///
-/// * `db_fields` - The list of database fields for which values should be
-///   generated.
-/// * `via_attrs` - The `via` attributes for the fields. If specified for a
-///   field, that field will be wrapped in the intermediary type.
-///
 fn generate_db_field_values_impl(
     db_fields: &[Ident],
     via_attrs: &[Option<ViaIntermediary>],
@@ -794,10 +749,6 @@ fn generate_db_field_values_impl(
 
 /// Generate code implementation for the `field_names()` method.
 ///
-/// # Parameters
-///
-/// * `db_fields` - The list of database fields.
-///
 fn generate_fn_field_names_impl(db_fields: &[Ident]) -> TokenStream2 {
     quote! {
         vec![#(stringify!(#db_fields)),*]
@@ -805,11 +756,6 @@ fn generate_fn_field_names_impl(db_fields: &[Ident]) -> TokenStream2 {
 }
 
 /// Generate code implementation for the `field_values()` method.
-///
-/// # Parameters
-///
-/// * `db_field_values_impl` - The code implementation for the database field
-///   values.
 ///
 fn generate_fn_field_values_impl(db_field_values_impl: &[TokenStream2]) -> TokenStream2 {
     quote! {
@@ -823,8 +769,6 @@ fn generate_fn_field_values_impl(db_field_values_impl: &[TokenStream2]) -> Token
 ///
 /// # Parameters
 ///
-/// * `db_fields`            - The list of database fields.
-/// * `default_fields`       - The list of default fields.
 /// * `internal_fields`      - Internal-used fields for `Model`s: firstly the
 ///   field that contains the internal row ID, and then
 ///   the field that contains the associated `Stash`.
@@ -884,11 +828,6 @@ fn generate_fn_from_row_impl(
 
 /// Generate code implementation for the `id_value()` method.
 ///
-/// # Parameters
-///
-/// * `id_field`    - The field that contains the primary key.
-/// * `is_optional` - Whether the primary key is optional.
-///
 fn generate_fn_id_value_impl(id_field: &Ident, is_optional: bool) -> TokenStream2 {
     if is_optional {
         quote! {
@@ -902,11 +841,6 @@ fn generate_fn_id_value_impl(id_field: &Ident, is_optional: bool) -> TokenStream
 }
 
 /// Generate code implementation for the `set_id_value()` method.
-///
-/// # Parameters
-///
-/// * `id_field`    - The field that contains the primary key.
-/// * `is_optional` - Whether the primary key is optional.
 ///
 fn generate_fn_set_id_value_impl(id_field: &Ident, is_optional: bool) -> TokenStream2 {
     if is_optional {
@@ -928,7 +862,6 @@ fn generate_fn_set_id_value_impl(id_field: &Ident, is_optional: bool) -> TokenSt
 ///
 /// # Parameters
 ///
-/// * `db_fields` - The list of database fields.
 /// * `via_attrs` - The `via` attributes for the fields. If specified for a
 ///   field, that field will be converted from a SQL field type to
 ///   the intermediary type before converting to the struct field

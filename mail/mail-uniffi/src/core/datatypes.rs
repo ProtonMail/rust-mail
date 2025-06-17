@@ -874,13 +874,6 @@ pub struct Contact {
 
 impl Contact {
     /// Converts a [`RealContact`] into a [`Contact`].
-    ///
-    /// # Parameters
-    ///
-    /// * `value`     - The [`RealContact`] to convert.
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for finding the records.
-    ///
     pub async fn try_from_real(value: RealContact, tether: &Tether) -> Result<Self, AppError> {
         let mut contact_emails = Vec::with_capacity(value.contact_emails.len());
         for email in &value.contact_emails {
@@ -974,13 +967,6 @@ pub struct ContactEmail {
 
 impl ContactEmail {
     /// Converts a [`RealContactEmail`] into a [`ContactEmail`].
-    ///
-    /// # Parameters
-    ///
-    /// * `value`     - The [`RealContactEmail`] to convert.
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for finding the records.
-    ///
     pub async fn try_from_real(value: RealContactEmail, tether: &Tether) -> Result<Self, AppError> {
         Ok(Self {
             canonical_email: value.canonical_email,

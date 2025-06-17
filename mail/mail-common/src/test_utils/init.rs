@@ -190,10 +190,6 @@ impl MailTestContext {
     /// This function sets up basic user data that should be fetched after login
     /// to initialize the database and/or the context for the tests.
     ///
-    /// # Parameters
-    ///
-    /// * `params` - The parameters to use for the setup.
-    ///
     pub async fn setup_user(&self, params: Params) {
         self.setup_user_repeated(params, 1).await;
     }
@@ -202,11 +198,6 @@ impl MailTestContext {
     ///
     /// This function sets up basic user data that should be fetched after login
     /// to initialize the database and/or the context for the tests.
-    ///
-    /// # Parameters
-    ///
-    /// * `params`          - The parameters to use for the setup.
-    /// * `number_of_calls` - The number of times the mocked requests will be called.
     ///
     #[allow(clippy::too_many_lines)]
     pub async fn setup_user_repeated(&self, mut params: Params, number_of_calls: u64) {
@@ -282,11 +273,6 @@ impl MailTestContext {
     ///
     /// This function will mock the response for the given conversations.
     ///
-    /// # Parameters
-    ///
-    /// * `conversations` - The list of conversations to respond with.
-    /// * `expect`        - How many times the endpoint should be called.
-    ///
     #[function_name::named]
     pub async fn mock_get_conversations(
         &self,
@@ -311,12 +297,6 @@ impl MailTestContext {
     /// Generate new mock expectations for retrieving conversations.
     ///
     /// This function will mock the response for the given conversations.
-    ///
-    /// # Parameters
-    ///
-    /// * `conversations` - The list of conversations to respond with.
-    /// * `and`           - A function to add additional matchers to the request.
-    /// * `expect`        - How many times the endpoint should be called.
     ///
     #[function_name::named]
     pub async fn mock_get_conversations_and(
@@ -356,15 +336,6 @@ impl MailTestContext {
     ///
     /// This function will mock the response for the given conversations.
     ///
-    /// # Parameters
-    ///
-    /// * `conversations` - The list of conversations to respond with.
-    /// * `end_id`        - The id of last page element
-    /// * `end_time`      - The end time of last page element
-    /// * `page_size`     - Size of the page.
-    /// * `total`         - Total number of pages.
-    /// * `expect`        - How many times the endpoint should be called.
-    ///
     #[function_name::named]
     pub async fn mock_get_conversations_page(
         &self,
@@ -402,11 +373,6 @@ impl MailTestContext {
     ///
     /// This function will mock the response for the given message metadata.
     ///
-    /// # Parameters
-    ///
-    /// * `metadata` - The list of message to respond with.
-    /// * `expect`   - How many times the endpoint should be called.
-    ///
     #[function_name::named]
     pub async fn mock_get_message_metadata(
         &self,
@@ -431,12 +397,6 @@ impl MailTestContext {
     /// Generate new mock expectations for retrieving message metadata.
     ///
     /// This function will mock the response for the given message metadata.
-    ///
-    /// # Parameters
-    ///
-    /// * `metadata` - The list of message to respond with.
-    /// * `and`      - A function to add additional matchers to the request.
-    /// * `expect`   - How many times the endpoint should be called.
     ///
     #[function_name::named]
     pub async fn mock_get_message_metadata_and(
@@ -463,15 +423,6 @@ impl MailTestContext {
     /// Generate new mock expectations for retrieving message metadata pages.
     ///
     /// This function will mock the response for the given message metadata.
-    ///
-    /// # Parameters
-    ///
-    /// * `metadata`  - The list of message to respond with.
-    /// * `end_id`    - The id of last page element
-    /// * `end_time`  - The end time of last page element
-    /// * `page_size` - Size of the page.
-    /// * `total`     - Total number of pages.
-    /// * `expect`    - How many times the endpoint should be called.
     ///
     #[function_name::named]
     pub async fn mock_get_message_metadata_page(
@@ -509,12 +460,6 @@ impl MailTestContext {
     /// Generate new mock expectations for retrieving conversation's messages.
     ///
     /// This function will mock the response for the given conversations.
-    ///
-    /// # Parameters
-    ///
-    /// * `conversation` - Requested Conversation
-    /// * `messages`     -
-    /// * `expect`       - How many times the endpoint should be called.
     ///
     #[function_name::named]
     pub async fn mock_get_conversation_messages(
@@ -563,11 +508,6 @@ impl MailTestContext {
     ///
     /// This function will mock the response for the given message counts.
     ///
-    /// # Parameters
-    ///
-    /// * `counts` - The message counts to respond with. If `None`, an empty list will be used.
-    /// * `expect` - How many times the endpoint should be called.
-    ///
     #[function_name::named]
     pub async fn mock_get_messages_count(
         &self,
@@ -590,11 +530,6 @@ impl MailTestContext {
     ///
     /// This function will mock the response for the given conversation counts.
     ///
-    /// # Parameters
-    ///
-    /// * `counts` - The conversation counts to respond with. If `None`, an empty list will be used.
-    /// * `expect` - How many times the endpoint should be called.
-    ///
     #[function_name::named]
     pub async fn mock_get_conversations_count(
         &self,
@@ -616,11 +551,6 @@ impl MailTestContext {
     /// Generate new mock expectations for retrieving incoming defaults.
     ///
     /// This function will mock the response for the given incoming defaults.
-    ///
-    /// # Parameters
-    ///
-    /// * `incoming_defaults` - The incoming defaults to respond with. If `None`, an empty list will be used.
-    /// * `expect`            - How many times the endpoint should be called.
     ///
     #[function_name::named]
     pub async fn mock_get_incoming_defaults(

@@ -127,14 +127,6 @@ impl Label {
 
     /// TODO: Document this function.
     ///
-    /// # Parameters
-    ///
-    /// * `name`       - TODO: Document this parameter.
-    /// * `color`      - TODO: Document this parameter.
-    /// * `label_type` - TODO: Document this parameter.
-    /// * `parent_id`  - TODO: Document this parameter.
-    /// * `api`        - The API instance to use.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed.
@@ -160,9 +152,6 @@ impl Label {
 
     /// Fetches all labels from the API.
     ///
-    /// # Parameters
-    /// * `api` - The API instance to use.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed
@@ -176,9 +165,6 @@ impl Label {
 
     /// Fetches mail labels from the API.
     ///
-    /// # Parameters
-    /// * `api` - The API instance to use.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed
@@ -191,9 +177,6 @@ impl Label {
     }
 
     /// Fetches contact labels from the API.
-    ///
-    /// # Parameters
-    /// * `api` - The API instance to use.
     ///
     /// # Errors
     ///
@@ -234,10 +217,6 @@ impl Label {
 
     /// Fetches the given labels from the API.
     ///
-    /// # Parameters
-    ///
-    /// * `api`   - The API instance to use.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed.
@@ -259,10 +238,6 @@ impl Label {
     }
 
     /// Stores given labels in the database.
-    ///
-    /// # Parameters
-    ///
-    /// * `tx` - The stash transaction to use for the database connection.
     ///
     /// # Errors
     ///
@@ -328,14 +303,6 @@ impl Label {
 
     /// TODO: Document this function.
     ///
-    /// # Parameters
-    ///
-    /// * `id`         - The ID of the label to update.
-    /// * `name`       - TODO: Document this parameter.
-    /// * `color`      - TODO: Document this parameter.
-    /// * `label_type` - TODO: Document this parameter.
-    /// * `api`        - The API instance to use.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed.
@@ -363,12 +330,6 @@ impl Label {
 
     /// Function to update the label's expanded state in remote.
     ///
-    /// # Parameters
-    ///
-    /// * `id`         - The Remote ID of the label to update.
-    /// * `expanded`   - The new expanded state.
-    /// * `api`        - The API instance to use.
-    ///
     /// # Errors
     ///
     /// Returns an error if the API request failed.
@@ -391,11 +352,6 @@ impl Label {
 
     /// Get all labels with given kind
     ///
-    /// # Parameters
-    ///
-    /// * `kind` - The kind of the label, eg. System, Folder etc.
-    /// * `tx`   - The tether to use for the database connection.
-    ///
     /// # Errors
     ///
     /// Returns an error if the data could not be read from the database.
@@ -410,11 +366,6 @@ impl Label {
     }
 
     /// Get all labels with given kinds
-    ///
-    /// # Parameters
-    ///
-    /// * `kinds` - The list of label kinds, eg. System, Folder etc.
-    /// * `tx`    - The tether to use for the database connection.
     ///
     /// # Errors
     ///

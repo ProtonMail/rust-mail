@@ -11,11 +11,6 @@ use reqwest::{Client, StatusCode, header::CONTENT_LENGTH, header::CONTENT_TYPE};
 ///
 /// In most cases this function won't be necessary, as requests are fired from
 /// within the library code itself.
-///
-/// # Parameters
-///
-/// * `url` - The URL to request.
-///
 pub async fn request(url: String) -> (StatusCode, Option<String>, Option<usize>, Bytes) {
     let response = Client::new().get(url).send().await.unwrap();
     let status = response.status();
