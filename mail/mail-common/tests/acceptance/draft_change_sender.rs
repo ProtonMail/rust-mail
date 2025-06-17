@@ -1,6 +1,4 @@
-mod drafts_common;
-
-use drafts_common::*;
+use super::drafts_common::*;
 use proton_core_api::services::proton::{AddressId, UserId};
 use proton_mail_api::services::proton::prelude::MimeType;
 use proton_mail_common::actions::draft::AttachmentRemove;

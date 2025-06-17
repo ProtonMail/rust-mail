@@ -1,6 +1,4 @@
-use stash::orm::Model;
-mod drafts_common;
-use drafts_common::*;
+use super::drafts_common::*;
 use proton_core_api::consts::{General, Mail};
 use proton_core_api::services::proton::common::ApiErrorInfo;
 use proton_core_api::services::proton::{LabelId, UserId};
@@ -15,6 +13,7 @@ use proton_mail_common::test_utils::message_body::{
     TEST_USER_ID, message_body_test_message_simple, message_body_test_user_secret,
 };
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
+use stash::orm::Model;
 
 #[tokio::test]
 async fn discard_before_save_only_deletes_metadata() {
