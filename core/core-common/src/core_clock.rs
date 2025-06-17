@@ -33,7 +33,11 @@ impl CoreClock {
     }
 
     pub fn auto_lock_elapsed(&self) -> Duration {
-        self.auto_lock_accessed.elapsed()
+        if self.auto_lock_accessed.just_created.load(Ordering::Acquire) {
+            Duration::ZERO
+        } else {
+            self.auto_lock_accessed.elapsed()
+        }
     }
 
     pub fn pin_code_elapsed(&self) -> Duration {
@@ -72,6 +76,7 @@ impl CoreClock {
 pub struct ActivityClock {
     last_activity: Mutex<Instant>,
     accessed: AtomicBool,
+    just_created: AtomicBool,
 }
 
 impl ActivityClock {
@@ -80,12 +85,14 @@ impl ActivityClock {
         Self {
             last_activity: Mutex::new(now),
             accessed: AtomicBool::new(true),
+            just_created: AtomicBool::new(true),
         }
     }
 
     pub fn tick(&self) {
         if self.accessed.swap(false, Ordering::Acquire) {
             *self.last_activity.lock() = Instant::now();
+            self.just_created.store(false, Ordering::Release);
         }
     }
 
