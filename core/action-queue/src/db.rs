@@ -203,9 +203,7 @@ impl StoredAction {
 
     pub(crate) fn short_dbg_str(&self) -> String {
         format!(
-            "Action {{id={:?} type={} version={} queued={} delayed={} debug_str={} }}",
-            self.id,
-            self.action_type,
+            "Action {{ version={} queued={} delayed={} debug_str={} }}",
             self.version,
             self.created,
             self.scheduled,

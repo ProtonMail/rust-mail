@@ -806,6 +806,15 @@ impl MailSession {
         .map_err(UserContextError::from)
     }
 
+    /// Mark biometrics check as passed.
+    ///
+    /// This method is used to mark that the biometrics check has been passed
+    /// for autolock to reset the timer.
+    ///
+    pub fn biometrics_check_passed(&self) {
+        self.mail_ctx.core_context().clock().auto_lock_accessed();
+    }
+
     /// Create a PIN App protection.
     ///
     /// The same PIN will be required for authentication of the user

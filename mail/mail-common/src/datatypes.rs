@@ -40,6 +40,7 @@
 mod assigned_actions;
 pub mod attachment;
 pub(crate) mod contextual_conversation;
+pub mod dependencies;
 pub mod exclusive_location;
 pub mod folder_banner;
 pub mod labels;
@@ -50,6 +51,7 @@ mod rollback_item_type;
 mod search_options;
 mod system_folder;
 pub mod theme;
+
 use stash::orm::Model;
 
 use anyhow::Context;

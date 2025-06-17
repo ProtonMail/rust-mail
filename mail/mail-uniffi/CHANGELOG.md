@@ -31,6 +31,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- [ET-3367] For labels with count less than page_size force fetch_more while loading `all_items`
+- [ET-2944] Fetch missing dependencies during event loop
+
+
+## [mail-uniffi-v0.93.4] - 2025-06-17
+
+### Fixes
+
+- Do not sync conversation on load without messages
+- Disable fixed location prefetcher
+- [ET-3243] Mark conversation unread
+- Conversation message selection
+
+
+## [mail-uniffi-v0.93.3] - 2025-06-17
+
+### Fixes
+
+- [ET-3380] Fist call to `should_lock` always returns true
+
+
+## [mail-uniffi-v0.93.2] - 2025-06-16
+
+### Changed
+
+- [ET-3026] Improve action queue logs
+
+### Fixes
+
+- [ET-3301] Add `biometrics_check_passed` for invokation after biometrics protection was verified by the client
+- [ET-3301] Reset the access when auto lock is not invoked
+
+
+## [mail-uniffi-v0.93.1] - 2025-06-16
+
+### Fixes
+
 - [ET-3307] Disable wal checkpoint on close
 - [ET-3351] Out of bounds access in draft::save
 

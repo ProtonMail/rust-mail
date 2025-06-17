@@ -122,7 +122,7 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
 
     // Test if the scroller can read visible elements
     let expected_count = 50_usize;
-    let count = scroller.visible_element_count(&tether).await.unwrap();
+    let count = scroller.seen_count(&tether).await.unwrap();
     assert_eq!(count, expected_count as u64);
 
     let expected = expected_conversations(expected_count, REMOTE_LABEL_ID, &data).unwrap();
@@ -143,7 +143,7 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
     .unwrap()
     .into();
 
-    let count = new_scroller.visible_element_count(&tether).await.unwrap();
+    let count = new_scroller.seen_count(&tether).await.unwrap();
     assert_eq!(count, expected_count as u64);
 
     let expected = scroller.visible_elements(&tether).await.unwrap();
@@ -179,7 +179,7 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
         .await
         .unwrap();
 
-    let count = new_scroller.visible_element_count(&tether).await.unwrap();
+    let count = new_scroller.seen_count(&tether).await.unwrap();
     assert_eq!(count, expected_count as u64 + 1);
 
     let expected = scroller.visible_elements(&tether).await.unwrap();
@@ -256,10 +256,7 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
 
     // Test if the scroller can read visible elements within its own range
     let expected_count = 5_usize;
-    let count = cached_scroller
-        .visible_element_count(&tether)
-        .await
-        .unwrap();
+    let count = cached_scroller.seen_count(&tether).await.unwrap();
     assert_eq!(count, expected_count as u64);
     assert!(cached_scroller.has_more(&tether).await.unwrap());
 
@@ -296,10 +293,7 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
         .await
         .unwrap();
 
-    let count = cached_scroller
-        .visible_element_count(&tether)
-        .await
-        .unwrap();
+    let count = cached_scroller.seen_count(&tether).await.unwrap();
     assert_eq!(count, expected_count as u64 + 1);
     let expected_conv = ContextualConversation::new(conversation.clone(), local_label_id).unwrap();
 
@@ -354,10 +348,7 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
     cached_scroller.fetch_more(&tether).await.unwrap();
 
     let expected_count = 5_usize;
-    let count = cached_scroller
-        .visible_element_count(&tether)
-        .await
-        .unwrap();
+    let count = cached_scroller.seen_count(&tether).await.unwrap();
 
     assert_eq!(count, expected_count as u64);
     assert!(cached_scroller.has_more(&tether).await.unwrap());
@@ -380,10 +371,7 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
         .await
         .unwrap();
 
-    let actual_count = cached_scroller
-        .visible_element_count(&tether)
-        .await
-        .unwrap();
+    let actual_count = cached_scroller.seen_count(&tether).await.unwrap();
     assert_eq!(actual_count, 0);
 
     let actual = cached_scroller.visible_elements(&tether).await.unwrap();
@@ -413,10 +401,7 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
         .await
         .unwrap();
 
-    let actual_count = cached_scroller
-        .visible_element_count(&tether)
-        .await
-        .unwrap();
+    let actual_count = cached_scroller.seen_count(&tether).await.unwrap();
     assert_eq!(actual_count, 0);
 
     let actual = cached_scroller.visible_elements(&tether).await.unwrap();
@@ -503,29 +488,20 @@ async fn test_cashed_scroller_reads_last_two_pages_together_when_last_page_is_no
             .await
             .unwrap()
             .unwrap();
-    let items = cached_scroller
-        .visible_element_count(&tether)
-        .await
-        .unwrap();
+    let items = cached_scroller.seen_count(&tether).await.unwrap();
 
     assert_eq!(items, 0);
 
     cached_scroller.fetch_more(&tether).await.unwrap();
 
-    let items = cached_scroller
-        .visible_element_count(&tether)
-        .await
-        .unwrap();
+    let items = cached_scroller.seen_count(&tether).await.unwrap();
 
     assert_eq!(items, 2);
 
     let loaded_page = cached_scroller.fetch_more(&tether).await.unwrap();
     assert_eq!(loaded_page.len(), 3);
 
-    let items = cached_scroller
-        .visible_element_count(&tether)
-        .await
-        .unwrap();
+    let items = cached_scroller.seen_count(&tether).await.unwrap();
 
     assert_eq!(items, 5);
 }
@@ -719,19 +695,13 @@ async fn test_cashed_scroller_correctly_reads_empty_conversations_from_the_trash
             .await
             .unwrap()
             .unwrap();
-    let items = cached_scroller
-        .visible_element_count(&tether)
-        .await
-        .unwrap();
+    let items = cached_scroller.seen_count(&tether).await.unwrap();
 
     assert_eq!(items, 0);
 
     cached_scroller.fetch_more(&tether).await.unwrap();
 
-    let items = cached_scroller
-        .visible_element_count(&tether)
-        .await
-        .unwrap();
+    let items = cached_scroller.seen_count(&tether).await.unwrap();
 
     assert_eq!(items, 4);
 }

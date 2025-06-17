@@ -119,7 +119,8 @@ impl ConversationScroller {
     /// Retrieves the total number of records in the result set.
     #[must_use]
     pub fn total(&self) -> u64 {
-        async_runtime().block_on(async { self.scroller.lock().await.total() })
+        async_runtime()
+            .block_on(async { self.scroller.lock().await.total().await.unwrap_or_default() })
     }
 
     /// Checks if there is a next page available.
@@ -208,7 +209,8 @@ impl MessageScroller {
     /// Retrieves the total number of records in the result set.
     #[must_use]
     pub fn total(&self) -> u64 {
-        async_runtime().block_on(async { self.scroller.lock().await.total() })
+        async_runtime()
+            .block_on(async { self.scroller.lock().await.total().await.unwrap_or_default() })
     }
 
     /// Checks if there is a next page available.
@@ -297,7 +299,8 @@ impl SearchScroller {
     /// Retrieves the total number of records in the result set.
     #[must_use]
     pub fn total(&self) -> u64 {
-        async_runtime().block_on(async { self.scroller.lock().await.total() })
+        async_runtime()
+            .block_on(async { self.scroller.lock().await.total().await.unwrap_or_default() })
     }
 
     /// Checks if there is a next page available.

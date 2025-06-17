@@ -562,7 +562,7 @@ impl<T: ScrollData> ScrollCursor<T> {
     ///
     /// Return error if the query failed.
     ///
-    pub async fn visible_element_count(&self, tether: &Tether) -> Result<u64, StashError> {
+    pub async fn seen_count(&self, tether: &Tether) -> Result<u64, StashError> {
         let query = T::query(self.unread, None, false, None, self.scroll_order);
         T::Model::count(
             query,
@@ -730,8 +730,8 @@ impl<T: ScrollData> CachedScrollData<T> {
     /// It will load two pages instead of one if the last page is not completly filled.
     ///
     pub async fn fetch_more(&mut self, tether: &Tether) -> Result<Vec<T::Item>, StashError> {
-        let all = self.end.visible_element_count(tether).await?;
-        let cursor_count = self.cursor.visible_element_count(tether).await?;
+        let all = self.end.seen_count(tether).await?;
+        let cursor_count = self.cursor.seen_count(tether).await?;
 
         if cursor_count < all {
             let offset = Some(cursor_count);
@@ -766,8 +766,8 @@ impl<T: ScrollData> CachedScrollData<T> {
         &mut self,
         tether: &Tether,
     ) -> Result<Option<Vec<T::Item>>, StashError> {
-        let all = self.end.visible_element_count(tether).await?;
-        let cursor_count = self.cursor.visible_element_count(tether).await?;
+        let all = self.end.seen_count(tether).await?;
+        let cursor_count = self.cursor.seen_count(tether).await?;
 
         if cursor_count < all {
             let offset = Some(cursor_count);
@@ -812,15 +812,15 @@ impl<T: ScrollData> CachedScrollData<T> {
 
     /// Available elements count to fetch with this cursor
     ///
-    pub async fn all_element_count(&self, tether: &Tether) -> Result<u64, StashError> {
-        self.end.visible_element_count(tether).await
+    pub async fn synced_count(&self, tether: &Tether) -> Result<u64, StashError> {
+        self.end.seen_count(tether).await
     }
 
     /// Check if there are more items to fetch for in memory cursor.
     ///
     pub async fn has_more(&self, tether: &Tether) -> Result<bool, StashError> {
-        let all = self.end.visible_element_count(tether).await?;
-        let cursor_count = self.cursor.visible_element_count(tether).await?;
+        let all = self.end.seen_count(tether).await?;
+        let cursor_count = self.cursor.seen_count(tether).await?;
 
         Ok(cursor_count < all)
     }
@@ -828,8 +828,8 @@ impl<T: ScrollData> CachedScrollData<T> {
     /// Check if there are more than a page worth of items to fetch for in memory cursor.
     ///
     pub async fn has_more_than_a_page(&self, tether: &Tether) -> Result<bool, StashError> {
-        let all = self.end.visible_element_count(tether).await?;
-        let cursor_count = self.cursor.visible_element_count(tether).await?;
+        let all = self.end.seen_count(tether).await?;
+        let cursor_count = self.cursor.seen_count(tether).await?;
 
         if all > cursor_count {
             Ok(all - cursor_count > self.page_size as u64)

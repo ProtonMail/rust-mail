@@ -33,6 +33,7 @@ use crate::MailContextResult;
 use crate::actions::{
     LabelAsAction, MessageAction, MessageAvailableActions, MoveAction, MoveItemAction, ReplyAction,
 };
+use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, Disposition, EncryptedMessageBody, ExclusiveLocation,
     LocalMessageId, MessageFlags, MessageLabelsCount, MessageRecipients, MessageReplyTos,
@@ -45,8 +46,8 @@ use crate::{AppError, MailUserContext};
 use anyhow::{Context, anyhow};
 use itertools::Itertools;
 use proton_core_api::service::ApiServiceError;
+use proton_core_api::services::proton::Proton;
 use proton_core_api::services::proton::{AddressId, LabelId};
-use proton_core_api::services::proton::{Proton, ProtonCore};
 use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::datatypes::{
     LabelType, LocalAddressId, LocalLabelId, SystemLabel, UnixTimestamp,
@@ -1252,52 +1253,14 @@ impl Message {
         messages: &[MessageMetadata],
         api: &Proton,
         tether: &mut Tether,
-    ) -> Result<(), AppError> {
-        let mut addrs = vec![];
-        // First we load the addresses because the addresses need to exist before the messages get
-        // loaded.
-        for msg in messages {
-            if (Address::find_by_remote_id(msg.address_id.to_owned(), tether).await?).is_none() {
-                debug!("Address {} not found, syncing...", msg.address_id);
-                let addr = api
-                    .get_address_by_id(msg.address_id.to_owned())
-                    .await?
-                    .address;
-                addrs.push(Address::from(addr));
-            }
+    ) -> Result<(), MailContextError> {
+        let mut fetcher = MessageOrConversationDependencyFetcher::new();
+
+        for message in messages {
+            fetcher.check_api_message_metadata(message, tether).await?
         }
 
-        tether
-            .tx::<_, _, StashError>(async |tx| {
-                for mut addr in addrs {
-                    addr.save(tx).await?;
-                }
-                Ok(())
-            })
-            .await?;
-
-        let mut missing_labels_ids = vec![];
-        for msg in messages {
-            for rid in &msg.label_ids {
-                if (Label::find_by_remote_id(rid.clone(), tether))
-                    .await?
-                    .is_none()
-                {
-                    missing_labels_ids.push(rid.clone());
-                }
-            }
-        }
-
-        if !missing_labels_ids.is_empty() {
-            info!(
-                "{} label(s) were in a conversations but not locally, synchronizing...",
-                missing_labels_ids.len()
-            );
-            let missing_labels = Label::get_labels_by_ids(api, missing_labels_ids).await?;
-            tether
-                .tx(async |tx| Label::store_labels(tx, missing_labels).await)
-                .await?;
-        }
+        fetcher.fetch_and_store(api, tether).await?;
 
         Ok(())
     }
@@ -1318,11 +1281,10 @@ impl Message {
         options: GetMessagesOptions,
         api: &Proton,
         tether: &mut Tether,
-    ) -> Result<Vec<Message>, AppError> {
+    ) -> Result<Vec<Message>, MailContextError> {
         let messages = api
             .get_messages(options)
-            .await
-            .context("Error fetching the messages from the API")?
+            .await?
             .messages
             .into_iter()
             .collect_vec();

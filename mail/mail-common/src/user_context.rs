@@ -530,10 +530,8 @@ impl MailUserContext {
     /// - Drafts
     /// - AllDrafts
     pub async fn prefetch(self: &Arc<Self>) -> MailContextResult<()> {
-        let tether = self.user_stash().connection();
-        let locations = PrefetchJob::default_locations(&tether).await;
-
-        self.queue_prefetch_jobs(locations).await
+        // TODO: Remove me
+        Ok(())
     }
 
     pub async fn queue_prefetch_jobs(

@@ -292,6 +292,42 @@ pub fn new_test_unread_db_state() -> TestDBState {
     }
 }
 
+pub fn new_test_unread_db_state_unread_label_in_folder() -> TestDBState {
+    let conv_id1 = DELETE_DB_CONV1.clone();
+    TestDBState {
+        addresses: vec![test_address()],
+        labels: vec![test_label1(), test_label2()],
+        conversations: vec![Conversation {
+            remote_id: Some(conv_id1.clone()),
+            labels: vec![
+                ConversationLabel {
+                    remote_label_id: Some(MY_LABEL_ID1.clone()),
+                    ..Default::default()
+                },
+                ConversationLabel {
+                    remote_label_id: Some(MY_LABEL_ID2.clone()),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        }],
+        messages: vec![
+            Message {
+                label_ids: vec![MY_LABEL_ID1.clone()],
+                unread: false,
+                time: 100.into(),
+                ..CONV1_MSG1.to_owned()
+            },
+            Message {
+                label_ids: vec![MY_LABEL_ID2.clone()],
+                unread: false,
+                time: 200.into(),
+                ..CONV1_MSG2.to_owned()
+            },
+        ],
+    }
+}
+
 /// Database state where there is one conversation which has one label applied and we
 /// need to tes that if we apply another label it does populate the table with 0
 /// values.
