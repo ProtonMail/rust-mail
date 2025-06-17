@@ -144,6 +144,7 @@ pub struct VCard {
 
 impl VCard {
     #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    #[allow(clippy::too_many_lines)]
     pub fn from_ical_contact(value: VcardContact) -> VCardResult<Self> {
         let mut result = VCard::new();
 
