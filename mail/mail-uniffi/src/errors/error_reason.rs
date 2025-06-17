@@ -9,7 +9,7 @@ use proton_mail_common::errors::{
     DraftSendErrorReason as RealDraftSendErrorReason,
     DraftSenderAddressChangeErrorReason as RealDraftSenderAddressChangeErrorReason,
     DraftUndoSendErrorReason as RealDraftUndoSendErrorReason,
-    EventErrorReason as RealEventErrorReason, LoginErrorReason as RealLoginErrorReason,
+    EventErrorReason as RealEventErrorReason,
     MailScrollerErrorReason as RealMailScrollerErrorReason,
     OtherErrorReason as RealOtherErrorReason, PinAuthErrorReason as RealPinAuthErrorReason,
     PinSetErrorReason as RealPinSetErrorReason,
@@ -55,31 +55,6 @@ impl From<RealContextErrorReason> for ContextReason {
             RealContextErrorReason::UserContextNotInitialized(_) => {
                 ContextReason::UserContextNotInitialized
             }
-        }
-    }
-}
-
-/// Specific Reason for error occurrence within Login Flow.
-///
-/// This enum is used to represent the specific reason for an error that occurred
-/// in handling login related operations in order to provide only the necessary
-/// information to the user.
-#[derive(Debug, UniffiEnum)]
-pub enum LoginErrorReason {
-    InvalidCredentials,
-    UnsupportedTfa,
-    CantUnlockUserKey,
-    UserSetup,
-    AddressSetup,
-}
-
-impl From<RealLoginErrorReason> for LoginErrorReason {
-    fn from(reason: RealLoginErrorReason) -> Self {
-        match reason {
-            RealLoginErrorReason::InvalidCredentials => LoginErrorReason::InvalidCredentials,
-            RealLoginErrorReason::CantUnlockUserKey => LoginErrorReason::CantUnlockUserKey,
-            RealLoginErrorReason::UserSetup => LoginErrorReason::UserSetup,
-            RealLoginErrorReason::AddressSetup => LoginErrorReason::AddressSetup,
         }
     }
 }
