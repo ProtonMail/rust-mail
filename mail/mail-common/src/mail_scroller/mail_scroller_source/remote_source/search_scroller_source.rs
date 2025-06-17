@@ -273,7 +273,7 @@ impl MailScrollerSource for SearchScrollerSource {
     async fn initialize(
         &mut self,
         ctx: &MailUserContext,
-    ) -> Result<(u64, MailPaginatorJoinHandle), MailContextError> {
+    ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let mut tether = ctx.user_stash().connection();
         tether
             .tx(async |tx| SearchScrollData::delete_all(tx).await)
@@ -294,7 +294,7 @@ impl MailScrollerSource for SearchScrollerSource {
         )
         .await?;
 
-        Ok((page_size as u64 * 2, task))
+        Ok(task)
     }
 
     async fn visible_items(
@@ -311,7 +311,7 @@ impl MailScrollerSource for SearchScrollerSource {
         }
     }
 
-    async fn visible_items_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
+    async fn seen_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
         let tether = ctx.user_stash().connection();
 
         if !self.initialized {
@@ -323,7 +323,11 @@ impl MailScrollerSource for SearchScrollerSource {
         }
     }
 
-    async fn all_items_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
+    async fn synced_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
+        self.seen_total(ctx).await
+    }
+
+    async fn all_total(&self, ctx: &MailUserContext) -> Result<u64, MailContextError> {
         let tether = ctx.user_stash().connection();
 
         Ok(self.total(&tether).await?)
@@ -333,7 +337,7 @@ impl MailScrollerSource for SearchScrollerSource {
     async fn sync_next(
         &mut self,
         ctx: &MailUserContext,
-    ) -> Result<(Vec<Self::Item>, u64, MailPaginatorJoinHandle), MailContextError> {
+    ) -> Result<(Vec<Self::Item>, MailPaginatorJoinHandle), MailContextError> {
         let tether = ctx.user_stash().connection();
 
         if !self.initialized {
@@ -348,24 +352,21 @@ impl MailScrollerSource for SearchScrollerSource {
                 last.visible_elements(&tether).await?
             };
 
-            let (task, total) = if items.is_empty() {
-                (None, 0)
+            let task = if items.is_empty() {
+                None
             } else {
-                let total = self.total(&tether).await?;
-                let task = Self::spawn_background_sync(
+                Self::spawn_background_sync(
                     ctx,
                     SystemLabel::AllMail.label_id(),
                     self.search.clone(),
                     self.page_size,
                 )
-                .await?;
-
-                (task, total)
+                .await?
             };
 
-            Ok((items, total, task))
+            Ok((items, task))
         } else {
-            Ok((vec![], 0, None))
+            Ok((vec![], None))
         }
     }
 

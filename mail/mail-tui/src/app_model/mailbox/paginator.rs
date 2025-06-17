@@ -55,7 +55,7 @@ impl<T: MailScrollerSource> Paginator<T> {
     }
 
     pub async fn total(&self) -> u64 {
-        self.paginator.lock().await.total()
+        self.paginator.lock().await.total().await.unwrap()
     }
 
     /// Get the next pagination page as series of background tasks which will

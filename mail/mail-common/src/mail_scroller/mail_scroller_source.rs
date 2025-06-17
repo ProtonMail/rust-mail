@@ -30,7 +30,7 @@ pub trait MailScrollerSource: Send + Sync {
     fn initialize(
         &mut self,
         ctx: &MailUserContext,
-    ) -> impl Future<Output = Result<(u64, MailPaginatorJoinHandle), MailContextError>> + Send;
+    ) -> impl Future<Output = Result<MailPaginatorJoinHandle, MailContextError>> + Send;
 
     /// Return the items that fall into range of the synced data.
     ///
@@ -51,7 +51,7 @@ pub trait MailScrollerSource: Send + Sync {
     /// # Errors
     ///
     /// Return error if the query failed.
-    fn visible_items_total(
+    fn seen_total(
         &self,
         ctx: &MailUserContext,
     ) -> impl Future<Output = Result<u64, MailContextError>> + Send;
@@ -63,7 +63,17 @@ pub trait MailScrollerSource: Send + Sync {
     /// # Errors
     ///
     /// Return error if the query failed.
-    fn all_items_total(
+    fn synced_total(
+        &self,
+        ctx: &MailUserContext,
+    ) -> impl Future<Output = Result<u64, MailContextError>> + Send;
+
+    /// Return the total number of items in the label.
+    ///
+    /// # Errors
+    ///
+    /// Return error if the query failed.
+    fn all_total(
         &self,
         ctx: &MailUserContext,
     ) -> impl Future<Output = Result<u64, MailContextError>> + Send;
@@ -80,9 +90,7 @@ pub trait MailScrollerSource: Send + Sync {
     fn sync_next(
         &mut self,
         ctx: &MailUserContext,
-    ) -> impl Future<
-        Output = Result<(Vec<Self::Item>, u64, MailPaginatorJoinHandle), MailContextError>,
-    > + Send;
+    ) -> impl Future<Output = Result<(Vec<Self::Item>, MailPaginatorJoinHandle), MailContextError>> + Send;
 
     fn watched_tables(&self) -> Vec<String>;
 

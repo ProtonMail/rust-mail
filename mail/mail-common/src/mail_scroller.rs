@@ -44,9 +44,9 @@ pub enum MailScrollerError {
 pub struct MailScroller<T: MailScrollerSource + 'static> {
     ctx: Weak<MailUserContext>,
     source: Arc<Mutex<T>>,
-    total: u64,
     task: MailPaginatorJoinHandle,
     dirty: Arc<AtomicBool>,
+    page_size: usize,
 }
 
 impl MailScroller<DataScrollerSource<ConversationScrollData>> {
@@ -61,7 +61,7 @@ impl MailScroller<DataScrollerSource<ConversationScrollData>> {
             LabelScrollOrder::for_local_label_id(local_label_id, &ctx.user_stash().connection())
                 .await?;
         let source = DataScrollerSource::new(local_label_id, unread, page_size, scroll_order);
-        MailScroller::new(ctx, source).await
+        MailScroller::new(ctx, source, page_size).await
     }
 }
 
@@ -77,7 +77,7 @@ impl MailScroller<DataScrollerSource<MessageScrollData>> {
             LabelScrollOrder::for_local_label_id(local_label_id, &ctx.user_stash().connection())
                 .await?;
         let source = DataScrollerSource::new(local_label_id, unread, page_size, scroll_order);
-        MailScroller::new(ctx, source).await
+        MailScroller::new(ctx, source, page_size).await
     }
 }
 
@@ -89,7 +89,7 @@ impl MailScroller<SearchScrollerSource> {
     ) -> Result<Self, MailContextError> {
         let ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let source = SearchScrollerSource::new(search, page_size);
-        MailScroller::new(ctx, source).await
+        MailScroller::new(ctx, source, page_size).await
     }
 }
 
@@ -100,15 +100,19 @@ impl<T: MailScrollerSource> MailScroller<T> {
     /// # Errors
     ///
     /// Returns error if something went wrong with initializing the data source.
-    async fn new(ctx: Arc<MailUserContext>, mut source: T) -> Result<Self, MailContextError> {
-        let (total, task) = source.initialize(&ctx).await?;
+    async fn new(
+        ctx: Arc<MailUserContext>,
+        mut source: T,
+        page_size: usize,
+    ) -> Result<Self, MailContextError> {
+        let task = source.initialize(&ctx).await?;
 
         Ok(Self {
             ctx: Arc::downgrade(&ctx),
-            total,
             source: Arc::new(Mutex::new(source)),
             task,
             dirty: Arc::new(AtomicBool::new(false)),
+            page_size,
         })
     }
 
@@ -163,8 +167,9 @@ impl<T: MailScrollerSource> MailScroller<T> {
         // external event updates.
         // We could use our own table observer to be notified of changes
         // but we may as well check the source for the final "truth".
-        let visible_items = self.seen().await?;
-        Ok(visible_items < self.total)
+        let total = self.total().await?;
+        let seen = self.seen().await?;
+        Ok(seen < total)
     }
 
     /// Fetch more data from the server.
@@ -192,17 +197,17 @@ impl<T: MailScrollerSource> MailScroller<T> {
             Ok(())
         };
 
-        let (items, new_total, task) = src
+        let (items, task) = src
             .sync_next(&ctx)
             .await
             .inspect_err(|e| tracing::error!("Failed to fetch next page: {e:?}"))?;
 
-        self.total = new_total;
         self.task = task;
 
-        let seen = src.visible_items_total(&ctx).await?;
+        let seen = src.seen_total(&ctx).await?;
+        let total = src.all_total(&ctx).await?;
 
-        if items.is_empty() && seen < self.total {
+        if items.is_empty() && seen < total {
             previous_result?;
 
             if self.task.is_none() {
@@ -225,37 +230,40 @@ impl<T: MailScrollerSource> MailScroller<T> {
     /// Return error if the query failed.
     pub async fn all_items(&mut self) -> Result<Vec<T::Item>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
+        let total = self.total().await?;
+
+        if total > 0 && total < self.page_size as u64 {
+            self.dirty.store(false, Ordering::Release);
+            let _ = self.fetch_more().await;
+        }
+
         // We need to acquire the lock before clearing the dirty flag
         // as the fetch more should not be able to pass through the dirty flag.
         // before all_items is finished loading.
         let src = self.source.lock().await;
 
         self.dirty.store(false, Ordering::Release);
-        self.total = src.all_items_total(&ctx).await?;
-        let items = src.visible_items(&ctx).await;
 
-        drop(src);
-
-        items
+        src.visible_items(&ctx).await
     }
 
     /// Return the total number of elements available.
     ///
     /// Note: This value does not react to changes until more
     /// data is fetched from the server.
-    pub fn total(&self) -> u64 {
-        self.total
+    pub async fn total(&self) -> Result<u64, MailContextError> {
+        let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
+        let src = self.source.lock().await;
+
+        src.all_total(&ctx).await
     }
 
     /// Return the number of already seen elements.
     pub async fn seen(&self) -> Result<u64, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let src = self.source.lock().await;
-        let total = src.visible_items_total(&ctx).await;
 
-        drop(src);
-
-        total
+        src.seen_total(&ctx).await
     }
 
     async fn await_task(task: &mut MailPaginatorJoinHandle) -> Result<(), MailContextError> {

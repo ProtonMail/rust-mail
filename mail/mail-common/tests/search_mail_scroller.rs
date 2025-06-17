@@ -153,7 +153,7 @@ async fn test_search_mail_scroller_reads_two_pages_from_online_scroll_data() {
         ]
     );
     assert!(scroller.has_more().await.unwrap());
-    assert_eq!(scroller.total(), 10);
+    assert_eq!(scroller.total().await.unwrap(), 10);
 
     scroller.fetch_more().await.unwrap();
     let actual = scroller.all_items().await.unwrap();
@@ -178,7 +178,7 @@ async fn test_search_mail_scroller_reads_two_pages_from_online_scroll_data() {
         ]
     );
     assert!(!scroller.has_more().await.unwrap());
-    assert_eq!(scroller.total(), 10);
+    assert_eq!(scroller.total().await.unwrap(), 10);
     assert!(scroller.fetch_more().await.unwrap().is_empty());
 }
 

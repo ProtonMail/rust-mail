@@ -149,7 +149,7 @@ async fn paginate_mail<T: MailScrollerSource>(
     <T as MailScrollerSource>::Item: PartialEq + Debug,
 {
     let mut element_count = 0_u64;
-    let total_elements = paginator.total();
+    let total_elements = paginator.total().await.unwrap();
     #[allow(clippy::cast_possible_truncation)]
     let mut all_elements = Vec::with_capacity(total_elements as usize);
 
