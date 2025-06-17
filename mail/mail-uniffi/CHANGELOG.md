@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- [ET-3367] For labels with count less than page_size force fetch_more while loading `all_items`
+- [ET-2944] Fetch missing dependencies during event loop
+
+
+## [mail-uniffi-v0.93.4] - 2025-06-17
+
+### Fixes
+
 - Do not sync conversation on load without messages
 - Disable fixed location prefetcher
 - [ET-3243] Mark conversation unread
