@@ -13,6 +13,7 @@ use crate::test_utils::db::new_test_connection_file;
 use crate::test_utils::db_states::{
     new_test_delete_db_state, new_test_label_db_state,
     new_test_label_db_state_label_with_existing_labels, new_test_unread_db_state,
+    new_test_unread_db_state_unread_label_in_folder,
 };
 use crate::test_utils::search::{
     MY_ATTACHMENT_ID, MY_LABEL_ID1, MY_LABEL_ID2, create_labels, test_conversation,
@@ -233,7 +234,7 @@ mod first_unread_message {
         (MessageFlags::RECEIVED, false, &[&INBOX]),
         (MessageFlags::RECEIVED, false, &[&INBOX]),
         (MessageFlags::RECEIVED, false, &[&FOLDER]),
-    ], Some(1.into()); "TEST26 - different view labels"
+    ], Some(2.into()); "TEST26 - different view labels"
 )]
     #[test_case(
     &[&INBOX], &[
@@ -249,6 +250,13 @@ mod first_unread_message {
         (MessageFlags::RECEIVED, false, &[&INBOX]),
     ], Some(2.into()); "TEST28 - different view labels"
 )]
+    #[test_case(
+    &[&FOLDER], &[
+        (MessageFlags::RECEIVED, false, &[&INBOX]),
+        (MessageFlags::RECEIVED, false, &[&FOLDER]),
+        (MessageFlags::RECEIVED, false, &[&INBOX]),
+    ], Some(1.into()); "TEST29 - different view labels in custom folder"
+    )]
     fn first_unread_message(
         labels: &[&Label],
         messages: &[(MessageFlags, bool, &[&Label])],
@@ -2332,6 +2340,63 @@ async fn test_conversation_mark_unread() {
             assert_eq!(label_counts.total, start_label_counts.total);
         }
     }
+}
+
+#[tokio::test]
+async fn test_conversation_marks_only_the_last_message_with_the_same_label_as_unread() {
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection();
+    let mut state = new_test_unread_db_state_unread_label_in_folder();
+    prepare_db_state_core(&mut tether, &mut state.addresses).await;
+    let (state, state_map) = prepare_and_patch_db_state(&mut tether, state.clone()).await;
+
+    let local_conv_id = *state_map
+        .conversations
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
+        .unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+
+    let db_conversation = Conversation::load(local_conv_id, &tether)
+        .await
+        .expect("failed to get conversation")
+        .expect("should have value");
+
+    assert_eq!(db_conversation.num_messages, 2);
+    assert_eq!(db_conversation.num_unread, 0);
+
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            // Mark last one as unread
+            Conversation::mark_unread(local_label_id1, [local_conv_id], tx)
+                .await
+                .unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    let db_conversation = Conversation::load(local_conv_id, &tether)
+        .await
+        .expect("failed to get conversation")
+        .expect("should have value");
+
+    let messages = Message::find(
+        "WHERE local_conversation_id=?
+                AND unread=1",
+        params![local_conv_id],
+        &tether,
+    )
+    .await
+    .unwrap();
+    assert_eq!(messages.len(), 1);
+    let message = &messages[0];
+    // newest message has time at 400.
+    assert_eq!(message.time, 100.into());
+
+    assert_eq!(message.label_ids[0], *MY_LABEL_ID1);
+
+    // There should be 1 unread message.
+    assert_eq!(db_conversation.num_unread, 1);
 }
 
 #[tokio::test]

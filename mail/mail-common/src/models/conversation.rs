@@ -689,13 +689,13 @@ impl Conversation {
                 .query_values::<_, LocalMessageId>(
                     indoc::indoc! {"
                     WITH conv_msgs AS (
-                        SELECT local_id, ? AS label_id 
-                        FROM messages 
+                        SELECT local_id, ? AS label_id
+                        FROM messages
                         WHERE local_conversation_id=?
                     )
                     INSERT OR IGNORE INTO
                         message_labels (local_message_id, local_label_id)
-                    SELECT * FROM conv_msgs 
+                    SELECT * FROM conv_msgs
                     RETURNING local_message_id AS value
                     "},
                     params![label_id, id],
@@ -1487,7 +1487,7 @@ impl Conversation {
         }
 
         fn first_consecutive_unread_msg(
-            label_id: &LabelId,
+            label_id: Option<&LabelId>,
             messages: &[Message],
             filter: impl Fn(&Message) -> bool,
         ) -> Option<LocalMessageId> {
@@ -1505,7 +1505,9 @@ impl Conversation {
                 messages
                     .iter()
                     .rev()
-                    .find(|m| filter(m) && m.label_ids.contains(label_id))
+                    .find(|m| {
+                        filter(m) && label_id.is_none_or(|label_id| m.label_ids.contains(label_id))
+                    })
                     .and_then(|m| m.local_id)
             })
         }
@@ -1513,7 +1515,13 @@ impl Conversation {
         let view_is_starred_label_or_folder = label.label_type == LabelType::Label
             || label.label_type == LabelType::Folder
             || label.remote_id == Some(LabelId::starred());
-        let label_id = label.remote_id.as_ref()?;
+        // If this is not a custom label or a folder we don't want to match against
+        // label id.
+        let label_id = if label.label_type != LabelType::System {
+            Some(label.remote_id.as_ref()?)
+        } else {
+            None
+        };
 
         if view_is_starred_label_or_folder {
             first_consecutive_unread_msg(label_id, messages, |msg| !msg.flags.is_draft())
@@ -1858,10 +1866,12 @@ impl Conversation {
             };
             // Find all messages that need to be marked as read.
             let message = Message::find_first(
-                "WHERE local_conversation_id=?
+                "
+                JOIN message_labels AS ml ON messages.local_id = ml.local_message_id AND local_label_id=?
+                WHERE local_conversation_id=?
                 AND unread=0
                 ORDER BY time DESC",
-                params![conversation_id],
+                params![local_label_id, conversation_id],
                 bond,
             )
             .await?;
@@ -2008,7 +2018,7 @@ impl Conversation {
                     DELETE FROM message_labels
                     WHERE local_message_id IN (
                         SELECT local_id
-                        FROM messages 
+                        FROM messages
                         WHERE local_conversation_id=?1
                     ) AND message_labels.local_label_id=?2
                     RETURNING local_message_id AS value
@@ -2302,8 +2312,8 @@ impl Conversation {
             .query_values(
                 formatdoc! {"
                 SELECT local_label_id AS value
-                FROM conversation_labels 
-                WHERE 
+                FROM conversation_labels
+                WHERE
                     local_conversation_id in ({})"
                     , placeholders(ids)
                 },
@@ -2824,12 +2834,13 @@ impl Conversation {
         tx: &mut impl RunTransaction,
         session: &Session,
     ) -> Result<(), AppError> {
-        let Some(conversation) = Self::find_by_id(local_conversation_id, tx.tether()).await? else {
+        let Some(mut conversation) = Self::find_by_id(local_conversation_id, tx.tether()).await?
+        else {
             return Err(AppError::ConversationNotFound(local_conversation_id));
         };
 
         if !conversation.has_messages {
-            let Some(rid) = conversation.remote_id else {
+            let Some(ref rid) = conversation.remote_id else {
                 return Err(AppError::ConversationHasNoRemoteId(local_conversation_id));
             };
             debug!("Syncing conversation messages");
@@ -2841,14 +2852,18 @@ impl Conversation {
                 )));
             }
 
-            let conversation_response = session.api().get_conversation(rid).await.map_err(|e| {
-                error!("failed to download conversation messages: {e:?}");
-                AppError::from(e)
-            })?;
+            let conversation_response =
+                session
+                    .api()
+                    .get_conversation(rid.clone())
+                    .await
+                    .map_err(|e| {
+                        error!("failed to download conversation messages: {e:?}");
+                        AppError::from(e)
+                    })?;
 
-            tx.run_tx::<_, _>(async |tx| {
+            tx.run_tx::<_, _>(async move |tx| {
                 let message_metadata: Vec<ApiMessageMetadata> = conversation_response.messages;
-                let mut new_conversation: Conversation = conversation_response.conversation.into();
 
                 Message::create_or_update_messages_from_metadata(message_metadata, tx)
                     .await
@@ -2857,11 +2872,8 @@ impl Conversation {
                         e
                     })?;
 
-                new_conversation.local_id = conversation.local_id;
-                new_conversation.row_id = conversation.row_id;
-                new_conversation.has_messages = true;
-
-                new_conversation.save(tx).await.map_err(|e| {
+                conversation.has_messages = true;
+                conversation.save(tx).await.map_err(|e| {
                     error!("Failed to write conversation: {e:?}");
                     e
                 })?;
@@ -3369,7 +3381,7 @@ impl ConversationMessageLabelStats {
                 JOIN message_labels AS ML ON
                     ML.local_message_id = messages.local_id AND
                     ML.local_label_id = ?
-                WHERE 
+                WHERE
                     messages.local_conversation_id = ? AND
                     messages.local_id IN ({})
             ",

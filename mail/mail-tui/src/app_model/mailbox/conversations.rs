@@ -208,6 +208,11 @@ impl ConversationsState {
         message: Message,
         mbox: &Mailbox,
     ) -> Command<Messages> {
+        if let Message::ConversationState(ConversationMessage::Refreshed(conversations)) = message {
+            self.conversations_refreshed(conversations);
+            return Command::None;
+        }
+
         match &mut self.messages {
             MessagesStatus::None => {
                 let Message::ConversationState(message) = message else {
