@@ -332,7 +332,6 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         &mut self,
         ctx: &MailUserContext,
     ) -> Result<(Vec<Self::Item>, MailPaginatorJoinHandle), MailContextError> {
-        tracing::debug!("Sync next state: {:?}", self.state);
         let tether = ctx.user_stash().connection();
         let label = self.get_label(&tether).await?;
         let total = T::total(self.local_label_id, self.unread, &tether).await?;
@@ -367,7 +366,6 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         // state. This is the soonest place it can be safely called.
         self.sync_scroller(&tether).await?;
 
-        tracing::debug!("Sync next after sync state: {:?}", self.state);
         let (items, task) = match &mut self.state {
             MailScrollerState::Online(scroller) => {
                 // This is the only place where cache progresses,
