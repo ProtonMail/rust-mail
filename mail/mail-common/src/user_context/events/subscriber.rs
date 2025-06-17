@@ -1,4 +1,3 @@
-use crate::MailUserContext;
 use crate::actions::refresh::ActionRefresh;
 use crate::actions::{conversations, messages};
 use crate::datatypes::{MessageLabelsCount, ReadFilter, ViewMode};
@@ -11,6 +10,7 @@ use crate::prefetch::PrefetchJob;
 use crate::user_context::events::conversations::handle_conversation_events;
 use crate::user_context::events::labels::handle_label_events;
 use crate::user_context::events::messages::handle_message_events;
+use crate::{MailContextError, MailUserContext};
 use crate::{datatypes::ConversationLabelsCount, events::MailEvent};
 use anyhow::{anyhow, bail};
 use async_trait::async_trait;
@@ -24,8 +24,10 @@ use std::sync::{Arc, Weak};
 use tracing::{debug, error, info, warn};
 
 // Import common macros from core
+use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::labels::LabelScrollOrder;
 use proton_core_common::event_loop::{join_task, try_refresh};
+use stash::stash::Tether;
 
 pub struct MailEventSubscriber(Weak<MailUserContext>);
 
@@ -54,11 +56,25 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
         let ctx = self.inner()?;
         debug!("Handling {} mail events", events.len());
 
-        // This needs to happen outside of the transaction because queuing an action creates a
-        // transaction and it would deadlock otherwise.
         let mut tether = ctx.user_context.stash().connection();
         let mut conversation_ids = Vec::with_capacity(events.len());
         let mut message_ids = Vec::with_capacity(events.len());
+
+        // Check for missing dependencies. Sometimes when lot of messages/conversations get moved
+        // to newly created label the items can have the new label before the label create event.
+
+        let dependency_fetcher = calculate_missing_dependencies(events, &tether)
+            .await
+            .map_err(|e| {
+                SubscriberError::Other(anyhow!("Failed to calculate dependencies: {e:?}"))
+            })?;
+        dependency_fetcher
+            .fetch_and_store(ctx.api(), &mut tether)
+            .await
+            .map_err(|e| {
+                SubscriberError::Other(anyhow!("Failed to fetch or store dependencies: {e:?}"))
+            })?;
+
         let queue_incoming_default = tether
             .tx::<_, _, SubscriberError>(async |tx| {
                 let mut queue_incoming_default = false;
@@ -325,4 +341,30 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
     };
 
     Ok(())
+}
+
+async fn calculate_missing_dependencies(
+    events: &[MailEvent],
+    tether: &Tether,
+) -> Result<MessageOrConversationDependencyFetcher, MailContextError> {
+    let mut fetcher = MessageOrConversationDependencyFetcher::new();
+    for event in events {
+        if let Some(conversation_events) = &event.conversations {
+            for conversation_event in conversation_events {
+                if let Some(conversation) = conversation_event.conversation.as_ref() {
+                    fetcher.check_conversation(conversation, tether).await?
+                }
+            }
+        }
+
+        if let Some(message_events) = &event.messages {
+            for message_event in message_events {
+                if let Some(message) = message_event.message.as_ref() {
+                    fetcher.check_api_message_metadata(message, tether).await?
+                }
+            }
+        }
+    }
+
+    Ok(fetcher)
 }

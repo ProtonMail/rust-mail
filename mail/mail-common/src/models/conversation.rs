@@ -10,14 +10,15 @@ use crate::actions::{
     ConversationAction, ConversationAvailableActions, GeneralActions, LabelAsAction,
     MailActionError, MoveAction, MoveItemAction, filter_responses,
 };
+use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::{
     AttachmentMetadata, ConversationLabelsCount, CustomLabel, Disposition, ExclusiveLocation,
     LocalMessageId, MessageAttachmentInfos, MessageLabelsCount, MessageRecipients, MessageSenders,
     ReadFilter, SystemLabelId,
 };
-use crate::find_in_query;
 use crate::models::*;
 use crate::{AppError, actions::conversations::Delete};
+use crate::{MailContextError, find_in_query};
 use anyhow::{Context, anyhow};
 use futures::future;
 use indoc::{formatdoc, indoc};
@@ -58,7 +59,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::future::Future;
 use std::ops::AddAssign;
 use std::sync::Arc;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, trace, warn};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq, SmartDefault)]
 #[TableName("conversations")]
@@ -2113,27 +2114,15 @@ impl Conversation {
         conversations: &[ApiConversation],
         api: &Proton,
         tether: &mut Tether,
-    ) -> Result<(), AppError> {
-        let mut missing_labels_ids = vec![];
-        for conv in conversations {
-            for label in &conv.labels {
-                let rid = label.id.clone();
-                if (Label::find_by_remote_id(rid, tether)).await?.is_none() {
-                    missing_labels_ids.push(label.id.clone());
-                }
-            }
+    ) -> Result<(), MailContextError> {
+        let mut fetcher = MessageOrConversationDependencyFetcher::new();
+
+        for conversation in conversations {
+            fetcher.check_api_conversation(conversation, tether).await?
         }
 
-        if !missing_labels_ids.is_empty() {
-            info!(
-                "{} label(s) were in a conversations but not locally, synchronizing...",
-                missing_labels_ids.len()
-            );
-            let missing_labels = Label::get_labels_by_ids(api, missing_labels_ids).await?;
-            tether
-                .tx(async |tx| Label::store_labels(tx, missing_labels).await)
-                .await?;
-        }
+        fetcher.fetch_and_store(api, tether).await?;
+
         Ok(())
     }
     /// Search for conversations.
@@ -2160,13 +2149,9 @@ impl Conversation {
         options: GetConversationsOptions,
         api: &Proton,
         tether: &mut Tether,
-    ) -> Result<Vec<Conversation>, AppError> {
+    ) -> Result<Vec<Conversation>, MailContextError> {
         // Fetch all the conversations from the API
-        let conversations = api
-            .get_conversations(options)
-            .await
-            .context("Error fetching the conversations from the API")?
-            .conversations;
+        let conversations = api.get_conversations(options).await?.conversations;
 
         Self::sync_dependencies(&conversations, api, tether).await?;
 
