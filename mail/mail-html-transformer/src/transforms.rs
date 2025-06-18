@@ -47,7 +47,6 @@ pub fn move_styles_to_body(document: NodeRef) {
     }
 }
 
-#[allow(clippy::missing_panics_doc)] // The select is well formed.
 /// This function overrides all `rel` attributes in `<a>` tags to be [noreferrer.](https://developer.mozilla.org/en-US/docs/Web/HTML/Attributes/rel/noreferrer)
 ///
 /// See [this article](https://mathiasbynens.github.io/rel-noopener/) to see how the lack of it could be abused

@@ -47,7 +47,6 @@ impl TryFrom<&str> for IanaToken {
 }
 
 /// Validate that given `value` respect format for `iana-token` values
-#[allow(clippy::missing_panics_doc, reason = "Valid regex")]
 #[must_use]
 pub fn is_iana_token_value(value: &str) -> bool {
     // iana-token = 1*(ALPHA / DIGIT / "-")

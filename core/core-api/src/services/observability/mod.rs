@@ -72,10 +72,6 @@ impl ObservabilityManager {
     /// * `send_period` - The `Duration` between each metric-sending operation.
     /// * `batch_size` - The maximum number of metrics to send in each batch.
     ///
-    /// # Panics
-    /// This method does not panic directly, but the spawned task assumes that the Tokio runtime
-    /// is available. If called outside a Tokio runtime, it will panic.
-    /// ```
     pub fn start(client: Client, send_period: Duration, batch_size: usize) {
         START.call_once(|| {
             tokio::spawn(async move {

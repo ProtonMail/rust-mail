@@ -92,8 +92,6 @@ pub fn testdata_user_keys() -> UserKeys {
 }
 
 /// Returns the user secret to unlock the default test user keys.
-///
-/// # Panics
 pub fn testdata_user_secret() -> UserKeySecret {
     let salts = Salts::new(iter::once(Salt {
         id: KeyId::from(TEST_USER_KEY_ID),
@@ -115,7 +113,6 @@ pub fn testdata_address_keys_for_user_address() -> AddressKeys {
 
 /// Returns the unlocked user keys of the test account.
 ///
-/// # Panics
 pub fn unlocked_user_key<P>(pgp: &P) -> UnlockedUserKeys<P>
 where
     P: PGPProviderSync,

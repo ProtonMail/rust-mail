@@ -329,6 +329,7 @@ mut_mut = "warn"
 print_stdout = "warn"
 unseparated_literal_suffix = "warn"
 wrong_self_convention = "warn"
+missing_panics_doc = "allow"
 #TODO: Cargo build override rather than profile config(https://users.rust-lang.org/t/how-to-modify-profile-release-only-for-a-target/48811/3)
 
 [profile.bench]

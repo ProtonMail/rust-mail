@@ -44,7 +44,6 @@ impl TryFrom<&str> for XName {
 }
 
 /// Validate that given `value` respect format for `x-name` values
-#[allow(clippy::missing_panics_doc, reason = "Valid regex")]
 #[must_use]
 pub fn is_x_name_value(value: &str) -> bool {
     // x-name = "x-" 1*(ALPHA / DIGIT / "-")

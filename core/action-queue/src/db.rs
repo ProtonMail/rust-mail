@@ -305,7 +305,6 @@ impl StoredAction {
     ///
     /// See [`Model::save()`].
     ///
-    #[allow(clippy::missing_panics_doc)]
     pub async fn on_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         // Resolve dependencies from keys
         let direct_dependencies = ActionDependencyKeysTable::resolve_dependency_keys(
@@ -547,7 +546,6 @@ impl StoredAction {
     /// # Errors
     ///
     /// Returns error if the query failed or the executor could not be retrieved.
-    #[allow(clippy::missing_panics_doc)] // next_action.id.unwrap will never happen.
     pub async fn pop(
         executor_id: String,
         action_group: &str,

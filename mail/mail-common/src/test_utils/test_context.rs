@@ -123,9 +123,6 @@ impl MailTestContext {
     /// Since asking for a new context does not initialize it (we are reusing them),
     /// it is programmers responsibility to initialize context manually afterwards.
     ///
-    /// # Panics
-    /// Get the test user mail context.
-    ///
     pub async fn uninitialized_mail_user_context(&self) -> Arc<MailUserContext> {
         let ctx = self
             .mail_context
@@ -147,10 +144,6 @@ impl MailTestContext {
     ///
     /// Only use in the pair with [`Self::uninitialized_mail_user_context`].
     ///
-    /// # Panics
-    ///
-    /// If the initialization fails
-    ///
     pub async fn initialize_uninitialized_ctx(&self, ctx: &Arc<MailUserContext>) {
         MailUserContext::initialize_async(ctx.clone())
             .await
@@ -160,8 +153,6 @@ impl MailTestContext {
     /// Get the test user context.
     /// Has to be called **AFTER** setting up the API mocks
     ///
-    /// # Panics
-    /// Get the test user mail context.
     pub async fn mail_user_context(&self) -> Arc<MailUserContext> {
         let ctx = self
             .mail_context
@@ -203,10 +194,6 @@ impl MailTestContext {
 
     /// Get the test user context but only if its initialized
     ///
-    /// # Panics
-    ///
-    /// Panics if couldnt retrieve context from session
-    ///
     pub async fn initialized_mail_user_context(&self) -> Option<Arc<MailUserContext>> {
         let ctx = self
             .mail_context
@@ -233,7 +220,6 @@ impl MailTestContext {
     /// method to set this up by default as a lower-priority expectation and
     /// establish a catch-all in that way.
     ///
-    /// # Panics
     #[function_name::named]
     pub async fn catch_all(&self) {
         // If there are any unconfigured calls, we will panic because it's not what

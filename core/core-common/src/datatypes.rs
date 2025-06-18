@@ -1510,9 +1510,6 @@ pub struct Timestamp(f64);
 impl Timestamp {
     /// Create a new [`Timestamp`] at the current time.
     ///
-    /// # Panics
-    ///
-    /// Panics if the system time is before the Unix epoch.
     #[must_use]
     pub fn now() -> Self {
         let now = SystemTime::now()

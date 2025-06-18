@@ -32,10 +32,6 @@ impl GroupedContacts {
     /// Note, that the contact group is represented by [`Label`]. Currently, this function WON'T
     /// assert if the label has type `ContactGroup`.
     ///
-    /// # Panics
-    ///
-    /// This function may panic if the contact group does not have local ID assigned.
-    ///
     #[must_use]
     pub fn from_contacts_and_groups(
         mut contacts: Vec<Contact>,
@@ -246,11 +242,6 @@ impl ContactSuggestions {
     ///
     /// This function does not filter the results. Make sure, that the filtering
     /// does not exclude contacts that are part of contact group still matching the query.
-    ///
-    /// # Panics
-    ///
-    /// When contact has no local id (meaning it was not fetched from the database).
-    /// Or when contact group has no remote ID
     ///
     #[must_use]
     pub fn from_contacts_and_device_contacts(

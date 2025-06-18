@@ -111,7 +111,7 @@ impl<T: PublicKey> AsPublicKeyRef<T> for TestAddressPublicKey<T> {
     }
 }
 
-#[allow(clippy::missing_panics_doc, dead_code)]
+#[allow(dead_code)]
 pub fn get_test_address_keys<P>(pgp: &P) -> Vec<TestAddressKey<P::PrivateKey>>
 where
     P: PGPProviderSync,
@@ -119,7 +119,7 @@ where
     get_test_address_key_source(pgp, TEST_DECRYPTION_KEY, "password")
 }
 
-#[allow(clippy::missing_panics_doc, dead_code)]
+#[allow(dead_code)]
 pub fn create_account_unlocked_address_keys<T: PGPProviderSync>(
     provider: &T,
     source: &str,
@@ -140,7 +140,7 @@ pub fn create_account_unlocked_address_keys<T: PGPProviderSync>(
     UnlockedAddressKeys(Vec::from([key]))
 }
 
-#[allow(clippy::missing_panics_doc, dead_code)]
+#[allow(dead_code)]
 pub fn create_account_unlocked_address_keys_v6<T: PGPProviderSync>(
     provider: &T,
     primary_v4: &str,
@@ -175,7 +175,7 @@ pub fn create_account_unlocked_address_keys_v6<T: PGPProviderSync>(
     UnlockedAddressKeys(Vec::from([key_v4, key_v6]))
 }
 
-#[allow(clippy::missing_panics_doc, dead_code)]
+#[allow(dead_code)]
 pub fn create_test_recipient_keys<P>(pgp: &P) -> (Vec<P::PrivateKey>, Vec<P::PublicKey>)
 where
     P: PGPProviderSync,
@@ -199,7 +199,7 @@ where
     (vec![r1, r2], vec![r1_pub, r2_pub])
 }
 
-#[allow(clippy::missing_panics_doc, dead_code)]
+#[allow(dead_code)]
 pub fn get_test_address_key_source<P>(
     pgp: &P,
     source: &str,
@@ -214,7 +214,7 @@ where
     vec![TestAddressKey(decryption_key)]
 }
 
-#[allow(clippy::missing_panics_doc, dead_code)]
+#[allow(dead_code)]
 pub fn get_test_public_address_keys<P>(pgp: &P) -> Vec<TestAddressPublicKey<P::PublicKey>>
 where
     P: PGPProviderSync,
@@ -222,7 +222,6 @@ where
     get_test_public_address_key_source(pgp, TEST_VERIFICATION_KEY)
 }
 
-#[allow(clippy::missing_panics_doc)]
 pub fn get_test_public_address_key_source<P>(
     pgp: &P,
     source: &str,

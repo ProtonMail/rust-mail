@@ -1,5 +1,3 @@
-#![allow(clippy::missing_panics_doc)]
-
 use super::*;
 
 /// Creates an *.ics-compatible string.

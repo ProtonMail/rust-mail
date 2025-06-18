@@ -18,8 +18,6 @@ pub mod system_labels;
 
 /// Get the the counts (first unread, second total) depending on the [`ViewMode`].
 ///
-/// # Panics
-/// If label provided does not have Local ID
 pub async fn messages_counts(label: &Label, tether: &Tether) -> Result<(u64, u64), AppError> {
     match label.view_mode(tether).await? {
         ViewMode::Conversations => {
@@ -39,10 +37,6 @@ pub async fn messages_counts(label: &Label, tether: &Tether) -> Result<(u64, u64
 ///
 /// The color depends on [`MailSettings`] `enable_folder_color` and `inherit_parent_folder_color`
 ///
-///
-/// # Panics
-///
-/// If there is no [`MailSettings`] in the [`Stash`]
 ///
 pub async fn color_to_display(
     value: &Label,

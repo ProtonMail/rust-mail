@@ -1060,7 +1060,6 @@ impl QueueAutoExecutor {
     }
 
     /// Wait on the executor to finish.
-    #[allow(clippy::missing_panics_doc)]
     pub async fn await_finished(mut self) {
         let _ = (&mut self.join_handle).await;
     }

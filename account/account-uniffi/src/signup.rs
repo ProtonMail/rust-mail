@@ -1,4 +1,4 @@
-#![allow(clippy::match_same_arms, clippy::missing_panics_doc)]
+#![allow(clippy::match_same_arms)]
 
 //! Implements the sign-up flow.
 

@@ -337,9 +337,8 @@ where
     ///
     /// # Panics
     ///
-    /// This function will panic if the local id has not been set.
-    /// Normally you set it by calling
-    /// [`Model::save`]
+    /// This function will panic if the local id has not been set (i.e. if the
+    /// modal hasn't been saved yet).
     fn id(&self) -> Self::IdType;
 
     /// Gets the name of the ID field for the record type.

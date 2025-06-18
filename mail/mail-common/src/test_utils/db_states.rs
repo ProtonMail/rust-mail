@@ -171,7 +171,6 @@ pub fn new_message_id(num: usize) -> MessageId {
     MessageId::from(format!("RemoteId{num}"))
 }
 
-/// # Panics
 pub fn new_test_delete_db_state() -> TestDBState {
     // Conversation 1 has 4 messages, split between 2 labels, 1 is unread  + 1 Attachment(s)
     // Conversation 2 has 2 message in one label, 1 is unread + 0 Attachment(s)

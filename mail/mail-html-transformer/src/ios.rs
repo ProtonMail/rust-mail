@@ -9,7 +9,6 @@ use html5ever::{QualName, namespace_url, ns};
 use kuchikiki::{Attributes, ElementData, NodeData, NodeRef};
 use std::cell::RefCell;
 
-#[allow(clippy::missing_panics_doc)]
 /// This pass injects a `meta` element into the HTML `head` element.
 ///
 /// This is currently required to ensure the iOS web view resizes to fit the

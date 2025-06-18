@@ -36,9 +36,7 @@ pub struct TestDBStateMap {
     pub message_counts: HashMap<LabelId, MessageLabelsCount>,
 }
 
-/// # Panics
 pub async fn prepare_db_state_core(tether: &mut Tether, env: &mut [Address]) {
-    // create addresses
     tether
         .tx::<_, _, StashError>(async |tx| {
             for address in env.iter_mut() {
@@ -57,7 +55,6 @@ pub async fn prepare_and_patch_db_state(
     prepare_and_patch_db_state_and_skip(tether, env, false).await
 }
 
-/// # Panics
 #[allow(clippy::too_many_lines)]
 pub async fn prepare_and_patch_db_state_and_skip(
     tether: &mut Tether,
@@ -275,7 +272,6 @@ pub async fn prepare_and_patch_db_state_and_skip(
         .unwrap()
 }
 
-/// # Panics
 #[must_use]
 pub fn find_conversation_label(conv: &Conversation, id: &LabelId) -> ConversationLabel {
     conv.labels
@@ -285,7 +281,6 @@ pub fn find_conversation_label(conv: &Conversation, id: &LabelId) -> Conversatio
         .clone()
 }
 
-/// # Panics
 #[must_use]
 pub fn message_counts_for_conversation(
     messages: &[Message],
@@ -313,7 +308,6 @@ pub fn message_counts_for_conversation(
     (unread, total)
 }
 
-/// # Panics
 #[allow(clippy::from_iter_instead_of_collect)]
 pub async fn conv_counts_as_map(
     tether: &Tether,
@@ -342,7 +336,6 @@ pub async fn conv_counts_as_map(
         .await
 }
 
-/// # Panics
 #[allow(clippy::from_iter_instead_of_collect)]
 pub async fn msg_counts_as_map(tether: &Tether) -> BTreeMap<LocalLabelId, MessageLabelsCount> {
     let iter = MessageCounters::all(tether)
@@ -369,7 +362,6 @@ pub async fn msg_counts_as_map(tether: &Tether) -> BTreeMap<LocalLabelId, Messag
         .await
 }
 
-/// # Panics
 pub async fn create_address(tether: &mut Tether) -> Address {
     let mut address = test_address();
     tether

@@ -67,7 +67,6 @@ where
         })
     }
 
-    #[allow(clippy::missing_panics_doc)]
     pub fn encrypt(&self, pgp: &P, ics: &[u8]) -> Result<(EncryptedIcs, Signature)> {
         let sig = pgp
             .new_signer()

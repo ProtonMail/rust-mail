@@ -364,9 +364,6 @@ impl CoreSession {
     ///
     /// Returns an error if the encryption fails.
     ///
-    /// # Panics
-    ///
-    /// Panics if the UID in the auth does not match the session's remote ID.
     pub fn with_tokens(
         self,
         tokens: &Tokens,

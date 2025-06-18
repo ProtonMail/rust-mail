@@ -226,8 +226,6 @@ impl TestContext {
 
     /// Creates a new account and a fake session.
     ///
-    /// # Panics
-    ///
     pub async fn new_account(
         &self,
         user_id: UserId,
@@ -282,7 +280,6 @@ impl TestContext {
 
     /// Get the test user context.
     ///
-    /// # Panics
     pub async fn user_context(&self) -> Arc<UserContext> {
         self.context
             .user_context_from_session(
@@ -309,8 +306,6 @@ impl TestContext {
     /// It is unfortunately not possible to use the [`Mock::with_priority()`]
     /// method to set this up by default as a lower-priority expectation and
     /// establish a catch-all in that way.
-    ///
-    /// # Panics
     ///
     pub async fn catch_all(&self) {
         catch_all(&self.mock_web_server).await;
@@ -340,9 +335,6 @@ pub struct MockApiEnv {
 impl MockApiEnv {
     /// Create a new `MockApiEnv` with the given host.
     ///
-    /// # Panics
-    ///
-    /// Panics if the given host is not a valid URL.
     pub fn new(host: impl AsRef<str>) -> Self {
         Self {
             host: host.as_ref().parse().expect("URL must be valid"),

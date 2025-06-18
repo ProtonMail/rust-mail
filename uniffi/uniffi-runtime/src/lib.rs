@@ -31,10 +31,6 @@ static RUNTIME: OnceLock<Runtime> = OnceLock::new();
 /// // because `async_runtime_slim()` was called first
 /// ```
 ///
-/// # Panics
-///
-/// This function may panic if Tokio fails to init async runtime
-///
 #[must_use]
 pub fn async_runtime() -> &'static Runtime {
     RUNTIME.get_or_init(|| {
@@ -73,10 +69,6 @@ pub fn async_runtime() -> &'static Runtime {
 /// // This runtime2 is a static reference to SLIM runtime using limited number of cores,
 /// // because `async_runtime_slim()` was called first
 /// ```
-///
-/// # Panics
-///
-/// This function may panic if Tokio fails to init async runtime
 ///
 #[must_use]
 pub fn async_runtime_slim() -> &'static Runtime {
