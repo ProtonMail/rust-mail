@@ -1,25 +1,30 @@
+use crate::MailUserContext;
 use crate::actions::rollback::RollbackAction;
-use crate::{MailContextError, MailUserContext};
 use proton_action_queue::queue::ActionError;
 use proton_core_common::actions::event_poll::EventPoll;
 use proton_event_loop::EventLoopError;
 use std::time::Duration;
+use tokio::time;
 use tracing::{Instrument, error};
 
 impl MailUserContext {
-    /// Setup a background task that queues the event loop action.
-    pub(crate) async fn init_event_loop_poll(
-        &self,
-        duration: Duration,
-    ) -> Result<(), MailContextError> {
+    pub(crate) fn init_event_loop_poll(&self, duration: Duration) {
         tracing::info!(
             "Initializing event loop poll with {} second interval",
             duration.as_secs()
         );
+
         let ctx = self.this.clone();
-        let mut interval = tokio::time::interval(duration);
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+        let mut interval = {
+            let mut interval = time::interval(duration);
+
+            interval.set_missed_tick_behavior(time::MissedTickBehavior::Skip);
+            interval
+        };
+
         let watcher = self.user_context.initialization_watcher.clone();
+
         self.spawn(
             async move {
                 // Wait until `MailUserContext` is initialized.
@@ -56,7 +61,6 @@ impl MailUserContext {
             }
             .instrument(tracing::debug_span!("event_loop")),
         );
-        Ok(())
     }
 
     /// Queue an action to execute the event loop.
