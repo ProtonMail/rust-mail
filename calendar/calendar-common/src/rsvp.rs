@@ -5,7 +5,8 @@ use chrono::{DateTime, NaiveDate, Utc};
 use jiff::Zoned;
 use proton_calendar_api::{
     CalendarAttendeeId, CalendarAttendeeStatus, CalendarAttendeeToken, CalendarBootstrap,
-    CalendarColor, CalendarEvent, CalendarEventRecurrenceId, CalendarEventUid, CalendarId,
+    CalendarColor, CalendarEvent, CalendarEventId, CalendarEventRecurrenceId, CalendarEventUid,
+    CalendarId,
 };
 use proton_core_api::{service::ApiServiceError, services::proton::Proton};
 use proton_crypto::crypto::PGPProviderSync;
@@ -18,18 +19,41 @@ use thiserror::Error;
 use tracing::instrument;
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct RsvpEventId {
-    uid: CalendarEventUid,
-    rid: Option<CalendarEventRecurrenceId>,
+pub enum RsvpEventId {
+    /// Event with up-front known Proton id.
+    ///
+    /// This is the ideal case, because we can ask the backend about this event
+    /// directly, without having to do (somewhat expensive) look-ups.
+    ///
+    /// In practice we get this only/mostly for email reminders - most RSVPs get
+    /// resolved through the (uid,rid) tuple below.
+    ///
+    /// See: [`Self::from_headers()`].
+    Direct(CalendarId, CalendarEventId),
+
+    /// Event for which we know only the uid and possibly recurrence id.
+    ///
+    /// This is a less ideal case, because we have to remap this (uid,rid) tuple
+    /// into a Proton event id when we're fetching the event.
+    ///
+    /// See: [`Self::from_invite()`].
+    Indirect(CalendarEventUid, Option<CalendarEventRecurrenceId>),
 }
 
 impl RsvpEventId {
     #[doc(hidden)]
-    pub fn new(uid: &str, rid: Option<i64>) -> Self {
-        Self {
-            uid: uid.into(),
-            rid: rid.map(CalendarEventRecurrenceId::new),
-        }
+    #[must_use]
+    pub fn direct(cid: &str, eid: &str) -> Self {
+        RsvpEventId::Direct(cid.into(), eid.into())
+    }
+
+    #[doc(hidden)]
+    #[must_use]
+    pub fn indirect(uid: &str, rid: Option<i64>) -> Self {
+        let uid = uid.into();
+        let rid = rid.map(CalendarEventRecurrenceId::new);
+
+        RsvpEventId::Indirect(uid, rid)
     }
 
     /// Extracts event identifier from `invite.ics` attachment.
@@ -67,7 +91,7 @@ impl RsvpEventId {
             })
             .transpose()?;
 
-        Ok(Self { uid, rid })
+        Ok(RsvpEventId::Indirect(uid, rid))
     }
 
     /// Extracts event identifier from email headers.
@@ -78,6 +102,18 @@ impl RsvpEventId {
     ///
     /// See: [`Self::from_invite()`], [`Self::fetch()`].
     pub fn from_headers(headers: &HashMap<String, JsonValue>) -> Option<Self> {
+        let cid = headers
+            .get("X-Pm-Calendar-Calendarid")
+            .and_then(|id| id.as_str());
+
+        let eid = headers
+            .get("X-Pm-Calendar-Eventid")
+            .and_then(|id| id.as_str());
+
+        if let (Some(cid), Some(eid)) = (cid, eid) {
+            return Some(RsvpEventId::Direct(cid.into(), eid.into()));
+        }
+
         let uid = headers
             .get("X-Pm-Calendar-Eventuid")?
             .as_str()
@@ -89,7 +125,7 @@ impl RsvpEventId {
             .and_then(|rid| rid.parse().ok())
             .map(CalendarEventRecurrenceId::new);
 
-        Some(Self { uid, rid })
+        Some(RsvpEventId::Indirect(uid, rid))
     }
 
     /// Fetches event from the API, decrypts it, and returns its contents.
@@ -350,10 +386,7 @@ mod tests {
         )
         .unwrap();
 
-        let expected = RsvpEventId {
-            uid: "1234-1234-1234-1234".into(),
-            rid: None,
-        };
+        let expected = RsvpEventId::Indirect("1234-1234-1234-1234".into(), None);
 
         assert_eq!(expected, actual);
     }
@@ -384,10 +417,10 @@ mod tests {
                 .timestamp()
                 .as_second();
 
-            RsvpEventId {
-                uid: "1234-1234-1234-1234".into(),
-                rid: Some(CalendarEventRecurrenceId::new(rid)),
-            }
+            RsvpEventId::Indirect(
+                "1234-1234-1234-1234".into(),
+                Some(CalendarEventRecurrenceId::new(rid)),
+            )
         };
 
         assert_eq!(expected, actual);
@@ -416,10 +449,7 @@ mod tests {
         )
         .unwrap();
 
-        let expected = RsvpEventId {
-            uid: "1234-1234-1234-1234".into(),
-            rid: None,
-        };
+        let expected = RsvpEventId::Indirect("1234-1234-1234-1234".into(), None);
 
         assert_eq!(expected, actual);
     }
@@ -461,23 +491,37 @@ mod tests {
     }
 
     #[test]
-    fn from_headers() {
+    fn from_headers_direct() {
+        let actual = RsvpEventId::from_headers(&headers([
+            ("Method", "GET"),
+            ("X-Pm-Calendar-Calendarid", "1234-1234-1234-1234"),
+            ("FOO", "BAR"),
+            ("X-Pm-Calendar-Eventid", "4321-4321-4321-4321"),
+        ]));
+
+        let expected = Some(RsvpEventId::Direct(
+            "1234-1234-1234-1234".into(),
+            "4321-4321-4321-4321".into(),
+        ));
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn from_headers_indirect() {
         let actual = RsvpEventId::from_headers(&headers([
             ("Method", "GET"),
             ("X-Pm-Calendar-Eventuid", "1234-1234-1234-1234"),
             ("FOO", "BAR"),
         ]));
 
-        let expected = Some(RsvpEventId {
-            uid: "1234-1234-1234-1234".into(),
-            rid: None,
-        });
+        let expected = Some(RsvpEventId::Indirect("1234-1234-1234-1234".into(), None));
 
         assert_eq!(expected, actual);
     }
 
     #[test]
-    fn from_headers_recurring() {
+    fn from_headers_indirect_recurring() {
         let actual = RsvpEventId::from_headers(&headers([
             ("Method", "GET"),
             ("X-Pm-Calendar-Eventuid", "1234-1234-1234-1234"),
@@ -485,10 +529,10 @@ mod tests {
             ("X-Pm-Calendar-Occurrence", "1514804400"),
         ]));
 
-        let expected = Some(RsvpEventId {
-            uid: "1234-1234-1234-1234".into(),
-            rid: Some(CalendarEventRecurrenceId::new(1_514_804_400)),
-        });
+        let expected = Some(RsvpEventId::Indirect(
+            "1234-1234-1234-1234".into(),
+            Some(CalendarEventRecurrenceId::new(1_514_804_400)),
+        ));
 
         assert_eq!(expected, actual);
     }

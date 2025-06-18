@@ -29,9 +29,16 @@ pub trait ProtonCalendar {
     /// <https://protonmail.gitlab-pages.protontech.ch/Slim-API/calendar/#tag/Event/operation/get_calendar-%7B_version%7D-%7BcalID%7D-events-%7BeventID%7D>
     fn get_calendar_event(
         &self,
+        cal_id: &CalendarId,
+        event_id: &CalendarEventId,
+    ) -> impl Future<Output = ApiServiceResult<CalendarEvent>> + Send;
+
+    /// <https://protonmail.gitlab-pages.protontech.ch/Slim-API/calendar/#tag/Event/operation/get_calendar-%7B_version%7D-events>
+    fn find_calendar_events(
+        &self,
         uid: &CalendarEventUid,
         rid: Option<CalendarEventRecurrenceId>,
-    ) -> impl Future<Output = ApiServiceResult<Option<CalendarEvent>>> + Send;
+    ) -> impl Future<Output = ApiServiceResult<Vec<CalendarEvent>>> + Send;
 
     /// <https://protonmail.gitlab-pages.protontech.ch/Slim-API/calendar/#tag/VTimezone/operation/get_calendar-%7B_version%7D-vtimezones>
     ///
@@ -83,9 +90,23 @@ impl ProtonCalendar for Proton {
 
     async fn get_calendar_event(
         &self,
+        cal_id: &CalendarId,
+        event_id: &CalendarEventId,
+    ) -> ApiServiceResult<CalendarEvent> {
+        let resp: GetCalendarEvent = GET!("{CALENDAR_V1}/{cal_id}/events/{event_id}")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?;
+
+        Ok(resp.event)
+    }
+
+    async fn find_calendar_events(
+        &self,
         uid: &CalendarEventUid,
         rid: Option<CalendarEventRecurrenceId>,
-    ) -> ApiServiceResult<Option<CalendarEvent>> {
+    ) -> ApiServiceResult<Vec<CalendarEvent>> {
         let req = GET!("{CALENDAR_V1}/events")
             .query(("UID", uid))
             .query(("Page", 0))
@@ -99,7 +120,7 @@ impl ProtonCalendar for Proton {
 
         let resp: FoundCalendarEvents = req.send_with(self).await?.ok()?.into_body_json()?;
 
-        Ok(resp.events.into_iter().next())
+        Ok(resp.events)
     }
 
     async fn get_calendar_vtimezones(

@@ -149,7 +149,7 @@ async fn fetch_and_answer() {
         .unwrap()
         .unwrap();
 
-    assert_eq!(RsvpEventId::new(EVENT_UID, None), rsvp);
+    assert_eq!(RsvpEventId::indirect(EVENT_UID, None), rsvp);
 
     // ---
     // Step 3: Load RSVP details from the calendar.
@@ -245,7 +245,7 @@ async fn fetch_and_answer() {
         .await;
 
     ctx.mock_web_server
-        .mock_get_calendar_event(EVENT_UID, None, Some(event))
+        .mock_find_calendar_events(EVENT_UID, None, Some(event))
         .await;
 
     let mut rsvp = message_body

@@ -24,10 +24,10 @@ async fn using_address_key() {
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_event("8maQ3qBa", None, Some(event.clone()))
+        .mock_find_calendar_events("8maQ3qBa", None, Some(event.clone()))
         .await;
 
-    let actual = RsvpEventId::new("8maQ3qBa", None)
+    let actual = RsvpEventId::indirect("8maQ3qBa", None)
         .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
         .await
         .unwrap();
@@ -53,10 +53,10 @@ async fn using_shared_key() {
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_event("8maQ3qBa", None, Some(event.clone()))
+        .mock_find_calendar_events("8maQ3qBa", None, Some(event.clone()))
         .await;
 
-    let actual = RsvpEventId::new("8maQ3qBa", None)
+    let actual = RsvpEventId::indirect("8maQ3qBa", None)
         .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
         .await
         .unwrap();
@@ -85,10 +85,36 @@ async fn recurring() {
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_event("8maQ3qBa", Some(rid), Some(event.clone()))
+        .mock_find_calendar_events("8maQ3qBa", Some(rid), Some(event.clone()))
         .await;
 
-    let actual = RsvpEventId::new("8maQ3qBa", Some(rid))
+    let actual = RsvpEventId::indirect("8maQ3qBa", Some(rid))
+        .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
+        .await
+        .unwrap();
+
+    pa::assert_eq!(Some(expected_event(event)), actual);
+}
+
+/// Make sure we can fetch events with direct id - see [`RsvpEventId::Direct`].
+#[tokio::test]
+async fn direct() {
+    let world = world().await;
+    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_bootstrap("HzNtbT1J", world.bootstrap())
+        .await;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_event("8maQ3qBa", "pFmwNlJp", event.clone())
+        .await;
+
+    let actual = RsvpEventId::direct("8maQ3qBa", "pFmwNlJp")
         .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
         .await
         .unwrap();
@@ -130,10 +156,10 @@ async fn cancelled() {
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_event("8maQ3qBa", None, Some(event.clone()))
+        .mock_find_calendar_events("8maQ3qBa", None, Some(event.clone()))
         .await;
 
-    let actual = RsvpEventId::new("8maQ3qBa", None)
+    let actual = RsvpEventId::indirect("8maQ3qBa", None)
         .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
         .await
         .unwrap()
@@ -154,10 +180,10 @@ async fn unknown() {
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_event("8maQ3qBa", None, None)
+        .mock_find_calendar_events("8maQ3qBa", None, None)
         .await;
 
-    let actual = RsvpEventId::new("8maQ3qBa", None)
+    let actual = RsvpEventId::indirect("8maQ3qBa", None)
         .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
         .await
         .unwrap();
@@ -191,10 +217,10 @@ async fn err_unknown_attendee_status() {
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_event("8maQ3qBa", None, Some(event))
+        .mock_find_calendar_events("8maQ3qBa", None, Some(event))
         .await;
 
-    let actual = RsvpEventId::new("8maQ3qBa", None)
+    let actual = RsvpEventId::indirect("8maQ3qBa", None)
         .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
         .await
         .unwrap_err();
@@ -230,10 +256,10 @@ async fn err_missing_x_pm_token() {
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_event("8maQ3qBa", None, Some(event))
+        .mock_find_calendar_events("8maQ3qBa", None, Some(event))
         .await;
 
-    let actual = RsvpEventId::new("8maQ3qBa", None)
+    let actual = RsvpEventId::indirect("8maQ3qBa", None)
         .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
         .await
         .unwrap_err();
@@ -270,10 +296,10 @@ async fn err_many_events_in_ics() {
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_event("8maQ3qBa", None, Some(event))
+        .mock_find_calendar_events("8maQ3qBa", None, Some(event))
         .await;
 
-    let actual = RsvpEventId::new("8maQ3qBa", None)
+    let actual = RsvpEventId::indirect("8maQ3qBa", None)
         .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
         .await
         .unwrap_err();

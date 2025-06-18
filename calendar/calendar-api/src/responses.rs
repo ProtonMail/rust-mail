@@ -86,6 +86,12 @@ pub struct CalendarMemberPassphrase {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
+pub struct GetCalendarEvent {
+    pub event: CalendarEvent,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
 pub struct FoundCalendarEvents {
     pub events: Vec<CalendarEvent>,
 }

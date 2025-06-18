@@ -43,7 +43,23 @@ async fn fetch(
 ) -> RsvpResult<Option<(CalendarBootstrap, CalendarEvent)>> {
     info!("Fetching event data");
 
-    let event = api.get_calendar_event(&id.uid, id.rid).await?;
+    let event = match id {
+        RsvpEventId::Direct(cid, eid) => Some(api.get_calendar_event(cid, eid).await?),
+
+        RsvpEventId::Indirect(uid, rid) => {
+            let events = api.find_calendar_events(uid, *rid).await?;
+
+            // If this is a repeating event, but we're asking the API without
+            // providing the recurrence id - you can imagine we're asking about
+            // the "original" event, so to say - the API will return us both the
+            // original event and all of its single edits.
+            //
+            // Since we're interested only in the original event, we can just
+            // ignore the single edits and pick the first event from the list
+            // (which is guaranteed to be this original we're looking for).
+            events.into_iter().next()
+        }
+    };
 
     if let Some(event) = event {
         info!("Fetching bootstrap data");

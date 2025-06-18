@@ -59,10 +59,10 @@ async fn answer(case: fn() -> TestCase) {
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_event("8maQ3qBa", None, Some(event.clone()))
+        .mock_find_calendar_events("8maQ3qBa", None, Some(event.clone()))
         .await;
 
-    let mut event = RsvpEventId::new("8maQ3qBa", None)
+    let mut event = RsvpEventId::indirect("8maQ3qBa", None)
         .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
         .await
         .unwrap()

@@ -1,6 +1,7 @@
 use crate::{
     CalendarAttendeeStatus, CalendarBootstrap, CalendarEvent, CalendarNotificationsUpdate,
-    FoundCalendarEvents, UpdateCalendarEventAttendee, UpdateCalendarEventPersonalPart,
+    FoundCalendarEvents, GetCalendarEvent, UpdateCalendarEventAttendee,
+    UpdateCalendarEventPersonalPart,
 };
 use jiff::Zoned;
 use wiremock::matchers::{body_json, method, path, query_param};
@@ -23,6 +24,13 @@ pub trait ProtonCalendarMock {
     ) -> impl Future<Output = ()> + Send;
 
     fn mock_get_calendar_event(
+        &self,
+        cal_id: &str,
+        event_id: &str,
+        event: CalendarEvent,
+    ) -> impl Future<Output = ()> + Send;
+
+    fn mock_find_calendar_events(
         &self,
         uid: &str,
         rid: Option<i64>,
@@ -71,7 +79,20 @@ impl ProtonCalendarMock for MockServer {
     }
 
     #[function_name::named]
-    async fn mock_get_calendar_event(
+    async fn mock_get_calendar_event(&self, cal_id: &str, event_id: &str, event: CalendarEvent) {
+        let response = GetCalendarEvent { event };
+
+        Mock::given(method("GET"))
+            .and(path(format!("/api/calendar/v1/{cal_id}/events/{event_id}")))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .expect(1)
+            .named(function_name!())
+            .mount(self)
+            .await;
+    }
+
+    #[function_name::named]
+    async fn mock_find_calendar_events(
         &self,
         uid: &str,
         rid: Option<i64>,

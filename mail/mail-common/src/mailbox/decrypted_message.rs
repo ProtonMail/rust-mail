@@ -463,7 +463,7 @@ impl DecryptedMessageBody {
         address_id: &AddressId,
         rsvp: RsvpEventId,
     ) -> MailContextResult<Option<RsvpEvent>> {
-        info!(?rsvp, "Fetching RSVP");
+        info!("Fetching RSVP");
 
         let pgp = proton_crypto::new_pgp_provider();
 
@@ -476,7 +476,13 @@ impl DecryptedMessageBody {
             })?;
 
         match rsvp.fetch(ctx.api(), &pgp, &keys, ctx.rsvp_cache()).await {
-            Ok(event) => Ok(event),
+            Ok(event) => {
+                if event.is_none() {
+                    debug!("False-positive, API says no such event exists");
+                }
+
+                Ok(event)
+            }
 
             Err(err) => {
                 warn!(?err, "Couldn't fetch event from the calendar");
