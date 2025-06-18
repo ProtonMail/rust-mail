@@ -1,6 +1,7 @@
+use super::Message;
 use crate::datatypes::exclusive_location::ExclusiveLocation;
 use crate::datatypes::{AttachmentMetadata, Disposition, LocalAttachmentId, SystemLabelId as _};
-use crate::models::Attachment;
+use crate::models::{Attachment, AttachmentType};
 use crate::{AppError, DecryptedAttachment, MailContextError, MailContextResult, MailUserContext};
 use anyhow::Context as _;
 use indoc::indoc;
@@ -29,8 +30,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime};
 use tokio::fs;
 use tracing::{debug, error, info, warn};
-
-use super::{AttachmentType, Message};
 
 /// This is the metadata for where or if the attachment has the data downloaded
 /// It's stored in a separate table because:
@@ -121,6 +120,10 @@ impl Attachment {
         ctx: &MailUserContext,
         into_transaction: &mut impl RunTransaction,
     ) -> MailContextResult<Vec<u8>> {
+        if let AttachmentType::Direct(content) = &self.attachment_type {
+            return Ok(content.clone());
+        }
+
         if let Some(path) =
             Self::path_from_cache_and_update_metadata_atomic(self.id(), into_transaction).await?
         {
@@ -361,12 +364,15 @@ impl Attachment {
         let pgp = new_pgp_provider();
 
         let remote_attachment_id = match &self.attachment_type {
-            crate::models::AttachmentType::Remote(Some(id)) => id,
-            crate::models::AttachmentType::Remote(None) => {
+            AttachmentType::Remote(Some(id)) => id,
+            AttachmentType::Remote(None) => {
                 return Err(MailContextError::CalledFetchedAttachmentLocalAttachment);
             }
-            crate::models::AttachmentType::Pgp => {
+            AttachmentType::Pgp => {
                 return Err(MailContextError::CalledFetchedAttachmentOnPgp);
+            }
+            AttachmentType::Direct(content) => {
+                return Ok(content.clone());
             }
         };
 

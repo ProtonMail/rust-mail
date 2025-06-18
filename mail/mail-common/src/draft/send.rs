@@ -1,11 +1,10 @@
 use crate::datatypes::{Disposition, MimeType};
 use crate::draft::recipients::ValidationState;
 use crate::draft::{CancelScheduleSendError, PackageError, SendError, compose::html_to_text};
-use crate::models::{Attachment, DraftMetadata, Message};
+use crate::models::{Attachment, AttachmentType, DraftMetadata, Message};
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use anyhow::anyhow;
 use chrono::{DateTime, Datelike, Days, Local, LocalResult, NaiveTime};
-use proton_action_queue::action::WriterGuard;
 use proton_action_queue::observers::ActionAwaiter;
 use proton_action_queue::queue::{BroadcastMessage, Queue, QueuedError};
 use proton_core_api::consts::Mail;
@@ -108,7 +107,7 @@ pub async fn build_packages<P>(
     mime_type: MimeType,
     stored_message_body: &str,
     attachments: &[Attachment],
-    guard: &mut WriterGuard<'_>,
+    tx: &mut impl RunTransaction,
 ) -> Result<Vec<Package>, PackageError>
 where
     P: PGPProviderSync,
@@ -142,7 +141,7 @@ where
                     mime_type,
                     stored_message_body,
                     attachments,
-                    guard,
+                    tx,
                 )
                 .await?
             }
@@ -246,7 +245,7 @@ pub async fn generate_mime_top_package<P>(
     mime_type: MimeType,
     body: &str,
     attachments: &[Attachment],
-    guard: &mut WriterGuard<'_>,
+    tx: &mut impl RunTransaction,
 ) -> Result<EncryptedPackageBody, PackageError>
 where
     P: PGPProviderSync,
@@ -270,17 +269,17 @@ where
     // There is no streaming currently.
     for attachment in attachments {
         match attachment.attachment_type {
-            crate::models::AttachmentType::Remote(Some(_)) => (),
-            crate::models::AttachmentType::Remote(None) => {
+            AttachmentType::Remote(Some(_)) | AttachmentType::Direct(_) => (),
+            AttachmentType::Remote(None) => {
                 return Err(PackageError::AttachmentNoRemoteId);
             }
-            crate::models::AttachmentType::Pgp => {
+            AttachmentType::Pgp => {
                 continue;
             }
         }
 
         let loaded_data = attachment
-            .content_data(context, guard)
+            .content_data(context, tx)
             .instrument(
                 debug_span!("mime_package::get_attachment_content_data", id = ?attachment.local_id),
             )
@@ -469,24 +468,29 @@ where
     // Reveal session keys of the attachments to the server.
     let mut attachment_keys = HashMap::new();
 
-    for attachment in attachments {
-        let remote_attachment_id = match &attachment.attachment_type {
-            crate::models::AttachmentType::Remote(Some(id)) => id,
-            crate::models::AttachmentType::Remote(None) => {
+    for (attachment_idx, attachment) in attachments.iter().enumerate() {
+        let attachment_id = match &attachment.attachment_type {
+            AttachmentType::Remote(Some(id)) => id.to_string(),
+            AttachmentType::Remote(None) => {
                 //TODO(ET-1407): Correctly handle this error.
                 return Err(PackageError::AttachmentNoRemoteId);
             }
-            crate::models::AttachmentType::Pgp => {
+            AttachmentType::Pgp => {
                 continue;
             }
+
+            // Direct attachments don't have explicit ids - fortunately that's
+            // not a problem, because we don't need "real" ids, we just need a
+            // number that's unique across attachments for this specific mail
+            AttachmentType::Direct(_) => attachment_idx.to_string(),
         };
 
-        let attachment_info = attachment.decrypt_attachment_info(pgp, sender_keys)?;
+        let attachment_key = attachment
+            .decrypt_attachment_info(pgp, sender_keys)?
+            .session_key
+            .into();
 
-        attachment_keys.insert(
-            remote_attachment_id.to_string(),
-            attachment_info.session_key.into(),
-        );
+        attachment_keys.insert(attachment_id, attachment_key);
     }
 
     if !attachment_keys.is_empty() {
@@ -504,25 +508,29 @@ fn process_attachments<P>(
     attachments: &[Attachment],
     sender_keys: &[impl AsRef<P::PrivateKey>],
     recipient_key: &P::PublicKey,
-    sign: bool,
+    mut sign: bool,
 ) -> Result<(), PackageError>
 where
     P: PGPProviderSync,
 {
     let mut attachment_key_packets = HashMap::with_capacity(attachments.len());
     let mut attachment_enc_signatures = HashMap::with_capacity(attachments.len());
-    let mut sign = sign;
 
     // Encrypt the attachment towards the recipient.
-    for attachment in attachments {
-        let remote_attachment_id = match &attachment.attachment_type {
-            crate::models::AttachmentType::Remote(Some(id)) => id,
-            crate::models::AttachmentType::Remote(None) => {
+    for (attachment_idx, attachment) in attachments.iter().enumerate() {
+        let attachment_id = match &attachment.attachment_type {
+            AttachmentType::Remote(Some(id)) => id.to_string(),
+            AttachmentType::Remote(None) => {
                 return Err(PackageError::AttachmentNoRemoteId);
             }
-            crate::models::AttachmentType::Pgp => {
+            AttachmentType::Pgp => {
                 continue;
             }
+
+            // Direct attachments don't have explicit ids - fortunately that's
+            // not a problem, because we don't need "real" ids, we just need a
+            // number that's unique across attachments for this specific mail
+            AttachmentType::Direct(_) => attachment_idx.to_string(),
         };
 
         if attachment.signature.is_none() && attachment.enc_signature.is_none() {
@@ -542,13 +550,10 @@ where
             .encrypt_signature_to_recipient(pgp, recipient_key)
             .map_err(PackageError::PackageAttachmentInfoReEncryptSignature)?
         {
-            attachment_enc_signatures.insert(
-                remote_attachment_id.to_string(),
-                enc_signature.encode_base64(),
-            );
+            attachment_enc_signatures.insert(attachment_id.clone(), enc_signature.encode_base64());
         }
 
-        attachment_key_packets.insert(remote_attachment_id.to_string(), recipient_attachment_kp);
+        attachment_key_packets.insert(attachment_id, recipient_attachment_kp);
     }
 
     if !attachment_key_packets.is_empty() {

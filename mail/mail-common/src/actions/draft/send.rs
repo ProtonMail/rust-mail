@@ -378,7 +378,6 @@ impl Send {
                 .await
                 .inspect_err(|e| error!("Failed to load draft attachments : {e:?}"))?;
 
-        // TODO(ET-1407): PGP/Embedded attachments
         let packages = build_packages(
             context,
             &pgp,
@@ -386,8 +385,6 @@ impl Send {
             send_preferences,
             action.mime_type,
             &stored_message_body,
-            // Even though we are already passing in the message body metadata we
-            // leave this parameter here for when we handle the PGP embedded case.
             &attachments,
             guard,
         )

@@ -282,3 +282,38 @@ pub struct NewAttachmentParams {
     /// Encrypted attachment payload.
     pub data_packet: Vec<u8>,
 }
+
+// TODO rename DraftSender into Sender etc.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct DirectParams {
+    pub subject: String,
+    pub sender: DraftSender,
+    pub to_list: Vec<DraftRecipient>,
+    pub body: EncryptedDraft,
+    pub attachments: Vec<DirectAttachment>,
+}
+
+#[serde_as]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct DirectAttachment {
+    pub filename: String,
+    #[serde(rename = "MIMEType")]
+    pub mimetype: String,
+    #[serde_as(as = "Base64")]
+    pub contents: Vec<u8>,
+}
+
+impl DirectAttachment {
+    pub const INVITE_ICS: &str = "invite.ics";
+
+    #[must_use]
+    pub fn invite_reply(ics: Vec<u8>) -> Self {
+        Self {
+            filename: Self::INVITE_ICS.into(),
+            mimetype: "text/calendar; method=reply".into(),
+            contents: ics,
+        }
+    }
+}

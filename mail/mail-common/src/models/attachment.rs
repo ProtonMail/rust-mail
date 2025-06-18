@@ -166,6 +166,11 @@ pub enum AttachmentType {
     /// Some if it exists in the server and None if it's local
     Remote(Option<AttachmentId>),
     Pgp,
+
+    /// Ad-hoc attachment, for usage with direct emails.
+    ///
+    /// See [`Attachment::direct()`].
+    Direct(Vec<u8>),
 }
 
 impl Default for AttachmentType {
@@ -175,6 +180,10 @@ impl Default for AttachmentType {
 }
 
 impl AttachmentType {
+    pub fn is_direct(&self) -> bool {
+        matches!(self, Self::Direct(_))
+    }
+
     pub fn to_json(&self) -> Result<String, StashError> {
         serde_json::to_string(self)
             .context("error serializing attachment_type")
@@ -185,6 +194,20 @@ impl AttachmentType {
 sql_using_serde!(AttachmentType);
 
 impl Attachment {
+    /// Creates an ad-hoc attachment, for usage with direct emails.
+    ///
+    /// Attachments created using this function are temporary - they don't have
+    /// local ids and they don't have remote ids, their only purpose is to be
+    /// added into a direct email and sent at once.
+    pub fn direct(att: &EncryptedAttachment, mime_type: attachment::MimeType) -> Self {
+        Self {
+            attachment_type: AttachmentType::Direct(att.data.clone()),
+            key_packets: Some(RealKeyPackets::new_from_bytes(&att.metadata.key_packets).into()),
+            mime_type,
+            ..Attachment::default()
+        }
+    }
+
     /// Gets the remote id of the attachment.
     /// This is here to lower compile times.
     pub fn remote_id(&self) -> Option<AttachmentId> {
@@ -246,6 +269,12 @@ impl Attachment {
     /// Returns an error if the query failed.
     ///
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        if self.attachment_type.is_direct() {
+            return Err(StashError::Critical(anyhow!(
+                "Direct attachments can't be saved into the database"
+            )));
+        }
+
         // If we already exist in the db
         if let Some(local_id) = self.local_id {
             // There is currently a race because we try to write too much data at the same time

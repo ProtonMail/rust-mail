@@ -16,6 +16,7 @@
 use bytes::Bytes;
 use proton_core_api::service::ApiServiceResult;
 use proton_core_api::services::proton::{IncomingDefaultId, LabelId};
+use proton_crypto_inbox::attachment::KeyPackets;
 use std::time::Duration;
 
 use crate::services::proton::prelude::*;
@@ -375,6 +376,16 @@ pub trait ProtonMail {
         delay: Option<Duration>,
         delivery_time: Option<u64>,
     ) -> ApiServiceResult<PostSendMessageResponse>;
+
+    /// <https://protonmail.gitlab-pages.protontech.ch/Slim-API/mail/#tag/Message/operation/post_mail-v4-messages-send-direct>
+    async fn send_direct_mail(
+        &self,
+        message: DirectParams,
+        parent: Option<(MessageId, DraftAction)>,
+        packages: Vec<Package>,
+        attachment_keys: Vec<KeyPackets>,
+        auto_save_contacts: bool,
+    ) -> ApiServiceResult<()>;
 
     /// Reports a message as phishing.
     /// It requires the decrypted message body.

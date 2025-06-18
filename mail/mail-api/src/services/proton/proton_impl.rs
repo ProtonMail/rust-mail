@@ -4,6 +4,7 @@ use proton_core_api::service::ApiServiceResult;
 use proton_core_api::services::proton::muon::util::ProtonRequestExt;
 use proton_core_api::services::proton::muon::{GET, POST, PUT, serde_to_query};
 use proton_core_api::services::proton::{CORE_V4, IncomingDefaultId, LabelId, Proton};
+use proton_crypto_inbox::attachment::KeyPackets;
 use serde_json::json;
 use std::io::Cursor;
 use std::time::Duration;
@@ -430,6 +431,35 @@ impl ProtonMail for Proton {
             .await?
             .ok()?
             .into_body_json()?)
+    }
+
+    async fn send_direct_mail(
+        &self,
+        message: DirectParams,
+        parent: Option<(MessageId, DraftAction)>,
+        packages: Vec<Package>,
+        attachment_keys: Vec<KeyPackets>,
+        auto_save_contacts: bool,
+    ) -> ApiServiceResult<()> {
+        let (parent_id, action) =
+            parent.map_or_else(|| (None, None), |(id, action)| (Some(id), Some(action)));
+
+        let send_request = PostSendDirectRequest {
+            message,
+            parent_id,
+            action,
+            attachment_keys,
+            packages,
+            auto_save_contacts,
+        };
+
+        POST!("{MAIL_V4}/messages/send/direct")
+            .body_json(send_request)?
+            .send_with(self)
+            .await?
+            .ok()?;
+
+        Ok(())
     }
 
     async fn cancel_send(&self, message_id: MessageId) -> ApiServiceResult<PostCancelSendResponse> {
