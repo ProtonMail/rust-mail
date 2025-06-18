@@ -5948,6 +5948,7 @@ dependencies = [
  "pretty_assertions",
  "proton-account-api",
  "proton-action-queue",
+ "proton-calendar-api",
  "proton-calendar-common",
  "proton-canonical-email",
  "proton-core-api",

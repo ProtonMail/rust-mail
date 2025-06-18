@@ -4,8 +4,8 @@ mod fetch;
 use chrono::{DateTime, NaiveDate, Utc};
 use jiff::Zoned;
 use proton_calendar_api::{
-    CalendarAttendeeId, CalendarAttendeeStatus, CalendarAttendeeToken, CalendarColor,
-    CalendarEvent, CalendarEventRecurrenceId, CalendarEventUid, CalendarId,
+    CalendarAttendeeId, CalendarAttendeeStatus, CalendarAttendeeToken, CalendarBootstrap,
+    CalendarColor, CalendarEvent, CalendarEventRecurrenceId, CalendarEventUid, CalendarId,
 };
 use proton_core_api::{service::ApiServiceError, services::proton::Proton};
 use proton_crypto::crypto::PGPProviderSync;
@@ -102,11 +102,12 @@ impl RsvpEventId {
         api: &Proton,
         pgp: &P,
         keys: &UnlockedAddressKeys<P>,
+        cache: &impl RsvpCache,
     ) -> RsvpResult<Option<RsvpEvent>>
     where
         P: PGPProviderSync,
     {
-        fetch::exec(api, pgp, keys, self).await
+        fetch::exec(api, pgp, keys, cache, self).await
     }
 }
 
@@ -138,6 +139,7 @@ impl RsvpEvent {
         api: &Proton,
         pgp: &P,
         keys: &UnlockedAddressKeys<P>,
+        cache: &impl RsvpCache,
         sender: M,
         answer: RsvpAnswer<'_>,
     ) -> RsvpAnswerResult<(), M>
@@ -145,7 +147,7 @@ impl RsvpEvent {
         P: PGPProviderSync,
         M: RsvpMailSender,
     {
-        answer::exec(api, pgp, keys, sender, self, answer).await
+        answer::exec(api, pgp, keys, cache, sender, self, answer).await
     }
 
     #[must_use]
@@ -226,6 +228,17 @@ impl From<RsvpAnswerStatus> for ical::PartStat {
             RsvpAnswerStatus::Yes => ical::PartStat::Accepted,
         }
     }
+}
+
+pub trait RsvpCache {
+    fn get_calendar_bootstrap<E, Fn, Fut>(
+        &self,
+        id: &CalendarId,
+        fetch: Fn,
+    ) -> impl Future<Output = Result<CalendarBootstrap, E>> + Send
+    where
+        Fn: FnOnce() -> Fut + Send,
+        Fut: Future<Output = Result<CalendarBootstrap, E>> + Send;
 }
 
 pub trait RsvpMailSender {

@@ -63,7 +63,7 @@ async fn answer(case: fn() -> TestCase) {
         .await;
 
     let mut event = RsvpEventId::new("8maQ3qBa", None)
-        .fetch(&world.sess, &world.pgp, &world.address_keys)
+        .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
         .await
         .unwrap()
         .unwrap();
@@ -110,7 +110,14 @@ async fn answer(case: fn() -> TestCase) {
     let sender = FakeRsvpMailSender(&mut mail);
 
     event
-        .answer(&world.sess, &world.pgp, &world.address_keys, sender, answer)
+        .answer(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            sender,
+            answer,
+        )
         .await
         .unwrap();
 

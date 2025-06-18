@@ -28,7 +28,7 @@ async fn using_address_key() {
         .await;
 
     let actual = RsvpEventId::new("8maQ3qBa", None)
-        .fetch(&world.sess, &world.pgp, &world.address_keys)
+        .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
         .await
         .unwrap();
 
@@ -57,7 +57,7 @@ async fn using_shared_key() {
         .await;
 
     let actual = RsvpEventId::new("8maQ3qBa", None)
-        .fetch(&world.sess, &world.pgp, &world.address_keys)
+        .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
         .await
         .unwrap();
 
@@ -89,7 +89,7 @@ async fn recurring() {
         .await;
 
     let actual = RsvpEventId::new("8maQ3qBa", Some(rid))
-        .fetch(&world.sess, &world.pgp, &world.address_keys)
+        .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
         .await
         .unwrap();
 
@@ -134,7 +134,7 @@ async fn cancelled() {
         .await;
 
     let actual = RsvpEventId::new("8maQ3qBa", None)
-        .fetch(&world.sess, &world.pgp, &world.address_keys)
+        .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
         .await
         .unwrap()
         .unwrap();
@@ -158,7 +158,7 @@ async fn unknown() {
         .await;
 
     let actual = RsvpEventId::new("8maQ3qBa", None)
-        .fetch(&world.sess, &world.pgp, &world.address_keys)
+        .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
         .await
         .unwrap();
 
@@ -195,7 +195,7 @@ async fn err_unknown_attendee_status() {
         .await;
 
     let actual = RsvpEventId::new("8maQ3qBa", None)
-        .fetch(&world.sess, &world.pgp, &world.address_keys)
+        .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
         .await
         .unwrap_err();
 
@@ -234,7 +234,7 @@ async fn err_missing_x_pm_token() {
         .await;
 
     let actual = RsvpEventId::new("8maQ3qBa", None)
-        .fetch(&world.sess, &world.pgp, &world.address_keys)
+        .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
         .await
         .unwrap_err();
 
@@ -274,7 +274,7 @@ async fn err_many_events_in_ics() {
         .await;
 
     let actual = RsvpEventId::new("8maQ3qBa", None)
-        .fetch(&world.sess, &world.pgp, &world.address_keys)
+        .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
         .await
         .unwrap_err();
 

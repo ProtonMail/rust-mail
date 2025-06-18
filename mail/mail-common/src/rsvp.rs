@@ -5,6 +5,7 @@ use crate::draft::{self, send};
 use crate::models::{Attachment, MailSettings};
 use crate::{MailUserContext, models::Message};
 use anyhow::Context;
+use proton_calendar_api::{CalendarBootstrap, CalendarId};
 use proton_calendar_common as calendar;
 use proton_core_api::service::ApiServiceError;
 use proton_crypto_account::keys::{PrimaryUnlockedAddressKey, UnlockedAddressKeys};
@@ -16,8 +17,39 @@ use proton_mail_api::services::proton::prelude::{
     DirectAttachment, DirectParams, DraftAction, DraftRecipient, DraftSender, Package,
 };
 use stash::stash::Tether;
+use std::collections::HashMap;
 use std::slice;
 use thiserror::Error;
+use tokio::sync::Mutex;
+
+#[derive(Debug, Default)]
+pub(crate) struct RsvpCache {
+    calendars: Mutex<HashMap<CalendarId, CalendarBootstrap>>,
+}
+
+impl calendar::RsvpCache for RsvpCache {
+    async fn get_calendar_bootstrap<E, Fn, Fut>(
+        &self,
+        id: &CalendarId,
+        fetch: Fn,
+    ) -> Result<CalendarBootstrap, E>
+    where
+        Fn: FnOnce() -> Fut + Send,
+        Fut: Future<Output = Result<CalendarBootstrap, E>> + Send,
+    {
+        let mut calendars = self.calendars.lock().await;
+
+        if let Some(calendar) = calendars.get(id) {
+            Ok(calendar.clone())
+        } else {
+            let calendar = fetch().await?;
+
+            calendars.insert(id.clone(), calendar.clone());
+
+            Ok(calendar)
+        }
+    }
+}
 
 pub(crate) struct RsvpMailSender<'a, P>
 where

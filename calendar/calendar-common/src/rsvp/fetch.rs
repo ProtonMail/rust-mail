@@ -1,3 +1,4 @@
+use super::RsvpCache;
 use crate::{
     CalendarBootstrapExt, CalendarEventPayloadExt, RsvpAttendee, RsvpCalendar, RsvpError,
     RsvpEvent, RsvpEventId, RsvpOccurrence, RsvpOrganizer, RsvpResult,
@@ -18,12 +19,13 @@ pub(super) async fn exec<P>(
     api: &Proton,
     pgp: &P,
     keys: &UnlockedAddressKeys<P>,
+    cache: &impl RsvpCache,
     id: &RsvpEventId,
 ) -> RsvpResult<Option<RsvpEvent>>
 where
     P: PGPProviderSync,
 {
-    let Some((calendar, event)) = fetch(api, id).await? else {
+    let Some((calendar, event)) = fetch(api, cache, id).await? else {
         return Ok(None);
     };
 
@@ -36,6 +38,7 @@ where
 #[instrument(skip_all)]
 async fn fetch(
     api: &Proton,
+    cache: &impl RsvpCache,
     id: &RsvpEventId,
 ) -> RsvpResult<Option<(CalendarBootstrap, CalendarEvent)>> {
     info!("Fetching event data");
@@ -45,7 +48,16 @@ async fn fetch(
     if let Some(event) = event {
         info!("Fetching bootstrap data");
 
-        let calendar = api.get_calendar_bootstrap(&event.calendar_id).await?;
+        let calendar = cache
+            .get_calendar_bootstrap(&event.calendar_id, || {
+                // We need for the returned future to be static, otherwise rustc
+                // has hard time proving sendness
+                let api = api.clone();
+                let id = event.calendar_id.clone();
+
+                async move { api.get_calendar_bootstrap(&id).await }
+            })
+            .await?;
 
         Ok(Some((calendar, event)))
     } else {

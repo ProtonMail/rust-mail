@@ -7,11 +7,11 @@ use chrono::DateTime;
 use indoc::indoc;
 use proton_calendar_api::{
     CalendarAttendee, CalendarAttendeeStatus, CalendarBootstrap, CalendarEvent,
-    CalendarEventPayload, CalendarEventPayloadType, CalendarKey, CalendarKeyFlags, CalendarMember,
-    CalendarMemberPassphrase, CalendarPassphrase,
+    CalendarEventPayload, CalendarEventPayloadType, CalendarId, CalendarKey, CalendarKeyFlags,
+    CalendarMember, CalendarMemberPassphrase, CalendarPassphrase,
 };
 use proton_calendar_common::{
-    RsvpAttendee, RsvpCalendar, RsvpEvent, RsvpOccurrence, RsvpOrganizer,
+    RsvpAttendee, RsvpCache, RsvpCalendar, RsvpEvent, RsvpOccurrence, RsvpOrganizer,
 };
 use proton_core_api::session::{Config, Session};
 use proton_core_common::test_utils::test_context::{MockApiEnv, TestContext};
@@ -57,6 +57,7 @@ where
     pgp: P,
     address_keys: UnlockedAddressKeys<P>,
     calendar_key: UnlockedCalendarKey<P>,
+    cache: DummyRsvpCache,
 }
 
 async fn world() -> World<impl PGPProviderSync> {
@@ -105,6 +106,7 @@ async fn world() -> World<impl PGPProviderSync> {
         pgp,
         address_keys,
         calendar_key,
+        cache: DummyRsvpCache,
     }
 }
 
@@ -219,6 +221,22 @@ where
             color: Some("#aabbcc".into()),
             is_proton_proton_invite: true,
         }
+    }
+}
+
+struct DummyRsvpCache;
+
+impl RsvpCache for DummyRsvpCache {
+    fn get_calendar_bootstrap<E, Fn, Fut>(
+        &self,
+        _: &CalendarId,
+        fetch: Fn,
+    ) -> impl Future<Output = Result<CalendarBootstrap, E>>
+    where
+        Fn: FnOnce() -> Fut + Send,
+        Fut: Future<Output = Result<CalendarBootstrap, E>> + Send,
+    {
+        fetch()
     }
 }
 

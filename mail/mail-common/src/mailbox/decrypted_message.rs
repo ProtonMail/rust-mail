@@ -395,6 +395,7 @@ impl DecryptedMessageBody {
     /// Use [`Self::fetch_rsvp()`] to fetch the invitation object.
     ///
     /// TODO (NGC-57) implement support for offline-mode
+    #[tracing::instrument(skip(self, ctx))]
     pub async fn identify_rsvp(
         &self,
         ctx: &MailUserContext,
@@ -475,7 +476,7 @@ impl DecryptedMessageBody {
                 err
             })?;
 
-        match rsvp.fetch(ctx.api(), &pgp, &keys).await {
+        match rsvp.fetch(ctx.api(), &pgp, &keys, ctx.rsvp_cache()).await {
             Ok(event) => Ok(event),
 
             Err(err) => {
@@ -491,7 +492,7 @@ impl DecryptedMessageBody {
     ///
     /// TODO (NGC-57) implement support for offline-mode
     #[tracing::instrument(
-        skip(self, ctx, tether, rsvp),
+        skip(self, ctx, msg, tether, rsvp),
         fields(id = rsvp.raw.id.as_str()),
     )]
     pub async fn answer_rsvp(
@@ -528,7 +529,7 @@ impl DecryptedMessageBody {
             status,
         };
 
-        rsvp.answer(ctx.api(), &pgp, &keys, mail, answer)
+        rsvp.answer(ctx.api(), &pgp, &keys, ctx.rsvp_cache(), mail, answer)
             .await
             .map_err(|err| match err {
                 RsvpAnswerError::Rsvp(err) => err.into(),

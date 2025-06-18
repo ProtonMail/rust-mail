@@ -1,6 +1,6 @@
 use super::{
-    RsvpAnswer, RsvpAnswerResult, RsvpAnswerStatus, RsvpError, RsvpEvent, RsvpMailSender,
-    RsvpResult,
+    RsvpAnswer, RsvpAnswerResult, RsvpAnswerStatus, RsvpCache, RsvpError, RsvpEvent,
+    RsvpMailSender, RsvpResult,
 };
 use crate::{CalendarBootstrapExt, CalendarEventPayloadExt, RsvpAnswerError};
 use itertools::Itertools;
@@ -20,6 +20,7 @@ pub(super) async fn exec<P, M>(
     api: &Proton,
     pgp: &P,
     keys: &UnlockedAddressKeys<P>,
+    cache: &impl RsvpCache,
     sender: M,
     event: &mut RsvpEvent,
     answer: RsvpAnswer<'_>,
@@ -30,8 +31,15 @@ where
 {
     info!(?answer, "Answering");
 
-    let calendar = api
-        .get_calendar_bootstrap(&event.raw.calendar_id)
+    let calendar = cache
+        .get_calendar_bootstrap(&event.raw.calendar_id, || {
+            // We need for the returned future to be static, otherwise rustc has
+            // hard time proving sendness
+            let api = api.clone();
+            let id = event.raw.calendar_id.clone();
+
+            async move { api.get_calendar_bootstrap(&id).await }
+        })
         .await
         .map_err(RsvpError::from)?;
 
