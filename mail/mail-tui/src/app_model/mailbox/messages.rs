@@ -2,11 +2,11 @@ use super::LabelAs;
 use super::search::SearchStatusBar;
 use crate::CLI_ARGS;
 use crate::app::Command;
-use crate::app_model::YesNoPopup;
 use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::paginator::Paginator;
 use crate::app_model::mailbox::{ConversationMessage, ITEM_LIMIT, Item, Message, MessageMessage};
 use crate::app_model::watcher::TuiWatchHandle;
+use crate::app_model::{ChoosePopup, YesNoPopup};
 use crate::messages::Messages;
 use crate::widgets::utils::{date_from_timestamp, format_recipients, format_sender};
 use crate::widgets::{
@@ -18,7 +18,7 @@ use futures::FutureExt;
 use futures::future::try_join_all;
 use itertools::Itertools as _;
 use proton_calendar_api::CalendarAttendeeStatus;
-use proton_calendar_common::{RsvpEvent, RsvpOccurrence};
+use proton_calendar_common::{RsvpAnswerStatus, RsvpEvent, RsvpOccurrence};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::os::safe_write;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
@@ -368,6 +368,7 @@ impl MessagesState {
                 self.table_state.prev();
                 Command::None
             }
+
             KeyCode::Char('j') | KeyCode::Down => {
                 self.table_state.next();
                 if let Mode::Label(paginator) = &self.mode {
@@ -390,6 +391,7 @@ impl MessagesState {
                 }
                 Command::None
             }
+
             KeyCode::Char('a') => {
                 let user_ctx = ctx.to_owned();
 
@@ -442,14 +444,17 @@ impl MessagesState {
                     download,
                 ])
             }
+
             KeyCode::Char('e') => self
                 .selected_message_id()
                 .map(|id| Composer::open(ctx.to_owned(), id))
                 .unwrap_or_default(),
+
             KeyCode::Char('u') => self
                 .selected_message_id()
                 .map(|id| Command::message(MessageMessage::MarkMessageUnread(id).into()))
                 .unwrap_or_default(),
+
             KeyCode::Char('r') => self
                 .selected_message_id()
                 .map(|id| {
@@ -464,6 +469,7 @@ impl MessagesState {
                     }
                 })
                 .unwrap_or_default(),
+
             KeyCode::Char('f') => {
                 if key.modifiers.contains(KeyModifiers::CONTROL) {
                     self.selected_message_id()
@@ -475,10 +481,12 @@ impl MessagesState {
                         .unwrap_or_default()
                 }
             }
+
             KeyCode::Char('F') => self
                 .selected_message_id()
                 .map(|id| Command::message(MessageMessage::UnstarMessage(id).into()))
                 .unwrap_or_default(),
+
             KeyCode::Char('t') => {
                 if key.modifiers.contains(KeyModifiers::CONTROL) {
                     self.selected_message_id()
@@ -488,10 +496,12 @@ impl MessagesState {
                     Command::None
                 }
             }
+
             KeyCode::Char('d') => self
                 .selected_message_id()
                 .map(|id| Command::message(MessageMessage::DeleteMessage(id).into()))
                 .unwrap_or_default(),
+
             KeyCode::Char('b') => self
                 .selected_email()
                 .map(|email| {
@@ -500,6 +510,7 @@ impl MessagesState {
                     )
                 })
                 .unwrap_or_default(),
+
             KeyCode::Char('B') => self
                 .selected_email()
                 .map(|email| {
@@ -508,28 +519,117 @@ impl MessagesState {
                     )
                 })
                 .unwrap_or_default(),
+
             KeyCode::Char('s') => Command::message(Message::OpenLabelSelectPopup.into()),
+
             KeyCode::Char('m') => self
                 .selected_message_id()
                 .map(|id| Command::message(Message::OpenMoveItemPopup(Item::Message(id)).into()))
                 .unwrap_or_default(),
+
             KeyCode::Char('l') => self
                 .selected_message_id()
                 .map(|id| Command::message(Message::OpenLabelItemPopup(Item::Message(id)).into()))
                 .unwrap_or_default(),
+
             KeyCode::Char('h') => Command::message(MessageMessage::HasMore.into()),
+
             KeyCode::Enter => self
                 .selected_message_id()
                 .map(|_| Command::message(MessageMessage::OpenMessageBody.into()))
                 .unwrap_or_default(),
+
             KeyCode::Char('z') => self
                 .selected_message_id()
                 .map(|id| Command::message(MessageMessage::CancelScheduleSend(id).into()))
                 .unwrap_or_default(),
+
             KeyCode::Char('p') => self
                 .selected_message_id()
                 .map(|id| Command::message(MessageMessage::ReportPhishing(id).into()))
                 .unwrap_or_default(),
+
+            KeyCode::Char('A') => {
+                let DecryptedMessageStatus::Success(state) = &mut self.open_message else {
+                    return Command::None;
+                };
+
+                let Some(Ok(rsvp)) = &state.rsvp else {
+                    return Command::None;
+                };
+
+                let msg = state.msg.clone();
+                let body = state.body.clone();
+                let ctx = ctx.clone();
+                let mut rsvp = rsvp.clone();
+
+                Command::message(Messages::raise_popup(
+                    ChoosePopup::default()
+                        .with(
+                            KeyCode::Char('y'),
+                            "Answer: yes",
+                            Some(RsvpAnswerStatus::Yes),
+                        )
+                        .with(
+                            KeyCode::Char('m'),
+                            "Answer: maybe",
+                            Some(RsvpAnswerStatus::Maybe),
+                        )
+                        .with(KeyCode::Char('n'), "Answer: no", Some(RsvpAnswerStatus::No))
+                        .space()
+                        .with(KeyCode::Esc, "Go back", None)
+                        .on_reply(move |status| match status {
+                            Some(status) => Command::batch([
+                                Command::message(Messages::DismissPopup),
+                                Command::message(Messages::DisplayBackgroundProgress(
+                                    "Answering invitation...".into(),
+                                )),
+                                Command::task(async move {
+                                    let mut tether = ctx.user_stash().connection();
+
+                                    let result = body
+                                        .answer_rsvp(&ctx, &mut tether, &msg, &mut rsvp, status)
+                                        .await
+                                        .context("Couldn't answer the invitation");
+
+                                    match result {
+                                        Ok(()) => {
+                                            let status = match status {
+                                                RsvpAnswerStatus::Yes => "Invitation accepted",
+                                                RsvpAnswerStatus::Maybe => {
+                                                    "Invitation tentatively accepted"
+                                                }
+                                                RsvpAnswerStatus::No => "Invitation declined",
+                                            };
+
+                                            Command::batch([
+                                                Command::message(Messages::Mailbox(
+                                                    Message::MessageState(
+                                                        MessageMessage::UpdateRsvp(Box::new(rsvp)),
+                                                    ),
+                                                )),
+                                                Command::message(
+                                                    Messages::DismissBackgroundProgress,
+                                                ),
+                                                Command::message(Messages::DisplayInfo(
+                                                    None,
+                                                    status.into(),
+                                                )),
+                                            ])
+                                        }
+
+                                        Err(err) => Command::batch([
+                                            Command::message(Messages::DismissBackgroundProgress),
+                                            Command::message(Messages::DisplayError(None, err)),
+                                        ]),
+                                    }
+                                }),
+                            ]),
+
+                            None => Command::message(Messages::DismissPopup),
+                        }),
+                ))
+            }
 
             _ => Command::None,
         }
@@ -627,6 +727,11 @@ impl MessagesState {
             MessageMessage::CancelScheduleSend(id) => {
                 return cancel_scheduled_send(user_ctx.to_owned(), id);
             }
+            MessageMessage::UpdateRsvp(rsvp) => {
+                if let DecryptedMessageStatus::Success(msg) = &mut self.open_message {
+                    msg.rsvp = Some(Ok(*rsvp));
+                }
+            }
         }
         Command::None
     }
@@ -667,7 +772,8 @@ impl MessagesState {
 }
 
 pub struct DecryptedMessage {
-    metadata: MailMessage,
+    msg: Arc<MailMessage>,
+    body: Arc<DecryptedMessageBody>,
     content: String,
     content_scroll: ScrollableParagraphState,
     content_lines: usize,
@@ -728,12 +834,13 @@ impl DecryptedMessageStatus {
 
 impl DecryptedMessage {
     pub async fn new(
-        metadata: MailMessage,
+        msg: MailMessage,
         body: DecryptedMessageBody,
         ctx: &MailUserContext,
         tether: &mut Tether,
     ) -> Result<Self> {
-        let sender = metadata.sender.address.clone();
+        let sender = msg.sender.address.clone();
+
         let body_output = body
             .transformed(&sender, TransformOpts::default(), tether)
             .await;
@@ -753,11 +860,12 @@ impl DecryptedMessage {
                 .html_dir
                 .clone()
                 .unwrap_or_else(|| std::env::temp_dir().join("proton_htmls"));
+
             let escaped_subject = PathBuf::from(
-                &metadata
-                    .subject
+                &msg.subject
                     .replace(|c: char| !c.is_ascii_alphanumeric(), "_"),
             );
+
             temp_dir.push(escaped_subject);
 
             fs::create_dir_all(&temp_dir).await.unwrap();
@@ -781,26 +889,23 @@ impl DecryptedMessage {
         let content_scroll = ScrollableParagraphState::new();
         let content_lines = content.chars().filter(|c| *c == '\n').count();
 
-        let date = date_from_timestamp(metadata.time);
-        let from = format_sender(&metadata.sender);
-        let to = format_recipients(&metadata.to_list);
-        let cc = format_recipients(&metadata.cc_list);
-        let bcc = format_recipients(&metadata.bcc_list);
-        let labels = metadata.custom_labels.iter().map(|l| &l.name).join(", ");
+        let date = date_from_timestamp(msg.time);
+        let from = format_sender(&msg.sender);
+        let to = format_recipients(&msg.to_list);
+        let cc = format_recipients(&msg.cc_list);
+        let bcc = format_recipients(&msg.bcc_list);
+        let labels = msg.custom_labels.iter().map(|l| &l.name).join(", ");
 
-        let rsvp = if let Some(rsvp) = metadata.rsvp_attachment_id() {
-            metadata
-                .fetch_rsvp(ctx, rsvp, tether)
-                .await
-                .map_err(|err| format!("Can't fetch RSVP: {err}"))
-                .inspect_err(|err| warn!("{err}"))
-                .transpose()
-        } else {
-            None
-        };
+        let rsvp = body
+            .fetch_rsvp(ctx, tether, &msg.remote_address_id)
+            .await
+            .map_err(|err| format!("Can't fetch RSVP: {err}"))
+            .inspect_err(|err| warn!("{err}"))
+            .transpose();
 
         Ok(Self {
-            metadata,
+            msg: Arc::new(msg),
+            body: Arc::new(body),
             content,
             content_scroll,
             content_lines,
@@ -838,7 +943,7 @@ impl DecryptedMessage {
         let headers = vec![
             Row::new([
                 Cell::from("Subject:"),
-                Cell::from(self.metadata.subject.as_str()),
+                Cell::from(self.msg.subject.as_str()),
             ])
             .bold(),
             Row::new([Cell::from("Date:").bold(), Cell::from(self.date.as_str())]),

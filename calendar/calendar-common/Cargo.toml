@@ -5,21 +5,25 @@ edition.workspace = true
 
 [dependencies]
 chrono = { workspace = true }
-proton-core-api = { workspace = true }
+itertools = { workspace = true }
+jiff = { workspace = true }
 proton-calendar-api = { workspace = true }
+proton-core-api = { workspace = true }
 proton-crypto = { workspace = true }
 proton-crypto-account = { workspace = true }
 proton-crypto-calendar = { workspace = true }
 proton-ical = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
 indoc = { workspace = true }
 pretty_assertions = { workspace = true }
-proton-core-api = { workspace = true }
 proton-calendar-api = { workspace = true, features = ["test-utils"] }
+proton-core-api = { workspace = true }
 proton-core-common = { workspace = true, features = ["test-utils"] }
+test-case = { workspace = true }
 tokio = { workspace = true }
 
 [lints]

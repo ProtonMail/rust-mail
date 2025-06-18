@@ -22,7 +22,7 @@ use crate::services::proton::response_data::MimeType;
 use indexmap::IndexMap;
 use proton_crypto_inbox::attachment::{
     Base64AttachmentEncryptedSignature, BinaryAttachmentEncryptedSignature,
-    BinaryAttachmentSignature, KeyPackets,
+    BinaryAttachmentSignature, EncryptedAttachment, KeyPackets,
 };
 use proton_crypto_inbox::keys::{InboxSessionKey, KeyPacket, PackageCryptoType, SessionKeyExposed};
 use proton_crypto_inbox::message::EncryptedDraft;
@@ -309,11 +309,29 @@ impl DirectAttachment {
     pub const INVITE_ICS: &str = "invite.ics";
 
     #[must_use]
-    pub fn invite_reply(ics: Vec<u8>) -> Self {
+    pub fn new(filename: &str, mimetype: &str, contents: &EncryptedAttachment) -> Self {
+        let contents = {
+            let mut payload = Vec::new();
+
+            payload.extend(&contents.data);
+            payload.extend(&contents.metadata.key_packets);
+
+            if let Some(sign) = &contents.metadata.signature {
+                payload.extend(sign.as_slice());
+            }
+
+            payload
+        };
+
         Self {
-            filename: Self::INVITE_ICS.into(),
-            mimetype: "text/calendar; method=reply".into(),
-            contents: ics,
+            filename: filename.into(),
+            mimetype: mimetype.into(),
+            contents,
         }
+    }
+
+    #[must_use]
+    pub fn invite_reply(ics: &EncryptedAttachment) -> Self {
+        Self::new(Self::INVITE_ICS, "text/calendar; method=reply", ics)
     }
 }

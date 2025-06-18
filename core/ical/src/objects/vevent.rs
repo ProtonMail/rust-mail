@@ -3,7 +3,7 @@ use super::*;
 /// Event; part of a [`VCalendar`].
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545.html#section-3.6.1>
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 #[cfg_attr(feature = "php", derive(ZvalConvert))]
 pub struct VEvent {
     pub uid: Option<Uid>,
@@ -61,6 +61,12 @@ impl VEvent {
 
             alarms: Vec::new(),
         }
+    }
+
+    #[must_use]
+    pub fn with_dtstamp(mut self, dtstamp: impl Into<DtStamp>) -> Self {
+        self.dtstamp = Some(dtstamp.into());
+        self
     }
 
     #[must_use]

@@ -1,8 +1,10 @@
 use crate::{ATTENDEES_EVENT, SHARED_EVENT, expected_event, world};
 use indoc::indoc;
+use jiff::Zoned;
 use pretty_assertions as pa;
 use proton_calendar_api::ProtonCalendarMock;
 use proton_calendar_common::{RsvpError, RsvpEventId};
+use std::str::FromStr;
 
 /// Make sure we can understand RSVPs that have been auto-imported into the
 /// calendar, but haven't been replied to yet.
@@ -69,6 +71,11 @@ async fn recurring() {
     let world = world().await;
     let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
 
+    let rid = Zoned::from_str("20250423T082000[UTC]")
+        .unwrap()
+        .timestamp()
+        .as_second();
+
     world
         .ctx
         .mock_web_server
@@ -78,10 +85,10 @@ async fn recurring() {
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_event("8maQ3qBa", Some("Lm9wZW5w"), Some(event.clone()))
+        .mock_get_calendar_event("8maQ3qBa", Some(rid), Some(event.clone()))
         .await;
 
-    let actual = RsvpEventId::new("8maQ3qBa", Some("Lm9wZW5w"))
+    let actual = RsvpEventId::new("8maQ3qBa", Some(rid))
         .fetch(&world.sess, &world.pgp, &world.address_keys)
         .await
         .unwrap();
@@ -96,7 +103,6 @@ async fn cancelled() {
     const CALENDAR_EVENT: &str = indoc! {"
         BEGIN:VCALENDAR
         VERSION:2.0
-        PRODID:-//Proton AG//web-calendar 5.0.48.1//EN
         BEGIN:VEVENT
         UID:1Gax95xN@proton.me
         DTSTAMP:20250423T082009Z
@@ -124,10 +130,10 @@ async fn cancelled() {
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_event("8maQ3qBa", Some("Lm9wZW5w"), Some(event.clone()))
+        .mock_get_calendar_event("8maQ3qBa", None, Some(event.clone()))
         .await;
 
-    let actual = RsvpEventId::new("8maQ3qBa", Some("Lm9wZW5w"))
+    let actual = RsvpEventId::new("8maQ3qBa", None)
         .fetch(&world.sess, &world.pgp, &world.address_keys)
         .await
         .unwrap()
@@ -164,7 +170,6 @@ async fn err_unknown_attendee_status() {
     const ATTENDEES_EVENT: &str = indoc! {"
         BEGIN:VCALENDAR
         VERSION:2.0
-        PRODID:-//Proton AG//web-calendar 5.0.48.1//EN
         BEGIN:VEVENT
         UID:1Gax95xN@proton.me
         ATTENDEE;CN=foo@localhost;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=245902dc:mailto:foo@localhost
@@ -206,7 +211,6 @@ async fn err_missing_x_pm_token() {
     const ATTENDEES_EVENT: &str = indoc! {"
         BEGIN:VCALENDAR
         VERSION:2.0
-        PRODID:-//Proton AG//web-calendar 5.0.48.1//EN
         BEGIN:VEVENT
         UID:1Gax95xN@proton.me
         ATTENDEE;CN=foo@localhost;ROLE=REQ-PARTICIPANT;RSVP=TRUE:mailto:foo@localhost
@@ -245,7 +249,6 @@ async fn err_many_events_in_ics() {
     const ATTENDEES_EVENT: &str = indoc! {"
         BEGIN:VCALENDAR
         VERSION:2.0
-        PRODID:-//Proton AG//web-calendar 5.0.48.1//EN
         BEGIN:VEVENT
         UID:q6tHm9Uy@proton.me
         END:VEVENT

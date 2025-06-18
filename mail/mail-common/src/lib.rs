@@ -15,6 +15,7 @@ mod user_context;
 pub mod background_execution;
 pub mod draft;
 pub mod mail_scroller;
+pub mod rsvp;
 mod send_queries;
 
 #[cfg(feature = "test-utils")]

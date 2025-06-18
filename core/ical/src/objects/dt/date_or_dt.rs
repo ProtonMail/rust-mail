@@ -18,6 +18,17 @@ impl<F> DateOrDt<F> {
 
 impl DateOrDt<AnyForm> {
     #[must_use]
+    pub fn tzid(&self) -> Option<&TzId> {
+        match self {
+            DateOrDt::Date(_) => None,
+            DateOrDt::DateTime(dt) => match &dt.form {
+                AnyForm::Local | AnyForm::Utc => None,
+                AnyForm::Tz(tz) => Some(tz),
+            },
+        }
+    }
+
+    #[must_use]
     pub(crate) fn validate(&self, cal: &VCalendar) -> Vec<DateTimeViolation> {
         match self {
             DateOrDt::Date(_) => Vec::new(),

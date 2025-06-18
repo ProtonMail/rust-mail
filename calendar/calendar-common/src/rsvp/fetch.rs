@@ -40,9 +40,7 @@ async fn fetch(
 ) -> RsvpResult<Option<(CalendarBootstrap, CalendarEvent)>> {
     info!("Fetching event data");
 
-    let event = api
-        .get_calendar_event(&id.uid, id.recurrence_id.as_ref())
-        .await?;
+    let event = api.get_calendar_event(&id.uid, id.rid).await?;
 
     if let Some(event) = event {
         info!("Fetching bootstrap data");
@@ -256,6 +254,7 @@ mod tests {
         CalendarEvent {
             shared_events: Vec::default(),
             calendar_events: Vec::default(),
+            id: "xxx".into(),
             calendar_id: "xxx".into(),
             start_time: 0,
             end_time: 0,
@@ -270,6 +269,9 @@ mod tests {
                 author: "spongebob@squarepants.com".into(),
             }],
             attendees: Vec::default(),
+            notifications: None,
+            color: None,
+            is_proton_proton_invite: true,
         }
     }
 

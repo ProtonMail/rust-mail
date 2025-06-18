@@ -1,10 +1,11 @@
 use crate::{
-    CalendarAttendeeId, CalendarAttendeeToken, CalendarColor, CalendarId, CalendarKeyId,
-    CalendarMemberId,
+    CalendarAttendeeId, CalendarAttendeeToken, CalendarColor, CalendarEventId,
+    CalendarEventRecurrenceId, CalendarId, CalendarKeyId, CalendarMemberId, CalendarNotification,
 };
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_with::{BoolFromInt, serde_as};
+use std::collections::BTreeMap;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
@@ -93,6 +94,8 @@ pub struct FoundCalendarEvents {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct CalendarEvent {
+    #[serde(rename = "ID")]
+    pub id: CalendarEventId,
     pub shared_events: Vec<CalendarEventPayload>,
     pub calendar_events: Vec<CalendarEventPayload>,
     #[serde(rename = "CalendarID")]
@@ -103,12 +106,16 @@ pub struct CalendarEvent {
     #[serde_as(as = "BoolFromInt")]
     pub full_day: bool,
     #[serde(rename = "RecurrenceID")]
-    pub recurrence_id: Option<String>,
+    pub recurrence_id: Option<CalendarEventRecurrenceId>,
     pub address_key_packet: Option<String>,
     pub shared_key_packet: Option<String>,
     // Same story as with calendar members - there's always one item here
     pub attendees_events: [CalendarEventPayload; 1],
     pub attendees: Vec<CalendarAttendee>,
+    pub notifications: Option<Vec<CalendarNotification>>,
+    pub color: Option<CalendarColor>,
+    #[serde_as(as = "BoolFromInt")]
+    pub is_proton_proton_invite: bool,
 }
 
 impl CalendarEvent {
@@ -167,6 +174,27 @@ pub enum CalendarAttendeeStatus {
     Yes = 3, // aka "accepted"
 }
 
+impl CalendarAttendeeStatus {
+    /// Returns whether this status warrants notifying the user (e.g. whether we
+    /// should send a push notification).
+    #[must_use]
+    pub fn should_notify(&self) -> bool {
+        matches!(self, Self::Maybe | Self::Yes)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct CalendarVTimezones {
+    pub timezones: BTreeMap<CalendarVTimezoneName, CalendarVTimezoneIcs>,
+}
+
+// e.g. "Europe/London"
+pub type CalendarVTimezoneName = String;
+
+// e.g. "BEGIN:VTIMEZONE..."
+pub type CalendarVTimezoneIcs = String;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -177,6 +205,9 @@ mod tests {
 
     const SIGNED: bool = true;
     const NOT_SIGNED: bool = false;
+
+    const NOTIFY: bool = true;
+    const DONT_NOTIFY: bool = false;
 
     #[test_case(CalendarEventPayloadType::ClearText, NOT_SIGNED, NOT_ENCRYPTED)]
     #[test_case(CalendarEventPayloadType::Encrypted, NOT_SIGNED, ENCRYPTED)]
@@ -189,5 +220,13 @@ mod tests {
     ) {
         assert_eq!(is_signed, target.is_signed());
         assert_eq!(is_encrypted, target.is_encrypted());
+    }
+
+    #[test_case(CalendarAttendeeStatus::Unanswered, DONT_NOTIFY)]
+    #[test_case(CalendarAttendeeStatus::Maybe, NOTIFY)]
+    #[test_case(CalendarAttendeeStatus::No, DONT_NOTIFY)]
+    #[test_case(CalendarAttendeeStatus::Yes, NOTIFY)]
+    fn should_notify(target: CalendarAttendeeStatus, expected: bool) {
+        assert_eq!(expected, target.should_notify());
     }
 }

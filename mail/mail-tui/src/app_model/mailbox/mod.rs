@@ -16,6 +16,7 @@ use anyhow::Context;
 use chrono::{DateTime, Local};
 use messages::BlockOrUnblock;
 pub use model::MailboxModel;
+use proton_calendar_common::RsvpEvent;
 use proton_core_common::datatypes::{LocalIdMarker, LocalLabelId, Refresh};
 use proton_mail_common::datatypes::{
     ContextualConversation, LocalAttachmentId, LocalConversationId, LocalMessageId,
@@ -106,6 +107,7 @@ pub enum MessageMessage {
     BlockSender(String, BlockOrUnblock),
     HasMore,
     CancelScheduleSend(LocalMessageId),
+    UpdateRsvp(Box<RsvpEvent>),
 }
 
 impl From<MessageMessage> for Messages {

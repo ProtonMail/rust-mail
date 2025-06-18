@@ -144,3 +144,13 @@ pub fn jz(s: &str) -> jiff::Zoned {
 pub fn cal() -> VCalendar {
     VCalendar::new("test")
 }
+
+#[must_use]
+pub fn prodid() -> String {
+    format!(
+        "-//Proton AG//oxidized-calendar {}.{}.{}//EN",
+        env!("CARGO_PKG_VERSION_MAJOR"),
+        env!("CARGO_PKG_VERSION_MINOR"),
+        env!("CARGO_PKG_VERSION_PATCH"),
+    )
+}

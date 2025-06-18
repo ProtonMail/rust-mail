@@ -29,7 +29,7 @@ use proton_mail_common::MailContext;
 use ratatui::crossterm::event::{Event, KeyCode, KeyEventKind};
 use ratatui::layout::{Constraint, Flex};
 use ratatui::prelude::*;
-use ratatui::widgets::{Block, Borders, Clear, Paragraph, Row, Table, Wrap};
+use ratatui::widgets::{Block, Borders, Clear, List, Paragraph, Row, Table, Wrap};
 use session_select::SessionSelectModel;
 use std::backtrace::Backtrace;
 use std::fs::{File, read_to_string};
@@ -368,6 +368,7 @@ impl Model<Messages> for AppModel {
         self.state.view_status_bar(frame, view_status_area);
 
         if let Some(bg_progress) = &mut self.bg_progress {
+            frame.render_widget(Backdrop, frame.area());
             bg_progress.draw(frame);
         }
 
@@ -387,7 +388,6 @@ impl Model<Messages> for AppModel {
 
             frame.render_widget(Backdrop, frame.area());
             frame.render_widget(Clear, box_area);
-
             popup.view(frame, popup_area);
 
             let mut block = Block::new().borders(Borders::ALL);
@@ -820,5 +820,130 @@ impl Popup for HelpPopup {
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
         self.list_state.handle_event(&event);
         Command::None
+    }
+}
+
+#[derive(Default)]
+pub struct ChoosePopup<T> {
+    width: u16,
+    height: u16,
+    widgets: Vec<ChoosePopupWidget<T>>,
+    handler: Option<Box<dyn FnOnce(T) -> Command<Messages> + Send>>,
+}
+
+impl<T> ChoosePopup<T> {
+    pub fn with(mut self, key: KeyCode, label: impl Into<String>, event: T) -> Self {
+        let label = label.into();
+
+        self.width = self
+            .width
+            .max(u16::try_from(key.desc().len() + 1 + label.len()).unwrap());
+
+        self.height += 1;
+
+        self.widgets.push(ChoosePopupWidget::Button {
+            key,
+            label,
+            event: Some(event),
+        });
+
+        self
+    }
+
+    pub fn space(mut self) -> Self {
+        self.height += 1;
+        self.widgets.push(ChoosePopupWidget::Space);
+        self
+    }
+
+    pub fn on_reply(
+        mut self,
+        handler: impl FnOnce(T) -> Command<Messages> + Send + 'static,
+    ) -> Self {
+        self.handler = Some(Box::new(handler));
+        self
+    }
+}
+
+impl<T> Popup for ChoosePopup<T> {
+    fn title(&self) -> Option<String> {
+        None
+    }
+
+    fn handle_event(&mut self, event: Event) -> Command<Messages> {
+        if let Event::Key(pressed) = event {
+            if pressed.modifiers.is_empty() {
+                let event = self.widgets.iter_mut().find_map(|widget| {
+                    let ChoosePopupWidget::Button { key, event, .. } = widget else {
+                        return None;
+                    };
+
+                    if *key == pressed.code {
+                        event.take()
+                    } else {
+                        None
+                    }
+                });
+
+                if let (Some(event), Some(handler)) = (event, self.handler.take()) {
+                    return handler(event);
+                }
+            }
+        }
+
+        Command::None
+    }
+
+    fn view(&mut self, frame: &mut Frame, area: Rect) {
+        let body = List::new(self.widgets.iter().map(|widget| widget.as_line()));
+        let area = area.inner(Margin::new(1, 0));
+
+        frame.render_widget(body, area);
+    }
+
+    fn height(&self) -> Constraint {
+        Constraint::Length(self.height + 2)
+    }
+
+    fn width(&self) -> Constraint {
+        Constraint::Length(self.width + 4)
+    }
+}
+
+#[derive(Debug)]
+enum ChoosePopupWidget<T> {
+    Button {
+        key: KeyCode,
+        label: String,
+        event: Option<T>,
+    },
+    Space,
+}
+
+impl<T> ChoosePopupWidget<T> {
+    fn as_line(&self) -> Line {
+        match self {
+            ChoosePopupWidget::Button { key, label, .. } => Line::from_iter([
+                Span::raw(key.desc()).bold(),
+                Span::raw(" "),
+                Span::raw(label),
+            ]),
+
+            ChoosePopupWidget::Space => Line::default(),
+        }
+    }
+}
+
+pub trait KeyCodeExt {
+    fn desc(&self) -> String;
+}
+
+impl KeyCodeExt for KeyCode {
+    fn desc(&self) -> String {
+        match self {
+            KeyCode::Esc => "Esc:".into(),
+            KeyCode::Char(ch) => format!("{ch}:"),
+            this => unimplemented!("don't know how to describe {this:?}"),
+        }
     }
 }

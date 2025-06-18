@@ -22,12 +22,11 @@ use futures::try_join;
 use indoc::{formatdoc, indoc};
 use proton_action_queue::action::MetadataBuilder;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
-use proton_calendar_common::{RsvpError, RsvpEvent, RsvpEventId};
 use proton_core_common::utils::MapVec as _;
+use proton_mail_api::services::proton::prelude::DirectAttachment;
 use sqlite_watcher::watcher::TableObserver;
 use stash::utils::{MapToSql, placeholders};
 use std::collections::HashSet;
-use tokio::fs;
 
 use crate::MailContextResult;
 use crate::actions::{
@@ -63,7 +62,7 @@ use proton_mail_api::services::proton::response_data::{
     MessageMetadata, OperationResult,
 };
 use proton_mail_api::services::proton::responses::GetMessagesResponse;
-use proton_mail_ids::{LocalAttachmentId, LocalConversationId};
+use proton_mail_ids::LocalConversationId;
 use stash::exports::ToSql;
 use stash::macros::{DbRecord, Model};
 use stash::orm::Model;
@@ -2621,97 +2620,24 @@ impl Message {
         self.label_ids.contains(&LabelId::sent()) && self.flags.is_sent()
     }
 
-    /// Returns id of the `invite.ics` attachment, if any.
-    ///
-    /// See [`Self::is_rsvp()`], [`Self::fetch_rsvp()`].
-    pub fn rsvp_attachment_id(&self) -> Option<LocalAttachmentId> {
-        self.attachments_metadata.iter().find_map(|att| {
-            if att.filename == "invite.ics" {
-                att.local_id
-            } else {
-                None
-            }
-        })
-    }
-
-    /// Returns whether this message is an RSVP invitation.
+    /// Returns whether this message contains an RSVP invitation.
     ///
     /// Since this function doesn't parse the invitation[1], it's possible it
-    /// returns a false-positive - notably, we'll return `true` for all mails
-    /// that contain an attachment called `invite.ics` even if this attachment
-    /// isn't really a valid invitation.
+    /// returns a false-positive - case in point, we'll return `true` for all
+    /// mails that contain an attachment called `invite.ics` even if this
+    /// attachment isn't really an invitation.
     ///
     /// This is good enough as showing potential "whoopsie, not really an rsvp"
-    /// message is an UI-problem.
-    ///
-    /// See: [`Self::rsvp_attachment_id()`], [`Self::fetch_rsvp()`].
+    /// message is a UI-problem.
     ///
     /// [1] loading attachments is asynchronous, while we need for this function
     ///     to be synchronous, because we need to know rsvp-ness when displaying
     ///     an email list (i.e. no time to actually load and parse all the
     ///     attachments)
     pub fn is_rsvp(&self) -> bool {
-        self.rsvp_attachment_id().is_some()
-    }
-
-    /// Checks if given attachment is an RSVP and, if so, fetches its event from
-    /// the calendar and returns it.
-    ///
-    /// See: [`RsvpEvent::fetch()`].
-    ///
-    /// TODO (NGC-57) implement support for offline-mode
-    #[tracing::instrument(skip(self, ctx, tether))]
-    pub async fn fetch_rsvp(
-        &self,
-        ctx: &MailUserContext,
-        rsvp: LocalAttachmentId,
-        tether: &mut Tether,
-    ) -> MailContextResult<Option<RsvpEvent>> {
-        debug!("Fetching RSVP");
-
-        let ics = Attachment::get_attachment(ctx, rsvp).await.map_err(|err| {
-            warn!(?err, "Couldn't get the RSVP attachment");
-            err
-        })?;
-
-        let ics = fs::read(&ics.data_path).await.map_err(|err| {
-            warn!(?err, "Couldn't read the RSVP attachment");
-            err
-        })?;
-
-        let event = match RsvpEventId::from_internal(&ics) {
-            Ok(event) => event,
-
-            Err(RsvpError::IcsIsNotRsvpRequest) => {
-                return Ok(None);
-            }
-
-            Err(err) => {
-                warn!(?err, "Couldn't parse the RSVP attachment");
-                return Err(err.into());
-            }
-        };
-
-        info!(?event, "Got RSVP, fetching state from the server");
-
-        let pgp = proton_crypto::new_pgp_provider();
-
-        let keys = ctx
-            .unlocked_address_keys(&pgp, tether, &self.remote_address_id)
-            .await
-            .map_err(|err| {
-                warn!(?err, "Couldn't unlock address keys");
-                err
-            })?;
-
-        match event.fetch(ctx.api(), &pgp, &keys).await {
-            Ok(event) => Ok(event),
-
-            Err(err) => {
-                warn!(?err, "Couldn't fetch event from the calendar");
-                Err(err.into())
-            }
-        }
+        self.attachments_metadata
+            .iter()
+            .any(|att| att.filename == DirectAttachment::INVITE_ICS)
     }
 
     pub async fn update_ids_and_display_order(

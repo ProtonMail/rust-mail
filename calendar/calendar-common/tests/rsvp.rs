@@ -1,4 +1,5 @@
 mod rsvp {
+    mod answer;
     mod fetch;
 }
 
@@ -26,7 +27,6 @@ use std::sync::Arc;
 const SHARED_EVENT: &str = indoc! {"
     BEGIN:VCALENDAR
     VERSION:2.0
-    PRODID:-//Proton AG//web-calendar 5.0.47.3//EN
     BEGIN:VEVENT
     UID:IAni7dazrh7RFc_rbQ1c1m4K3JEQ@proton.me
     DTSTAMP:20250423T082009Z
@@ -40,7 +40,6 @@ const SHARED_EVENT: &str = indoc! {"
 const ATTENDEES_EVENT: &str = indoc! {"
     BEGIN:VCALENDAR
     VERSION:2.0
-    PRODID:-//Proton AG//web-calendar 5.0.48.1//EN
     BEGIN:VEVENT
     UID:1Gax95xN@proton.me
     ATTENDEE;CN=foo@localhost;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=245902dc:mailto:foo@localhost
@@ -190,6 +189,7 @@ where
                 author: "foo@localhost".into(),
             }],
             calendar_events,
+            id: "pFmwNlJp".into(),
             calendar_id: "HzNtbT1J".into(),
             start_time: 1_744_790_400,
             end_time: 1_744_795_800,
@@ -215,6 +215,9 @@ where
                     status: CalendarAttendeeStatus::Maybe,
                 },
             ],
+            notifications: None,
+            color: Some("#aabbcc".into()),
+            is_proton_proton_invite: true,
         }
     }
 }
