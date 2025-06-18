@@ -1003,7 +1003,7 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the action failed to execute.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(self,queue))]
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip_all)]
     pub async fn save(
         &mut self,
         queue: &Queue,
@@ -1018,7 +1018,7 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the action failed to execute.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(self,queue))]
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip_all)]
     pub async fn send(
         &mut self,
         queue: &Queue,
@@ -1035,7 +1035,7 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the action failed to execute.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(self,queue))]
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip_all)]
     pub async fn schedule_send(
         &mut self,
         delivery_time: DateTime<Local>,
@@ -1052,7 +1052,7 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the action failed to execute.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(self,queue))]
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip_all)]
     pub async fn discard(
         &self,
         queue: &Queue,
@@ -1900,7 +1900,7 @@ impl DraftAttachmentRemovalQueuer {
                     e => return Err(e.into()),
                 }
             }
-            metadata = metadata.with_dependency(action_id);
+            metadata = metadata.with_sequential_dependency(action_id);
         };
 
         Ok(queue
