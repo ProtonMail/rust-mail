@@ -54,7 +54,7 @@ pub mod recipients;
 pub(crate) mod send;
 
 use crate::draft::compose::{
-    DraftAddressChangeOutput, DraftAddressChangeRequest, encrypt_draft_body, get_signature,
+    DraftAddressChangeOutput, DraftAddressChangeRequest, encrypt_draft_body, get_full_signature,
     inject_dark_mode, patch_draft_with_reply_mode, prepare_html_reply, prepare_plain_text_reply,
 };
 pub use send::ScheduleSendOptions;
@@ -648,7 +648,8 @@ impl Draft {
         address: &Address,
         mail_settings: &MailSettings,
     ) -> Self {
-        let body = compose::get_signature(address, mail_settings, mail_settings.draft_mime_type);
+        let body =
+            compose::get_full_signature(address, mail_settings, mail_settings.draft_mime_type);
         Self {
             metadata_id,
             sender: address.email.clone(),
@@ -845,7 +846,7 @@ impl Draft {
             MimeType::TextPlain
         };
 
-        let mut body = get_signature(address, mail_settings, mime_type);
+        let mut body = get_full_signature(address, mail_settings, mime_type);
 
         // If the message we are replying to is HTML we should also generate an HTML body for
         // replying even if the user has selected plain text as the default editing mode.
