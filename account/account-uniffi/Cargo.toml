@@ -17,7 +17,6 @@ uniffi.workspace = true
 uniffi-common.workspace = true
 uniffi-macros.workspace = true
 uniffi-runtime.workspace = true
-
 # crates.io dependencies
 futures.workspace = true
 itertools.workspace = true

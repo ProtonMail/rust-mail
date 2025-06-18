@@ -22,6 +22,43 @@ pub struct GetAuthModulusResponse {
     pub modulus_id: String,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "PascalCase")]
+pub struct GetPasswordPoliciesResponse {
+    pub code: ResponseCode,
+    pub password_policies: Vec<PasswordPolicyResponse>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+#[serde(rename_all = "PascalCase")]
+pub struct PasswordPolicyResponse {
+    /// The name of the password policy. This serves as identifier.
+    pub policy_name: String,
+
+    /// The state of the password policy. Disabled policies are not returned.
+    pub state: PasswordPolicyState,
+
+    /// The requirement message. This is a relatively short string informing the user how to fulfill the policy.
+    pub requirement_message: String,
+
+    /// The error message. This string is intended to be displayed to the user when they try to proceed with a password that does not respect the policy.
+    pub error_message: String,
+
+    /// The regex. It should be applied to the password. If it returns true, the policy passed.
+    pub regex: String,
+
+    /// Whether the policy should be hidden when the password respects it. In other words it should only appear when violated.
+    pub hide_if_valid: bool,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
+#[repr(u8)]
+pub enum PasswordPolicyState {
+    Disabled = 0,
+    Enabled = 1,
+    Optional = 2,
+}
+
 /// This enum defines different categories of addresses with assigned integer values.
 #[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
 #[repr(u8)]
@@ -935,6 +972,66 @@ mod tests {
                 primary: 1,
                 active: 1,
             },
+        };
+
+        assert_eq!(response, expected);
+    }
+
+    #[test]
+    fn test_password_policies() {
+        let json = r#"
+            {
+                "Code": 1000,
+                "PasswordPolicies": [
+                    {
+                        "PolicyName": "DisallowSequences",
+                        "State": 1,
+                        "RequirementMessage": "No sequences (not 123 or abc)",
+                        "ErrorMessage": "Password must not contain a sequence (not 123 or abc)",
+                        "Regex": "^(?:(?!(.)\\1{2}|012|123|234|345|456|567|678|789|890|210|321|432|543|654|765|876|987|098|abc|bcd|cde|def|efg|fgh|ghi|hij|ijk|jkl|klm|lmn|mno|nop|opq|pqr|qrs|rst|stu|tuv|uvw|vwx|wxy|xyz).)*$",
+                        "HideIfValid": true
+                    },
+                    {
+                        "PolicyName": "DisallowCommonPasswords",
+                        "State": 2,
+                        "RequirementMessage": "Something not too common",
+                        "ErrorMessage": "Password shouldn't be too common or too predictable",
+                        "Regex": "^(?!(protonmail|protonvpn|protondrive|protonpass|)$).*$",
+                        "HideIfValid": false
+                    }
+                ]
+            }
+        "#;
+
+        let response: GetPasswordPoliciesResponse =
+            serde_json::from_str(json).expect("Failed to deserialize JSON");
+
+        let expected = GetPasswordPoliciesResponse {
+            code: ResponseCode(1000),
+            password_policies: vec![
+                PasswordPolicyResponse {
+                    policy_name: String::from("DisallowSequences"),
+                    state: PasswordPolicyState::Enabled,
+                    requirement_message: String::from("No sequences (not 123 or abc)"),
+                    error_message: String::from(
+                        "Password must not contain a sequence (not 123 or abc)",
+                    ),
+                    regex: String::from(
+                        r"^(?:(?!(.)\1{2}|012|123|234|345|456|567|678|789|890|210|321|432|543|654|765|876|987|098|abc|bcd|cde|def|efg|fgh|ghi|hij|ijk|jkl|klm|lmn|mno|nop|opq|pqr|qrs|rst|stu|tuv|uvw|vwx|wxy|xyz).)*$",
+                    ),
+                    hide_if_valid: true,
+                },
+                PasswordPolicyResponse {
+                    policy_name: String::from("DisallowCommonPasswords"),
+                    state: PasswordPolicyState::Optional,
+                    requirement_message: String::from("Something not too common"),
+                    error_message: String::from(
+                        "Password shouldn't be too common or too predictable",
+                    ),
+                    regex: String::from(r"^(?!(protonmail|protonvpn|protondrive|protonpass|)$).*$"),
+                    hide_if_valid: false,
+                },
+            ],
         };
 
         assert_eq!(response, expected);

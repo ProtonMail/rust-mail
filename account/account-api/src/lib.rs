@@ -52,6 +52,8 @@ pub type ApiServiceResult<T, E = ApiError> = Result<T, E>;
 
 #[allow(async_fn_in_trait)]
 pub trait AccountApi {
+    async fn get_password_policies(&self) -> ApiServiceResult<GetPasswordPoliciesResponse>;
+
     /// Get a new random auth modulus.
     async fn get_auth_modulus(&self) -> ApiServiceResult<GetAuthModulusResponse>;
 
@@ -232,6 +234,14 @@ pub trait AccountApi {
 }
 
 impl AccountApi for muon::Client {
+    async fn get_password_policies(&self) -> ApiServiceResult<GetPasswordPoliciesResponse> {
+        Ok(GET!("{AUTH_V4}/password-policies")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
     async fn get_auth_modulus(&self) -> ApiServiceResult<GetAuthModulusResponse> {
         Ok(GET!("{AUTH_V4}/modulus")
             .send_with(self)
