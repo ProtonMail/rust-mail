@@ -46,7 +46,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::{iter, thread};
 use throbber_widgets_tui::ThrobberState;
-use tokio::fs;
+use tokio::{fs, task};
 use tracing::{debug, warn};
 
 /// Displays a list of messages based of message metadata. If a conversation is opened the message
@@ -266,7 +266,7 @@ impl MessagesState {
             #[allow(clippy::redundant_closure_call)] // Poor's man try blocks
             let c: Result<_> = (|| async move {
                 let stash = ctx.user_stash();
-                let mut tether = stash.connection();
+                let tether = stash.connection();
                 let local_id = metadata.id();
 
                 let decrypted = MailMessage::message_body(&ctx, local_id)
@@ -274,7 +274,7 @@ impl MessagesState {
                     .context("Failed to get message body")?;
 
                 Ok(Box::new(
-                    DecryptedMessage::new(metadata, decrypted, &ctx, &mut tether).await?,
+                    DecryptedMessage::new(metadata, decrypted, &ctx, tether).await?,
                 ))
             })()
             .await;
@@ -554,7 +554,7 @@ impl MessagesState {
                     return Command::None;
                 };
 
-                let Some(Ok(rsvp)) = &state.rsvp else {
+                let RsvpStatus::Success(rsvp) = &state.rsvp else {
                     return Command::None;
                 };
 
@@ -605,7 +605,7 @@ impl MessagesState {
                                             Command::batch([
                                                 Command::message(Messages::Mailbox(
                                                     Message::MessageState(
-                                                        MessageMessage::UpdateRsvp(Box::new(rsvp)),
+                                                        MessageMessage::UpdateRsvp(rsvp),
                                                     ),
                                                 )),
                                                 Command::message(
@@ -729,7 +729,7 @@ impl MessagesState {
             }
             MessageMessage::UpdateRsvp(rsvp) => {
                 if let DecryptedMessageStatus::Success(msg) = &mut self.open_message {
-                    msg.rsvp = Some(Ok(*rsvp));
+                    msg.rsvp = RsvpStatus::Success(rsvp);
                 }
             }
         }
@@ -784,7 +784,38 @@ pub struct DecryptedMessage {
     bcc: String,
     labels: String,
     banners: Vec<MessageBanner>,
-    rsvp: Option<Result<RsvpEvent, String>>,
+    rsvp: RsvpStatus,
+}
+
+enum RsvpStatus {
+    None,
+    Loading(task::JoinHandle<Result<Option<RsvpEvent>, String>>),
+    Success(Box<RsvpEvent>),
+    Error(String),
+}
+
+impl RsvpStatus {
+    fn tick(&mut self) {
+        if let RsvpStatus::Loading(task) = self {
+            match task.now_or_never() {
+                Some(Ok(Ok(Some(rsvp)))) => {
+                    *self = RsvpStatus::Success(Box::new(rsvp));
+                }
+                Some(Ok(Ok(None))) => {
+                    *self = RsvpStatus::None;
+                }
+                Some(Ok(Err(err))) => {
+                    *self = RsvpStatus::Error(err.to_string());
+                }
+                Some(Err(err)) => {
+                    *self = RsvpStatus::Error(err.to_string());
+                }
+                None => {
+                    // Still loading
+                }
+            }
+        }
+    }
 }
 
 enum DecryptedMessageStatus {
@@ -836,13 +867,14 @@ impl DecryptedMessage {
     pub async fn new(
         msg: MailMessage,
         body: DecryptedMessageBody,
-        ctx: &MailUserContext,
-        tether: &mut Tether,
+        ctx: &Arc<MailUserContext>,
+        mut tether: Tether,
     ) -> Result<Self> {
+        let body = Arc::new(body);
         let sender = msg.sender.address.clone();
 
         let body_output = body
-            .transformed(&sender, TransformOpts::default(), tether)
+            .transformed(&sender, TransformOpts::default(), &tether)
             .await;
 
         if let Some(cmd_name) = CLI_ARGS.browser.as_deref() {
@@ -896,16 +928,31 @@ impl DecryptedMessage {
         let bcc = format_recipients(&msg.bcc_list);
         let labels = msg.custom_labels.iter().map(|l| &l.name).join(", ");
 
-        let rsvp = body
-            .fetch_rsvp(ctx, tether, &msg.remote_address_id)
-            .await
-            .map_err(|err| format!("Can't fetch RSVP: {err}"))
-            .inspect_err(|err| warn!("{err}"))
-            .transpose();
+        let rsvp = match body.identify_rsvp(ctx).await {
+            Ok(Some(rsvp)) => {
+                let task = task::spawn({
+                    let ctx = (*ctx).clone();
+                    let body = body.clone();
+                    let address_id = msg.remote_address_id.clone();
+
+                    async move {
+                        body.fetch_rsvp(&ctx, &mut tether, &address_id, rsvp)
+                            .await
+                            .map_err(|err| format!("Couldn't fetch RSVP: {err}"))
+                            .inspect_err(|err| warn!("{err}"))
+                    }
+                });
+
+                RsvpStatus::Loading(task)
+            }
+
+            Ok(None) => RsvpStatus::None,
+            Err(err) => RsvpStatus::Error(err.to_string()),
+        };
 
         Ok(Self {
             msg: Arc::new(msg),
-            body: Arc::new(body),
+            body,
             content,
             content_scroll,
             content_lines,
@@ -929,6 +976,7 @@ impl DecryptedMessage {
         ])
         .areas(area);
 
+        self.rsvp.tick();
         self.draw_headers(frame, headers_area);
         self.draw_banners(frame, banners_area);
         self.draw_rsvp(frame, rsvp_area);
@@ -1015,43 +1063,54 @@ impl DecryptedMessage {
 
     fn lay_rsvp(&self) -> u16 {
         match &self.rsvp {
-            Some(Ok(rsvp)) => {
+            RsvpStatus::None => 0,
+            RsvpStatus::Loading(_) => 2,
+
+            RsvpStatus::Success(rsvp) => {
                 let status = if rsvp.is_cancelled { 2 } else { 0 };
                 let header = 4;
                 let atts = rsvp.attendees.len();
 
                 status + header + atts
             }
-            Some(Err(msg)) => 1 + msg.lines().count(),
-            None => 0,
+
+            RsvpStatus::Error(msg) => 1 + msg.lines().count(),
         }
         .try_into()
         .unwrap()
     }
 
     fn draw_rsvp(&self, frame: &mut Frame, area: Rect) {
-        let Some(rsvp) = &self.rsvp else {
+        if let RsvpStatus::None = &self.rsvp {
             return;
-        };
+        }
 
         let [sep_area, body_area] =
             Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(area);
 
         frame.render_widget(Block::new().borders(Borders::TOP), sep_area);
 
-        // ---
-
-        let rsvp = match rsvp {
-            Ok(rsvp) => rsvp,
-
-            Err(err) => {
-                frame.render_widget(Paragraph::new(err.as_str()), body_area);
-                return;
+        match &self.rsvp {
+            RsvpStatus::None => {
+                unreachable!();
             }
-        };
+            RsvpStatus::Loading(_) => {
+                Self::draw_rsvp_loading(frame, body_area);
+            }
+            RsvpStatus::Success(rsvp) => {
+                Self::draw_rsvp_success(frame, body_area, rsvp);
+            }
+            RsvpStatus::Error(err) => {
+                Self::draw_rsvp_error(frame, body_area, err);
+            }
+        }
+    }
 
-        // ---
+    fn draw_rsvp_loading(frame: &mut Frame, area: Rect) {
+        frame.render_widget(Paragraph::new("Loading invitation..."), area);
+    }
 
+    fn draw_rsvp_success(frame: &mut Frame, area: Rect, rsvp: &RsvpEvent) {
         let rsvp_status = if rsvp.is_cancelled {
             vec![
                 Text::raw("! Event was cancelled").fg(Color::Yellow),
@@ -1111,7 +1170,11 @@ impl DecryptedMessage {
             .chain(iter::once(Text::raw("")))
             .chain(rsvp_atts);
 
-        frame.render_widget(List::new(rows), body_area);
+        frame.render_widget(List::new(rows), area);
+    }
+
+    fn draw_rsvp_error(frame: &mut Frame, area: Rect, err: &str) {
+        frame.render_widget(Paragraph::new(err), area);
     }
 
     fn draw_content(&mut self, frame: &mut Frame, area: Rect) {

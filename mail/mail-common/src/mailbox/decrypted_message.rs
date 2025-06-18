@@ -389,7 +389,16 @@ impl DecryptedMessageBody {
         )
     }
 
-    async fn identify_rsvp(&self, ctx: &MailUserContext) -> MailContextResult<Option<RsvpEventId>> {
+    /// Checks if this mail contains an invitation and, if so, returns its
+    /// identifier.
+    ///
+    /// Use [`Self::fetch_rsvp()`] to fetch the invitation object.
+    ///
+    /// TODO (NGC-57) implement support for offline-mode
+    pub async fn identify_rsvp(
+        &self,
+        ctx: &MailUserContext,
+    ) -> MailContextResult<Option<RsvpEventId>> {
         if let Some(rsvp) = RsvpEventId::from_headers(&self.metadata.parsed_headers.headers) {
             debug!("Identified RSVP via headers");
 
@@ -452,11 +461,8 @@ impl DecryptedMessageBody {
         ctx: &MailUserContext,
         tether: &mut Tether,
         address_id: &AddressId,
+        rsvp: RsvpEventId,
     ) -> MailContextResult<Option<RsvpEvent>> {
-        let Some(rsvp) = self.identify_rsvp(ctx).await? else {
-            return Ok(None);
-        };
-
         info!(?rsvp, "Fetching RSVP");
 
         let pgp = proton_crypto::new_pgp_provider();
