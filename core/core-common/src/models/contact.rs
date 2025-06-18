@@ -494,10 +494,6 @@ impl Contact {
     ///
     /// when querying the database fails.
     ///
-    /// # Panics
-    ///
-    /// This function panics if remote ID of the contact is missing.
-    ///
     pub async fn contact_suggestions(
         device_contacts: Vec<DeviceContact>,
         tether: &Tether,
@@ -677,10 +673,6 @@ pub struct SyncedContacts {
 impl SyncedContacts {
     /// Consume this manual closure by storing data in the Database.
     /// Attention: This function should be executed only after Labels are synchronized
-    ///
-    /// # Panics
-    ///
-    /// Panics if the local id does exist
     ///
     #[tracing::instrument(skip_all)]
     pub async fn store(self, tx: &Bond<'_>) -> Result<(), StashError> {

@@ -470,10 +470,6 @@ fn extract_db_fields(fields: &[&Field], include_id_field: bool) -> Vec<Ident> {
 /// This function extracts the fields of a struct, ensuring that the struct is
 /// indeed a struct with named fields.
 ///
-/// # Panics
-///
-/// This function panics if the input is not a struct with named fields.
-///
 fn extract_fields<'a>(input: &'a DeriveInput, macro_name: &'a str) -> Vec<&'a Field> {
     if let Data::Struct(data) = &input.data {
         if let Fields::Named(fields) = &data.fields {
@@ -491,11 +487,6 @@ fn extract_fields<'a>(input: &'a DeriveInput, macro_name: &'a str) -> Vec<&'a Fi
 /// This function extracts the field that is marked as the primary key from the
 /// struct fields. It is expected that there is exactly one field marked with
 /// the `IdField` attribute.
-///
-/// # Panics
-///
-/// This function panics if the `IdField` attribute is missing, or does not have
-/// an identifier.
 ///
 fn extract_id_field(fields: &[&Field]) -> (Ident, Type, bool, bool) {
     let id_field = fields
@@ -576,10 +567,6 @@ fn extract_id_field(fields: &[&Field]) -> (Ident, Type, bool, bool) {
 /// expected that there is no more than one attribute with the name
 /// `ModelActions`, but it can be omitted.
 ///
-/// # Panics
-///
-/// This function panics if the `TableName` attribute is missing.
-///
 fn extract_model_actions(input: &DeriveInput) -> (bool, bool) {
     let mut on_load = false;
     let mut on_save = false;
@@ -617,11 +604,6 @@ fn extract_model_actions(input: &DeriveInput) -> (bool, bool) {
 /// row ID (a [`u64`]) for the record. This is not the same as the primary key
 /// field represented by the `IdField` attribute.
 ///
-/// # Panics
-///
-/// This function panics if the `RowIdField` attribute is missing, or does not
-/// have an identifier.
-///
 fn extract_row_id_field(fields: &[&Field]) -> Ident {
     fields
         .iter()
@@ -641,10 +623,6 @@ fn extract_row_id_field(fields: &[&Field]) -> Ident {
 ///
 /// This function extracts the table name from the struct attributes. It is
 /// expected that there is exactly one attribute with the name `TableName`.
-///
-/// # Panics
-///
-/// This function panics if the `TableName` attribute is missing.
 ///
 fn extract_table_name(input: &DeriveInput) -> LitStr {
     input
@@ -668,10 +646,6 @@ fn extract_table_name(input: &DeriveInput) -> LitStr {
 ///
 /// Note that the `via` argument only applies to `DbField` attributes, and not
 /// to `IdField` attributes.
-///
-/// # Panics
-///
-/// This function panics if the attribute cannot be parsed.
 ///
 fn extract_via_attrs(fields: &[&Field], include_id_field: bool) -> Vec<Option<ViaIntermediary>> {
     fields
@@ -866,10 +840,6 @@ fn generate_fn_set_id_value_impl(id_field: &Ident, is_optional: bool) -> TokenSt
 ///   field, that field will be converted from a SQL field type to
 ///   the intermediary type before converting to the struct field
 ///   type.
-///
-/// # Panics
-///
-/// This function panics if any fields do not have an identifier.
 ///
 fn generate_from_row_values_impl(
     db_fields: &[Ident],

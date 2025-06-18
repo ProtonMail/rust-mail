@@ -70,10 +70,6 @@ impl AssignedSwipeAction {
     ///
     /// Returns an error if query fails
     ///
-    /// # Panics
-    ///
-    /// Panics if system label does not have a Local ID
-    ///
     pub async fn load(
         swipe_action: SwipeAction,
         current_folder: LocalLabelId,

@@ -135,11 +135,6 @@ impl StatusObserver {
     /// The status is initialized to `Online`.
     /// The last check is initialized to `Instant::now() - UP_TO_DATE_SECONDS` to make it stale.
     ///
-    /// # Panics
-    ///
-    /// Should not panic as `checked_sub` is subtracting a value that is within the range of `Instant`.
-    /// If it does, it's a bug.
-    ///
     pub fn new() -> Self {
         let (status_tx, _) = watch::channel(ConnectionStatus::Online);
 
@@ -156,11 +151,6 @@ impl StatusObserver {
     ///
     /// The status is initialized to `Online`.
     /// The last check is initialized to `Instant::now() - UP_TO_DATE_SECONDS` to make it stale.
-    ///
-    /// # Panics
-    ///
-    /// Should not panic as `checked_sub` is subtracting a value that is within the range of `Instant`.
-    /// If it does, it's a bug.
     ///
     #[cfg(any(test, debug_assertions))]
     pub fn test() -> Self {
@@ -183,11 +173,6 @@ impl StatusObserver {
     ///
     /// The status is initialized to `Online`.
     /// The last check is initialized to `Instant::now() - UP_TO_DATE_SECONDS` to make it stale.
-    ///
-    /// # Panics
-    ///
-    /// Should not panic as `checked_sub` is subtracting a value that is within the range of `Instant`.
-    /// If it does, it's a bug.
     ///
     #[cfg(any(test, debug_assertions))]
     pub fn set_up_to_date(&mut self, up_to_date: Duration) {

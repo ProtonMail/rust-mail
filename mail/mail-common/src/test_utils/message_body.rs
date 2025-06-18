@@ -256,7 +256,6 @@ pub fn message_body_test_message_mime() -> ApiMessage {
     }
 }
 
-/// # Panics
 pub fn message_body_test_user_secret() -> UserKeySecret {
     let salts = Salts::new(iter::once(Salt {
         id: KeyId::from(TEST_USER_KEY_ID),
@@ -269,7 +268,7 @@ pub fn message_body_test_user_secret() -> UserKeySecret {
         .map(UserKeySecret)
         .unwrap()
 }
-/// # Panics
+
 pub fn generate_new_api_address(
     address_id: AddressId,
     address_email: &str,

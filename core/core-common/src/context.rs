@@ -366,11 +366,6 @@ impl Context {
 
     /// Get the current Arc instance for this context.
     ///
-    /// # Panics
-    ///
-    /// Panics if the context is not alive. In practice, this should never happen
-    /// as calls to this method have to be made on the Context object itself.
-    ///
     #[must_use]
     pub fn as_arc(&self) -> Arc<Self> {
         self.this.upgrade().expect("Should never fail")

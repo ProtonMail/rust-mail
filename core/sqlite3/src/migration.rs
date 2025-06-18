@@ -24,10 +24,6 @@ pub trait Migration: Send + Sync + 'static {
     /// Migration order string. A part of the name.
     /// Used to determine order of migrations.
     ///
-    /// # Panics
-    ///
-    /// Panics if the migration name does not contain `_`.
-    ///
     fn order_number(&self) -> &str {
         let Some((order, _)) = self.name().split_once('_') else {
             panic!(
@@ -235,10 +231,6 @@ async fn run_migrations(
 ///
 /// This function sorts by the order number and panics, if there are `0001_a.sql` and `0001_b.sql`. Such a conflict indicates, that the
 /// ordering is undecidable and it's developer's responsibility to rename one of the files.
-///
-/// # Panics
-///
-/// This function will panic if migrations do not have unique migration order number.
 ///
 pub fn sort_migrations_and_check_for_conflicts(migrations: &mut [Box<dyn Migration>]) {
     migrations.sort_by_key(|m| m.order_number().to_string());

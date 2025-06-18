@@ -243,10 +243,6 @@ impl Label {
     ///
     /// Returns an error if the data could not be written to the database.
     ///
-    /// # Panics
-    /// If labels fetched from database do not contain Local ID.
-    /// Note, this is rather impossible and is just a matter of limitations of Stash API
-    ///
     pub async fn store_labels(
         tx: &Bond<'_>,
         labels: Vec<Label>,

@@ -27,7 +27,6 @@ pub fn random_string(length: usize) -> String {
 /// method to set this up by default as a lower-priority expectation and
 /// establish a catch-all in that way.
 ///
-/// # Panics
 pub async fn catch_all(mock_server: &MockServer) {
     // If there are any unconfigured calls, we will panic because it's not what
     // we expect to happen, so the test should fail

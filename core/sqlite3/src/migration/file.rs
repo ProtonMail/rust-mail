@@ -41,11 +41,6 @@ impl Migration for EmbeddedFileMigration {
 
 /// Loads embedded migrations
 ///
-/// # Panics
-///
-/// This function will panic if glob pattern fails searching for **/*.sql, as well
-/// as if the content of the file won't be in valid UTF-8.
-///
 #[must_use]
 pub fn embedded_migrations(dir: &Dir<'static>) -> Vec<Box<dyn Migration>> {
     dir.find("**/*.sql")

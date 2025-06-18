@@ -39,8 +39,6 @@ impl UserContext {
     /// Returns errors if the API call fails, the conversation doesn't exist, or if there's an
     /// issue with the sender that causes problems when creating the API request on our side.
     ///
-    /// # Panics
-    /// If cache metadata are unset
     pub async fn image_for_sender(
         &self,
         address: String,

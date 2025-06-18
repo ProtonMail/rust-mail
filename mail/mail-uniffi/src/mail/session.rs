@@ -73,12 +73,6 @@ pub struct MailSessionParams {
 // constructor.
 /// Create a new mail session.
 ///
-/// # Panics
-///
-/// Panics if the API URL is invalid. In this situation we cannot proceed.
-///
-/// TODO: An error type needs to be added for this later.
-///
 #[must_use]
 #[uniffi_export]
 pub fn create_mail_session(
@@ -115,12 +109,6 @@ pub fn create_mail_session(
 ///
 /// This function is designed for extension. Do not use it in the main application without thorough testing!
 ///
-/// # Panics
-///
-/// Panics if the API URL is invalid. In this situation we cannot proceed.
-///
-/// TODO: An error type needs to be added for this later.
-///
 #[must_use]
 #[uniffi_export]
 pub fn create_mail_ios_extension_session(
@@ -138,12 +126,6 @@ pub fn create_mail_ios_extension_session(
 // NOTE: Callbacks can not be stored in record types, which is why they are still in the
 // constructor.
 /// Create a new mail session.
-///
-/// # Panics
-///
-/// Panics if the API URL is invalid. In this situation we cannot proceed.
-///
-/// TODO: An error type needs to be added for this later.
 ///
 async fn create_mail_session_inner(
     params: MailSessionParams,

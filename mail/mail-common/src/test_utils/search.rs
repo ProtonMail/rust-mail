@@ -264,7 +264,6 @@ impl MailTestContext {
 /// `label_id` is not set, the local `label` can not be found or the query
 /// failed.
 ///
-/// # Panics
 pub async fn create_labels(tether: &mut Tether) -> Vec<LocalLabelId> {
     let mut labels = [test_label1(), test_label2()];
     tether

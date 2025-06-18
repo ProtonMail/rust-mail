@@ -49,10 +49,6 @@ mod traits;
 /// }
 /// ```
 ///
-/// ### Panics
-///
-/// This macro will panic if the `TokenStream` is not a function or impl block.
-///
 /// ### Limitations
 ///
 /// Return type must be exactly `Result<T, E>` where `T` and `E` are generic types.

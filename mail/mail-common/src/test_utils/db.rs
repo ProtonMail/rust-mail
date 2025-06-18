@@ -3,7 +3,6 @@ use proton_core_common::db::migrations::migrate_core_db;
 use stash::stash::{Stash, StashConfiguration};
 use tempfile::{TempDir, tempdir};
 
-/// # Panics
 pub async fn new_test_connection() -> Stash {
     use std::io::stdout;
     use tracing::Level;
@@ -30,7 +29,6 @@ pub async fn new_test_connection() -> Stash {
     stash
 }
 
-/// # Panics
 pub async fn new_test_connection_file() -> (Stash, TempDir) {
     use std::io::stdout;
     use tracing::Level;
