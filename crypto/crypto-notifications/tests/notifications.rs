@@ -79,7 +79,7 @@ where
     get_test_device_key_source(pgp, TEST_DECRYPTION_KEY, "password")
 }
 
-#[allow(clippy::missing_panics_doc, dead_code)]
+#[allow(dead_code)]
 pub fn get_test_device_key_source<P>(
     pgp: &P,
     source: &str,

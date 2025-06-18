@@ -383,7 +383,6 @@ impl From<RealMessageBanner> for MessageBanner {
 ///
 /// Returns an error if the database query fails.
 ///
-#[allow(clippy::missing_panics_doc)]
 #[uniffi_export]
 pub async fn message(
     session: Arc<MailUserSession>,
@@ -420,7 +419,6 @@ pub struct WatchedMessage {
 ///
 /// Returns an error if the database query fails.
 ///
-#[allow(clippy::missing_panics_doc)]
 #[uniffi_export]
 pub async fn watch_message(
     session: Arc<MailUserSession>,
@@ -451,7 +449,6 @@ pub async fn watch_message(
 ///
 /// Returns an error if the database query fails.
 ///
-#[allow(clippy::missing_panics_doc)]
 #[uniffi_export]
 pub async fn messages_for_conversation(
     session: Arc<MailUserSession>,
@@ -476,7 +473,6 @@ pub async fn messages_for_conversation(
 ///
 /// Returns an error if the database query fails.
 ///
-#[allow(clippy::missing_panics_doc)]
 #[uniffi_export]
 pub async fn messages_for_label(
     session: Arc<MailUserSession>,
@@ -505,7 +501,6 @@ pub async fn messages_for_label(
 ///
 /// Returns an error if the database query fails.
 ///
-#[allow(clippy::missing_panics_doc)]
 #[uniffi_export]
 pub async fn scroll_messages_for_label(
     session: Arc<MailUserSession>,
@@ -538,7 +533,6 @@ pub async fn scroll_messages_for_label(
 ///
 /// Returns an error if the database query fails.
 ///
-#[allow(clippy::missing_panics_doc)]
 #[uniffi_export]
 pub async fn scroller_search(
     session: Arc<MailUserSession>,
@@ -784,7 +778,6 @@ pub struct WatchedMessages {
 ///
 /// Returns an error if the database query fails.
 ///
-#[allow(clippy::missing_panics_doc)]
 #[uniffi_export]
 pub async fn watch_messages_for_label(
     session: Arc<MailUserSession>,

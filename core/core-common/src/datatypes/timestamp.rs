@@ -11,7 +11,6 @@ impl UnixTimestamp {
         Self(value)
     }
 
-    #[allow(clippy::missing_panics_doc)]
     #[must_use]
     pub fn now() -> Self {
         Self(

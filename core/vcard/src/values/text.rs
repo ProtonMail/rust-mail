@@ -32,7 +32,6 @@ fn unescape(value: &str) -> String {
 /// This is unused, might be useful for the future if we want to limit what texts the user can
 /// create.
 // I don't think that it makes sense to reject invalid texts when parsing, as we can still display them.
-#[allow(clippy::missing_panics_doc, reason = "Valid regex")]
 #[must_use]
 fn _is_text_value(value: &str) -> bool {
     // text = *TEXT-CHAR

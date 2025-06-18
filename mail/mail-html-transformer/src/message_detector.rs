@@ -87,7 +87,6 @@ fn find_split_doc(i: impl Iterator<Item = NodeRef>) -> Option<NodeRef> {
 
 /// Try to remove the blockquote and returns if it had it.
 #[must_use]
-#[allow(clippy::missing_panics_doc)]
 pub fn strip_blockquote(message: NodeRef) -> bool {
     // First let's find an element with a well known selector
     // such as an element with class `protonmail_quote
@@ -132,7 +131,6 @@ pub fn strip_blockquote(message: NodeRef) -> bool {
 
 /// Try to locate the eventual blockquote present in the document no matter the expeditor of the mail
 #[must_use]
-#[allow(clippy::missing_panics_doc)]
 pub fn locate_blockquote(message: NodeRef) -> SplitDoc {
     // First let's find an element with a well known selector
     // such as an element with class `protonmail_quote

@@ -250,7 +250,6 @@ pub async fn all_available_bottom_bar_actions_for_conversations(
 ///
 /// Returns an error if the database query fails or the server request failed.
 ///
-#[allow(clippy::missing_panics_doc)]
 #[uniffi_export]
 pub async fn conversation(
     mailbox: Arc<Mailbox>,
@@ -315,7 +314,6 @@ impl From<ContextualConversationAndMessages> for ConversationAndMessages {
 ///
 /// Returns an error if the database query fails.
 ///
-#[allow(clippy::missing_panics_doc)]
 #[uniffi_export]
 pub async fn conversations_for_label(
     session: Arc<MailUserSession>,
@@ -462,7 +460,6 @@ pub async fn move_conversations(
 ///
 /// Returns an error if the database query fails.
 ///
-#[allow(clippy::missing_panics_doc)]
 #[uniffi_export]
 pub async fn scroll_conversations_for_label(
     session: Arc<MailUserSession>,
@@ -623,7 +620,6 @@ pub struct WatchedConversation {
 ///
 /// Returns an error if the database query fails.
 ///
-#[allow(clippy::missing_panics_doc)]
 #[uniffi_export]
 pub async fn watch_conversation(
     mailbox: Arc<Mailbox>,
@@ -672,7 +668,6 @@ pub struct WatchedConversations {
 ///
 /// Returns an error if the database query fails.
 ///
-#[allow(clippy::missing_panics_doc)]
 #[uniffi_export]
 pub async fn watch_conversations_for_label(
     session: Arc<MailUserSession>,

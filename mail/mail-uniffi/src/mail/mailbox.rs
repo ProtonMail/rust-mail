@@ -171,7 +171,6 @@ impl Mailbox {
     /// # Errors
     ///
     /// Returns error if the query failed.
-    #[allow(clippy::missing_panics_doc)]
     pub async fn watch_unread_count(
         &self,
         callback: Box<dyn LiveQueryCallback>,

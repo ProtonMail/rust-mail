@@ -30,7 +30,6 @@ mod support_level;
 
 /// Reverts dark mode injection in inline attributes.
 /// This function removes modified `style` attribute and restores original style from `data-proton-original-style` attribute.
-#[allow(clippy::missing_panics_doc)]
 pub fn revert_dark_mode_in_inline_attributes(document: &NodeRef) {
     let Ok(res) = document.select("[data-proton-original-style]") else {
         tracing::warn!("Could not select nodes with data-proton-original-style attribute");

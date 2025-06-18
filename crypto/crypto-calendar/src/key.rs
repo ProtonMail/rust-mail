@@ -155,7 +155,6 @@ where
         Self::wrap(pgp, private_key)
     }
 
-    #[allow(clippy::missing_panics_doc)]
     pub fn export(
         &self,
         pgp: &P,

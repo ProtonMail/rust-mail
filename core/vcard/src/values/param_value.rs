@@ -58,7 +58,6 @@ impl TryFrom<&str> for ParamValue {
 
 /// Validate that the given `value` respect the format for a `param-value`
 #[allow(clippy::similar_names)]
-#[allow(clippy::missing_panics_doc, reason = "Valid regex")]
 #[must_use]
 pub fn is_param_value(value: &str) -> bool {
     // param-value = *SAFE-CHAR / DQUOTE *QSAFE-CHAR DQUOTE

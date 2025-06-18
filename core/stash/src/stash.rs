@@ -483,7 +483,6 @@ impl Stash {
     /// Create a sqlite pool.
     /// This is infallible, if it cannot open the file it will fail later on when we try to
     /// connect.
-    #[allow(clippy::missing_panics_doc)] // This can only happen if we misconfigure the pool.
     fn make_pool(config: StashConfiguration<'_>) -> Arc<StashConnectionPool> {
         let StashConfiguration {
             path, pool_size, ..
@@ -815,7 +814,6 @@ impl Tether {
     /// * [`Interface::execute()`]
     /// * [`params!`](crate::utils::params)
     ///
-    #[allow(clippy::missing_panics_doc)]
     pub async fn query<Q, T>(
         &self,
         query: Q,

@@ -81,7 +81,6 @@ impl Debug for PidElement {
 }
 
 /// Validate that the given `values` respect the format for a `PID` parameter
-#[allow(clippy::missing_panics_doc, reason = "Valid regex")]
 #[must_use]
 pub fn is_pid_param(values: &[String]) -> bool {
     // pid-param = "PID=" pid-value *("," pid-value)

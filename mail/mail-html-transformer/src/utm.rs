@@ -23,7 +23,6 @@ pub enum Error {
 }
 
 #[must_use]
-#[allow(clippy::missing_panics_doc)] // The select is well formed.
 /// Strip UTM trackers from all HTML links in the given `document`.
 pub fn strip(document: NodeRef) -> u64 {
     let select = document.select("[href]").unwrap();

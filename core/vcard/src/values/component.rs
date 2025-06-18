@@ -47,7 +47,6 @@ impl TryFrom<&str> for Component {
 }
 
 /// Validate that given `value` respect format for `component` values
-#[allow(clippy::missing_panics_doc, reason = "Valid regex")]
 #[must_use]
 pub fn is_component_value(value: &str) -> bool {
     // component = "\\" / "\," / "\;" / "\n" / WSP / NON-ASCII / %x21-2B / %x2D-3A / %x3C-5B / %x5D-7E
