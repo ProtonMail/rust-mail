@@ -125,6 +125,12 @@ impl proton_action_queue::action::Handler for AttachmentUploadHandler {
             )
         };
 
+        tracing::info!(
+            "Uploading attachment {} from draft {}",
+            attachment_upload_metadata.local_attachment_id,
+            attachment_upload_metadata.metadata_id
+        );
+
         if let Some(id) = attachment_upload_metadata.action_id {
             error!(
                 "Attempting to create new attachment upload action when existing action ({id}) exists"

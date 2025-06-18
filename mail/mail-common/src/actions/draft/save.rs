@@ -178,6 +178,8 @@ impl proton_action_queue::action::Handler for SaveHandler {
             return Err(SaveError::MetadataNotFound(action.metadata_id).into());
         };
 
+        tracing::info!("Saving draft {}", action.metadata_id);
+
         let body_len = action.body.len() as u64;
         let Some(address) = Address::find_by_remote_id(action.address_id.clone(), bond)
             .await
