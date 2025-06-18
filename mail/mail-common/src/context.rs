@@ -134,7 +134,7 @@ pub enum MailContextError {
     #[error(transparent)]
     Rsvp(#[from] RsvpError),
     #[error("{0}")]
-    Other(anyhow::Error),
+    Other(#[from] anyhow::Error),
 }
 
 impl MailContextError {

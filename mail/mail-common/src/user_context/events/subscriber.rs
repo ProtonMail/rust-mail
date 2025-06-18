@@ -12,12 +12,14 @@ use crate::user_context::events::labels::handle_label_events;
 use crate::user_context::events::messages::handle_message_events;
 use crate::{MailContextError, MailUserContext};
 use crate::{datatypes::ConversationLabelsCount, events::MailEvent};
+use anyhow::Context;
 use anyhow::{anyhow, bail};
 use async_trait::async_trait;
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedActionOutput};
 use proton_core_common::datatypes::{Refresh, SystemLabel};
 use proton_core_common::models::{Label, ModelExtension};
 use proton_event_loop::subscriber::{Subscriber, SubscriberError};
+use proton_mail_ids::{LocalConversationId, LocalMessageId};
 use stash::orm::Model;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
@@ -46,6 +48,14 @@ impl MailEventSubscriber {
     }
 }
 
+/// This is data to be used outside of the transaction context
+#[derive(Default)]
+pub struct PostEventSyncData {
+    pub msg_for_prefetch: Vec<LocalMessageId>,
+    pub cnv_for_prefetch: Vec<LocalConversationId>,
+    queue_incoming_default: bool,
+}
+
 #[async_trait]
 impl Subscriber<MailEvent> for MailEventSubscriber {
     fn name(&self) -> &'static str {
@@ -57,55 +67,40 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
         debug!("Handling {} mail events", events.len());
 
         let mut tether = ctx.user_context.stash().connection();
-        let mut conversation_ids = Vec::with_capacity(events.len());
-        let mut message_ids = Vec::with_capacity(events.len());
+        let mut data = PostEventSyncData::default();
 
         // Check for missing dependencies. Sometimes when lot of messages/conversations get moved
         // to newly created label the items can have the new label before the label create event.
 
-        let dependency_fetcher = calculate_missing_dependencies(events, &tether)
+        calculate_missing_dependencies(events, &tether)
             .await
-            .map_err(|e| {
-                SubscriberError::Other(anyhow!("Failed to calculate dependencies: {e:?}"))
-            })?;
-        dependency_fetcher
+            .context("Failed to calculate dependencies")?
             .fetch_and_store(ctx.api(), &mut tether)
             .await
-            .map_err(|e| {
-                SubscriberError::Other(anyhow!("Failed to fetch or store dependencies: {e:?}"))
-            })?;
+            .context("Failed to fetch or store dependencies")?;
 
-        let queue_incoming_default = tether
+        tether
             .tx::<_, _, SubscriberError>(async |tx| {
-                let mut queue_incoming_default = false;
                 for event in events {
                     if let Some(labels) = &event.labels {
                         debug!("Handling label events");
-                        handle_label_events(tx, labels).await.map_err(|e| {
-                            error!("{e:?}");
-                            SubscriberError::Other(e.into())
-                        })?;
+                        handle_label_events(tx, labels)
+                            .await
+                            .context("Error handling label events")?;
                     }
 
                     if let Some(conversations) = &event.conversations {
                         debug!("Handling conversation events");
-                        let ids = handle_conversation_events(tx, conversations)
+                        handle_conversation_events(tx, conversations, &mut data)
                             .await
-                            .map_err(|e| {
-                                error!("{e:?}");
-                                SubscriberError::Other(e.into())
-                            })?;
-                        conversation_ids.extend(ids);
+                            .context("Error handling conversation events")?;
                     }
 
                     if let Some(messages) = &event.messages {
                         debug!("Handling message events");
-                        let ids = handle_message_events(tx, messages).await.map_err(|e| {
-                            error!("{e:?}");
-                            SubscriberError::Other(e.into())
-                        })?;
-
-                        message_ids.extend(ids);
+                        handle_message_events(tx, messages, &mut data)
+                            .await
+                            .context("Error handling message events")?;
                     }
 
                     if let Some(conversation_counts) = &event.conversation_counts {
@@ -133,23 +128,24 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
 
                     // It so happens that the API only returns the IDs of what changed, not the
                     // actual data, so we better reload all.
-                    queue_incoming_default |= event.incoming_defaults.is_some();
+                    data.queue_incoming_default |= event.incoming_defaults.is_some();
                 }
-                Ok(queue_incoming_default)
+                Ok(())
             })
             .await
-            .map_err(|e| {
-                let e = anyhow!("Failed to apply changes: {e}");
-                error!("{e:?}");
-                SubscriberError::Other(e)
-            })?;
+            .context("Failed to apply changes")?;
 
         let label_id = SystemLabel::AllMail.local_id(&tether).await?.unwrap();
-        let conversation_jobs = conversation_ids
+        let conversation_jobs = data
+            .cnv_for_prefetch
             .into_iter()
             .map(|id| PrefetchJob::Conversation(id, label_id))
             .collect();
-        let message_jobs = message_ids.into_iter().map(PrefetchJob::Message).collect();
+        let message_jobs = data
+            .msg_for_prefetch
+            .into_iter()
+            .map(PrefetchJob::Message)
+            .collect();
 
         let _ = ctx
             .queue_prefetch_jobs(conversation_jobs)
@@ -164,7 +160,7 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
                 error!("Failed to queue msg jobs for prefetch: {e}");
             });
 
-        if queue_incoming_default {
+        if data.queue_incoming_default {
             IncomingDefaultLocation::action_resync(ctx.action_queue()).await;
         }
 
@@ -254,11 +250,7 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
 
             Label::store_labels(tx, all_remote_labels)
                 .await
-                .map_err(|e| {
-                    let e = anyhow!("Failed to sync labels: {e}");
-                    error!("{e:?}");
-                    SubscriberError::Other(e)
-                })?;
+                .context("Failed to sync labels")?;
 
             for local_label_to_remove in all_local_labels.into_values() {
                 if let Some(_system_label) =
