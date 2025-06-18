@@ -104,9 +104,7 @@ impl MailUserContext {
         this.register_subscribers().await?;
 
         if let EventPollMode::Automatic(interval) = this.user_context().event_poll_mode() {
-            this.init_event_loop_poll(interval)
-                .await
-                .inspect_err(|e| error!("Failed to init event loop task: {e:?}"))?;
+            this.init_event_loop_poll(interval);
         }
 
         Ok(this)
