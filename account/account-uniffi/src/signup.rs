@@ -234,13 +234,14 @@ impl SignupFlow {
     pub async fn submit_external_username(
         &self,
         email: String,
+        user_behavior: Option<UserBehavior>,
     ) -> Result<SimpleSignupState, SignupError> {
         let flow = self.flow.clone();
 
         uniffi_async(async move {
             flow.lock()
                 .await
-                .submit_external_username(email)
+                .submit_external_username(email, user_behavior.map(Into::into))
                 .await
                 .map_err(SignupError::from)
         })

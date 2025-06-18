@@ -180,10 +180,14 @@ impl SignupFlow {
     }
 
     /// Submit Proton External email
-    pub async fn submit_external_username(&mut self, email: String) -> Result<(), SignupError> {
+    pub async fn submit_external_username(
+        &mut self,
+        email: String,
+        behavior: Option<Behavior>,
+    ) -> Result<(), SignupError> {
         let username = Username::External { email };
 
-        let next = self.state()?.submit_username(username, None).await?;
+        let next = self.state()?.submit_username(username, behavior).await?;
 
         self.state.push(next);
 
