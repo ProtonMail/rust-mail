@@ -10,7 +10,6 @@ use crate::models::{
 };
 use crate::rsvp::RsvpMailSender;
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
-use jiff::Zoned;
 use parking_lot::Mutex;
 use proton_calendar_common::{
     RsvpAnswer, RsvpAnswerError, RsvpAnswerStatus, RsvpError, RsvpEvent, RsvpEventId,
@@ -524,7 +523,7 @@ impl DecryptedMessageBody {
         };
 
         let answer = RsvpAnswer {
-            now: Zoned::now(),
+            now: ctx.mail_context().core_context().clock().now(),
             email: &msg.to_list.value[0].address,
             status,
         };
