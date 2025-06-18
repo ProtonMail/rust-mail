@@ -599,6 +599,8 @@ impl Save {
                         attachments.iter().filter_map(|a| a.remote_id()).count()
                     );
 
+                    // This is safe to do as API guarantees that inherited attachments from
+                    // reply forward are updated in place. This is expected to happen only once.
                     for (index, original_attachment) in attachments
                         .iter_mut()
                         .enumerate()
@@ -697,11 +699,13 @@ impl Save {
                 // If address changed saving the attachments are upload with new key packets
                 // which will reset their data. We need to check if this occurred here and
                 // reset the signatures and update the key packets so that send works correctly.
-                for (index, original_attachment) in attachments
-                    .iter()
-                    .enumerate(){
-                    let new_attachment = &mut new_message_body_metadata.attachments[index];
-                    if original_attachment.remote_address_id != new_attachment.remote_address_id || original_attachment.key_packets!= new_attachment.key_packets {
+                // Ordering of the attachments is only guaranteed if there are inherited attachments
+                // from reply/forwarding. This only happens on time, the rest of the case
+                // the order will not be guaranteed anymore.
+                for original_attachment in attachments {
+                    if let Some(new_attachment)= new_message_body_metadata.attachments.iter_mut().find(|new_attachment| {
+                        original_attachment.remote_id() == new_attachment.remote_id() && (original_attachment.remote_address_id != new_attachment.remote_address_id || original_attachment.key_packets!= new_attachment.key_packets)
+                    }) {
                         tracing::info!("Detected address change on attachment ({}/{})", original_attachment.local_id.unwrap(), original_attachment.remote_id().as_ref().unwrap());
                         new_attachment.local_id = original_attachment.local_id;
                         new_attachment.row_id = original_attachment.row_id;
