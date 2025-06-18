@@ -5955,6 +5955,7 @@ dependencies = [
  "proton-core-api",
  "proton-core-common",
  "proton-crypto-account",
+ "proton-crypto-calendar",
  "proton-crypto-inbox",
  "proton-event-loop",
  "proton-mail-api",
