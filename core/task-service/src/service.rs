@@ -38,7 +38,7 @@ impl TaskService {
         thread::Builder::new()
             .name("task-service".into())
             .spawn(move || {
-                Self::run(receiver);
+                Self::run(&receiver);
             })?;
 
         Ok(Self {
@@ -48,7 +48,7 @@ impl TaskService {
     }
 
     #[tracing::instrument(skip(receiver))]
-    fn run(receiver: mpsc::Receiver<Command>) {
+    fn run(receiver: &mpsc::Receiver<Command>) {
         debug!("Starting task service");
 
         let mut wakers: HashMap<usize, Waker> = HashMap::new();
