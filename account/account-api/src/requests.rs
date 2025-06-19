@@ -606,21 +606,7 @@ mod tests {
     fn test_create_user_payload_serialization() {
         let info = ChallengeInfo {
             product_name: "mail-ios".into(),
-            device_info: Some(DeviceInfo {
-                language: "lang".into(),
-                timezone: "tz".into(),
-                timezone_offset: -60,
-                model: "model".into(),
-                brand: "brand".into(),
-                codename: "code".into(),
-                uuid: "uuid".into(),
-                country: "country".into(),
-                rooted: false,
-                font_scale: "scale".into(),
-                storage: 123.0,
-                dark_mode: true,
-                keyboards: vec!["kb".into()],
-            }),
+            device_info: Some(create_device_info_stub()),
             recovery_behavior: Some(Behavior {
                 time: vec![123],
                 click: 42,
@@ -630,21 +616,7 @@ mod tests {
             }),
             username_behavior: None,
         };
-        let request = CreateUserRequest {
-            user_type: CreateUserType::Normal,
-            username: "name".into(),
-            domain: None,
-            auth: AuthInput {
-                version: 123,
-                modulus_id: "mod".into(),
-                salt: "salt".into(),
-                verifier: "ver".into(),
-            },
-            email: None,
-            phone: None,
-            referrer: None,
-            payload: ChallengePayload::new(&info),
-        };
+        let request = create_user_request_stub(&info);
         let serialized = serde_json::to_string(&request).expect("Failed to serialize");
         assert_eq!(
             serialized,
@@ -658,5 +630,65 @@ mod tests {
                 r#""keyboards":["kb"],"timeRecovery":[123],"clickRecovery":42,"copyRecovery":["copy"],"pasteRecovery":["paste"],"keydownRecovery":["key"]}}}"#,
             )
         );
+    }
+
+    #[test]
+    fn test_create_anonymous_payload_serialization() {
+        let info = ChallengeInfo {
+            product_name: "mail-ios".into(),
+            device_info: Some(create_device_info_stub()),
+            recovery_behavior: None,
+            username_behavior: None,
+        };
+        let request = create_user_request_stub(&info);
+        let serialized = serde_json::to_string(&request).expect("Failed to serialize");
+        assert_eq!(
+            serialized,
+            concat!(
+                r#"{"Type":1,"Username":"name","Domain":null,"#,
+                r#""Auth":{"Version":123,"ModulusID":"mod","Salt":"salt","Verifier":"ver"},"#,
+                r#""Email":null,"Phone":null,"Referrer":null,"Payload":{"#,
+                r#""mail-ios-v4-challenge-0":{"v":"2.2.0","appLang":"lang","timezone":"tz","timezoneOffset":-60,"#,
+                r#""deviceName":"model","deviceBrand":"brand","deviceCodename":"code","uuid":"uuid","regionCode":"country","#,
+                r#""isJailbreak":false,"preferredContentSize":"scale","storageCapacity":123.0,"isDarkmodeOn":true,"#,
+                r#""keyboards":["kb"]}}}"#,
+            )
+        );
+    }
+
+    fn create_device_info_stub() -> DeviceInfo {
+        DeviceInfo {
+            language: "lang".into(),
+            timezone: "tz".into(),
+            timezone_offset: -60,
+            model: "model".into(),
+            brand: "brand".into(),
+            codename: "code".into(),
+            uuid: "uuid".into(),
+            country: "country".into(),
+            rooted: false,
+            font_scale: "scale".into(),
+            storage: 123.0,
+            dark_mode: true,
+            keyboards: vec!["kb".into()],
+        }
+    }
+
+    fn create_user_request_stub(challenge_info: &ChallengeInfo) -> CreateUserRequest {
+        CreateUserRequest {
+            user_type: CreateUserType::Normal,
+            username: "name".into(),
+            domain: None,
+            auth: AuthInput {
+                version: 123,
+                modulus_id: "mod".into(),
+                salt: "salt".into(),
+                verifier: "ver".into(),
+            },
+            email: None,
+            phone: None,
+            referrer: None,
+            payload: ChallengePayload::new(challenge_info),
+        }
     }
 }

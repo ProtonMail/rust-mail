@@ -35,8 +35,8 @@ pub enum PayloadFrame {
 #[serde(rename_all = "PascalCase")]
 pub struct PayloadFrameV2_2 {
     /// Frame's metadata.
-    #[serde(rename = "frame")]
-    pub metadata: PayloadFrameMetadata,
+    #[serde(rename = "frame", skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<PayloadFrameMetadata>,
     /// Device fingerprint.
     #[serde(flatten, skip_serializing_if = "Option::is_none")]
     pub device_info: Option<DeviceInfo>,
@@ -91,6 +91,12 @@ impl ChallengePayload {
     pub fn new(challenge_info: &ChallengeInfo) -> Option<Self> {
         if challenge_info.recovery_behavior.is_none() && challenge_info.username_behavior.is_none()
         {
+            if challenge_info.device_info.is_some() {
+                let mut frames = HashMap::with_capacity(1);
+                insert_payload_frame(&mut frames, challenge_info, None, None);
+                return Some(ChallengePayload { frames });
+            }
+
             return None;
         }
 
@@ -99,18 +105,18 @@ impl ChallengePayload {
         if let Some(behavior) = challenge_info.recovery_behavior.clone() {
             insert_payload_frame(
                 &mut frames,
-                PayloadFrameMetadata::Recovery,
                 challenge_info,
-                PayloadFrameBehavior::Recovery(behavior),
+                Some(PayloadFrameMetadata::Recovery),
+                Some(PayloadFrameBehavior::Recovery(behavior)),
             );
         }
 
         if let Some(behavior) = challenge_info.username_behavior.clone() {
             insert_payload_frame(
                 &mut frames,
-                PayloadFrameMetadata::Username,
                 challenge_info,
-                PayloadFrameBehavior::Username(behavior),
+                Some(PayloadFrameMetadata::Username),
+                Some(PayloadFrameBehavior::Username(behavior)),
             );
         }
 
@@ -120,9 +126,9 @@ impl ChallengePayload {
 
 fn insert_payload_frame(
     payload: &mut HashMap<String, PayloadFrame>,
-    metadata: PayloadFrameMetadata,
     challenge_info: &ChallengeInfo,
-    behavior: PayloadFrameBehavior,
+    metadata: Option<PayloadFrameMetadata>,
+    behavior: Option<PayloadFrameBehavior>,
 ) {
     let id = payload.len();
     let name = format!("{}-v4-challenge-{id}", challenge_info.product_name);
@@ -131,7 +137,7 @@ fn insert_payload_frame(
         PayloadFrameV2_2 {
             metadata,
             device_info: challenge_info.device_info.clone(),
-            user_behavior: Some(behavior),
+            user_behavior: behavior,
         }
         .into(),
     );
@@ -191,7 +197,7 @@ mod test {
                     (
                         "mail-ios-v4-challenge-0".to_string(),
                         PayloadFrameV2_2 {
-                            metadata: PayloadFrameMetadata::Recovery,
+                            metadata: Some(PayloadFrameMetadata::Recovery),
                             device_info: Some(device_info.clone()),
                             user_behavior: Some(PayloadFrameBehavior::Recovery(recovery_behavior)),
                         }
@@ -200,7 +206,7 @@ mod test {
                     (
                         "mail-ios-v4-challenge-1".to_string(),
                         PayloadFrameV2_2 {
-                            metadata: PayloadFrameMetadata::Username,
+                            metadata: Some(PayloadFrameMetadata::Username),
                             device_info: Some(device_info.clone()),
                             user_behavior: Some(PayloadFrameBehavior::Username(username_behavior)),
                         }
