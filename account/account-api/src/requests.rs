@@ -405,7 +405,8 @@ pub struct CreateAddressKeyRequest {
 
     /// The address forwarding ID.
     #[serde(rename = "AddressForwardingID")]
-    pub address_forwarding_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub address_forwarding_id: Option<String>,
 
     /// Indicates if this is the primary key (1 for primary, 0 for non-primary).
     pub primary: u8,
@@ -650,7 +651,7 @@ mod tests {
         let request = CreateAddressKeyRequest {
             address_id: "addr_id_1".to_string(),
             private_key: "addr_private_key".to_string(),
-            address_forwarding_id: "addr_forwarding_id".to_string(),
+            address_forwarding_id: Some("addr_forwarding_id".to_string()),
             primary: 1,
             token: "addr_token".to_string(),
             signature: "addr_signature".to_string(),
