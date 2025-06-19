@@ -5,20 +5,9 @@ use proton_core_api::services::proton::EventId;
 
 /// This trait allows abstraction over how to store and load events. Note that this only stores the
 /// event RemoteId, you will need to ask the `Provider` for the actual event.
-#[cfg_attr(test, mockall::automock)]
 #[async_trait]
 pub trait Store: Send + Sync {
-    /// Load the latest event id from the store.
-    ///
-    /// # Errors
-    /// Returns error if value failed to be loaded.
     async fn load(&self) -> anyhow::Result<Option<EventId>>;
-
-    /// Store the latest event id into the store.
-    ///
-    /// # Errors
-    /// Returns error if value failed to be stored.
-    ///
     async fn store(&self, id: EventId) -> anyhow::Result<()>;
 }
 
@@ -26,6 +15,7 @@ pub trait Store: Send + Sync {
 pub struct InMemoryStore {
     id: std::sync::RwLock<Option<EventId>>,
 }
+
 #[async_trait]
 impl Store for InMemoryStore {
     async fn load(&self) -> anyhow::Result<Option<EventId>> {

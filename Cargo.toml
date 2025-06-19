@@ -82,7 +82,6 @@ html2text = "0.14.2"
 jiff = "0.2.4"
 file-format = { version = "0.26.0", features = ["reader"] }
 mime = "0.3.17"
-mockall = "0.12"
 num_enum = "0.7.3"
 oxilangtag = "0.1"
 parking_lot = "0.12.3"

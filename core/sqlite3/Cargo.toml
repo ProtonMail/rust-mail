@@ -34,7 +34,6 @@ include_dir = { workspace = true }
 itertools = { workspace = true }
 
 [dev-dependencies]
-mockall = { workspace = true }
 rand = { workspace = true }
 tempdir = { workspace = true }
 
