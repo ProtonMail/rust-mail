@@ -175,9 +175,9 @@ async fn sanitize_draft_reply_html() {
     assert_eq!(sanitized, draft.body);
 }
 
-#[tokio::test]
 #[test_case::test_case(ReplyMode::Sender; "Sender")]
 #[test_case::test_case(ReplyMode::All; "All")]
+#[tokio::test]
 async fn reply_to_sent_message_should_use_to_list_rather_than_sender(reply_mode: ReplyMode) {
     let source_body_metadata = existing_message_body_metadata();
     let mut message = existing_message();
