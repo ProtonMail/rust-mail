@@ -126,7 +126,7 @@ impl EventPollInternal {
     /// publishing raw events to all registered subscribers and storing the event id for the next iteration.
     /// The execution of the loop is aborted on the first error.
     #[tracing::instrument(name="event_poll_raw",level=Level::DEBUG, skip_all)]
-    pub async fn poll_raw(
+    pub(crate) async fn poll_raw(
         &self,
         store: &dyn Store,
         provider: &dyn Provider,
