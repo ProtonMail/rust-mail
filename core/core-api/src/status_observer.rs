@@ -342,7 +342,7 @@ impl StatusObserverLayer {
         use ErrorKind::*;
 
         match error.kind() {
-            Tls | Resolve | Dial | Send | SendRetry => {
+            Tls | Resolve | Dial | Send => {
                 self.update(ConnectionStatus::Offline);
             }
 

@@ -4016,7 +4016,7 @@ dependencies = [
 [[package]]
 name = "muon"
 version = "1.3.0"
-source = "git+https://gitlab.protontech.ch/jhoulahan/muon.git?rev=e8ce5fd6400bd47de27c03a32cc6689377bc2096#e8ce5fd6400bd47de27c03a32cc6689377bc2096"
+source = "git+https://gitlab.protontech.ch/jhoulahan/muon.git?rev=97ab1546108bd6026e8aebbec1c552ee5ad5e5b3#97ab1546108bd6026e8aebbec1c552ee5ad5e5b3"
 dependencies = [
  "anyhow",
  "async-channel",
@@ -5512,6 +5512,7 @@ dependencies = [
  "rand 0.8.5",
  "secrecy",
  "serde",
+ "serde_json",
  "sha2",
  "smart-default",
  "sqlite-watcher",

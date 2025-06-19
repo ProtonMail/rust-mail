@@ -1,7 +1,7 @@
 use crate::services::proton::common::ApiErrorInfo;
 use crate::store::StoreError;
 use muon::Status;
-use muon::error::ParseEndpointErr;
+use muon::common::ParseEndpointErr;
 use serde_qs::Error as QueryStringError;
 use std::fmt::{Debug, Display};
 use std::string::FromUtf8Error;

@@ -35,6 +35,7 @@ proton-sqlite3 = { workspace = true }
 proton-vcard = { workspace = true }
 secrecy = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 sha2 = { workspace = true }
 smart-default = { workspace = true }
 stash = { workspace = true }

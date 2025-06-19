@@ -4,7 +4,7 @@ use proton_core_api::session::{Config, Session};
 use proton_core_api::status_observer::StatusObserver;
 use proton_core_api::status_watcher::StatusWatcher;
 use proton_core_common::test_utils::test_context::MockApiEnv;
-use proton_core_common::test_utils::utils::catch_all;
+use proton_core_common::test_utils::utils::{catch_all, mock_auth_endpoints};
 use std::time::Duration;
 use test_case::test_case;
 use tokio::time::sleep;
@@ -26,6 +26,7 @@ fn random_path() -> String {
 #[tokio::test]
 async fn shared_status() {
     let mock_server = MockServer::start().await;
+    mock_auth_endpoints(&mock_server).await;
     let mock_env = MockApiEnv::new(mock_server.uri()).with_path("/api");
     let api_config = Config::for_env(mock_env);
     let api_1 = Session::builder()
@@ -93,6 +94,7 @@ async fn shared_status() {
 async fn make_another_request_when_stale() {
     let mock_server = MockServer::start().await;
     let api_path = random_path();
+    mock_auth_endpoints(&mock_server).await;
     let mock_env = MockApiEnv::new(mock_server.uri()).with_path(&api_path);
     let api_config = Config::for_env(mock_env);
     let status = status_watcher(500);
@@ -123,6 +125,7 @@ async fn make_another_request_when_stale() {
 async fn very_bad_connection_but_responding_in_under_a_second() {
     let mock_server = MockServer::start().await;
     let api_path = random_path();
+    mock_auth_endpoints(&mock_server).await;
     let mock_env = MockApiEnv::new(mock_server.uri()).with_path(&api_path);
     let api_config = Config::for_env(mock_env);
     let status = status_watcher(1000);
@@ -155,6 +158,7 @@ async fn very_bad_connection_but_responding_in_under_a_second() {
 async fn wait_for_online() {
     let mock_server = MockServer::start().await;
     let api_path = random_path();
+    mock_auth_endpoints(&mock_server).await;
     let mock_env = MockApiEnv::new(mock_server.uri()).with_path(&api_path);
     let api_config = Config::for_env(mock_env);
     let status = status_watcher(500);
@@ -194,6 +198,7 @@ async fn wait_for_online() {
 async fn multiple_subscribers() {
     let mock_server = MockServer::start().await;
     let api_path = random_path();
+    mock_auth_endpoints(&mock_server).await;
     let mock_env = MockApiEnv::new(mock_server.uri()).with_path(&api_path);
     let api_config = Config::for_env(mock_env);
     let status = status_watcher(500);
@@ -261,6 +266,7 @@ async fn multiple_subscribers() {
 async fn status_reflected_in_response_http_code(http_code: u16, expected_status: ConnectionStatus) {
     let mock_server = MockServer::start().await;
     let api_path = random_path();
+    mock_auth_endpoints(&mock_server).await;
     let mock_env = MockApiEnv::new(mock_server.uri()).with_path(&api_path);
     let api_config = Config::for_env(mock_env);
 

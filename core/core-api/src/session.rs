@@ -1,7 +1,7 @@
 use derive_more::{Debug, Deref};
 use muon::client::flow::ForkFlowResult;
+use muon::common::ParseEndpointErr;
 use muon::env::DynEnv;
-use muon::error::ParseEndpointErr;
 use std::borrow::Borrow;
 use std::sync::Arc;
 use tokio::sync::{RwLock, watch};
