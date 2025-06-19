@@ -8,13 +8,10 @@ use crate::datatypes::{Disposition, LocalAttachmentId, MimeType};
 use crate::models::{
     Attachment, AttachmentType, EmbeddedAttachmentInfo, MailSettings, Message, MessageBodyMetadata,
 };
-use crate::rsvp::RsvpMailSender;
+use crate::rsvp::RsvpEvent;
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use parking_lot::Mutex;
-use proton_calendar_common::{
-    RsvpAnswer, RsvpAnswerError, RsvpAnswerStatus, RsvpError, RsvpEvent, RsvpEventId,
-};
-use proton_core_api::services::proton::AddressId;
+use proton_calendar_common::{RsvpError, RsvpEventId};
 use proton_crypto_inbox::proton_crypto;
 use proton_mail_api::services::proton::prelude::DirectAttachment;
 use proton_mail_html_transformer::Transformer;
@@ -452,63 +449,16 @@ impl DecryptedMessageBody {
 
     /// Fetches given invitation from the API.
     ///
-    /// See: [`RsvpEvent::fetch()`].
-    ///
     /// TODO (NGC-57) implement support for offline-mode
-    #[tracing::instrument(skip(self, ctx, tether))]
+    #[tracing::instrument(skip(self, ctx, msg, tether))]
     pub async fn fetch_rsvp(
         &self,
         ctx: &MailUserContext,
         tether: &mut Tether,
-        address_id: &AddressId,
+        msg: &Message,
         rsvp: RsvpEventId,
     ) -> MailContextResult<Option<RsvpEvent>> {
         info!("Fetching RSVP");
-
-        let pgp = proton_crypto::new_pgp_provider();
-
-        let keys = ctx
-            .unlocked_address_keys(&pgp, tether, address_id)
-            .await
-            .map_err(|err| {
-                warn!(?err, "Couldn't unlock address keys");
-                err
-            })?;
-
-        match rsvp.fetch(ctx.api(), &pgp, &keys, ctx.rsvp_cache()).await {
-            Ok(event) => {
-                if event.is_none() {
-                    debug!("False-positive, API says no such event exists");
-                }
-
-                Ok(event)
-            }
-
-            Err(err) => {
-                warn!(?err, "Couldn't fetch event from the calendar");
-                Err(err.into())
-            }
-        }
-    }
-
-    /// Answers an RSVP.
-    ///
-    /// See: [`RsvpEvent::answer()`].
-    ///
-    /// TODO (NGC-57) implement support for offline-mode
-    #[tracing::instrument(
-        skip(self, ctx, msg, tether, rsvp),
-        fields(id = rsvp.raw.id.as_str()),
-    )]
-    pub async fn answer_rsvp(
-        &self,
-        ctx: &MailUserContext,
-        tether: &mut Tether,
-        msg: &Message,
-        rsvp: &mut RsvpEvent,
-        status: RsvpAnswerStatus,
-    ) -> MailContextResult<()> {
-        info!("Answering RSVP");
 
         let pgp = proton_crypto::new_pgp_provider();
 
@@ -520,26 +470,21 @@ impl DecryptedMessageBody {
                 err
             })?;
 
-        let mail = RsvpMailSender {
-            ctx,
-            msg,
-            pgp: &pgp,
-            keys: &keys,
-            tether,
-        };
+        match rsvp.fetch(ctx.api(), &pgp, &keys, ctx.rsvp_cache()).await {
+            Ok(event) => {
+                if let Some(event) = event {
+                    Ok(Some(RsvpEvent::new(event, msg)))
+                } else {
+                    debug!("False-positive, API says no such event exists");
+                    Ok(None)
+                }
+            }
 
-        let answer = RsvpAnswer {
-            now: ctx.mail_context().core_context().clock().now(),
-            email: &msg.to_list.value[0].address,
-            status,
-        };
-
-        rsvp.answer(ctx.api(), &pgp, &keys, ctx.rsvp_cache(), mail, answer)
-            .await
-            .map_err(|err| match err {
-                RsvpAnswerError::Rsvp(err) => err.into(),
-                RsvpAnswerError::Mail(err) => err.into(),
-            })
+            Err(err) => {
+                warn!(?err, "Couldn't fetch event from the calendar");
+                Err(err.into())
+            }
+        }
     }
 }
 

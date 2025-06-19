@@ -16,7 +16,6 @@ use anyhow::Context;
 use chrono::{DateTime, Local};
 use messages::BlockOrUnblock;
 pub use model::MailboxModel;
-use proton_calendar_common::RsvpEvent;
 use proton_core_common::datatypes::{LocalIdMarker, LocalLabelId, Refresh};
 use proton_mail_common::datatypes::{
     ContextualConversation, LocalAttachmentId, LocalConversationId, LocalMessageId,
@@ -25,6 +24,7 @@ use proton_mail_common::draft::attachments::DraftAttachment;
 use proton_mail_common::draft::compose::DraftAddressChangeOutput;
 use proton_mail_common::models::{Attachment, LabelWithCounters, Message as MailMessage};
 use proton_mail_common::proton_mail_api::proton_core_api::services::proton::AddressId;
+use proton_mail_common::rsvp::RsvpEvent;
 use proton_mail_common::{MailUserContext, Mailbox};
 use search::{Search, SearchStatusBar};
 use std::path::PathBuf;

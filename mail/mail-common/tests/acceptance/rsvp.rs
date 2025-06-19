@@ -129,12 +129,8 @@ async fn fetch_and_answer() {
         .await
         .unwrap();
 
-    let message = Message::load(1.into(), &tx).await.unwrap().unwrap();
-
-    let message_body = message
-        .fetch_message_body(&user_ctx, &mut tx)
-        .await
-        .unwrap();
+    let msg = Message::load(1.into(), &tx).await.unwrap().unwrap();
+    let msg_body = msg.fetch_message_body(&user_ctx, &mut tx).await.unwrap();
 
     // ---
     // Step 2: Find RSVP.
@@ -143,11 +139,7 @@ async fn fetch_and_answer() {
     // but we could've generated an `invite.ics` attachment instead as well
     // (it's just more difficult and the outcome is the same, so why bother).
 
-    let rsvp = message_body
-        .identify_rsvp(&user_ctx)
-        .await
-        .unwrap()
-        .unwrap();
+    let rsvp = msg_body.identify_rsvp(&user_ctx).await.unwrap().unwrap();
 
     assert_eq!(RsvpEventId::indirect(EVENT_UID, None), rsvp);
 
@@ -248,8 +240,8 @@ async fn fetch_and_answer() {
         .mock_find_calendar_events(EVENT_UID, None, Some(event))
         .await;
 
-    let mut rsvp = message_body
-        .fetch_rsvp(&user_ctx, &mut tx, &message.remote_address_id, rsvp)
+    let mut rsvp = msg_body
+        .fetch_rsvp(&user_ctx, &mut tx, &msg, rsvp)
         .await
         .unwrap()
         .unwrap();
@@ -324,14 +316,7 @@ async fn fetch_and_answer() {
             .all(|att| att.status == CalendarAttendeeStatus::Yes)
     );
 
-    message_body
-        .answer_rsvp(
-            &user_ctx,
-            &mut tx,
-            &message,
-            &mut rsvp,
-            RsvpAnswerStatus::Yes,
-        )
+    rsvp.answer(&user_ctx, &mut tx, RsvpAnswerStatus::Yes)
         .await
         .unwrap();
 

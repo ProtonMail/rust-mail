@@ -4,7 +4,6 @@ use proton_core_api::service::ApiServiceResult;
 use proton_core_api::services::proton::muon::util::ProtonRequestExt;
 use proton_core_api::services::proton::muon::{GET, POST, PUT, serde_to_query};
 use proton_core_api::services::proton::{CORE_V4, IncomingDefaultId, LabelId, Proton};
-use proton_crypto_inbox::attachment::KeyPackets;
 use serde_json::json;
 use std::io::Cursor;
 use std::time::Duration;
@@ -438,7 +437,6 @@ impl ProtonMail for Proton {
         message: DirectParams,
         parent: Option<(MessageId, DraftAction)>,
         packages: Vec<Package>,
-        attachment_keys: Vec<KeyPackets>,
         auto_save_contacts: bool,
     ) -> ApiServiceResult<()> {
         let (parent_id, action) =
@@ -448,7 +446,6 @@ impl ProtonMail for Proton {
             message,
             parent_id,
             action,
-            attachment_keys,
             packages,
             auto_save_contacts,
         };

@@ -30,7 +30,7 @@ use crate::services::proton::request_data::{
 };
 use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_crypto_inbox::attachment::{
-    BinaryAttachmentEncryptedSignature, BinaryAttachmentSignature, KeyPackets,
+    BinaryAttachmentEncryptedSignature, BinaryAttachmentSignature,
 };
 use serde::Serialize;
 use serde_with::{BoolFromInt, DisplayFromStr, serde_as};
@@ -428,7 +428,6 @@ pub struct PostSendDirectRequest {
     #[serde(rename = "ParentID")]
     pub parent_id: Option<MessageId>,
     pub action: Option<DraftAction>,
-    pub attachment_keys: Vec<KeyPackets>,
     pub packages: Vec<Package>,
     #[serde_as(as = "BoolFromInt")]
     pub auto_save_contacts: bool,

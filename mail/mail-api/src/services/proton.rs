@@ -13,13 +13,11 @@
 //! For full documentation on the core API implementation, see [`Proton`](proton_core_api::services::proton::Proton).
 //!
 
+use crate::services::proton::prelude::*;
 use bytes::Bytes;
 use proton_core_api::service::ApiServiceResult;
 use proton_core_api::services::proton::{IncomingDefaultId, LabelId};
-use proton_crypto_inbox::attachment::KeyPackets;
 use std::time::Duration;
-
-use crate::services::proton::prelude::*;
 
 pub mod common;
 pub mod prelude;
@@ -383,7 +381,6 @@ pub trait ProtonMail {
         message: DirectParams,
         parent: Option<(MessageId, DraftAction)>,
         packages: Vec<Package>,
-        attachment_keys: Vec<KeyPackets>,
         auto_save_contacts: bool,
     ) -> ApiServiceResult<()>;
 

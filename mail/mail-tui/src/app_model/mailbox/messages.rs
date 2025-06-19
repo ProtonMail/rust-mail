@@ -18,7 +18,7 @@ use futures::FutureExt;
 use futures::future::try_join_all;
 use itertools::Itertools as _;
 use proton_calendar_api::CalendarAttendeeStatus;
-use proton_calendar_common::{RsvpAnswerStatus, RsvpEvent, RsvpOccurrence};
+use proton_calendar_common::{RsvpAnswerStatus, RsvpOccurrence};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::os::safe_write;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
@@ -33,6 +33,7 @@ use proton_mail_common::models::default_location::IncomingDefaultLocation;
 use proton_mail_common::models::{
     Attachment, LabelWithCounters, Message as MailMessage, MessageScrollData,
 };
+use proton_mail_common::rsvp::RsvpEvent;
 use proton_mail_common::{AppError, MailContextResult, MailUserContext, Mailbox};
 use proton_mail_html_transformer::Html2TextOptions;
 use ratatui::Frame;
@@ -558,8 +559,6 @@ impl MessagesState {
                     return Command::None;
                 };
 
-                let msg = state.msg.clone();
-                let body = state.body.clone();
                 let ctx = ctx.clone();
                 let mut rsvp = rsvp.clone();
 
@@ -587,8 +586,8 @@ impl MessagesState {
                                 Command::task(async move {
                                     let mut tether = ctx.user_stash().connection();
 
-                                    let result = body
-                                        .answer_rsvp(&ctx, &mut tether, &msg, &mut rsvp, status)
+                                    let result = rsvp
+                                        .answer(&ctx, &mut tether, status)
                                         .await
                                         .context("Couldn't answer the invitation");
 
@@ -773,7 +772,6 @@ impl MessagesState {
 
 pub struct DecryptedMessage {
     msg: Arc<MailMessage>,
-    body: Arc<DecryptedMessageBody>,
     content: String,
     content_scroll: ScrollableParagraphState,
     content_lines: usize,
@@ -870,7 +868,7 @@ impl DecryptedMessage {
         ctx: &Arc<MailUserContext>,
         mut tether: Tether,
     ) -> Result<Self> {
-        let body = Arc::new(body);
+        let msg = Arc::new(msg);
         let sender = msg.sender.address.clone();
 
         let body_output = body
@@ -932,11 +930,10 @@ impl DecryptedMessage {
             Ok(Some(rsvp)) => {
                 let task = task::spawn({
                     let ctx = (*ctx).clone();
-                    let body = body.clone();
-                    let address_id = msg.remote_address_id.clone();
+                    let msg = msg.clone();
 
                     async move {
-                        body.fetch_rsvp(&ctx, &mut tether, &address_id, rsvp)
+                        body.fetch_rsvp(&ctx, &mut tether, &msg, rsvp)
                             .await
                             .map_err(|err| format!("Couldn't fetch RSVP: {err}"))
                             .inspect_err(|err| warn!("{err}"))
@@ -951,8 +948,7 @@ impl DecryptedMessage {
         };
 
         Ok(Self {
-            msg: Arc::new(msg),
-            body,
+            msg,
             content,
             content_scroll,
             content_lines,
