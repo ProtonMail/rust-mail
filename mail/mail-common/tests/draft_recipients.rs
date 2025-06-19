@@ -11,7 +11,6 @@ use proton_mail_common::test_utils::message_body::{TEST_USER_ID, message_body_te
 use proton_mail_common::test_utils::test_context::MailTestContext;
 use test_case::test_case;
 
-#[tokio::test]
 #[test_case(TEST_EMAIL_1,
     success_response(false),
     ValidationState::Valid(false)
@@ -32,7 +31,7 @@ use test_case::test_case;
     failure_unknown(),
     ValidationState::Unknown
 ; "Unknown Error")]
-
+#[tokio::test]
 async fn single_recipient_validation(email: &str, response: Response, state: ValidationState) {
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
@@ -85,7 +84,6 @@ async fn single_recipient_validation(email: &str, response: Response, state: Val
     }
 }
 
-#[tokio::test]
 #[test_case(TEST_EMAIL_1,
     success_response(false),
     ValidationState::Valid(false)
@@ -106,7 +104,7 @@ async fn single_recipient_validation(email: &str, response: Response, state: Val
     failure_unknown(),
     ValidationState::Unknown
 ; "Unknown Error")]
-
+#[tokio::test]
 async fn group_recipient_validation(email: &str, response: Response, state: ValidationState) {
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(

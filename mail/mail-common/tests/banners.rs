@@ -262,7 +262,6 @@ async fn banners() {
     ctx.execute_all_actions().await.unwrap();
 }
 
-#[tokio::test]
 #[test_case(
     LabelId::inbox(),
     MessageFlags::PHISHING_AUTO,
@@ -275,13 +274,12 @@ async fn banners() {
     Some(MessageBanner::PhishingAttempt {auto:false});
     "Phishing has precedence over spam auto"
 )]
-// This is disabled because for some unknown reason this fails on CI on macOS
-#[cfg_attr(not(target_os = "macos"), test_case(
+#[test_case(
     LabelId::spam(),
     MessageFlags::SPAM_MANUAL | MessageFlags::PHISHING_AUTO,
     Some(MessageBanner::Spam {auto:false});
     "Phishing doesn't take precedence over spam if the user has moved manually to spam"
-))]
+)]
 #[test_case(
     LabelId::spam(),
     MessageFlags::SPAM_AUTO,
@@ -294,6 +292,7 @@ async fn banners() {
     Some(MessageBanner::Spam {auto:true});
     "No flags in spam still are auto spam"
 )]
+#[tokio::test]
 async fn spam_banners(label: LabelId, flags: MessageFlags, res: Option<MessageBanner>) {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
