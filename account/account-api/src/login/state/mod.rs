@@ -472,8 +472,8 @@ impl State {
         let request = CreateAddressKeyRequest {
             address_id: address.id.to_string(),
             private_key: addr_key.key.private_key.to_string(),
-            address_forwarding_id: address.id.to_string(),
             primary: 1,
+            address_forwarding_id: None,
             token,
             signature,
             signed_key_list,
