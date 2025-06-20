@@ -227,6 +227,7 @@ CoreEvent {
             },
             flags: SettingsFlags {
                 welcomed: false,
+                edm_opt_out: false,
             },
             hide_side_panel: true,
             high_security: HighSecurity {

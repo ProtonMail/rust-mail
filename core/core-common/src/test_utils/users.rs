@@ -92,7 +92,10 @@ static DEFAULT_USER_SETTINGS: LazyLock<ApiUserSettings> = LazyLock::new(|| ApiUs
     time_format: ApiTimeFormat::Default,
     welcome: false,
     early_access: false,
-    flags: ApiSettingsFlags { welcomed: false },
+    flags: ApiSettingsFlags {
+        welcomed: false,
+        edm_opt_out: false,
+    },
     referral: None,
     device_recovery: false,
     telemetry: false,

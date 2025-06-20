@@ -100,7 +100,10 @@ async fn test_core_store_and_load_user_settings() {
         time_format: TimeFormat::H12,
         welcome: Default::default(),
         early_access: Default::default(),
-        flags: SettingsFlags { welcomed: true },
+        flags: SettingsFlags {
+            welcomed: true,
+            edm_opt_out: false,
+        },
         referral: None,
         device_recovery: Default::default(),
         telemetry: true,
