@@ -507,7 +507,7 @@ impl Draft {
             (None, DraftSyncStatus::Synced)
         } else if let Some(remote_id) = message.remote_id.clone() {
             debug!("Draft metadata has no pending changes, syncing.");
-            match Message::force_sync_message_and_body(context, remote_id, true).await {
+            match Message::force_sync_message_and_body(context, remote_id, true, tether).await {
                 Ok((message_new, decrypted)) => {
                     message = message_new;
 

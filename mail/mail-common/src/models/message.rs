@@ -932,47 +932,23 @@ impl Message {
         Ok(())
     }
 
-    /// Given a vec of message metadatas tries to create them in the database
-    ///
-    /// # Parameters
-    ///
-    /// * `metadata`  - The message metadata returned from the API
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for accessing the database.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed, or the data could not be
-    /// written to the database.
-    ///
+    /// Given a vec of message metadata tries to create them in the database
     pub async fn create_or_update_messages_from_metadata_vec(
         metadata: Vec<ApiMessageMetadata>,
         bond: &Bond<'_>,
     ) -> Result<Vec<Message>, AppError> {
-        let mut ids = Vec::with_capacity(metadata.len());
+        let mut messages = Vec::with_capacity(metadata.len());
 
         for metadata in metadata {
             let mut message = Message::from_api_metadata(metadata, bond).await?;
             Self::save(&mut message, bond).await?;
-            ids.push(message);
+            messages.push(message);
         }
 
-        Ok(ids)
+        Ok(messages)
     }
 
     /// Given a message metadata tries to create it in the database
-    ///
-    /// # Parameters
-    ///
-    /// * `metadata`  - The message metadata returned from the API
-    /// * `interface` - The database interface, i.e. [`Stash`] or [`Tether`], to
-    ///   use for accessing the database.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed, or the data could not be
-    /// written to the database.
-    ///
     pub async fn create_or_update_messages_from_metadata(
         metadata: Vec<ApiMessageMetadata>,
         bond: &Bond<'_>,
@@ -2540,31 +2516,33 @@ impl Message {
     /// - if the message failed to download
     /// - if the db query failed
     /// - if the message body could not be written to the cache
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(ctx))]
+    #[tracing::instrument(level=tracing::Level::DEBUG, skip(ctx, tether))]
     pub async fn force_sync_message_and_body(
         ctx: &MailUserContext,
         message_id: MessageId,
         with_attachment_prefetch: bool,
+        tether: &mut Tether,
     ) -> MailContextResult<(Message, DecryptedMessageBody)> {
-        let mut tether = ctx.user_stash().connection();
-
         let (message, encrypted) =
-            Self::sync_message_and_body(message_id, ctx.api(), &mut tether).await?;
+            Self::sync_message_and_body(message_id, ctx.api(), tether).await?;
 
         let decrypted = Self::decrypt_message_body(
             ctx,
             &message.remote_address_id,
             encrypted,
-            &tether,
+            tether.tether(),
             with_attachment_prefetch,
         )
         .await?;
 
+        let body = decrypted.body.clone();
         tether
-            .tx(async |tx| {
-                Self::store_decrypted_message_body(message.id(), decrypted.body.clone(), tx).await
+            .tx::<_, _, StashError>(async |tx| {
+                Self::store_decrypted_message_body(message.id(), body, tx).await?;
+                Ok(())
             })
             .await?;
+
         Ok((message, decrypted))
     }
 
@@ -2578,7 +2556,7 @@ impl Message {
     async fn sync_message_and_body(
         message_id: MessageId,
         api: &Proton,
-        mut tx: impl RunTransaction,
+        tx: &mut impl RunTransaction,
     ) -> Result<(Message, EncryptedMessageBody), MailContextError> {
         let message = api.get_message(message_id).await.map(|v| v.message)?;
 
@@ -2650,12 +2628,15 @@ impl Message {
     ) -> Result<Option<DecryptedMessageBody>, MailContextError> {
         let Some(metadata) = MessageBodyMetadata::for_message(local_id, tether)
             .await
-            .inspect_err(|e| error!("Failed to retrieve message body metadata from db: {e:?}"))?
+            .context("Failed to retrieve message body metadata from db")?
         else {
             return Ok(None);
         };
 
-        let Some(body) = Self::load_decrypted_message_body(local_id, tether).await? else {
+        let Some(body) = Self::load_decrypted_message_body(local_id, tether)
+            .await
+            .context("Failed to retrieve decrypted message body from db")?
+        else {
             return Ok(None);
         };
 
@@ -2674,10 +2655,11 @@ impl Message {
         tether: &Tether,
     ) -> Result<Option<String>, StashError> {
         tether
-            .query_value::<_, Option<String>>(
-                indoc! {
-                    "SELECT body as value FROM message_body
-                        WHERE message_id = ?"
+            .query_value_opt::<String>(
+                indoc! { "
+                    SELECT body AS value 
+                    FROM message_body
+                    WHERE message_id = ?"
                 },
                 params![local_id],
             )
@@ -2692,6 +2674,18 @@ impl Message {
         bond.execute(
             "INSERT OR REPLACE INTO message_body (message_id, body) VALUES (?,?)",
             params![local_id, message],
+        )
+        .await?;
+        Ok(())
+    }
+
+    pub async fn delete_message_body(
+        local_id: LocalMessageId,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        bond.execute(
+            "DELETE FROM message_body WHERE message_id = ?",
+            params![local_id],
         )
         .await?;
         Ok(())
@@ -2746,11 +2740,11 @@ impl Message {
         ctx: &MailUserContext,
         remote_id: MessageId,
     ) -> MailContextResult<LocalMessageId> {
-        let tether = &ctx.user_stash().connection();
+        let tether = &mut ctx.user_stash().connection();
         if let Some(message) = Self::find_by_remote_id(remote_id.clone(), tether).await? {
             return Ok(message.id());
         }
-        let (message, _) = Self::force_sync_message_and_body(ctx, remote_id, false).await?;
+        let (message, _) = Self::force_sync_message_and_body(ctx, remote_id, false, tether).await?;
         Ok(message.id())
     }
 
@@ -2946,34 +2940,6 @@ impl Message {
                 || *label_id == LabelId::drafts()
                 || *label_id == LabelId::all_drafts()
         })
-    }
-
-    pub(crate) async fn can_update_from_event_loop(
-        message_id: MessageId,
-        message_flags: MessageFlags,
-        tx: &Bond<'_>,
-    ) -> Result<bool, StashError> {
-        if DraftMetadata::find_by_message_with_remote_id(message_id.clone(), tx)
-            .await?
-            .is_some()
-        {
-            // We have a message that has been opened as a draft, but it is possible that
-            // another session has sent this draft. Deleting the metadata at this point in
-            // time can trigger the composer to display a collection of metadata not found errors
-            // that can be very confusing for the user.
-            // We let the update progress and the next action that executes for that
-            // draft will trigger a failure and clean itself up.
-            // It's possible that some messages will never properly clean up this way, but
-            // this should happen very often and the associated metadata is not very large
-            // with each draft. Correctly solving this requires knowledge of active composer
-            // states on the rust side.
-            tracing::info!(
-                "Message {message_id} has draft metadata but was already sent, update will be allowed"
-            );
-            return Ok(message_flags.is_schedule_send() || message_flags.is_sent());
-        }
-
-        Ok(true)
     }
 }
 

@@ -398,6 +398,23 @@ impl MailTestContext {
             .await;
     }
 
+    /// Generate a new mock expectation that a draft was created
+    ///
+    /// this does not validate anything.
+    ///
+    #[allow(clippy::doc_markdown)]
+    #[function_name::named]
+    pub async fn mock_create_draft_no_validation(&self, reply: ApiMessage) {
+        let response = PostCreateDraftResponse { message: reply };
+        Mock::given(method("POST"))
+            .and(path("/api/mail/v4/messages".to_string()))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .expect(1)
+            .named(function_name!())
+            .mount(self.mock_server())
+            .await;
+    }
+
     /// Generate a new mock expectation for a failed draft creation.
     ///
     /// Note that this mock does not valid the draft body.
