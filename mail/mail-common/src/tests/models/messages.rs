@@ -2843,6 +2843,7 @@ fn test_message_metadata(
         num_attachments: 24,
         attachments_metadata: attachments.into_iter().collect(),
         snooze_time: 5000,
+        reply_to: Default::default(),
     }
 }
 
@@ -2889,6 +2890,7 @@ fn test_message_with_metadata(
             num_attachments: 24,
             attachments_metadata: attachments.into_iter().collect(),
             snooze_time: 5000,
+            reply_to: Default::default(),
         },
     }
 }

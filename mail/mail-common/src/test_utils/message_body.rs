@@ -207,6 +207,7 @@ pub fn message_body_test_message_simple() -> ApiMessage {
             snooze_time: 0,
             num_attachments: 0,
             attachments_metadata: vec![],
+            reply_to: Default::default(),
         },
         body: ApiMessageBody {
             header: String::new(),
@@ -237,6 +238,7 @@ pub fn message_body_test_message_mime() -> ApiMessage {
             label_ids: vec![],
             num_attachments: 0,
             order: 3629,
+            reply_to: Default::default(),
             reply_tos: vec![],
             sender: ApiMessageSender::default(),
             size: 2334,

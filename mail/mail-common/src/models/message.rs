@@ -36,7 +36,7 @@ use crate::actions::{
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, Disposition, EncryptedMessageBody, ExclusiveLocation,
-    LocalMessageId, MessageFlags, MessageLabelsCount, MessageRecipients, MessageReplyTos,
+    LocalMessageId, MessageFlags, MessageLabelsCount, MessageRecipients, MessageReplyTo,
     MessageSender, MimeType, MobileActions, ParsedHeaders, ReadFilter, SystemLabelId,
     theme::MailTheme,
 };
@@ -146,8 +146,8 @@ pub struct Message {
     #[DbField]
     pub display_order: u64,
 
-    #[DbField]
-    pub reply_tos: MessageReplyTos,
+    pub reply_to: MessageReplyTo,
+    pub reply_tos: Vec<MessageReplyTo>,
 
     #[DbField]
     pub sender: MessageSender,
@@ -1223,10 +1223,23 @@ impl Message {
             .map(CustomLabel::from)
             .collect();
 
-        // TODO: The message body might need to be loaded in here, but it's not
-        // TODO: totally clear how best to do that seeing as the cache feature
-        // TODO: requires some additional parameters such as the path. So this can
-        // TODO: currently be done as a subsequent manual step.
+        self.reply_to = tether
+            .query::<_, MessageReplyTo>(
+                "SELECT * FROM message_reply_to WHERE local_message_id = ?",
+                params![self.id()],
+            )
+            .await?
+            .pop()
+            .ok_or(StashError::Custom(anyhow!(
+                "Message should always have one reply to field"
+            )))?;
+
+        self.reply_tos = tether
+            .query::<_, MessageReplyTo>(
+                "SELECT * FROM message_reply_tos WHERE local_message_id = ?",
+                params![self.id()],
+            )
+            .await?;
 
         Ok(())
     }
@@ -1341,6 +1354,70 @@ impl Message {
         if self.exclusive_location.is_none() && !self.label_ids.is_empty() {
             self.exclusive_location =
                 ExclusiveLocation::from_label_ids(&self.label_ids, bond).await?;
+        }
+
+        bond.execute(
+            indoc! {
+            "INSERT INTO message_reply_to (
+                local_message_id,
+                name,
+                address,
+                bimi_selector,
+                is_proton,
+                is_simple_login,
+                display_sender_image
+            ) VALUES (?,?,?,?,?,?,?)
+            ON CONFLICT (local_message_id) DO UPDATE SET
+                name=excluded.name,
+                address=excluded.address,
+                bimi_selector=excluded.bimi_selector,
+                is_proton=excluded.is_proton,
+                is_simple_login=excluded.is_simple_login,
+                display_sender_image=excluded.display_sender_image
+            "},
+            params![
+                self.local_id.unwrap(),
+                self.reply_to.name.clone(),
+                self.reply_to.address.clone(),
+                self.reply_to.bimi_selector.clone(),
+                self.reply_to.is_proton,
+                self.reply_to.is_simple_login,
+                self.reply_to.display_sender_image
+            ],
+        )
+        .await?;
+
+        for reply_to in &self.reply_tos {
+            bond.execute(
+                indoc! {
+                "INSERT INTO message_reply_tos (
+                    local_message_id,
+                    name,
+                    address,
+                    bimi_selector,
+                    is_proton,
+                    is_simple_login,
+                    display_sender_image
+                ) VALUES (?,?,?,?,?,?,?)
+                ON CONFLICT (local_message_id) DO UPDATE SET
+                    name=excluded.name,
+                    address=excluded.address,
+                    bimi_selector=excluded.bimi_selector,
+                    is_proton=excluded.is_proton,
+                    is_simple_login=excluded.is_simple_login,
+                    display_sender_image=excluded.display_sender_image
+                "},
+                params![
+                    self.local_id.unwrap(),
+                    reply_to.name.clone(),
+                    reply_to.address.clone(),
+                    reply_to.bimi_selector.clone(),
+                    reply_to.is_proton,
+                    reply_to.is_simple_login,
+                    reply_to.display_sender_image
+                ],
+            )
+            .await?;
         }
 
         Ok(())
@@ -1498,7 +1575,7 @@ impl Message {
             return Err(AppError::MessageMissing(message_id));
         };
 
-        let reply_actions = if message.reply_tos.value.len() > 1 {
+        let reply_actions = if message.reply_tos.len() > 1 {
             ReplyAction::all()
         } else {
             ReplyAction::single_address()
@@ -2041,9 +2118,8 @@ impl Message {
             exclusive_location,
             label_ids: value.label_ids,
             num_attachments: value.num_attachments,
-            reply_tos: MessageReplyTos {
-                value: value.reply_tos.map_vec(),
-            },
+            reply_to: value.reply_to.into(),
+            reply_tos: value.reply_tos.map_vec(),
             sender: value.sender.into(),
             size: value.size,
             snooze_time: value.snooze_time.into(),
@@ -3012,6 +3088,7 @@ impl Default for Message {
             exclusive_location: Default::default(),
             num_attachments: Default::default(),
             display_order: Default::default(),
+            reply_to: Default::default(),
             reply_tos: Default::default(),
             sender: Default::default(),
             size: Default::default(),

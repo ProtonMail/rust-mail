@@ -1510,7 +1510,8 @@ pub struct Message {
     /// TODO: Document this field.
     pub display_order: u64,
 
-    /// TODO: Document this field.
+    pub reply_to: MessageReplyTo,
+
     pub reply_tos: Vec<MessageReplyTo>,
 
     /// TODO: Document this field.
@@ -1573,7 +1574,8 @@ impl From<RealMessage> for Message {
             is_replied_all: value.is_replied_all,
             num_attachments: value.num_attachments,
             display_order: value.display_order,
-            reply_tos: value.reply_tos.value.map_vec(),
+            reply_to: value.reply_to.into(),
+            reply_tos: value.reply_tos.map_vec(),
             sender: value.sender.into(),
             size: value.size,
             snooze_time: value.snooze_time.into(),

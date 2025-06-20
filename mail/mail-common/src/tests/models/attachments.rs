@@ -176,6 +176,7 @@ async fn create_attachment_dependencies(
                     snooze_time: 0,
                     num_attachments: 0,
                     attachments_metadata: metadata.clone(),
+                    reply_to: Default::default(),
                 }],
                 tx,
             )

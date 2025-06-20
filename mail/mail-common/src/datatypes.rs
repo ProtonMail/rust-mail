@@ -1315,13 +1315,30 @@ impl From<&str> for MessageRecipient {
     }
 }
 
-#[derive(Clone, Default, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(Clone, Default, Debug, DbRecord, Eq, PartialEq)]
 pub struct MessageReplyTo {
     /// Email of the recipient
+    #[DbField]
     pub address: String,
 
     /// Display name of the recipient,empty if none.
+    #[DbField]
     pub name: String,
+
+    #[DbField]
+    pub bimi_selector: Option<String>,
+
+    /// Whether to display the sender image.
+    #[DbField]
+    pub display_sender_image: bool,
+
+    /// Whether the address is a proton address.
+    #[DbField]
+    pub is_proton: bool,
+
+    /// Whether address originated from simple login alias.
+    #[DbField]
+    pub is_simple_login: bool,
 }
 
 impl From<ApiMessageReplyTo> for MessageReplyTo {
@@ -1329,6 +1346,10 @@ impl From<ApiMessageReplyTo> for MessageReplyTo {
         Self {
             address: value.address,
             name: value.name,
+            bimi_selector: value.bimi_selector,
+            is_proton: value.is_proton,
+            is_simple_login: value.is_simple_login,
+            display_sender_image: value.display_sender_image,
         }
     }
 }
@@ -1354,14 +1375,6 @@ pub struct MessageSenders {
 }
 
 sql_using_serde!(MessageSenders);
-
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(transparent)]
-pub struct MessageReplyTos {
-    pub value: Vec<MessageReplyTo>,
-}
-
-sql_using_serde!(MessageReplyTos);
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct MessageAttachment {
@@ -2108,3 +2121,4 @@ impl From<LabelDescription> for LabelType {
 pub use proton_mail_ids::LocalAttachmentId;
 pub use proton_mail_ids::LocalConversationId;
 pub use proton_mail_ids::LocalMessageId;
+use stash::macros::DbRecord;

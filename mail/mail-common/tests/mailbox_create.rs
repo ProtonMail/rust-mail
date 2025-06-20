@@ -119,6 +119,7 @@ async fn test_new_mailbox_sync_messages() {
         snooze_time: 0,
         num_attachments: 0,
         attachments_metadata: vec![],
+        reply_to: Default::default(),
     }];
 
     params
@@ -226,6 +227,7 @@ async fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
         snooze_time: 0,
         num_attachments: 0,
         attachments_metadata: vec![],
+        reply_to: Default::default(),
     }];
 
     params

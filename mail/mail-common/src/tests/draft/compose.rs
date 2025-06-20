@@ -385,6 +385,7 @@ fn existing_message() -> Message {
         label_ids: vec![],
         num_attachments: 0,
         display_order: 0,
+        reply_to: Default::default(),
         reply_tos: Default::default(),
         sender: MessageSender {
             address: "sender@void.org".to_owned(),

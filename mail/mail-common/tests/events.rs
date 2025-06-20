@@ -107,6 +107,7 @@ async fn event_fetches_missing_dependencies() {
         label_ids: vec![missing_label_1.id.clone(), missing_label_2.id.clone()],
         num_attachments: 0,
         order: 0,
+        reply_to: Default::default(),
         reply_tos: vec![],
         sender: Default::default(),
         size: 0,
