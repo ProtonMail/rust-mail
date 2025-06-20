@@ -57,7 +57,7 @@ in
     ++ lib.optionals pkgs.stdenv.isDarwin (
       with pkgs;
       [
-        darwin.xcode_16_3
+        darwin.xcode_16_3 # For building the app
         findutils
         libiconv
       ]
@@ -118,6 +118,9 @@ in
 
       exec = ''
         pushd "$DEVENV_ROOT"
+
+        # Make sure we are using 16.2 to build the framework.
+        sudo xcode-select --switch "${pkgs.darwin.xcode_16_2}/Contents/Developer"
         ${filterPkg "libiconv"} ./mail/mail-uniffi/ios/build-local.sh
         popd
       '';
