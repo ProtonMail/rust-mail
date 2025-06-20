@@ -1,5 +1,5 @@
 use crate::datatypes::{MessageRecipient, MessageSender, MimeType, PmSignature};
-use crate::draft::recipients::{ContactGroupResolver, RecipientList};
+use crate::draft::recipients::{ContactGroupResolver, MaybeEmptyString, RecipientList};
 use crate::draft::{
     AttachmentRemovalId, Draft, DraftAttachmentRemovalQueuer, Error, ReplyMode, SaveError,
     SenderAddressChangeError,
@@ -48,11 +48,9 @@ pub(super) async fn patch_draft_with_reply_mode(
                 )
                 .await;
             } else {
-                draft.to_list = RecipientList::from_message_recipients(
-                    contact_group_resolver,
-                    std::iter::once(source_message.sender.clone().into()),
-                )
-                .await;
+                draft.to_list = RecipientList::from_message_reply_to(std::iter::once(
+                    source_message.reply_to.clone(),
+                ));
             }
             draft.subject = apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject);
         }
@@ -66,27 +64,36 @@ pub(super) async fn patch_draft_with_reply_mode(
             } else {
                 draft.to_list = RecipientList::from_message_recipients(
                     contact_group_resolver,
-                    std::iter::once(source_message.sender.clone().into()).chain(
-                        source_message
-                            .to_list
-                            .value
-                            .iter()
-                            .filter(|v| v.address != sender_address.email)
-                            .cloned(),
-                    ),
-                )
-                .await;
-                draft.cc_list = RecipientList::from_message_recipients(
-                    contact_group_resolver,
                     source_message
-                        .cc_list
-                        .value
+                        .reply_tos
                         .iter()
-                        .filter(|v| v.address != sender_address.email)
-                        .cloned(),
+                        .map(|v| MessageRecipient {
+                            address: v.address.clone(),
+                            is_proton: v.is_proton,
+                            name: v.name.clone(),
+                            group: MaybeEmptyString::from_option(None),
+                        })
+                        .chain(
+                            source_message
+                                .to_list
+                                .value
+                                .iter()
+                                .filter(|v| v.address != sender_address.email)
+                                .cloned(),
+                        ),
                 )
                 .await;
             }
+            draft.cc_list = RecipientList::from_message_recipients(
+                contact_group_resolver,
+                source_message
+                    .cc_list
+                    .value
+                    .iter()
+                    .filter(|v| v.address != sender_address.email)
+                    .cloned(),
+            )
+            .await;
             draft.subject = apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject);
         }
         ReplyMode::Forward => {

@@ -1,11 +1,11 @@
 pub use super::*;
-use crate::datatypes::LocalAttachmentId;
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::LocalMessageId;
 use crate::datatypes::MessageFlags;
 use crate::datatypes::SystemLabelId;
 use crate::datatypes::attachment;
 use crate::datatypes::{Disposition, MessageRecipient, MessageRecipients, MessageSender};
+use crate::datatypes::{LocalAttachmentId, MessageReplyTo};
 use crate::decrypted_message::DecryptedMessageBody;
 use crate::draft::recipients::{MaybeEmptyString, NullContactGroupResolver};
 use crate::draft::{Draft, MetadataId};
@@ -86,6 +86,52 @@ async fn check_reply_from_html_with_text_as_default() {
     let (draft, _, _) = create_reply_with(ReplyMode::All, MimeType::TextPlain).await;
     assert_snapshot!(draft.body());
     assert_eq!(draft.mime_type, MimeType::TextHtml);
+}
+
+#[tokio::test]
+async fn check_reply_simple_login_alias() {
+    // The reply data of the message body metadata will be different than the sender
+    let mut source_body_metadata = existing_message_body_metadata();
+    source_body_metadata.mime_type = MimeType::TextPlain;
+    source_body_metadata.reply_to.address = "hiddin_from_view@simplelogin.net".to_owned();
+    let source_body = "Hello World".to_owned();
+    let expected_email = source_body_metadata.reply_to.address.clone();
+    let (draft, _, _) = create_reply_with_mime_and_body(
+        ReplyMode::Sender,
+        MimeType::TextPlain,
+        source_body_metadata,
+        source_body,
+    )
+    .await;
+    assert!(draft.to_list.contains_email(&expected_email));
+    assert!(
+        !draft
+            .to_list
+            .contains_email(&existing_message().sender.address)
+    );
+}
+
+#[tokio::test]
+async fn check_reply_all_simple_login_alias() {
+    // The reply data of the message body metadata will be different than the sender
+    let mut source_body_metadata = existing_message_body_metadata();
+    source_body_metadata.mime_type = MimeType::TextPlain;
+    source_body_metadata.reply_tos[0].address = "hiddin_from_view@simplelogin.net".to_owned();
+    let source_body = "Hello World".to_owned();
+    let expected_email = source_body_metadata.reply_tos[0].address.clone();
+    let (draft, _, _) = create_reply_with_mime_and_body(
+        ReplyMode::All,
+        MimeType::TextPlain,
+        source_body_metadata,
+        source_body,
+    )
+    .await;
+    assert!(draft.to_list.contains_email(&expected_email));
+    assert!(
+        !draft
+            .to_list
+            .contains_email(&existing_message().sender.address)
+    );
 }
 
 #[tokio::test]
@@ -385,8 +431,22 @@ fn existing_message() -> Message {
         label_ids: vec![],
         num_attachments: 0,
         display_order: 0,
-        reply_to: Default::default(),
-        reply_tos: Default::default(),
+        reply_to: MessageReplyTo {
+            address: "sender@void.org".to_owned(),
+            bimi_selector: None,
+            display_sender_image: false,
+            is_proton: false,
+            is_simple_login: false,
+            name: "Send InToVoid".to_string(),
+        },
+        reply_tos: vec![MessageReplyTo {
+            address: "sender@void.org".to_owned(),
+            bimi_selector: None,
+            display_sender_image: false,
+            is_proton: false,
+            is_simple_login: false,
+            name: "Send InToVoid".to_string(),
+        }],
         sender: MessageSender {
             address: "sender@void.org".to_owned(),
             bimi_selector: None,

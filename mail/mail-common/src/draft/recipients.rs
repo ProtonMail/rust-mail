@@ -1,5 +1,5 @@
 use crate::MailUserContext;
-use crate::datatypes::MessageRecipient;
+use crate::datatypes::{MessageRecipient, MessageReplyTo};
 use non_empty_string::NonEmptyString;
 use parking_lot::{Mutex, RwLock};
 use proton_core_api::service::ApiServiceError;
@@ -228,6 +228,20 @@ impl RecipientList {
             }
         }
 
+        list
+    }
+
+    pub fn from_message_reply_to(reply_tos: impl IntoIterator<Item = MessageReplyTo>) -> Self {
+        let mut list = Self::new();
+        for recipient in reply_tos {
+            let entry = RecipientEntry {
+                email: recipient.address,
+                display_name: recipient.name.into(),
+            };
+            if let Err(e) = list.add_single(entry) {
+                error!("Failed to add single recipient: {e:?}");
+            }
+        }
         list
     }
 
