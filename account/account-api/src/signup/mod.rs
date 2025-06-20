@@ -133,7 +133,7 @@ impl SignupFlow {
         client: muon::Client,
         store: DynStore,
         challenge_info: ChallengeInfo,
-    ) -> Result<Self, SignupError> {
+    ) -> Result<Self, ApiError> {
         let domains = client.get_available_domains(None).await?.domains;
         let countries = COUNTRIES.to_owned();
         let state = vec![State::new(client, challenge_info)];

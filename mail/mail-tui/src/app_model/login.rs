@@ -116,7 +116,7 @@ impl AppStateHandler for LoginModel {
                         let mut flow = match ctx.new_login_flow().await {
                             Ok(f) => f,
                             Err(e) => {
-                                return Command::message(e.into());
+                                return Command::message(anyhow!(e.to_string()).into());
                             }
                         };
                         let message = if let Err(e) = flow

@@ -2,7 +2,6 @@ mod action_error;
 mod draft_error;
 mod error_reason;
 mod event_error;
-mod login_error;
 mod pin_error;
 mod proton_error;
 mod scroller_error;
@@ -15,7 +14,6 @@ pub use self::action_error::*;
 pub use self::draft_error::*;
 pub use self::error_reason::*;
 pub use self::event_error::*;
-pub use self::login_error::*;
 pub use self::pin_error::*;
 pub use self::proton_error::*;
 pub use self::scroller_error::*;
@@ -94,7 +92,6 @@ export_void_result! {
     VoidDraftSaveResult(DraftSaveError),
     VoidDraftUndoSendResult(DraftUndoSendError),
     VoidEventResult(EventError),
-    VoidLoginResult(MailLoginError),
     VoidProtonResult(ProtonError),
     VoidSessionResult(UserContextError),
 }
