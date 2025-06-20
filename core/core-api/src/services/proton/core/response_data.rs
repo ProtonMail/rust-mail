@@ -768,7 +768,7 @@ pub struct SettingsFlags {
     /// TODO: Document this field.
     #[serde_as(as = "BoolFromInt")]
     pub welcomed: bool,
-    /// EasyDeviceMigration (QR Login) opt out. The user can choose to disable the feature.
+    /// `EasyDeviceMigration` (QR Login) opt out. The user can choose to disable the feature.
     #[serde_as(as = "BoolFromInt")]
     pub edm_opt_out: bool,
 }
