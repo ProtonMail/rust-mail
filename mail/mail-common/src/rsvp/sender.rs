@@ -1,12 +1,15 @@
 use crate::MailContextError;
 use crate::MailUserContext;
 use crate::datatypes::{MessageRecipient, MimeType, attachment};
+use crate::draft::SendError;
 use crate::draft::compose::REPLY_PREFIX;
+use crate::draft::send::MailType;
 use crate::draft::{self, send};
+use crate::models::AttachmentType;
+use crate::models::Message;
 use crate::models::{Attachment, MailSettings};
 use anyhow::Context;
 use proton_calendar_common::{self as cal};
-use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::AddressId;
 use proton_crypto_account::keys::{PrimaryUnlockedAddressKey, UnlockedAddressKeys};
 use proton_crypto_inbox::attachment::{EncryptableAttachment, EncryptedAttachment};
@@ -19,7 +22,8 @@ use proton_mail_api::services::proton::prelude::{
 };
 use stash::stash::Tether;
 use std::slice;
-use thiserror::Error;
+use tracing::error;
+use tracing::warn;
 
 pub(crate) struct RsvpMailSender<'a, P>
 where
@@ -39,29 +43,68 @@ impl<P> cal::RsvpMailSender for RsvpMailSender<'_, P>
 where
     P: PGPProviderSync,
 {
-    type Error = RsvpMailError;
+    type Error = MailContextError;
 
-    async fn send(mut self, to: &str, body: &str, ics: &str) -> Result<(), RsvpMailError> {
-        let key = self.keys.primary_for_mail().with_context(|| {
-            format!(
-                "Couldn't get primary key for address {}",
-                self.msg_address_id
-            )
-        })?;
+    async fn send(mut self, to: &str, body: &str, ics: &str) -> Result<(), Self::Error> {
+        let key = self
+            .keys
+            .primary_for_mail()
+            .with_context(|| {
+                format!(
+                    "Couldn't get primary key for address {}",
+                    self.msg_address_id
+                )
+            })
+            .map_err(MailContextError::Other)?;
 
-        let ics = RsvpAttachment(ics)
-            .attachment_encrypt_and_sign(self.pgp, &key)
-            .context("Couldn't encrypt attachment")?;
-
+        let ics = RsvpAttachment(ics).attachment_encrypt_and_sign(self.pgp, &key)?;
         let message = self.build_message(to, body, &key, &ics)?;
         let parent = Some((self.msg_id.clone(), DraftAction::Reply));
-        let packages = self.build_packages(to, body, &ics).await?;
+        let (packages, mut ics) = self.build_packages(to, body, ics).await?;
         let auto_save_contacts = false;
 
-        self.ctx
+        let resp = self
+            .ctx
             .api()
-            .send_direct_mail(message, parent, packages, auto_save_contacts)
+            .send_direct(message, parent, packages, auto_save_contacts)
             .await?;
+
+        let result = self
+            .tether
+            .tx::<_, _, anyhow::Error>(async move |tx| {
+                if let Some(remote_att) = resp.sent.body.attachments.first() {
+                    ics.attachment_type = AttachmentType::Remote(Some(remote_att.id.clone()));
+                } else {
+                    warn!("Suspicious: API response contains no attachments");
+                }
+
+                let (mut msg, mut body, _) = Message::from_api_data(resp.sent, tx)
+                    .await
+                    .context("Couldn't create message from API response")?;
+
+                msg.save(tx).await.context("Couldn't save message")?;
+                body.save(tx).await.context("Couldn't save message body")?;
+
+                Ok(())
+            })
+            .await;
+
+        if let Err(err) = result {
+            // Since the reply was already sent to the organizer, we can't bail
+            // out now - the organizer's calendar got updated (by the virtue of
+            // getting the mail sent), so our calendar must be updated as well.
+            //
+            // (i.e. if we bailed out here, RSVP logic would assume that the
+            // mail did not, in fact, go through, and would abort the flow.)
+            //
+            // It's a pity, sure, but let's hope that event loop catches this
+            // and pulls the message anyway.
+
+            warn!(
+                "Message to the organizer got sent correctly, but we couldn't \
+                 save it into the database: {err:?}",
+            );
+        }
 
         Ok(())
     }
@@ -77,7 +120,7 @@ where
         body: &str,
         key: &PrimaryUnlockedAddressKey<P::PrivateKey, P::PublicKey>,
         ics: &EncryptedAttachment,
-    ) -> Result<DirectParams, RsvpMailError> {
+    ) -> Result<DirectParams, MailContextError> {
         let subject = draft::compose::apply_prefix_to_subject(REPLY_PREFIX, self.msg_subject);
 
         let sender = DraftSender {
@@ -87,7 +130,10 @@ where
 
         let body = RsvpBody(body)
             .encrypt_draft_body(self.pgp, key)
-            .context("Couldn't encrypt body")?;
+            .map_err(|err| {
+                error!("Failed to encrypt response: {err:?}");
+                MailContextError::Crypto
+            })?;
 
         let to = DraftRecipient {
             address: to.to_string(),
@@ -110,29 +156,41 @@ where
         &mut self,
         to: &str,
         body: &str,
-        ics: &EncryptedAttachment,
-    ) -> Result<Vec<Package>, RsvpMailError> {
+        ics: EncryptedAttachment,
+    ) -> Result<(Vec<Package>, Attachment), MailContextError> {
         let to = to.to_string();
-        let ics = Attachment::direct(ics, attachment::MimeType::text_plain());
+
+        let ics = self
+            .tether
+            .tx(async |bond| {
+                Attachment::create(
+                    self.ctx,
+                    bond,
+                    ics,
+                    DirectAttachment::INVITE_ICS,
+                    attachment::MimeType::text_plain(),
+                )
+                .await
+            })
+            .await?;
 
         let crypto = MailSettings::get(self.tether)
-            .await
-            .context("Couldn't get mail settings")?
+            .await?
             .unwrap_or_default()
             .crypto_mail_settings();
 
-        let prefs = send::load_send_preferences_for_recipients(
+        let prefs = send::load_prefs(
             self.ctx,
             self.pgp,
             self.tether,
             slice::from_ref(&to),
             crypto,
         )
-        .await
-        .context("Couldn't load preferences")?;
+        .await?;
 
         let packages = send::build_packages(
             self.ctx,
+            MailType::Direct,
             self.pgp,
             self.keys,
             prefs,
@@ -142,9 +200,9 @@ where
             self.tether,
         )
         .await
-        .context("Couldn't build packages")?;
+        .map_err(SendError::SendMessage)?;
 
-        Ok(packages)
+        Ok((packages, ics))
     }
 }
 
@@ -163,23 +221,5 @@ struct RsvpBody<'a>(&'a str);
 impl EncryptableDraft for RsvpBody<'_> {
     fn plaintext_message_body(&self) -> &[u8] {
         self.0.as_bytes()
-    }
-}
-
-#[derive(Debug, Error)]
-pub enum RsvpMailError {
-    #[error(transparent)]
-    Api(#[from] ApiServiceError),
-
-    #[error(transparent)]
-    Other(#[from] anyhow::Error),
-}
-
-impl From<RsvpMailError> for MailContextError {
-    fn from(err: RsvpMailError) -> Self {
-        match err {
-            RsvpMailError::Api(err) => MailContextError::Api(err),
-            RsvpMailError::Other(err) => MailContextError::Other(err),
-        }
     }
 }

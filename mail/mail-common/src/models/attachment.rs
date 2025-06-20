@@ -166,11 +166,6 @@ pub enum AttachmentType {
     /// Some if it exists in the server and None if it's local
     Remote(Option<AttachmentId>),
     Pgp,
-
-    /// Ad-hoc attachment, for usage with direct emails.
-    ///
-    /// See [`Attachment::direct()`].
-    Direct(Vec<u8>),
 }
 
 impl Default for AttachmentType {
@@ -180,10 +175,6 @@ impl Default for AttachmentType {
 }
 
 impl AttachmentType {
-    pub fn is_direct(&self) -> bool {
-        matches!(self, Self::Direct(_))
-    }
-
     pub fn to_json(&self) -> Result<String, StashError> {
         serde_json::to_string(self)
             .context("error serializing attachment_type")
@@ -194,28 +185,13 @@ impl AttachmentType {
 sql_using_serde!(AttachmentType);
 
 impl Attachment {
-    /// Creates an ad-hoc attachment, for usage with direct emails.
-    ///
-    /// Attachments created using this function are temporary - they don't have
-    /// local ids and they don't have remote ids, their only purpose is to be
-    /// added into a direct email and sent at once.
-    pub fn direct(att: &EncryptedAttachment, mime_type: attachment::MimeType) -> Self {
-        Self {
-            attachment_type: AttachmentType::Direct(att.data.clone()),
-            key_packets: Some(RealKeyPackets::new_from_bytes(&att.metadata.key_packets).into()),
-            mime_type,
-            ..Attachment::default()
-        }
-    }
-
-    /// Gets the remote id of the attachment.
-    /// This is here to lower compile times.
     pub fn remote_id(&self) -> Option<AttachmentId> {
         match &self.attachment_type {
             AttachmentType::Remote(id) => id.clone(),
             _ => None,
         }
     }
+
     /// Load attachment metadata for a given `conversation_id`.
     ///
     /// Only attachments with [`Disposition::Attachment`] are loaded. For the full attachment
@@ -269,12 +245,6 @@ impl Attachment {
     /// Returns an error if the query failed.
     ///
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if self.attachment_type.is_direct() {
-            return Err(StashError::Critical(anyhow!(
-                "Direct attachments can't be saved into the database"
-            )));
-        }
-
         // If we already exist in the db
         if let Some(local_id) = self.local_id {
             // There is currently a race because we try to write too much data at the same time
@@ -605,6 +575,31 @@ impl Attachment {
                 error!("Failed to encrypt attachment: {e:?}");
                 MailContextError::Crypto
             })
+    }
+
+    #[tracing::instrument(skip(ctx, bond, att))]
+    pub async fn create(
+        ctx: &MailUserContext,
+        bond: &Bond<'_>,
+        att: EncryptedAttachment,
+        filename: &str,
+        mime_type: attachment::MimeType,
+    ) -> Result<Self, MailContextError> {
+        info!("Creating attachment");
+
+        let mut this = Self {
+            attachment_type: AttachmentType::Remote(None),
+            key_packets: Some(RealKeyPackets::new_from_bytes(&att.metadata.key_packets).into()),
+            filename: filename.into(),
+            mime_type,
+            ..Attachment::default()
+        };
+
+        this.save(bond).await?;
+
+        Self::store_in_cache(ctx, &this.filename, this.id(), att.data, bond).await?;
+
+        Ok(this)
     }
 
     /// Create a new attachment from the given file `path`.

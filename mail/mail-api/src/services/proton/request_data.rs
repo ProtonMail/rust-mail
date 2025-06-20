@@ -138,7 +138,25 @@ pub type DraftAttachmentKeyPackets = IndexMap<AttachmentId, KeyPackets>;
 pub type PackageAddresses = HashMap<String, AddressSubPackage>;
 pub type PackageAttachmentKeyPackets = HashMap<String, KeyPacket>;
 pub type PackageAttachmentEncSignatures = HashMap<String, Base64AttachmentEncryptedSignature>;
-pub type PackageAttachmentExposedKeys = HashMap<String, ExposedKey>;
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(untagged)]
+pub enum PackageAttachmentExposedKeys {
+    /// Map of attachment remote ids onto attachment keys.
+    ///
+    /// This is used for building a draft-mail request, because that's the only
+    /// case where we know attachment remote ids up-front.
+    Map(HashMap<String, ExposedKey>),
+
+    /// List of attachment keys.
+    ///
+    /// This is used for building a direct-mail request, because in that case
+    /// we don't know attachment remote ids up front, we can only list them.
+    ///
+    /// Keys here must be listed in the same order in which attachments appear
+    /// within the message.
+    List(Vec<ExposedKey>),
+}
 
 /// Signature mode of a sub-package.
 #[derive(Debug, Default, Serialize_repr, PartialEq, Eq, Clone, Copy)]

@@ -4,4 +4,4 @@ mod sender;
 
 pub(crate) use self::cache::*;
 pub use self::event::*;
-pub use self::sender::*;
+pub(crate) use self::sender::*;

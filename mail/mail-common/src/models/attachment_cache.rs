@@ -359,15 +359,12 @@ impl Attachment {
             AttachmentType::Pgp => {
                 return Err(MailContextError::CalledFetchedAttachmentOnPgp);
             }
-            AttachmentType::Direct(content) => {
-                return Ok(content.clone());
-            }
         };
 
         let encrypted_content = Attachment::fetch_content(remote_attachment_id.clone(), ctx.api())
             .await
             .map_err(|e| {
-                error!("Failed to fetch attachment ({attachment_id:?}) from API: {e:?}",);
+                error!("Failed to fetch attachment ({attachment_id:?}) from API: {e:?}");
                 e
             })?;
 

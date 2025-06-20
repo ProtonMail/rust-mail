@@ -252,7 +252,6 @@ pub struct PutMessageHamResponse {
     edited_labels: bool,
 }
 
-/// Response to a relabel message request.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
@@ -278,14 +277,16 @@ pub struct PutUpdateDraftResponse {
 #[cfg_attr(any(test, debug_assertions), derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PostSendMessageResponse {
-    /// The expected epoch of delivery
-    pub delivery_time: u64,
-
-    /// The sent message
+    pub delivery_time: u64, // unix timestamp
     pub sent: Message,
-
-    /// The updated conversation.
     pub conversation: Conversation,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PostSendDirectMessageResponse {
+    pub sent: Message,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]

@@ -4,8 +4,8 @@ use proton_core_api::services::proton::LabelId;
 use proton_core_api::services::proton::common::ApiErrorInfo;
 use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_api::services::proton::prelude::{
-    IncomingDefault, PostCancelSendResponse, PostIncomingDefaultResponse, PostSendRequest,
-    PutMessageHamResponse,
+    IncomingDefault, PostCancelSendResponse, PostIncomingDefaultResponse,
+    PostSendDirectMessageResponse, PostSendRequest, PutMessageHamResponse,
 };
 use proton_mail_api::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
@@ -456,13 +456,14 @@ impl MailTestContext {
     /// This endpoint matches only the plain-text metadata (subject, attachment
     /// file names etc.), ignoring the encrypted stuff.
     #[function_name::named]
-    pub async fn mock_send_direct_mail(
+    pub async fn mock_send_direct(
         &self,
         subject: &str,
         sender: &str,
         recipient: &str,
         attachments: &[&str],
         parent_id: Option<&str>,
+        response: PostSendDirectMessageResponse,
     ) {
         let attachments: JsonValue = attachments
             .iter()
@@ -496,7 +497,7 @@ impl MailTestContext {
         Mock::given(method("POST"))
             .and(path("/api/mail/v4/messages/send/direct"))
             .and(body_partial_json(request))
-            .respond_with(ResponseTemplate::new(200))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response))
             .expect(1)
             .named(function_name!())
             .mount(self.mock_server())

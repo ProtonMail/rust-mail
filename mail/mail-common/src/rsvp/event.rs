@@ -90,7 +90,7 @@ impl RsvpEvent {
             .await
             .map_err(|err| match err {
                 RsvpAnswerError::Rsvp(err) => err.into(),
-                RsvpAnswerError::Mail(err) => err.into(),
+                RsvpAnswerError::Mail(err) => err,
             })
     }
 }

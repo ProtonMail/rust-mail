@@ -398,7 +398,6 @@ impl DecryptedMessageBody {
     ) -> MailContextResult<Option<RsvpEventId>> {
         if let Some(rsvp) = RsvpEventId::from_headers(&self.metadata.parsed_headers.headers) {
             debug!("Identified RSVP via headers");
-
             return Ok(Some(rsvp));
         }
 
@@ -428,7 +427,6 @@ impl DecryptedMessageBody {
             match RsvpEventId::from_invite(&ics) {
                 Ok(rsvp) => {
                     debug!("Identified RSVP via attachment");
-
                     return Ok(Some(rsvp));
                 }
 
@@ -438,7 +436,6 @@ impl DecryptedMessageBody {
 
                 Err(err) => {
                     warn!(?err, "Couldn't parse the RSVP attachment");
-
                     return Err(err.into());
                 }
             };

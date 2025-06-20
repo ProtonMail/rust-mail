@@ -288,8 +288,10 @@ pub enum PackageError {
     AttachmentDataMissing,
     #[error("Attachment failed to load: {0}")]
     AttachmentLoad(Box<MailContextError>),
-    #[error("Failed to get attachment remote id")]
+    #[error("Attachment has no remote id")]
     AttachmentNoRemoteId,
+    #[error("Attachment alraedy has remote id")]
+    AttachmentAlreadyHasRemoteId,
     #[error("Failed to get attachment address key {0}")]
     AttachmentAddressKeyMissing(AddressId),
     #[error("Failed to write mime body to buffer: {0}")]

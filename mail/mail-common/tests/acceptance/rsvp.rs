@@ -1,15 +1,13 @@
 use indoc::formatdoc;
 use jiff::Zoned;
-use proton_calendar_api::{
-    CalendarAttendee, CalendarAttendeeStatus, CalendarBootstrap, CalendarEvent,
-    CalendarEventPayload, CalendarEventPayloadType, CalendarKey, CalendarKeyFlags, CalendarMember,
-    CalendarMemberPassphrase, CalendarNotificationsUpdate, CalendarPassphrase, ProtonCalendarMock,
-};
+use proton_calendar_api::{self as cal, ProtonCalendarMock};
 use proton_calendar_common::{RsvpAnswerStatus, RsvpEventId};
 use proton_core_api::services::proton::{GetKeysAllResponse, LabelId, UserId};
+use proton_core_common::models::ModelExtension;
 use proton_crypto_calendar::{CalendarEventEncryptor, KeyPacket, UnlockedCalendarKey};
+use proton_crypto_inbox::attachment::KeyPackets;
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
-use proton_mail_api::services::proton::prelude::MessageRecipient;
+use proton_mail_api::services::proton::prelude as mail;
 use proton_mail_common::Mailbox;
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Message;
@@ -102,7 +100,7 @@ async fn fetch_and_answer() {
 
         message.metadata.subject = "Invitation for an event".into();
 
-        message.metadata.to_list = vec![MessageRecipient {
+        message.metadata.to_list = vec![mail::MessageRecipient {
             address: TEST_MAIL.into(),
             is_proton: true,
             name: String::default(),
@@ -120,7 +118,7 @@ async fn fetch_and_answer() {
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
 
-    ctx.mock_get_messages(vec![message.metadata]).await;
+    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
 
     Mailbox::with_remote_id(&tx, LabelId::inbox())
         .await
@@ -129,7 +127,7 @@ async fn fetch_and_answer() {
         .await
         .unwrap();
 
-    let msg = Message::load(1.into(), &tx).await.unwrap().unwrap();
+    let mut msg = Message::load(1.into(), &tx).await.unwrap().unwrap();
     let msg_body = msg.fetch_message_body(&user_ctx, &mut tx).await.unwrap();
 
     // ---
@@ -159,20 +157,20 @@ async fn fetch_and_answer() {
     let calendar = {
         let key = calendar_key.export(&pgp, &address_keys[0]).unwrap();
 
-        CalendarBootstrap {
-            keys: vec![CalendarKey {
+        cal::CalendarBootstrap {
+            keys: vec![cal::CalendarKey {
                 id: CALENDAR_KEY_ID.into(),
                 private_key: key.key().into(),
-                flags: CalendarKeyFlags::ActiveAndPrimary,
+                flags: cal::CalendarKeyFlags::ActiveAndPrimary,
             }],
-            passphrase: CalendarPassphrase {
-                member_passphrases: vec![CalendarMemberPassphrase {
+            passphrase: cal::CalendarPassphrase {
+                member_passphrases: vec![cal::CalendarMemberPassphrase {
                     member_id: CALENDAR_MEMBER_ID.into(),
                     passphrase: key.passphrase().into(),
                     signature: key.signature().into(),
                 }],
             },
-            members: [CalendarMember {
+            members: [cal::CalendarMember {
                 id: CALENDAR_MEMBER_ID.into(),
                 name: "My calendar".into(),
                 color: "#273EB2".into(),
@@ -192,9 +190,9 @@ async fn fetch_and_answer() {
         let address_key_packet = key_packets.address_key_packet.map(KeyPacket::into_base64);
         let shared_key_packet = key_packets.shared_key_packet.map(KeyPacket::into_base64);
 
-        CalendarEvent {
-            shared_events: vec![CalendarEventPayload {
-                ty: CalendarEventPayloadType::Encrypted,
+        cal::CalendarEvent {
+            shared_events: vec![cal::CalendarEventPayload {
+                ty: cal::CalendarEventPayloadType::Encrypted,
                 data: shared_event.into_base64(),
                 signature: None,
                 author: SPONGEBOB_MAIL.into(),
@@ -208,22 +206,22 @@ async fn fetch_and_answer() {
             recurrence_id: None,
             address_key_packet,
             shared_key_packet,
-            attendees_events: [CalendarEventPayload {
-                ty: CalendarEventPayloadType::Encrypted,
+            attendees_events: [cal::CalendarEventPayload {
+                ty: cal::CalendarEventPayloadType::Encrypted,
                 data: attendees_event.into_base64(),
                 signature: None,
                 author: SPONGEBOB_MAIL.into(),
             }],
             attendees: vec![
-                CalendarAttendee {
+                cal::CalendarAttendee {
                     id: SPONGEBOB_ATT_ID.into(),
                     token: SPONGEBOB_ATT_TOKEN.into(),
-                    status: CalendarAttendeeStatus::Yes,
+                    status: cal::CalendarAttendeeStatus::Yes,
                 },
-                CalendarAttendee {
+                cal::CalendarAttendee {
                     id: TEST_ATT_ID.into(),
                     token: TEST_ATT_TOKEN.into(),
-                    status: CalendarAttendeeStatus::Unanswered,
+                    status: cal::CalendarAttendeeStatus::Unanswered,
                 },
             ],
             notifications: None,
@@ -268,7 +266,7 @@ async fn fetch_and_answer() {
             CALENDAR_ID,
             EVENT_ID,
             TEST_ATT_ID,
-            CalendarAttendeeStatus::Yes,
+            cal::CalendarAttendeeStatus::Yes,
             &now,
         )
         .await;
@@ -278,7 +276,7 @@ async fn fetch_and_answer() {
             CALENDAR_ID,
             EVENT_ID,
             None,
-            CalendarNotificationsUpdate::SetToDefault,
+            cal::CalendarNotificationsUpdate::SetToDefault,
         )
         .await;
 
@@ -296,7 +294,7 @@ async fn fetch_and_answer() {
         )
         .await;
 
-    ctx.mock_send_direct_mail(
+    ctx.mock_send_direct(
         "Re: Invitation for an event",
         TEST_MAIL,
         SPONGEBOB_MAIL,
@@ -305,26 +303,57 @@ async fn fetch_and_answer() {
             "blkMQzCHplN2H_FNJ2GdMtRkmr3f9v_cFma64_Cmi8IPw3wx_lK-0ZEqA8cBfIf0Pe\
              VbY2P7oVQVwPup-h0syg==",
         ),
+        mail::PostSendDirectMessageResponse {
+            sent: mail::Message {
+                metadata: mail::MessageMetadata {
+                    num_attachments: 1,
+                    ..message.metadata.clone()
+                },
+                body: mail::MessageBody {
+                    attachments: vec![mail::MessageAttachment {
+                        id: mail::AttachmentId::new("cHIs3FzX".into()),
+                        disposition: mail::Disposition::Attachment,
+                        enc_signature: None,
+                        headers: mail::MessageAttachmentHeaders {
+                            content_disposition: "attachment".into(),
+                            content_id: None,
+                            content_transfer_encoding: None,
+                            image_height: None,
+                            image_width: None,
+                        },
+                        key_packets: KeyPackets::new_from_bytes(&[]),
+                        mime_type: "text/calendar".into(),
+                        name: "invite.ics".into(),
+                        signature: None,
+                        size: 123,
+                    }],
+                    ..message.body.clone()
+                },
+            },
+        },
     )
     .await;
 
-    // Sanity-check: Our status is `Unanswered`, so this should yield `false`
     assert!(
         !rsvp
             .attendees
             .iter()
-            .all(|att| att.status == CalendarAttendeeStatus::Yes)
+            .all(|att| att.status == cal::CalendarAttendeeStatus::Yes)
     );
 
     rsvp.answer(&user_ctx, &mut tx, RsvpAnswerStatus::Yes)
         .await
         .unwrap();
 
-    // Sanity-check: Our status was changed into `Yes`, so this should yield
-    // `true`
     assert!(
         rsvp.attendees
             .iter()
-            .all(|att| att.status == CalendarAttendeeStatus::Yes)
+            .all(|att| att.status == cal::CalendarAttendeeStatus::Yes)
     );
+
+    msg.reload(&tx).await.unwrap();
+
+    assert_eq!(1, msg.attachments_metadata.len());
+    assert_eq!("invite.ics", msg.attachments_metadata[0].filename);
+    assert_eq!(123, msg.attachments_metadata[0].size);
 }

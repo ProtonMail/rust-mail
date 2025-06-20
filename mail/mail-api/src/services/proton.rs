@@ -376,13 +376,13 @@ pub trait ProtonMail {
     ) -> ApiServiceResult<PostSendMessageResponse>;
 
     /// <https://protonmail.gitlab-pages.protontech.ch/Slim-API/mail/#tag/Message/operation/post_mail-v4-messages-send-direct>
-    async fn send_direct_mail(
+    async fn send_direct(
         &self,
         message: DirectParams,
         parent: Option<(MessageId, DraftAction)>,
         packages: Vec<Package>,
         auto_save_contacts: bool,
-    ) -> ApiServiceResult<()>;
+    ) -> ApiServiceResult<PostSendDirectMessageResponse>;
 
     /// Reports a message as phishing.
     /// It requires the decrypted message body.
