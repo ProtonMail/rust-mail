@@ -2819,31 +2819,36 @@ impl Conversation {
         tx: &mut impl RunTransaction,
         session: &Session,
     ) -> Result<(), AppError> {
-        let Some(conversation) = Self::find_by_id(local_conversation_id, tx.tether()).await? else {
+        let Some(mut conversation) = Self::find_by_id(local_conversation_id, tx.tether()).await?
+        else {
             return Err(AppError::ConversationNotFound(local_conversation_id));
         };
 
         if !conversation.has_messages {
-            let Some(rid) = conversation.remote_id else {
+            let Some(ref rid) = conversation.remote_id else {
                 return Err(AppError::ConversationHasNoRemoteId(local_conversation_id));
             };
             debug!("Syncing conversation messages");
 
-            if session.graceful_status().await.is_offline() {
+            if session.status().await.is_offline() {
                 debug!("No connection, skipping sync");
                 return Err(AppError::API(ApiServiceError::NetworkError(
                     "No connection".to_owned(),
                 )));
             }
 
-            let conversation_response = session.api().get_conversation(rid).await.map_err(|e| {
-                error!("failed to download conversation messages: {e:?}");
-                AppError::from(e)
-            })?;
+            let conversation_response =
+                session
+                    .api()
+                    .get_conversation(rid.clone())
+                    .await
+                    .map_err(|e| {
+                        error!("failed to download conversation messages: {e:?}");
+                        AppError::from(e)
+                    })?;
 
-            tx.run_tx::<_, _>(async |tx| {
+            tx.run_tx::<_, _>(async move |tx| {
                 let message_metadata: Vec<ApiMessageMetadata> = conversation_response.messages;
-                let mut new_conversation: Conversation = conversation_response.conversation.into();
 
                 Message::create_or_update_messages_from_metadata(message_metadata, tx)
                     .await
@@ -2852,14 +2857,25 @@ impl Conversation {
                         e
                     })?;
 
-                new_conversation.local_id = conversation.local_id;
-                new_conversation.row_id = conversation.row_id;
-                new_conversation.has_messages = true;
+                if conversation.is_known {
+                    conversation.has_messages = true;
+                    conversation.save(tx).await.map_err(|e| {
+                        error!("Failed to write conversation: {e:?}");
+                        e
+                    })?;
+                } else {
+                    let mut new_conversation: Conversation =
+                        conversation_response.conversation.into();
 
-                new_conversation.save(tx).await.map_err(|e| {
-                    error!("Failed to write conversation: {e:?}");
-                    e
-                })?;
+                    new_conversation.local_id = conversation.local_id;
+                    new_conversation.row_id = conversation.row_id;
+                    new_conversation.has_messages = true;
+
+                    new_conversation.save(tx).await.map_err(|e| {
+                        error!("Failed to write conversation: {e:?}");
+                        e
+                    })?;
+                }
 
                 Ok(())
             })
