@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixes
+
+- [ET-3285] Add `graceful_status` method and use it when trying to fetch messages for conversation or message body
+- Do not overwrite conversation if its `known` but has no messages
+- [ET-3308] Drafts and schedule send now properly update if edited on another session.
+
+
 ## [mail-uniffi-v0.93.6] - 2025-06-18
 
 ### Fixes
