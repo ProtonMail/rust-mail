@@ -690,13 +690,13 @@ impl Conversation {
                 .query_values::<_, LocalMessageId>(
                     indoc::indoc! {"
                     WITH conv_msgs AS (
-                        SELECT local_id, ? AS label_id 
-                        FROM messages 
+                        SELECT local_id, ? AS label_id
+                        FROM messages
                         WHERE local_conversation_id=?
                     )
                     INSERT OR IGNORE INTO
                         message_labels (local_message_id, local_label_id)
-                    SELECT * FROM conv_msgs 
+                    SELECT * FROM conv_msgs
                     RETURNING local_message_id AS value
                     "},
                     params![label_id, id],
@@ -2019,7 +2019,7 @@ impl Conversation {
                     DELETE FROM message_labels
                     WHERE local_message_id IN (
                         SELECT local_id
-                        FROM messages 
+                        FROM messages
                         WHERE local_conversation_id=?1
                     ) AND message_labels.local_label_id=?2
                     RETURNING local_message_id AS value
@@ -2297,8 +2297,8 @@ impl Conversation {
             .query_values(
                 formatdoc! {"
                 SELECT local_label_id AS value
-                FROM conversation_labels 
-                WHERE 
+                FROM conversation_labels
+                WHERE
                     local_conversation_id in ({})"
                     , placeholders(ids)
                 },
@@ -2829,7 +2829,7 @@ impl Conversation {
             };
             debug!("Syncing conversation messages");
 
-            if session.status().await.is_offline() {
+            if session.graceful_status().await.is_offline() {
                 debug!("No connection, skipping sync");
                 return Err(AppError::API(ApiServiceError::NetworkError(
                     "No connection".to_owned(),
@@ -3364,7 +3364,7 @@ impl ConversationMessageLabelStats {
                 JOIN message_labels AS ML ON
                     ML.local_message_id = messages.local_id AND
                     ML.local_label_id = ?
-                WHERE 
+                WHERE
                     messages.local_conversation_id = ? AND
                     messages.local_id IN ({})
             ",

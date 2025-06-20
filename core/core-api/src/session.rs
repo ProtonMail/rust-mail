@@ -4,6 +4,7 @@ use muon::env::DynEnv;
 use muon::error::ParseEndpointErr;
 use std::borrow::Borrow;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::{RwLock, watch};
 
 use crate::auth::UserKeySecret;
@@ -251,7 +252,7 @@ impl Builder {
 
         ObservabilityManager::start(
             client.clone(),
-            tokio::time::Duration::from_secs(60),
+            Duration::from_secs(60),
             OBSERVABILITY_BATCH_SIZE,
         );
 
@@ -347,9 +348,10 @@ impl Session {
 
     /// Get the connection status of the current session.
     ///
-    /// Underlying it will ping the Proton server with one second timeout to check
-    /// if the connection can be established. The method will return the current
-    /// status if is fresh enough without making a new request.
+    /// Underlying it will ping the Proton server with two seconds timeout when
+    /// the connection status is uncertain - to check if the connection can be
+    /// established. The method will return the current status if it is fresh
+    /// enough without making a new request.
     ///
     /// The connection status can be one of the following:
     /// - `ConnectionStatus::Online`: The application is online and server is reachable.
@@ -358,6 +360,28 @@ impl Session {
     ///
     pub async fn status(&self) -> ConnectionStatus {
         self.status.status(self.client.clone()).await
+    }
+
+    /// Get the connection status of the current session.
+    ///
+    /// It uses [`status`] method under the hood, but if it claims the connection
+    /// cannot be made it will allow grace period of two seconds. It will follow logic:
+    /// * If the connection is online, it will return `ConnectionStatus::Online` immediately.
+    /// * If the connection is offline, it will wait for 2 seconds and return the current status.
+    ///
+    /// This method is useful to avoid returning `ConnectionStatus::Offline`
+    /// when the connection status is uncertain.
+    ///
+    pub async fn graceful_status(&self) -> ConnectionStatus {
+        match self.status().await {
+            ConnectionStatus::Online => ConnectionStatus::Online,
+            status => {
+                match tokio::time::timeout(Duration::from_secs(2), self.wait_for_online()).await {
+                    Ok(()) => ConnectionStatus::Online,
+                    Err(_) => status,
+                }
+            }
+        }
     }
 
     /// Returns a reference to the store.
