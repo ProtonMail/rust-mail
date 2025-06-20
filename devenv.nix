@@ -35,8 +35,10 @@ in
     # so that 'xcodebuild' resolves to the version installed outside the devshell.
     export ${filterPkgIn "xcbuild" "PATH"};
     export ${filterPkgIn "clang" "PATH"};
+    export ${filterPkgIn "cctools-binutils" "PATH"};
     unset DEVELOPER_DIR;
     unset SDKROOT;
+    unset LD;
 
     echo "Helper scripts you can run to make your development richer:"
     echo
@@ -112,6 +114,19 @@ in
       else
         null;
 
+    proton-run-ios = {
+      description = ''Builds the iOS project (but not the uniffi framework) and runs it on the simulator'';
+      binary = "bash";
+
+      exec = ''
+        pushd "$DEVENV_ROOT"
+        # Make sure we are using 16.3 to build the framework.
+        sudo xcode-select --switch "${pkgs.darwin.xcode_16_3}/Contents/Developer"
+        ./mail/mail-uniffi/ios/run-local.sh
+        
+        popd
+      '';
+    };
     proton-build-ios = {
       description = "Builds iOS uniffi framework and injects it to the iOS project";
       binary = "bash";
@@ -122,6 +137,7 @@ in
         # Make sure we are using 16.2 to build the framework.
         sudo xcode-select --switch "${pkgs.darwin.xcode_16_2}/Contents/Developer"
         ${filterPkg "libiconv"} ./mail/mail-uniffi/ios/build-local.sh
+        
         popd
       '';
     };
