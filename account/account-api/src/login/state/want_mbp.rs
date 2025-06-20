@@ -12,7 +12,7 @@ pub struct WantMbp {
 }
 
 impl WantMbp {
-    pub fn new(client: muon::Client, data: StateData) -> Self {
+    pub(crate) fn new(client: muon::Client, data: StateData) -> Self {
         info!("Login flow wants mailbox password");
 
         Self { client, data }

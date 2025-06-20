@@ -5,24 +5,27 @@ use proton_core_api::session::Session;
 
 /// Represents a completed login flow.
 pub struct Complete {
-    pub client: muon::Client,
-    pub data: StateData,
-    pub user: Option<User>,
+    client: muon::Client,
+    data: StateData,
+    user: Option<User>,
 }
 
 impl Complete {
-    pub fn new(client: muon::Client, data: StateData, user: Option<User>) -> Self {
+    pub(crate) fn new(client: muon::Client, data: StateData, user: Option<User>) -> Self {
         Self { client, data, user }
     }
 
+    #[must_use]
     pub fn into_session(self) -> Session {
         Session::from_parts(self.client, self.data.parts)
     }
 
+    #[must_use]
     pub fn password_change_required(&self) -> Option<bool> {
         Some(self.user.as_ref()?.flags.has_temporary_password)
     }
 
+    #[must_use]
     pub fn delinquent_state(&self) -> Option<DelinquentState> {
         Some(self.user.as_ref()?.delinquent.into())
     }

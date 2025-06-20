@@ -161,7 +161,9 @@ impl Store for AuthStore {
                     info!("creating account for {user_id}");
 
                     let name_or_addr = self.name_or_addr.take();
-                    let name_or_addr = name_or_addr.context("missing name or address")?;
+                    // Ensures a non-null value for the name_or_addr field to satisfy database update requirements.
+                    // A default empty string is used when the value is None, as certain mobile callbacks expect this field to be non-null.
+                    let name_or_addr = name_or_addr.unwrap_or_else(|| String::from("Unknown"));
 
                     CoreAccount::new(user_id.clone(), name_or_addr)
                         .save(tx)
@@ -305,7 +307,8 @@ impl Store for AuthStore {
                 }
 
                 account
-                    .with_username(data.username)
+                    .with_username(data.username.clone())
+                    .with_name_or_addr(data.username)
                     .with_display_name(data.display_name)
                     .with_primary_addr(data.primary_addr)
                     .with_ready()

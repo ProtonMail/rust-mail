@@ -602,15 +602,6 @@ impl Popup for InfoDialog {
     }
 
     fn view(&mut self, frame: &mut Frame, area: Rect) {
-        let [_, msg, _, instructions] = Layout::vertical([
-            Constraint::Fill(1),
-            Constraint::Min(3),
-            Constraint::Fill(1),
-            Constraint::Length(2),
-        ])
-        .flex(Flex::Center)
-        .areas(area.inner(Margin::new(2, 2)));
-
         let text = match &self.text {
             DialogText::Error(error) => {
                 frame.render_widget(Block::new().white().on_red(), area);
@@ -621,6 +612,19 @@ impl Popup for InfoDialog {
                 text.clone()
             }
         };
+
+        // Split text into lines and find the maximum height
+        let lines: Vec<&str> = text.lines().collect();
+        let content_height = u16::try_from(lines.len()).unwrap_or(3);
+
+        let [_, msg, _, instructions] = Layout::vertical([
+            Constraint::Fill(1),
+            Constraint::Min(content_height),
+            Constraint::Fill(1),
+            Constraint::Length(2),
+        ])
+        .flex(Flex::Center)
+        .areas(area.inner(Margin::new(2, 2)));
 
         frame.render_widget(
             Paragraph::new(text)

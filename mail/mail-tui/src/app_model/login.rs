@@ -5,18 +5,23 @@ use crate::app_model::{AppState, AppStateHandler, context_init};
 use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
 use anyhow::anyhow;
+use copypasta::{ClipboardContext, ClipboardProvider as _};
 use proton_account_api::login::{LoginError, LoginFlow};
 use proton_mail_common::MailContext;
 use proton_mail_common::proton_mail_api::proton_core_api::services::proton::muon::client::flow::LoginExtraInfo;
+use qrcode::QrCode;
+use qrcode::render::unicode;
 use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Flex;
 use ratatui::prelude::*;
 use secrecy::{ExposeSecret, SecretString};
 use std::sync::Arc;
+use std::time::Duration;
 
 pub enum Message {
     Submit,
     ToggleInput,
+    QRLogin,
     LoginSuccess(LoginFlow),
     LoginFailed(LoginError),
 }
@@ -59,6 +64,70 @@ impl LoginModel {
             ActiveInput::Password => &mut self.password_input_state,
         }
     }
+
+    fn qr_login(ctx: &Arc<MailContext>) -> Command<Messages> {
+        let ctx = Arc::clone(ctx);
+        Command::batch([
+            Command::message(Messages::DisplayBackgroundProgress(
+                "Generating QR code ...".to_owned(),
+            )),
+            Command::task(async move {
+                let mut flow = match ctx.new_login_flow().await {
+                    Ok(f) => f,
+                    Err(e) => {
+                        return Command::message(Messages::DisplayError(None, anyhow!(e)));
+                    }
+                };
+                match flow.generate_sign_in_qr_code(true).await {
+                    Ok(qr_content) => {
+                        // Copy to clipboard
+                        let mut ctx = ClipboardContext::new().unwrap();
+                        ctx.set_contents(qr_content.clone()).unwrap();
+
+                        let code = QrCode::new(&qr_content).unwrap();
+                        let ascii_image = code
+                            .render::<unicode::Dense1x2>()
+                            .dark_color(unicode::Dense1x2::Light)
+                            .light_color(unicode::Dense1x2::Dark)
+                            .build();
+                        Command::batch([
+                            Command::Message(Messages::DismissBackgroundProgress),
+                            Command::message(Messages::DisplayInfo(
+                                Some("QR".to_owned()),
+                                format!(
+                                    "Copied to Clipboard\n{qr_content}\n{ascii_image}\n\nWaiting for Host Device confirmation"
+                                ),
+                            )),
+                            Command::task(async move {
+                                let mut err = None;
+                                loop {
+                                    if let Err(e) = flow.check_host_device_confirmation().await {
+                                        err = Some(e);
+                                        break;
+                                    } else if flow.is_awaiting_host_device_confirmation() {
+                                        // No confirmation yet, keep polling
+                                        tokio::time::sleep(Duration::from_secs(1)).await;
+                                    } else {
+                                        break;
+                                    }
+                                }
+                                let msg = if let Some(err) = err {
+                                    Message::LoginFailed(err).into()
+                                } else {
+                                    Message::LoginSuccess(flow).into()
+                                };
+                                Command::batch([
+                                    Command::Message(Messages::DismissPopup),
+                                    Command::message(msg),
+                                ])
+                            }),
+                        ])
+                    }
+                    Err(e) => Command::message(Message::LoginFailed(e).into()),
+                }
+            }),
+        ])
+    }
 }
 
 impl AppStateHandler for LoginModel {
@@ -73,6 +142,7 @@ impl AppStateHandler for LoginModel {
             }
             KeyCode::Enter => Command::message(Message::Submit.into()),
             KeyCode::Tab => Command::message(Message::ToggleInput.into()),
+            KeyCode::Char('q') => Command::message(Message::QRLogin.into()),
             _ => {
                 self.active_text_input_state_mut().handle_event(&event);
                 Command::none()
@@ -120,7 +190,7 @@ impl AppStateHandler for LoginModel {
                             }
                         };
                         let message = if let Err(e) = flow
-                            .login(
+                            .login_with_credentials(
                                 email.clone(),
                                 password.expose_secret().to_owned(),
                                 LoginExtraInfo::default(),
@@ -138,6 +208,7 @@ impl AppStateHandler for LoginModel {
                     }),
                 ])
             }
+            Message::QRLogin => Self::qr_login(ctx),
             Message::LoginSuccess(mut flow) => {
                 if flow.is_awaiting_2fa() {
                     Command::message(Messages::SwitchAppState(TwoFaModel::new(flow).into()))
@@ -204,6 +275,8 @@ impl AppStateHandler for LoginModel {
                 Span::raw("Submit"),
                 Span::styled(" Tab: ", Style::new().bold()),
                 Span::raw("Switch Input"),
+                Span::styled(" Q: ", Style::new().bold()),
+                Span::raw("QR Login"),
             ]),
             area,
         );
@@ -214,7 +287,11 @@ impl AppStateHandler for LoginModel {
     }
 
     fn help_options(&self) -> Vec<(&'static str, &'static str)> {
-        vec![("enter", "Submit"), ("tab", "Switch Input")]
+        vec![
+            ("enter", "Submit"),
+            ("tab", "Switch Input"),
+            ("q", "QR Login"),
+        ]
     }
 }
 

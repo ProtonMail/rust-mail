@@ -12,12 +12,15 @@ use crate::errors::{ActionError, ProtonError, UserContextError, VoidSessionResul
 use crate::mail::state::MailUserContextPtr;
 use crate::{LiveQueryCallback, async_runtime, spawn_async, uniffi_async};
 use futures::TryFutureExt;
+use proton_account_api::login::state::want_qr_confirmation::process_target_device_qr_code;
+use proton_account_uniffi::login::ProcessTargetDeviceQrError;
 use proton_core_api::services::proton::{ProtonAuth, ProtonPayments};
 use proton_mail_common::MailUserContext;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::Attachment;
 use stash::stash::Stash;
 use std::sync::Arc;
+use tracing::error;
 
 use super::datatypes::AttachmentMetadata;
 
@@ -144,6 +147,32 @@ impl MailUserSession {
         })
         .await
         .map_err(UserContextError::from)
+    }
+
+    /// Processes a QR code from a Target Device to initiate a secure session fork.
+    ///
+    /// This function parses the provided QR code, retrieves the current device's session passphrase,
+    /// optionally encrypts it using the encryption key from the QR code, and sends a fork confirmation
+    /// to the Target Device.
+    pub async fn process_target_device_qr_code(
+        &self,
+        qr_code: String,
+    ) -> Result<(), ProcessTargetDeviceQrError> {
+        let ctx = self
+            .ctx()
+            .inspect_err(|err| error!("Failed to get Context: {err:?}"))
+            .map_err(|_| {
+                ProcessTargetDeviceQrError::Other(String::from("Failed to get Context"))
+            })?;
+        let muon_client = ctx.api().clone();
+        let core_context = Arc::clone(ctx.core_context());
+        uniffi_async::<_, ProcessTargetDeviceQrError, _>(async move {
+            process_target_device_qr_code(&qr_code, muon_client, core_context)
+                .await
+                .map_err(ProcessTargetDeviceQrError::from)
+        })
+        .await
+        .into()
     }
 
     /// Provides a way to get the datatypes::User FFI instance.

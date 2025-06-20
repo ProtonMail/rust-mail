@@ -1,6 +1,7 @@
 use datatypes::MigrationData;
 use muon::client::flow::LoginExtraInfo;
 use proton_account_api::login as login_api;
+use proton_account_api::login::state::want_qr_confirmation::ProcessTargetDeviceQrError as RealProcessTargetDeviceQrError;
 use proton_account_api::responses as responses_api;
 use proton_core_api::service::ApiServiceError;
 use std::sync::Arc;
@@ -63,7 +64,7 @@ impl LoginFlow {
         uniffi_async::<_, LoginError, _>(async move {
             let mut guard = flow.lock().await;
             guard
-                .login(email, password, extra_info)
+                .login_with_credentials(email, password, extra_info)
                 .await
                 .map_err(LoginError::from)
         })
@@ -118,10 +119,75 @@ impl LoginFlow {
         .await
         .into()
     }
+
+    /// Generates a QR code for user sign-in, optionally including an encryption key.
+    ///
+    /// This method initiates a code-based authentication flow and constructs a QR code string
+    /// in the format: `version:user_code:encryption_key_base64:client_id`.
+    /// If an encryption key is required, a secure 32-byte key is generated and encoded in Base64.
+    /// The resulting state includes the QR code, user code, and encryption key (if applicable) for further processing.
+    ///
+    /// # Arguments
+    /// * `need_encryption_key` - If `true`, generates a 32-byte encryption key; otherwise, uses an empty default.
+    pub async fn generate_sign_in_qr_code(
+        &self,
+        need_encryption_key: bool,
+    ) -> Result<String, LoginError> {
+        let flow = self.flow.clone();
+        uniffi_async::<_, LoginError, _>(async move {
+            let mut guard = flow.lock().await;
+            guard
+                .generate_sign_in_qr_code(need_encryption_key)
+                .await
+                .map_err(LoginError::from)
+        })
+        .await
+        .into()
+    }
+
+    /// Verifies host device confirmation for QR code login and completes the authentication process.
+    ///
+    /// This method waits for host device confirmation of the QR code login, decodes the payload using
+    /// the provided encryption key, fetches user information, validates the passphrase, and stores user
+    /// data. On success, it constructs a completed authentication state with session details.
+    pub async fn check_host_device_confirmation(&self) -> Result<QrPollingResult, LoginError> {
+        let flow = self.flow.clone();
+        uniffi_async::<_, LoginError, _>(async move {
+            let mut guard = flow.lock().await;
+            guard
+                .check_host_device_confirmation()
+                .await
+                .map_err(LoginError::from)?;
+            if guard.is_awaiting_host_device_confirmation() {
+                Ok(QrPollingResult::StillPolling)
+            } else {
+                Ok(QrPollingResult::Confirmed)
+            }
+        })
+        .await
+        .into()
+    }
+}
+
+#[derive(UniffiEnum)]
+pub enum QrPollingResult {
+    StillPolling,
+    Confirmed,
 }
 
 #[uniffi_export]
 impl LoginFlow {
+    /// Check whether the login flow is waiting for Host Device confirmationo
+    #[must_use]
+    pub fn is_awaiting_host_device_confirmation(&self) -> bool {
+        async_runtime().block_on(async {
+            self.flow
+                .lock()
+                .await
+                .is_awaiting_host_device_confirmation()
+        })
+    }
+
     /// Check whether the login flow has completed.
     #[must_use]
     pub fn is_logged_in(&self) -> bool {
@@ -234,26 +300,20 @@ pub enum LoginError {
     /// Returned if we fail to set up a new address key.
     AddressKeySetup(String),
 
-    /// Returned if the user keyring is invalid.
-    MissingPrimaryKey,
-
-    /// TODO: Document this variant.
-    KeySecretDecryption,
-
-    /// TODO: Document this variant.
-    KeySecretDerivation(String),
-
     /// TODO: Document this variant.
     KeySecretSaltFetch(UserApiServiceError),
 
-    /// TODO: Document this variant.
-    ServerProof(String),
-
-    /// TODO: Document this variant.
-    SrpProof(String),
-
     /// Authentication Store operation failed.
     AuthStore(String),
+
+    /// Error during network call
+    ApiError(String),
+
+    /// Failed to poll the fork for completion
+    WithCodePollFlowFailed(String),
+
+    // Failed to encode QR login payload
+    QRLoginEncoding,
 
     Other(String),
 }
@@ -267,6 +327,9 @@ impl From<login_api::LoginError> for LoginError {
             | login_api::LoginError::ServerProof(..)
             | login_api::LoginError::SrpProof(..)
             | login_api::LoginError::WrongMailboxPassword => LoginError::InvalidCredentials,
+            login_api::LoginError::MissingPrimaryKey
+            |login_api::LoginError::KeySecretDecryption
+            |login_api::LoginError::KeySecretDerivation(_) => LoginError::CantUnlockUserKey,
             login_api::LoginError::FlowLogin(e) => LoginError::FlowLogin(e.into()),
             login_api::LoginError::FlowTotp(e) => LoginError::FlowTotp(e.into()),
             login_api::LoginError::FlowFido(e) => LoginError::FlowFido(e.into()),
@@ -275,11 +338,13 @@ impl From<login_api::LoginError> for LoginError {
             login_api::LoginError::AddressFetch(e) => LoginError::AddressSetup(e.to_string()),
             login_api::LoginError::UserFetch(e) => LoginError::UserFetch(e.into()),
             login_api::LoginError::UserKeySetup(e) => LoginError::UserKeySetup(e),
-            login_api::LoginError::MissingPrimaryKey
-            |login_api::LoginError::KeySecretDecryption
-            |login_api::LoginError::KeySecretDerivation(_) => LoginError::CantUnlockUserKey,
             login_api::LoginError::KeySecretSaltFetch(e) => LoginError::KeySecretSaltFetch(e.into()),
             login_api::LoginError::AuthStore(error) => LoginError::AuthStore(error.to_string()),
+            login_api::LoginError::ApiError(e) => LoginError::ApiError(e.to_string()),
+            login_api::LoginError::WithCodePollFlowFailed(e) => {
+                LoginError::WithCodePollFlowFailed(e.to_string())
+            }
+            login_api::LoginError::QRLoginEncoding => LoginError::QRLoginEncoding,
         }
     }
 }
@@ -316,5 +381,39 @@ impl From<responses_api::DelinquentState> for DelinquentState {
             responses_api::DelinquentState::Delinquent => DelinquentState::Delinquent,
             responses_api::DelinquentState::NotReceived => DelinquentState::NotReceived,
         }
+    }
+}
+
+#[derive(UniffiEnum)]
+pub enum ProcessTargetDeviceQrError {
+    ParseError(String),
+    EncryptionFailed(String),
+    Api(String),
+    PassphraseAcquire(String),
+    Other(String),
+}
+
+impl From<RealProcessTargetDeviceQrError> for ProcessTargetDeviceQrError {
+    fn from(value: RealProcessTargetDeviceQrError) -> Self {
+        match value {
+            RealProcessTargetDeviceQrError::ParseError(err) => {
+                ProcessTargetDeviceQrError::ParseError(err.to_string())
+            }
+            RealProcessTargetDeviceQrError::EncryptionFailed(err) => {
+                ProcessTargetDeviceQrError::EncryptionFailed(err.to_string())
+            }
+            RealProcessTargetDeviceQrError::Api(err) => {
+                ProcessTargetDeviceQrError::Api(err.to_string())
+            }
+            RealProcessTargetDeviceQrError::PassphraseAcquire(err) => {
+                ProcessTargetDeviceQrError::PassphraseAcquire(err.to_string())
+            }
+        }
+    }
+}
+
+impl From<JoinError> for ProcessTargetDeviceQrError {
+    fn from(value: JoinError) -> Self {
+        Self::Other(value.to_string())
     }
 }

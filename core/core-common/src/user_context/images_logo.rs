@@ -127,9 +127,9 @@ impl UserContext {
                     .join(format!("{address}-{opts_hash:#x}.{image_format}"));
 
                 let image_size = image.len();
-                safe_write_async(&path, image)
-                    .await
-                    .with_context(|| format!("Error saving {image_size} bytes to {path:?}"))?;
+                safe_write_async(&path, image).await.with_context(|| {
+                    format!("Error saving {image_size} bytes to {}", path.display())
+                })?;
                 let path = path
                     .into_os_string()
                     .into_string()

@@ -17,7 +17,7 @@ pub struct WantTfa {
 }
 
 impl WantTfa {
-    pub fn new(flow: TfaFlow, data: StateData, pass: Option<String>) -> Self {
+    pub(crate) fn new(flow: TfaFlow, data: StateData, pass: Option<String>) -> Self {
         info!("Login flow wants 2FA");
 
         Self { flow, data, pass }

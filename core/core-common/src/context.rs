@@ -40,6 +40,7 @@ use proton_sqlite3::MigratorError;
 use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use proton_task_service::{BackgroundAwareTaskService, TaskService};
 use proton_vcard::VcardValidationError;
+use secrecy::SecretVec;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
 use std::collections::HashMap;
 use std::future::Future;
@@ -456,6 +457,12 @@ impl Context {
         Ok(sessions.count() > 0)
     }
 
+    /// Extracts the client id from the app version, which usually looks like "platform-app@version", eg.: android-mail@10.9
+    #[must_use]
+    pub fn get_client_id(&self) -> &str {
+        self.api_config.get_client_id()
+    }
+
     /// Watch the API sessions for changes.
     ///
     /// # Returns
@@ -832,6 +839,7 @@ impl Context {
         }
     }
 
+    /// Returns the key used to decrypt database secrets.
     #[tracing::instrument(err, skip(self))]
     pub fn get_encryption_key(&self) -> CoreContextResult<SessionEncryptionKey> {
         let Some(key) = self.load_secret::<SessionEncryptionKey>()? else {
@@ -1089,6 +1097,59 @@ impl Context {
     pub fn get_product_name(&self) -> String {
         self.product_name.clone()
     }
+
+    /// Retrieves the passphrase for the current session by decrypting the session's key secret.
+    pub async fn get_session_passphrase(&self) -> Result<SecretVec<u8>, PassphraseAcquireError> {
+        let session_id = self.get_primary_session_id().await?;
+        let db_key = self.get_encryption_key()?;
+        self.get_session(session_id)
+            .await?
+            .ok_or(PassphraseAcquireError::NoSession)?
+            .key_secret
+            .ok_or(PassphraseAcquireError::NoKeySecret)?
+            .decrypt_to_bytes(&db_key)
+            .map_err(|err| {
+                error!("Failed to decrypt sessions key_secret: {err}");
+                PassphraseAcquireError::KeySecretDecryption
+            })
+    }
+
+    /// Retrieves the ID of the primary session for the primary account.
+    pub async fn get_primary_session_id(&self) -> Result<SessionId, PassphraseAcquireError> {
+        let primary_account = self
+            .get_primary_account()
+            .await?
+            .ok_or(PassphraseAcquireError::NoPrimaryAccount)?;
+        let session_id = self
+            .get_account_sessions(primary_account.remote_id)
+            .await?
+            .first()
+            .ok_or(PassphraseAcquireError::NoSessionId)?
+            .remote_id
+            .clone();
+        Ok(session_id)
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum PassphraseAcquireError {
+    #[error("Error: {0}")]
+    ContextError(#[from] CoreContextError),
+
+    #[error("Could not find logged in primary account")]
+    NoPrimaryAccount,
+
+    #[error("Could not find session id")]
+    NoSessionId,
+
+    #[error("No key_secret for the session")]
+    KeySecretDecryption,
+
+    #[error("Could not find session")]
+    NoSession,
+
+    #[error("No key_secret for the session")]
+    NoKeySecret,
 }
 
 fn get_account_db_path(path: impl AsRef<Path>) -> PathBuf {

@@ -1,9 +1,12 @@
 use crate::login::state::StateData;
 use crate::login::{LoginError, state::State};
+use base64::Engine;
+use base64::prelude::BASE64_STANDARD;
 use futures::TryFutureExt;
 use muon::client::PasswordMode::{One, Two};
-use muon::client::flow::{AuthFlow, LoginExtraInfo, LoginFlow, LoginFlowData};
+use muon::client::flow::{AuthFlow, LoginExtraInfo, LoginFlow, LoginFlowData, WithCodeFlow};
 use muon::client::{Auth, Tokens};
+use proton_core_api::auth::KeySecret;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::observability::metrics::AuthV4RequestMetric;
 use proton_core_api::services::observability::{
@@ -12,29 +15,34 @@ use proton_core_api::services::observability::{
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::SessionParts;
 use proton_core_api::store::{AuthInfo, MbpMode, TfaMode, UserData};
+use proton_crypto_account::proton_crypto::generate_secure_random_bytes;
 use secrecy::{ExposeSecret, SecretString};
 use tracing::info;
+
+use super::want_qr_confirmation::WantQrConfirmation;
 
 /// Represents the initial state of the login flow;
 /// the user must call `login` to proceed.
 pub struct WantLogin {
+    client: muon::Client,
     flow: AuthFlow,
     parts: SessionParts,
     observability: ObservabilityRecorder,
 }
 
 impl WantLogin {
-    pub fn new(flow: AuthFlow, parts: SessionParts) -> Self {
+    pub fn new(client: muon::Client, parts: SessionParts) -> Self {
         info!("Login flow wants login");
-
+        let flow = client.clone().auth();
         Self {
+            client,
             flow,
             parts,
             observability: ObservabilityRecorder::default(),
         }
     }
 
-    pub async fn login(
+    pub async fn login_with_credentials(
         self,
         user: String,
         pass: String,
@@ -45,6 +53,44 @@ impl WantLogin {
         self.try_login(user, pass, info)
             .map_err(|err| (State::LoginRetry, err))
             .await
+    }
+
+    pub async fn generate_sign_in_qr_code(
+        self,
+        need_encryption_key: bool,
+    ) -> Result<State, LoginError> {
+        let flow = match self.client.auth().from_fork().with_code().await {
+            WithCodeFlow::Poll(flow) => flow,
+            WithCodeFlow::Ok(_client, _vec) => {
+                error!("Client is in invalid state, the fork must not be complete yet");
+                return Err(LoginError::InvalidState);
+            }
+            WithCodeFlow::Failed { reason, .. } => {
+                error!("Failed to initiate client forking: {reason}");
+                return Err(LoginError::InvalidState);
+            }
+        };
+
+        let encryption_key = if need_encryption_key {
+            let encryption_key: [u8; 32] = generate_secure_random_bytes();
+            KeySecret::new(encryption_key.to_vec())
+        } else {
+            KeySecret::new(vec![])
+        };
+
+        let qr_code_version = 0;
+        let user_code = flow.code().to_owned();
+        let encryption_key_base64 = BASE64_STANDARD.encode(encryption_key.as_bytes());
+        let client_id = self.parts.config.get_client_id();
+        let qr_code = format!("{qr_code_version}:{user_code}:{encryption_key_base64}:{client_id}");
+        Ok(State::WantQrConfirmation(WantQrConfirmation {
+            user_code,
+            qr_code,
+            encryption_key,
+            parts: self.parts,
+            observability: self.observability,
+            fork_flow: flow,
+        }))
     }
 
     /// Migrate session created by the legacy version of the app

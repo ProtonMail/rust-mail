@@ -36,7 +36,7 @@ async fn main() {
 
     let mut login_flow = LoginFlow::new(session.clone());
     login_flow
-        .login(user_email, user_password, LoginExtraInfo::default())
+        .login_with_credentials(user_email, user_password, LoginExtraInfo::default())
         .await
         .unwrap();
 

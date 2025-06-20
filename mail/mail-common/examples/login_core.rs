@@ -59,7 +59,7 @@ async fn main() {
 
     let user_email = std::env::var("PAPI_USER_EMAIL").unwrap();
     let user_password = std::env::var("PAPI_USER_PASSWORD").unwrap();
-    flow.login(user_email, user_password, LoginExtraInfo::default())
+    flow.login_with_credentials(user_email, user_password, LoginExtraInfo::default())
         .await
         .unwrap();
 

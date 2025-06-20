@@ -28,13 +28,16 @@ pub struct Cli {
     #[arg(long)]
     env: Option<String>,
 
+    #[arg(long)]
+    device: Option<String>,
+
     #[command(subcommand)]
     cmd: Cmd,
 }
 
 impl Cli {
     pub async fn run(proxy: EventLoopProxy<UserEvent>) -> Result<()> {
-        Self::parse().run_cmd(proxy.clone()).await?;
+        Self::parse().run_cmd(proxy.clone()).await.unwrap();
 
         proxy.send_event(UserEvent::Exit)?;
 
@@ -42,7 +45,13 @@ impl Cli {
     }
 
     async fn run_cmd(self, proxy: EventLoopProxy<UserEvent>) -> Result<()> {
-        let dir = std::env::temp_dir();
+        let dir = if let Some(device_dir) = self.device {
+            std::env::temp_dir().join(device_dir)
+        } else {
+            std::env::temp_dir()
+        };
+        std::fs::create_dir_all(&dir)?;
+
         let kch = Arc::new(OnDiskKeyChain::new(&dir)?);
         let hvn = Arc::new(HvNotifier::new(proxy));
         let cfg = build_config(self.app, self.env)?;

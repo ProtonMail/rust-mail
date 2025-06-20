@@ -111,6 +111,16 @@ impl CoreAccount {
         }
     }
 
+    #[must_use]
+    pub fn with_name_or_addr(self, name_or_addr: String) -> Self {
+        Self {
+            name_or_addr,
+
+            // --- preserve ---
+            ..self
+        }
+    }
+
     /// Update the password of the account.
     ///
     /// # Errors
@@ -602,6 +612,7 @@ pub struct InvalidLengthOfSessionKey;
 
 //TODO: This could potentially be reused in other contexts.
 /// Encryption key for encryption of session data.
+/// The key used to decrypt database secrets. It is not the User's passphrase
 #[derive(Clone)]
 pub struct SessionEncryptionKey {
     key: Key<Aes256Gcm>,

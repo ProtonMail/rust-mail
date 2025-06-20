@@ -48,6 +48,7 @@ pub struct ObservabilityManager {
 /// This struct provides a convenient interface for recording metrics, delegating
 /// storage to the global [`ObservabilityManager`]. It uses a reference to the
 /// singleton `MANAGER` for thread-safe operations.
+#[derive(Clone)]
 pub struct ObservabilityRecorder {
     manager: Arc<RwLock<ObservabilityManager>>,
 }
