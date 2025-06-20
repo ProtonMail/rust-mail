@@ -2830,7 +2830,7 @@ impl Conversation {
             };
             debug!("Syncing conversation messages");
 
-            if session.status().await.is_offline() {
+            if session.graceful_status().await.is_offline() {
                 debug!("No connection, skipping sync");
                 return Err(AppError::API(ApiServiceError::NetworkError(
                     "No connection".to_owned(),
