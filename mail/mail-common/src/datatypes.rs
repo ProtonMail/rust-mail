@@ -98,8 +98,8 @@ use proton_mail_api::services::proton::response_data::{
     MessageAttachmentHeaders as ApiMessageAttachmentHeaders,
     MessageAttachmentInfo as ApiMessageAttachmentInfo, MessageButtons as ApiMessageButtons,
     MessageCount as ApiMessageCount, MessageFlags as ApiMessageFlags,
-    MessageRecipient as ApiMessageRecipient, MessageReplyTo as ApiMessageReplyTo,
-    MessageSender as ApiMessageSender, MimeType as ApiMimeType, MobileSetting as ApiMobileSetting,
+    MessageRecipient as ApiMessageRecipient, MessageSender as ApiMessageSender,
+    MimeType as ApiMimeType, MobileSetting as ApiMobileSetting,
     MobileSettings as ApiMobileSettings, NextMessageOnMove as ApiNextMessageOnMove,
     PgpScheme as ApiPgpScheme, PmSignature as ApiPmSignature, ShowImages as ApiShowImages,
     ShowMoved as ApiShowMoved, SpamAction as ApiSpamAction, SwipeAction as ApiSwipeAction,
@@ -1315,45 +1315,6 @@ impl From<&str> for MessageRecipient {
     }
 }
 
-#[derive(Clone, Default, Debug, DbRecord, Eq, PartialEq)]
-pub struct MessageReplyTo {
-    /// Email of the recipient
-    #[DbField]
-    pub address: String,
-
-    /// Display name of the recipient,empty if none.
-    #[DbField]
-    pub name: String,
-
-    #[DbField]
-    pub bimi_selector: Option<String>,
-
-    /// Whether to display the sender image.
-    #[DbField]
-    pub display_sender_image: bool,
-
-    /// Whether the address is a proton address.
-    #[DbField]
-    pub is_proton: bool,
-
-    /// Whether address originated from simple login alias.
-    #[DbField]
-    pub is_simple_login: bool,
-}
-
-impl From<ApiMessageReplyTo> for MessageReplyTo {
-    fn from(value: ApiMessageReplyTo) -> Self {
-        Self {
-            address: value.address,
-            name: value.name,
-            bimi_selector: value.bimi_selector,
-            is_proton: value.is_proton,
-            is_simple_login: value.is_simple_login,
-            display_sender_image: value.display_sender_image,
-        }
-    }
-}
-
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct MessageRecipients {
@@ -1363,6 +1324,19 @@ pub struct MessageRecipients {
 impl From<Vec<MessageRecipient>> for MessageRecipients {
     fn from(value: Vec<MessageRecipient>) -> Self {
         Self { value }
+    }
+}
+
+impl Deref for MessageRecipients {
+    type Target = Vec<MessageRecipient>;
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl DerefMut for MessageRecipients {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
     }
 }
 
@@ -2121,4 +2095,3 @@ impl From<LabelDescription> for LabelType {
 pub use proton_mail_ids::LocalAttachmentId;
 pub use proton_mail_ids::LocalConversationId;
 pub use proton_mail_ids::LocalMessageId;
-use stash::macros::DbRecord;

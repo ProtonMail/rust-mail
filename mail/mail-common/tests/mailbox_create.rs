@@ -107,7 +107,6 @@ async fn test_new_mailbox_sync_messages() {
         to_list: vec![],
         cc_list: vec![],
         bcc_list: vec![],
-        reply_tos: vec![],
         flags: ApiMessageFlags::empty(),
         time: 0,
         size: 0,
@@ -119,7 +118,6 @@ async fn test_new_mailbox_sync_messages() {
         snooze_time: 0,
         num_attachments: 0,
         attachments_metadata: vec![],
-        reply_to: Default::default(),
     }];
 
     params
@@ -215,7 +213,6 @@ async fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
         to_list: vec![],
         cc_list: vec![],
         bcc_list: vec![],
-        reply_tos: vec![],
         flags: ApiMessageFlags::empty(),
         time: 0,
         size: 0,
@@ -227,7 +224,6 @@ async fn test_new_mailbox_always_sync_messages_for_drafts_and_sent() {
         snooze_time: 0,
         num_attachments: 0,
         attachments_metadata: vec![],
-        reply_to: Default::default(),
     }];
 
     params

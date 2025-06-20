@@ -164,7 +164,6 @@ async fn create_attachment_dependencies(
                     to_list: vec![],
                     cc_list: vec![],
                     bcc_list: vec![],
-                    reply_tos: vec![],
                     flags: ApiMessageFlags::empty(),
                     time: 0,
                     size: 0,
@@ -176,7 +175,6 @@ async fn create_attachment_dependencies(
                     snooze_time: 0,
                     num_attachments: 0,
                     attachments_metadata: metadata.clone(),
-                    reply_to: Default::default(),
                 }],
                 tx,
             )

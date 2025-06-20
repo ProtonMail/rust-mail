@@ -292,6 +292,8 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 mime_type: action.mime_type,
                 parsed_headers: Default::default(),
                 attachments,
+                reply_to: Default::default(),
+                reply_tos: vec![],
                 row_id: None,
             };
 

@@ -772,6 +772,10 @@ pub struct MessageBody {
     /// Encrypted message body
     pub body: String,
 
+    pub reply_to: MessageReplyTo,
+
+    pub reply_tos: Vec<MessageReplyTo>,
+
     /// Unparsed RFC822 message headers.
     pub header: String,
 
@@ -1079,10 +1083,6 @@ pub struct MessageMetadata {
     /// TODO: Document this field.
     pub order: u64,
 
-    pub reply_to: MessageReplyTo,
-
-    pub reply_tos: Vec<MessageReplyTo>,
-
     /// TODO: Document this field.
     #[serde(default)]
     pub sender: MessageSender,
@@ -1128,8 +1128,6 @@ impl Default for MessageMetadata {
             label_ids: Vec::default(),
             num_attachments: 0,
             order: 0,
-            reply_to: MessageReplyTo::default(),
-            reply_tos: Vec::default(),
             sender: MessageSender::default(),
             size: 0,
             snooze_time: 0,

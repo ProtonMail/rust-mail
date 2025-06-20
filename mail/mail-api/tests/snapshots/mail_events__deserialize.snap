@@ -265,24 +265,6 @@ MailEvent {
                         ],
                         num_attachments: 2,
                         order: 456,
-                        reply_to: MessageSender {
-                            address: "hello@proton.me",
-                            bimi_selector: None,
-                            display_sender_image: false,
-                            is_proton: false,
-                            is_simple_login: false,
-                            name: "hello",
-                        },
-                        reply_tos: [
-                            MessageSender {
-                                address: "hello@proton.me",
-                                bimi_selector: None,
-                                display_sender_image: false,
-                                is_proton: false,
-                                is_simple_login: false,
-                                name: "hello",
-                            },
-                        ],
                         sender: MessageSender {
                             address: "foo@protonmail.dev",
                             bimi_selector: None,

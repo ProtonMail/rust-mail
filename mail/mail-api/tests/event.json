@@ -90,16 +90,6 @@
         ],
         "LabelIDsRemoved": [
           "2"
-        ],
-        "ReplyTo": {
-          "Address": "hello@proton.me",
-          "Name": "hello"
-        },
-        "ReplyTos": [
-          {
-            "Address": "hello@proton.me",
-            "Name": "hello"
-          }
         ]
       }
     }
