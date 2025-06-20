@@ -114,6 +114,21 @@ in
       else
         null;
 
+    proton-logs-ios = {
+      description = "Shows the rust logs of the iOS app";
+      binary = "bash";
+
+      exec = ''
+        pushd "$DEVENV_ROOT"
+        
+        xcrun simctl spawn "$DEVICE_ID" log stream \
+              --predicate 'subsystem == "ch.protonmail.protonmail" AND category == "[Proton] Rust"' \
+              --style syslog
+
+        popd
+      '';
+    };
+
     proton-run-ios = {
       description = ''Builds the iOS project (but not the uniffi framework) and runs it on the simulator'';
       binary = "bash";

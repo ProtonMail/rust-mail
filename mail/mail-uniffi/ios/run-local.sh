@@ -5,9 +5,6 @@ set -x
 
 # Set scheme and destination
 SCHEME="ProtonMail"
-DEVICE_NAME="iPhone 16 Pro Max"
-DEVICE_ID="7C1E9F4F-38BF-4D70-9DA6-52CFF959C061"
-DEVICE_OS="18.4"
 DEVICE_ARCH="arm64"
 DESTINATION="platform=iOS Simulator,id=$DEVICE_ID,arch=$DEVICE_ARCH"
 BUNDLE_ID="ch.protonmail.protonmail"

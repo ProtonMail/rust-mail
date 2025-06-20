@@ -100,3 +100,100 @@ custom envvar - create a file called `devenv.local.nix` with:
 ```
 
 Having that, use the `proton-build-ios` command to build the iOS stuff.
+
+## Building xcode project & running app in simulator
+
+First, you need to choose which version of iPhone simulator you would like to use.
+You can see all available options by running:
+
+```sh
+xcrun simctl list
+```
+
+Example output:
+
+```
+...
+-- iOS 18.3 --
+    iPhone 16 Pro (918F79B8-70DC-4567-B0C6-6253B0D49C25) (Shutdown) 
+    iPhone 16 Pro Max (7C1E9F4F-38BF-4D70-9DA6-52CFF959C061) (Shutdown) 
+...
+```
+
+Save the UUID of chosen model to the env variable `DEVICE_ID`
+
+`.envrc`:
+```sh
+export DEVICE_ID="7C1E9F4F-38BF-4D70-9DA6-52CFF959C06";
+```
+
+or `devenv.local.nix` if you use Nix:
+```nix
+env.DEVICE_ID = "7C1E9F4F-38BF-4D70-9DA6-52CFF959C061";
+```
+
+**Important**
+
+Make sure that the XCode being selected is 16.3. You can use
+```sh
+sudo xcode-select --switch ..path-to-xcode-16.3..
+```
+
+However keep in mind that you still need `16.2` to build Uniffi.
+
+Then you can build and run the XCodeproj by invoking from the root folder:
+```sh
+./mail/mail-uniffi/ios/run-local.sh
+```
+
+(Or you can use `proton-run-ios` if you use Nix :). It handles any folder, not just root one and switches to the right XCode automatically)
+
+So in the end the process looks like this:
+
+```sh
+sudo xcode-select --switch ..path-to-xcode-16.2..
+./mail/mail-uniffi/ios/build-local.sh
+sudo xcode-select --switch ..path-to-xcode-16.3..
+./mail/mail-uniffi/ios/run-local.sh
+
+```
+
+Since it is bit cumbersome to manage two versions of xcode via terminal,
+`xcodes` tool is recommended (unless you use Nix, in which case you are already covered):
+
+```sh
+brew install xcodesorg/made/xcodes
+```
+
+Then:
+
+```sh
+xcodes select 16.2
+./mail/mail-uniffi/ios/build-local.sh
+xcodes select 16.3
+./mail/mail-uniffi/ios/run-local.sh
+```
+
+
+
+## Accessing logs from the simulator
+
+You can run to get Rust logs:
+
+```sh
+xcrun simctl spawn "$DEVICE_ID" log stream \
+      --predicate 'subsystem == "ch.protonmail.protonmail" \
+      AND category == "[Proton] Rust"' \
+      --style syslog
+```
+
+(Or you can use `proton-logs-ios` if you use Nix :))
+
+
+If you need **all** logs, not just Rust one:
+
+```sh
+xcrun simctl spawn "$DEVICE_ID" log stream \
+      --predicate 'subsystem == "ch.protonmail.protonmail" \
+      --style syslog
+```
