@@ -1,56 +1,102 @@
 use std::sync::Arc;
 
-use proton_account_common::password_validator::MinLengthPasswordValidator;
-use proton_account_common::password_validator::PasswordValidator;
+use proton_account_common::password_validator::FetchValidatorsError as RealFetchValidatorsError;
 use proton_account_common::password_validator::PasswordValidatorResult;
+use proton_account_common::password_validator::PasswordValidatorService as RealPasswordValidatorService;
 use secrecy::ExposeSecret;
 use secrecy::SecretString;
+use thiserror::Error;
+use tokio::sync::Mutex;
 use tokio::task::AbortHandle;
+use tokio::task::JoinError;
 use uniffi_runtime::async_runtime;
+use uniffi_runtime::uniffi_async;
+
+use crate::login::LoginFlow;
 
 #[derive(uniffi::Object)]
-pub struct PasswordValidatorService {}
+pub struct PasswordValidatorService {
+    service: Arc<Mutex<RealPasswordValidatorService>>,
+}
+
+#[derive(Debug, Error, uniffi::Error)]
+pub enum FetchValidatorsError {
+    #[error("API error: {0}")]
+    Api(String),
+
+    #[error("Regex error: {0}")]
+    Regex(String),
+
+    #[error("{0}")]
+    Other(String),
+}
 
 #[uniffi::export]
 impl PasswordValidatorService {
-    #[must_use]
-    #[uniffi::constructor]
-    pub fn new() -> Self {
-        Self {}
+    pub async fn fetch_validators(&self) -> Result<(), FetchValidatorsError> {
+        let service = self.service.clone();
+        uniffi_async::<_, FetchValidatorsError, _>(async move {
+            let mut guard = service.lock().await;
+            guard
+                .fetch_validators()
+                .await
+                .map_err(FetchValidatorsError::from)
+        })
+        .await
     }
 
-    #[must_use]
-    pub fn validate(
+    pub async fn validate(
         &self,
-        password: String,
-        user_id: Option<String>,
+        plain_password: String,
         callback: Box<dyn PasswordValidatorServiceCallback>,
-    ) -> PasswordValidatorServiceHandle {
-        let local_validators = [Box::new(MinLengthPasswordValidator::default())];
-        let password_secret = SecretString::from(password);
-        let handle = async_runtime().spawn(async move {
-            let results: Vec<PasswordValidatorServiceResult> = local_validators
-                .iter()
-                .map(|v| to_service_result(v.validate(&password_secret, &user_id)))
-                .collect();
+    ) -> Result<PasswordValidatorServiceHandle, PasswordValidationError> {
+        let password = SecretString::from(plain_password);
+        let service = self.service.clone();
+        uniffi_async::<_, PasswordValidationError, _>(async move {
+            let guard = service.lock().await;
+            let results = guard.validate(&password);
             let token = results
                 .iter()
-                .all(PasswordValidatorServiceResult::is_success)
-                .then_some(Arc::new(PasswordValidatorServiceToken::new(
-                    password_secret,
-                )));
-            callback.on_results(results, token);
-        });
-
-        PasswordValidatorServiceHandle {
-            handle: handle.abort_handle(),
-        }
+                .all(PasswordValidatorResult::is_success)
+                .then(|| Arc::new(PasswordValidatorServiceToken::new(password)));
+            let handle = async_runtime().spawn(async move {
+                callback.on_results(results.into_iter().map(to_service_result).collect(), token);
+            });
+            Ok(PasswordValidatorServiceHandle {
+                handle: handle.abort_handle(),
+            })
+        })
+        .await
     }
 }
 
-impl Default for PasswordValidatorService {
-    fn default() -> Self {
-        PasswordValidatorService::new()
+#[derive(Debug, Error, uniffi::Error)]
+pub enum PasswordValidationError {
+    #[error("JoinError: {0}")]
+    JoinError(String),
+}
+impl From<JoinError> for PasswordValidationError {
+    fn from(value: JoinError) -> Self {
+        Self::JoinError(value.to_string())
+    }
+}
+
+impl PasswordValidatorService {
+    pub async fn new(login_flow: &LoginFlow) -> Result<Self, String> {
+        let flow = login_flow.inner_flow().clone();
+
+        async_runtime()
+            .spawn(async move {
+                let guard = flow.lock().await;
+                PasswordValidatorService {
+                    service: Arc::new(Mutex::new(RealPasswordValidatorService {
+                        client: guard.api().clone(),
+                        policies: Vec::new(),
+                    })),
+                }
+            })
+            .await
+            .map_err(|err| err.to_string())
     }
 }
 
@@ -65,30 +111,6 @@ pub trait PasswordValidatorServiceCallback: Send + Sync {
         results: Vec<PasswordValidatorServiceResult>,
         token: Option<Arc<PasswordValidatorServiceToken>>,
     );
-}
-
-/// Result of password validation.
-#[derive(uniffi::Record)]
-#[allow(clippy::struct_excessive_bools)]
-pub struct PasswordValidatorServiceResult {
-    /// The message displayed to the user if this validation fails.
-    pub error_message: String,
-    /// If true, the requirement message should be hidden from the user.
-    pub hide_if_valid: bool,
-    /// If true, passing this validation is not required to proceed.
-    pub is_optional: bool,
-    /// If true, then this validation has passed.
-    pub is_valid: bool,
-    /// The message displayed to the user, explaining what is needed to pass the validation.
-    pub requirement_message: String,
-}
-
-impl PasswordValidatorServiceResult {
-    /// If true, the validation was successful.
-    /// Note: a validation may be successful, even if it's not valid, in case it's optional.
-    fn is_success(&self) -> bool {
-        self.is_valid || self.is_optional
-    }
 }
 
 /// Represents a confirmation that a given password was validated.
@@ -131,6 +153,36 @@ fn to_service_result(result: PasswordValidatorResult) -> PasswordValidatorServic
         is_valid: result.is_valid,
         requirement_message: result.requirement_message,
     }
+}
+
+impl From<RealFetchValidatorsError> for FetchValidatorsError {
+    fn from(value: RealFetchValidatorsError) -> Self {
+        match value {
+            RealFetchValidatorsError::Api(e) => FetchValidatorsError::Api(e.to_string()),
+            RealFetchValidatorsError::Regex(e) => FetchValidatorsError::Regex(e),
+        }
+    }
+}
+
+impl From<JoinError> for FetchValidatorsError {
+    fn from(value: JoinError) -> Self {
+        Self::Other(value.to_string())
+    }
+}
+
+#[derive(uniffi::Record)]
+#[allow(clippy::struct_excessive_bools)]
+pub struct PasswordValidatorServiceResult {
+    /// The message displayed to the user if this validation fails.
+    pub error_message: String,
+    /// If true, the requirement message should be hidden from the user.
+    pub hide_if_valid: bool,
+    /// If true, passing this validation is not required to proceed.
+    pub is_optional: bool,
+    /// If true, then this validation has passed.
+    pub is_valid: bool,
+    /// The message displayed to the user, explaining what is needed to pass the validation.
+    pub requirement_message: String,
 }
 
 #[cfg(test)]

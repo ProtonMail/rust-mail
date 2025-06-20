@@ -5340,8 +5340,13 @@ dependencies = [
 name = "proton-account-common"
 version = "0.1.0"
 dependencies = [
+ "muon",
  "proton-account-api",
+ "regex",
  "secrecy",
+ "thiserror 1.0.69",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
