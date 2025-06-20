@@ -181,7 +181,7 @@ impl Contact {
         tether: &Tether,
         provider: &T,
         keys: &UnlockedUserKeys<T>,
-    ) -> Result<Option<VCard>, anyhow::Error> {
+    ) -> anyhow::Result<VCard> {
         let cards = ContactCard::find(
             "WHERE remote_contact_id = ?",
             params![self.remote_id.clone()],
@@ -189,15 +189,15 @@ impl Contact {
         )
         .await?;
 
-        let Some(card) = cards.into_iter().find(|c| {
-            matches!(
-                c.card_type,
-                ContactCardType::Encrypted | ContactCardType::EncryptedAndSigned
-            )
-        }) else {
-            debug!("No card details");
-            return Ok(None);
-        };
+        let card = cards
+            .into_iter()
+            .find(|c| {
+                matches!(
+                    c.card_type,
+                    ContactCardType::Encrypted | ContactCardType::EncryptedAndSigned
+                )
+            })
+            .context("No card details")?;
 
         let card = card
             .decrypt_and_verify_sync(provider, keys, keys)
@@ -210,7 +210,7 @@ impl Contact {
         let card = card
             .try_into()
             .context("Error parsing vCard with proton-vcard")?;
-        Ok(Some(card))
+        Ok(card)
     }
 
     /// Returns the associated emails for a contact.
