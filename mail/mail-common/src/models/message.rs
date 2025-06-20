@@ -1777,7 +1777,7 @@ impl Message {
             return Err(AppError::MessageHasNoRemoteId(self.id()).into());
         };
 
-        if ctx.session().status().await.is_offline() {
+        if ctx.session().graceful_status().await.is_offline() {
             debug!("No connection, skipping sync");
             return Err(MailContextError::Api(ApiServiceError::NetworkError(
                 "No connection".to_owned(),
