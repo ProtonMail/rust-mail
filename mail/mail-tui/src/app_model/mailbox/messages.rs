@@ -18,7 +18,7 @@ use futures::FutureExt;
 use futures::future::try_join_all;
 use itertools::Itertools as _;
 use proton_calendar_api::CalendarAttendeeStatus;
-use proton_calendar_common::{RsvpAnswerStatus, RsvpOccurrence};
+use proton_calendar_common::{RsvpAnswerStatus, RsvpOccurrence, RsvpStatus};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::os::safe_write;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
@@ -555,7 +555,7 @@ impl MessagesState {
                     return Command::None;
                 };
 
-                let RsvpStatus::Success(rsvp) = &state.rsvp else {
+                let Rsvp::Success(rsvp) = &state.rsvp else {
                     return Command::None;
                 };
 
@@ -728,7 +728,7 @@ impl MessagesState {
             }
             MessageMessage::UpdateRsvp(rsvp) => {
                 if let DecryptedMessageStatus::Success(msg) = &mut self.open_message {
-                    msg.rsvp = RsvpStatus::Success(rsvp);
+                    msg.rsvp = Rsvp::Success(rsvp);
                 }
             }
         }
@@ -782,31 +782,31 @@ pub struct DecryptedMessage {
     bcc: String,
     labels: String,
     banners: Vec<MessageBanner>,
-    rsvp: RsvpStatus,
+    rsvp: Rsvp,
 }
 
-enum RsvpStatus {
+enum Rsvp {
     None,
     Loading(task::JoinHandle<Result<Option<RsvpEvent>, String>>),
     Success(Box<RsvpEvent>),
     Error(String),
 }
 
-impl RsvpStatus {
+impl Rsvp {
     fn tick(&mut self) {
-        if let RsvpStatus::Loading(task) = self {
+        if let Rsvp::Loading(task) = self {
             match task.now_or_never() {
                 Some(Ok(Ok(Some(rsvp)))) => {
-                    *self = RsvpStatus::Success(Box::new(rsvp));
+                    *self = Rsvp::Success(Box::new(rsvp));
                 }
                 Some(Ok(Ok(None))) => {
-                    *self = RsvpStatus::None;
+                    *self = Rsvp::None;
                 }
                 Some(Ok(Err(err))) => {
-                    *self = RsvpStatus::Error(err.to_string());
+                    *self = Rsvp::Error(err.to_string());
                 }
                 Some(Err(err)) => {
-                    *self = RsvpStatus::Error(err.to_string());
+                    *self = Rsvp::Error(err.to_string());
                 }
                 None => {
                     // Still loading
@@ -940,11 +940,11 @@ impl DecryptedMessage {
                     }
                 });
 
-                RsvpStatus::Loading(task)
+                Rsvp::Loading(task)
             }
 
-            Ok(None) => RsvpStatus::None,
-            Err(err) => RsvpStatus::Error(err.to_string()),
+            Ok(None) => Rsvp::None,
+            Err(err) => Rsvp::Error(err.to_string()),
         };
 
         Ok(Self {
@@ -1059,25 +1059,29 @@ impl DecryptedMessage {
 
     fn lay_rsvp(&self) -> u16 {
         match &self.rsvp {
-            RsvpStatus::None => 0,
-            RsvpStatus::Loading(_) => 2,
+            Rsvp::None => 0,
+            Rsvp::Loading(_) => 2,
 
-            RsvpStatus::Success(rsvp) => {
-                let status = if rsvp.is_cancelled { 2 } else { 0 };
+            Rsvp::Success(rsvp) => {
+                let status = match rsvp.status {
+                    RsvpStatus::Active => 0,
+                    RsvpStatus::Cancelled => 2,
+                };
+
                 let header = 4;
                 let atts = rsvp.attendees.len();
 
                 status + header + atts
             }
 
-            RsvpStatus::Error(msg) => 1 + msg.lines().count(),
+            Rsvp::Error(msg) => 1 + msg.lines().count(),
         }
         .try_into()
         .unwrap()
     }
 
     fn draw_rsvp(&self, frame: &mut Frame, area: Rect) {
-        if let RsvpStatus::None = &self.rsvp {
+        if let Rsvp::None = &self.rsvp {
             return;
         }
 
@@ -1087,16 +1091,16 @@ impl DecryptedMessage {
         frame.render_widget(Block::new().borders(Borders::TOP), sep_area);
 
         match &self.rsvp {
-            RsvpStatus::None => {
+            Rsvp::None => {
                 unreachable!();
             }
-            RsvpStatus::Loading(_) => {
+            Rsvp::Loading(_) => {
                 Self::draw_rsvp_loading(frame, body_area);
             }
-            RsvpStatus::Success(rsvp) => {
+            Rsvp::Success(rsvp) => {
                 Self::draw_rsvp_success(frame, body_area, rsvp);
             }
-            RsvpStatus::Error(err) => {
+            Rsvp::Error(err) => {
                 Self::draw_rsvp_error(frame, body_area, err);
             }
         }
@@ -1107,19 +1111,17 @@ impl DecryptedMessage {
     }
 
     fn draw_rsvp_success(frame: &mut Frame, area: Rect, rsvp: &RsvpEvent) {
-        let rsvp_status = if rsvp.is_cancelled {
-            vec![
+        let rsvp_status = match rsvp.status {
+            RsvpStatus::Active => vec![],
+            RsvpStatus::Cancelled => vec![
                 Text::raw("! Event was cancelled").fg(Color::Yellow),
                 Text::raw(""),
-            ]
-        } else {
-            vec![]
+            ],
         };
 
-        let fg = if rsvp.is_cancelled {
-            Color::DarkGray
-        } else {
-            Color::White
+        let fg = match rsvp.status {
+            RsvpStatus::Active => Color::White,
+            RsvpStatus::Cancelled => Color::DarkGray,
         };
 
         let rsvp_summary = rsvp.summary.as_deref().unwrap_or("(no title)");

@@ -11,7 +11,7 @@ use proton_calendar_api::{
     CalendarMember, CalendarMemberPassphrase, CalendarPassphrase,
 };
 use proton_calendar_common::{
-    RsvpAttendee, RsvpCache, RsvpCalendar, RsvpEvent, RsvpOccurrence, RsvpOrganizer,
+    RsvpAttendee, RsvpCache, RsvpCalendar, RsvpEvent, RsvpOccurrence, RsvpOrganizer, RsvpStatus,
 };
 use proton_core_api::session::{Config, Session};
 use proton_core_common::test_utils::test_context::{MockApiEnv, TestContext};
@@ -271,7 +271,7 @@ fn expected_event(raw: CalendarEvent) -> RsvpEvent {
             name: "My calendar".into(),
             color: "#273EB2".into(),
         },
-        is_cancelled: false,
+        status: RsvpStatus::Active,
         raw: Box::new(raw),
     }
 }

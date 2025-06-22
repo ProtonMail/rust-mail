@@ -156,7 +156,7 @@ pub struct RsvpEvent {
     pub attendees: Vec<RsvpAttendee>,
     pub organizer: RsvpOrganizer,
     pub calendar: RsvpCalendar,
-    pub is_cancelled: bool,
+    pub status: RsvpStatus,
     pub raw: Box<CalendarEvent>,
 }
 
@@ -230,6 +230,12 @@ pub struct RsvpCalendar {
     pub id: CalendarId,
     pub name: String,
     pub color: CalendarColor,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum RsvpStatus {
+    Active,
+    Cancelled,
 }
 
 #[derive(Clone, Debug, PartialEq)]

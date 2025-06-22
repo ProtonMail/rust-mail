@@ -3,7 +3,7 @@ use indoc::indoc;
 use jiff::Zoned;
 use pretty_assertions as pa;
 use proton_calendar_api::ProtonCalendarMock;
-use proton_calendar_common::{RsvpError, RsvpEventId};
+use proton_calendar_common::{RsvpError, RsvpEventId, RsvpStatus};
 use std::str::FromStr;
 
 /// Make sure we can understand RSVPs that have been auto-imported into the
@@ -165,7 +165,7 @@ async fn cancelled() {
         .unwrap()
         .unwrap();
 
-    assert!(actual.is_cancelled);
+    assert_eq!(RsvpStatus::Cancelled, actual.status);
 }
 
 /// Make sure that asking for a non-imported event doesn't end up as error.

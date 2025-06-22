@@ -1,4 +1,4 @@
-use super::RsvpCache;
+use super::{RsvpCache, RsvpStatus};
 use crate::{
     CalendarBootstrapExt, CalendarEventPayloadExt, RsvpAttendee, RsvpCalendar, RsvpError,
     RsvpEvent, RsvpEventId, RsvpOccurrence, RsvpOrganizer, RsvpResult,
@@ -107,7 +107,7 @@ where
         attendees,
         organizer,
         calendar,
-        is_cancelled: meta.is_cancelled,
+        status: meta.status,
         raw: Box::new(event),
     })
 }
@@ -125,7 +125,7 @@ where
     let mut summary = None;
     let mut location = None;
     let mut description = None;
-    let mut is_cancelled = false;
+    let mut status = RsvpStatus::Active;
 
     // Event data is split between shared events (which contain summary,
     // location and description) and calendar event (which contains the status)
@@ -143,14 +143,16 @@ where
         description =
             description.or_else(|| event.description.map(|desc| desc.value.into_string()));
 
-        is_cancelled |= event.status == Some(ical::Status::Cancelled);
+        if event.status == Some(ical::Status::Cancelled) {
+            status = RsvpStatus::Cancelled;
+        }
     }
 
     Ok(Metadata {
         summary,
         location,
         description,
-        is_cancelled,
+        status,
     })
 }
 
@@ -269,7 +271,7 @@ struct Metadata {
     summary: Option<String>,
     location: Option<String>,
     description: Option<String>,
-    is_cancelled: bool,
+    status: RsvpStatus,
 }
 
 #[cfg(test)]
