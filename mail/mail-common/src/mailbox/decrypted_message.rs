@@ -8,11 +8,9 @@ use crate::datatypes::{Disposition, LocalAttachmentId, MimeType};
 use crate::models::{
     Attachment, AttachmentType, EmbeddedAttachmentInfo, MailSettings, Message, MessageBodyMetadata,
 };
-use crate::rsvp::RsvpEvent;
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use parking_lot::Mutex;
 use proton_calendar_common::{RsvpError, RsvpEventId};
-use proton_crypto_inbox::proton_crypto;
 use proton_mail_api::services::proton::prelude::DirectAttachment;
 use proton_mail_html_transformer::Transformer;
 use proton_mail_html_transformer::transforms::ColorMode;
@@ -25,7 +23,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::fs;
 use tokio::task::JoinHandle;
-use tracing::{debug, info, trace, warn};
+use tracing::{debug, trace, warn};
 
 /// What to do with the body. If in any of the fields `None` is specified it will read the relevant
 /// value from the user setttings. If all are set, the db query will be elided.
@@ -388,7 +386,7 @@ impl DecryptedMessageBody {
     /// Checks if this mail contains an invitation and, if so, returns its
     /// identifier.
     ///
-    /// Use [`Self::fetch_rsvp()`] to fetch the invitation object.
+    /// Use [`Message::fetch_rsvp()`] to fetch the invitation object.
     ///
     /// TODO (NGC-57) implement support for offline-mode
     #[tracing::instrument(skip(self, ctx))]
@@ -442,46 +440,6 @@ impl DecryptedMessageBody {
         }
 
         Ok(None)
-    }
-
-    /// Fetches given invitation from the API.
-    ///
-    /// TODO (NGC-57) implement support for offline-mode
-    #[tracing::instrument(skip(self, ctx, msg, tether))]
-    pub async fn fetch_rsvp(
-        &self,
-        ctx: &MailUserContext,
-        tether: &mut Tether,
-        msg: &Message,
-        rsvp: RsvpEventId,
-    ) -> MailContextResult<Option<RsvpEvent>> {
-        info!("Fetching RSVP");
-
-        let pgp = proton_crypto::new_pgp_provider();
-
-        let keys = ctx
-            .unlocked_address_keys(&pgp, tether, &msg.remote_address_id)
-            .await
-            .map_err(|err| {
-                warn!(?err, "Couldn't unlock address keys");
-                err
-            })?;
-
-        match rsvp.fetch(ctx.api(), &pgp, &keys, ctx.rsvp_cache()).await {
-            Ok(event) => {
-                if let Some(event) = event {
-                    Ok(Some(RsvpEvent::new(event, msg)))
-                } else {
-                    debug!("False-positive, API says no such event exists");
-                    Ok(None)
-                }
-            }
-
-            Err(err) => {
-                warn!(?err, "Couldn't fetch event from the calendar");
-                Err(err.into())
-            }
-        }
     }
 }
 

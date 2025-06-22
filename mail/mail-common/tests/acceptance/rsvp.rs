@@ -238,8 +238,8 @@ async fn fetch_and_answer() {
         .mock_find_calendar_events(EVENT_UID, None, Some(event))
         .await;
 
-    let mut rsvp = msg_body
-        .fetch_rsvp(&user_ctx, &mut tx, &msg, rsvp)
+    let mut rsvp = msg
+        .fetch_rsvp(&user_ctx, &mut tx, &rsvp)
         .await
         .unwrap()
         .unwrap();

@@ -21,11 +21,12 @@ mod send_queries;
 #[cfg(feature = "test-utils")]
 pub mod test_utils;
 
-pub use context::{MailContext, MailContextError, MailContextResult};
-pub use mailbox::{DecryptedAttachment, Mailbox, decrypted_message};
+pub use self::context::{MailContext, MailContextError, MailContextResult};
+pub use self::mailbox::{DecryptedAttachment, Mailbox, decrypted_message};
+pub use self::rsvp::RsvpEvent;
+pub use self::sidebar::{Sidebar, SidebarError, SidebarResult};
+pub use self::user_context::MailUserContext;
 use proton_core_common::models::LabelError;
-pub use sidebar::{Sidebar, SidebarError, SidebarResult};
-pub use user_context::MailUserContext;
 
 // re-exports
 use crate::datatypes::{LocalAttachmentId, LocalMessageId};

@@ -933,7 +933,7 @@ impl DecryptedMessage {
                     let msg = msg.clone();
 
                     async move {
-                        body.fetch_rsvp(&ctx, &mut tether, &msg, rsvp)
+                        msg.fetch_rsvp(&ctx, &mut tether, &rsvp)
                             .await
                             .map_err(|err| format!("Couldn't fetch RSVP: {err}"))
                             .inspect_err(|err| warn!("{err}"))

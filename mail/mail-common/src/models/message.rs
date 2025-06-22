@@ -16,12 +16,13 @@ use crate::actions::{
     AllBottomBarMessageActions, BottomBarActions, GeneralActions, MailActionError,
     MovableSystemFolderAction, filter_responses,
 };
-use crate::models::*;
 use crate::{MailContextError, find_in_query};
+use crate::{RsvpEvent, models::*};
 use futures::try_join;
 use indoc::{formatdoc, indoc};
 use proton_action_queue::action::MetadataBuilder;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
+use proton_calendar_common::RsvpEventId;
 use proton_core_common::utils::MapVec as _;
 use proton_mail_api::services::proton::prelude::DirectAttachment;
 use sqlite_watcher::watcher::TableObserver;
@@ -71,7 +72,7 @@ use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandl
 use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::future::Future;
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("messages")]
@@ -2668,6 +2669,47 @@ impl Message {
                 || *label_id == LabelId::drafts()
                 || *label_id == LabelId::all_drafts()
         })
+    }
+
+    /// Fetches given invitation from the API.
+    ///
+    /// Use [`DecryptedMessageBody::fetch_rsvp()`] to get [`RsvpEventId`].
+    ///
+    /// TODO (NGC-57) implement support for offline-mode
+    #[tracing::instrument(skip(self, ctx, tether))]
+    pub async fn fetch_rsvp(
+        &self,
+        ctx: &MailUserContext,
+        tether: &mut Tether,
+        rsvp: &RsvpEventId,
+    ) -> MailContextResult<Option<RsvpEvent>> {
+        info!("Fetching RSVP");
+
+        let pgp = proton_crypto::new_pgp_provider();
+
+        let keys = ctx
+            .unlocked_address_keys(&pgp, tether, &self.remote_address_id)
+            .await
+            .map_err(|err| {
+                warn!(?err, "Couldn't unlock address keys");
+                err
+            })?;
+
+        match rsvp.fetch(ctx.api(), &pgp, &keys, ctx.rsvp_cache()).await {
+            Ok(event) => {
+                if let Some(event) = event {
+                    Ok(Some(RsvpEvent::new(event, self)))
+                } else {
+                    debug!("False-positive, API says no such event exists");
+                    Ok(None)
+                }
+            }
+
+            Err(err) => {
+                warn!(?err, "Couldn't fetch event from the calendar");
+                Err(err.into())
+            }
+        }
     }
 }
 
