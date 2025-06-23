@@ -1,7 +1,8 @@
 use crate::ApiError;
 use crate::DelinquentState;
 use crate::login::state::State;
-use muon::client::flow::{LoginExtraInfo, LoginFlowData};
+use crate::shared::challenge::{Behavior, ChallengeInfo};
+use muon::client::flow::LoginFlowData;
 use proton_core_api::service::{ApiServiceError, ServiceError};
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::{CoreSession, Session};
@@ -113,9 +114,9 @@ pub struct LoginFlow {
 impl LoginFlow {
     /// Create a new login flow from the beginning.
     #[must_use]
-    pub fn new(session: Session) -> Self {
+    pub fn new(session: Session, challenge_info: ChallengeInfo) -> Self {
         let (client, parts) = session.to_parts();
-        let state = State::new(client, parts);
+        let state = State::new(client, parts, Some(challenge_info));
 
         Self { session, state }
     }
@@ -171,9 +172,9 @@ impl LoginFlow {
         &mut self,
         user: String,
         pass: String,
-        info: LoginExtraInfo,
+        user_behavior: Option<Behavior>,
     ) -> Result<(), LoginError> {
-        self.transition(|s: State| s.login_with_credentials(user, pass, info))
+        self.transition(|s: State| s.login_with_credentials(user, pass, user_behavior))
             .await
             .inspect_err(|_| self.try_recover())
     }
@@ -352,7 +353,7 @@ impl LoginFlow {
 
         match self.take_state() {
             State::LoginRetry => {
-                self.state = State::new(client, parts);
+                self.state = State::new(client, parts, None);
             }
 
             State::TfaRetry(user_id, session_id, pass) => {

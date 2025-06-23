@@ -5,11 +5,12 @@ use crate::login::state::want_login::WantLogin;
 use crate::login::state::want_mbp::WantMbp;
 use crate::login::state::want_tfa::{TfaFlow, WantTfa};
 use crate::prelude::AuthInput;
+use crate::shared::challenge::{Behavior, ChallengeInfo};
 use crate::shared::crypto::{NewAddrKey, NewUserKey, SharedCryptoError};
 use derive_more::{Debug, From};
 use futures::TryFutureExt;
 use itertools::Itertools;
-use muon::client::flow::{LoginExtraInfo, LoginFlowData};
+use muon::client::flow::LoginFlowData;
 use proton_core_api::auth::UserKeySecret;
 use proton_core_api::services::observability::ObservabilityRecorder;
 use proton_core_api::services::proton::{Address, AddressId, ProtonCore, SessionId, User, UserId};
@@ -82,10 +83,12 @@ impl State {
         self,
         user: String,
         pass: String,
-        info: LoginExtraInfo,
+        user_behavior: Option<Behavior>,
     ) -> Result<Self, (Self, LoginError)> {
         if let Self::WantLogin(state) = self {
-            Ok(state.login_with_credentials(user, pass, info).await?)
+            Ok(state
+                .login_with_credentials(user, pass, user_behavior)
+                .await?)
         } else {
             Err((self, LoginError::InvalidState))
         }
@@ -214,8 +217,12 @@ impl State {
 impl State {
     /// Create a `WantLogin` state.
     #[must_use]
-    pub fn new(client: muon::Client, parts: SessionParts) -> Self {
-        Self::want_login(client, parts)
+    pub fn new(
+        client: muon::Client,
+        parts: SessionParts,
+        challenge_info: Option<ChallengeInfo>,
+    ) -> Self {
+        Self::want_login(client, parts, challenge_info)
     }
 
     /// Create a `WantTfa` state from a resumed login flow.
@@ -259,8 +266,12 @@ impl State {
 /// Private entrypoints for creating new states.
 impl State {
     /// Create a `WantLogin` state.
-    fn want_login(client: muon::Client, parts: SessionParts) -> Self {
-        WantLogin::new(client, parts).into()
+    fn want_login(
+        client: muon::Client,
+        parts: SessionParts,
+        challenge_info: Option<ChallengeInfo>,
+    ) -> Self {
+        WantLogin::new(client, parts, challenge_info).into()
     }
 
     /// Create a `WantTfa` state.

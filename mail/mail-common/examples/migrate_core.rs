@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use proton_core_api::auth::UserKeySecret;
-use proton_core_api::services::proton::muon::client::flow::{LoginExtraInfo, LoginFlowData};
+use proton_core_api::services::proton::muon::client::flow::LoginFlowData;
 use proton_core_api::session::{Config, CoreSession as _};
 use proton_core_api::store::UserData;
 use proton_core_common::db::account::SessionEncryptionKey;
@@ -84,7 +84,7 @@ async fn main() {
 
     let mut flow = legacy_context.new_login_flow().await.unwrap();
 
-    flow.login_with_credentials(user_email, user_password, LoginExtraInfo::default())
+    flow.login_with_credentials(user_email, user_password, None)
         .await
         .unwrap();
 

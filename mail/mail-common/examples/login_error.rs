@@ -1,7 +1,7 @@
 #![allow(clippy::print_stdout)]
 use clap::Parser;
 use proton_account_api::login::LoginFlow;
-use proton_core_api::services::proton::muon::client::flow::LoginExtraInfo;
+use proton_account_api::shared::challenge::ChallengeInfo;
 use proton_core_api::session::Session;
 
 #[derive(Parser, Debug)]
@@ -18,9 +18,9 @@ async fn main() {
     let Args { username, password } = Args::parse();
 
     let session = Session::new().await.unwrap();
-    let mut login_flow = LoginFlow::new(session);
+    let mut login_flow = LoginFlow::new(session, ChallengeInfo::default());
     let result = login_flow
-        .login_with_credentials(username, password, LoginExtraInfo::default())
+        .login_with_credentials(username, password, None)
         .await;
 
     match result {

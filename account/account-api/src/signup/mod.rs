@@ -1,10 +1,10 @@
 use crate::countries::{COUNTRIES, Country};
-use crate::prelude::{Address, Behavior, User};
+use crate::prelude::{Address, User};
+use crate::shared::challenge::{Behavior, ChallengeInfo};
 use crate::shared::crypto::SharedCryptoError;
 use crate::signup::state::{Recovery, StateKind, Username};
 use crate::{AccountApi, ApiError};
 use proton_core_api::store::{DynStore, StoreError};
-use proton_core_common::device::DeviceInfo;
 use proton_crypto_account::errors::{AccountCryptoError, SKLError};
 use proton_crypto_account::{proton_crypto::CryptoError, salts::SaltError};
 use state::State;
@@ -101,19 +101,6 @@ impl From<SharedCryptoError> for SignupError {
             SharedCryptoError::SKL(e) => e.into(),
         }
     }
-}
-
-/// Info needed to construct the challenge payload.
-#[derive(Debug, Clone)]
-pub struct ChallengeInfo {
-    /// Product name to be used in a challenge payload (e.g. `mail`).
-    pub product_name: String,
-    /// Device fingerprint.
-    pub device_info: Option<DeviceInfo>,
-    /// User behaviour while entering the recovery method (if applicable).
-    pub recovery_behavior: Option<Behavior>,
-    /// User behaviour while entering the username (if applicable).
-    pub username_behavior: Option<Behavior>,
 }
 
 /// A signup flow that can be used to sign up a user.
