@@ -13,6 +13,12 @@ pub async fn migrate_core_db(stash: &Stash) -> Result<usize, MigratorError> {
     let mut migrations: Vec<Box<dyn Migration>> = embedded_migrations(&DIR);
 
     let mut tether = stash.connection();
+
+    // Create action queue tables first as we can have items that depend on this.
+    // This is safe to call multiple times as the migration code guarantees that
+    // this will only run once per new version.
+    proton_action_queue::db::create_tables(&mut tether).await?;
+
     let migrator = Migrator::new();
     migrator
         .migrate(&mut tether, VERSION_TABLE_NAME, &mut migrations)

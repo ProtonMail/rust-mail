@@ -772,6 +772,10 @@ pub struct MessageBody {
     /// Encrypted message body
     pub body: String,
 
+    pub reply_to: MessageReplyTo,
+
+    pub reply_tos: Vec<MessageReplyTo>,
+
     /// Unparsed RFC822 message headers.
     pub header: String,
 
@@ -1081,10 +1085,6 @@ pub struct MessageMetadata {
 
     /// TODO: Document this field.
     #[serde(default)]
-    pub reply_tos: Vec<MessageReplyTo>,
-
-    /// TODO: Document this field.
-    #[serde(default)]
     pub sender: MessageSender,
 
     /// TODO: Document this field.
@@ -1128,7 +1128,6 @@ impl Default for MessageMetadata {
             label_ids: Vec::default(),
             num_attachments: 0,
             order: 0,
-            reply_tos: Vec::default(),
             sender: MessageSender::default(),
             size: 0,
             snooze_time: 0,
@@ -1195,15 +1194,8 @@ pub struct MessageRecipient {
     pub group: Option<String>,
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-#[serde(rename_all = "PascalCase")]
-pub struct MessageReplyTo {
-    /// Email of the recipient
-    pub address: String,
-    /// Display name of the recipient,empty if none.
-    pub name: String,
-}
+// There is a lot of overlap with this type.
+pub type MessageReplyTo = MessageSender;
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]

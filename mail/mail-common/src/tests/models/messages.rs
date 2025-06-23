@@ -40,7 +40,8 @@ use proton_mail_api::services::proton::response_data::{
     Disposition as ApiDisposition, Message as ApiMessage,
     MessageAttachment as ApiMessageAttachment,
     MessageAttachmentHeaders as ApiMessageAttachmentHeaders, MessageFlags as ApiMessageFlags,
-    MessageSender as ApiMessageSender, MimeType as ApiMimeType,
+    MessageReplyTo as ApiMessageReplyTo, MessageSender as ApiMessageSender,
+    MimeType as ApiMimeType,
 };
 use serde_json::json;
 use stash::orm::Model;
@@ -1693,8 +1694,10 @@ async fn test_create_message_and_body() {
                 "zeta".to_owned(): serde_json::Value::String("gama".to_owned()),
             },
             body: "my_message".to_owned(),
+            reply_to: Default::default(),
             mime_type: ApiMimeType::TextPlain,
             attachments: vec![],
+            reply_tos: vec![],
         },
     };
     let (mut metadata, mut body_metadata, _) = Message::from_api_data(message.clone(), &conn)
@@ -1733,6 +1736,8 @@ async fn test_create_message_and_body() {
         },
         mime_type: message.body.mime_type.into(),
         attachments: vec![],
+        reply_to: Default::default(),
+        reply_tos: vec![],
         row_id: Some(1),
     };
 
@@ -1755,8 +1760,24 @@ async fn test_update_message_and_body() {
                 "zeta".to_owned(): serde_json::Value::String("gama".to_owned()),
             },
             body: "my_message".to_owned(),
+            reply_to: ApiMessageReplyTo {
+                address: "foo@foo.com".to_string(),
+                name: "foo".to_string(),
+                bimi_selector: None,
+                display_sender_image: true,
+                is_proton: true,
+                is_simple_login: true,
+            },
             mime_type: ApiMimeType::TextPlain,
             attachments: vec![],
+            reply_tos: vec![ApiMessageReplyTo {
+                address: "foo@foo.com".to_string(),
+                name: "foo".to_string(),
+                bimi_selector: None,
+                display_sender_image: true,
+                is_proton: true,
+                is_simple_login: true,
+            }],
         },
     };
 
@@ -1793,6 +1814,16 @@ async fn test_update_message_and_body() {
             },
             mime_type: MimeType::TextHtml,
             header: "new header".to_string(),
+            reply_to: MessageReplyTo {
+                address: "bar@bar.com".to_string(),
+                name: "bar".to_string(),
+                ..Default::default()
+            },
+            reply_tos: vec![MessageReplyTo {
+                address: "bar@bar.com".to_string(),
+                name: "bar".to_string(),
+                ..Default::default()
+            }],
             ..body_metadata
         }
         .save(tx)
@@ -1814,8 +1845,18 @@ async fn test_update_message_and_body() {
             headers: message.body.parsed_headers,
         },
         mime_type: MimeType::TextHtml,
-        attachments: vec![],
+        reply_to: MessageReplyTo {
+            address: "bar@bar.com".to_string(),
+            name: "bar".to_string(),
+            ..Default::default()
+        },
+        reply_tos: vec![MessageReplyTo {
+            address: "bar@bar.com".to_string(),
+            name: "bar".to_string(),
+            ..Default::default()
+        }],
         row_id: Some(1),
+        attachments: vec![],
     };
 
     assert_eq!(db_message_body, expected);
@@ -1846,6 +1887,7 @@ async fn test_create_message_and_body_with_attachments() {
                 "zeta".to_owned(): serde_json::Value::String("gama".to_owned()),
             },
             body: "my_message".to_owned(),
+            reply_to: Default::default(),
             mime_type: ApiMimeType::TextPlain,
             attachments: vec![ApiMessageAttachment {
                 id: attachment_id.clone(),
@@ -1864,6 +1906,7 @@ async fn test_create_message_and_body_with_attachments() {
                     image_height: Some("720".to_owned()),
                 },
             }],
+            reply_tos: vec![],
         },
     };
 
@@ -1949,6 +1992,7 @@ async fn message_metadata_update_does_not_purge_inline_attachments() {
                 "zeta".to_owned(): serde_json::Value::String("gama".to_owned()),
             },
             body: "my_message".to_owned(),
+            reply_to: Default::default(),
             mime_type: ApiMimeType::TextPlain,
             attachments: vec![
                 ApiMessageAttachment {
@@ -1986,6 +2030,7 @@ async fn message_metadata_update_does_not_purge_inline_attachments() {
                     },
                 },
             ],
+            reply_tos: vec![],
         },
     };
 
@@ -2831,7 +2876,6 @@ fn test_message_metadata(
         to_list: vec![],
         cc_list: vec![],
         bcc_list: vec![],
-        reply_tos: vec![],
         flags: ApiMessageFlags::AUTO | ApiMessageFlags::PHISHING_AUTO,
         time: 100,
         size: 1024,
@@ -2854,6 +2898,8 @@ fn test_message_with_metadata(
         body: ApiMessageBody {
             attachments: vec![],
             body: "".to_owned(),
+            reply_to: Default::default(),
+            reply_tos: vec![],
             header: "".to_owned(),
             mime_type: Default::default(),
             parsed_headers: Default::default(),
@@ -2877,7 +2923,6 @@ fn test_message_with_metadata(
             to_list: vec![],
             cc_list: vec![],
             bcc_list: vec![],
-            reply_tos: vec![],
             flags: ApiMessageFlags::AUTO | ApiMessageFlags::PHISHING_AUTO,
             time: 100,
             size: 1024,

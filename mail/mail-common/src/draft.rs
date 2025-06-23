@@ -832,7 +832,7 @@ impl Draft {
         address: &Address,
         mail_settings: &MailSettings,
         source_message: &Message,
-        source_message_body: DecryptedMessageBody,
+        mut source_message_body: DecryptedMessageBody,
         use_utc: bool,
         mime_type_override: Option<MimeType>,
     ) -> (Self, Vec<Attachment>) {
@@ -867,7 +867,7 @@ impl Draft {
             );
         };
 
-        let mut attachments = source_message_body.metadata.attachments;
+        let mut attachments = std::mem::take(&mut source_message_body.metadata.attachments);
 
         if reply_mode != ReplyMode::Forward {
             attachments.retain(|attachment| attachment.disposition == Disposition::Inline);
@@ -890,6 +890,7 @@ impl Draft {
             contact_group_resolver,
             &mut draft,
             source_message,
+            &source_message_body.metadata,
             reply_mode,
             address,
         )
