@@ -9,13 +9,15 @@ use proton_vcard::parameters::type_tel::TelType;
 
 use proton_vcard::parameters::type_generic::GenericType;
 use stash::orm::Model as _;
+use stash::stash::Tether;
+use tracing::warn;
 
 use core::fmt;
 use std::fmt::Display;
 
 use proton_crypto::new_pgp_provider;
 
-use crate::datatypes::LocalContactId;
+use crate::datatypes::{AvatarInformation, LocalContactId};
 
 use crate::UserContext;
 use crate::models::Contact;
@@ -30,7 +32,8 @@ use proton_vcard::values::date_and_or_time::MaybeDateAndOrTime;
 pub struct InspectableContactDetails {
     /// Clients want this for consistency
     pub id: LocalContactId,
-    pub extended_name: Option<ExtendedName>,
+    pub avatar_information: AvatarInformation,
+    pub extended_name: ExtendedName,
     /// These are sorted per display order
     pub fields: Vec<ContactField>,
 }
@@ -60,41 +63,82 @@ impl InspectableContactDetails {
     pub async fn get_from_contact(
         ctx: &UserContext,
         contact_id: LocalContactId,
-    ) -> anyhow::Result<Option<Self>> {
-        let mut tether = ctx.stash().connection();
+        tether: &mut Tether,
+    ) -> anyhow::Result<Self> {
+        match Self::get_from_contact_full(ctx, contact_id, tether).await {
+            Ok(details) => Ok(details),
+            Err(e) => {
+                warn!(
+                    "Failed to get contact details from contact: {e:?}. Falling back to basic contact data"
+                );
+                let mut contact = Contact::load(contact_id, tether)
+                    .await?
+                    .context("Contact does not exist")?;
+                contact.emails(tether).await?;
 
-        Contact::sync_with_card(contact_id, ctx.session(), &mut tether).await?;
+                Ok(Self::get_from_contact_basic(contact))
+            }
+        }
+    }
 
-        let contact = Contact::load(contact_id, &tether)
+    fn get_from_contact_basic(contact: Contact) -> Self {
+        let id = contact.id();
+        let emails = contact
+            .contact_emails
+            .into_iter()
+            .map(|em| ContactDetailsEmail {
+                email_type: vec![],
+                email: em.email,
+            })
+            .collect();
+
+        Self {
+            id,
+            avatar_information: AvatarInformation::from(&contact.name),
+            extended_name: ExtendedName {
+                first: Some(contact.name),
+                ..Default::default()
+            },
+            fields: vec![ContactField::Emails(emails)],
+        }
+    }
+
+    async fn get_from_contact_full(
+        ctx: &UserContext,
+        contact_id: LocalContactId,
+        tether: &mut Tether,
+    ) -> anyhow::Result<Self> {
+        Contact::sync_with_card(contact_id, ctx.session(), tether).await?;
+
+        let mut contact = Contact::load(contact_id, tether)
             .await?
             .context("Contact does not exist")?;
+        contact.emails(tether).await?;
 
         let pgp = new_pgp_provider();
-        let unlocked_user_keys = ctx.unlocked_user_keys(&pgp, &tether, ctx.session()).await?;
+        let unlocked_user_keys = ctx.unlocked_user_keys(&pgp, tether, ctx.session()).await?;
 
-        let card = contact
-            .vcard_details(&tether, &pgp, &unlocked_user_keys)
-            .await?
-            .map(|c| Self::from_vcard(contact_id, c));
+        let vcard = contact
+            .vcard_details(tether, &pgp, &unlocked_user_keys)
+            .await?;
 
-        Ok(card)
+        Ok(Self::from_vcard(contact, vcard))
     }
 
     /// Transforms the data in the vCard struct to something suitable for human consumption
-    pub(crate) fn from_vcard(id: LocalContactId, vcard: VCard) -> Self {
-        let mut res = Self {
-            id,
-            fields: vec![],
-            extended_name: None,
-        };
+    pub(crate) fn from_vcard(contact: Contact, vcard: VCard) -> Self {
+        let mut res = Self::get_from_contact_basic(contact);
         let v = &mut res.fields;
 
-        vcard
-            .emails
-            .sorted_extend(v, ContactField::Emails, |email| ContactDetailsEmail {
-                email_type: email.r#type.iter().cloned().map_vec(),
-                email: email.value.value,
-            });
+        match &mut v[0] {
+            ContactField::Emails(emails) => {
+                emails.extend(vcard.emails.to_sorted_iter(|email| ContactDetailsEmail {
+                    email_type: email.r#type.iter().cloned().map_vec(),
+                    email: email.value.value,
+                }));
+            }
+            _ => unreachable!("The first and only field should always be the emails field"),
+        };
 
         vcard
             .telephones
@@ -107,13 +151,17 @@ impl InspectableContactDetails {
             .addresses
             .sorted_extend(v, ContactField::Address, ContactDetailAddress::from);
 
-        res.extended_name = vcard.name.map(|name| ExtendedName {
-            last: name.last.concat_to_string(" "),
-            first: name.first.concat_to_string(" "),
-            additional: name.additional.concat_to_string(" "),
-            prefix: name.prefix.concat_to_string(" "),
-            suffix: name.suffix.concat_to_string(" "),
-        });
+        if let Some(name) = vcard.name {
+            res.extended_name = ExtendedName {
+                last: name.last.concat_to_string(" "),
+                first: name.first.concat_to_string(" "),
+                additional: name.additional.concat_to_string(" "),
+                prefix: name.prefix.concat_to_string(" "),
+                suffix: name.suffix.concat_to_string(" "),
+            };
+        } else {
+            // Nothing bad happens, the name is read from the contact model.
+        }
 
         if let Some(g) = vcard.gender {
             v.push(ContactField::Gender(g.value.into()));
@@ -169,7 +217,7 @@ impl InspectableContactDetails {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ExtendedName {
     pub last: Option<String>,
     pub first: Option<String>,
@@ -356,9 +404,13 @@ pub(crate) mod test {
         let c = r.next().expect("Expected 1 card").unwrap();
         assert!(r.next().is_none(), "Expected exactly 1 card");
         let vcard = VCard::from_ical_contact(c).unwrap();
+        let contact = Contact {
+            local_id: Some(LocalContactId(42)),
+            ..Default::default()
+        };
         Snapshot {
             vcard: raw_vcard,
-            fields: InspectableContactDetails::from_vcard(LocalContactId(42), vcard).fields,
+            fields: InspectableContactDetails::from_vcard(contact, vcard).fields,
         }
     }
 

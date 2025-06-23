@@ -31,6 +31,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- [ET-3285] Add `graceful_status` method and use it when trying to fetch messages for conversation or message body
+- Do not overwrite conversation if its `known` but has no messages
+- [ET-3308] Drafts and schedule send now properly update if edited on another session.
+
+
+## [mail-uniffi-v0.93.6] - 2025-06-18
+
+### Fixes
+
+- [ET-3378] Do not upload deleted attachments
+- [ET-3395] Attachment key packets order
+- [ET-3342] Draft signature update on address change
+
+
+## [mail-uniffi-v0.93.5] - 2025-06-17
+
+### Fixes
+
 - [ET-3367] For labels with count less than page_size force fetch_more while loading `all_items`
 - [ET-2944] Fetch missing dependencies during event loop
 

@@ -21,13 +21,7 @@ pub enum SubscriberError {
     #[error("{0:?}")]
     StashError(#[from] StashError),
     #[error("{0:?}")]
-    Other(anyhow::Error),
-}
-
-impl From<anyhow::Error> for SubscriberError {
-    fn from(value: anyhow::Error) -> Self {
-        Self::Other(value)
-    }
+    Other(#[from] anyhow::Error),
 }
 
 /// Subscriber traits allow anyone to access the events from the event loop.

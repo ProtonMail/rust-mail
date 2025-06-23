@@ -104,7 +104,7 @@ async fn forward_draft_message_creation() {
 fn message_signature_empty_without_address_or_mail_setting_signature() {
     let address = address_with_signature("");
     let mail_settings = MailSettings::default();
-    let signature = get_signature(&address, &mail_settings, MimeType::TextHtml);
+    let signature = get_full_signature(&address, &mail_settings, MimeType::TextHtml);
     assert!(signature.is_empty());
 }
 
@@ -112,7 +112,7 @@ fn message_signature_empty_without_address_or_mail_setting_signature() {
 fn message_signature_with_signature_only() {
     let address = address_with_signature(ADDRESS_SIGNATURE);
     let mail_settings = MailSettings::default();
-    let signature = get_signature(&address, &mail_settings, MimeType::TextHtml);
+    let signature = get_full_signature(&address, &mail_settings, MimeType::TextHtml);
     insta::assert_snapshot!(signature);
 }
 
@@ -121,7 +121,7 @@ fn message_signature_with_mail_settings_signature_only() {
     // mail settings signature should not be rendered as it is deprecated.
     let address = address_with_signature("");
     let mail_settings = mail_settings_with_signature();
-    let signature = get_signature(&address, &mail_settings, MimeType::TextHtml);
+    let signature = get_full_signature(&address, &mail_settings, MimeType::TextHtml);
     insta::assert_snapshot!(signature);
 }
 
@@ -130,7 +130,7 @@ fn message_signature_with_address_and_mail_settings_signature() {
     // mail settings signature should not be rendered as it is deprecated.
     let address = address_with_signature(ADDRESS_SIGNATURE);
     let mail_settings = mail_settings_with_signature();
-    let signature = get_signature(&address, &mail_settings, MimeType::TextHtml);
+    let signature = get_full_signature(&address, &mail_settings, MimeType::TextHtml);
     insta::assert_snapshot!(signature);
 }
 
@@ -139,7 +139,7 @@ fn message_signature_with_all_signatures() {
     // mail settings signature should not be rendered as it is deprecated.
     let address = address_with_signature(ADDRESS_SIGNATURE);
     let mail_settings = mail_settings_with_signature_and_pm_signautre();
-    let signature = get_signature(&address, &mail_settings, MimeType::TextHtml);
+    let signature = get_full_signature(&address, &mail_settings, MimeType::TextHtml);
     insta::assert_snapshot!(signature);
 }
 
@@ -149,7 +149,7 @@ fn html_signature_converted_to_plain_text() {
     let signature = r#"<div style="font-family: Arial, sans-serif; font-size: 14px; color: rgb(0, 0, 0); background-color: rgb(255, 255, 255);">My Default Signature<br></div>"#;
     let address = address_with_signature(signature);
     let mail_settings = mail_settings_with_signature();
-    let signature = get_signature(&address, &mail_settings, MimeType::TextPlain);
+    let signature = get_full_signature(&address, &mail_settings, MimeType::TextPlain);
     insta::assert_snapshot!(signature);
 }
 

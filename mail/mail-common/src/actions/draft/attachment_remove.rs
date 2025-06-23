@@ -90,6 +90,12 @@ impl proton_action_queue::action::Handler for Handler {
         // find message
         let message_id = action.local_message_id(tx).await?;
 
+        tracing::info!(
+            "Removing attachment {} from draft {}",
+            attachment_metadata.local_attachment_id,
+            attachment_metadata.metadata_id
+        );
+
         // remove attachment from message. It is possible the draft does not exist yet, but
         // the attachment metadata is present nonetheless.
         if let Some(message_id) = message_id {
