@@ -5800,6 +5800,7 @@ dependencies = [
  "proton-account-api",
  "proton-action-queue",
  "proton-calendar-common",
+ "proton-canonical-email",
  "proton-core-api",
  "proton-core-common",
  "proton-crypto-account",
