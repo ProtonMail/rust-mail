@@ -1,10 +1,12 @@
 use super::Id;
+use crate::core::datatypes::AvatarInformation;
 use crate::errors::UserContextError;
 use crate::mail::MailUserSession;
 use crate::uniffi_async;
 use proton_core_common::datatypes::contact_details::ContactDetailAddress as RealAddress;
 use proton_core_common::datatypes::contact_details::ContactDetailsEmail as RealContactDetailsEmail;
 use proton_core_common::datatypes::contact_details::ContactField as RealContactField;
+use proton_core_common::datatypes::contact_details::ExtendedName as RealExtendedName;
 use proton_core_common::datatypes::contact_details::Gender as RealGender;
 use proton_core_common::datatypes::contact_details::InspectableContactDetails as RealContactDetails;
 use proton_core_common::datatypes::contact_details::Telephone as RealTelephone;
@@ -19,13 +21,15 @@ use proton_vcard::values::date_and_or_time::MaybeDateAndOrTime;
 pub async fn get_contact_details(
     session: &MailUserSession,
     contact_id: Id,
-) -> Result<Option<ContactDetailCard>, UserContextError> {
+) -> Result<ContactDetailCard, UserContextError> {
     let ctx = session.ctx()?;
 
     uniffi_async(async move {
         let ctx = ctx.user_context();
-        let details = RealContactDetails::get_from_contact(ctx, contact_id.into()).await?;
-        Ok::<_, RealProtonMailError>(details.map(Into::into))
+        let mut tether = ctx.stash().connection();
+        let details =
+            RealContactDetails::get_from_contact(ctx, contact_id.into(), &mut tether).await?;
+        Ok::<_, RealProtonMailError>(details.into())
     })
     .await
     .map_err(UserContextError::from)
@@ -35,6 +39,8 @@ pub async fn get_contact_details(
 #[derive(uniffi::Record)]
 pub struct ContactDetailCard {
     pub id: Id,
+    pub avatar_information: AvatarInformation,
+    pub extended_name: ExtendedName,
     /// These are sorted per display order
     pub fields: Vec<ContactField>,
 }
@@ -43,7 +49,29 @@ impl From<RealContactDetails> for ContactDetailCard {
     fn from(value: RealContactDetails) -> Self {
         Self {
             id: value.id.into(),
+            avatar_information: value.avatar_information.into(),
+            extended_name: value.extended_name.into(),
             fields: value.fields.map_vec(),
+        }
+    }
+}
+
+#[derive(uniffi::Record)]
+pub struct ExtendedName {
+    pub last: Option<String>,
+    pub first: Option<String>,
+    // additional names: These have been requested not to be included since they're not used
+    // in mobile's UI.
+    // pub additional: Option<String>,
+    // pub prefix: Option<String>,
+    // pub suffix: Option<String>,
+}
+
+impl From<RealExtendedName> for ExtendedName {
+    fn from(value: RealExtendedName) -> Self {
+        Self {
+            last: value.last,
+            first: value.first,
         }
     }
 }

@@ -21,8 +21,8 @@ use ratatui::{
     widgets::{Block, Borders, Cell, List, ListItem, Row, Table},
 };
 use stash::stash::Tether;
+use std::fmt::Write as _;
 use std::sync::Arc;
-use std::{fmt::Write as _, mem};
 use tracing::error;
 
 use crate::{
@@ -71,7 +71,7 @@ enum OpenedContactState {
     #[default]
     None,
     Loading(ContactItem),
-    Contact(InspectableContactDetails, ContactItem),
+    Contact(InspectableContactDetails),
     Group(ContactGroupItem),
 }
 
@@ -100,8 +100,8 @@ impl OpenedContactState {
             OpenedContactState::Loading(item) => {
                 Self::draw_contact_item(frame, contact_area, item);
             }
-            OpenedContactState::Contact(details, item) => {
-                Self::draw_contact_details(frame, contact_area, details, item);
+            OpenedContactState::Contact(details) => {
+                Self::draw_contact_details(frame, contact_area, details);
             }
             OpenedContactState::Group(group) => {
                 Self::draw_group(frame, contact_area, group);
@@ -142,12 +142,7 @@ impl OpenedContactState {
         clippy::too_many_lines,
         reason = "It's a straightforward renedering function with no logic and no further fn calls"
     )]
-    fn draw_contact_details(
-        frame: &mut Frame,
-        area: Rect,
-        details: &InspectableContactDetails,
-        item: &ContactItem,
-    ) {
+    fn draw_contact_details(frame: &mut Frame, area: Rect, details: &InspectableContactDetails) {
         let mut rows = vec![];
 
         let mut title_cell_size = 0;
@@ -162,19 +157,14 @@ impl OpenedContactState {
             }
         };
 
-        add_row("Name:", &item.name);
-        for email in &item.emails {
-            add_row("Email:", &email.email);
-        }
-
-        if let Some(ExtendedName {
-            last,
-            first,
-            additional,
-            prefix,
-            suffix,
-        }) = &details.extended_name
         {
+            let ExtendedName {
+                last,
+                first,
+                additional,
+                prefix,
+                suffix,
+            } = &details.extended_name;
             let mut extended_name_repr = String::new();
             if let Some(prefix) = prefix {
                 write!(&mut extended_name_repr, "{prefix} ").unwrap();
@@ -365,12 +355,9 @@ impl ContactsModel {
         let ctx = self.ctx.clone();
         Command::task(async move {
             let ctx = ctx.user_context();
-            match InspectableContactDetails::get_from_contact(ctx, contact_id).await {
-                Ok(Some(details)) => Command::Message(Message::LoadContactDetails(details).into()),
-                Ok(None) => {
-                    tracing::info!("Contact has no details");
-                    Command::None
-                }
+            let mut tether = ctx.stash().connection();
+            match InspectableContactDetails::get_from_contact(ctx, contact_id, &mut tether).await {
+                Ok(details) => Command::Message(Message::LoadContactDetails(details).into()),
                 Err(e) => {
                     tracing::error!("{e:?}");
                     Command::message(e.into())
@@ -547,9 +534,9 @@ impl AppStateHandler for ContactsModel {
                 }
             }
             Message::LoadContactDetails(contacts) => {
-                match mem::take(&mut self.open_contact) {
-                    OpenedContactState::Loading(contact_item) => {
-                        self.open_contact = OpenedContactState::Contact(contacts, contact_item);
+                match self.open_contact {
+                    OpenedContactState::Loading(_) => {
+                        self.open_contact = OpenedContactState::Contact(contacts);
                     }
                     _ => unreachable!(),
                 }

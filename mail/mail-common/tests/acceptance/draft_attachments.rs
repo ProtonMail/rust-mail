@@ -497,6 +497,7 @@ async fn draft_reply_or_forward_creates_new_attachments() {
         &user_ctx,
         existing_message.remote_id.clone().unwrap(),
         false,
+        &mut tether,
     )
     .await
     .unwrap();
@@ -655,6 +656,7 @@ async fn deleting_draft_metadata_cleans_not_uploaded_attachments() {
         &user_ctx,
         existing_message.remote_id.clone().unwrap(),
         false,
+        &mut tether,
     )
     .await
     .unwrap();

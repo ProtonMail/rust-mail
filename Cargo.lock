@@ -433,9 +433,9 @@ checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
 name = "autocfg"
-version = "1.4.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ace50bade8e6234aa140d9a2f552bbee1db4d353f69b8217bc503490fc1a9f26"
+checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "backtrace"
@@ -560,8 +560,9 @@ dependencies = [
 
 [[package]]
 name = "bindgen"
-version = "0.71.1"
-source = "git+https://github.com/rust-lang/rust-bindgen?rev=97ab9152b5edb1fda1ced9bc1604f5e4dc9cfaa9#97ab9152b5edb1fda1ced9bc1604f5e4dc9cfaa9"
+version = "0.72.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f72209734318d0b619a5e0f5129918b848c416e122a3c4ce054e03cb87b726f"
 dependencies = [
  "bitflags 2.9.1",
  "cexpr",
@@ -2096,12 +2097,12 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
 name = "errno"
-version = "0.3.12"
+version = "0.3.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cea14ef9355e3beab063703aa9dab15afd25f0667c341310c1e5274bb1d0da18"
+checksum = "778e2ac28f6c47af28e4907f13ffd1e1ddbd400980a9abd7c8df189bf578a5ad"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -2833,12 +2834,12 @@ dependencies = [
 
 [[package]]
 name = "gopenpgp-sys"
-version = "0.3.0"
+version = "0.3.1"
 source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "3097c324f097ef0caf6787c011b97e14238171dea5e558f62eec1f5b8940040f"
+checksum = "603618c7b7067b8f3bc91029ddfe55c8bee672590bed9061217a8e17cddd6726"
 dependencies = [
  "base64",
- "bindgen 0.71.1",
+ "bindgen 0.72.0",
  "hex",
  "zeroize",
 ]
@@ -5745,9 +5746,9 @@ dependencies = [
 
 [[package]]
 name = "proton-crypto"
-version = "0.5.0"
+version = "0.5.1"
 source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "a13ad931eae67439bc87ecc62b6af37805b8c4484e28511b1e3269a2b16d1fbe"
+checksum = "afb9e00acb482e56050995bba659ddb0a5692fc3cd32c9c348537281e2b31f3d"
 dependencies = [
  "gopenpgp-sys",
  "hex",
@@ -5761,9 +5762,9 @@ dependencies = [
 
 [[package]]
 name = "proton-crypto-account"
-version = "0.11.0"
+version = "0.11.1"
 source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
-checksum = "9c859527688b67281c5dbcb1e24e207a13278b41009c0e4f99f222c37eea000c"
+checksum = "8c0d894bb20ec547a6887da80bbcd3703f3dd5b5cd4125457bedf34ea3676a5f"
 dependencies = [
  "base64",
  "derive_more 2.0.1",
@@ -8941,14 +8942,14 @@ version = "0.26.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "521bc38abb08001b01866da9f51eb7c5d647a19260e00054a8c7fd5f9e57f7a9"
 dependencies = [
- "webpki-roots 1.0.0",
+ "webpki-roots 1.0.1",
 ]
 
 [[package]]
 name = "webpki-roots"
-version = "1.0.0"
+version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2853738d1cc4f2da3a225c18ec6c3721abb31961096e9dbf5ab35fa88b19cfdb"
+checksum = "8782dd5a41a24eed3a4f40b606249b3e236ca61adf1f25ea4d45c73de122b502"
 dependencies = [
  "rustls-pki-types",
 ]
@@ -9188,6 +9189,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e38bc4d79ed67fd075bcc251a1c39b32a1776bbe92e5bef1f0bf1f8c531853b"
 dependencies = [
  "windows-targets 0.52.6",
+]
+
+[[package]]
+name = "windows-sys"
+version = "0.60.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f2f500e4d28234f72040990ec9d39e3a6b950f9f22d3dba18416c35882612bcb"
+dependencies = [
+ "windows-targets 0.53.2",
 ]
 
 [[package]]
@@ -9470,9 +9480,9 @@ dependencies = [
 
 [[package]]
 name = "wiremock"
-version = "0.6.3"
+version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "101681b74cd87b5899e87bcf5a64e83334dd313fcd3053ea72e6dba18928e301"
+checksum = "a2b8b99d4cdbf36b239a9532e31fe4fb8acc38d1897c1761e161550a7dc78e6a"
 dependencies = [
  "assert-json-diff",
  "async-trait",
@@ -9693,18 +9703,18 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.8.25"
+version = "0.8.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1702d9583232ddb9174e01bb7c15a2ab8fb1bc6f227aa1233858c351a3ba0cb"
+checksum = "1039dd0d3c310cf05de012d8a39ff557cb0d23087fd44cad61df08fc31907a2f"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.8.25"
+version = "0.8.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28a6e20d751156648aa063f3800b706ee209a32c0b4d9f24be3d980b01be55ef"
+checksum = "9ecf5b4cc5364572d7f4c329661bcc82724222973f2cab6f050a4e5c22f75181"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -9833,3 +9843,8 @@ dependencies = [
  "cc",
  "pkg-config",
 ]
+
+[[patch.unused]]
+name = "bindgen"
+version = "0.71.1"
+source = "git+https://github.com/rust-lang/rust-bindgen?rev=97ab9152b5edb1fda1ced9bc1604f5e4dc9cfaa9#97ab9152b5edb1fda1ced9bc1604f5e4dc9cfaa9"

@@ -636,9 +636,14 @@ async fn create_draft_reply_with_override_impl(
     ctx.catch_all().await;
 
     // Get the message body - required to reply to draft.
-    Message::force_sync_message_and_body(&user_ctx, existing_message.remote_id.unwrap(), false)
-        .await
-        .unwrap();
+    Message::force_sync_message_and_body(
+        &user_ctx,
+        existing_message.remote_id.unwrap(),
+        false,
+        &mut tether,
+    )
+    .await
+    .unwrap();
 
     tether
         .tx::<_, _, StashError>(async |tx| {
@@ -1255,9 +1260,14 @@ async fn prepare_draft_reply_attach_public_key(
     ctx.catch_all().await;
 
     // Get the message body - required to reply to draft.
-    Message::force_sync_message_and_body(&user_ctx, existing_message.remote_id.unwrap(), false)
-        .await
-        .unwrap();
+    Message::force_sync_message_and_body(
+        &user_ctx,
+        existing_message.remote_id.unwrap(),
+        false,
+        &mut tether,
+    )
+    .await
+    .unwrap();
 
     tether
         .tx::<_, _, StashError>(async |tx| {

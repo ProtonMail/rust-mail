@@ -99,7 +99,7 @@ pub(super) async fn patch_draft_with_reply_mode(
 ///
 /// `mime_type` is passed in explicitly since it can be overridden when reply to html content
 /// for instance.
-pub(super) fn get_signature(
+pub(super) fn get_full_signature(
     address: &Address,
     mail_settings: &MailSettings,
     mime_type: MimeType,
@@ -109,18 +109,7 @@ pub(super) fn get_signature(
     } else {
         "\n"
     };
-    let mut signature = if mime_type == MimeType::TextPlain {
-        // convert signature from html to text. All our signatures are generated
-        // on and are stored as web snippets.
-        Transformer::new(&address.signature)
-            .to_plain_text(Html2TextOptions {
-                link_foot_notes: false,
-                ..Default::default()
-            })
-            .unwrap_or(address.signature.clone())
-    } else {
-        address.signature.clone()
-    };
+    let mut signature = get_address_signature(address, mime_type);
 
     if mail_settings.pm_signature != PmSignature::Disabled {
         signature.push_str(line_break);
@@ -137,6 +126,21 @@ pub(super) fn get_signature(
     }
 
     signature
+}
+
+pub(super) fn get_address_signature(address: &Address, mime_type: MimeType) -> String {
+    if mime_type == MimeType::TextPlain {
+        // convert signature from html to text. All our signatures are generated
+        // on and are stored as web snippets.
+        Transformer::new(&address.signature)
+            .to_plain_text(Html2TextOptions {
+                link_foot_notes: false,
+                ..Default::default()
+            })
+            .unwrap_or(address.signature.clone())
+    } else {
+        address.signature.clone()
+    }
 }
 
 pub(crate) fn recipient_from_message_sender(
@@ -521,8 +525,11 @@ impl DraftAddressChangeRequest {
             }
         };
 
-        let new_signature = get_signature(&address, &mail_settings, self.mime_type);
-        let old_signature = get_signature(&old_address, &mail_settings, self.mime_type);
+        // We only want to replace the address signature, not the whole setup with spacing
+        // and the extra spacing and optional "Sent from ProtonMail".
+        // This also more resilient to body changes after editing.
+        let new_signature = get_address_signature(&address, self.mime_type);
+        let old_signature = get_address_signature(&old_address, self.mime_type);
 
         Ok(Some(DraftAddressChangeOutput {
             old_signature,

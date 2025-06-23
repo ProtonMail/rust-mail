@@ -1,5 +1,6 @@
 use super::drafts_common::{self, draft_message};
 use chrono::{Days, Local, Months, NaiveDate, NaiveDateTime, NaiveTime, TimeZone, Utc};
+use indoc::formatdoc;
 use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
 use proton_core_api::consts::{CoreBundle, Mail};
 use proton_core_api::services::proton::common::ApiErrorInfo;
@@ -1142,6 +1143,109 @@ async fn message_sent_from_another_session_should_move_draft_to_sent_folder() {
     assert!(draft_message.label_ids.contains(&LabelId::all_mail()));
     assert!(draft_message.label_ids.contains(&LabelId::sent()));
     assert!(!draft_message.is_draft());
+}
+
+#[tokio::test]
+async fn message_sent_from_another_session_should_refetch_message() {
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let mut params = drafts_common::draft_test_params();
+
+    let mut message1 = draft_message();
+
+    // Remove the signature and make message plain so that message body is not contaminated
+    message1.body.mime_type = MimeType::TextPlain.into();
+    params.addresses[0].signature = String::new();
+
+    let mut message2 = message1.clone();
+    message2.body.body = formatdoc! {
+"-----BEGIN PGP MESSAGE-----
+
+wV4DGS71hsmM2EQSAQdAQbrUEnSKP+ePivt6gEVpZKyVL7nvyVNgMkxzpXEC01Ew
+T+WzP5pNYZyfpiIiOhpAXLxxCZXh8ybiPNlPknYEUhPPZ/5m6cnEPT8uNXvi21kB
+0sBjASJB8qaKq6/6ccjFBB8yH0FFgebo+9J2eaZmGtxDznz/LKajWa6HOr/LDjYv
+VNCSfn80Zg1Zp+E0cVjbVvgiyy+oNLqy8DqvDFOIhm6QoxSBSW9U0nek0YA3QdkJ
+ItmA8iKGTdQL5GXUC5QrKbD634mZQlogYWOLdrdhDjQZ6QjPzHjcEKxGDTCuEAsW
+pK0Grd8zcJY/t8kZmy4Owm1cFia7u/8zAmMDgL0yMCKRwm+5Hpeg9RghFHIIabY7
+M+PK763FJHYgYm3oeXPv+VayrM8lkwLiiSwaxHXtzh2HhR5k0nhjgoozQuMoupUz
+1gPNzG+CWKxgFyzhvkIUeHb17IEe4VtGjInWrqLrAI7MY/Xg5cEvIvTWGIj9wCfU
+1hzGEWHV
+=IFmt
+-----END PGP MESSAGE-----"};
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_create_draft_no_validation(message1.clone()).await;
+    ctx.mock_get_message_with_expected(&message2.metadata.id, message2.clone(), 1)
+        .await;
+    ctx.catch_all().await;
+
+    // Add some other label ids to this message to make sure they are skipped.
+    let user_ctx = ctx.mail_user_context().await;
+    let tether = user_ctx.user_stash().connection();
+
+    // Create draft.
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    draft.set_mime_type(MimeType::TextPlain);
+    *draft.body_mut() = String::from("Nobody expects");
+    draft
+        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
+
+    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+
+    let body = Message::message_body(&user_ctx, draft_message_id)
+        .await
+        .unwrap();
+    assert_eq!(body.body, "Nobody expects");
+
+    // Execute action.
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    // Simulate event loop update
+    let mut sent_message = message1.clone();
+    sent_message.metadata.label_ids.clear();
+    sent_message.metadata.label_ids.push(LabelId::sent());
+    sent_message.metadata.label_ids.push(LabelId::all_mail());
+    sent_message.metadata.flags = MessageFlags::SENT;
+    user_ctx
+        .apply_event(
+            MailEvent {
+                event_id: EventId::from("My Event ID"),
+                labels: None,
+                conversation_counts: None,
+                conversations: None,
+                incoming_defaults: None,
+                mail_settings: None,
+                message_counts: None,
+                messages: Some(vec![MessageEvent {
+                    id: message1.metadata.id.clone(),
+                    action: Action::Update,
+                    message: Some(sent_message.metadata),
+                }]),
+                refresh: 0,
+                has_more: false,
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+
+    // Load the draft.
+    let draft_message = Message::load(draft_message_id, &tether)
+        .await
+        .unwrap()
+        .expect("failed to load message");
+    assert_eq!(draft_message.remote_id, Some(message1.metadata.id));
+
+    let body = Message::message_body(&user_ctx, draft_message_id)
+        .await
+        .unwrap();
+    assert_eq!(body.body, "Nobody expects the spanish inquisition");
 }
 
 async fn send_fails_if_recipient_is_not_valid_impl(

@@ -35,6 +35,7 @@ END:VCARD
 ---------------------------
 
 Sorted fields:
+Emails([])
 Phones([Telephone { number: "652522142", tel_types: [] }, Telephone { number: "blah", tel_types: [String("other")] }])
 Address([ContactDetailAddress { street: Some("street"), city: Some("city"), region: Some("region"), postal_code: Some("postal"), country: Some("country"), addr_type: [] }, ContactDetailAddress { street: Some("aa"), city: Some("mep"), region: Some(""), postal_code: Some(""), country: Some(""), addr_type: [] }, ContactDetailAddress { street: Some(""), city: Some(""), region: Some("AAAAAAAAAAAAA"), postal_code: Some(""), country: Some(""), addr_type: [Work] }, ContactDetailAddress { street: Some(" "), city: Some(""), region: Some(""), postal_code: Some(""), country: Some(""), addr_type: [Work] }, ContactDetailAddress { street: Some(""), city: Some(""), region: Some(" "), postal_code: Some(""), country: Some(""), addr_type: [String("other")] }])
 Birthday(DateAndOrTime(DateAndOrTimeValue(DateTimeValue { year: Some(2025), month: Some(5), day: Some(27), hour: None, minute: None, second: None, zone: None })))

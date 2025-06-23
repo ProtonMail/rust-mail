@@ -2567,7 +2567,7 @@ impl Conversation {
             };
             debug!("Syncing conversation messages");
 
-            if session.status().await.is_offline() {
+            if session.graceful_status().await.is_offline() {
                 debug!("No connection, skipping sync");
                 return Err(AppError::API(ApiServiceError::NetworkError(
                     "No connection".to_owned(),
@@ -2594,11 +2594,25 @@ impl Conversation {
                         e
                     })?;
 
-                conversation.has_messages = true;
-                conversation.save(tx).await.map_err(|e| {
-                    error!("Failed to write conversation: {e:?}");
-                    e
-                })?;
+                if conversation.is_known {
+                    conversation.has_messages = true;
+                    conversation.save(tx).await.map_err(|e| {
+                        error!("Failed to write conversation: {e:?}");
+                        e
+                    })?;
+                } else {
+                    let mut new_conversation: Conversation =
+                        conversation_response.conversation.into();
+
+                    new_conversation.local_id = conversation.local_id;
+                    new_conversation.row_id = conversation.row_id;
+                    new_conversation.has_messages = true;
+
+                    new_conversation.save(tx).await.map_err(|e| {
+                        error!("Failed to write conversation: {e:?}");
+                        e
+                    })?;
+                }
 
                 Ok(())
             })
