@@ -107,7 +107,6 @@ in
 
       exec = ''
         xcodes install 16.3
-        xcodes install 16.2
       '';
     };
 
