@@ -59,7 +59,7 @@ in
     ++ lib.optionals pkgs.stdenv.isDarwin (
       with pkgs;
       [
-        darwin.xcode_16_3 # For building the app
+        xcodes # Selector of the xcode version
         findutils
         libiconv
       ]
@@ -101,18 +101,15 @@ in
   };
 
   scripts = {
-    xcode =
-      if pkgs.stdenv.isDarwin then
-        {
-          description = "Opens XCode";
-          binary = "bash";
+    proton-install-xcode = {
+      description = "Installs Xcode.";
+      binary = "bash";
 
-          exec = ''
-            open -n "${pkgs.darwin.xcode_16_3}"
-          '';
-        }
-      else
-        null;
+      exec = ''
+        xcodes install 16.3
+        xcodes install 16.2
+      '';
+    };
 
     proton-logs-ios = {
       description = "Shows the rust logs of the iOS app";
@@ -135,8 +132,7 @@ in
 
       exec = ''
         pushd "$DEVENV_ROOT"
-        # Make sure we are using 16.3 to build the framework.
-        sudo xcode-select --switch "${pkgs.darwin.xcode_16_3}/Contents/Developer"
+
         ./mail/mail-uniffi/ios/run-local.sh
         
         popd
@@ -149,8 +145,6 @@ in
       exec = ''
         pushd "$DEVENV_ROOT"
 
-        # Make sure we are using 16.2 to build the framework.
-        sudo xcode-select --switch "${pkgs.darwin.xcode_16_2}/Contents/Developer"
         ${filterPkg "libiconv"} ./mail/mail-uniffi/ios/build-local.sh
         
         popd

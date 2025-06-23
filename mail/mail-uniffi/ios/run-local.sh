@@ -9,6 +9,8 @@ DEVICE_ARCH="arm64"
 DESTINATION="platform=iOS Simulator,id=$DEVICE_ID,arch=$DEVICE_ARCH"
 BUNDLE_ID="ch.protonmail.protonmail"
 
+# While our Rust build process requires 16.2, iOS project requires 16.3.
+xcodes select 16.3
 
 xcrun xcodebuild \
         -scheme "$SCHEME" \

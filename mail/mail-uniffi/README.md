@@ -59,12 +59,24 @@ See [this confluence page for details](https://confluence.protontech.ch/display/
 
 ### iOS
 
+In order to build iOS app you need two versions of XCode at the same time.
+To make the process easier, you should use `xcodes` cli tool:
+
+```sh
+brew install xcodesorg/made/xcodes
+
+xcodes install 16.2
+xcodes install 16.3
+```
+
 Use the build script as below and define the location of the checked out iOS
 application:
 
 ```bash
 IOS_ROOT_REPO=${PATH_TO_REPO} ./proton-mail-uniffi/ios/build-local.sh
 ```
+
+(NOTE: build-local.sh invokes `xcodes select` which requires sudo - for the sake of switching XCode version).
 
 ## Creating a new release
 
