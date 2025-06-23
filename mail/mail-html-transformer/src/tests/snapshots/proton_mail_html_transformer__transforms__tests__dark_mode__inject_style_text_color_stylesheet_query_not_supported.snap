@@ -11,7 +11,7 @@ expression: html.to_string()
       background-color: #fff !important;
     }
     </style>
-  <style style="text/css">/* <dark_css> */</style><style style="text/css">[data-protonmail-message] .main {
+  <style type="text/css">/* <dark_css> */</style><style type="text/css">[data-protonmail-message] .main {
 color: #fff !important
  }html[data-protonmail-message] {
 background-color: #191927 !important

@@ -46,7 +46,10 @@ pub async fn handle_message_events(
                 // don't have conflict resolution strategies in place
                 // 3. It _was_ a draft, we have it open, now it has been sent: We might have
                 // missed updates, let's do a full update.
+                // 4. If it's `Action::Update` we need to update the body (except of course if the
+                //    draft is open)
 
+                let mut is_stale_draft = false;
                 if DraftMetadata::find_by_message_with_remote_id(message.id.clone(), tx)
                     .await?
                     .is_some()
@@ -72,18 +75,25 @@ pub async fn handle_message_events(
                         continue;
                     }
 
-                    tracing::info!(
+                    // Case 3.
+                    // We delete the local message body so that it gets re-requested
+                    // whenever it gets open again. This is because we're skipping updates.
+                    // Since we're skipping previous `Action::Update`s, this could be just an
+                    // `Action::UpdateFlags` and we would have a stale body.
+                    tracing::debug!(
                         "Message {} has draft metadata but was already sent, update will be allowed",
                         message.id
                     );
 
+                    is_stale_draft = true;
+                }
+
+                // Case 4.
+                if message_event.action == Action::Update || is_stale_draft {
                     if let Some(local_id) =
                         Message::remote_id_counterpart(message.id.clone(), tx).await?
                     {
-                        // Case 3.
-                        // We delete the local message body so that it gets re-requested
-                        // whenever it gets open again. This is because we're skipping updates.
-                        Message::delete_message_body(local_id, tx).await?;
+                        _ = Message::delete_message_body(local_id, tx).await;
                     }
                 }
 

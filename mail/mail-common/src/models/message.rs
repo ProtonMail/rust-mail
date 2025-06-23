@@ -36,9 +36,8 @@ use crate::actions::{
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, Disposition, EncryptedMessageBody, ExclusiveLocation,
-    LocalMessageId, MessageFlags, MessageLabelsCount, MessageRecipients, MessageReplyTos,
-    MessageSender, MimeType, MobileActions, ParsedHeaders, ReadFilter, SystemLabelId,
-    theme::MailTheme,
+    LocalMessageId, MessageFlags, MessageLabelsCount, MessageRecipients, MessageSender, MimeType,
+    MobileActions, ParsedHeaders, ReadFilter, SystemLabelId, theme::MailTheme,
 };
 use crate::decrypted_message::ThemeOpts;
 use crate::mailbox::decrypted_message::DecryptedMessageBody;
@@ -57,6 +56,7 @@ use proton_crypto_inbox::proton_crypto;
 use proton_mail_api::MAX_PAGE_ELEMENT_COUNT;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::{ConversationId, ExternalId, MessageId};
+use proton_mail_api::services::proton::prelude::MessageReplyTo as ApiMessageReplyTo;
 use proton_mail_api::services::proton::requests::GetMessagesOptions;
 use proton_mail_api::services::proton::response_data::{
     Message as ApiMessage, MessageBody as ApiMessageBody, MessageMetadata as ApiMessageMetadata,
@@ -65,7 +65,7 @@ use proton_mail_api::services::proton::response_data::{
 use proton_mail_api::services::proton::responses::GetMessagesResponse;
 use proton_mail_ids::{LocalAttachmentId, LocalConversationId};
 use stash::exports::ToSql;
-use stash::macros::Model;
+use stash::macros::{DbRecord, Model};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
@@ -145,9 +145,6 @@ pub struct Message {
 
     #[DbField]
     pub display_order: u64,
-
-    #[DbField]
-    pub reply_tos: MessageReplyTos,
 
     #[DbField]
     pub sender: MessageSender,
@@ -1110,11 +1107,6 @@ impl Message {
             .map(CustomLabel::from)
             .collect();
 
-        // TODO: The message body might need to be loaded in here, but it's not
-        // TODO: totally clear how best to do that seeing as the cache feature
-        // TODO: requires some additional parameters such as the path. So this can
-        // TODO: currently be done as a subsequent manual step.
-
         Ok(())
     }
 
@@ -1360,7 +1352,7 @@ impl Message {
             return Err(AppError::MessageMissing(message_id));
         };
 
-        let reply_actions = if message.reply_tos.value.len() > 1 {
+        let reply_actions = if message.to_list.len() + message.cc_list.len() > 1 {
             ReplyAction::all()
         } else {
             ReplyAction::single_address()
@@ -1866,9 +1858,6 @@ impl Message {
             exclusive_location,
             label_ids: value.label_ids,
             num_attachments: value.num_attachments,
-            reply_tos: MessageReplyTos {
-                value: value.reply_tos.map_vec(),
-            },
             sender: value.sender.into(),
             size: value.size,
             snooze_time: value.snooze_time.into(),
@@ -2833,7 +2822,6 @@ impl Default for Message {
             exclusive_location: Default::default(),
             num_attachments: Default::default(),
             display_order: Default::default(),
-            reply_tos: Default::default(),
             sender: Default::default(),
             size: Default::default(),
             snooze_time: UnixTimestamp::new(0),
@@ -2875,6 +2863,10 @@ pub struct MessageBodyMetadata {
     pub parsed_headers: ParsedHeaders,
 
     pub attachments: Vec<Attachment>,
+
+    pub reply_to: MessageReplyTo,
+
+    pub reply_tos: Vec<MessageReplyTo>,
 
     #[RowIdField]
     pub row_id: Option<u64>,
@@ -2930,6 +2922,10 @@ impl MessageBodyMetadata {
             .await
             .inspect_err(|e| error!("Failed to load attachments for body metadata: {e:?}"))?;
 
+        self.reply_to = MessageReplyTo::load_reply_to(self.id(), tether).await?;
+
+        self.reply_tos = MessageReplyTo::load_reply_tos(self.id(), tether).await?;
+
         Ok(())
     }
 
@@ -2978,6 +2974,11 @@ impl MessageBodyMetadata {
                     params![attachment.id(), self.local_message_id],
                 )
                 .await?;
+        }
+
+        self.reply_to.store_reply_to(self.id(), bond).await?;
+        for reply_to in &self.reply_tos {
+            reply_to.store_reply_tos(self.id(), bond).await?;
         }
         Ok(())
     }
@@ -3033,6 +3034,8 @@ impl MessageBodyMetadata {
                 parsed_headers: ParsedHeaders {
                     headers: api_message_body.parsed_headers,
                 },
+                reply_to: api_message_body.reply_to.into(),
+                reply_tos: api_message_body.reply_tos.map_vec(),
                 attachments,
                 row_id: None,
             },
@@ -3233,5 +3236,130 @@ impl TableObserver for MessageCounterWatcher {
                 tracing::error!("Failed to send notification for MessageCounterWatcher: {e:?}")
             })
             .ok();
+    }
+}
+
+// Note: This is not a model as this represents a link table that links data together.
+// We also want to use a more efficient sql query to update than the one provided by the
+// Model marcro.
+#[derive(Clone, Default, Debug, DbRecord, Eq, PartialEq)]
+pub struct MessageReplyTo {
+    /// Email of the recipient
+    #[DbField]
+    pub address: String,
+
+    /// Display name of the recipient,empty if none.
+    #[DbField]
+    pub name: String,
+
+    #[DbField]
+    pub bimi_selector: Option<String>,
+
+    /// Whether to display the sender image.
+    #[DbField]
+    pub display_sender_image: bool,
+
+    /// Whether the address is a proton address.
+    #[DbField]
+    pub is_proton: bool,
+
+    /// Whether address originated from simple login alias.
+    #[DbField]
+    pub is_simple_login: bool,
+}
+
+impl MessageReplyTo {
+    async fn store_reply_to(
+        &self,
+        message_id: LocalMessageId,
+        bond: &Bond<'_>,
+    ) -> Result<usize, StashError> {
+        self.store_impl(message_id, "message_reply_to", bond).await
+    }
+
+    async fn store_reply_tos(
+        &self,
+        message_id: LocalMessageId,
+        bond: &Bond<'_>,
+    ) -> Result<usize, StashError> {
+        self.store_impl(message_id, "message_reply_tos", bond).await
+    }
+    async fn store_impl(
+        &self,
+        message_id: LocalMessageId,
+        table_name: &str,
+        bond: &Bond<'_>,
+    ) -> Result<usize, StashError> {
+        bond.execute(
+            formatdoc! {
+            "INSERT INTO `{table_name}` (
+                local_message_id,
+                name,
+                address,
+                bimi_selector,
+                is_proton,
+                is_simple_login,
+                display_sender_image
+            ) VALUES (?,?,?,?,?,?,?)
+            ON CONFLICT (local_message_id) DO UPDATE SET
+                name=excluded.name,
+                address=excluded.address,
+                bimi_selector=excluded.bimi_selector,
+                is_proton=excluded.is_proton,
+                is_simple_login=excluded.is_simple_login,
+                display_sender_image=excluded.display_sender_image
+            "},
+            params![
+                message_id,
+                self.name.clone(),
+                self.address.clone(),
+                self.bimi_selector.clone(),
+                self.is_proton,
+                self.is_simple_login,
+                self.display_sender_image
+            ],
+        )
+        .await
+    }
+
+    async fn load_reply_to(
+        message_id: LocalMessageId,
+        tether: &Tether,
+    ) -> Result<MessageReplyTo, StashError> {
+        tether
+            .query::<_, MessageReplyTo>(
+                "SELECT * FROM message_reply_to WHERE local_message_id = ?",
+                params![message_id],
+            )
+            .await?
+            .pop()
+            .ok_or(StashError::Custom(anyhow!(
+                "Message should always have one reply to field"
+            )))
+    }
+
+    async fn load_reply_tos(
+        message_id: LocalMessageId,
+        tether: &Tether,
+    ) -> Result<Vec<MessageReplyTo>, StashError> {
+        tether
+            .query::<_, MessageReplyTo>(
+                "SELECT * FROM message_reply_tos WHERE local_message_id = ?",
+                params![message_id],
+            )
+            .await
+    }
+}
+
+impl From<ApiMessageReplyTo> for MessageReplyTo {
+    fn from(value: ApiMessageReplyTo) -> Self {
+        Self {
+            address: value.address,
+            name: value.name,
+            bimi_selector: value.bimi_selector,
+            is_proton: value.is_proton,
+            is_simple_login: value.is_simple_login,
+            display_sender_image: value.display_sender_image,
+        }
     }
 }

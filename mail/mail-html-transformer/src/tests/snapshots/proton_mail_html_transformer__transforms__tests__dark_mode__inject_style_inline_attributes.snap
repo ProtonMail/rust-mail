@@ -4,7 +4,7 @@ expression: html.to_string()
 ---
 <html data-protonmail-message="true"><head>
     <style>span{background-color: rgb(151, 202, 133);}</style>
-  <style style="text/css">/* <light_and_dark_css> */</style><style style="text/css">
+  <style type="text/css">/* <light_and_dark_css> */</style><style type="text/css">
                   @media ( prefers-color-scheme: dark ) {
                       [data-protonmail-message] span {
 background-color: #3e6b2e !important

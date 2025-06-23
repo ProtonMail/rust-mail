@@ -5,29 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [mail-uniffi-v0.94.0] - 2025-06-17
+## [Unreleased]
 
 ### Features
 
-- [ET-1969] Construct and send challenge payload
-- [ET-1969] Add payload version
-- [ET-1969] Use different payload for username and recovery frames
-- [ET-1969] Make clippy happy again
-- [ET-1969] Encapsulate challenge info in statedata object
-- [ET-1969] Use tagged enums
-- [ET-1969] Convert nested type to payloadframe idiomatically
-- [ET-1969] Avoid behaviour type duplication
-- [ET-1969] Clarify field purpose
-- [ET-1969] Attach user behaviour to submit_internal_username
-- [ET-1969] Provide challenge version from rust
-- [ET-3192] Basic password validator.
+- Submit user behavior data when creating external users.
+- [ET-3141] Download password policies
+- [ET-3166] Sign-in with qr code
+- [ET-1969] Move login challenge payload logic to rust
 
 ### Fixes
 
-- Extra space between subject and reply/forward prefix
+- [ET-3404] Error message localization
+- Sync_conversation_messages are using graceful_status method
 
 
-## [mail-uniffi-v0.93.1] - 2025-06-16
+## [mail-uniffi-v0.93.9] - 2025-06-20
 
 ### Fixes
 
@@ -51,6 +44,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - [ET-3367] For labels with count less than page_size force fetch_more while loading `all_items`
 - [ET-2944] Fetch missing dependencies during event loop
+
+
+## [mail-uniffi-v0.94.0] - 2025-06-17
+
+### Features
+
+- [ET-1969] Construct and send challenge payload
+- [ET-1969] Add payload version
+- [ET-1969] Use different payload for username and recovery frames
+- [ET-1969] Make clippy happy again
+- [ET-1969] Encapsulate challenge info in statedata object
+- [ET-1969] Use tagged enums
+- [ET-1969] Convert nested type to payloadframe idiomatically
+- [ET-1969] Avoid behaviour type duplication
+- [ET-1969] Clarify field purpose
+- [ET-1969] Attach user behaviour to submit_internal_username
+- [ET-1969] Provide challenge version from rust
+- [ET-3192] Basic password validator.
+
+### Fixes
+
+- Extra space between subject and reply/forward prefix
 
 
 ## [mail-uniffi-v0.93.4] - 2025-06-17

@@ -98,8 +98,8 @@ use proton_mail_api::services::proton::response_data::{
     MessageAttachmentHeaders as ApiMessageAttachmentHeaders,
     MessageAttachmentInfo as ApiMessageAttachmentInfo, MessageButtons as ApiMessageButtons,
     MessageCount as ApiMessageCount, MessageFlags as ApiMessageFlags,
-    MessageRecipient as ApiMessageRecipient, MessageReplyTo as ApiMessageReplyTo,
-    MessageSender as ApiMessageSender, MimeType as ApiMimeType, MobileSetting as ApiMobileSetting,
+    MessageRecipient as ApiMessageRecipient, MessageSender as ApiMessageSender,
+    MimeType as ApiMimeType, MobileSetting as ApiMobileSetting,
     MobileSettings as ApiMobileSettings, NextMessageOnMove as ApiNextMessageOnMove,
     PgpScheme as ApiPgpScheme, PmSignature as ApiPmSignature, ShowImages as ApiShowImages,
     ShowMoved as ApiShowMoved, SpamAction as ApiSpamAction, SwipeAction as ApiSwipeAction,
@@ -1315,24 +1315,6 @@ impl From<&str> for MessageRecipient {
     }
 }
 
-#[derive(Clone, Default, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct MessageReplyTo {
-    /// Email of the recipient
-    pub address: String,
-
-    /// Display name of the recipient,empty if none.
-    pub name: String,
-}
-
-impl From<ApiMessageReplyTo> for MessageReplyTo {
-    fn from(value: ApiMessageReplyTo) -> Self {
-        Self {
-            address: value.address,
-            name: value.name,
-        }
-    }
-}
-
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct MessageRecipients {
@@ -1345,6 +1327,19 @@ impl From<Vec<MessageRecipient>> for MessageRecipients {
     }
 }
 
+impl Deref for MessageRecipients {
+    type Target = Vec<MessageRecipient>;
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl DerefMut for MessageRecipients {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
+    }
+}
+
 sql_using_serde!(MessageRecipients);
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -1354,14 +1349,6 @@ pub struct MessageSenders {
 }
 
 sql_using_serde!(MessageSenders);
-
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(transparent)]
-pub struct MessageReplyTos {
-    pub value: Vec<MessageReplyTo>,
-}
-
-sql_using_serde!(MessageReplyTos);
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct MessageAttachment {

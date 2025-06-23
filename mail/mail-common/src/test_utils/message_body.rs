@@ -195,7 +195,6 @@ pub fn message_body_test_message_simple() -> ApiMessage {
             to_list: vec![],
             cc_list: vec![],
             bcc_list: vec![],
-            reply_tos: vec![],
             flags: ApiMessageFlags::DKIM_FAIL,
             time: 1_715_863_508,
             size: 333,
@@ -212,8 +211,10 @@ pub fn message_body_test_message_simple() -> ApiMessage {
             header: String::new(),
             parsed_headers: HashMap::default(),
             body: "-----BEGIN PGP MESSAGE-----\nVersion: ProtonMail\n\nwV4DGS71hsmM2EQSAQdAYdJSo4eHIE7InFrOSN3+7nIRKfkcsCAb7aPI86nI\ny2owI0FLuN3IlbCoKsFFXfSbnTff3IePkr7xmhQmUYrVk0h50kwkEVyHnyPI\nm2nyqZXA0sCKAbKKQlcvjlJbsyUpJvsIwHuggwrQ+7htDauT4/SB9hScyAPj\nICxCGfzOaXjcf1fqevOMDqIWaSEQpOcMw2ocGP4I8OKgylBfuy9DT0/RhJSe\nrDo2uhlYqs0xmUdlHWPvGKEy4TKlUk2JSAr9U4+5l4J5iIK9O/TVrU+Tf7Ot\nRdEFfN+ERJQmVqXcfSkoImVm7oi0QfNP3ExZ94vlFyBFch/Ox5Oco5wbetr3\nL7KPGWiEmLYDI/xeFNC4AO4FD+MVUHjIYqzS/GABxwJQ7pCC8WJXUHKS6ZNR\nNf8RGKGL1O2cbKWSuULb7HwWRGljWezyr5rPLKK7DaHX3wj2qmdQRcSzsKEu\nOLjlB6jppMjP2r/CZSqC+XbefwczOZxkLJQiw6ujB4etdiDFiM+QifJfrp6f\nhtf7JGwpxPa/IbiL5OlKy7NYYs6JXNYU\n=AVU2\n-----END PGP MESSAGE-----\n".to_owned(),
+            reply_to: Default::default(),
             mime_type: ApiMimeType::TextHtml,
             attachments: vec![],
+            reply_tos: vec![],
         },
     }
 }
@@ -237,7 +238,6 @@ pub fn message_body_test_message_mime() -> ApiMessage {
             label_ids: vec![],
             num_attachments: 0,
             order: 3629,
-            reply_tos: vec![],
             sender: ApiMessageSender::default(),
             size: 2334,
             snooze_time: 0,
@@ -249,6 +249,8 @@ pub fn message_body_test_message_mime() -> ApiMessage {
         body: ApiMessageBody {
             attachments: vec![],
             body: "-----BEGIN PGP MESSAGE-----\nVersion: ProtonMail\n\n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\nGelSG3lI\n=fy7R\n-----END PGP MESSAGE-----\n".to_string(),
+            reply_to: Default::default(),
+            reply_tos: vec![],
             header: String::new(),
             mime_type: ApiMimeType::MultipartMixed,
             parsed_headers: HashMap::default(),

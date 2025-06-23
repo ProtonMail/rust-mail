@@ -766,6 +766,16 @@ impl MailSession {
         .map_err(UserContextError::from)
     }
 
+    /// Start the auto lock countdown.
+    ///
+    /// This method is meant to be used when app is about to be put in the background.
+    /// It will start the auto lock countdown and will be used to determine if the app
+    /// spent enough time in the background to be locked.
+    ///
+    pub fn start_auto_lock_countdown(&self) {
+        self.mail_ctx.core_context().clock().auto_lock_tick();
+    }
+
     /// Shoul invoke app lock according to app settings.
     ///
     /// Method will update itself to new access time when returning `true`,

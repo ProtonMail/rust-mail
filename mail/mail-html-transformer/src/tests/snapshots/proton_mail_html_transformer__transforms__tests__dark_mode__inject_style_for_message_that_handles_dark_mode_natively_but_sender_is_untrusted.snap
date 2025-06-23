@@ -19,7 +19,7 @@ expression: html.to_string()
       }
     }
     </style>
-  <style style="text/css">/* <light_and_dark_css> */</style><style style="text/css">
+  <style type="text/css">/* <light_and_dark_css> */</style><style type="text/css">
                   @media ( prefers-color-scheme: dark ) {
                       @media (prefers-color-scheme: dark) {
 html[data-protonmail-message] {

@@ -1,10 +1,12 @@
 use crate::datatypes::{MessageRecipient, MessageSender, MimeType, PmSignature};
-use crate::draft::recipients::{ContactGroupResolver, RecipientList};
+use crate::draft::recipients::{ContactGroupResolver, MaybeEmptyString, RecipientList};
 use crate::draft::{
     AttachmentRemovalId, Draft, DraftAttachmentRemovalQueuer, Error, ReplyMode, SaveError,
     SenderAddressChangeError,
 };
-use crate::models::{Attachment, DraftAttachmentMetadata, MailSettings, Message, MetadataId};
+use crate::models::{
+    Attachment, DraftAttachmentMetadata, MailSettings, Message, MessageBodyMetadata, MetadataId,
+};
 use crate::{MailContextError, MailContextResult, MailUserContext};
 use chrono::DateTime;
 use proton_core_api::services::proton::AddressId;
@@ -33,6 +35,7 @@ pub(super) async fn patch_draft_with_reply_mode(
     contact_group_resolver: &impl ContactGroupResolver,
     draft: &mut Draft,
     source_message: &Message,
+    source_message_body: &MessageBodyMetadata,
     reply_mode: ReplyMode,
     sender_address: &Address,
 ) {
@@ -48,11 +51,9 @@ pub(super) async fn patch_draft_with_reply_mode(
                 )
                 .await;
             } else {
-                draft.to_list = RecipientList::from_message_recipients(
-                    contact_group_resolver,
-                    std::iter::once(source_message.sender.clone().into()),
-                )
-                .await;
+                draft.to_list = RecipientList::from_message_reply_to(std::iter::once(
+                    source_message_body.reply_to.clone(),
+                ));
             }
             draft.subject = apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject);
         }
@@ -64,29 +65,38 @@ pub(super) async fn patch_draft_with_reply_mode(
                 )
                 .await;
             } else {
+                let reply_tos_iter =
+                    source_message_body
+                        .reply_tos
+                        .iter()
+                        .map(|v| MessageRecipient {
+                            address: v.address.clone(),
+                            is_proton: v.is_proton,
+                            name: v.name.clone(),
+                            group: MaybeEmptyString::from_option(None),
+                        });
+                let to_list_iter = source_message
+                    .to_list
+                    .value
+                    .iter()
+                    .filter(|v| v.address != sender_address.email)
+                    .cloned();
                 draft.to_list = RecipientList::from_message_recipients(
                     contact_group_resolver,
-                    std::iter::once(source_message.sender.clone().into()).chain(
-                        source_message
-                            .to_list
-                            .value
-                            .iter()
-                            .filter(|v| v.address != sender_address.email)
-                            .cloned(),
-                    ),
-                )
-                .await;
-                draft.cc_list = RecipientList::from_message_recipients(
-                    contact_group_resolver,
-                    source_message
-                        .cc_list
-                        .value
-                        .iter()
-                        .filter(|v| v.address != sender_address.email)
-                        .cloned(),
+                    reply_tos_iter.chain(to_list_iter),
                 )
                 .await;
             }
+            draft.cc_list = RecipientList::from_message_recipients(
+                contact_group_resolver,
+                source_message
+                    .cc_list
+                    .value
+                    .iter()
+                    .filter(|v| v.address != sender_address.email)
+                    .cloned(),
+            )
+            .await;
             draft.subject = apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject);
         }
         ReplyMode::Forward => {

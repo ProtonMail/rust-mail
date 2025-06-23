@@ -82,13 +82,12 @@ use proton_mail_common::datatypes::{
     MessageFlags as RealMessageFlags, MessageLabelsCount as RealMessageCount,
     MessageRecipient as RealMessageRecipient,
     MessageRecipientDisplayMode as RealMessageRecipientDisplayMode,
-    MessageReplyTo as RealMessageReplyTo, MessageSender as RealMessageSender,
-    MimeType as RealMimeType, MobileSetting as RealMobileSetting,
-    MobileSettings as RealMobileSettings, NextMessageOnMove as RealNextMessageOnMove,
-    ParsedHeaderValue as RealParsedHeaderValue, PgpScheme as RealPgpScheme,
-    PmSignature as RealPmSignature, ShowImages as RealShowImages, ShowMoved as RealShowMoved,
-    SpamAction as RealSpamAction, SwipeAction as RealSwipeAction, ViewLayout as RealViewLayout,
-    ViewMode as RealViewMode,
+    MessageSender as RealMessageSender, MimeType as RealMimeType,
+    MobileSetting as RealMobileSetting, MobileSettings as RealMobileSettings,
+    NextMessageOnMove as RealNextMessageOnMove, ParsedHeaderValue as RealParsedHeaderValue,
+    PgpScheme as RealPgpScheme, PmSignature as RealPmSignature, ShowImages as RealShowImages,
+    ShowMoved as RealShowMoved, SpamAction as RealSpamAction, SwipeAction as RealSwipeAction,
+    ViewLayout as RealViewLayout, ViewMode as RealViewMode,
 };
 use proton_mail_common::datatypes::{
     ContextualConversation, ExclusiveLocation as RealExclusiveLocation,
@@ -96,6 +95,7 @@ use proton_mail_common::datatypes::{
 use proton_mail_common::draft::recipients::MaybeEmptyString;
 use proton_mail_common::models::{
     Conversation as RealConversation, MailSettings as RealMailSettings, Message as RealMessage,
+    MessageReplyTo as RealMessageReplyTo,
 };
 use smart_default::SmartDefault;
 use stash::orm::Model;
@@ -1498,9 +1498,6 @@ pub struct Message {
     pub display_order: u64,
 
     /// TODO: Document this field.
-    pub reply_tos: Vec<MessageReplyTo>,
-
-    /// TODO: Document this field.
     pub sender: MessageSender,
 
     /// TODO: Document this field.
@@ -1560,7 +1557,6 @@ impl From<RealMessage> for Message {
             is_replied_all: value.is_replied_all,
             num_attachments: value.num_attachments,
             display_order: value.display_order,
-            reply_tos: value.reply_tos.value.map_vec(),
             sender: value.sender.into(),
             size: value.size,
             snooze_time: value.snooze_time.into(),
