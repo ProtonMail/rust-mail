@@ -3,7 +3,7 @@ use indoc::indoc;
 use jiff::Zoned;
 use pretty_assertions as pa;
 use proton_calendar_api::ProtonCalendarMock;
-use proton_calendar_common::{RsvpError, RsvpEventId, RsvpStatus};
+use proton_calendar_common::{RsvpError, RsvpEventId, RsvpEventType, RsvpStatus};
 use std::str::FromStr;
 
 /// Make sure we can understand RSVPs that have been auto-imported into the
@@ -98,7 +98,7 @@ async fn recurring() {
 
 /// Make sure we can fetch events with direct id - see [`RsvpEventId::Direct`].
 #[tokio::test]
-async fn direct() {
+async fn direct_invite() {
     let world = world().await;
     let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
 
@@ -114,12 +114,38 @@ async fn direct() {
         .mock_get_calendar_event("8maQ3qBa", "pFmwNlJp", event.clone())
         .await;
 
-    let actual = RsvpEventId::direct("8maQ3qBa", "pFmwNlJp")
+    let actual = RsvpEventId::direct("8maQ3qBa", "pFmwNlJp", RsvpEventType::Invite)
         .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
         .await
         .unwrap();
 
     pa::assert_eq!(Some(expected_event(event)), actual);
+}
+
+#[tokio::test]
+async fn direct_reminder() {
+    let world = world().await;
+    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_bootstrap("HzNtbT1J", world.bootstrap())
+        .await;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_event("8maQ3qBa", "pFmwNlJp", event.clone())
+        .await;
+
+    let actual = RsvpEventId::direct("8maQ3qBa", "pFmwNlJp", RsvpEventType::Reminder)
+        .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(RsvpEventType::Reminder, actual.ty);
 }
 
 /// Make sure we can fetch cancelled events *and* mark them as such; this

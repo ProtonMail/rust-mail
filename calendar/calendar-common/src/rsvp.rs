@@ -29,7 +29,7 @@ pub enum RsvpEventId {
     /// resolved through the (uid,rid) tuple below.
     ///
     /// See: [`Self::from_headers()`].
-    Direct(CalendarId, CalendarEventId),
+    Direct(CalendarId, CalendarEventId, RsvpEventType),
 
     /// Event for which we know only the uid and possibly recurrence id.
     ///
@@ -43,8 +43,8 @@ pub enum RsvpEventId {
 impl RsvpEventId {
     #[doc(hidden)]
     #[must_use]
-    pub fn direct(cid: &str, eid: &str) -> Self {
-        RsvpEventId::Direct(cid.into(), eid.into())
+    pub fn direct(cid: &str, eid: &str, ty: RsvpEventType) -> Self {
+        RsvpEventId::Direct(cid.into(), eid.into(), ty)
     }
 
     #[doc(hidden)]
@@ -110,8 +110,19 @@ impl RsvpEventId {
             .get("X-Pm-Calendar-Eventid")
             .and_then(|id| id.as_str());
 
+        let ty = headers
+            .get("X-Pm-Calendar-Intent")
+            .and_then(|ty| ty.as_str())
+            .map_or(RsvpEventType::Invite, |ty| {
+                if ty == "reminder" {
+                    RsvpEventType::Reminder
+                } else {
+                    RsvpEventType::Invite
+                }
+            });
+
         if let (Some(cid), Some(eid)) = (cid, eid) {
-            return Some(RsvpEventId::Direct(cid.into(), eid.into()));
+            return Some(RsvpEventId::Direct(cid.into(), eid.into(), ty));
         }
 
         let uid = headers
@@ -149,6 +160,7 @@ impl RsvpEventId {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RsvpEvent {
+    pub ty: RsvpEventType,
     pub summary: Option<String>,
     pub location: Option<String>,
     pub description: Option<String>,
@@ -192,6 +204,24 @@ impl RsvpEvent {
             .notifications
             .as_ref()
             .is_some_and(|n| !n.is_empty())
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum RsvpEventType {
+    Invite,
+    Reminder,
+}
+
+impl RsvpEventType {
+    #[must_use]
+    pub fn is_invite(&self) -> bool {
+        matches!(self, Self::Invite)
+    }
+
+    #[must_use]
+    pub fn is_reminder(&self) -> bool {
+        matches!(self, Self::Reminder)
     }
 }
 
@@ -342,6 +372,9 @@ pub enum RsvpError {
 
     #[error("Organizer is not known")]
     OrganizerIsNotKnown,
+
+    #[error("Event is a reminder, not an invite")]
+    EventIsReminder,
 
     #[error("{0}")]
     Api(#[from] ApiServiceError),
@@ -508,6 +541,26 @@ mod tests {
         let expected = Some(RsvpEventId::Direct(
             "1234-1234-1234-1234".into(),
             "4321-4321-4321-4321".into(),
+            RsvpEventType::Invite,
+        ));
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn from_headers_direct_reminder() {
+        let actual = RsvpEventId::from_headers(&headers([
+            ("Method", "GET"),
+            ("X-Pm-Calendar-Calendarid", "1234-1234-1234-1234"),
+            ("FOO", "BAR"),
+            ("X-Pm-Calendar-Eventid", "4321-4321-4321-4321"),
+            ("X-Pm-Calendar-Intent", "reminder"),
+        ]));
+
+        let expected = Some(RsvpEventId::Direct(
+            "1234-1234-1234-1234".into(),
+            "4321-4321-4321-4321".into(),
+            RsvpEventType::Reminder,
         ));
 
         assert_eq!(expected, actual);

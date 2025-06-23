@@ -31,6 +31,10 @@ where
 {
     info!(?answer, "Answering");
 
+    if event.ty.is_reminder() {
+        return Err(RsvpError::EventIsReminder.into());
+    }
+
     let calendar = cache
         .get_calendar_bootstrap(&event.raw.calendar_id, || {
             // We need for the returned future to be static, otherwise rustc has

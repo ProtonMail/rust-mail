@@ -1,4 +1,4 @@
-use super::{RsvpCache, RsvpStatus};
+use super::{RsvpCache, RsvpEventType, RsvpStatus};
 use crate::{
     CalendarBootstrapExt, CalendarEventPayloadExt, RsvpAttendee, RsvpCalendar, RsvpError,
     RsvpEvent, RsvpEventId, RsvpOccurrence, RsvpOrganizer, RsvpResult,
@@ -30,7 +30,7 @@ where
     };
 
     let decryptor = calendar.create_decryptor(pgp, keys, &event)?;
-    let event = extract(pgp, calendar, event, &decryptor)?;
+    let event = extract(pgp, id, calendar, event, &decryptor)?;
 
     Ok(Some(event))
 }
@@ -44,7 +44,7 @@ async fn fetch(
     info!("Fetching event data");
 
     let event = match id {
-        RsvpEventId::Direct(cid, eid) => Some(api.get_calendar_event(cid, eid).await?),
+        RsvpEventId::Direct(cid, eid, _) => Some(api.get_calendar_event(cid, eid).await?),
 
         RsvpEventId::Indirect(uid, rid) => {
             let events = api.find_calendar_events(uid, *rid).await?;
@@ -86,6 +86,7 @@ async fn fetch(
 
 fn extract<P>(
     pgp: &P,
+    id: &RsvpEventId,
     calendar: CalendarBootstrap,
     event: CalendarEvent,
     decryptor: &CalendarEventDecryptor<P>,
@@ -93,6 +94,11 @@ fn extract<P>(
 where
     P: PGPProviderSync,
 {
+    let ty = match id {
+        RsvpEventId::Direct(_, _, ty) => *ty,
+        RsvpEventId::Indirect(_, _) => RsvpEventType::Invite,
+    };
+
     let meta = extract_metadata(pgp, &event, decryptor)?;
     let occurrence = extract_occurrence(&event)?;
     let attendees = extract_attendees(pgp, &event, decryptor)?;
@@ -100,6 +106,7 @@ where
     let calendar = extract_calendar(calendar, &event);
 
     Ok(RsvpEvent {
+        ty,
         summary: meta.summary,
         location: meta.location,
         description: meta.description,

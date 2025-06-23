@@ -11,7 +11,8 @@ use proton_calendar_api::{
     CalendarMember, CalendarMemberPassphrase, CalendarPassphrase,
 };
 use proton_calendar_common::{
-    RsvpAttendee, RsvpCache, RsvpCalendar, RsvpEvent, RsvpOccurrence, RsvpOrganizer, RsvpStatus,
+    RsvpAttendee, RsvpCache, RsvpCalendar, RsvpEvent, RsvpEventType, RsvpOccurrence, RsvpOrganizer,
+    RsvpStatus,
 };
 use proton_core_api::session::{Config, Session};
 use proton_core_common::test_utils::test_context::{MockApiEnv, TestContext};
@@ -242,6 +243,7 @@ impl RsvpCache for DummyRsvpCache {
 
 fn expected_event(raw: CalendarEvent) -> RsvpEvent {
     RsvpEvent {
+        ty: RsvpEventType::Invite,
         summary: Some("some title".into()),
         location: Some("some location".into()),
         description: Some("some description".into()),

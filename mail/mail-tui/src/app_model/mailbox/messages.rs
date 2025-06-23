@@ -559,6 +559,11 @@ impl MessagesState {
                     return Command::None;
                 };
 
+                if rsvp.ty.is_reminder() {
+                    // Reminders can't be answered
+                    return Command::None;
+                }
+
                 let ctx = ctx.clone();
                 let mut rsvp = rsvp.clone();
 
@@ -1107,7 +1112,7 @@ impl DecryptedMessage {
     }
 
     fn draw_rsvp_loading(frame: &mut Frame, area: Rect) {
-        frame.render_widget(Paragraph::new("Loading invitation..."), area);
+        frame.render_widget(Paragraph::new("Loading event..."), area);
     }
 
     fn draw_rsvp_success(frame: &mut Frame, area: Rect, rsvp: &RsvpEvent) {
