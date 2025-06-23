@@ -33,8 +33,6 @@ impl BackgroundExecutionContext {
         abort: impl Future<Output = bool>,
         max_duration: Duration,
     ) -> MailContextResult<BackgroundExecutionStatus> {
-        ctx.core_context().clock().auto_lock_tick();
-
         tracing::debug!("Background execution is gathering user contexts");
 
         let all_user_ctxs = ctx
