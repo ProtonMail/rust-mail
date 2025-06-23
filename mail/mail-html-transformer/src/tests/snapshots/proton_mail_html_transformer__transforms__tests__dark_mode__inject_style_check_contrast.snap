@@ -17,7 +17,7 @@ expression: html.to_string()
       background-color: white;
     }
     </style>
-  <style style="text/css">/* <light_and_dark_css> */</style><style style="text/css">
+  <style type="text/css">/* <light_and_dark_css> */</style><style type="text/css">
                   @media ( prefers-color-scheme: dark ) {
                       [data-protonmail-message] .case1 {
 background-color: #16171d !important;

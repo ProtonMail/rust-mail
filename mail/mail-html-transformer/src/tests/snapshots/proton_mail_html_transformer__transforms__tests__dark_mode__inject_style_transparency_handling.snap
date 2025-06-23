@@ -12,7 +12,7 @@ expression: html.to_string()
       background-color: transparent;
     }
     </style>
-  <style style="text/css">/* <light_and_dark_css> */</style></head>
+  <style type="text/css">/* <light_and_dark_css> */</style></head>
   <body>
   <div class="a" style="color: transparent"></div>
   

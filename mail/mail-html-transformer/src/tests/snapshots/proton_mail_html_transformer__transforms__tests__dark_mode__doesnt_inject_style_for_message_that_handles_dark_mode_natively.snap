@@ -19,7 +19,7 @@ expression: html.to_string()
       }
     }
     </style>
-  <style style="text/css">/* <light_and_dark_css> */</style></head>
+  <style type="text/css">/* <light_and_dark_css> */</style></head>
   <body>
   
 

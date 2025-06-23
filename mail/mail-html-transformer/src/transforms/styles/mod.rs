@@ -653,7 +653,7 @@ fn inject_style(document: &NodeRef, style_text: &str) {
     element_data
         .attributes
         .borrow_mut()
-        .insert("style", "text/css".to_owned());
+        .insert("type", "text/css".to_owned());
 
     let style_node = NodeRef::new(NodeData::Element(element_data));
     let text_node = NodeRef::new_text(style_text);
