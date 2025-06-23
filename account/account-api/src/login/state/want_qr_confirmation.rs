@@ -1,10 +1,5 @@
 use std::sync::Arc;
 
-use aes_gcm::{
-    AesGcm, KeyInit as _, Nonce,
-    aead::{Aead as _, consts::U16},
-    aes::Aes256,
-};
 use base64::{Engine as _, engine::general_purpose};
 use futures::TryFutureExt as _;
 use muon::client::flow::{WithCodeFlow, WithCodePollFlow};
@@ -18,7 +13,8 @@ use proton_core_api::{
     store::{Store, UserData},
 };
 use proton_core_common::{Context, PassphraseAcquireError};
-use proton_crypto_account::proton_crypto::{self, generate_secure_random_bytes};
+use proton_crypto_account::proton_crypto;
+use proton_crypto_subtle::aead::{AesGcmCiphertext, AesGcmKey};
 use regex::Regex;
 use secrecy::ExposeSecret;
 use serde_json::json;
@@ -114,12 +110,26 @@ impl WantQrConfirmation {
         let Some(payload) = payload.filter(|it| !it.is_empty()) else {
             return Ok(Vec::default());
         };
-        let decrypted_payload_bytes = decrypt(&payload, encryption_key.as_bytes())
+        let key = AesGcmKey::from_bytes(encryption_key.as_bytes())
+            .map_err(|err| format!("Invalid key: {err}"))?;
+        let cipthertext = AesGcmCiphertext::decode(&payload)
             .map_err(|err| format!("Failed to decode payload: {err}"))?;
+
+        // cipthertext -> bytes
+        let decrypted_payload_bytes = if cipthertext.is_legacy() {
+            key.decrypt_legacy(cipthertext, None)
+                .map_err(|err| format!("Failed to decrypt payload: {err}"))?
+        } else {
+            key.decrypt(cipthertext, None)
+                .map_err(|err| format!("Failed to decrypt payload: {err}"))?
+        };
+        // bytes -> UTF8 String
         let decrypted_payload = String::from_utf8(decrypted_payload_bytes)
             .map_err(|err| format!("Failed to parse decrypted payload to valid UTF8: {err}"))?;
+        // UTF8 String -> JSON
         let json: serde_json::Value = serde_json::from_str(&decrypted_payload)
             .map_err(|err| format!("Failed to parse payload into JSON: {err}"))?;
+        // JSON keyPassword field
         let key_password = json
             .get("keyPassword")
             .ok_or(String::from("Missing keyPassword field"))?
@@ -189,15 +199,18 @@ pub async fn process_target_device_qr_code(
             let passphrase = context.get_session_passphrase().await?;
             // Passphrase is a valid utf8 string
             let passphrase_str = String::from_utf8_lossy(passphrase.expose_secret());
+            let key = AesGcmKey::from_bytes(&encryption_key)
+                .map_err(|err| format!("Invalid key: {err}"))
+                .unwrap();
             let json = json!({
                 "type": "default",
                 "keyPassword": passphrase_str,
             });
-            let payload = encrypt(&json.to_string(), &encryption_key)?;
+            let payload = key.encrypt(json.to_string(), None).unwrap();
             client
                 .clone()
                 .fork(context.get_client_id())
-                .payload(payload)
+                .payload(payload.encode())
         } else {
             client.clone().fork(context.get_client_id())
         };
@@ -286,70 +299,6 @@ pub enum EncryptionError {
     InvalidBase64(base64::DecodeError),
 }
 
-const NONCE_LENGTH: usize = 16;
-const TAG_LENGTH: usize = 16;
-
-// TODO https://protonag.atlassian.net/browse/ET-3413
-/// Encrypts a payload string using AES-256-GCM with a 16-byte IV and 16-byte authentication tag.
-/// Returns output formatted as: IV (16 bytes) | ciphertext | tag (16 bytes).
-pub fn encrypt(payload: &str, key: &[u8]) -> Result<Vec<u8>, EncryptionError> {
-    if key.len() != 32 {
-        return Err(EncryptionError::InvalidKeyLength(key.len()));
-    }
-
-    let cipher = AesGcm::<Aes256, U16>::new_from_slice(key)
-        .map_err(|_| EncryptionError::InvalidKeyLength(key.len()))?;
-
-    let iv: [u8; NONCE_LENGTH] = generate_secure_random_bytes();
-    let nonce = Nonce::<U16>::from_slice(&iv);
-
-    let ciphertext_with_tag = cipher.encrypt(nonce, payload.as_bytes())?;
-
-    // Split ciphertext and tag
-    let ciphertext_len = ciphertext_with_tag.len() - TAG_LENGTH;
-    let ciphertext = &ciphertext_with_tag[..ciphertext_len];
-    let tag = &ciphertext_with_tag[ciphertext_len..];
-
-    // Construct output: IV | ciphertext | tag
-    let mut output = Vec::with_capacity(NONCE_LENGTH + ciphertext.len() + TAG_LENGTH);
-    output.extend_from_slice(&iv);
-    output.extend_from_slice(ciphertext);
-    output.extend_from_slice(tag);
-    Ok(output)
-}
-
-/// Decrypts an AES-256-GCM encrypted payload formatted as: IV (16 bytes) | ciphertext | tag (16 bytes).
-pub fn decrypt(data: &[u8], key: &[u8]) -> Result<Vec<u8>, EncryptionError> {
-    if key.len() != 32 {
-        return Err(EncryptionError::InvalidKeyLength(key.len()));
-    }
-
-    if data.len() < NONCE_LENGTH + TAG_LENGTH {
-        return Err(EncryptionError::InvalidDataLength(data.len()));
-    }
-
-    // Extract IV, ciphertext, and tag
-    let iv = &data[..NONCE_LENGTH];
-    let ciphertext_end = data.len() - TAG_LENGTH;
-    let ciphertext = &data[NONCE_LENGTH..ciphertext_end];
-    let tag = &data[ciphertext_end..];
-
-    // Reconstruct ciphertext with tag for decryption
-    let mut ciphertext_with_tag = Vec::with_capacity(ciphertext.len() + TAG_LENGTH);
-    ciphertext_with_tag.extend_from_slice(ciphertext);
-    ciphertext_with_tag.extend_from_slice(tag);
-
-    // Create nonce from IV
-    let nonce = Nonce::<U16>::from_slice(iv);
-
-    let cipher = AesGcm::<Aes256, U16>::new_from_slice(key)
-        .map_err(|_| EncryptionError::InvalidKeyLength(key.len()))?;
-
-    let plaintext = cipher.decrypt(nonce, ciphertext_with_tag.as_slice())?;
-
-    Ok(plaintext)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -427,88 +376,5 @@ mod tests {
         let input = "0:abc123:invalid-base64:client1";
         let result = parse_qr_string(input);
         assert!(matches!(result, Err(ParseError::Base64DecodeError(_))));
-    }
-
-    fn generate_key() -> Vec<u8> {
-        vec![0_u8; 32]
-    }
-
-    #[test]
-    fn test_encrypt_valid_payload() {
-        let payload = "Hello, world!";
-        let key = generate_key();
-        let result = encrypt(payload, &key);
-        assert!(
-            result.unwrap().len() >= NONCE_LENGTH + TAG_LENGTH,
-            "Output should include ciphertext, tag, and nonce"
-        );
-    }
-
-    #[test]
-    fn test_encrypt_empty_payload() {
-        let key = generate_key();
-        let result = encrypt("", &key);
-        assert!(result.is_ok());
-    }
-
-    #[test]
-    fn test_encrypt_invalid_key_length() {
-        let payload = "Hello, world!";
-        let key = vec![0_u8; 16]; // Too short
-        let result = encrypt(payload, &key);
-        assert!(matches!(result, Err(EncryptionError::InvalidKeyLength(16))));
-    }
-
-    #[test]
-    fn test_decrypt_valid_data() {
-        let payload = "Hello, world!";
-        let key = generate_key();
-        let encrypted = encrypt(payload, &key).expect("Encryption should succeed");
-        let result = decrypt(&encrypted, &key);
-        assert!(result.is_ok(), "Decryption should succeed");
-        let decrypted = result.unwrap();
-        assert_eq!(
-            decrypted,
-            payload.as_bytes(),
-            "Decrypted data should match original"
-        );
-    }
-
-    #[test]
-    fn test_decrypt_invalid_key_length() {
-        let payload = "Hello, world!";
-        let key = generate_key();
-        let encrypted = encrypt(payload, &key).expect("Encryption should succeed");
-        let invalid_key = vec![0_u8; 16]; // Too short
-        let result = decrypt(&encrypted, &invalid_key);
-        assert!(matches!(result, Err(EncryptionError::InvalidKeyLength(16))));
-    }
-
-    #[test]
-    fn test_decrypt_insufficient_data_length() {
-        let key = generate_key();
-        let data = vec![0_u8; NONCE_LENGTH + TAG_LENGTH - 1]; // Too short
-        let result = decrypt(&data, &key);
-        assert!(matches!(result, Err(EncryptionError::InvalidDataLength(_))));
-    }
-
-    #[test]
-    fn test_encrypt_decrypt_round_trip() {
-        let payloads = vec![
-            "Test",
-            "Hello, world!",
-            "A longer test payload with spaces!",
-        ];
-        let key = generate_key();
-
-        for payload in payloads {
-            let encrypted = encrypt(payload, &key).expect("Encryption should succeed");
-            let decrypted = decrypt(&encrypted, &key).expect("Decryption should succeed");
-            assert_eq!(
-                decrypted,
-                payload.as_bytes(),
-                "Round-trip should preserve payload"
-            );
-        }
     }
 }

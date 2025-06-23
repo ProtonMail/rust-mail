@@ -5510,6 +5510,7 @@ dependencies = [
  "proton-core-api",
  "proton-core-common",
  "proton-crypto-account",
+ "proton-crypto-subtle",
  "regex",
  "secrecy",
  "serde",
@@ -5818,6 +5819,19 @@ name = "proton-crypto-pin-hash"
 version = "0.1.0"
 dependencies = [
  "argon2",
+ "thiserror 1.0.69",
+ "zeroize",
+]
+
+[[package]]
+name = "proton-crypto-subtle"
+version = "0.1.0"
+source = "sparse+https://rust.gitlab-pages.protontech.ch/shared/registry/index/"
+checksum = "0590198ea347ad60b41ec87b1bdb7575e6a75799816ec93960db20d70f5a3f61"
+dependencies = [
+ "aes-gcm",
+ "base64",
+ "rand 0.8.5",
  "thiserror 1.0.69",
  "zeroize",
 ]

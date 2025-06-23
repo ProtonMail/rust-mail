@@ -7,6 +7,7 @@ categories = ["api-bindings"]
 [dependencies]
 # proton deps
 proton-crypto-account = { workspace = true }
+proton-crypto-subtle = { workspace = true }
 proton-core-api = { workspace = true }
 proton-core-common = { workspace = true }
 muon = { workspace = true }
