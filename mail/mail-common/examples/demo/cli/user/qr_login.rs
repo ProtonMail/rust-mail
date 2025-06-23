@@ -23,7 +23,7 @@ impl TargetCmd {
 
         assert!(flow.is_awaiting_host_device_confirmation());
         loop {
-            if let Err(e) = flow.check_host_device_confirmation().await {
+            if let Err(_e) = flow.check_host_device_confirmation().await {
                 break;
             } else if flow.is_awaiting_host_device_confirmation() {
                 // No confirmation yet, keep polling
