@@ -5,7 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [mail-uniffi-v0.93.10] - 2025-06-23
+
+### Fixes
+
+- [ET-3428] Reply to simple login alias
+- Sync_conversation_messages are using graceful_status method
+
+
+## [mail-uniffi-v0.93.9] - 2025-06-20
 
 ### Fixes
 
