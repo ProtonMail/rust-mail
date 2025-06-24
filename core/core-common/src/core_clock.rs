@@ -20,8 +20,7 @@ impl CoreClock {
     }
 
     /// Pretends that the current time is `now`.
-    ///
-    /// This function is supposed to be used only in tests.
+    #[cfg(feature = "test-utils")]
     pub fn pretend(&self, now: Zoned) {
         *self.now.write() = Some(now);
     }
@@ -84,6 +83,7 @@ impl ActivityClock {
 
     pub fn sub(&self, duration: Duration) {
         let mut last_activity = self.last_activity.lock();
+
         *last_activity = last_activity
             .checked_sub(duration)
             .unwrap_or(*last_activity);
