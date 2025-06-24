@@ -5,7 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [mail-uniffi-v0.93.12] - 2025-06-24
+
+### Changed
+
+- (breaking) remove direct prefetch calls
+
+### Features
+
+- Add prefetching of the very first page of the scroller
+
+### Fixes
+
+- [ET-3312] Don't remove log messages at sign-out
+- [ET-3477] Mailsetting pmsignature value
+
+
+## [mail-uniffi-v0.93.11] - 2025-06-23
 
 ### Fixes
 
