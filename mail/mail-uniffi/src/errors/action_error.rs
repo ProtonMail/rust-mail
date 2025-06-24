@@ -4,7 +4,6 @@ use derive_more::From;
 use proton_mail_common::MailContextError;
 use proton_mail_common::errors::MailErrorReason as RealMailErrorReason;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use tracing::error;
 
 #[derive(Debug, From, UniffiEnum)]
 pub enum ActionError {
@@ -14,7 +13,6 @@ pub enum ActionError {
 
 impl From<RealProtonMailError> for ActionError {
     fn from(error: RealProtonMailError) -> Self {
-        error!("ActionError from {error:?}");
         match error {
             RealProtonMailError::Reason(reason) => reason.into(),
             mail_error => ActionError::Other(ProtonError::from(mail_error)),
@@ -33,7 +31,6 @@ impl From<RealMailErrorReason> for ActionError {
 
 impl From<MailContextError> for ActionError {
     fn from(value: MailContextError) -> Self {
-        error!("ActionError from {value:?}");
         let v = RealProtonMailError::from(value);
         Self::from(v)
     }

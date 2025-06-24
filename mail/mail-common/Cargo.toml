@@ -19,6 +19,7 @@ test-utils = [
 
 demo = ["dep:tao", "dep:wry"]
 sql = ["proton-core-api/sql", "proton-mail-api/sql"]
+proton_mail_error_log = []
 
 [[example]]
 name = "demo"
