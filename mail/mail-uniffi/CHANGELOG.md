@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Features
+
+- Sanitize <style> from html
+
+### Fixes
+
+- [ET-3024] Log protonmailerror conversion
+
+
+## [mail-uniffi-v0.93.13] - 2025-06-24
+
 ### Fixes
 
 - [ET-3429] Correctly reply to email+alias
@@ -28,6 +39,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-3477] Mailsetting pmsignature value
 
 
+## [mail-uniffi-v0.93.10] - 2025-06-23
+
+### Fixes
+
+- [ET-3428] Reply to simple login alias
+- Sync_conversation_messages are using graceful_status method
+
+
 ## [mail-uniffi-v0.93.11] - 2025-06-23
 
 ### Fixes
@@ -36,14 +55,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-3416] (breaking) add `start_auto_lock_countdown` mailsession method to be used by clients just b4 putting app to background
 - [ET-3308] Schedule send now properly update if edited on another session (other edge cases)
 - Incorrect db migration
-
-
-## [mail-uniffi-v0.93.10] - 2025-06-23
-
-### Fixes
-
-- [ET-3428] Reply to simple login alias
-- Sync_conversation_messages are using graceful_status method
 
 
 ## [mail-uniffi-v0.93.9] - 2025-06-20
