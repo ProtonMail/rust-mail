@@ -516,7 +516,8 @@
         "EarlyAccess": 1,
         "Flags": {
             "Welcomed": 0,
-            "InAppPromosHidden": 0
+            "InAppPromosHidden": 0,
+            "EdmOptOut": 0
         },
         "Referral": {
             "Link": "https://pr.tn/ref/ERBYvlX8SC4KOyb",

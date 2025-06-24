@@ -1388,12 +1388,15 @@ impl From<RealReferral> for Referral {
 pub struct SettingsFlags {
     /// TODO: Document this field.
     pub welcomed: bool,
+    /// `EasyDeviceMigration` (QR Login) opt out. The user can choose to disable the feature.
+    pub edm_opt_out: bool,
 }
 
 impl From<SettingsFlags> for RealSettingsFlags {
     fn from(flags: SettingsFlags) -> Self {
         Self {
             welcomed: flags.welcomed,
+            edm_opt_out: flags.edm_opt_out,
         }
     }
 }
@@ -1402,6 +1405,7 @@ impl From<RealSettingsFlags> for SettingsFlags {
     fn from(flags: RealSettingsFlags) -> Self {
         Self {
             welcomed: flags.welcomed,
+            edm_opt_out: flags.edm_opt_out,
         }
     }
 }

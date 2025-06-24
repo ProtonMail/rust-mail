@@ -1312,12 +1312,15 @@ sql_using_serde!(Referral);
 pub struct SettingsFlags {
     /// TODO: Document this field.
     pub welcomed: bool,
+    /// `EasyDeviceMigration` (QR Login) opt out. The user can choose to disable the feature.
+    pub edm_opt_out: bool,
 }
 
 impl From<ApiSettingsFlags> for SettingsFlags {
     fn from(value: ApiSettingsFlags) -> Self {
         Self {
             welcomed: value.welcomed,
+            edm_opt_out: value.edm_opt_out,
         }
     }
 }
