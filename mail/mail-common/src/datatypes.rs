@@ -474,42 +474,44 @@ impl ToSql for PgpScheme {
     }
 }
 
-/// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq, TryFrom)]
-#[try_from(repr)]
-#[repr(u8)]
-pub enum PmSignature {
-    /// TODO: Document this variant.
-    #[default]
-    Disabled = 0,
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
+#[repr(transparent)]
+pub struct PmSignature(u8);
 
-    /// TODO: Document this variant.
-    Enabled = 1,
+bitflags::bitflags! {
+    impl PmSignature:u8 {
+        const ENABLED = 1 << 1;
 
-    /// TODO: Document this variant.
-    EnabledLocked = 2,
+        const LOCKED = 1 << 2;
+
+        // Safeguard against unknown values
+        const _ = !0;
+    }
+}
+
+impl PmSignature {
+    #[must_use]
+    pub fn is_enabled(self) -> bool {
+        self.intersects(PmSignature::ENABLED | PmSignature::LOCKED)
+    }
 }
 
 impl From<ApiPmSignature> for PmSignature {
     fn from(value: ApiPmSignature) -> Self {
-        match value {
-            ApiPmSignature::Disabled => Self::Disabled,
-            ApiPmSignature::Enabled => Self::Enabled,
-            ApiPmSignature::EnabledLocked => Self::EnabledLocked,
-        }
+        Self(value.bits())
     }
 }
 
 impl FromSql for PmSignature {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
         let val = u8::column_result(value)?;
-        Self::try_from(val).map_err(|_| FromSqlError::OutOfRange(i64::from(val)))
+        PmSignature::from_bits(val).ok_or(FromSqlError::OutOfRange(i64::from(val)))
     }
 }
 
 impl ToSql for PmSignature {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
-        Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
+        Ok(ToSqlOutput::Owned(Value::Integer(self.bits() as i64)))
     }
 }
 

@@ -163,20 +163,21 @@ pub enum PgpScheme {
     Mime = 16,
 }
 
-/// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
-#[repr(u8)]
-pub enum PmSignature {
-    /// TODO: Document this variant.
-    #[default]
-    Disabled = 0,
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq)]
+#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[serde(transparent)]
+#[repr(transparent)]
+pub struct PmSignature(u8);
 
-    /// TODO: Document this variant.
-    Enabled = 1,
+bitflags::bitflags! {
+    impl PmSignature:u8 {
+        const ENABLED = 1 << 1;
 
-    /// TODO: Document this variant.
-    EnabledLocked = 2,
+        const LOCKED = 1 << 2;
+
+        // Safeguard against unknown values
+        const _ = !0;
+    }
 }
 
 /// TODO: Document this enum.

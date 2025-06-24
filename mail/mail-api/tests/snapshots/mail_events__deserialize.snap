@@ -183,7 +183,9 @@ MailEvent {
             ),
             num_message_per_page: 50,
             pgp_scheme: Mime,
-            pm_signature: Disabled,
+            pm_signature: PmSignature(
+                0,
+            ),
             pm_signature_referral_link: false,
             prompt_pin: false,
             receive_mime_type: TextHtml,
