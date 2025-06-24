@@ -134,28 +134,26 @@ pub struct DraftParams {
 }
 
 pub type DraftAttachmentKeyPackets = IndexMap<AttachmentId, KeyPackets>;
-
 pub type PackageAddresses = HashMap<String, AddressSubPackage>;
-pub type PackageAttachmentKeyPackets = HashMap<String, KeyPacket>;
-pub type PackageAttachmentEncSignatures = HashMap<String, Base64AttachmentEncryptedSignature>;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(untagged)]
-pub enum PackageAttachmentExposedKeys {
-    /// Map of attachment remote ids onto attachment keys.
+pub enum PackageAttachmentEntries<T> {
+    /// Map of attachment remote ids onto `T`s (attachment keys or signatures).
     ///
-    /// This is used for building a draft-mail request, because that's the only
-    /// case where we know attachment remote ids up-front.
-    Map(HashMap<String, ExposedKey>),
+    /// This is used for building the "send draft" request, because that's the
+    /// only case where we know attachment remote ids up-front.
+    Draft(HashMap<String, T>),
 
-    /// List of attachment keys.
+    /// List of attachment `T`s (attachment keys or signatures).
     ///
-    /// This is used for building a direct-mail request, because in that case
-    /// we don't know attachment remote ids up front, we can only list them.
+    /// This is used for building the "send direct mail" request, because there
+    /// we don't know attachment remote ids up front, so we can only rely on
+    /// correlating attachments by indices.
     ///
-    /// Keys here must be listed in the same order in which attachments appear
-    /// within the message.
-    List(Vec<ExposedKey>),
+    /// Entries here must be listed in the same order in which attachments
+    /// appear within the message.
+    Direct(Vec<T>),
 }
 
 /// Signature mode of a sub-package.
@@ -199,7 +197,7 @@ pub struct Package {
 
     /// An the exposed attachment keys
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub attachment_keys: Option<PackageAttachmentExposedKeys>,
+    pub attachment_keys: Option<PackageAttachmentEntries<ExposedKey>>,
 
     /// The raw body.
     ///
@@ -222,11 +220,12 @@ pub struct AddressSubPackage {
 
     /// The encrypted attachment session keys towards the address.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub attachment_key_packets: Option<PackageAttachmentKeyPackets>,
+    pub attachment_key_packets: Option<PackageAttachmentEntries<KeyPacket>>,
 
     /// The encrypted  attachment signatures towards the address.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub attachment_enc_signatures: Option<PackageAttachmentEncSignatures>,
+    pub attachment_enc_signatures:
+        Option<PackageAttachmentEntries<Base64AttachmentEncryptedSignature>>,
 
     /// The signature mode towards this address.
     #[serde(skip_serializing_if = "Option::is_none")]

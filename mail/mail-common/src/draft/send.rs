@@ -1,7 +1,10 @@
+mod attachments;
+
+use self::attachments::*;
 use crate::datatypes::{Disposition, MimeType};
 use crate::draft::recipients::ValidationState;
 use crate::draft::{CancelScheduleSendError, PackageError, SendError, compose::html_to_text};
-use crate::models::{Attachment, AttachmentType, DraftMetadata, Message};
+use crate::models::{Attachment, DraftMetadata, Message};
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use anyhow::anyhow;
 use chrono::{DateTime, Datelike, Days, Local, LocalResult, NaiveTime};
@@ -24,7 +27,6 @@ use proton_crypto_inbox::message::packages::{
 };
 use proton_crypto_inbox::proton_crypto_inbox_mime::write::InboxMimeBuilder;
 use proton_mail_api::services::proton::ProtonMail;
-use proton_mail_api::services::proton::prelude::PackageAttachmentExposedKeys;
 use proton_mail_api::services::proton::request_data::{
     AddressSubPackage, Package, PackageSignaturesMode,
 };
@@ -32,7 +34,7 @@ use proton_mail_ids::LocalMessageId;
 use stash::stash::{RunTransaction, Tether};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
-use tracing::{Instrument, debug, debug_span, error, info};
+use tracing::{Instrument, debug, debug_span, error, info, instrument};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MailType {
@@ -40,6 +42,7 @@ pub enum MailType {
     Direct,
 }
 
+#[instrument(skip_all)]
 pub async fn load_prefs<P>(
     context: &MailUserContext,
     pgp: &P,
@@ -103,6 +106,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
+#[instrument(skip_all)]
 pub async fn build_packages<P>(
     context: &MailUserContext,
     ty: MailType,
@@ -139,7 +143,6 @@ where
             PackageMimeType::Multipart => {
                 generate_mime_top_package(
                     context,
-                    ty,
                     pgp,
                     &primary,
                     mime_type,
@@ -186,6 +189,7 @@ where
     Ok(packages)
 }
 
+#[instrument(skip_all)]
 fn generate_html_encrypted_package_body<P>(
     pgp: &P,
     address_key: &PrimaryUnlockedAddressKey<P::PrivateKey, P::PublicKey>,
@@ -203,6 +207,7 @@ where
     Ok(package_body)
 }
 
+#[instrument(skip_all)]
 fn generate_text_encrypted_package_body<P>(
     pgp: &P,
     address_key: &PrimaryUnlockedAddressKey<P::PrivateKey, P::PublicKey>,
@@ -233,10 +238,9 @@ where
     Ok(package_body)
 }
 
-#[allow(clippy::too_many_arguments)]
+#[instrument(skip_all)]
 async fn generate_mime_top_package<P>(
     context: &MailUserContext,
-    ty: MailType,
     pgp: &P,
     address_key: &PrimaryUnlockedAddressKey<P::PrivateKey, P::PublicKey>,
     mime_type: MimeType,
@@ -264,12 +268,7 @@ where
 
     // Load attachments and integrate them into the multipart/mime message.
     // There is no streaming currently.
-    for (attachment_idx, attachment) in attachments.iter().enumerate() {
-        // Note that we don't care about the attachment's index here, we just
-        // run the function to validate the attachment's constraints (i.e. we
-        // care whether this call succeeds or fails)
-        get_attachment_idx(ty, attachment, attachment_idx)?;
-
+    for attachment in attachments {
         let loaded_data = attachment
             .content_data(context, tx)
             .instrument(
@@ -314,6 +313,7 @@ where
     Ok(package_body)
 }
 
+#[instrument(skip_all)]
 fn build_top_package<P>(
     ty: MailType,
     pgp: &P,
@@ -355,6 +355,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
+#[instrument(skip_all)]
 fn build_address_sub_package<P>(
     ty: MailType,
     pgp: &P,
@@ -440,6 +441,7 @@ where
     Ok(())
 }
 
+#[instrument(skip_all)]
 fn process_attachment_cleartext<P>(
     ty: MailType,
     pgp: &P,
@@ -455,31 +457,23 @@ where
         return Ok(());
     }
 
-    let mut attachment_keys = Vec::new();
+    let mut attachment_keys = PackageAttachmentEntries::new(ty);
 
-    for (attachment_idx, attachment) in attachments.iter().enumerate() {
-        let Some(attachment_id) = get_attachment_idx(ty, attachment, attachment_idx)? else {
-            // Must've been a PGP attachment, we don't care about those here
+    for attachment in attachments {
+        if attachment.attachment_type.is_pgp() {
             continue;
-        };
+        }
 
         let attachment_key = attachment
             .decrypt_attachment_info(pgp, sender_keys)?
             .session_key
             .into();
 
-        attachment_keys.push((attachment_id, attachment_key));
+        attachment_keys.insert(attachment, attachment_key)?
     }
 
     if !attachment_keys.is_empty() {
-        top_package.attachment_keys = Some(match ty {
-            MailType::Draft => {
-                PackageAttachmentExposedKeys::Map(attachment_keys.into_iter().collect())
-            }
-            MailType::Direct => PackageAttachmentExposedKeys::List(
-                attachment_keys.into_iter().map(|(_, key)| key).collect(),
-            ),
-        });
+        top_package.attachment_keys = Some(attachment_keys.into());
     }
 
     Ok(())
@@ -487,6 +481,7 @@ where
 
 /// Encrypts the attachment info (session key, signatures) to the given recipient
 /// and adds them to to to the `address_package`.
+#[instrument(skip_all)]
 fn process_attachments<P>(
     ty: MailType,
     pgp: &P,
@@ -499,14 +494,13 @@ fn process_attachments<P>(
 where
     P: PGPProviderSync,
 {
-    let mut attachment_key_packets = HashMap::with_capacity(attachments.len());
-    let mut attachment_enc_signatures = HashMap::with_capacity(attachments.len());
+    let mut attachment_key_packets = PackageAttachmentEntries::new(ty);
+    let mut attachment_enc_signatures = PackageAttachmentEntries::new(ty);
 
-    for (attachment_idx, attachment) in attachments.iter().enumerate() {
-        let Some(attachment_id) = get_attachment_idx(ty, attachment, attachment_idx)? else {
-            // Must've been a PGP attachment, we don't care about those here
+    for attachment in attachments {
+        if attachment.attachment_type.is_pgp() {
             continue;
-        };
+        }
 
         if attachment.signature.is_none() && attachment.enc_signature.is_none() {
             sign = false;
@@ -525,60 +519,22 @@ where
             .encrypt_signature_to_recipient(pgp, recipient_key)
             .map_err(PackageError::PackageAttachmentInfoReEncryptSignature)?
         {
-            attachment_enc_signatures.insert(attachment_id.clone(), enc_signature.encode_base64());
+            attachment_enc_signatures.insert(attachment, enc_signature.encode_base64())?;
         }
 
-        attachment_key_packets.insert(attachment_id, recipient_attachment_kp);
+        attachment_key_packets.insert(attachment, recipient_attachment_kp)?;
     }
 
     if !attachment_key_packets.is_empty() {
-        address_package.attachment_key_packets = Some(attachment_key_packets);
+        address_package.attachment_key_packets = Some(attachment_key_packets.into());
     }
     if !attachment_enc_signatures.is_empty() {
-        address_package.attachment_enc_signatures = Some(attachment_enc_signatures);
+        address_package.attachment_enc_signatures = Some(attachment_enc_signatures.into());
     }
 
     address_package.signature = Some(PackageSignaturesMode::from(sign));
 
     Ok(())
-}
-
-fn get_attachment_idx(
-    ty: MailType,
-    att: &Attachment,
-    idx: usize,
-) -> Result<Option<String>, PackageError> {
-    match (ty, &att.attachment_type) {
-        // Sending a draft requires for all attachments to be already uploaded
-        (MailType::Draft, AttachmentType::Remote(Some(id))) => Ok(Some(id.to_string())),
-        (MailType::Draft, AttachmentType::Remote(None)) => Err(PackageError::AttachmentNoRemoteId),
-
-        // Conversely, sending a direct mail requires for all attachments *not*
-        // to be uploaded yet.
-        //
-        // That's because, as compared to drafts, sending a direct mail causes
-        // both the mail to be dispatched and the attachments to be saved - and
-        // both actions are carried out by the backend, both at once (at least
-        // "at once" from our point of view, of course).
-        //
-        // After the mail is sent, we get a response containing remote ids of
-        // those now-sent attachments -- so if an attachment we're planning to
-        // send _already_ has a remote id, something must've gone wrong:
-        //
-        // - should we now create a new local attachment?
-        // - should we overwrite this attachment's remote id later?
-        // - should we detonate user's device?
-        //
-        // Fortunately, the answer is simple(r) - let's just make a last-minute
-        // check and if the attachment already has a remote id, let's bail out;
-        // caller's fault!
-        (MailType::Direct, AttachmentType::Remote(Some(_))) => {
-            Err(PackageError::AttachmentAlreadyHasRemoteId)
-        }
-        (MailType::Direct, AttachmentType::Remote(None)) => Ok(Some(idx.to_string())),
-
-        (_, AttachmentType::Pgp) => Ok(None),
-    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -649,7 +605,7 @@ impl<Tz: chrono::TimeZone> ScheduleSendOptions<Tz> {
 /// sent.
 ///
 /// On completion returns the original scheduled time of the message.
-#[tracing::instrument(
+#[instrument(
     level = "debug",
     skip(tether, queue, session, wait_on_completion_duration)
 )]

@@ -168,17 +168,21 @@ pub enum AttachmentType {
     Pgp,
 }
 
-impl Default for AttachmentType {
-    fn default() -> Self {
-        Self::Remote(None)
-    }
-}
-
 impl AttachmentType {
+    pub fn is_pgp(&self) -> bool {
+        matches!(self, Self::Pgp)
+    }
+
     pub fn to_json(&self) -> Result<String, StashError> {
         serde_json::to_string(self)
             .context("error serializing attachment_type")
             .map_err(StashError::Custom)
+    }
+}
+
+impl Default for AttachmentType {
+    fn default() -> Self {
+        Self::Remote(None)
     }
 }
 
