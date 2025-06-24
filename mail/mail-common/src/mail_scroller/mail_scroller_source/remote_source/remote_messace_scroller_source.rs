@@ -50,14 +50,12 @@ impl RemoteSource for MessageScrollData {
             )
             .await?;
 
-            if !items.is_empty() {
-                let prefetch_jobs = items
-                    .into_iter()
-                    .filter_map(|item| Some(PrefetchJob::Message(item.local_id?)))
-                    .collect();
+            let prefetch_jobs = items
+                .into_iter()
+                .filter_map(|item| Some(PrefetchJob::Message(item.local_id?)))
+                .collect();
 
-                arc_ctx.queue_prefetch_jobs(prefetch_jobs).await?;
-            }
+            arc_ctx.queue_prefetch_jobs(prefetch_jobs).await?;
 
             Ok(())
         });

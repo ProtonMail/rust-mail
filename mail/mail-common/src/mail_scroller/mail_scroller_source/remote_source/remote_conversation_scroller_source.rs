@@ -52,15 +52,13 @@ impl RemoteSource for ConversationScrollData {
             )
             .await?;
 
-            if !items.is_empty() {
-                let prefetch_jobs = items
-                    .into_iter()
-                    .filter(|item| !item.has_messages)
-                    .map(|item| PrefetchJob::Conversation(item.local_id, local_label_id))
-                    .collect();
+            let prefetch_jobs = items
+                .into_iter()
+                .filter(|item| !item.has_messages)
+                .map(|item| PrefetchJob::Conversation(item.local_id, local_label_id))
+                .collect();
 
-                arc_ctx.queue_prefetch_jobs(prefetch_jobs).await?;
-            }
+            arc_ctx.queue_prefetch_jobs(prefetch_jobs).await?;
 
             Ok(())
         });
