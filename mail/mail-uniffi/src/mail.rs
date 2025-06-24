@@ -10,8 +10,6 @@ mod logging;
 pub mod mailbox;
 pub mod messages;
 mod notifications;
-#[allow(clippy::used_underscore_binding)]
-pub mod prefetch;
 mod session;
 mod settings;
 mod sidebar;
