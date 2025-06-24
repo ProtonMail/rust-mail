@@ -1,8 +1,5 @@
-#![allow(clippy::ignored_unit_patterns)]
-mod common;
-
-use crate::common::{DefaultError, TestWriteExtension};
-use common::{new_factory, new_queue};
+use super::common::{DefaultError, TestWriteExtension};
+use super::common::{new_factory, new_queue};
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, MetadataBuilder, Type, WriterGuard,
 };

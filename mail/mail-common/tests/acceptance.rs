@@ -15,6 +15,8 @@ mod acceptance {
     mod draft_save;
     mod draft_send;
     mod draft_undo_send;
+    mod drafts_common;
+    mod events;
     mod init;
     mod mailbox_conversation;
     mod mailbox_create;
@@ -37,6 +39,4 @@ mod acceptance {
     mod sidebar_custom_labels;
     mod sidebar_system_labels;
     mod sign_out_all;
-
-    mod drafts_common;
 }

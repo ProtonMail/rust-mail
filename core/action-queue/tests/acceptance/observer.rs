@@ -1,6 +1,4 @@
-mod common;
-
-use crate::common::{DefaultError, new_queue_typed};
+use super::common::{DefaultError, new_queue_typed};
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };

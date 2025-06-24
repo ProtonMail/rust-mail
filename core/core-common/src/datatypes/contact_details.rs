@@ -138,7 +138,7 @@ impl InspectableContactDetails {
                 }));
             }
             _ => unreachable!("The first and only field should always be the emails field"),
-        };
+        }
 
         vcard
             .telephones
@@ -416,43 +416,43 @@ pub(crate) mod test {
 
     #[test]
     fn real_contact() {
-        let real = include_str!("../../tests/vcards/real.vcf");
+        let real = include_str!("../../tests/acceptance/vcards/real.vcf");
         assert_snapshot!(get_vcard(real));
     }
     #[test]
     fn real_autosave() {
         // This one contains data only used by the backend, shouldn't contain anything useful.
-        let real_autosave = include_str!("../../tests/vcards/real-autosave.vcf");
+        let real_autosave = include_str!("../../tests/acceptance/vcards/real-autosave.vcf");
         assert_snapshot!(get_vcard(real_autosave));
     }
 
     #[test]
     fn full() {
-        let full = include_str!("../../tests/vcards/full.vcf");
+        let full = include_str!("../../tests/acceptance/vcards/full.vcf");
         assert_snapshot!(get_vcard(full));
     }
 
     #[test]
     fn small() {
-        let small = include_str!("../../tests/vcards/small.vcf");
+        let small = include_str!("../../tests/acceptance/vcards/small.vcf");
         assert_snapshot!(get_vcard(small));
     }
 
     #[test]
     fn vcard_v3() {
-        let v3 = include_str!("../../tests/vcards/v3.vcf");
+        let v3 = include_str!("../../tests/acceptance/vcards/v3.vcf");
         assert_snapshot!(get_vcard(v3));
     }
 
     #[test]
     fn frodo() {
-        let frodo = include_str!("../../tests/vcards/frodo.vcf");
+        let frodo = include_str!("../../tests/acceptance/vcards/frodo.vcf");
         assert_snapshot!(get_vcard(frodo));
     }
 
     #[test]
     fn mateusz() {
-        let frodo = include_str!("../../tests/vcards/mateusz.vcf");
+        let frodo = include_str!("../../tests/acceptance/vcards/mateusz.vcf");
         assert_snapshot!(get_vcard(frodo));
     }
 }

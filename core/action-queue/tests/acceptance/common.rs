@@ -1,21 +1,16 @@
-#![allow(dead_code)]
-
 use proton_action_queue::action::{Action, Factory};
 use proton_action_queue::queue::Queue;
-#[allow(unused_imports)]
 pub use proton_action_queue::tests::common::DefaultError;
 use stash::exports::SqliteError;
 use stash::params;
 use stash::stash::{Bond, Stash, StashConfiguration, StashError, Tether};
 
-/// Create a new queue.
 pub async fn new_queue(factory: Factory) -> Queue {
     Queue::with_factory(new_stash().await, factory)
         .await
         .unwrap()
 }
 
-/// Create a new queue with a given db `pool`.
 pub async fn new_queue_with_stash(stash: Stash, factory: Factory) -> Queue {
     Queue::with_factory(stash, factory).await.unwrap()
 }

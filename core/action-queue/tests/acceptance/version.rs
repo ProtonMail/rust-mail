@@ -1,8 +1,5 @@
-#![allow(clippy::ignored_unit_patterns)]
-mod common;
-
-use crate::common::{DefaultError, new_factory};
-use common::{new_queue_with_stash, new_stash};
+use super::common::{DefaultError, new_factory};
+use super::common::{new_queue_with_stash, new_stash};
 use proton_action_queue::action;
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, FactoryResult, Handler, Type, VersionConverter,
