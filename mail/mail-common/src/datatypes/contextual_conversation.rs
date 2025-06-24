@@ -102,6 +102,9 @@ pub struct ContextualConversation {
 
     /// TODO: Document this field
     pub snooze_time: UnixTimestamp,
+
+    /// Whether the conversation has messages downloaded.
+    pub has_messages: bool,
 }
 
 impl ContextualConversation {
@@ -136,6 +139,7 @@ impl ContextualConversation {
             subject: conversation.subject,
             time: label.context_time,
             snooze_time: label.context_snooze_time,
+            has_messages: conversation.has_messages,
         })
     }
 
