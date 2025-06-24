@@ -2,7 +2,6 @@ use crate::Result;
 use crate::cli::read;
 use futures::TryFutureExt;
 use proton_account_api::login::LoginFlow;
-use proton_core_api::services::proton::muon::client::flow::LoginExtraInfo;
 use proton_core_common::CoreAccountState;
 use proton_mail_common::{MailContext, MailUserContext};
 use std::sync::Arc;
@@ -26,10 +25,7 @@ impl Cmd {
         let mut flow = new_login_flow(&ctx, username).await?;
 
         if flow.is_logged_out() {
-            let pass = read("password")?;
-            let info = LoginExtraInfo::default();
-
-            flow.login_with_credentials(username.to_owned(), pass, info)
+            flow.login_with_credentials(username.to_owned(), read("password")?, None)
                 .await?;
         }
 
