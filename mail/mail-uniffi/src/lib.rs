@@ -352,20 +352,3 @@ impl From<PaginatorSearchOptions> for RealSearchOptions {
         }
     }
 }
-
-pub trait MapIntoResult<T, E> {
-    fn map_into<T1, E1>(self) -> Result<T1, E1>
-    where
-        T: Into<T1>,
-        E: Into<E1>;
-}
-
-impl<T, E> MapIntoResult<T, E> for Result<T, E> {
-    fn map_into<T1, E1>(self) -> Result<T1, E1>
-    where
-        T: Into<T1>,
-        E: Into<E1>,
-    {
-        self.map(Into::into).map_err(Into::into)
-    }
-}
