@@ -35,8 +35,10 @@ in
     # so that 'xcodebuild' resolves to the version installed outside the devshell.
     export ${filterPkgIn "xcbuild" "PATH"};
     export ${filterPkgIn "clang" "PATH"};
+    export ${filterPkgIn "cctools-binutils" "PATH"};
     unset DEVELOPER_DIR;
     unset SDKROOT;
+    unset LD;
 
     echo "Helper scripts you can run to make your development richer:"
     echo
@@ -57,7 +59,7 @@ in
     ++ lib.optionals pkgs.stdenv.isDarwin (
       with pkgs;
       [
-        darwin.xcode_16_3
+        xcodes # Selector of the xcode version
         findutils
         libiconv
       ]
@@ -99,26 +101,51 @@ in
   };
 
   scripts = {
-    xcode =
-      if pkgs.stdenv.isDarwin then
-        {
-          description = "Opens XCode";
-          binary = "bash";
+    proton-install-xcode = {
+      description = "Installs Xcode.";
+      binary = "bash";
 
-          exec = ''
-            open -n "${pkgs.darwin.xcode_16_3}"
-          '';
-        }
-      else
-        null;
+      exec = ''
+        xcodes install 16.3
+      '';
+    };
 
+    proton-logs-ios = {
+      description = "Shows the rust logs of the iOS app";
+      binary = "bash";
+
+      exec = ''
+        pushd "$DEVENV_ROOT"
+        
+        xcrun simctl spawn "$DEVICE_ID" log stream \
+              --predicate 'subsystem == "ch.protonmail.protonmail" AND category == "[Proton] Rust"' \
+              --style syslog
+
+        popd
+      '';
+    };
+
+    proton-run-ios = {
+      description = ''Builds the iOS project (but not the uniffi framework) and runs it on the simulator'';
+      binary = "bash";
+
+      exec = ''
+        pushd "$DEVENV_ROOT"
+
+        ./mail/mail-uniffi/ios/run-local.sh
+        
+        popd
+      '';
+    };
     proton-build-ios = {
       description = "Builds iOS uniffi framework and injects it to the iOS project";
       binary = "bash";
 
       exec = ''
         pushd "$DEVENV_ROOT"
+
         ${filterPkg "libiconv"} ./mail/mail-uniffi/ios/build-local.sh
+        
         popd
       '';
     };

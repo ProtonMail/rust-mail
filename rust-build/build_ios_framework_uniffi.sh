@@ -188,7 +188,7 @@ echo "Determining crate version"
 CRATE_VERSION=$(cargo metadata --format-version 1 --no-deps | jq --arg target "$TARGET" '.packages[] | select(.name == $target) | .version' | jq -r)
 
 echo "Generating swift bindings"
-cargo run -p uniffi-bindgen generate --library "target/aarch64-apple-ios/release/lib${TARGET_UNDERSCORE}.a" \
+cargo run --release -p uniffi-bindgen generate --library "target/aarch64-apple-ios/release/lib${TARGET_UNDERSCORE}.a" \
     --config "$CONFIG_PATH" --language swift --out-dir "$TMP_DIR/include"
 check_exit
 

@@ -59,6 +59,8 @@ See [this confluence page for details](https://confluence.protontech.ch/display/
 
 ### iOS
 
+Our application requires XCode 16.3.
+
 Use the build script as below and define the location of the checked out iOS
 application:
 
