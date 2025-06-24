@@ -776,7 +776,7 @@ impl MessagesState {
 }
 
 pub struct DecryptedMessage {
-    msg: Arc<MailMessage>,
+    msg: MailMessage,
     content: String,
     content_scroll: ScrollableParagraphState,
     content_lines: usize,
@@ -873,7 +873,6 @@ impl DecryptedMessage {
         ctx: &Arc<MailUserContext>,
         mut tether: Tether,
     ) -> Result<Self> {
-        let msg = Arc::new(msg);
         let sender = msg.sender.address.clone();
 
         let body_output = body
