@@ -16,6 +16,7 @@ use proton_account_api::login::state::want_qr_confirmation::process_target_devic
 use proton_account_uniffi::login::ProcessTargetDeviceQrError;
 use proton_account_uniffi::password::PasswordFlow;
 use proton_account_uniffi::password_validator::PasswordValidatorService;
+use proton_core_api::services::observability::ObservabilityRecorder;
 use proton_core_api::services::proton::{ProtonAuth, ProtonPayments};
 use proton_mail_common::MailUserContext;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
@@ -208,8 +209,9 @@ impl MailUserSession {
             })?;
         let muon_client = ctx.api().clone();
         let core_context = Arc::clone(ctx.core_context());
+        let observability = ObservabilityRecorder::default();
         uniffi_async::<_, ProcessTargetDeviceQrError, _>(async move {
-            process_target_device_qr_code(&qr_code, muon_client, core_context)
+            process_target_device_qr_code(&qr_code, muon_client, core_context, observability)
                 .await
                 .map_err(ProcessTargetDeviceQrError::from)
         })

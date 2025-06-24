@@ -17,8 +17,10 @@ use proton_core_api::services::observability::{
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::SessionParts;
 use proton_core_api::store::{AuthInfo, MbpMode, TfaMode, UserData};
+use proton_core_api::{metric, services::observability::ObservabilityMetric};
 use proton_crypto_account::proton_crypto::generate_secure_random_bytes;
 use secrecy::{ExposeSecret, SecretString};
+use serde::{Deserialize, Serialize};
 use serde_json::to_value;
 use tracing::info;
 
@@ -86,12 +88,19 @@ impl WantLogin {
         need_encryption_key: bool,
     ) -> Result<State, LoginError> {
         let flow = match self.client.auth().from_fork().with_code().await {
-            WithCodeFlow::Poll(flow) => flow,
+            WithCodeFlow::Poll(flow) => {
+                self.observability.record(QrLoginInitiateFork::success());
+                flow
+            }
             WithCodeFlow::Ok(_client, _vec) => {
+                self.observability.record(QrLoginInitiateFork::unknown());
                 error!("Client is in invalid state, the fork must not be complete yet");
                 return Err(LoginError::InvalidState);
             }
             WithCodeFlow::Failed { reason, .. } => {
+                // `FlowErr` type is somehow not accessable, so cannot match on `reason`, so let's use a
+                // generic error variant
+                self.observability.record(QrLoginInitiateFork::error());
                 error!("Failed to initiate client forking: {reason}");
                 return Err(LoginError::InvalidState);
             }
@@ -220,6 +229,32 @@ impl WantLogin {
                     .record(AuthV4RequestMetric::new(metric_response));
                 Err(LoginError::FlowLogin(api_service_err))
             }
+        }
+    }
+}
+
+metric! {
+    #[name = "core_qr_login_initiate_fork_total"]
+    #[version = 1]
+    #[doc = "This metric type records the outcomes of the `GET auth/v4/sessions/forks` API call."]
+    pub struct QrLoginInitiateFork {
+        pub status: ApiServiceObservabilityResponse
+    }
+}
+impl QrLoginInitiateFork {
+    fn success() -> Self {
+        QrLoginInitiateFork {
+            status: ApiServiceObservabilityResponse::Success,
+        }
+    }
+    fn unknown() -> Self {
+        QrLoginInitiateFork {
+            status: ApiServiceObservabilityResponse::Unknown,
+        }
+    }
+    fn error() -> Self {
+        QrLoginInitiateFork {
+            status: ApiServiceObservabilityResponse::NetworkError,
         }
     }
 }
