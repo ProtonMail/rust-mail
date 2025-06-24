@@ -840,7 +840,8 @@ pub struct User {
     pub name: Option<String>,
 
     /// TODO: Document this field.
-    pub private: u32,
+    #[serde_as(as = "BoolFromInt")]
+    pub private: bool,
 
     /// TODO: Document this field.
     pub product_used_space: ProductUsedSpace,

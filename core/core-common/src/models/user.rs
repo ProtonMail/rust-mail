@@ -62,7 +62,7 @@ pub struct User {
     pub mnemonic_status: UserMnemonicStatus,
 
     #[DbField]
-    pub private: u32,
+    pub private: bool,
 
     #[DbField]
     pub name: Option<String>,
