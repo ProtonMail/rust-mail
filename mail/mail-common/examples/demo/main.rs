@@ -2,6 +2,7 @@
 
 use crate::app::App;
 use crate::cli::Cli;
+use futures::TryFutureExt;
 use tao::event_loop::EventLoopBuilder;
 use tracing_subscriber::EnvFilter;
 
@@ -27,7 +28,7 @@ async fn main() -> Result<()> {
 
     let events = EventLoopBuilder::with_user_event().build();
 
-    tokio::spawn(Cli::run(events.create_proxy()));
+    tokio::spawn(Cli::run(events.create_proxy()).inspect_err(|e| error!("{e:?}")));
 
     App::new(&events)?.run(events)
 }

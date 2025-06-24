@@ -11,7 +11,7 @@ use proton_core_common::os::KeyChain;
 use proton_mail_common::context::ShouldInitializeMailUserContext;
 use proton_mail_common::{MailContext, MailUserContext};
 use std::io::{Result as IoResult, Write, stdin, stdout};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tao::event_loop::EventLoopProxy;
 
@@ -45,13 +45,7 @@ impl Cli {
     }
 
     async fn run_cmd(self, proxy: EventLoopProxy<UserEvent>) -> Result<()> {
-        let dir = if let Some(device_dir) = self.device {
-            std::env::temp_dir().join(device_dir)
-        } else {
-            std::env::temp_dir()
-        };
-        std::fs::create_dir_all(&dir)?;
-
+        let dir = tempdir(self.device).inspect(|dir| info!("{}", dir.display()))?;
         let kch = Arc::new(OnDiskKeyChain::new(&dir)?);
         let hvn = Arc::new(HvNotifier::new(proxy));
         let cfg = build_config(self.app, self.env)?;
@@ -152,4 +146,18 @@ fn read(prompt: &str) -> IoResult<String> {
     stdin().read_line(&mut input)?;
 
     Ok(input.trim().to_owned())
+}
+
+fn tempdir(device: Option<String>) -> Result<PathBuf> {
+    let mut dir = std::env::temp_dir().join("proton-mail-common-demo");
+
+    if let Some(device_dir) = device {
+        dir = dir.join(device_dir);
+    }
+
+    if !dir.exists() {
+        std::fs::create_dir_all(&dir)?;
+    }
+
+    Ok(dir)
 }
