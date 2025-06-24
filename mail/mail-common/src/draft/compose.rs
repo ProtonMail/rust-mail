@@ -37,9 +37,9 @@ pub(super) async fn patch_draft_with_reply_mode(
     source_message: &Message,
     source_message_body: &MessageBodyMetadata,
     reply_mode: ReplyMode,
-    sender_address: &Address,
 ) {
     let is_sent_message = source_message.is_sent();
+    let canonical_sender_email = proton_canonical_email::canonicalize_auto(&draft.sender);
 
     // Copy over the addresses based on reply mode
     match reply_mode {
@@ -79,7 +79,10 @@ pub(super) async fn patch_draft_with_reply_mode(
                     .to_list
                     .value
                     .iter()
-                    .filter(|v| v.address != sender_address.email)
+                    .filter(|v| {
+                        proton_canonical_email::canonicalize_auto(&v.address)
+                            != canonical_sender_email
+                    })
                     .cloned();
                 draft.to_list = RecipientList::from_message_recipients(
                     contact_group_resolver,
@@ -93,7 +96,10 @@ pub(super) async fn patch_draft_with_reply_mode(
                     .cc_list
                     .value
                     .iter()
-                    .filter(|v| v.address != sender_address.email)
+                    .filter(|v| {
+                        proton_canonical_email::canonicalize_auto(&v.address)
+                            != canonical_sender_email
+                    })
                     .cloned(),
             )
             .await;
