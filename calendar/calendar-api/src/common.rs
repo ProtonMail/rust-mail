@@ -1,5 +1,7 @@
+use jiff::Span;
 use proton_core_api::declare_proton_id;
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 
 declare_proton_id! {
     pub CalendarId
@@ -66,12 +68,25 @@ where
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct CalendarNotification {
     #[serde(rename = "Type")]
-    pub ty: u8,
-    pub trigger: String,
+    pub ty: CalendarNotificationType,
+    pub trigger: Span,
+}
+
+impl PartialEq for CalendarNotification {
+    fn eq(&self, other: &Self) -> bool {
+        self.ty == other.ty && self.trigger.fieldwise() == other.trigger.fieldwise()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize_repr, Deserialize_repr)]
+#[repr(u32)]
+pub enum CalendarNotificationType {
+    Email = 0,
+    Push = 1,
 }
 
 /// Unix timestamp.

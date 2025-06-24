@@ -368,8 +368,8 @@ mod tests {
                     status: CalendarAttendeeStatus::Unanswered,
                 }],
                 notifications: Some(vec![CalendarNotification {
-                    ty: 1,
-                    trigger: "-PT15M".into(),
+                    ty: CalendarNotificationType::Push,
+                    trigger: "-PT15M".parse().unwrap(),
                 }]),
                 color: None,
                 is_proton_proton_invite: true,

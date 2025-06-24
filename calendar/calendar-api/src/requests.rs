@@ -56,6 +56,7 @@ pub enum CalendarNotificationsUpdate {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::CalendarNotificationType;
     use indoc::indoc;
     use pretty_assertions as pa;
 
@@ -80,8 +81,8 @@ mod tests {
         let actual = serde_json::to_string_pretty(&UpdateCalendarEventPersonalPart {
             color: Some(CalendarColor::new("#cafe00")),
             notifications: CalendarNotificationsUpdate::SetTo(vec![CalendarNotification {
-                ty: 1,
-                trigger: "-PT15M".into(),
+                ty: CalendarNotificationType::Push,
+                trigger: "-PT15M".parse().unwrap(),
             }]),
         })
         .unwrap();
