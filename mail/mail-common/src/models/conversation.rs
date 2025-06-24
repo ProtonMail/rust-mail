@@ -3251,13 +3251,36 @@ impl ConversationLabel {
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         if let Some(stats) = stats {
+            let mut conv_counter =
+                ConversationCounters::find_by_id(self.local_label_id.unwrap(), bond)
+                    .await?
+                    .ok_or_else(|| AppError::LabelNotFound(self.local_label_id.unwrap()))?;
+            let existing_message_count = self.context_num_messages;
+            let existing_unread_count = self.context_num_unread;
+
             self.context_num_messages = self.context_num_messages.saturating_sub(stats.count);
             self.context_num_unread = self.context_num_unread.saturating_sub(stats.unread_count);
             self.context_num_attachments = self
                 .context_num_attachments
                 .saturating_sub(stats.attachment_count);
             self.context_size = self.context_size.saturating_sub(stats.size);
+            self.deleted = self.context_num_messages == 0;
             self.save(bond).await?;
+
+            let mut counter_updated = false;
+            if existing_message_count != 0 && self.context_num_messages == 0 {
+                conv_counter.total = conv_counter.total.saturating_sub(1);
+                counter_updated = true;
+            }
+
+            if existing_unread_count != 0 && self.context_num_unread == 0 {
+                conv_counter.unread = conv_counter.unread.saturating_sub(1);
+                counter_updated = true;
+            }
+
+            if counter_updated {
+                conv_counter.save(bond).await?;
+            }
         }
 
         Ok(())
@@ -3281,11 +3304,34 @@ impl ConversationLabel {
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         if let Some(stats) = stats {
+            let mut conv_counter =
+                ConversationCounters::find_by_id(self.local_label_id.unwrap(), bond)
+                    .await?
+                    .ok_or_else(|| AppError::LabelNotFound(self.local_label_id.unwrap()))?;
+            let existing_message_count = self.context_num_messages;
+            let existing_unread_count = self.context_num_unread;
+
             self.context_num_messages += stats.count;
             self.context_num_unread += stats.unread_count;
             self.context_num_attachments += stats.attachment_count;
             self.context_size += stats.size;
+            self.deleted = self.context_num_messages == 0;
             self.save(bond).await?;
+
+            let mut counter_updated = false;
+            if existing_message_count == 0 && self.context_num_messages != 0 {
+                conv_counter.total = conv_counter.total.saturating_add(1);
+                counter_updated = true;
+            }
+
+            if existing_unread_count == 0 && self.context_num_unread != 0 {
+                conv_counter.unread = conv_counter.unread.saturating_add(1);
+                counter_updated = true;
+            }
+
+            if counter_updated {
+                conv_counter.save(bond).await?;
+            }
         }
 
         Ok(())
