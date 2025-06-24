@@ -544,6 +544,11 @@ impl MailUserContext {
         self: &Arc<Self>,
         jobs: Vec<PrefetchJob>,
     ) -> MailContextResult<()> {
+        if jobs.is_empty() {
+            tracing::trace!("No prefetch jobs to queue");
+            return Ok(());
+        }
+
         if let Some(sender) = self.prefetch.get() {
             sender.send_async(jobs).await.map_err(|_| {
                 MailContextError::Other(anyhow!("Failed to send prefetch signal to prefetcher"))

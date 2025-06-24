@@ -13,12 +13,12 @@ use stash::stash::{Bond, Stash, Tether};
 use tracing::debug;
 
 use super::{MailPaginatorJoinHandle, RemoteSource};
-use crate::datatypes::labels::LabelScrollOrder;
 use crate::{
     MailContextError, MailUserContext,
     datatypes::{ContextualConversation, ReadFilter},
     models::{Conversation, ConversationScrollData},
 };
+use crate::{datatypes::labels::LabelScrollOrder, prefetch::PrefetchJob};
 
 /// Mail scroller implementation for [`Conversation`] on in a [`Label`].
 ///
@@ -39,8 +39,9 @@ impl RemoteSource for ConversationScrollData {
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
         let session = ctx.session().clone();
         let stash = ctx.user_stash().clone();
+        let arc_ctx = ctx.as_arc();
         let handle = ctx.spawn(async move {
-            RemoteConversationScrollerSource::sync_first_page(
+            let items = RemoteConversationScrollerSource::sync_first_page(
                 &session,
                 stash,
                 local_label_id,
@@ -50,6 +51,14 @@ impl RemoteSource for ConversationScrollData {
                 scroll_order,
             )
             .await?;
+
+            let prefetch_jobs = items
+                .into_iter()
+                .filter(|item| !item.has_messages)
+                .map(|item| PrefetchJob::Conversation(item.local_id, local_label_id))
+                .collect();
+
+            arc_ctx.queue_prefetch_jobs(prefetch_jobs).await?;
 
             Ok(())
         });
