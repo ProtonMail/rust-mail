@@ -2,21 +2,18 @@ use indoc::formatdoc;
 use jiff::Zoned;
 use proton_calendar_api::{self as cal, ProtonCalendarMock};
 use proton_calendar_common::{RsvpAnswerStatus, RsvpEventId};
-use proton_core_api::services::proton::{GetKeysAllResponse, LabelId, UserId};
+use proton_core_api::services::proton::{GetKeysAllResponse, UserId};
 use proton_core_common::models::ModelExtension;
 use proton_crypto_calendar::{CalendarEventEncryptor, KeyPacket, UnlockedCalendarKey};
 use proton_crypto_inbox::attachment::KeyPackets;
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_api::services::proton::prelude as mail;
-use proton_mail_common::Mailbox;
-use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::Message;
 use proton_mail_common::test_utils::message_body::{
     TEST_USER_ADDRESS_ID, TEST_USER_ID, message_body_test_message_simple, message_body_test_params,
     message_body_test_user_secret,
 };
 use proton_mail_common::test_utils::test_context::MailTestContext;
-use stash::orm::Model;
 use std::str::FromStr;
 
 const CALENDAR_ID: &str = "yXbOd5cP";
@@ -77,7 +74,7 @@ async fn fetch_and_answer() {
 
     ctx.core_context().clock().pretend(now.clone());
 
-    let mut tx = user_ctx.user_stash().connection();
+    let mut db = user_ctx.user_stash().connection();
 
     // ---
 
@@ -86,7 +83,7 @@ async fn fetch_and_answer() {
     let address_keys = ctx
         .mail_user_context()
         .await
-        .unlocked_address_keys(&pgp, &tx, &user_address_id)
+        .unlocked_address_keys(&pgp, &db, &user_address_id)
         .await
         .unwrap();
 
@@ -95,40 +92,37 @@ async fn fetch_and_answer() {
     // ---
     // Step 1: Fetch the message.
 
-    let message = {
-        let mut message = message_body_test_message_simple();
+    let msg_fixture = {
+        let mut msg = message_body_test_message_simple();
 
-        message.metadata.subject = "Invitation for an event".into();
+        msg.metadata.subject = "Invitation for an event".into();
 
-        message.metadata.to_list = vec![mail::MessageRecipient {
+        msg.metadata.to_list = vec![mail::MessageRecipient {
             address: TEST_MAIL.into(),
             is_proton: true,
             name: String::default(),
             group: None,
         }];
 
-        message
-            .body
+        msg.body
             .parsed_headers
             .insert("X-Pm-Calendar-Eventuid".into(), EVENT_UID.into());
 
-        message
+        msg
     };
 
-    ctx.mock_get_message(&message.metadata.id, message.clone())
+    ctx.mock_get_message(&msg_fixture.metadata.id, msg_fixture.clone())
         .await;
 
-    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+    // ---
 
-    Mailbox::with_remote_id(&tx, LabelId::inbox())
-        .await
-        .unwrap()
-        .sync(&mut tx, user_ctx.api(), 1)
+    let (mut msg, _, _) = Message::from_api_data(msg_fixture.clone(), &db)
         .await
         .unwrap();
 
-    let mut msg = Message::load(1.into(), &tx).await.unwrap().unwrap();
-    let msg_body = msg.fetch_message_body(&user_ctx, &mut tx).await.unwrap();
+    db.tx(async |tx| msg.save(&tx).await).await.unwrap();
+
+    let msg_body = msg.fetch_message_body(&user_ctx, &mut db).await.unwrap();
 
     // ---
     // Step 2: Find RSVP.
@@ -239,7 +233,7 @@ async fn fetch_and_answer() {
         .await;
 
     let mut rsvp = msg
-        .fetch_rsvp(&user_ctx, &mut tx, &rsvp)
+        .fetch_rsvp(&user_ctx, &mut db, &rsvp)
         .await
         .unwrap()
         .unwrap();
@@ -307,7 +301,7 @@ async fn fetch_and_answer() {
             sent: mail::Message {
                 metadata: mail::MessageMetadata {
                     num_attachments: 1,
-                    ..message.metadata.clone()
+                    ..msg_fixture.metadata.clone()
                 },
                 body: mail::MessageBody {
                     attachments: vec![mail::MessageAttachment {
@@ -327,12 +321,14 @@ async fn fetch_and_answer() {
                         signature: None,
                         size: 123,
                     }],
-                    ..message.body.clone()
+                    ..msg_fixture.body.clone()
                 },
             },
         },
     )
     .await;
+
+    ctx.catch_all().await;
 
     assert!(
         !rsvp
@@ -341,7 +337,7 @@ async fn fetch_and_answer() {
             .all(|att| att.status == cal::CalendarAttendeeStatus::Yes)
     );
 
-    rsvp.answer(&user_ctx, &mut tx, RsvpAnswerStatus::Yes)
+    rsvp.answer(&user_ctx, &mut db, RsvpAnswerStatus::Yes)
         .await
         .unwrap();
 
@@ -351,7 +347,7 @@ async fn fetch_and_answer() {
             .all(|att| att.status == cal::CalendarAttendeeStatus::Yes)
     );
 
-    msg.reload(&tx).await.unwrap();
+    msg.reload(&db).await.unwrap();
 
     assert_eq!(1, msg.attachments_metadata.len());
     assert_eq!("invite.ics", msg.attachments_metadata[0].filename);
