@@ -1,4 +1,4 @@
-use crate::common::{new_factory, new_queue};
+use super::common::{new_factory, new_queue};
 use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
@@ -9,8 +9,6 @@ use stash::stash::Bond;
 use std::num::NonZeroUsize;
 use std::time::Duration;
 use tokio::sync::watch;
-
-mod common;
 
 #[tokio::test]
 async fn auto_execute_until_empty() {
