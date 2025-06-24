@@ -1,11 +1,11 @@
 pub use super::*;
-use crate::datatypes::LocalAttachmentId;
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::LocalMessageId;
 use crate::datatypes::MessageFlags;
 use crate::datatypes::SystemLabelId;
 use crate::datatypes::attachment;
 use crate::datatypes::{Disposition, MessageRecipient, MessageRecipients, MessageSender};
+use crate::datatypes::{LocalAttachmentId, PmSignature};
 use crate::decrypted_message::DecryptedMessageBody;
 use crate::draft::recipients::{MaybeEmptyString, NullContactGroupResolver};
 use crate::draft::{Draft, MetadataId};
@@ -399,7 +399,7 @@ fn mail_settings_with_signature() -> MailSettings {
 fn mail_settings_with_signature_and_pm_signautre() -> MailSettings {
     MailSettings {
         signature: MAIL_SETTINGS_SIGNATURE.to_owned(),
-        pm_signature: PmSignature::Enabled,
+        pm_signature: PmSignature::ENABLED,
         ..Default::default()
     }
 }

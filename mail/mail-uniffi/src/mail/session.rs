@@ -42,6 +42,7 @@ use tracing_appender::non_blocking::WorkerGuard;
 /// This object needs to be kept alive for the entire duration of the application.
 ///
 #[derive(uniffi::Object)]
+#[allow(dead_code)]
 pub struct MailSession {
     mail_ctx: Arc<MailContext>,
     user_ctx: Arc<MailUserContextMap>,
@@ -701,17 +702,10 @@ impl MailSession {
             return Ok(());
         };
         let map = self.user_ctx.clone();
-        let guard = self.log_guard.clone();
-        let log_debug = self.params.log_debug;
 
         uniffi_async(async move {
             user_context.sign_out_all().await?;
             map.clear();
-            let maybe_log_guard = init_log(
-                user_context.core_context().get_log_path().unwrap(),
-                log_debug,
-            )?;
-            *guard.lock().await = maybe_log_guard;
 
             Result::<(), RealProtonMailError>::Ok(())
         })

@@ -519,23 +519,15 @@ impl MailUserContext {
         MailEventSubscriber::new(Weak::clone(&self.this))
     }
 
-    /// Prefetch key locations in the background.
-    ///
-    /// Following priority locations are prefetched:
-    /// - Inbox
-    /// - Sent
-    /// - AllSent
-    /// - Drafts
-    /// - AllDrafts
-    pub async fn prefetch(self: &Arc<Self>) -> MailContextResult<()> {
-        // TODO: Remove me
-        Ok(())
-    }
-
     pub async fn queue_prefetch_jobs(
         self: &Arc<Self>,
         jobs: Vec<PrefetchJob>,
     ) -> MailContextResult<()> {
+        if jobs.is_empty() {
+            tracing::trace!("No prefetch jobs to queue");
+            return Ok(());
+        }
+
         if let Some(sender) = self.prefetch.get() {
             sender.send_async(jobs).await.map_err(|_| {
                 MailContextError::Other(anyhow!("Failed to send prefetch signal to prefetcher"))

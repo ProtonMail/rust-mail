@@ -1,4 +1,4 @@
-use crate::datatypes::{MessageRecipient, MessageSender, MimeType, PmSignature};
+use crate::datatypes::{MessageRecipient, MessageSender, MimeType};
 use crate::draft::recipients::{ContactGroupResolver, MaybeEmptyString, RecipientList};
 use crate::draft::{
     AttachmentRemovalId, Draft, DraftAttachmentRemovalQueuer, Error, ReplyMode, SaveError,
@@ -121,7 +121,7 @@ pub(super) fn get_full_signature(
     };
     let mut signature = get_address_signature(address, mime_type);
 
-    if mail_settings.pm_signature != PmSignature::Disabled {
+    if mail_settings.pm_signature.is_enabled() {
         signature.push_str(line_break);
         signature.push_str(line_break);
         if mime_type == MimeType::TextHtml {

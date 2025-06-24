@@ -78,9 +78,8 @@ use proton_mail_common::datatypes::{
     ComposerDirection as RealComposerDirection, ComposerMode as RealComposerMode,
     ConversationLabelsCount as RealConversationCount, CustomLabel as RealCustomLabel,
     Disposition as RealDisposition, LabelDescription as RealLabelDescription, LocalConversationId,
-    LocalMessageId, MailSettingsId, MessageButtons as RealMessageButtons,
-    MessageFlags as RealMessageFlags, MessageLabelsCount as RealMessageCount,
-    MessageRecipient as RealMessageRecipient,
+    LocalMessageId, MessageButtons as RealMessageButtons, MessageFlags as RealMessageFlags,
+    MessageLabelsCount as RealMessageCount, MessageRecipient as RealMessageRecipient,
     MessageRecipientDisplayMode as RealMessageRecipientDisplayMode,
     MessageSender as RealMessageSender, MimeType as RealMimeType,
     MobileSetting as RealMobileSetting, MobileSettings as RealMobileSettings,
@@ -562,37 +561,23 @@ impl From<RealPgpScheme> for PgpScheme {
     }
 }
 
-/// TODO: Document this enum.
-#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq, UniffiEnum)]
-#[repr(u8)]
-pub enum PmSignature {
-    /// TODO: Document this variant.
-    #[default]
-    Disabled = 0,
-
-    /// TODO: Document this variant.
-    Enabled = 1,
-
-    /// TODO: Document this variant.
-    EnabledLocked = 2,
+#[derive(Clone, Copy, Debug, Eq, PartialEq, UniffiRecord)]
+pub struct PmSignature {
+    value: u8,
 }
 
-impl From<PmSignature> for RealPmSignature {
-    fn from(value: PmSignature) -> Self {
-        match value {
-            PmSignature::Disabled => RealPmSignature::Disabled,
-            PmSignature::Enabled => RealPmSignature::Enabled,
-            PmSignature::EnabledLocked => RealPmSignature::EnabledLocked,
+impl Default for PmSignature {
+    fn default() -> Self {
+        Self {
+            value: RealPmSignature::ENABLED.bits(),
         }
     }
 }
 
 impl From<RealPmSignature> for PmSignature {
     fn from(value: RealPmSignature) -> Self {
-        match value {
-            RealPmSignature::Disabled => PmSignature::Disabled,
-            RealPmSignature::Enabled => PmSignature::Enabled,
-            RealPmSignature::EnabledLocked => PmSignature::EnabledLocked,
+        Self {
+            value: value.bits(),
         }
     }
 }
@@ -1346,56 +1331,6 @@ pub struct MailSettings {
 
     /// TODO: Document this field.
     pub view_mode: ViewMode,
-}
-
-impl From<MailSettings> for RealMailSettings {
-    fn from(value: MailSettings) -> Self {
-        RealMailSettings {
-            local_id: MailSettingsId,
-            almost_all_mail: value.almost_all_mail.into(),
-            attach_public_key: value.attach_public_key,
-            auto_delete_spam_and_trash_days: value.auto_delete_spam_and_trash_days,
-            auto_save_contacts: value.auto_save_contacts,
-            block_sender_confirmation: value.block_sender_confirmation,
-            composer_mode: value.composer_mode.into(),
-            confirm_link: value.confirm_link,
-            delay_send_seconds: value.delay_send_seconds,
-            display_name: value.display_name,
-            draft_mime_type: value.draft_mime_type.into(),
-            enable_folder_color: value.enable_folder_color,
-            font_face: value.font_face,
-            hide_remote_images: value.hide_remote_images,
-            hide_embedded_images: value.hide_embedded_images,
-            hide_sender_images: value.hide_sender_images,
-            image_proxy: value.image_proxy,
-            inherit_parent_folder_color: value.inherit_parent_folder_color,
-            message_buttons: value.message_buttons.into(),
-            mobile_settings: value.mobile_settings.map(Into::into),
-            next_message_on_move: value.next_message_on_move.map(Into::into),
-            num_message_per_page: value.num_message_per_page,
-            pgp_scheme: value.pgp_scheme.into(),
-            pm_signature: value.pm_signature.into(),
-            pm_signature_referral_link: value.pm_signature_referral_link,
-            prompt_pin: value.prompt_pin,
-            receive_mime_type: value.receive_mime_type.into(),
-            right_to_left: value.right_to_left.into(),
-            shortcuts: value.shortcuts,
-            show_images: value.show_images.into(),
-            show_mime_type: value.show_mime_type.into(),
-            show_moved: value.show_moved.into(),
-            sign: value.sign,
-            signature: value.signature,
-            spam_action: value.spam_action.map(Into::into),
-            sticky_labels: value.sticky_labels,
-            submission_access: value.submission_access,
-            swipe_left: value.swipe_left.into(),
-            swipe_right: value.swipe_right.into(),
-            theme: value.theme,
-            view_layout: value.view_layout.into(),
-            view_mode: value.view_mode.into(),
-            row_id: None,
-        }
-    }
 }
 
 impl From<RealMailSettings> for MailSettings {
