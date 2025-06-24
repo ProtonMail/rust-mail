@@ -1021,7 +1021,6 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the action failed to execute.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip_all)]
     pub async fn save(
         &mut self,
         queue: &Queue,
@@ -1036,7 +1035,6 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the action failed to execute.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip_all)]
     pub async fn send(
         &mut self,
         queue: &Queue,
@@ -1053,7 +1051,6 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the action failed to execute.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip_all)]
     pub async fn schedule_send(
         &mut self,
         delivery_time: DateTime<Local>,
@@ -1070,7 +1067,6 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the action failed to execute.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip_all)]
     pub async fn discard(
         &self,
         queue: &Queue,
@@ -1619,7 +1615,7 @@ impl DraftSaveActionQueuer {
     }
 
     /// Consume and queue this action.
-    #[tracing::instrument(level=tracing::Level::DEBUG, name="draft::save",skip(self,queue))]
+    #[tracing::instrument(level=tracing::Level::DEBUG, name="draft::save",skip_all)]
     pub async fn queue(
         self,
         queue: &Queue,

@@ -41,6 +41,60 @@ pub enum ProtonMailError {
     Unexpected(Unexpected),
 }
 
+/// When `proton_mail_error_log` feature is enabled, this guard is used to prevent
+/// nested conversions to re-log the same error multiple times.
+///
+/// The first attempt at converting a type will capture the allowed to log value and then release it
+/// once it is done. Subsequent attempts in nested conversions will fail.
+///
+struct LogStackGuard(bool);
+
+impl LogStackGuard {
+    #[cfg(feature = "proton_mail_error_log")]
+    #[inline(always)]
+    fn new() -> Self {
+        Self(LOG_STACK.replace(false))
+    }
+    #[cfg(not(feature = "proton_mail_error_log"))]
+    #[inline(always)]
+    fn new() -> Self {
+        Self(true)
+    }
+
+    #[inline(always)]
+    fn can_log(&self) -> bool {
+        self.0
+    }
+}
+
+impl Drop for LogStackGuard {
+    #[inline(always)]
+    fn drop(&mut self) {
+        #[cfg(feature = "proton_mail_error_log")]
+        LOG_STACK.set(self.0);
+    }
+}
+
+#[cfg(feature = "proton_mail_error_log")]
+thread_local! {
+    static LOG_STACK: std::cell::Cell<bool> = const{ std::cell::Cell::new(true) };
+}
+
+#[cfg(feature = "proton_mail_error_log")]
+#[inline(always)]
+fn log_error<T: std::error::Error>(value: &T) -> LogStackGuard {
+    let guard = LogStackGuard::new();
+    if guard.can_log() {
+        error!("ProtonMailError::From: {value:?}");
+    }
+    guard
+}
+#[cfg(not(feature = "proton_mail_error_log"))]
+#[inline(always)]
+fn log_error<T: std::error::Error>(_: &T) -> LogStackGuard {
+    LogStackGuard::new()
+}
+
 impl ProtonMailError {
     /// Shorthand for creating a `ProtonMailError::Reason`.
     pub fn reason<R: Into<MailErrorReason>>(reason: R) -> Self {
@@ -62,6 +116,7 @@ impl From<MailErrorReason> for ProtonMailError {
 
 impl From<ApiServiceError> for ProtonMailError {
     fn from(error: ApiServiceError) -> Self {
+        let _guard = log_error(&error);
         if error.is_network_failure() {
             return Self::Network;
         }
@@ -79,6 +134,7 @@ impl From<ApiServiceError> for ProtonMailError {
 
 impl From<proton_account_api::ApiError> for ProtonMailError {
     fn from(error: proton_account_api::ApiError) -> Self {
+        let _guard = log_error(&error);
         match error {
             proton_account_api::ApiError::Muon(error) => Self::from(ApiServiceError::from(error)),
             proton_account_api::ApiError::Status(error) => Self::from(ApiServiceError::from(error)),
@@ -90,6 +146,7 @@ impl From<proton_account_api::ApiError> for ProtonMailError {
 
 impl From<PinError> for ProtonMailError {
     fn from(value: PinError) -> Self {
+        let _guard = log_error(&value);
         match value {
             PinError::TooShort => Self::reason(PinSetErrorReason::TooShort),
             PinError::TooLong => Self::reason(PinSetErrorReason::TooLong),
@@ -113,6 +170,7 @@ impl From<PinError> for ProtonMailError {
 
 impl From<LoginError> for ProtonMailError {
     fn from(error: LoginError) -> Self {
+        let _guard = log_error(&error);
         match error {
             LoginError::WrongMailboxPassword => Self::reason(LoginErrorReason::InvalidCredentials),
 
@@ -155,6 +213,7 @@ impl From<LoginError> for ProtonMailError {
 
 impl From<SignupError> for ProtonMailError {
     fn from(error: SignupError) -> Self {
+        let _guard = log_error(&error);
         match error {
             SignupError::Api(e) => Self::from(e),
             SignupError::Crypto(_) => Self::Unexpected(Unexpected::Crypto),
@@ -180,6 +239,7 @@ impl From<SignupError> for ProtonMailError {
 
 impl From<AppError> for ProtonMailError {
     fn from(error: AppError) -> Self {
+        log_error(&error);
         match error {
             AppError::API(api_service_error) => Self::from(api_service_error),
             AppError::LabelDoesNotHaveRemoteId(_local_label_id) => {
@@ -221,6 +281,7 @@ impl From<AppError> for ProtonMailError {
 
 impl From<MailContextError> for ProtonMailError {
     fn from(error: MailContextError) -> Self {
+        let _guard = log_error(&error);
         match error {
             MailContextError::AccountMissing(_) => Self::Unexpected(Unexpected::Database),
             MailContextError::SettingsMissing(_) => Self::Unexpected(Unexpected::Database),
@@ -277,6 +338,7 @@ impl From<MailContextError> for ProtonMailError {
 
 impl From<MailScrollerError> for ProtonMailError {
     fn from(error: MailScrollerError) -> Self {
+        let _guard = log_error(&error);
         match error {
             MailScrollerError::Dirty => Self::reason(MailScrollerErrorReason::Dirty),
         }
@@ -285,6 +347,7 @@ impl From<MailScrollerError> for ProtonMailError {
 
 impl From<DraftError> for ProtonMailError {
     fn from(value: DraftError) -> Self {
+        let _guard = log_error(&value);
         match value {
             DraftError::Open(v) => v.into(),
             DraftError::Save(v) => v.into(),
@@ -306,6 +369,7 @@ impl From<DraftError> for ProtonMailError {
 
 impl From<DraftOpenError> for ProtonMailError {
     fn from(value: DraftOpenError) -> Self {
+        let _guard = log_error(&value);
         match value {
             DraftOpenError::UserHasNoAddresses => Self::Unexpected(Unexpected::Internal),
             DraftOpenError::AddressNotFound(_) => Self::Reason(MailErrorReason::DraftOpenReason(
@@ -326,6 +390,7 @@ impl From<DraftOpenError> for ProtonMailError {
 
 impl From<DraftSendError> for ProtonMailError {
     fn from(value: DraftSendError) -> Self {
+        let _guard = log_error(&value);
         match value {
             DraftSendError::MessageIsNotADraft(_) => Self::Reason(
                 MailErrorReason::DraftSendReason(DraftSendErrorReason::MessageIsNotADraft),
@@ -358,6 +423,7 @@ impl From<DraftSendError> for ProtonMailError {
 
 impl From<DraftSaveError> for ProtonMailError {
     fn from(value: DraftSaveError) -> Self {
+        let _guard = log_error(&value);
         match value {
             DraftSaveError::UserHasNoAddresses => Self::Unexpected(Unexpected::Internal),
             DraftSaveError::AddressNotFound(_) => Self::Unexpected(Unexpected::Internal),
@@ -388,6 +454,7 @@ impl From<DraftSaveError> for ProtonMailError {
 
 impl From<DraftUndoError> for ProtonMailError {
     fn from(value: DraftUndoError) -> Self {
+        let _guard = log_error(&value);
         match value {
             DraftUndoError::MessageNotADraft(_) => Self::Reason(
                 MailErrorReason::DraftUndoSendReason(DraftUndoSendErrorReason::MessageIsNotADraft),
@@ -414,6 +481,7 @@ impl From<DraftUndoError> for ProtonMailError {
 
 impl From<DraftDiscardError> for ProtonMailError {
     fn from(value: DraftDiscardError) -> Self {
+        let _guard = log_error(&value);
         match value {
             DraftDiscardError::DeleteFailed => Self::Reason(MailErrorReason::DraftDiscardReason(
                 DraftDiscardErrorReason::MessageDoesNotExist,
@@ -428,6 +496,7 @@ impl From<DraftDiscardError> for ProtonMailError {
 
 impl From<AttachmentUploadError> for ProtonMailError {
     fn from(value: AttachmentUploadError) -> Self {
+        let _guard = log_error(&value);
         match value {
             AttachmentUploadError::MetadataNotFound(_)
             | AttachmentUploadError::MessageDoesNotExist => {
@@ -485,6 +554,7 @@ impl From<AttachmentUploadError> for ProtonMailError {
 
 impl From<PackageError> for ProtonMailError {
     fn from(value: PackageError) -> Self {
+        let _guard = log_error(&value);
         let draft_reason = match value {
             PackageError::RecipientEmailInvalid(e) => {
                 DraftSendErrorReason::RecipientEmailInvalid(e)
@@ -501,6 +571,7 @@ impl From<PackageError> for ProtonMailError {
 
 impl From<CancelScheduleSendError> for ProtonMailError {
     fn from(value: CancelScheduleSendError) -> Self {
+        let _guard = log_error(&value);
         match value {
             CancelScheduleSendError::TimedOut | CancelScheduleSendError::MetadataNotFound(_) => {
                 Self::Unexpected(Unexpected::Internal)
@@ -526,6 +597,7 @@ impl From<CancelScheduleSendError> for ProtonMailError {
 
 impl From<SenderAddressChangeError> for ProtonMailError {
     fn from(value: SenderAddressChangeError) -> Self {
+        let _guard = log_error(&value);
         match value {
             SenderAddressChangeError::AddressNotFound(_)
             | SenderAddressChangeError::MetadataNotFound(_) => {
@@ -553,6 +625,7 @@ impl From<SenderAddressChangeError> for ProtonMailError {
 
 impl From<EventLoopError> for ProtonMailError {
     fn from(error: EventLoopError) -> Self {
+        let _guard = log_error(&error);
         match error {
             EventLoopError::StoreRead(anyhow) | EventLoopError::StoreWrite(anyhow) => {
                 Self::from(anyhow)
@@ -570,6 +643,7 @@ impl From<EventLoopError> for ProtonMailError {
 
 impl From<SubscriberError> for ProtonMailError {
     fn from(error: SubscriberError) -> Self {
+        let _guard = log_error(&error);
         match error {
             SubscriberError::Api(api_service_error) => Self::from(api_service_error),
             SubscriberError::Other(_) => {
@@ -582,6 +656,7 @@ impl From<SubscriberError> for ProtonMailError {
 
 impl From<ContactError> for ProtonMailError {
     fn from(error: ContactError) -> Self {
+        let _guard = log_error(&error);
         match error {
             ContactError::CardNotFound(_string) => Self::reason(OtherErrorReason::InvalidParameter),
             ContactError::ContactCardRemoteIdNotPresent(_string)
@@ -598,6 +673,7 @@ impl From<ContactError> for ProtonMailError {
 
 impl From<MailActionError> for ProtonMailError {
     fn from(error: MailActionError) -> Self {
+        let _guard = log_error(&error);
         match error {
             MailActionError::Http(api_service_error) => Self::from(api_service_error),
             MailActionError::Stash(stash_error) => Self::from(stash_error),
@@ -616,6 +692,7 @@ where
     T::Error: Into<Self>,
 {
     fn from(error: InternalActionError<T>) -> Self {
+        let _guard = log_error(&error);
         match error {
             #[allow(clippy::useless_conversion)] // It is not useless clippy
             InternalActionError::Action(error) => Self::from(error.into()),
@@ -626,6 +703,7 @@ where
 
 impl From<SidebarError> for ProtonMailError {
     fn from(error: SidebarError) -> Self {
+        let _guard = log_error(&error);
         match error {
             SidebarError::MailContext(mail_context_error) => Self::from(mail_context_error),
             SidebarError::Stash(stash_error) => Self::from(stash_error),
@@ -636,6 +714,7 @@ impl From<SidebarError> for ProtonMailError {
 
 impl From<LabelError> for ProtonMailError {
     fn from(error: LabelError) -> Self {
+        let _guard = log_error(&error);
         match error {
             LabelError::API(api_service_error) => Self::from(api_service_error),
             LabelError::Stash(stash_error) => Self::from(stash_error),
@@ -652,6 +731,7 @@ impl From<LabelError> for ProtonMailError {
 
 impl From<RegisteredDeviceTaskError> for ProtonMailError {
     fn from(error: RegisteredDeviceTaskError) -> Self {
+        let _guard = log_error(&error);
         match error {
             RegisteredDeviceTaskError::CreateContext(core_context_error) => {
                 MailContextError::from(core_context_error).into()

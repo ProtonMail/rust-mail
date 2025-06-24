@@ -3,7 +3,6 @@ use crate::UniffiEnum;
 use derive_more::From;
 use proton_mail_common::errors::MailErrorReason as RealMailErrorReason;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
-use tracing::error;
 
 #[derive(Debug, From, UniffiEnum)]
 pub enum EventError {
@@ -13,7 +12,6 @@ pub enum EventError {
 
 impl From<RealProtonMailError> for EventError {
     fn from(error: RealProtonMailError) -> Self {
-        error!("EventError from {error:?}");
         match error {
             RealProtonMailError::Reason(reason) => reason.into(),
             mail_error => EventError::Other(ProtonError::from(mail_error)),
