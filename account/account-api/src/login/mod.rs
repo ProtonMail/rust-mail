@@ -50,6 +50,10 @@ pub enum LoginError {
     #[error("Failed to setup user key: {0}")]
     UserKeySetup(String),
 
+    /// Returned if we fail to setup the user key because the user is non-private.
+    #[error("Cannot setup user key for non-private user")]
+    UserKeySetupNonPrivate,
+
     /// Returned if we fail to set up a new address key.
     #[error("Failed to set up new address key: {0}")]
     AddressKeySetup(String),

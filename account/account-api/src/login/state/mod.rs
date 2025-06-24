@@ -276,6 +276,10 @@ impl State {
 
         // Does the user have a key?
         if user.keys.as_ref().is_empty() {
+            if !user.private {
+                return Err(LoginError::UserKeySetupNonPrivate);
+            }
+
             Self::setup_keys(&srp, &pgp, &client, &addresses, &pass).await?;
 
             user = client

@@ -221,6 +221,9 @@ pub enum LoginError {
     /// Returned if we fail to setup the user key.
     UserKeySetup(String),
 
+    /// Returned if we fail to setup the user key because the user is non-private.
+    UserKeySetupNonPrivate,
+
     /// Returned if we fail to fetch the user's addresses after login.
     AddressFetch(UserApiServiceError),
 
@@ -268,6 +271,7 @@ impl From<login_api::LoginError> for LoginError {
             login_api::LoginError::AddressFetch(e) => LoginError::AddressFetch(e.into()),
             login_api::LoginError::AddressSetup(e) => LoginError::AddressSetup(e),
             login_api::LoginError::UserKeySetup(e) => LoginError::UserKeySetup(e),
+            login_api::LoginError::UserKeySetupNonPrivate => LoginError::UserKeySetupNonPrivate,
             login_api::LoginError::AddressKeySetup(e) => LoginError::AddressKeySetup(e),
             login_api::LoginError::MissingPrimaryKey => LoginError::MissingPrimaryKey,
             login_api::LoginError::KeySecretDecryption => LoginError::KeySecretDecryption,
