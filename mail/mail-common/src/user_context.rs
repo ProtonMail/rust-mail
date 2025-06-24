@@ -540,19 +540,6 @@ impl MailUserContext {
         MailEventSubscriber::new(Weak::clone(&self.this))
     }
 
-    /// Prefetch key locations in the background.
-    ///
-    /// Following priority locations are prefetched:
-    /// - Inbox
-    /// - Sent
-    /// - AllSent
-    /// - Drafts
-    /// - AllDrafts
-    pub async fn prefetch(self: &Arc<Self>) -> MailContextResult<()> {
-        // TODO: Remove me
-        Ok(())
-    }
-
     pub async fn queue_prefetch_jobs(
         self: &Arc<Self>,
         jobs: Vec<PrefetchJob>,
