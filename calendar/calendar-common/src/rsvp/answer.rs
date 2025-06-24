@@ -14,7 +14,7 @@ use proton_crypto_calendar::{
     CalendarEventDecryptor, CalendarKeyPacketUpgrader, KeyPacketRef, LockedCalendarKey,
 };
 use proton_ical as ical;
-use tracing::{info, instrument, warn};
+use tracing::{debug, info, instrument, warn};
 
 pub(super) async fn exec<P, M>(
     api: &Proton,
@@ -125,7 +125,7 @@ where
     // the session key so that *it* is encrypted using calendar key - the data
     // remains the same, we just change how the key is represented.
     if let Some(key_packet) = &event.raw.address_key_packet {
-        info!("Upgrading event to be encrypted with calendar key");
+        debug!("Upgrading event to be encrypted with calendar key");
 
         let key_packet = {
             let calendar_key = LockedCalendarKey::from_bootstrap(calendar)?.import(pgp, keys)?;
@@ -147,12 +147,11 @@ where
         event.raw.shared_key_packet = Some(key_packet.into_base64());
     }
 
-    info!(
+    debug!(
         ?att_id,
         ?old_status,
         ?new_status,
-        ?notifs,
-        "Updating event in calendar",
+        "Updating attendee status",
     );
 
     api.update_calendar_event_attendee_status(
@@ -163,6 +162,13 @@ where
         &answer.now,
     )
     .await?;
+
+    debug!(
+        cal_id=?event.calendar.id,
+        event_id=?event.raw.id,
+        ?notifs,
+        "Updating personal part",
+    );
 
     api.update_calendar_event_personal_part(&event.calendar.id, &event.raw.id, color, notifs)
         .await?;
@@ -211,7 +217,7 @@ fn prepare_notifs(
 }
 
 /// Sends an email notifying organizer about our status.
-#[instrument(skip_all)]
+#[instrument(skip_all, fields(organizer = event.organizer.email))]
 #[allow(clippy::needless_lifetimes)] // false-positive
 async fn notify<'a, P, M>(
     api: &Proton,
@@ -225,11 +231,6 @@ where
     P: PGPProviderSync,
     M: RsvpMailSender,
 {
-    info!(
-        organizer=?event.organizer.email,
-        "Notifying organizer",
-    );
-
     let body = {
         let verb = match answer.status {
             RsvpAnswerStatus::Maybe => "tentatively accepted",
@@ -242,7 +243,13 @@ where
         format!("{} {verb} your invitation to {}", answer.email, summary)
     };
 
-    let ics = build_ics(api, pgp, event, answer, decryptor).await?;
+    let ics = {
+        debug!("Building *.ics");
+
+        build_ics(api, pgp, event, answer, decryptor).await?
+    };
+
+    debug!("Notifying organizer");
 
     sender
         .send(&event.organizer.email, &body, &ics)

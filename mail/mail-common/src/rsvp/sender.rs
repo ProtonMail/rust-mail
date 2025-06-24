@@ -22,6 +22,7 @@ use proton_mail_api::services::proton::prelude::{
 };
 use stash::stash::Tether;
 use std::slice;
+use tracing::debug;
 use tracing::error;
 use tracing::warn;
 
@@ -46,32 +47,56 @@ where
     type Error = MailContextError;
 
     async fn send(mut self, to: &str, body: &str, ics: &str) -> Result<(), Self::Error> {
-        let key = self
-            .keys
-            .primary_for_mail()
-            .with_context(|| {
-                format!(
-                    "Couldn't get primary key for address {}",
-                    self.msg_address_id
-                )
-            })
-            .map_err(MailContextError::Other)?;
+        let key = {
+            debug!("Getting mail key");
 
-        let ics = RsvpAttachment(ics).attachment_encrypt_and_sign(self.pgp, &key)?;
-        let message = self.build_message(to, body, &key, &ics)?;
+            self.keys
+                .primary_for_mail()
+                .with_context(|| {
+                    format!(
+                        "Couldn't get primary key for address {}",
+                        self.msg_address_id
+                    )
+                })
+                .map_err(MailContextError::Other)?
+        };
+
+        let ics = {
+            debug!("Encrypting attachment");
+
+            RsvpAttachment(ics).attachment_encrypt_and_sign(self.pgp, &key)?
+        };
+
+        let message = {
+            debug!("Building message");
+
+            self.build_message(to, body, &key, &ics)?
+        };
+
         let parent = Some((self.msg_id.clone(), DraftAction::Reply));
-        let (packages, mut ics) = self.build_packages(to, body, ics).await?;
+
+        let (packages, mut ics) = {
+            debug!("Building packages");
+
+            self.build_packages(to, body, ics).await?
+        };
+
         let auto_save_contacts = false;
 
-        let resp = self
-            .ctx
-            .api()
-            .send_direct(message, parent, packages, auto_save_contacts)
-            .await?;
+        let resp = {
+            debug!("Sending mail");
+
+            self.ctx
+                .api()
+                .send_direct(message, parent, packages, auto_save_contacts)
+                .await?
+        };
 
         let result = self
             .tether
             .tx::<_, _, anyhow::Error>(async move |tx| {
+                debug!("Saving message into the database");
+
                 if let Some(remote_att) = resp.sent.body.attachments.first() {
                     ics.attachment_type = AttachmentType::Remote(Some(remote_att.id.clone()));
                 } else {
