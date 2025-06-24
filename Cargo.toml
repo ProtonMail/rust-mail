@@ -30,7 +30,6 @@ members = [
   "mail/mail-ids",
   "mail/mail-tui",
   "mail/mail-uniffi",
-  "mail/mail-wasm",
   "payment/payment-crux",
   "payment/payment-sdk",
   "payment/payment-uniffi",
