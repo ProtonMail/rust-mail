@@ -11,6 +11,7 @@ extern crate muon;
 
 pub mod countries;
 pub mod login;
+pub mod password;
 pub mod prelude;
 pub mod requests;
 pub mod responses;

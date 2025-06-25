@@ -14,6 +14,7 @@ use crate::{LiveQueryCallback, async_runtime, spawn_async, uniffi_async};
 use futures::TryFutureExt;
 use proton_account_api::login::state::want_qr_confirmation::process_target_device_qr_code;
 use proton_account_uniffi::login::ProcessTargetDeviceQrError;
+use proton_account_uniffi::password::PasswordFlow;
 use proton_account_uniffi::password_validator::PasswordValidatorService;
 use proton_core_api::services::proton::{ProtonAuth, ProtonPayments};
 use proton_mail_common::MailUserContext;
@@ -170,6 +171,20 @@ impl MailUserSession {
             ctx.session()
                 .fork_with_version(app_version)
                 .await
+                .map_err(RealProtonMailError::from)
+        })
+        .await
+        .map_err(UserContextError::from)
+    }
+
+    /// Start new password change flow for an authenticated user session.
+    pub async fn new_password_flow(&self) -> Result<Arc<PasswordFlow>, UserContextError> {
+        let ctx = self.ctx()?;
+
+        uniffi_async(async move {
+            ctx.new_password_flow()
+                .await
+                .map(|flow| PasswordFlow::new(flow))
                 .map_err(RealProtonMailError::from)
         })
         .await

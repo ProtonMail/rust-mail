@@ -5,6 +5,7 @@ use std::sync::Arc;
 mod list;
 mod login;
 mod logout;
+mod password;
 mod qr_login;
 mod signup;
 mod switch;
@@ -29,6 +30,7 @@ enum UserSubCmd {
     Signup(signup::Cmd),
     Switch(switch::Cmd),
     Logout(logout::Cmd),
+    Password(password::Cmd),
     QrTarget(qr_login::TargetCmd),
     QrHost(qr_login::HostCmd),
 }
@@ -41,6 +43,7 @@ impl UserSubCmd {
             Self::Signup(cmd) => cmd.run(ctx).await,
             Self::Switch(cmd) => cmd.run(ctx).await,
             Self::Logout(cmd) => cmd.run(ctx).await,
+            Self::Password(cmd) => cmd.run(ctx).await,
             Self::QrTarget(cmd) => cmd.run(ctx).await,
             Self::QrHost(cmd) => cmd.run(ctx).await,
         }

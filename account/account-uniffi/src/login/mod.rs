@@ -357,7 +357,11 @@ impl From<login_api::LoginError> for LoginError {
             login_api::LoginError::FlowTotp(ApiServiceError::UnprocessableEntity(
                 _,
                 Some(info),
-            )) if info.code == CoreBundle::PasswordWrong as u32 => LoginError::Incorrect2FACode,
+            )) if info.code == CoreBundle::Auth2faInputInvalid as u32
+                || info.code == CoreBundle::Auth2faTokenInvalid as u32 =>
+            {
+                LoginError::Incorrect2FACode
+            }
 
             login_api::LoginError::FlowLogin(e) => LoginError::FlowLogin(e.into()),
             login_api::LoginError::FlowTotp(e) => LoginError::FlowTotp(e.into()),

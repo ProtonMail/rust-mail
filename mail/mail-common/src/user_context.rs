@@ -14,6 +14,7 @@ use crate::user_context::events::subscriber::MailEventSubscriber;
 use crate::user_context::initialization::InitializationMediator;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
+use proton_account_api::password::PasswordFlow;
 use proton_action_queue::queue::{Queue, QueueAutoExecutor, QueueAutoExecutorPool};
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::crypto_clock;
@@ -441,8 +442,16 @@ impl MailUserContext {
         Ok(send_preferences)
     }
 
+    /// Create a new password change flow.
+    pub async fn new_password_flow(&self) -> MailContextResult<PasswordFlow> {
+        let session = self.session().to_owned();
+        let account = self.user_context.core_account().await?;
+        let tfa_mode = account.second_factor_mode.unwrap_or_default();
+
+        Ok(PasswordFlow::new(session, tfa_mode))
+    }
+
     /// Logs this user out.
-    ///
     pub async fn logout(&self) -> MailContextResult<()> {
         self.mail_context
             .logout_account(self.user_id().to_owned())
