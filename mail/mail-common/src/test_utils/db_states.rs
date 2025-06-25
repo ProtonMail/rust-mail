@@ -220,6 +220,7 @@ pub fn new_test_delete_db_state() -> TestDBState {
             },
             Message {
                 label_ids: vec![MY_LABEL_ID1.clone(), all_mail.remote_id.clone().unwrap()],
+                unread: true,
                 ..CONV1_MSG3.to_owned()
             },
             Message {
@@ -237,6 +238,55 @@ pub fn new_test_delete_db_state() -> TestDBState {
                 let mut msg_2 = CONV2_MSG2.to_owned();
                 msg_2.label_ids.push(all_mail.remote_id.clone().unwrap());
                 msg_2
+            },
+        ],
+    }
+}
+
+pub fn new_test_delete_all_messages_in_conv_label_db_state() -> TestDBState {
+    // Conversation 1 has 4 messages, split between 2 labels
+    let conv_id1 = DELETE_DB_CONV1.clone();
+    let all_mail = Label {
+        remote_id: Some(LabelId::all_mail().clone()),
+        name: "All Mail".to_owned(),
+        ..Default::default()
+    };
+    let all_mail_conv_label = ConversationLabel {
+        remote_label_id: Some(all_mail.remote_id.clone().unwrap()),
+        ..Default::default()
+    };
+    TestDBState {
+        addresses: vec![test_address()],
+        labels: vec![test_label1(), test_label2(), all_mail.clone()],
+        conversations: vec![Conversation {
+            remote_id: Some(conv_id1.clone()),
+            labels: vec![
+                CONV_LABEL1.to_owned(),
+                CONV_LABEL2.to_owned(),
+                all_mail_conv_label.clone(),
+            ],
+            is_known: true,
+            ..Default::default()
+        }],
+        messages: vec![
+            Message {
+                attachments_metadata: vec![TEXT_ATTACHMENT.to_owned()],
+                num_attachments: 1,
+                label_ids: vec![MY_LABEL_ID2.clone(), all_mail.remote_id.clone().unwrap()],
+                ..CONV1_MSG1.to_owned()
+            },
+            Message {
+                label_ids: vec![MY_LABEL_ID1.clone(), all_mail.remote_id.clone().unwrap()],
+                ..CONV1_MSG2.to_owned()
+            },
+            Message {
+                label_ids: vec![MY_LABEL_ID1.clone(), all_mail.remote_id.clone().unwrap()],
+                ..CONV1_MSG3.to_owned()
+            },
+            Message {
+                unread: true,
+                label_ids: vec![MY_LABEL_ID2.clone(), all_mail.remote_id.clone().unwrap()],
+                ..CONV1_MSG4.to_owned()
             },
         ],
     }
