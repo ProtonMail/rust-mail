@@ -12,9 +12,7 @@ expression: html
 
       
 
-      <style>
-         body {color: red;}
-      </style>
+      
 
       
          <div>baz</div>

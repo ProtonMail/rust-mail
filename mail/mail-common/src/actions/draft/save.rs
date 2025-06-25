@@ -17,8 +17,8 @@ use crate::models::{
 use crate::{AppError, MailContextError, MailUserContext, draft};
 use indoc::indoc;
 use proton_action_queue::action::{
-    Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
-    WriterGuardError,
+    Action, ActionGroup, ActionId, FactoryResult, Priority, Type, VersionConverter,
+    VersionConverterError, WriterGuard, WriterGuardError, deserialize,
 };
 use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_core_common::datatypes::UnixTimestamp;
@@ -76,6 +76,9 @@ pub struct Save {
     unread: Option<bool>,
     /// Draft Sender
     sender: Option<MessageSender>,
+    /// The sender email can be different from the address email when using aliases.
+    #[serde(default)]
+    sender_email: Option<String>,
 }
 
 impl Save {
@@ -105,6 +108,7 @@ impl Save {
             attachment_ids: Vec::new(),
             unread: None,
             sender: None,
+            sender_email: Some(draft.sender.clone()),
         }
     }
 
@@ -136,10 +140,10 @@ impl Save {
 
 impl Action for Save {
     const TYPE: Type = Type("save_draft");
-    const VERSION: u32 = 1;
+    const VERSION: u32 = 2;
     const PRIORITY: Priority = Priority::High;
     const GROUP: ActionGroup = SEND_ACTION_GROUP;
-    type VersionConverter = DefaultVersionConverter<Self>;
+    type VersionConverter = SaveVersionConverter;
     type Handler = SaveHandler;
     type RemoteOutput = ();
 
@@ -147,6 +151,19 @@ impl Action for Save {
     type Error = MailContextError;
 
     type Context = MailUserContext;
+}
+
+pub struct SaveVersionConverter {}
+
+impl VersionConverter for SaveVersionConverter {
+    type Output = Save;
+
+    fn convert(old_version: u32, current_version: u32, data: &[u8]) -> FactoryResult<Self::Output> {
+        if !(old_version <= 2 && current_version == 2) {
+            return Err(VersionConverterError::InvalidVersion(current_version).into());
+        }
+        Ok(deserialize::<Save>(data)?)
+    }
 }
 
 #[derive(Default)]
@@ -188,6 +205,10 @@ impl proton_action_queue::action::Handler for SaveHandler {
             error!("Address with remote id {:?} not found.", action.address_id);
             return Err(SaveError::AddressNotFound(action.address_id.clone()).into());
         };
+
+        // This value can potentially be empty when migrating from and older version of
+        // the save action, use the address email when that happens.
+        let sender_email = action.sender_email.clone().unwrap_or(address.email.clone());
 
         let attachments = action
             .attachments(bond)
@@ -240,6 +261,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
 
             action.update_message(
                 &address,
+                sender_email,
                 &mut message,
                 attachments.len() as u64,
                 attachment_metadata,
@@ -273,6 +295,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 .inspect_err(|e| error!("Failed to get next message display order: {e:?}"))?;
             let mut message = action.create_new_message(
                 &address,
+                sender_email,
                 attachments.len() as u64,
                 attachment_metadata,
                 body_len,
@@ -730,9 +753,11 @@ impl Save {
             }).await
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn create_new_message(
         &self,
         address: &Address,
+        sender_email: String,
         total_attachment_count: u64,
         attachments: Vec<AttachmentMetadata>,
         body_len: u64,
@@ -753,7 +778,7 @@ impl Save {
             num_attachments: total_attachment_count.try_into().unwrap_or_default(),
             display_order,
             sender: MessageSender {
-                address: address.email.clone(),
+                address: sender_email,
                 name: address.display_name.clone(),
                 ..Default::default()
             },
@@ -765,9 +790,11 @@ impl Save {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn update_message(
         &self,
         address: &Address,
+        sender_email: String,
         message: &mut Message,
         total_attachment_count: u64,
         attachments: Vec<AttachmentMetadata>,
@@ -782,7 +809,7 @@ impl Save {
         message.bcc_list = self.bcc_list.to_message_recipients().into();
         message.num_attachments = total_attachment_count.try_into().unwrap_or_default();
         message.sender = MessageSender {
-            address: address.email.clone(),
+            address: sender_email.clone(),
             bimi_selector: None,
             display_sender_image: false,
             is_proton: false,

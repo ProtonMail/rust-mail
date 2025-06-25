@@ -5,7 +5,6 @@ use derive_more::From;
 use proton_mail_common::errors::MailErrorReason as RealMailErrorReason;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::errors::api_service_error::UserApiServiceError as RealUserApiServiceError;
-use tracing::error;
 use uniffi_common::errors::UserApiServiceError;
 
 #[derive(Debug, From, UniffiEnum)]
@@ -18,7 +17,6 @@ pub enum ProtonError {
 
 impl From<RealProtonMailError> for ProtonError {
     fn from(error: RealProtonMailError) -> Self {
-        error!("ProtonError from {error:?}");
         match error {
             RealProtonMailError::ServerError(err) => {
                 ProtonError::ServerError(into_uniffi_error(err))
@@ -47,7 +45,6 @@ impl From<RealMailErrorReason> for ProtonError {
 }
 
 fn into_uniffi_error(error: RealUserApiServiceError) -> UserApiServiceError {
-    error!("UserApiServiceError from {error:?}");
     match error {
         RealUserApiServiceError::BadRequest(text) => UserApiServiceError::BadRequest(text),
         RealUserApiServiceError::Unauthorized(text) => UserApiServiceError::Unauthorized(text),

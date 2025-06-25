@@ -437,6 +437,20 @@ async fn create_draft_reply_plain_text() {
 }
 
 #[tokio::test]
+async fn create_draft_reply_with_alias() {
+    // Check if we received the email on an alias it is set correctly
+    // on the message.
+    let alias_email = "my_alias_email+alias@proton.me";
+    create_draft_reply_with_override_impl(
+        MimeType::TextHtml,
+        ReplyMode::Sender,
+        None,
+        Some(alias_email.to_owned()),
+    )
+    .await;
+}
+
+#[tokio::test]
 async fn create_draft_reply_inherits_only_inline_attachments() {
     let draft_body = create_draft_reply_impl(MimeType::TextHtml, ReplyMode::Sender).await;
     assert_eq!(draft_body.metadata.attachments.len(), 1);
@@ -538,20 +552,22 @@ async fn create_draft_reply_impl(
     mime_type: MimeType,
     reply_mode: ReplyMode,
 ) -> DecryptedMessageBody {
-    create_draft_reply_with_override_impl(mime_type, reply_mode, None).await
+    create_draft_reply_with_override_impl(mime_type, reply_mode, None, None).await
 }
 async fn create_draft_reply_with_override(
     mime_type: MimeType,
     reply_mode: ReplyMode,
     mime_type_override: MimeType,
 ) -> DecryptedMessageBody {
-    create_draft_reply_with_override_impl(mime_type, reply_mode, Some(mime_type_override)).await
+    create_draft_reply_with_override_impl(mime_type, reply_mode, Some(mime_type_override), None)
+        .await
 }
 
 async fn create_draft_reply_with_override_impl(
     mime_type: MimeType,
     reply_mode: ReplyMode,
     mime_type_override: Option<MimeType>,
+    alias_override: Option<String>,
 ) -> DecryptedMessageBody {
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
@@ -567,6 +583,12 @@ async fn create_draft_reply_with_override_impl(
     remote_existing_message.body.reply_to.address = "me@proton.me".to_owned();
     remote_existing_message.metadata.id = "FancyRemoteId".into();
     remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
+    if let Some(alias_override) = &alias_override {
+        remote_existing_message.body.parsed_headers.insert(
+            "X-Original-To".to_owned(),
+            serde_json::Value::String(alias_override.clone()),
+        );
+    }
 
     remote_existing_message.body.attachments.reverse();
 
@@ -584,8 +606,13 @@ async fn create_draft_reply_with_override_impl(
         .unwrap();
     let existing_message = existing_message;
 
-    let expected_draft_params =
+    let mut expected_draft_params =
         expected_create_reply_draft_params(&existing_message, mime_type, reply_mode);
+    // override alias if present
+    if let Some(alias_override) = &alias_override {
+        expected_draft_params.sender.address = alias_override.clone();
+    }
+
     let mut message = draft_message();
     message.body.attachments = remote_existing_message.body.attachments.clone();
     if reply_mode != ReplyMode::Forward {
@@ -702,6 +729,10 @@ async fn create_draft_reply_with_override_impl(
         .await
         .unwrap()
         .unwrap();
+
+    if let Some(alias_override) = alias_override {
+        assert_eq!(draft.sender, alias_override);
+    }
 
     assert_eq!(draft_message.remote_id, Some(message.metadata.id));
 

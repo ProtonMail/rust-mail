@@ -1,7 +1,6 @@
 ---
 source: mail/mail-html-transformer/src/tests/sanitizer.rs
 expression: html
-snapshot_kind: text
 ---
 <!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml"><head>
     <!--[if gte mso 9]>
@@ -24,25 +23,7 @@ snapshot_kind: text
     <!-- //Cta_Section -->
     <!-- Height_Section -->
     <!-- //Height_Section -->
-    <style type="text/css">
-        body {
-            margin: 0 auto;
-            padding: 0;
-            -webkit-text-size-adjust: 100% !important;
-            -ms-text-size-adjust: 100% !important;
-            -webkit-font-smoothing: antialiased !important;
-        }
-
-        img {
-            border: 0 !important;
-            outline: none !important;
-        }
-
-        p {
-            Margin: 0px !important;
-            Padding: 0px !important;
-        }
-    </style>
+    
     <!--[if gte mso 9]>
     <style type="text/css">
         .none {
@@ -67,9 +48,7 @@ snapshot_kind: text
     <![endif]-->
 </head>
 <body class="em_body" style="margin:0px auto; padding:0px;" bgcolor="#ffffff">
-<style type="text/css">div#emailPreHeader {
-    display: none !important;
-}</style>
+
 <div id="emailPreHeader" style="mso-hide:all; visibility:hidden; opacity:0; color:transparent; mso-line-height-rule:exactly; line-height:0; font-size:0px; overflow:hidden; border-width:0; display:none !important;">
     Think global with DHL
 </div>

@@ -5,7 +5,7 @@ use crate::actions::draft::{
 use crate::datatypes::attachment::ContentId;
 use crate::datatypes::{Disposition, LocalAttachmentId, LocalMessageId, MimeType};
 
-use crate::decrypted_message::{DecryptedMessageBody, ThemeOpts};
+use crate::decrypted_message::{DecryptedMessageBody, ParsedHeaderValue, ThemeOpts};
 use crate::draft::attachments::{DraftAttachment, build_attachment_key_packets};
 use crate::draft::recipients::{ContactGroupResolver, ProtonContactGroupResolver, RecipientList};
 use crate::models::{
@@ -873,9 +873,26 @@ impl Draft {
             attachments.retain(|attachment| attachment.disposition == Disposition::Inline);
         };
 
+        // We need to check if this header is present to correctly determine the destination
+        // address of this email. This contains the email alias (email+alias@domain) which we
+        // need to use to reply.
+        let sender_email = source_message_body
+            .parsed_header_value("X-Original-To")
+            .map_or(address.email.clone(), |v| match v {
+                ParsedHeaderValue::String(v) => v,
+                ParsedHeaderValue::Array(a) => {
+                    tracing::warn!("Found array value for `X-Original-To`, using first value");
+                    if a.is_empty() {
+                        address.email.clone()
+                    } else {
+                        a[0].clone()
+                    }
+                }
+            });
+
         let mut draft = Self {
             metadata_id,
-            sender: address.email.clone(),
+            sender: sender_email,
             to_list: RecipientList::new(),
             cc_list: RecipientList::new(),
             bcc_list: RecipientList::new(),
@@ -892,7 +909,6 @@ impl Draft {
             source_message,
             &source_message_body.metadata,
             reply_mode,
-            address,
         )
         .await;
 
@@ -1005,7 +1021,6 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the action failed to execute.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip_all)]
     pub async fn save(
         &mut self,
         queue: &Queue,
@@ -1020,7 +1035,6 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the action failed to execute.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip_all)]
     pub async fn send(
         &mut self,
         queue: &Queue,
@@ -1037,7 +1051,6 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the action failed to execute.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip_all)]
     pub async fn schedule_send(
         &mut self,
         delivery_time: DateTime<Local>,
@@ -1054,7 +1067,6 @@ impl Draft {
     /// # Errors
     ///
     /// Returns error if the action failed to execute.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip_all)]
     pub async fn discard(
         &self,
         queue: &Queue,
@@ -1603,7 +1615,7 @@ impl DraftSaveActionQueuer {
     }
 
     /// Consume and queue this action.
-    #[tracing::instrument(level=tracing::Level::DEBUG, name="draft::save",skip(self,queue))]
+    #[tracing::instrument(level=tracing::Level::DEBUG, name="draft::save",skip_all)]
     pub async fn queue(
         self,
         queue: &Queue,

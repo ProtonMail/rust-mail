@@ -15,8 +15,7 @@ use crate::device::{DeviceInfo, DynDeviceInfoProvider};
 use crate::event_loop::EventPollMode;
 use crate::models::{AppSettings, ModelExtension};
 use crate::nuke_utils::{
-    drop_all_tables_in_database, remove_in_background, remove_or_clear_dir_safe,
-    rename_database_files,
+    drop_all_tables_in_database, remove_or_clear_dir_safe, rename_database_files,
 };
 use crate::os::{KeyChain, KeyChainError, KeyChainExt, StoreInKeyChain};
 use crate::pin_code::PinCode;
@@ -47,7 +46,6 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 use thiserror::Error;
-use tokio::fs;
 use tokio::sync::{Mutex, broadcast};
 use tokio::task::{JoinError, JoinHandle};
 use tokio_util::sync::CancellationToken;
@@ -804,42 +802,6 @@ impl Context {
         Ok(())
     }
 
-    /// Removes all data associated with the context.
-    ///
-    ///  That includes:
-    /// * Account database - drop all data, remove files
-    /// * Core cache - all files under the cache path
-    /// * Keychain - all secrets
-    ///
-    pub async fn tear_down(&self) {
-        tracing::warn!("Kill all background tasks");
-        self.cancel_all_tasks();
-        tracing::warn!("Remove all users from active_contexts");
-        self.active_user_contexts.lock().await.clear();
-        tracing::warn!("Remove all accounts");
-        let mut tether = self.account_stash().connection();
-        let _ = tether
-            .tx(async |tx| {
-                CoreAccount::delete_all(tx)
-                    .await
-                    .inspect_err(|e| tracing::error!("Failed to delete accounts from db: {e:?}"))
-            })
-            .await;
-        if let Some(log_path) = &self.log_path {
-            let log_path_to_nuke = log_path.with_extension("nuked");
-            if let Err(e) = fs::rename(log_path, &log_path_to_nuke).await {
-                tracing::error!("Failed to rename log file: {e:?}");
-                return;
-            }
-            if let Err(e) = fs::File::create(log_path).await {
-                tracing::error!("Failed to create log file: {e:?}");
-                return;
-            }
-            remove_in_background(&[log_path_to_nuke]).await;
-        }
-    }
-
-    /// Returns the key used to decrypt database secrets.
     #[tracing::instrument(err, skip(self))]
     pub fn get_encryption_key(&self) -> CoreContextResult<SessionEncryptionKey> {
         let Some(key) = self.load_secret::<SessionEncryptionKey>()? else {

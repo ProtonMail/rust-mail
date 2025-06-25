@@ -952,14 +952,6 @@ impl Message {
                         .mark_delete_update_stats(all_stats.get(label_id), bond)
                         .await?;
                 }
-
-                if conversation.deleted {
-                    for (label_id, stats) in all_stats.iter() {
-                        conversation
-                            .remove_conversation_from_label(*label_id, Some(stats), bond)
-                            .await?;
-                    }
-                }
             }
         }
 
