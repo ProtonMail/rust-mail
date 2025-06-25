@@ -5,7 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [mail-uniffi-v0.93.15] - 2025-06-25
+
+### Fixes
+
+- [ET-3312] Remove tear down step from sign_out_all
+- [ET-3085] Remove address_forwarding_id to fix address key generation
+- [ET-2815] Conversation label update when messages deleted
+- Do not generate keys for non-private users
+
+
+## [mail-uniffi-v0.93.14] - 2025-06-24
 
 ### Features
 
