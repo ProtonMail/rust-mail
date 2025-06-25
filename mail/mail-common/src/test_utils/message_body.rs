@@ -80,7 +80,7 @@ pub fn message_body_test_user_info() -> ApiUser {
         to_migrate: false,
         mnemonic_status: ApiUserMnemonicStatus::Unknown,
         role: 0,
-        private: 0,
+        private: false,
         subscribed: 0,
         services: 0,
         delinquent: DelinquentState::Paid,

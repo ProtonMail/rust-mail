@@ -1490,7 +1490,7 @@ pub struct User {
     pub mnemonic_status: UserMnemonicStatus,
 
     /// TODO: Document this field.
-    pub private: u32,
+    pub private: bool,
 
     /// TODO: Document this field.
     pub name: Option<String>,

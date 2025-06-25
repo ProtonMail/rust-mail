@@ -284,6 +284,9 @@ pub enum LoginError {
     /// Returned if we fail to setup the user key.
     UserKeySetup(String),
 
+    /// Returned if we fail to setup the user key because the user is non-private.
+    UserKeySetupNonPrivate,
+
     /// Returned if we fail to fetch the user's addresses after login.
     AddressFetch(UserApiServiceError),
 
@@ -315,6 +318,7 @@ impl From<login_api::LoginError> for LoginError {
     fn from(value: login_api::LoginError) -> Self {
         match value {
             login_api::LoginError::InvalidState => LoginError::InvalidState,
+            login_api::LoginError::UserKeySetupNonPrivate => LoginError::UserKeySetupNonPrivate,
             login_api::LoginError::FlowLogin(ApiServiceError::UnprocessableEntity(..))// HTTP code 422
             | login_api::LoginError::KeySecretSaltFetch(ApiServiceError::UnprocessableEntity(..)) // HTTP code 422
             | login_api::LoginError::ServerProof(..)
