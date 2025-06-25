@@ -138,7 +138,7 @@ impl InspectableContactDetails {
                 }));
             }
             _ => unreachable!("The first and only field should always be the emails field"),
-        };
+        }
 
         vcard
             .telephones
