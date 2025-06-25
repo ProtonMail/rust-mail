@@ -1,5 +1,5 @@
 use super::MailUserSession;
-use crate::core::datatypes::ContactSuggestions;
+use crate::core::datatypes::{ContactGroupItem, ContactSuggestions};
 use crate::errors::{ActionError, VoidActionResult};
 use crate::{UniffiRecord, watch_channel_inner};
 use crate::{
@@ -32,12 +32,32 @@ pub async fn contact_list(
     let stash = session.user_stash()?;
     uniffi_async(async move {
         let tether = stash.connection();
-        Result::<_, RealProtonMailError>::Ok(
+        Ok::<_, RealProtonMailError>(
             RealContact::contact_list(&tether)
                 .await?
                 .into_iter()
                 .map(Into::into)
                 .collect(),
+        )
+    })
+    .await
+    .map_err(ActionError::from)
+}
+
+/// Returns a specific contact group detailed info
+// This is not necessary but android wants this.
+#[uniffi_export]
+pub async fn contact_group_by_id(
+    session: Arc<MailUserSession>,
+    id: Id,
+) -> Result<ContactGroupItem, ActionError> {
+    let stash = session.user_stash()?;
+    uniffi_async(async move {
+        let tether = stash.connection();
+        Ok::<_, RealProtonMailError>(
+            RealContact::contact_group_by_id(&tether, id.into())
+                .await?
+                .into(),
         )
     })
     .await

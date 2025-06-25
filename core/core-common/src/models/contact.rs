@@ -6,8 +6,8 @@ use std::time::Instant;
 
 use crate::actions::contacts::Delete as ContactsDelete;
 use crate::datatypes::{
-    ContactSuggestions, DeviceContact, GroupedContacts, InitializationKey, LabelType, Labels,
-    LocalContactId,
+    ContactGroupItem, ContactSuggestions, DeviceContact, GroupedContacts, InitializationKey,
+    LabelType, Labels, LocalContactId, LocalLabelId,
 };
 use crate::models::{ContactCard, ContactEmail, ModelExtension, ModelIdExtension};
 use crate::{ContactError, CoreContextError, CoreContextResult};
@@ -482,6 +482,27 @@ impl Contact {
             contacts,
             contact_groups,
         ))
+    }
+
+    // This is not necessary but android wants this.
+    pub async fn contact_group_by_id(
+        tether: &Tether,
+        id: LocalLabelId,
+    ) -> Result<ContactGroupItem, StashError> {
+        let l = Label::find_by_id(id, tether)
+            .await?
+            .context("The specified id doesn't exist")?;
+
+        debug_assert_eq!(l.label_type, LabelType::ContactGroup);
+
+        let res = ContactEmail::find("WHERE local_contact_id = ?", params![id], tether).await?;
+
+        Ok(ContactGroupItem {
+            local_id: l.id(),
+            avatar_information: l.name.as_str().into(),
+            name: l.name,
+            contacts: res.map_vec(),
+        })
     }
 
     /// Returns a list of contact suggestions (used for example in Composer). Sorted, deduplicated but not filtered by the query.
