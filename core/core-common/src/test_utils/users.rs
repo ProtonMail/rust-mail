@@ -138,7 +138,7 @@ static DEFAULT_USER: LazyLock<ApiUser> = LazyLock::new(|| ApiUser {
     to_migrate: false,
     mnemonic_status: ApiUserMnemonicStatus::Disabled,
     role: 0,
-    private: 0,
+    private: false,
     subscribed: 0,
     services: 0,
     delinquent: DelinquentState::Paid,

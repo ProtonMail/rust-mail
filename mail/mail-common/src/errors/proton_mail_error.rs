@@ -180,6 +180,7 @@ impl From<LoginError> for ProtonMailError {
             | LoginError::UserFetch(e) => Self::from(e),
 
             LoginError::UserKeySetup(_) => Self::reason(LoginErrorReason::UserSetup),
+            LoginError::UserKeySetupNonPrivate => Self::reason(LoginErrorReason::UserSetup),
 
             LoginError::AddressFetch(_)
             | LoginError::AddressSetup(_)

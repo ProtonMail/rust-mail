@@ -181,7 +181,7 @@ fn new_test_user() -> User {
         to_migrate: Default::default(),
         mnemonic_status: UserMnemonicStatus::Disabled,
         role: 12345,
-        private: 442_424,
+        private: false,
         subscribed: PaidSubscription(3_234_234),
         services: 23_123_123,
         delinquent: DelinquentState::Paid,

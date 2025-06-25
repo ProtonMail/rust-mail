@@ -1,6 +1,5 @@
 ---
 source: core/core-api/tests/core_events.rs
-assertion_line: 8
 expression: mail_event
 ---
 CoreEvent {
@@ -196,7 +195,7 @@ CoreEvent {
             name: Some(
                 "jason",
             ),
-            private: 1,
+            private: true,
             product_used_space: ProductUsedSpace {
                 calendar: 0,
                 contact: 0,

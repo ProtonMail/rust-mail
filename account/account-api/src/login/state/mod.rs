@@ -276,6 +276,10 @@ impl State {
 
         // Does the user have a key?
         if user.keys.as_ref().is_empty() {
+            if !user.private {
+                return Err(LoginError::UserKeySetupNonPrivate);
+            }
+
             Self::setup_keys(&srp, &pgp, &client, &addresses, &pass).await?;
 
             user = client
@@ -472,8 +476,8 @@ impl State {
         let request = CreateAddressKeyRequest {
             address_id: address.id.to_string(),
             private_key: addr_key.key.private_key.to_string(),
-            address_forwarding_id: address.id.to_string(),
             primary: 1,
+            address_forwarding_id: None,
             token,
             signature,
             signed_key_list,
