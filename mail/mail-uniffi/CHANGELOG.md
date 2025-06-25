@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.93.16] - 2025-06-25
+
+### Features
+
+- Add a way to create decrypted message from string for the sake of testing
+
+### Fixes
+
+- Images were stretched
+- Deserialization error for fetch label request
+- [ET-3422] Improve html address signature update
+- Incorrect mail settings pmsignature bitflag values
+
+
 ## [mail-uniffi-v0.93.15] - 2025-06-25
 
 ### Fixes
