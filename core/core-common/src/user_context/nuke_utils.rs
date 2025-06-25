@@ -110,10 +110,11 @@ pub async fn clear_dir_safe(path: impl AsRef<Path>) {
     };
 
     let failed = remove_files(&all_files).await;
-    remove_in_background(&failed).await;
+    let _ = remove_in_background(&failed);
 }
 
-pub async fn remove_in_background(paths: &[PathBuf]) -> Option<JoinHandle<()>> {
+#[must_use]
+pub fn remove_in_background(paths: &[PathBuf]) -> Option<JoinHandle<()>> {
     if !paths.is_empty() {
         let mut failed = paths.to_vec();
         // We have still some files not removed

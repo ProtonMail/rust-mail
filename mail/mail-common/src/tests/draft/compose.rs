@@ -137,6 +137,69 @@ async fn check_reply_all_simple_login_alias() {
 }
 
 #[tokio::test]
+async fn reply_to_email_alias() {
+    let mut source_body_metadata = existing_message_body_metadata();
+    source_body_metadata
+        .parsed_headers
+        .headers
+        .insert("X-Original-To".to_owned(), TEST_EMAIL_ALIAS.into());
+    let source_body = "Hello World".to_owned();
+    let mut source_message = existing_message();
+    source_message.to_list.push(MessageRecipient {
+        address: TEST_EMAIL_ALIAS.to_owned(),
+        is_proton: false,
+        name: TEST_EMAIL_DISPLAY_NAME.to_owned(),
+        group: Default::default(),
+    });
+    let (draft, _, _) = create_reply_with_mime_and_body_and_message(
+        ReplyMode::Sender,
+        MimeType::TextPlain,
+        source_body_metadata,
+        source_body,
+        source_message,
+    )
+    .await;
+    assert!(!draft.to_list.contains_email(TEST_EMAIL_ALIAS));
+    assert_eq!(draft.sender, TEST_EMAIL_ALIAS);
+}
+
+#[tokio::test]
+async fn reply_strips_duplicate_sender_emails_and_aliases() {
+    let mut source_body_metadata = existing_message_body_metadata();
+    source_body_metadata
+        .parsed_headers
+        .headers
+        .insert("X-Original-To".to_owned(), TEST_EMAIL_ALIAS.into());
+    let source_body = "Hello World".to_owned();
+    let mut source_message = existing_message();
+    source_message.to_list.push(MessageRecipient {
+        address: TEST_EMAIL_ALIAS.to_owned(),
+        is_proton: false,
+        name: TEST_EMAIL_DISPLAY_NAME.to_owned(),
+        group: Default::default(),
+    });
+    source_message.cc_list.push(MessageRecipient {
+        address: TEST_EMAIL_ALIAS_ALT.to_owned(),
+        is_proton: false,
+        name: TEST_EMAIL_DISPLAY_NAME.to_owned(),
+        group: Default::default(),
+    });
+    let (draft, _, _) = create_reply_with_mime_and_body_and_message(
+        ReplyMode::All,
+        MimeType::TextPlain,
+        source_body_metadata,
+        source_body,
+        source_message,
+    )
+    .await;
+    assert!(!draft.to_list.contains_email(TEST_EMAIL_ALIAS));
+    assert!(!draft.to_list.contains_email(TEST_EMAIL_ALIAS_ALT));
+    assert!(!draft.cc_list.contains_email(TEST_EMAIL_ALIAS));
+    assert!(!draft.cc_list.contains_email(TEST_EMAIL_ALIAS_ALT));
+    assert_eq!(draft.sender, TEST_EMAIL_ALIAS);
+}
+
+#[tokio::test]
 async fn forward_draft_message_creation() {
     let (draft, source_message, attachments) = create_reply(ReplyMode::Forward).await;
     assert_eq!(
@@ -374,10 +437,10 @@ fn address_with_signature(signature: impl Into<String>) -> Address {
         remote_id: Some(remote_address_id()),
         address_type: AddressType::Original,
         catch_all: false,
-        display_name: "Addr Display Name".to_owned(),
+        display_name: TEST_EMAIL_DISPLAY_NAME.to_owned(),
         display_order: 0,
         domain_id: None,
-        email: "address_email@proton.me".to_owned(),
+        email: TEST_EMAIL.to_owned(),
         keys: Default::default(),
         proton_mx: false,
         receive: false,
@@ -388,6 +451,13 @@ fn address_with_signature(signature: impl Into<String>) -> Address {
         row_id: None,
     }
 }
+
+const TEST_EMAIL: &str = "address_email@proton.me";
+
+const TEST_EMAIL_DISPLAY_NAME: &str = "Addr Display Name";
+
+const TEST_EMAIL_ALIAS: &str = "address_email+alias@proton.me";
+const TEST_EMAIL_ALIAS_ALT: &str = "address_email+alias_alt@proton.me";
 
 fn mail_settings_with_signature() -> MailSettings {
     MailSettings {

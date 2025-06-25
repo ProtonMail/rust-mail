@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.93.15] - 2025-06-25
+
+### Fixes
+
+- [ET-3312] Remove tear down step from sign_out_all
+- [ET-3085] Remove address_forwarding_id to fix address key generation
+- [ET-2815] Conversation label update when messages deleted
+- Do not generate keys for non-private users
+
+
+## [mail-uniffi-v0.93.14] - 2025-06-24
+
+### Features
+
+- Sanitize <style> from html
+
+### Fixes
+
+- [ET-3024] Log protonmailerror conversion
+
+
+## [mail-uniffi-v0.93.13] - 2025-06-24
+
+### Fixes
+
+- [ET-3429] Correctly reply to email+alias
+
+
 ## [mail-uniffi-v0.93.12] - 2025-06-24
 
 ### Changed
@@ -19,6 +47,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - [ET-3312] Don't remove log messages at sign-out
 - [ET-3477] Mailsetting pmsignature value
+
+
+## [mail-uniffi-v0.93.10] - 2025-06-23
+
+### Fixes
+
+- [ET-3428] Reply to simple login alias
+- Sync_conversation_messages are using graceful_status method
 
 
 ## [mail-uniffi-v0.93.11] - 2025-06-23
@@ -43,14 +79,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-3416] (breaking) add `start_auto_lock_countdown` mailsession method to be used by clients just b4 putting app to background
 - [ET-3308] Schedule send now properly update if edited on another session (other edge cases)
 - Incorrect db migration
-
-
-## [mail-uniffi-v0.93.10] - 2025-06-23
-
-### Fixes
-
-- [ET-3428] Reply to simple login alias
-- Sync_conversation_messages are using graceful_status method
 
 
 ## [mail-uniffi-v0.93.9] - 2025-06-20

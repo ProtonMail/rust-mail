@@ -19,6 +19,7 @@ test-utils = [
 
 demo = ["dep:tao", "dep:wry"]
 sql = ["proton-core-api/sql", "proton-mail-api/sql"]
+proton_mail_error_log = []
 
 [[example]]
 name = "demo"
@@ -50,6 +51,7 @@ proton-account-api = { workspace = true }
 proton-calendar-common = { workspace = true }
 proton-core-api = { workspace = true, features = ["sql"] }
 proton-mail-api = { workspace = true, features = ["sql"] }
+proton-canonical-email = { workspace = true }
 proton-core-common = { workspace = true }
 proton-crypto-account = { workspace = true }
 proton-crypto-inbox = { workspace = true }

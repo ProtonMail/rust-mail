@@ -15,7 +15,8 @@ use crate::label;
 use crate::models::{Conversation, MailSettings, Message, MessageBodyMetadata};
 use crate::test_utils::db::new_test_connection_file;
 use crate::test_utils::db_states::{
-    new_test_delete_db_state, new_test_label_db_state, new_test_unread_db_state,
+    new_test_delete_all_messages_in_conv_label_db_state, new_test_delete_db_state,
+    new_test_label_db_state, new_test_unread_db_state,
 };
 use crate::test_utils::search::{
     MY_ADDRESS_ID, MY_CONVERSATION_ID, MY_LABEL_ID1, MY_LABEL_ID2, create_labels,
@@ -1404,7 +1405,7 @@ pub async fn test_delete_local_message() {
             assert_eq!(conv_count.total, start_conv_count.total);
             // Conversation 1 & 2 have two unread message each on different labels and we removed
             // the unread message from label1.
-            assert_eq!(conv_count.unread, 1);
+            assert_eq!(conv_count.unread, 0);
         }
     }
 
@@ -1474,6 +1475,90 @@ pub async fn test_delete_local_message() {
             .is_empty()
         );
     }
+}
+
+#[tokio::test]
+pub async fn deleting_all_messages_in_a_label_removes_conversation_label() {
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let mut conn = stash.connection();
+    let mut state = new_test_delete_all_messages_in_conv_label_db_state();
+    prepare_db_state_core(&mut conn, &mut state.addresses).await;
+    let (state, state_map) = prepare_and_patch_db_state(&mut conn, state.clone()).await;
+
+    let local_conv_id = *state_map
+        .conversations
+        .get(state.conversations[0].remote_id.as_ref().unwrap())
+        .unwrap();
+    let local_label_id1 = *state_map.labels.get(&MY_LABEL_ID1).unwrap();
+    let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
+
+    conn.tx(async |tx| {
+        let messages = Message::ids_in_label(local_label_id1, tx).await.unwrap();
+        assert_eq!(messages.len(), 2);
+        Message::mark_deleted(messages, tx).await
+    })
+    .await
+    .unwrap();
+
+    let conversation = Conversation::load(local_conv_id, &conn)
+        .await
+        .unwrap()
+        .unwrap();
+    let conv_label_1 = conversation
+        .labels
+        .iter()
+        .find(|l| l.local_label_id.unwrap() == local_label_id1)
+        .unwrap();
+    assert!(conv_label_1.deleted);
+    let conv_label_2 = conversation
+        .labels
+        .iter()
+        .find(|l| l.local_label_id.unwrap() == local_label_id2)
+        .unwrap();
+    assert!(!conv_label_2.deleted);
+
+    conn.tx(async |tx| {
+        let messages = Message::ids_in_label(local_label_id2, tx).await.unwrap();
+        assert_eq!(messages.len(), 2);
+        Message::mark_deleted(messages, tx).await
+    })
+    .await
+    .unwrap();
+
+    let conversation = Conversation::load(local_conv_id, &conn)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(conversation.deleted);
+
+    // undelete to check the reverse
+    conn.tx(async |tx| {
+        Message::mark_undeleted(
+            state.messages.iter().map(|v| v.local_id.unwrap()).collect(),
+            tx,
+        )
+        .await
+    })
+    .await
+    .unwrap();
+
+    let conversation = Conversation::load(local_conv_id, &conn)
+        .await
+        .unwrap()
+        .unwrap();
+    let conv_label_1 = conversation
+        .labels
+        .iter()
+        .find(|l| l.local_label_id.unwrap() == local_label_id1)
+        .unwrap();
+    assert!(!conv_label_1.deleted);
+    let conv_label_2 = conversation
+        .labels
+        .iter()
+        .find(|l| l.local_label_id.unwrap() == local_label_id2)
+        .unwrap();
+    assert!(!conv_label_2.deleted);
+    assert!(!conversation.deleted);
 }
 
 #[tokio::test]
