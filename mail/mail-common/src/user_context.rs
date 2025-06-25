@@ -516,8 +516,6 @@ impl MailUserContext {
                 .inspect_err(|e| tracing::error!("Could not remove account, `{e}`"));
         }
 
-        self.core_context().tear_down().await;
-
         Ok(())
     }
 
