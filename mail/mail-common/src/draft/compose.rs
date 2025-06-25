@@ -126,6 +126,10 @@ pub(super) fn get_full_signature(
         "\n"
     };
     let mut signature = get_address_signature(address, mime_type);
+    if mime_type == MimeType::TextHtml {
+        // wrap the signature in a div block so we can replace it later
+        signature = format!("<div class=\"{PM_SIGNATURE_DIV_CLASS}\">{signature}</div>");
+    }
 
     if mail_settings.pm_signature.is_enabled() {
         signature.push_str(line_break);
@@ -419,6 +423,9 @@ pub const HTML_LINE_BREAK: &str = "<br>";
 const PM_SIGNATURE_HTML: &str = r#"Sent with <a target="_blank" href="https://proton.me/mail/home">Proton Mail</a> secure email."#;
 
 const PM_SIGNATURE_PLAIN_TEXT: &str = "Sent with Proton Mail secure email.";
+
+// this is the value the web client is using.
+pub(super) const PM_SIGNATURE_DIV_CLASS: &str = "protonmail_signature_block-user";
 
 fn apply_prefix_to_subject(prefix: &str, subject: &str) -> String {
     let trimmed_subject = subject.trim();
