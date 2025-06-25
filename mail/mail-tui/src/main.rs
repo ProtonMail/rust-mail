@@ -37,6 +37,11 @@ struct CliArgs {
     #[arg(long, short)]
     api_dev_env: bool,
 
+    /// How the app should introduce itself to the API; might affect available
+    /// authentication methods and other functionalities.
+    #[arg(long, default_value = "ios-mail@7.1.0")]
+    version: String,
+
     /// Open messages in a browser window. Specify to choose an app or leave empty to use the
     /// default.
     #[arg(long, short)]
@@ -68,10 +73,15 @@ impl CliArgs {
     }
 
     pub fn api_config(&self) -> Config {
-        if self.api_dev_env {
+        let cfg = if self.api_dev_env {
             Config::atlas()
         } else {
             Config::default()
+        };
+
+        Config {
+            app_version: self.version.clone(),
+            ..cfg
         }
     }
 }
