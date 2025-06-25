@@ -108,6 +108,7 @@ impl From<SharedCryptoError> for SignupError {
 /// The flow guides the user through the signup process, ensuring all necessary steps
 /// are completed in the correct order.
 pub struct SignupFlow {
+    client: muon::Client,
     store: DynStore,
     state: Vec<State>,
     domains: Vec<String>,
@@ -123,9 +124,10 @@ impl SignupFlow {
     ) -> Result<Self, ApiError> {
         let domains = client.get_available_domains(None).await?.domains;
         let countries = COUNTRIES.to_owned();
-        let state = vec![State::new(client, challenge_info)];
+        let state = vec![State::new(client.clone(), challenge_info)];
 
         Ok(Self {
+            client,
             store,
             state,
             domains,
@@ -260,5 +262,10 @@ impl SignupFlow {
 
     fn state(&self) -> Result<State, SignupError> {
         self.state.last().cloned().ok_or(SignupError::InvalidState)
+    }
+
+    #[must_use]
+    pub fn api(&self) -> &muon::Client {
+        &self.client
     }
 }

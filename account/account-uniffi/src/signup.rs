@@ -2,6 +2,7 @@
 
 //! Implements the sign-up flow.
 
+use crate::common::MuonClient;
 use crate::user_behavior::UserBehavior;
 use itertools::Itertools;
 use proton_account_api::countries::Country as RealCountry;
@@ -364,6 +365,17 @@ impl SignupFlow {
             })
         })
         .await
+    }
+
+    /// Returns a muon Client
+    pub async fn api(&self) -> Option<Arc<MuonClient>> {
+        let flow = self.flow.clone();
+        uniffi_async::<_, JoinError, _>(async move {
+            let guard = flow.lock().await;
+            Ok(Arc::new(MuonClient::new(guard.api())))
+        })
+        .await
+        .ok()
     }
 }
 
