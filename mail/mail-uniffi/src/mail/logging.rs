@@ -38,10 +38,14 @@ pub(super) fn init_log(log_path: &Path, debug: bool) -> std::io::Result<Option<W
             },
         );
 
-    tracing_subscriber::registry()
+    if let Err(e) = tracing_subscriber::registry()
         .with(file_subscriber)
         .with(os_log_subscriber)
-        .init();
+        .try_init()
+    {
+        tracing::warn!("Failed to initialize logging: {e}");
+        eprintln!("Failed to initialize logging: {e}");
+    }
 
     tracing::info!(path=?log_path, "Path to log");
 
@@ -72,7 +76,15 @@ pub(super) fn init_log(log_path: &Path, debug: bool) -> std::io::Result<Option<W
         } else {
             app_tracing_env_filter_default()
         });
-    tracing_subscriber::registry().with(file_subscriber).init();
+
+    if let Err(e) = tracing_subscriber::registry()
+        .with(file_subscriber)
+        .try_init()
+    {
+        tracing::warn!("Failed to initialize logging: {e}");
+        eprintln!("Failed to initialize logging: {e}");
+    }
+
     log_backtrace_on_panic();
 
     tracing::info!(path=?log_path, "Path to log");
