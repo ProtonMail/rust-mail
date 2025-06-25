@@ -816,6 +816,26 @@ pub async fn all_available_bottom_bar_actions_for_messages(
     .map_err(ActionError::from)
 }
 
+/// This function should **NEVER** be used in the production.
+/// We provide it only for the sake of snapshot testing of our HTML transformer.
+/// It returns a decrypted message as if it was a new draft.
+///
+#[uniffi_export]
+pub fn test_stub_message_body(
+    session: &MailUserSession,
+    sender: String,
+    content: String,
+) -> Result<Arc<DecryptedMessage>, ActionError> {
+    let ctx = session.ptr();
+    let msg = Arc::new(DecryptedMessage {
+        ctx,
+        sender,
+        body: DecryptedMessageBody::new_draft(content, MimeType::TextHtml.into()),
+    });
+
+    Ok(msg)
+}
+
 /// Return the decrypted body of the specified message.
 ///
 /// If the message body has never been fetched before, it will be retrieved from
