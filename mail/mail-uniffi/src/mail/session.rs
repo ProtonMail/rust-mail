@@ -1000,14 +1000,17 @@ impl MailSession {
     /// Returns an error if the operation fails.
     #[returns(VoidSessionResult)]
     pub async fn logout_account(&self, user_id: String) -> Result<(), UserContextError> {
+        let mail_ctx = self.mail_ctx.clone();
         let user_ctx = self.user_ctx.clone();
         let user_id = user_id.into();
 
         uniffi_async(async move {
-            user_ctx
-                .remove(&user_id)
-                .ok_or(Unexpected::Internal)?
-                .logout_and_delete_data()
+            if user_ctx.remove(&user_id).is_none() {
+                debug!("Logging out account without any active context");
+            }
+
+            mail_ctx
+                .logout_account_and_delete_user_data(user_id)
                 .map_err(RealProtonMailError::from)
                 .await
         })

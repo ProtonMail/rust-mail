@@ -216,7 +216,7 @@ fn message_signature_empty_without_address_or_mail_setting_signature() {
     let address = address_with_signature("");
     let mail_settings = MailSettings::default();
     let signature = get_full_signature(&address, &mail_settings, MimeType::TextHtml);
-    assert!(signature.is_empty());
+    insta::assert_snapshot!(signature);
 }
 
 #[test]

@@ -1248,6 +1248,100 @@ M+PK763FJHYgYm3oeXPv+VayrM8lkwLiiSwaxHXtzh2HhR5k0nhjgoozQuMoupUz
     assert_eq!(body.body, "Nobody expects the spanish inquisition");
 }
 
+#[tokio::test]
+async fn already_sent_from_even_update() {
+    // gracefully handle a message already sent from another session via an event update.
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.to_list.push(MessageRecipient {
+        address: "foo@bar.com".to_string(),
+        is_proton: false,
+        name: "".to_string(),
+        group: None,
+    });
+    let mut sent_message = message.clone();
+    message.metadata.label_ids.push(LabelId::drafts());
+    sent_message.metadata.label_ids.push(LabelId::sent());
+    sent_message.metadata.flags.set(MessageFlags::SENT, true);
+    sent_message.body.header = "Fancy new header".to_owned();
+
+    let expected_draft_params = expected_create_draft_params();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_create_draft(
+        expected_draft_params.clone(),
+        None,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+    ctx.mock_update_draft(
+        message.metadata.id.clone(),
+        expected_draft_params,
+        message.clone(),
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+
+    // Create draft.
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    draft
+        .to_list
+        .add_single(RecipientEntry {
+            email: "foo@bar.com".into(),
+            display_name: MaybeEmptyString(None),
+        })
+        .unwrap();
+    draft
+        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
+
+    // Save at least once so we can retrieve the message id.
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    draft
+        .send(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
+
+    // Simulate Event update
+    user_ctx
+        .apply_event(
+            MailEvent {
+                event_id: EventId::from("Event"),
+                labels: None,
+                conversation_counts: None,
+                conversations: None,
+                incoming_defaults: None,
+                mail_settings: None,
+                message_counts: None,
+                messages: Some(vec![MessageEvent {
+                    id: sent_message.metadata.id.clone(),
+                    action: Action::Update,
+                    message: Some(sent_message.metadata),
+                }]),
+                refresh: 0,
+                has_more: false,
+            }
+            .into(),
+        )
+        .await
+        .unwrap();
+
+    //execute should not fail
+    user_ctx.execute_all_send_actions().await.unwrap();
+}
+
 async fn send_fails_if_recipient_is_not_valid_impl(
     api_error_code: u32,
 ) -> (Arc<anyhow::Error>, LocalMessageId, Arc<MailUserContext>) {

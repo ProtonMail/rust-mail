@@ -57,10 +57,11 @@ pub mod utm;
 
 mod html2text;
 
+use crate::replace_inner::InvalidSelectorError;
+use crate::transforms::styles::{IncludeFullStaticCss, InjectDarkModeOptions};
 pub use html2text::Html2TextOptions;
 
-use crate::transforms::styles::{IncludeFullStaticCss, InjectDarkModeOptions};
-
+mod replace_inner;
 #[cfg(test)]
 #[path = "tests/lib.rs"]
 mod tests;
@@ -258,6 +259,15 @@ impl Transformer {
     ) -> Result<String, ::html2text::Error> {
         let cursor = std::io::Cursor::new(reader);
         Self::html2text(cursor, options)
+    }
+
+    /// See [`replace_inner::replace_inner_div`] for more details.
+    pub fn replace_inner_div(
+        &self,
+        div_class: &str,
+        replacement: &str,
+    ) -> Result<(), InvalidSelectorError> {
+        replace_inner::replace_inner_div(&self.document, div_class, replacement)
     }
 }
 

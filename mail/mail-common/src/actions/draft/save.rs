@@ -219,6 +219,12 @@ impl proton_action_queue::action::Handler for SaveHandler {
         let attachment_ids = attachments.iter().map(|a| a.id()).collect::<Vec<_>>();
 
         let conversation_id = if let Some(id) = metadata.local_conversation_id {
+            let message_count = Conversation::message_count(id, bond).await?;
+            // we should only update the conversation subject if there is only one message.
+            if message_count == 1 {
+                debug!("Updating conversation subject");
+                Conversation::update_subject(id, action.subject.clone(), bond).await?;
+            }
             id
         } else {
             debug!("Conversation does not exist, creating");

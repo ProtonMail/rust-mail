@@ -35,6 +35,7 @@ use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_api::services::proton::prelude::DraftReplyOrForwardParams;
 use proton_mail_api::services::proton::request_data::DraftAction;
 use proton_mail_api::services::proton::response_data::Message as ApiMessage;
+use proton_mail_html_transformer::Transformer;
 use proton_mail_html_transformer::transforms::styles::BrowserCapabilities;
 use proton_mail_ids::LocalConversationId;
 use proton_sqlite3::rusqlite;
@@ -54,8 +55,9 @@ pub mod recipients;
 pub(crate) mod send;
 
 use crate::draft::compose::{
-    DraftAddressChangeOutput, DraftAddressChangeRequest, encrypt_draft_body, get_full_signature,
-    inject_dark_mode, patch_draft_with_reply_mode, prepare_html_reply, prepare_plain_text_reply,
+    DraftAddressChangeOutput, DraftAddressChangeRequest, PM_SIGNATURE_DIV_CLASS,
+    encrypt_draft_body, get_full_signature, inject_dark_mode, patch_draft_with_reply_mode,
+    prepare_html_reply, prepare_plain_text_reply,
 };
 pub use send::ScheduleSendOptions;
 
@@ -1552,7 +1554,15 @@ impl Draft {
         self.sender = output.sender;
         // we can only replace the signature if it wasn't empty and the original signature
         // remains intact.
-        if !output.old_signature.is_empty() {
+        if self.mime_type == MimeType::TextHtml {
+            let transformer = Transformer::new(self.body());
+            if let Err(e) =
+                transformer.replace_inner_div(PM_SIGNATURE_DIV_CLASS, &output.new_signature)
+            {
+                error!("Error when swapping address signatures: {e}");
+            }
+            self.body = transformer.to_string();
+        } else if !output.old_signature.is_empty() {
             self.body = self
                 .body
                 .replace(&output.old_signature, &output.new_signature)

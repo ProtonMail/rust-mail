@@ -304,28 +304,45 @@ body:not([class]) > pre:first-child  {
         width: 100% !important;
         min-width: 0 !important;
         table-layout: fixed !important;
+        height: fit-content !important;
     }
 
-    [style*="max-width"] {
+    table, tbody {
+        display: block;
+    }
+
+    :not(img):not(td)[style*="max-width"] {
         max-width: 100% !important;
         width: 100% !important;
         min-width: 0 !important;
     }
     
-    [style*="width"] {
+    :not(img):not(td)[style*="width"] {
         width: 100% !important;
     }
 
-    :not(img)[width] {
-        width: 100% !important;
+    :not(img):not(td)[width] {
+        max-width: 100% !important;
     }
     
-    td[width], td[style*="width"] {
-        width: auto !important;
+    tr {
+        display: flex;
+        justify-content: space-between;
+        width: 100% !important;
+    }
+
+    td, th {
+        display: inline-block !important;
+        word-break: break-word !important;
+        overflow-wrap: break-word !important;
+    }
+
+    td:not([width]):not([style*="width"]), th:not([width]):not([style*="width"]) {
+        flex: 1;
     }
 
     /* Some emails have empty cells to provide margins. However on mobile, they break the layout. */
-    td:empty, td:not(:has(*)) {
+    td:empty, th:empty {
         display: none !important;
         width: 0 !important;
     }

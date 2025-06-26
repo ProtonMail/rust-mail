@@ -171,9 +171,9 @@ pub struct PmSignature(u8);
 
 bitflags::bitflags! {
     impl PmSignature:u8 {
-        const ENABLED = 1 << 1;
+        const ENABLED = 1 << 0;
 
-        const LOCKED = 1 << 2;
+        const LOCKED = 1 << 1;
 
         // Safeguard against unknown values
         const _ = !0;

@@ -27,6 +27,7 @@ use proton_core_common::utils::MapVec;
 use proton_mail_common::MailUserContext;
 use proton_mail_common::errors::unexpected::Unexpected;
 
+use proton_core_api::services::proton::AddressId;
 use proton_mail_common::datatypes::LocalConversationId;
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::message_banner::MessageBanner as RealMessageBanner;
@@ -40,7 +41,7 @@ use proton_mail_common::errors::{
 };
 use proton_mail_common::mail_scroller::MailScroller;
 use proton_mail_common::models::default_location::IncomingDefaultLocation;
-use proton_mail_common::models::{self, Message as RealMessage};
+use proton_mail_common::models::{self, Message as RealMessage, MessageBodyMetadata};
 use stash::orm::Model as _;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -734,6 +735,35 @@ pub async fn all_available_bottom_bar_actions_for_messages(
     })
     .await
     .map_err(ActionError::from)
+}
+
+/// This function should **NEVER** be used in the production.
+/// We provide it only for the sake of snapshot testing of our HTML transformer.
+/// It returns a decrypted message as if it was a new draft.
+///
+#[uniffi_export]
+pub fn test_stub_message_body(
+    session: &MailUserSession,
+    sender: String,
+    content: String,
+) -> Result<Arc<DecryptedMessage>, ActionError> {
+    let ctx = session.ptr();
+    let msg = Arc::new(DecryptedMessage {
+        ctx,
+        sender,
+        body: DecryptedMessageBody {
+            body: content,
+            metadata: MessageBodyMetadata {
+                mime_type: proton_mail_common::datatypes::MimeType::TextHtml,
+                ..Default::default()
+            },
+            pgp_subject: None,
+            address_id: AddressId::from("Unknown"),
+            in_flight: parking_lot::Mutex::default(),
+        },
+    });
+
+    Ok(msg)
 }
 
 /// Return the decrypted body of the specified message.

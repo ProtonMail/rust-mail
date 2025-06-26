@@ -3,4 +3,4 @@ source: mail/mail-common/src/draft/../tests/draft/compose.rs
 expression: signature
 snapshot_kind: text
 ---
-<br><br>My Address Signature
+<br><br><div class="protonmail_signature_block-user">My Address Signature</div>
