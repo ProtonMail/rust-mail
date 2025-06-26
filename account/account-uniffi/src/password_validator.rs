@@ -12,7 +12,7 @@ use tokio::task::JoinError;
 use uniffi_runtime::async_runtime;
 use uniffi_runtime::uniffi_async;
 
-use crate::login::LoginFlow;
+use crate::common::MuonClient;
 
 #[derive(uniffi::Object)]
 pub struct PasswordValidatorService {
@@ -33,6 +33,18 @@ pub enum FetchValidatorsError {
 
 #[uniffi::export]
 impl PasswordValidatorService {
+    #[uniffi::constructor]
+    #[must_use]
+    pub fn create(client: &Arc<MuonClient>) -> PasswordValidatorService {
+        let client: &muon::Client = client.as_inner();
+        PasswordValidatorService {
+            service: Arc::new(Mutex::new(RealPasswordValidatorService {
+                client: client.clone(),
+                policies: Vec::new(),
+            })),
+        }
+    }
+
     pub async fn fetch_validators(&self) -> Result<(), FetchValidatorsError> {
         let service = self.service.clone();
         uniffi_async::<_, FetchValidatorsError, _>(async move {
@@ -78,25 +90,6 @@ pub enum PasswordValidationError {
 impl From<JoinError> for PasswordValidationError {
     fn from(value: JoinError) -> Self {
         Self::JoinError(value.to_string())
-    }
-}
-
-impl PasswordValidatorService {
-    pub async fn new(login_flow: &LoginFlow) -> Result<Self, String> {
-        let flow = login_flow.inner_flow().clone();
-
-        async_runtime()
-            .spawn(async move {
-                let guard = flow.lock().await;
-                PasswordValidatorService {
-                    service: Arc::new(Mutex::new(RealPasswordValidatorService {
-                        client: guard.api().clone(),
-                        policies: Vec::new(),
-                    })),
-                }
-            })
-            .await
-            .map_err(|err| err.to_string())
     }
 }
 
