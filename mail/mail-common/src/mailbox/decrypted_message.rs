@@ -422,7 +422,7 @@ impl DecryptedMessageBody {
                     return Ok(Some(RsvpEventId::new(id, msg_id, self.address_id.clone())));
                 }
 
-                Err(RsvpError::IcsIsNotRsvpRequest) => {
+                Err(RsvpError::IcsIsNotRsvp) => {
                     return Ok(None);
                 }
 

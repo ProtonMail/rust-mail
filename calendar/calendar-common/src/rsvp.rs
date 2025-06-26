@@ -62,9 +62,9 @@ impl RsvpEventId {
     pub fn from_invite(ics: &[u8]) -> RsvpResult<Self> {
         let cal = ical::VCalendar::from_bytes(ics)?.cal;
 
-        if cal.method != Some(ical::Method::Request) {
-            return Err(RsvpError::IcsIsNotRsvpRequest);
-        }
+        let Some(ical::Method::Cancel | ical::Method::Request) = cal.method else {
+            return Err(RsvpError::IcsIsNotRsvp);
+        };
 
         let mut event = cal
             .events
@@ -340,8 +340,8 @@ pub type RsvpResult<T, E = RsvpError> = Result<T, E>;
 
 #[derive(Debug, Error)]
 pub enum RsvpError {
-    #[error("*.ics is not an RSVP request")]
-    IcsIsNotRsvpRequest,
+    #[error("*.ics is not an RSVP")]
+    IcsIsNotRsvp,
 
     #[error("*.ics contains more than one event")]
     IcsContainsMoreThanOneEvent,
@@ -412,6 +412,30 @@ mod tests {
             indoc! {"
                 BEGIN:VCALENDAR
                 METHOD:REQUEST
+                PRODID:-//Proton AG//iCal//EN
+                VERSION:2.0
+                CALSCALE:GREGORIAN
+                BEGIN:VEVENT
+                UID:1234-1234-1234-1234
+                DTSTAMP:20180101T120000
+                END:VEVENT
+                END:VCALENDAR
+            "}
+            .as_bytes(),
+        )
+        .unwrap();
+
+        let expected = RsvpEventId::Indirect("1234-1234-1234-1234".into(), None);
+
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn from_invite_cancelled() {
+        let actual = RsvpEventId::from_invite(
+            indoc! {"
+                BEGIN:VCALENDAR
+                METHOD:CANCEL
                 PRODID:-//Proton AG//iCal//EN
                 VERSION:2.0
                 CALSCALE:GREGORIAN
@@ -515,7 +539,7 @@ mod tests {
         )
         .unwrap_err();
 
-        assert_eq!("*.ics is not an RSVP request", actual.to_string());
+        assert_eq!(RsvpError::IcsIsNotRsvp.to_string(), actual.to_string());
     }
 
     fn headers<'a>(kv: impl IntoIterator<Item = (&'a str, &'a str)>) -> HashMap<String, JsonValue> {
