@@ -8,9 +8,11 @@ use crate::datatypes::{Disposition, LocalAttachmentId, MimeType};
 use crate::models::{
     Attachment, AttachmentType, EmbeddedAttachmentInfo, MailSettings, Message, MessageBodyMetadata,
 };
+use crate::rsvp::RsvpEventId;
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use parking_lot::Mutex;
-use proton_calendar_common::{RsvpError, RsvpEventId};
+use proton_calendar_common::{self as cal, RsvpError};
+use proton_core_api::services::proton::AddressId;
 use proton_mail_api::services::proton::prelude::DirectAttachment;
 use proton_mail_html_transformer::Transformer;
 use proton_mail_html_transformer::transforms::ColorMode;
@@ -166,14 +168,10 @@ type InFlightAttachments =
 
 /// Consists of the message's body metadata and decrypted content.
 pub struct DecryptedMessageBody {
-    /// The decrypted message contents.
     pub body: String,
-
-    /// Metadata associated with the message body
     pub metadata: MessageBodyMetadata,
-
-    /// The subject that comes from a multipart message.
     pub pgp_subject: Option<String>,
+    pub address_id: AddressId,
 
     /// Since the clients are holding on to this, we can request the attachments when we are
     /// decrypyting the message so that the data is ready for when they request it.
@@ -193,6 +191,7 @@ impl DecryptedMessageBody {
         body: String,
         metadata: MessageBodyMetadata,
         pgp_subject: Option<String>,
+        address_id: AddressId,
         ctx: Arc<MailUserContext>,
     ) -> Self {
         let in_flight = metadata
@@ -221,6 +220,7 @@ impl DecryptedMessageBody {
             body,
             metadata,
             pgp_subject,
+            address_id,
             in_flight: Mutex::new(in_flight),
         }
     }
@@ -231,25 +231,13 @@ impl DecryptedMessageBody {
         body: String,
         metadata: MessageBodyMetadata,
         pgp_subject: Option<String>,
+        address_id: AddressId,
     ) -> Self {
         Self {
             body,
             metadata,
             pgp_subject,
-            in_flight: Default::default(),
-        }
-    }
-
-    /// Create a new decrypted message body that corresponds to an empty draft with
-    /// the given `body` and `mime_type`.
-    pub fn new_draft(body: String, mime_type: MimeType) -> Self {
-        Self {
-            body,
-            metadata: MessageBodyMetadata {
-                mime_type,
-                ..Default::default()
-            },
-            pgp_subject: None,
+            address_id,
             in_flight: Default::default(),
         }
     }
@@ -394,9 +382,14 @@ impl DecryptedMessageBody {
         &self,
         ctx: &MailUserContext,
     ) -> MailContextResult<Option<RsvpEventId>> {
-        if let Some(rsvp) = RsvpEventId::from_headers(&self.metadata.parsed_headers.headers) {
+        if let Some(id) = cal::RsvpEventId::from_headers(&self.metadata.parsed_headers.headers) {
             debug!("Identified RSVP via headers");
-            return Ok(Some(rsvp));
+
+            return Ok(Some(RsvpEventId::new(
+                id,
+                self.metadata.local_message_id,
+                self.address_id.clone(),
+            )));
         }
 
         let invite = self.metadata.attachments.iter().find_map(|att| {
@@ -422,10 +415,15 @@ impl DecryptedMessageBody {
                 err
             })?;
 
-            match RsvpEventId::from_invite(&ics) {
-                Ok(rsvp) => {
+            match cal::RsvpEventId::from_invite(&ics) {
+                Ok(id) => {
                     debug!("Identified RSVP via attachment");
-                    return Ok(Some(rsvp));
+
+                    return Ok(Some(RsvpEventId::new(
+                        id,
+                        self.metadata.local_message_id,
+                        self.address_id.clone(),
+                    )));
                 }
 
                 Err(RsvpError::IcsIsNotRsvpRequest) => {
@@ -434,6 +432,7 @@ impl DecryptedMessageBody {
 
                 Err(err) => {
                     warn!(?err, "Couldn't parse the RSVP attachment");
+
                     return Err(err.into());
                 }
             };

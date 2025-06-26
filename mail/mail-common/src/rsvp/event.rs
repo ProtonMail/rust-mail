@@ -1,39 +1,29 @@
-use crate::datatypes::MessageRecipient;
 use crate::rsvp::RsvpMailSender;
 use crate::{MailContextError, MailContextResult};
 use crate::{MailUserContext, models::Message};
 use anyhow::Context;
 use proton_calendar_common::{self as cal, RsvpAnswer, RsvpAnswerError, RsvpAnswerStatus};
-use proton_core_api::services::proton::AddressId;
 use proton_crypto_inbox::proton_crypto;
-use proton_mail_api::services::proton::common::MessageId;
+use proton_mail_ids::LocalMessageId;
+use stash::orm::Model;
 use stash::stash::Tether;
 use std::ops;
-use tracing::{info, warn};
+use tracing::{info, instrument, warn};
 
 #[derive(Clone, Debug)]
 pub struct RsvpEvent {
     event: cal::RsvpEvent,
-    msg_id: Option<MessageId>,
-    msg_subject: String,
-    msg_recipient: Option<MessageRecipient>,
-    msg_address_id: AddressId,
+    msg_id: Option<LocalMessageId>,
 }
 
 impl RsvpEvent {
-    pub(crate) fn new(event: cal::RsvpEvent, msg: &Message) -> Self {
-        Self {
-            event,
-            msg_id: msg.remote_id.clone(),
-            msg_subject: msg.subject.clone(),
-            msg_recipient: msg.to_list.value.first().cloned(),
-            msg_address_id: msg.remote_address_id.clone(),
-        }
+    pub(crate) fn new(event: cal::RsvpEvent, msg_id: Option<LocalMessageId>) -> Self {
+        Self { event, msg_id }
     }
 
-    /// TODO (NGC-57) implement support for offline-mode
-    #[tracing::instrument(
-        skip(self, ctx, tether),
+    // TODO (NGC-57) implement support for offline-mode
+    #[instrument(
+        skip_all,
         fields(id = self.event.raw.id.as_str()),
     )]
     pub async fn answer(
@@ -44,10 +34,22 @@ impl RsvpEvent {
     ) -> MailContextResult<()> {
         info!("Answering RSVP");
 
+        let msg_id = self
+            .msg_id
+            .context("Invite's message has no id")
+            .map_err(MailContextError::Other)?;
+
+        let msg = Message::load(msg_id, tether)
+            .await
+            .context("Couldn't load invite's message")
+            .map_err(MailContextError::Other)?
+            .context("Couldn't find invite's message")
+            .map_err(MailContextError::Other)?;
+
         let pgp = proton_crypto::new_pgp_provider();
 
         let keys = ctx
-            .unlocked_address_keys(&pgp, tether, &self.msg_address_id)
+            .unlocked_address_keys(&pgp, tether, &msg.remote_address_id)
             .await
             .map_err(|err| {
                 warn!(?err, "Couldn't unlock address keys");
@@ -55,16 +57,17 @@ impl RsvpEvent {
             })?;
 
         let sender = {
-            let msg_id = self
-                .msg_id
+            let msg_id = msg
+                .remote_id
                 .as_ref()
-                .context("Invite message has no remote id")
+                .context("Invite's message has no remote id")
                 .map_err(MailContextError::Other)?;
 
-            let msg_recipient = self
-                .msg_recipient
-                .as_ref()
-                .context("Invite message has no recipient")
+            let msg_recipient = msg
+                .to_list
+                .value
+                .first()
+                .context("Invite's message has no recipient")
                 .map_err(MailContextError::Other)?;
 
             RsvpMailSender {
@@ -73,9 +76,9 @@ impl RsvpEvent {
                 keys: &keys,
                 tether,
                 msg_id,
-                msg_subject: &self.msg_subject,
+                msg_subject: &msg.subject,
                 msg_recipient,
-                msg_address_id: &self.msg_address_id,
+                msg_address_id: &msg.remote_address_id,
             }
         };
 

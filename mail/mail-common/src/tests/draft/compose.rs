@@ -413,6 +413,7 @@ async fn create_reply_with_mime_and_body_and_message(
         body: source_body,
         metadata: source_body_metadata,
         pgp_subject: None,
+        address_id: address.remote_id.clone().unwrap(),
         in_flight: Default::default(),
     };
 

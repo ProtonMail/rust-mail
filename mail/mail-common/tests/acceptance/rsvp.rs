@@ -120,7 +120,7 @@ async fn fetch_and_answer() {
         .await
         .unwrap();
 
-    db.tx(async |tx| msg.save(&tx).await).await.unwrap();
+    db.tx(async |tx| msg.save(tx).await).await.unwrap();
 
     let msg_body = msg.fetch_message_body(&user_ctx, &mut db).await.unwrap();
 
@@ -133,7 +133,7 @@ async fn fetch_and_answer() {
 
     let rsvp = msg_body.identify_rsvp(&user_ctx).await.unwrap().unwrap();
 
-    assert_eq!(RsvpEventId::indirect(EVENT_UID, None), rsvp);
+    assert_eq!(RsvpEventId::indirect(EVENT_UID, None), *rsvp);
 
     // ---
     // Step 3: Load RSVP details from the calendar.
@@ -232,11 +232,7 @@ async fn fetch_and_answer() {
         .mock_find_calendar_events(EVENT_UID, None, Some(event))
         .await;
 
-    let mut rsvp = msg
-        .fetch_rsvp(&user_ctx, &mut db, &rsvp)
-        .await
-        .unwrap()
-        .unwrap();
+    let mut rsvp = rsvp.fetch(&user_ctx, &mut db).await.unwrap().unwrap();
 
     assert_eq!(Some("face-to-face with rust-test"), rsvp.summary.as_deref());
 

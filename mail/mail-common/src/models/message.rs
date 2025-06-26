@@ -16,13 +16,12 @@ use crate::actions::{
     AllBottomBarMessageActions, BottomBarActions, GeneralActions, MailActionError,
     MovableSystemFolderAction, filter_responses,
 };
+use crate::models::*;
 use crate::{MailContextError, find_in_query};
-use crate::{RsvpEvent, models::*};
 use futures::try_join;
 use indoc::{formatdoc, indoc};
 use proton_action_queue::action::MetadataBuilder;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
-use proton_calendar_common::RsvpEventId;
 use proton_core_common::utils::MapVec as _;
 use proton_mail_api::services::proton::prelude::DirectAttachment;
 use sqlite_watcher::watcher::TableObserver;
@@ -72,7 +71,7 @@ use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandl
 use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::future::Future;
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, trace, warn};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("messages")]
@@ -1562,11 +1561,13 @@ impl Message {
         mut tx: impl RunTransaction,
     ) -> Result<DecryptedMessageBody, MailContextError> {
         if let Some(decrypted) =
-            Self::load_decrypted_message_from_cache(self.id(), tx.tether()).await?
+            Self::load_decrypted_message_from_cache(self.id(), &self.remote_address_id, tx.tether())
+                .await?
         {
             debug!("Found message body in cache.");
             return Ok(decrypted);
         }
+
         trace!("Message body not in cache. Fetching...");
 
         let Some(remote_id) = self.remote_id.clone() else {
@@ -2414,7 +2415,7 @@ impl Message {
         let address_keys = ctx.unlocked_address_keys(&pgp, tether, address_id).await?;
 
         encrypted_message_body
-            .into_decrypted_message(ctx, address_keys, pgp, attachment_prefetch)
+            .into_decrypted_message(ctx, address_id, address_keys, pgp, attachment_prefetch)
             .await
             .map_err(|e| {
                 error!("Failed to decrypt message body: {e:?}");
@@ -2430,6 +2431,7 @@ impl Message {
     #[tracing::instrument(level=tracing::Level::DEBUG, skip(tether))]
     pub(crate) async fn load_decrypted_message_from_cache(
         local_id: LocalMessageId,
+        address_id: &AddressId,
         tether: &Tether,
     ) -> Result<Option<DecryptedMessageBody>, MailContextError> {
         let Some(metadata) = MessageBodyMetadata::for_message(local_id, tether)
@@ -2447,7 +2449,10 @@ impl Message {
         };
 
         Ok(Some(DecryptedMessageBody::new_without_prefetching(
-            body, metadata, None,
+            body,
+            metadata,
+            None,
+            address_id.clone(),
         )))
     }
 
@@ -2669,47 +2674,6 @@ impl Message {
                 || *label_id == LabelId::drafts()
                 || *label_id == LabelId::all_drafts()
         })
-    }
-
-    /// Fetches given invitation from the API.
-    ///
-    /// Use [`DecryptedMessageBody::fetch_rsvp()`] to get [`RsvpEventId`].
-    ///
-    /// TODO (NGC-57) implement support for offline-mode
-    #[tracing::instrument(skip(self, ctx, tether))]
-    pub async fn fetch_rsvp(
-        &self,
-        ctx: &MailUserContext,
-        tether: &mut Tether,
-        rsvp: &RsvpEventId,
-    ) -> MailContextResult<Option<RsvpEvent>> {
-        info!("Fetching RSVP");
-
-        let pgp = proton_crypto::new_pgp_provider();
-
-        let keys = ctx
-            .unlocked_address_keys(&pgp, tether, &self.remote_address_id)
-            .await
-            .map_err(|err| {
-                warn!(?err, "Couldn't unlock address keys");
-                err
-            })?;
-
-        match rsvp.fetch(ctx.api(), &pgp, &keys, ctx.rsvp_cache()).await {
-            Ok(event) => {
-                if let Some(event) = event {
-                    Ok(Some(RsvpEvent::new(event, self)))
-                } else {
-                    debug!("False-positive, API says no such event exists");
-                    Ok(None)
-                }
-            }
-
-            Err(err) => {
-                warn!(?err, "Couldn't fetch event from the calendar");
-                Err(err.into())
-            }
-        }
     }
 }
 

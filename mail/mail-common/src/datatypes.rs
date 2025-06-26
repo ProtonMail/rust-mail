@@ -73,7 +73,7 @@ use crate::models::{Attachment, AttachmentType, MailSettings, MessageBodyMetadat
 use crate::{AppError, MailContextError, MailUserContext};
 use attachment::ContentId;
 use core::fmt;
-use proton_core_api::services::proton::LabelId;
+use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_core_common::datatypes::{
     AvatarInformation, LabelColor, LabelType, LocalLabelId, SystemLabel,
 };
@@ -1007,6 +1007,7 @@ impl EncryptedMessageBody {
     pub async fn into_decrypted_message<P>(
         mut self,
         ctx: &MailUserContext,
+        address_id: &AddressId,
         address_keys: UnlockedAddressKeys<P>,
         pgp: P,
         with_attachment_prefetch: bool,
@@ -1033,10 +1034,22 @@ impl EncryptedMessageBody {
 
         match decrypted_body {
             DecryptedBody::Plain(body) => Ok(if with_attachment_prefetch {
-                DecryptedMessageBody::new_prefetching(body, self.metadata, None, ctx)
+                DecryptedMessageBody::new_prefetching(
+                    body,
+                    self.metadata,
+                    None,
+                    address_id.clone(),
+                    ctx,
+                )
             } else {
-                DecryptedMessageBody::new_without_prefetching(body, self.metadata, None)
+                DecryptedMessageBody::new_without_prefetching(
+                    body,
+                    self.metadata,
+                    None,
+                    address_id.clone(),
+                )
             }),
+
             DecryptedBody::Mime(ProcessedMessage {
                 body,
                 // We store the pgp attachments as normal attachments
@@ -1080,6 +1093,7 @@ impl EncryptedMessageBody {
                         body,
                         self.metadata,
                         encrypted_subject,
+                        address_id.clone(),
                         ctx,
                     )
                 } else {
@@ -1087,6 +1101,7 @@ impl EncryptedMessageBody {
                         body,
                         self.metadata,
                         encrypted_subject,
+                        address_id.clone(),
                     )
                 })
             }

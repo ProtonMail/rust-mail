@@ -934,10 +934,9 @@ impl DecryptedMessage {
             Ok(Some(rsvp)) => {
                 let task = task::spawn({
                     let ctx = (*ctx).clone();
-                    let msg = msg.clone();
 
                     async move {
-                        msg.fetch_rsvp(&ctx, &mut tether, &rsvp)
+                        rsvp.fetch(&ctx, &mut tether)
                             .await
                             .map_err(|err| format!("Couldn't fetch RSVP: {err}"))
                             .inspect_err(|err| warn!("{err}"))
