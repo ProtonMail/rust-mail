@@ -25,10 +25,10 @@ use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::MessageId;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
-use stash::stash::Bond;
+use stash::stash::{Bond, StashError};
 use std::collections::HashSet;
 use std::time::Duration;
-use tracing::{debug, error};
+use tracing::{error, info};
 
 #[derive(Serialize, Deserialize)]
 pub struct Send {
@@ -341,6 +341,20 @@ impl Send {
             return Err(AppError::MessageHasNoRemoteId(local_message_id).into());
         };
 
+        // check if the message was not already sent by another session. If it was the body
+        // is reset and will be lost. Rather than failing later, gracefully exit now.
+        // We can not do this check for schedule sent as the message has already been moved
+        // the all send label, whereas the regular sent goes to outbox first.
+        if message_metadata.is_sent() {
+            info!("Message was already sent from another session");
+            guard
+                .tx::<_, (), WriterGuardError>(async |tx| {
+                    Ok(on_already_sent(action.metadata_id, None, tx).await?)
+                })
+                .await?;
+            return Ok((remote_message_id, 0.into()));
+        }
+
         // Load the mail settings of the sending user.
         let mail_settings = MailSettings::get(guard.tether())
             .await
@@ -488,27 +502,17 @@ impl Send {
                     return Err(err.into());
                 };
                 if proton_error.code == Mail::MessageAlreadySent as u32 {
-                    debug!("Message already sent.");
+                    info!("Message already sent on server");
                     // When the message is already sent, we just need to delete the
                     // metadata. The event loop will take care of the rest.
                     guard
                         .tx::<_, _, <Self as Action>::Error>(async |tx| {
-                            DraftMetadata::delete(action.metadata_id, tx)
-                                .await
-                                .inspect_err(|e| {
-                                    error!("Failed to delete draft metadata after send: {e:?}")
-                                })?;
-
-                            // Register rollback item just in case the event loop already ran
-                            // and the event was missed.
-                            RollbackItem::new(
-                                remote_message_id.clone().into_inner(),
-                                RollbackItemType::Message,
+                            Ok(on_already_sent(
+                                action.metadata_id,
+                                Some(remote_message_id.clone()),
+                                tx,
                             )
-                            .save(tx)
-                            .await
-                            .inspect_err(|e| error!("Failed to register rollback item: {e:?}"))?;
-                            Ok(())
+                            .await?)
                         })
                         .await?;
                     // We have no delivery time here, so we just return 0 to "cancel"
@@ -572,4 +576,24 @@ async fn save_send_status(
     guard
         .tx::<_, _, WriterGuardError>(async |tx| Ok(send_result.save(tx).await?))
         .await
+}
+
+async fn on_already_sent(
+    metadata_id: MetadataId,
+    message_id: Option<MessageId>,
+    tx: &Bond<'_>,
+) -> Result<(), StashError> {
+    DraftMetadata::delete(metadata_id, tx)
+        .await
+        .inspect_err(|e| error!("Failed to delete draft metadata after send: {e:?}"))?;
+
+    if let Some(message_id) = message_id {
+        // Register rollback item just in case the event loop already ran
+        // and the event was missed.
+        RollbackItem::new(message_id.into_inner(), RollbackItemType::Message)
+            .save(tx)
+            .await
+            .inspect_err(|e| error!("Failed to register rollback item: {e:?}"))?;
+    }
+    Ok(())
 }
