@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixes
+
+- Make sure our tracing logger is not crashing the app if fails
+- [ET-2322] Update draft conversation subject
+- [ET-2909] Handle already sent via event update
+- [ET-3518] Hide reply message actions
+- [ET-3310] Handle missing user context on logout
+
+
 ## [mail-uniffi-v0.93.16] - 2025-06-25
 
 ### Features
@@ -13,8 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
-- Images were stretched
 - Deserialization error for fetch label request
+- Images were stretched
 - [ET-3422] Improve html address signature update
 - Incorrect mail settings pmsignature bitflag values
 
