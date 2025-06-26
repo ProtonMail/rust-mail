@@ -1075,9 +1075,10 @@ impl DecryptedMessage {
                 };
 
                 let header = 4;
-                let atts = rsvp.attendees.len();
+                let organizer = 1;
+                let attendees = rsvp.attendees.len();
 
-                status + header + atts
+                status + header + organizer + attendees
             }
 
             Rsvp::Error(msg) => 1 + msg.lines().count(),
@@ -1152,6 +1153,8 @@ impl DecryptedMessage {
             }
         };
 
+        let rsvp_org = format!("- <{}> (organizer)", rsvp.organizer.email);
+
         let rsvp_atts = rsvp.attendees.iter().map(|att| {
             let status = match att.status {
                 CalendarAttendeeStatus::Unanswered => "unanswered",
@@ -1165,6 +1168,7 @@ impl DecryptedMessage {
 
         let rsvp_summary = Text::from(rsvp_summary).fg(fg);
         let rsvp_occur = Text::from(rsvp_occur).fg(fg);
+        let rsvp_org = Text::from(rsvp_org).fg(fg);
         let rsvp_atts = rsvp_atts.map(|att| Text::from(att).fg(fg));
 
         let rows = rsvp_status
@@ -1172,6 +1176,7 @@ impl DecryptedMessage {
             .chain(iter::once(rsvp_summary))
             .chain(iter::once(rsvp_occur))
             .chain(iter::once(Text::raw("")))
+            .chain(iter::once(rsvp_org))
             .chain(rsvp_atts);
 
         frame.render_widget(List::new(rows), area);
