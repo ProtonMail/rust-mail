@@ -270,6 +270,14 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
     assert_eq!(draft.to_list, new_to_list);
     assert_eq!(draft.cc_list, new_cc_list);
     assert_eq!(draft.bcc_list, new_bcc_list);
+
+    let draft_conv_id = draft.conversation_id(&tether).await.unwrap().unwrap();
+
+    let conv = Conversation::find_by_id(draft_conv_id, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(conv.subject, new_subject);
 }
 
 #[tokio::test]
