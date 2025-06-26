@@ -1,5 +1,5 @@
 use crate::rsvp::RsvpMailSender;
-use crate::{MailContextError, MailContextResult};
+use crate::{AppError, MailContextError, MailContextResult};
 use crate::{MailUserContext, models::Message};
 use anyhow::Context;
 use proton_calendar_common::{self as cal, RsvpAnswer, RsvpAnswerError, RsvpAnswerStatus};
@@ -38,8 +38,7 @@ impl RsvpEvent {
             .await
             .context("Couldn't load invite's message")
             .map_err(MailContextError::Other)?
-            .context("Couldn't find invite's message")
-            .map_err(MailContextError::Other)?;
+            .ok_or_else(|| AppError::MessageMissing(self.msg_id))?;
 
         let pgp = proton_crypto::new_pgp_provider();
 
@@ -55,8 +54,7 @@ impl RsvpEvent {
             let msg_id = msg
                 .remote_id
                 .as_ref()
-                .context("Invite's message has no remote id")
-                .map_err(MailContextError::Other)?;
+                .ok_or_else(|| AppError::MessageHasNoRemoteId(self.msg_id))?;
 
             let msg_recipient = msg
                 .to_list
