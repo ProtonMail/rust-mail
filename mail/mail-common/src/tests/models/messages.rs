@@ -62,6 +62,9 @@ static INBOX: LazyLock<Label> = LazyLock::new(
 static SPAM: LazyLock<Label> = LazyLock::new(
     || label!(label_type: LabelType::System, remote_id: Some(LabelId::spam()), name: "Spam".to_owned(), color: LabelColor::black()),
 );
+static OUTBOX: LazyLock<Label> = LazyLock::new(
+    || label!(label_type: LabelType::System, remote_id: Some(LabelId::outbox()), name: "Outbox".to_owned(), color: LabelColor::black()),
+);
 static LABEL: LazyLock<Label> = LazyLock::new(
     || label!(label_type: LabelType::Label, remote_id: Some("label".into()), name: "Label".to_owned(), color: LabelColor::black()),
 );
@@ -312,11 +315,59 @@ mod available_actions {
             .build()),
     });
 
+    static TEST6: LazyLock<TestCase> = LazyLock::new(|| TestCase {
+        view: OUTBOX.clone(),
+        message: MessageWithLabels {
+            message: message!(unread:false, remote_id: msg_id!("message_in_outbox")),
+            labels: vec![OUTBOX.clone()],
+        },
+        theme: ThemeOpts {
+            current_theme: MailTheme::DarkMode,
+            theme_override: Some(MailTheme::LightMode),
+            supports_dark_mode_via_media_query: false,
+        },
+        expected: Ok(MessageAvailableActions::builder()
+            .move_actions(vec![
+                MovableSystemFolderAction {
+                    local_id: 0.into(),
+                    name: MovableSystemFolder::Trash,
+                }
+                .into(),
+                MovableSystemFolderAction {
+                    local_id: 0.into(),
+                    name: MovableSystemFolder::Archive,
+                }
+                .into(),
+                MovableSystemFolderAction {
+                    local_id: 0.into(),
+                    name: MovableSystemFolder::Spam,
+                }
+                .into(),
+                MoveItemAction::MoveTo,
+            ])
+            .message_actions(vec![
+                MessageAction::MarkUnread,
+                MessageAction::Star,
+                MessageAction::LabelAs,
+            ])
+            .general_actions(vec![
+                GeneralActions::Print,
+                GeneralActions::ReportPhishing,
+                GeneralActions::SaveAsPdf,
+                GeneralActions::ViewHeaders,
+                GeneralActions::ViewHtml,
+                GeneralActions::ViewMessageInDarkMode,
+            ])
+            .reply_actions(vec![])
+            .build()),
+    });
+
     #[test_case(&TEST1; "TEST1: Unread, starred in custom folder viewed from Inbox")]
     #[test_case(&TEST2; "TEST2: Read, not starred and in custom folder viewed from Folder")]
     #[test_case(&TEST3; "TEST3: Default, viewed from Spam")]
     #[test_case(&TEST4; "TEST4: Dark mode, no override")]
     #[test_case(&TEST5; "TEST5: Dark mode, with override")]
+    #[test_case(&TEST6; "TEST6: Outbox - Can Not Reply")]
     #[tokio::test]
     async fn test_available_actions(test_case: &TestCase) {
         let stash = new_test_connection().await;

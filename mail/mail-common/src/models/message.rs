@@ -1482,7 +1482,9 @@ impl Message {
             return Err(AppError::MessageMissing(message_id));
         };
 
-        let reply_actions = if message.to_list.len() + message.cc_list.len() > 1 {
+        let reply_actions = if !message.can_reply() {
+            vec![]
+        } else if message.to_list.len() + message.cc_list.len() > 1 {
             ReplyAction::all()
         } else {
             ReplyAction::single_address()
