@@ -372,6 +372,7 @@ impl MessagesState {
 
             KeyCode::Char('j') | KeyCode::Down => {
                 self.table_state.next();
+
                 if let Mode::Label(paginator) = &self.mode {
                     if self.table_state.selected().unwrap_or_default()
                         == self.messages.len().saturating_sub(1)
@@ -381,6 +382,7 @@ impl MessagesState {
                         });
                     }
                 }
+
                 if let Mode::Search(paginator) = &self.mode {
                     if self.table_state.selected().unwrap_or_default()
                         == self.messages.len().saturating_sub(1)
@@ -390,61 +392,11 @@ impl MessagesState {
                         });
                     }
                 }
+
                 Command::None
             }
 
-            KeyCode::Char('a') => {
-                let user_ctx = ctx.to_owned();
-
-                let message = self
-                    .selected_message()
-                    .expect("Should have a message selected");
-
-                debug!(
-                    "Downloading the attachments for message {}",
-                    message.subject
-                );
-
-                let download = Command::task(async move {
-                    let all = message.attachments_metadata.into_iter().map(|mdata| {
-                        let user_ctx = Arc::clone(&user_ctx);
-
-                        async move {
-                            Attachment::get_attachment(&user_ctx, mdata.local_id.unwrap())
-                                .await
-                                .map(|att| {
-                                    format!(
-                                        "{} -> {:?}",
-                                        att.attachment_metadata.filename, att.data_path,
-                                    )
-                                })
-                        }
-                    });
-
-                    let tri = try_join_all(all)
-                        .await
-                        .context("Failed to download attachments");
-
-                    match tri {
-                        Ok(attatchments) => Command::message(Messages::DisplayInfo(
-                            Some("Attachments Successfully Fetched".to_owned()),
-                            format!(
-                                "{} attachments fetched successfully:\n{}",
-                                attatchments.len(),
-                                attatchments.join("\n"),
-                            ),
-                        )),
-                        Err(e) => Command::message(Messages::DisplayError(None, e)),
-                    }
-                });
-
-                Command::batch([
-                    Command::message(Messages::DisplayBackgroundProgress(
-                        "Fetching attachments".to_string(),
-                    )),
-                    download,
-                ])
-            }
+            KeyCode::Char('a') => self.handle_download_attachments(ctx),
 
             KeyCode::Char('e') => self
                 .selected_message_id()
@@ -550,93 +502,144 @@ impl MessagesState {
                 .map(|id| Command::message(MessageMessage::ReportPhishing(id).into()))
                 .unwrap_or_default(),
 
-            KeyCode::Char('A') => {
-                let DecryptedMessageStatus::Success(state) = &mut self.open_message else {
-                    return Command::None;
-                };
-
-                let Rsvp::Success(rsvp) = &state.rsvp else {
-                    return Command::None;
-                };
-
-                if rsvp.ty.is_reminder() {
-                    // Reminders can't be answered
-                    return Command::None;
-                }
-
-                let ctx = ctx.clone();
-                let mut rsvp = rsvp.clone();
-
-                Command::message(Messages::raise_popup(
-                    ChoosePopup::default()
-                        .with(
-                            KeyCode::Char('y'),
-                            "Answer: yes",
-                            Some(RsvpAnswerStatus::Yes),
-                        )
-                        .with(
-                            KeyCode::Char('m'),
-                            "Answer: maybe",
-                            Some(RsvpAnswerStatus::Maybe),
-                        )
-                        .with(KeyCode::Char('n'), "Answer: no", Some(RsvpAnswerStatus::No))
-                        .space()
-                        .with(KeyCode::Esc, "Go back", None)
-                        .on_reply(move |status| match status {
-                            Some(status) => Command::batch([
-                                Command::message(Messages::DismissPopup),
-                                Command::message(Messages::DisplayBackgroundProgress(
-                                    "Answering invitation...".into(),
-                                )),
-                                Command::task(async move {
-                                    let mut tether = ctx.user_stash().connection();
-
-                                    let result = rsvp
-                                        .answer(&ctx, &mut tether, status)
-                                        .await
-                                        .context("Couldn't answer the invitation");
-
-                                    match result {
-                                        Ok(()) => {
-                                            let status = match status {
-                                                RsvpAnswerStatus::Yes => "Invitation accepted",
-                                                RsvpAnswerStatus::Maybe => {
-                                                    "Invitation tentatively accepted"
-                                                }
-                                                RsvpAnswerStatus::No => "Invitation declined",
-                                            };
-
-                                            Command::batch([
-                                                Command::message(Messages::Mailbox(
-                                                    Message::MessageState(
-                                                        MessageMessage::UpdateRsvp(rsvp),
-                                                    ),
-                                                )),
-                                                Command::message(
-                                                    Messages::DismissBackgroundProgress,
-                                                ),
-                                                Command::message(Messages::DisplayInfo(
-                                                    None,
-                                                    status.into(),
-                                                )),
-                                            ])
-                                        }
-
-                                        Err(err) => Command::batch([
-                                            Command::message(Messages::DismissBackgroundProgress),
-                                            Command::message(Messages::DisplayError(None, err)),
-                                        ]),
-                                    }
-                                }),
-                            ]),
-
-                            None => Command::message(Messages::DismissPopup),
-                        }),
-                ))
-            }
+            KeyCode::Char('A') => self.handle_answer_rsvp(ctx),
 
             _ => Command::None,
         }
+    }
+
+    fn handle_download_attachments(&self, ctx: &Arc<MailUserContext>) -> Command<Messages> {
+        let user_ctx = ctx.to_owned();
+
+        let message = self
+            .selected_message()
+            .expect("Should have a message selected");
+
+        debug!(
+            "Downloading the attachments for message {}",
+            message.subject
+        );
+
+        let download = Command::task(async move {
+            let all = message.attachments_metadata.into_iter().map(|mdata| {
+                let user_ctx = Arc::clone(&user_ctx);
+
+                async move {
+                    Attachment::get_attachment(&user_ctx, mdata.local_id.unwrap())
+                        .await
+                        .map(|att| {
+                            format!(
+                                "{} -> {:?}",
+                                att.attachment_metadata.filename, att.data_path,
+                            )
+                        })
+                }
+            });
+
+            let tri = try_join_all(all)
+                .await
+                .context("Failed to download attachments");
+
+            match tri {
+                Ok(attatchments) => Command::message(Messages::DisplayInfo(
+                    Some("Attachments Successfully Fetched".to_owned()),
+                    format!(
+                        "{} attachments fetched successfully:\n{}",
+                        attatchments.len(),
+                        attatchments.join("\n"),
+                    ),
+                )),
+                Err(e) => Command::message(Messages::DisplayError(None, e)),
+            }
+        });
+
+        Command::batch([
+            Command::message(Messages::DisplayBackgroundProgress(
+                "Fetching attachments".to_string(),
+            )),
+            download,
+        ])
+    }
+
+    fn handle_answer_rsvp(&self, ctx: &Arc<MailUserContext>) -> Command<Messages> {
+        let DecryptedMessageStatus::Success(state) = &self.open_message else {
+            return Command::None;
+        };
+
+        let Rsvp::Success(rsvp) = &state.rsvp else {
+            return Command::None;
+        };
+
+        if rsvp.ty.is_reminder() {
+            // Reminders can't be answered
+            return Command::None;
+        }
+
+        let ctx = ctx.clone();
+        let mut rsvp = rsvp.clone();
+
+        Command::message(Messages::raise_popup(
+            ChoosePopup::default()
+                .with(
+                    KeyCode::Char('y'),
+                    "Answer: yes",
+                    Some(RsvpAnswerStatus::Yes),
+                )
+                .with(
+                    KeyCode::Char('m'),
+                    "Answer: maybe",
+                    Some(RsvpAnswerStatus::Maybe),
+                )
+                .with(KeyCode::Char('n'), "Answer: no", Some(RsvpAnswerStatus::No))
+                .space()
+                .with(KeyCode::Esc, "Go back", None)
+                .on_reply(move |status| match status {
+                    Some(status) => Command::batch([
+                        Command::message(Messages::DismissPopup),
+                        Command::message(Messages::DisplayBackgroundProgress(
+                            "Answering invitation...".into(),
+                        )),
+                        Command::task(async move {
+                            let mut tether = ctx.user_stash().connection();
+
+                            let result = rsvp
+                                .answer(&ctx, &mut tether, status)
+                                .await
+                                .context("Couldn't answer the invitation");
+
+                            match result {
+                                Ok(()) => {
+                                    let status = match status {
+                                        RsvpAnswerStatus::Yes => "Invitation accepted",
+                                        RsvpAnswerStatus::Maybe => {
+                                            "Invitation tentatively accepted"
+                                        }
+                                        RsvpAnswerStatus::No => "Invitation declined",
+                                    };
+
+                                    Command::batch([
+                                        Command::message(Messages::Mailbox(Message::MessageState(
+                                            MessageMessage::UpdateRsvp(rsvp),
+                                        ))),
+                                        Command::message(Messages::DismissBackgroundProgress),
+                                        Command::message(Messages::DisplayInfo(
+                                            None,
+                                            status.into(),
+                                        )),
+                                    ])
+                                }
+
+                                Err(err) => Command::batch([
+                                    Command::message(Messages::DismissBackgroundProgress),
+                                    Command::message(Messages::DisplayError(None, err)),
+                                ]),
+                            }
+                        }),
+                    ]),
+
+                    None => Command::message(Messages::DismissPopup),
+                }),
+        ))
     }
 
     pub fn update(
