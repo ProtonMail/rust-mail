@@ -3017,6 +3017,21 @@ impl Conversation {
         )
         .await
     }
+
+    pub async fn update_subject(
+        id: LocalConversationId,
+        subject: String,
+        bond: &Bond<'_>,
+    ) -> Result<usize, StashError> {
+        bond.execute(
+            format!(
+                "UPDATE {} SET subject=? WHERE local_id=?",
+                Self::table_name()
+            ),
+            params![subject, id],
+        )
+        .await
+    }
 }
 
 impl From<ApiConversation> for Conversation {
