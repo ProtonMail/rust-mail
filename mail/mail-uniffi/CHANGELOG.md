@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Features
+
+- Et-3175 add edmoptout flag
+- Et-3175 add migration code
+- Et-3175 fix failing test
+- Et-3175 connect to the correct db
+- Contact_group_by_id for android
+- [ET-3413] Use crypto crate for qr login encryption functionalities
+- [ET-3497] Provide uniffi bindings for passwordpolicy
+
+### Fixes
+
+- Do not generate keys for non-private users
+
+
+## [mail-uniffi-v0.93.17] - 2025-06-26
+
 ### Fixes
 
 - Make sure our tracing logger is not crashing the app if fails
@@ -24,8 +41,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
-- Deserialization error for fetch label request
 - Images were stretched
+- Deserialization error for fetch label request
 - [ET-3422] Improve html address signature update
 - Incorrect mail settings pmsignature bitflag values
 
@@ -38,6 +55,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-3085] Remove address_forwarding_id to fix address key generation
 - [ET-2815] Conversation label update when messages deleted
 - Do not generate keys for non-private users
+
+
+## [mail-uniffi-v0.93.12] - 2025-06-24
+
+### Changed
+
+- (breaking) remove direct prefetch calls
+
+### Features
+
+- Add prefetching of the very first page of the scroller
+
+### Fixes
+
+- [ET-3312] Don't remove log messages at sign-out
+- [ET-3477] Mailsetting pmsignature value
 
 
 ## [mail-uniffi-v0.93.14] - 2025-06-24
@@ -58,31 +91,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-3429] Correctly reply to email+alias
 
 
-## [mail-uniffi-v0.93.12] - 2025-06-24
-
-### Changed
-
-- (breaking) remove direct prefetch calls
-
-### Features
-
-- Add prefetching of the very first page of the scroller
-
-### Fixes
-
-- [ET-3312] Don't remove log messages at sign-out
-- [ET-3477] Mailsetting pmsignature value
-
-
-## [mail-uniffi-v0.93.10] - 2025-06-23
-
-### Fixes
-
-- [ET-3428] Reply to simple login alias
-- Sync_conversation_messages are using graceful_status method
-
-
-## [mail-uniffi-v0.93.11] - 2025-06-23
+## [mail-uniffi-v0.95.0] - 2025-06-23
 
 ### Features
 
@@ -104,6 +113,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-3416] (breaking) add `start_auto_lock_countdown` mailsession method to be used by clients just b4 putting app to background
 - [ET-3308] Schedule send now properly update if edited on another session (other edge cases)
 - Incorrect db migration
+
+
+## [mail-uniffi-v0.93.10] - 2025-06-23
+
+### Fixes
+
+- [ET-3428] Reply to simple login alias
+- Sync_conversation_messages are using graceful_status method
 
 
 ## [mail-uniffi-v0.93.9] - 2025-06-20
