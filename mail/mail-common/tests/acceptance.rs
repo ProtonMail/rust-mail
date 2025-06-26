@@ -29,6 +29,7 @@ mod acceptance {
     mod mock;
     mod pin_code;
     mod refersh;
+    mod rsvp;
     mod search;
     mod search_mail_scroller;
     mod send_preferences;

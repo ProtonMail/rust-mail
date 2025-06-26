@@ -1,15 +1,19 @@
 mod common;
+mod requests;
 mod responses;
 
 #[cfg(feature = "test-utils")]
 mod test_utils;
 
 pub use self::common::*;
+pub use self::requests::*;
 pub use self::responses::*;
 
 #[cfg(feature = "test-utils")]
 pub use self::test_utils::*;
 
+use jiff::Zoned;
+use muon::PUT;
 use muon::{GET, http::HttpReqExt};
 use proton_core_api::{service::ApiServiceResult, services::proton::Proton};
 
@@ -25,9 +29,51 @@ pub trait ProtonCalendar {
     /// <https://protonmail.gitlab-pages.protontech.ch/Slim-API/calendar/#tag/Event/operation/get_calendar-%7B_version%7D-%7BcalID%7D-events-%7BeventID%7D>
     fn get_calendar_event(
         &self,
+        cal_id: &CalendarId,
         event_id: &CalendarEventId,
-        recur_id: Option<&CalendarEventRecurrenceId>,
-    ) -> impl Future<Output = ApiServiceResult<Option<CalendarEvent>>> + Send;
+    ) -> impl Future<Output = ApiServiceResult<CalendarEvent>> + Send;
+
+    /// <https://protonmail.gitlab-pages.protontech.ch/Slim-API/calendar/#tag/Event/operation/get_calendar-%7B_version%7D-events>
+    fn find_calendar_events(
+        &self,
+        uid: &CalendarEventUid,
+        rid: Option<CalendarEventRecurrenceId>,
+    ) -> impl Future<Output = ApiServiceResult<Vec<CalendarEvent>>> + Send;
+
+    /// <https://protonmail.gitlab-pages.protontech.ch/Slim-API/calendar/#tag/VTimezone/operation/get_calendar-%7B_version%7D-vtimezones>
+    ///
+    /// Requires `timezones.len() <= 10`.
+    fn get_calendar_vtimezones(
+        &self,
+        timezones: &[&str],
+    ) -> impl Future<Output = ApiServiceResult<CalendarVTimezones>>;
+
+    /// <https://protonmail.gitlab-pages.protontech.ch/Slim-API/calendar/#tag/Event/operation/put_calendar-%7B_version%7D-%7BcalID%7D-events-%7BeventID%7D-upgrade>
+    fn upgrade_calendar_event_invite(
+        &self,
+        cal_id: &CalendarId,
+        event_id: &CalendarEventId,
+        shared_key_packet: &str,
+    ) -> impl Future<Output = ApiServiceResult<()>> + Send;
+
+    /// <https://protonmail.gitlab-pages.protontech.ch/Slim-API/calendar/#tag/Event/operation/put_calendar-%7B_version%7D-%7BcalID%7D-events-sync>
+    fn update_calendar_event_attendee_status(
+        &self,
+        cal_id: &CalendarId,
+        event_id: &CalendarEventId,
+        att_id: &CalendarAttendeeId,
+        status: CalendarAttendeeStatus,
+        update_time: &Zoned,
+    ) -> impl Future<Output = ApiServiceResult<()>> + Send;
+
+    /// <https://protonmail.gitlab-pages.protontech.ch/Slim-API/calendar/#tag/Event/operation/put_calendar-%7B_version%7D-%7BcalID%7D-events-%7BeventID%7D-personal>
+    fn update_calendar_event_personal_part(
+        &self,
+        cal_id: &CalendarId,
+        event_id: &CalendarEventId,
+        color: Option<CalendarColor>,
+        notifications: CalendarNotificationsUpdate,
+    ) -> impl Future<Output = ApiServiceResult<()>> + Send;
 }
 
 impl ProtonCalendar for Proton {
@@ -44,23 +90,111 @@ impl ProtonCalendar for Proton {
 
     async fn get_calendar_event(
         &self,
+        cal_id: &CalendarId,
         event_id: &CalendarEventId,
-        recur_id: Option<&CalendarEventRecurrenceId>,
-    ) -> ApiServiceResult<Option<CalendarEvent>> {
+    ) -> ApiServiceResult<CalendarEvent> {
+        let resp: GetCalendarEvent = GET!("{CALENDAR_V1}/{cal_id}/events/{event_id}")
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?;
+
+        Ok(resp.event)
+    }
+
+    async fn find_calendar_events(
+        &self,
+        uid: &CalendarEventUid,
+        rid: Option<CalendarEventRecurrenceId>,
+    ) -> ApiServiceResult<Vec<CalendarEvent>> {
         let req = GET!("{CALENDAR_V1}/events")
-            .query(("UID", event_id))
+            .query(("UID", uid))
             .query(("Page", 0))
             .query(("PageSize", 100))
             .query(("CalendarType", 0));
 
-        let req = match recur_id {
-            Some(id) => req.query(("RecurrenceID", id)),
+        let req = match rid {
+            Some(id) => req.query(("RecurrenceID", id.get())),
             None => req,
         };
 
         let resp: FoundCalendarEvents = req.send_with(self).await?.ok()?.into_body_json()?;
 
-        Ok(resp.events.into_iter().next())
+        Ok(resp.events)
+    }
+
+    async fn get_calendar_vtimezones(
+        &self,
+        timezones: &[&str],
+    ) -> ApiServiceResult<CalendarVTimezones> {
+        let mut req = GET!("{CALENDAR_V1}/vtimezones");
+
+        for timezone in timezones {
+            req = req.query(("Timezones[]", timezone));
+        }
+
+        req.send_with(self)
+            .await?
+            .ok()?
+            .body_json()
+            .map_err(Into::into)
+    }
+
+    async fn upgrade_calendar_event_invite(
+        &self,
+        cal_id: &CalendarId,
+        event_id: &CalendarEventId,
+        shared_key_packet: &str,
+    ) -> ApiServiceResult<()> {
+        PUT!("{CALENDAR_V1}/{cal_id}/events/{event_id}/upgrade")
+            .body_json(UpgradeCalendarEventInvite {
+                shared_key_packet: shared_key_packet.into(),
+            })?
+            .send_with(self)
+            .await?
+            .ok()?;
+
+        Ok(())
+    }
+
+    async fn update_calendar_event_attendee_status(
+        &self,
+        cal_id: &CalendarId,
+        event_id: &CalendarEventId,
+        att_id: &CalendarAttendeeId,
+        status: CalendarAttendeeStatus,
+        update_time: &Zoned,
+    ) -> ApiServiceResult<()> {
+        PUT!("{CALENDAR_V1}/{cal_id}/events/{event_id}/attendees/{att_id}")
+            .body_json(UpdateCalendarEventAttendee {
+                status,
+                update_time: update_time.timestamp().as_second(),
+                comment: None,
+            })?
+            .send_with(self)
+            .await?
+            .ok()?;
+
+        Ok(())
+    }
+
+    async fn update_calendar_event_personal_part(
+        &self,
+        cal_id: &CalendarId,
+        event_id: &CalendarEventId,
+        color: Option<CalendarColor>,
+        notifications: CalendarNotificationsUpdate,
+    ) -> ApiServiceResult<()> {
+        PUT!("{CALENDAR_V1}/{cal_id}/events/{event_id}/personal")
+            .body_json(UpdateCalendarEventPersonalPart {
+                color,
+                notifications,
+            })?
+            .send_with(self)
+            .await?
+            .ok()?;
+
+        Ok(())
     }
 }
 
@@ -154,11 +288,12 @@ mod tests {
                                 "Author": "spongebob@squarepants.com"
                             }
                         ],
+                        "ID": "6GAnNerJ...",
                         "CalendarID": "HzNtbT1J...",
                         "StartTime": 1744790400,
                         "EndTime": 1744792200,
                         "FullDay": 0,
-                        "RecurrenceID": null,
+                        "RecurrenceID": 1744792300,
                         "AddressKeyPacket": "wV4DkxOc...",
                         "SharedKeyPacket": null,
                         "AttendeesEvents": [
@@ -175,7 +310,15 @@ mod tests {
                                 "Token": "66791e2f...",
                                 "Status": 0
                             }
-                        ]
+                        ],
+                        "Notifications": [
+                            {
+                                "Type": 1,
+                                "Trigger": "-PT15M"
+                            }
+                        ],
+                        "Color": null,
+                        "IsProtonProtonInvite": 1
                     }
                 ]
             }
@@ -185,6 +328,7 @@ mod tests {
 
         let expected = FoundCalendarEvents {
             events: vec![CalendarEvent {
+                id: "6GAnNerJ...".into(),
                 shared_events: vec![
                     CalendarEventPayload {
                         ty: CalendarEventPayloadType::Signed,
@@ -209,7 +353,7 @@ mod tests {
                 start_time: 1_744_790_400,
                 end_time: 1_744_792_200,
                 full_day: false,
-                recurrence_id: None,
+                recurrence_id: Some(CalendarEventRecurrenceId::new(1_744_792_300)),
                 address_key_packet: Some("wV4DkxOc...".into()),
                 shared_key_packet: None,
                 attendees_events: [CalendarEventPayload {
@@ -223,6 +367,12 @@ mod tests {
                     token: "66791e2f...".into(),
                     status: CalendarAttendeeStatus::Unanswered,
                 }],
+                notifications: Some(vec![CalendarNotification {
+                    ty: CalendarNotificationType::Push,
+                    trigger: "-PT15M".parse().unwrap(),
+                }]),
+                color: None,
+                is_proton_proton_invite: true,
             }],
         };
 

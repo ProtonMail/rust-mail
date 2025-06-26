@@ -4,7 +4,7 @@ use crate::actions::draft::{
 };
 use crate::datatypes::{LocalMessageId, MessageFlags, MimeType, RollbackItemType};
 use crate::draft::compose::create_timestamp;
-use crate::draft::send::{build_packages, load_send_preferences_for_recipients};
+use crate::draft::send::{MailType, build_packages, load_prefs};
 use crate::draft::{Draft, ReplyMode, SendError, draft_attachment_staging_path};
 use crate::models::{
     Conversation, DraftAttachmentMetadata, DraftMetadata, DraftSendFailure, DraftSendResult,
@@ -357,7 +357,7 @@ impl Send {
         let pgp = new_pgp_provider();
 
         // Load send preferences for each recipient of the message.
-        let send_preferences = load_send_preferences_for_recipients(
+        let send_preferences = load_prefs(
             context,
             &pgp,
             guard,
@@ -378,16 +378,14 @@ impl Send {
                 .await
                 .inspect_err(|e| error!("Failed to load draft attachments : {e:?}"))?;
 
-        // TODO(ET-1407): PGP/Embedded attachments
         let packages = build_packages(
             context,
+            MailType::Draft,
             &pgp,
             &address_keys,
             send_preferences,
             action.mime_type,
             &stored_message_body,
-            // Even though we are already passing in the message body metadata we
-            // leave this parameter here for when we handle the PGP embedded case.
             &attachments,
             guard,
         )

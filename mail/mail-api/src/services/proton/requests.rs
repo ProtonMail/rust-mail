@@ -20,6 +20,7 @@
 //! used by both requests and responses.
 //!
 
+use super::prelude::DirectParams;
 use super::request_data::{NewAttachmentDisposition, Package};
 use crate::MAX_PAGE_ELEMENT_COUNT_U64;
 use crate::services::proton::common::{ConversationId, MessageId};
@@ -417,6 +418,19 @@ pub struct PostSendRequest {
 
     /// The packages that contain the encrypted emails.
     pub packages: Vec<Package>,
+}
+
+#[serde_as]
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PostSendDirectRequest {
+    pub message: DirectParams,
+    #[serde(rename = "ParentID")]
+    pub parent_id: Option<MessageId>,
+    pub action: Option<DraftAction>,
+    pub packages: Vec<Package>,
+    #[serde_as(as = "BoolFromInt")]
+    pub auto_save_contacts: bool,
 }
 
 /// Create a new attachment request.

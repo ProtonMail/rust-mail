@@ -52,8 +52,20 @@ impl VCalendar {
     }
 
     #[must_use]
+    pub fn with_events(mut self, events: impl IntoIterator<Item = VEvent>) -> Self {
+        self.events.extend(events);
+        self
+    }
+
+    #[must_use]
     pub fn with_timezone(mut self, timezone: VTimeZone) -> Self {
         self.timezones.push(timezone);
+        self
+    }
+
+    #[must_use]
+    pub fn with_timezones(mut self, timezones: impl IntoIterator<Item = VTimeZone>) -> Self {
+        self.timezones.extend(timezones);
         self
     }
 

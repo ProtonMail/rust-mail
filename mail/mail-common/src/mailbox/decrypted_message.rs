@@ -6,10 +6,14 @@ use crate::datatypes::message_banner::MessageBanner;
 use crate::datatypes::theme::MailTheme;
 use crate::datatypes::{Disposition, LocalAttachmentId, MimeType};
 use crate::models::{
-    AttachmentType, EmbeddedAttachmentInfo, MailSettings, Message, MessageBodyMetadata,
+    Attachment, AttachmentType, EmbeddedAttachmentInfo, MailSettings, Message, MessageBodyMetadata,
 };
+use crate::rsvp::RsvpEventId;
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use parking_lot::Mutex;
+use proton_calendar_common::{self as cal, RsvpError};
+use proton_core_api::services::proton::AddressId;
+use proton_mail_api::services::proton::prelude::DirectAttachment;
 use proton_mail_html_transformer::Transformer;
 use proton_mail_html_transformer::transforms::ColorMode;
 use proton_mail_html_transformer::transforms::styles::{BrowserCapabilities, IncludeFullStaticCss};
@@ -19,6 +23,7 @@ use stash::orm::Model;
 use stash::stash::Tether;
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::fs;
 use tokio::task::JoinHandle;
 use tracing::{debug, trace, warn};
 
@@ -163,14 +168,10 @@ type InFlightAttachments =
 
 /// Consists of the message's body metadata and decrypted content.
 pub struct DecryptedMessageBody {
-    /// The decrypted message contents.
     pub body: String,
-
-    /// Metadata associated with the message body
     pub metadata: MessageBodyMetadata,
-
-    /// The subject that comes from a multipart message.
     pub pgp_subject: Option<String>,
+    pub address_id: AddressId,
 
     /// Since the clients are holding on to this, we can request the attachments when we are
     /// decrypyting the message so that the data is ready for when they request it.
@@ -190,6 +191,7 @@ impl DecryptedMessageBody {
         body: String,
         metadata: MessageBodyMetadata,
         pgp_subject: Option<String>,
+        address_id: AddressId,
         ctx: Arc<MailUserContext>,
     ) -> Self {
         let in_flight = metadata
@@ -218,6 +220,7 @@ impl DecryptedMessageBody {
             body,
             metadata,
             pgp_subject,
+            address_id,
             in_flight: Mutex::new(in_flight),
         }
     }
@@ -228,25 +231,13 @@ impl DecryptedMessageBody {
         body: String,
         metadata: MessageBodyMetadata,
         pgp_subject: Option<String>,
+        address_id: AddressId,
     ) -> Self {
         Self {
             body,
             metadata,
             pgp_subject,
-            in_flight: Default::default(),
-        }
-    }
-
-    /// Create a new decrypted message body that corresponds to an empty draft with
-    /// the given `body` and `mime_type`.
-    pub fn new_draft(body: String, mime_type: MimeType) -> Self {
-        Self {
-            body,
-            metadata: MessageBodyMetadata {
-                mime_type,
-                ..Default::default()
-            },
-            pgp_subject: None,
+            address_id,
             in_flight: Default::default(),
         }
     }
@@ -378,6 +369,72 @@ impl DecryptedMessageBody {
             self.metadata.mime_type,
             banners,
         )
+    }
+
+    /// Checks if this mail contains an invitation and, if so, returns its
+    /// identifier.
+    ///
+    /// Use [`Message::fetch_rsvp()`] to fetch the invitation object.
+    ///
+    /// TODO (NGC-57) implement support for offline-mode
+    #[tracing::instrument(skip(self, ctx))]
+    pub async fn identify_rsvp(
+        &self,
+        ctx: &MailUserContext,
+    ) -> MailContextResult<Option<RsvpEventId>> {
+        let Some(msg_id) = self.metadata.local_message_id else {
+            return Ok(None);
+        };
+
+        if let Some(id) = cal::RsvpEventId::from_headers(&self.metadata.parsed_headers.headers) {
+            debug!("Identified RSVP via headers");
+
+            return Ok(Some(RsvpEventId::new(id, msg_id, self.address_id.clone())));
+        }
+
+        let invite = self.metadata.attachments.iter().find_map(|att| {
+            if att.filename == DirectAttachment::INVITE_ICS {
+                att.local_id
+            } else {
+                None
+            }
+        });
+
+        if let Some(invite) = invite {
+            debug!("Analyzing invite attachment");
+
+            let ics = Attachment::get_attachment(ctx, invite)
+                .await
+                .map_err(|err| {
+                    warn!(?err, "Couldn't get the RSVP attachment");
+                    err
+                })?;
+
+            let ics = fs::read(&ics.data_path).await.map_err(|err| {
+                warn!(?err, "Couldn't read the RSVP attachment");
+                err
+            })?;
+
+            match cal::RsvpEventId::from_invite(&ics) {
+                Ok(id) => {
+                    debug!("Identified RSVP via attachment");
+
+                    return Ok(Some(RsvpEventId::new(id, msg_id, self.address_id.clone())));
+                }
+
+                Err(RsvpError::IcsIsNotRsvpRequest) => {
+                    return Ok(None);
+                }
+
+                Err(err) => {
+                    warn!(?err, "Couldn't parse the RSVP attachment");
+
+                    return Err(err.into());
+                }
+            };
+        }
+
+        Ok(None)
     }
 }
 

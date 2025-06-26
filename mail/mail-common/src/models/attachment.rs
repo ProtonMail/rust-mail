@@ -168,13 +168,11 @@ pub enum AttachmentType {
     Pgp,
 }
 
-impl Default for AttachmentType {
-    fn default() -> Self {
-        Self::Remote(None)
-    }
-}
-
 impl AttachmentType {
+    pub fn is_pgp(&self) -> bool {
+        matches!(self, Self::Pgp)
+    }
+
     pub fn to_json(&self) -> Result<String, StashError> {
         serde_json::to_string(self)
             .context("error serializing attachment_type")
@@ -182,17 +180,22 @@ impl AttachmentType {
     }
 }
 
+impl Default for AttachmentType {
+    fn default() -> Self {
+        Self::Remote(None)
+    }
+}
+
 sql_using_serde!(AttachmentType);
 
 impl Attachment {
-    /// Gets the remote id of the attachment.
-    /// This is here to lower compile times.
     pub fn remote_id(&self) -> Option<AttachmentId> {
         match &self.attachment_type {
             AttachmentType::Remote(id) => id.clone(),
             _ => None,
         }
     }
+
     /// Load attachment metadata for a given `conversation_id`.
     ///
     /// Only attachments with [`Disposition::Attachment`] are loaded. For the full attachment
@@ -576,6 +579,31 @@ impl Attachment {
                 error!("Failed to encrypt attachment: {e:?}");
                 MailContextError::Crypto
             })
+    }
+
+    #[tracing::instrument(skip(ctx, bond, att))]
+    pub async fn create(
+        ctx: &MailUserContext,
+        bond: &Bond<'_>,
+        att: EncryptedAttachment,
+        filename: &str,
+        mime_type: attachment::MimeType,
+    ) -> Result<Self, MailContextError> {
+        info!("Creating attachment");
+
+        let mut this = Self {
+            attachment_type: AttachmentType::Remote(None),
+            key_packets: Some(RealKeyPackets::new_from_bytes(&att.metadata.key_packets).into()),
+            filename: filename.into(),
+            mime_type,
+            ..Attachment::default()
+        };
+
+        this.save(bond).await?;
+
+        Self::store_in_cache(ctx, &this.filename, this.id(), att.data, bond).await?;
+
+        Ok(this)
     }
 
     /// Create a new attachment from the given file `path`.

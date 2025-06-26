@@ -1,4 +1,5 @@
 mod rsvp {
+    mod answer;
     mod fetch;
 }
 
@@ -6,11 +7,12 @@ use chrono::DateTime;
 use indoc::indoc;
 use proton_calendar_api::{
     CalendarAttendee, CalendarAttendeeStatus, CalendarBootstrap, CalendarEvent,
-    CalendarEventPayload, CalendarEventPayloadType, CalendarKey, CalendarKeyFlags, CalendarMember,
-    CalendarMemberPassphrase, CalendarPassphrase,
+    CalendarEventPayload, CalendarEventPayloadType, CalendarId, CalendarKey, CalendarKeyFlags,
+    CalendarMember, CalendarMemberPassphrase, CalendarPassphrase,
 };
 use proton_calendar_common::{
-    RsvpAttendee, RsvpCalendar, RsvpEvent, RsvpOccurrence, RsvpOrganizer,
+    RsvpAttendee, RsvpCache, RsvpCalendar, RsvpEvent, RsvpIntent, RsvpOccurrence, RsvpOrganizer,
+    RsvpStatus,
 };
 use proton_core_api::session::{Config, Session};
 use proton_core_common::test_utils::test_context::{MockApiEnv, TestContext};
@@ -26,7 +28,6 @@ use std::sync::Arc;
 const SHARED_EVENT: &str = indoc! {"
     BEGIN:VCALENDAR
     VERSION:2.0
-    PRODID:-//Proton AG//web-calendar 5.0.47.3//EN
     BEGIN:VEVENT
     UID:IAni7dazrh7RFc_rbQ1c1m4K3JEQ@proton.me
     DTSTAMP:20250423T082009Z
@@ -40,7 +41,6 @@ const SHARED_EVENT: &str = indoc! {"
 const ATTENDEES_EVENT: &str = indoc! {"
     BEGIN:VCALENDAR
     VERSION:2.0
-    PRODID:-//Proton AG//web-calendar 5.0.48.1//EN
     BEGIN:VEVENT
     UID:1Gax95xN@proton.me
     ATTENDEE;CN=foo@localhost;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=245902dc:mailto:foo@localhost
@@ -58,6 +58,7 @@ where
     pgp: P,
     address_keys: UnlockedAddressKeys<P>,
     calendar_key: UnlockedCalendarKey<P>,
+    cache: DummyRsvpCache,
 }
 
 async fn world() -> World<impl PGPProviderSync> {
@@ -106,6 +107,7 @@ async fn world() -> World<impl PGPProviderSync> {
         pgp,
         address_keys,
         calendar_key,
+        cache: DummyRsvpCache,
     }
 }
 
@@ -190,6 +192,7 @@ where
                 author: "foo@localhost".into(),
             }],
             calendar_events,
+            id: "pFmwNlJp".into(),
             calendar_id: "HzNtbT1J".into(),
             start_time: 1_744_790_400,
             end_time: 1_744_795_800,
@@ -215,12 +218,32 @@ where
                     status: CalendarAttendeeStatus::Maybe,
                 },
             ],
+            notifications: None,
+            color: Some("#aabbcc".into()),
+            is_proton_proton_invite: true,
         }
+    }
+}
+
+struct DummyRsvpCache;
+
+impl RsvpCache for DummyRsvpCache {
+    fn get_calendar_bootstrap<E, Fn, Fut>(
+        &self,
+        _: &CalendarId,
+        fetch: Fn,
+    ) -> impl Future<Output = Result<CalendarBootstrap, E>>
+    where
+        Fn: FnOnce() -> Fut + Send,
+        Fut: Future<Output = Result<CalendarBootstrap, E>> + Send,
+    {
+        fetch()
     }
 }
 
 fn expected_event(raw: CalendarEvent) -> RsvpEvent {
     RsvpEvent {
+        intent: RsvpIntent::Invite,
         summary: Some("some title".into()),
         location: Some("some location".into()),
         description: Some("some description".into()),
@@ -250,7 +273,7 @@ fn expected_event(raw: CalendarEvent) -> RsvpEvent {
             name: "My calendar".into(),
             color: "#273EB2".into(),
         },
-        is_cancelled: false,
+        status: RsvpStatus::Active,
         raw: Box::new(raw),
     }
 }

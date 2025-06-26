@@ -416,7 +416,7 @@ const PM_SIGNATURE_HTML: &str = r#"Sent with <a target="_blank" href="https://pr
 
 const PM_SIGNATURE_PLAIN_TEXT: &str = "Sent with Proton Mail secure email.";
 
-fn apply_prefix_to_subject(prefix: &str, subject: &str) -> String {
+pub fn apply_prefix_to_subject(prefix: &str, subject: &str) -> String {
     let trimmed_subject = subject.trim();
     if trimmed_subject.starts_with(prefix) {
         trimmed_subject.to_string()

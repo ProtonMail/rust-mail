@@ -345,7 +345,7 @@ impl Context {
             task_service: BackgroundAwareTaskService::new(task_service),
             on_session_deleted_broadcast: broadcast_sender,
             event_poll_mode,
-            clock: CoreClock::new(),
+            clock: CoreClock::default(),
         });
 
         let ctx_weak = ctx.this.clone();

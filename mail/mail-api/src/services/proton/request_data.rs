@@ -22,7 +22,7 @@ use crate::services::proton::response_data::MimeType;
 use indexmap::IndexMap;
 use proton_crypto_inbox::attachment::{
     Base64AttachmentEncryptedSignature, BinaryAttachmentEncryptedSignature,
-    BinaryAttachmentSignature, KeyPackets,
+    BinaryAttachmentSignature, EncryptedAttachment, KeyPackets,
 };
 use proton_crypto_inbox::keys::{InboxSessionKey, KeyPacket, PackageCryptoType, SessionKeyExposed};
 use proton_crypto_inbox::message::EncryptedDraft;
@@ -134,11 +134,27 @@ pub struct DraftParams {
 }
 
 pub type DraftAttachmentKeyPackets = IndexMap<AttachmentId, KeyPackets>;
-
 pub type PackageAddresses = HashMap<String, AddressSubPackage>;
-pub type PackageAttachmentKeyPackets = HashMap<String, KeyPacket>;
-pub type PackageAttachmentEncSignatures = HashMap<String, Base64AttachmentEncryptedSignature>;
-pub type PackageAttachmentExposedKeys = HashMap<String, ExposedKey>;
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(untagged)]
+pub enum PackageAttachmentEntries<T> {
+    /// Map of attachment remote ids onto `T`s (attachment keys or signatures).
+    ///
+    /// This is used for building the "send draft" request, because that's the
+    /// only case where we know attachment remote ids up-front.
+    Draft(HashMap<String, T>),
+
+    /// List of attachment `T`s (attachment keys or signatures).
+    ///
+    /// This is used for building the "send direct mail" request, because there
+    /// we don't know attachment remote ids up front, so we can only rely on
+    /// correlating attachments by indices.
+    ///
+    /// Entries here must be listed in the same order in which attachments
+    /// appear within the message.
+    Direct(Vec<T>),
+}
 
 /// Signature mode of a sub-package.
 #[derive(Debug, Default, Serialize_repr, PartialEq, Eq, Clone, Copy)]
@@ -181,7 +197,7 @@ pub struct Package {
 
     /// An the exposed attachment keys
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub attachment_keys: Option<PackageAttachmentExposedKeys>,
+    pub attachment_keys: Option<PackageAttachmentEntries<ExposedKey>>,
 
     /// The raw body.
     ///
@@ -204,11 +220,12 @@ pub struct AddressSubPackage {
 
     /// The encrypted attachment session keys towards the address.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub attachment_key_packets: Option<PackageAttachmentKeyPackets>,
+    pub attachment_key_packets: Option<PackageAttachmentEntries<KeyPacket>>,
 
     /// The encrypted  attachment signatures towards the address.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub attachment_enc_signatures: Option<PackageAttachmentEncSignatures>,
+    pub attachment_enc_signatures:
+        Option<PackageAttachmentEntries<Base64AttachmentEncryptedSignature>>,
 
     /// The signature mode towards this address.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -281,4 +298,57 @@ pub struct NewAttachmentParams {
     pub enc_signature: Option<BinaryAttachmentEncryptedSignature>,
     /// Encrypted attachment payload.
     pub data_packet: Vec<u8>,
+}
+
+// TODO rename DraftSender into Sender etc.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct DirectParams {
+    pub subject: String,
+    pub sender: DraftSender,
+    pub to_list: Vec<DraftRecipient>,
+    pub body: EncryptedDraft,
+    pub attachments: Vec<DirectAttachment>,
+}
+
+#[serde_as]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct DirectAttachment {
+    pub filename: String,
+    #[serde(rename = "MIMEType")]
+    pub mimetype: String,
+    #[serde_as(as = "Base64")]
+    pub contents: Vec<u8>,
+}
+
+impl DirectAttachment {
+    pub const INVITE_ICS: &str = "invite.ics";
+
+    #[must_use]
+    pub fn new(filename: &str, mimetype: &str, contents: &EncryptedAttachment) -> Self {
+        let contents = {
+            let mut payload = Vec::new();
+
+            payload.extend(&contents.data);
+            payload.extend(&contents.metadata.key_packets);
+
+            if let Some(sign) = &contents.metadata.signature {
+                payload.extend(sign.as_slice());
+            }
+
+            payload
+        };
+
+        Self {
+            filename: filename.into(),
+            mimetype: mimetype.into(),
+            contents,
+        }
+    }
+
+    #[must_use]
+    pub fn invite_reply(ics: &EncryptedAttachment) -> Self {
+        Self::new(Self::INVITE_ICS, "text/calendar; method=reply", ics)
+    }
 }

@@ -2,11 +2,11 @@ use super::LabelAs;
 use super::search::SearchStatusBar;
 use crate::CLI_ARGS;
 use crate::app::Command;
-use crate::app_model::YesNoPopup;
 use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::paginator::Paginator;
 use crate::app_model::mailbox::{ConversationMessage, ITEM_LIMIT, Item, Message, MessageMessage};
 use crate::app_model::watcher::TuiWatchHandle;
+use crate::app_model::{ChoosePopup, YesNoPopup};
 use crate::messages::Messages;
 use crate::widgets::utils::{date_from_timestamp, format_recipients, format_sender};
 use crate::widgets::{
@@ -18,7 +18,7 @@ use futures::FutureExt;
 use futures::future::try_join_all;
 use itertools::Itertools as _;
 use proton_calendar_api::CalendarAttendeeStatus;
-use proton_calendar_common::{RsvpEvent, RsvpOccurrence};
+use proton_calendar_common::{RsvpAnswerStatus, RsvpOccurrence, RsvpStatus};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::os::safe_write;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
@@ -33,6 +33,7 @@ use proton_mail_common::models::default_location::IncomingDefaultLocation;
 use proton_mail_common::models::{
     Attachment, LabelWithCounters, Message as MailMessage, MessageScrollData,
 };
+use proton_mail_common::rsvp::RsvpEvent;
 use proton_mail_common::{AppError, MailContextResult, MailUserContext, Mailbox};
 use proton_mail_html_transformer::Html2TextOptions;
 use ratatui::Frame;
@@ -46,7 +47,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::{iter, thread};
 use throbber_widgets_tui::ThrobberState;
-use tokio::fs;
+use tokio::{fs, task};
 use tracing::{debug, warn};
 
 /// Displays a list of messages based of message metadata. If a conversation is opened the message
@@ -266,7 +267,7 @@ impl MessagesState {
             #[allow(clippy::redundant_closure_call)] // Poor's man try blocks
             let c: Result<_> = (|| async move {
                 let stash = ctx.user_stash();
-                let mut tether = stash.connection();
+                let tether = stash.connection();
                 let local_id = metadata.id();
 
                 let decrypted = MailMessage::message_body(&ctx, local_id)
@@ -274,7 +275,7 @@ impl MessagesState {
                     .context("Failed to get message body")?;
 
                 Ok(Box::new(
-                    DecryptedMessage::new(metadata, decrypted, &ctx, &mut tether).await?,
+                    DecryptedMessage::new(metadata, decrypted, &ctx, tether).await?,
                 ))
             })()
             .await;
@@ -368,8 +369,10 @@ impl MessagesState {
                 self.table_state.prev();
                 Command::None
             }
+
             KeyCode::Char('j') | KeyCode::Down => {
                 self.table_state.next();
+
                 if let Mode::Label(paginator) = &self.mode {
                     if self.table_state.selected().unwrap_or_default()
                         == self.messages.len().saturating_sub(1)
@@ -379,6 +382,7 @@ impl MessagesState {
                         });
                     }
                 }
+
                 if let Mode::Search(paginator) = &self.mode {
                     if self.table_state.selected().unwrap_or_default()
                         == self.messages.len().saturating_sub(1)
@@ -388,68 +392,22 @@ impl MessagesState {
                         });
                     }
                 }
+
                 Command::None
             }
-            KeyCode::Char('a') => {
-                let user_ctx = ctx.to_owned();
 
-                let message = self
-                    .selected_message()
-                    .expect("Should have a message selected");
+            KeyCode::Char('a') => self.handle_download_attachments(ctx),
 
-                debug!(
-                    "Downloading the attachments for message {}",
-                    message.subject
-                );
-
-                let download = Command::task(async move {
-                    let all = message.attachments_metadata.into_iter().map(|mdata| {
-                        let user_ctx = Arc::clone(&user_ctx);
-
-                        async move {
-                            Attachment::get_attachment(&user_ctx, mdata.local_id.unwrap())
-                                .await
-                                .map(|att| {
-                                    format!(
-                                        "{} -> {:?}",
-                                        att.attachment_metadata.filename, att.data_path,
-                                    )
-                                })
-                        }
-                    });
-
-                    let tri = try_join_all(all)
-                        .await
-                        .context("Failed to download attachments");
-
-                    match tri {
-                        Ok(attatchments) => Command::message(Messages::DisplayInfo(
-                            Some("Attachments Successfully Fetched".to_owned()),
-                            format!(
-                                "{} attachments fetched successfully:\n{}",
-                                attatchments.len(),
-                                attatchments.join("\n"),
-                            ),
-                        )),
-                        Err(e) => Command::message(Messages::DisplayError(None, e)),
-                    }
-                });
-
-                Command::batch([
-                    Command::message(Messages::DisplayBackgroundProgress(
-                        "Fetching attachments".to_string(),
-                    )),
-                    download,
-                ])
-            }
             KeyCode::Char('e') => self
                 .selected_message_id()
                 .map(|id| Composer::open(ctx.to_owned(), id))
                 .unwrap_or_default(),
+
             KeyCode::Char('u') => self
                 .selected_message_id()
                 .map(|id| Command::message(MessageMessage::MarkMessageUnread(id).into()))
                 .unwrap_or_default(),
+
             KeyCode::Char('r') => self
                 .selected_message_id()
                 .map(|id| {
@@ -464,6 +422,7 @@ impl MessagesState {
                     }
                 })
                 .unwrap_or_default(),
+
             KeyCode::Char('f') => {
                 if key.modifiers.contains(KeyModifiers::CONTROL) {
                     self.selected_message_id()
@@ -475,10 +434,12 @@ impl MessagesState {
                         .unwrap_or_default()
                 }
             }
+
             KeyCode::Char('F') => self
                 .selected_message_id()
                 .map(|id| Command::message(MessageMessage::UnstarMessage(id).into()))
                 .unwrap_or_default(),
+
             KeyCode::Char('t') => {
                 if key.modifiers.contains(KeyModifiers::CONTROL) {
                     self.selected_message_id()
@@ -488,10 +449,12 @@ impl MessagesState {
                     Command::None
                 }
             }
+
             KeyCode::Char('d') => self
                 .selected_message_id()
                 .map(|id| Command::message(MessageMessage::DeleteMessage(id).into()))
                 .unwrap_or_default(),
+
             KeyCode::Char('b') => self
                 .selected_email()
                 .map(|email| {
@@ -500,6 +463,7 @@ impl MessagesState {
                     )
                 })
                 .unwrap_or_default(),
+
             KeyCode::Char('B') => self
                 .selected_email()
                 .map(|email| {
@@ -508,31 +472,174 @@ impl MessagesState {
                     )
                 })
                 .unwrap_or_default(),
+
             KeyCode::Char('s') => Command::message(Message::OpenLabelSelectPopup.into()),
+
             KeyCode::Char('m') => self
                 .selected_message_id()
                 .map(|id| Command::message(Message::OpenMoveItemPopup(Item::Message(id)).into()))
                 .unwrap_or_default(),
+
             KeyCode::Char('l') => self
                 .selected_message_id()
                 .map(|id| Command::message(Message::OpenLabelItemPopup(Item::Message(id)).into()))
                 .unwrap_or_default(),
+
             KeyCode::Char('h') => Command::message(MessageMessage::HasMore.into()),
+
             KeyCode::Enter => self
                 .selected_message_id()
                 .map(|_| Command::message(MessageMessage::OpenMessageBody.into()))
                 .unwrap_or_default(),
+
             KeyCode::Char('z') => self
                 .selected_message_id()
                 .map(|id| Command::message(MessageMessage::CancelScheduleSend(id).into()))
                 .unwrap_or_default(),
+
             KeyCode::Char('p') => self
                 .selected_message_id()
                 .map(|id| Command::message(MessageMessage::ReportPhishing(id).into()))
                 .unwrap_or_default(),
 
+            KeyCode::Char('A') => self.handle_answer_rsvp(ctx),
+
             _ => Command::None,
         }
+    }
+
+    fn handle_download_attachments(&self, ctx: &Arc<MailUserContext>) -> Command<Messages> {
+        let user_ctx = ctx.to_owned();
+
+        let message = self
+            .selected_message()
+            .expect("Should have a message selected");
+
+        debug!(
+            "Downloading the attachments for message {}",
+            message.subject
+        );
+
+        let download = Command::task(async move {
+            let all = message.attachments_metadata.into_iter().map(|mdata| {
+                let user_ctx = Arc::clone(&user_ctx);
+
+                async move {
+                    Attachment::get_attachment(&user_ctx, mdata.local_id.unwrap())
+                        .await
+                        .map(|att| {
+                            format!(
+                                "{} -> {:?}",
+                                att.attachment_metadata.filename, att.data_path,
+                            )
+                        })
+                }
+            });
+
+            let tri = try_join_all(all)
+                .await
+                .context("Failed to download attachments");
+
+            match tri {
+                Ok(attatchments) => Command::message(Messages::DisplayInfo(
+                    Some("Attachments Successfully Fetched".to_owned()),
+                    format!(
+                        "{} attachments fetched successfully:\n{}",
+                        attatchments.len(),
+                        attatchments.join("\n"),
+                    ),
+                )),
+                Err(e) => Command::message(Messages::DisplayError(None, e)),
+            }
+        });
+
+        Command::batch([
+            Command::message(Messages::DisplayBackgroundProgress(
+                "Fetching attachments".to_string(),
+            )),
+            download,
+        ])
+    }
+
+    fn handle_answer_rsvp(&self, ctx: &Arc<MailUserContext>) -> Command<Messages> {
+        let DecryptedMessageStatus::Success(state) = &self.open_message else {
+            return Command::None;
+        };
+
+        let Rsvp::Success(rsvp) = &state.rsvp else {
+            return Command::None;
+        };
+
+        if rsvp.intent.is_reminder() {
+            // Reminders can't be answered
+            return Command::None;
+        }
+
+        let ctx = ctx.clone();
+        let mut rsvp = rsvp.clone();
+
+        Command::message(Messages::raise_popup(
+            ChoosePopup::default()
+                .with(
+                    KeyCode::Char('y'),
+                    "Answer: yes",
+                    Some(RsvpAnswerStatus::Yes),
+                )
+                .with(
+                    KeyCode::Char('m'),
+                    "Answer: maybe",
+                    Some(RsvpAnswerStatus::Maybe),
+                )
+                .with(KeyCode::Char('n'), "Answer: no", Some(RsvpAnswerStatus::No))
+                .space()
+                .with(KeyCode::Esc, "Go back", None)
+                .on_reply(move |status| match status {
+                    Some(status) => Command::batch([
+                        Command::message(Messages::DismissPopup),
+                        Command::message(Messages::DisplayBackgroundProgress(
+                            "Answering invitation...".into(),
+                        )),
+                        Command::task(async move {
+                            let mut tether = ctx.user_stash().connection();
+
+                            let result = rsvp
+                                .answer(&ctx, &mut tether, status)
+                                .await
+                                .context("Couldn't answer the invitation");
+
+                            match result {
+                                Ok(()) => {
+                                    let status = match status {
+                                        RsvpAnswerStatus::Yes => "Invitation accepted",
+                                        RsvpAnswerStatus::Maybe => {
+                                            "Invitation tentatively accepted"
+                                        }
+                                        RsvpAnswerStatus::No => "Invitation declined",
+                                    };
+
+                                    Command::batch([
+                                        Command::message(Messages::Mailbox(Message::MessageState(
+                                            MessageMessage::UpdateRsvp(rsvp),
+                                        ))),
+                                        Command::message(Messages::DismissBackgroundProgress),
+                                        Command::message(Messages::DisplayInfo(
+                                            None,
+                                            status.into(),
+                                        )),
+                                    ])
+                                }
+
+                                Err(err) => Command::batch([
+                                    Command::message(Messages::DismissBackgroundProgress),
+                                    Command::message(Messages::DisplayError(None, err)),
+                                ]),
+                            }
+                        }),
+                    ]),
+
+                    None => Command::message(Messages::DismissPopup),
+                }),
+        ))
     }
 
     pub fn update(
@@ -627,6 +734,11 @@ impl MessagesState {
             MessageMessage::CancelScheduleSend(id) => {
                 return cancel_scheduled_send(user_ctx.to_owned(), id);
             }
+            MessageMessage::UpdateRsvp(rsvp) => {
+                if let DecryptedMessageStatus::Success(msg) = &mut self.open_message {
+                    msg.rsvp = Rsvp::Success(rsvp);
+                }
+            }
         }
         Command::None
     }
@@ -667,7 +779,7 @@ impl MessagesState {
 }
 
 pub struct DecryptedMessage {
-    metadata: MailMessage,
+    msg: MailMessage,
     content: String,
     content_scroll: ScrollableParagraphState,
     content_lines: usize,
@@ -678,7 +790,38 @@ pub struct DecryptedMessage {
     bcc: String,
     labels: String,
     banners: Vec<MessageBanner>,
-    rsvp: Option<Result<RsvpEvent, String>>,
+    rsvp: Rsvp,
+}
+
+enum Rsvp {
+    None,
+    Loading(task::JoinHandle<Result<Option<RsvpEvent>, String>>),
+    Success(Box<RsvpEvent>),
+    Error(String),
+}
+
+impl Rsvp {
+    fn tick(&mut self) {
+        if let Rsvp::Loading(task) = self {
+            match task.now_or_never() {
+                Some(Ok(Ok(Some(rsvp)))) => {
+                    *self = Rsvp::Success(Box::new(rsvp));
+                }
+                Some(Ok(Ok(None))) => {
+                    *self = Rsvp::None;
+                }
+                Some(Ok(Err(err))) => {
+                    *self = Rsvp::Error(err.to_string());
+                }
+                Some(Err(err)) => {
+                    *self = Rsvp::Error(err.to_string());
+                }
+                None => {
+                    // Still loading
+                }
+            }
+        }
+    }
 }
 
 enum DecryptedMessageStatus {
@@ -728,14 +871,15 @@ impl DecryptedMessageStatus {
 
 impl DecryptedMessage {
     pub async fn new(
-        metadata: MailMessage,
+        msg: MailMessage,
         body: DecryptedMessageBody,
-        ctx: &MailUserContext,
-        tether: &mut Tether,
+        ctx: &Arc<MailUserContext>,
+        mut tether: Tether,
     ) -> Result<Self> {
-        let sender = metadata.sender.address.clone();
+        let sender = msg.sender.address.clone();
+
         let body_output = body
-            .transformed(&sender, TransformOpts::default(), tether)
+            .transformed(&sender, TransformOpts::default(), &tether)
             .await;
 
         if let Some(cmd_name) = CLI_ARGS.browser.as_deref() {
@@ -753,11 +897,12 @@ impl DecryptedMessage {
                 .html_dir
                 .clone()
                 .unwrap_or_else(|| std::env::temp_dir().join("proton_htmls"));
+
             let escaped_subject = PathBuf::from(
-                &metadata
-                    .subject
+                &msg.subject
                     .replace(|c: char| !c.is_ascii_alphanumeric(), "_"),
             );
+
             temp_dir.push(escaped_subject);
 
             fs::create_dir_all(&temp_dir).await.unwrap();
@@ -781,26 +926,35 @@ impl DecryptedMessage {
         let content_scroll = ScrollableParagraphState::new();
         let content_lines = content.chars().filter(|c| *c == '\n').count();
 
-        let date = date_from_timestamp(metadata.time);
-        let from = format_sender(&metadata.sender);
-        let to = format_recipients(&metadata.to_list);
-        let cc = format_recipients(&metadata.cc_list);
-        let bcc = format_recipients(&metadata.bcc_list);
-        let labels = metadata.custom_labels.iter().map(|l| &l.name).join(", ");
+        let date = date_from_timestamp(msg.time);
+        let from = format_sender(&msg.sender);
+        let to = format_recipients(&msg.to_list);
+        let cc = format_recipients(&msg.cc_list);
+        let bcc = format_recipients(&msg.bcc_list);
+        let labels = msg.custom_labels.iter().map(|l| &l.name).join(", ");
 
-        let rsvp = if let Some(rsvp) = metadata.rsvp_attachment_id() {
-            metadata
-                .fetch_rsvp(ctx, rsvp, tether)
-                .await
-                .map_err(|err| format!("Can't fetch RSVP: {err}"))
-                .inspect_err(|err| warn!("{err}"))
-                .transpose()
-        } else {
-            None
+        let rsvp = match body.identify_rsvp(ctx).await {
+            Ok(Some(rsvp)) => {
+                let task = task::spawn({
+                    let ctx = (*ctx).clone();
+
+                    async move {
+                        rsvp.fetch(&ctx, &mut tether)
+                            .await
+                            .map_err(|err| format!("Couldn't fetch RSVP: {err}"))
+                            .inspect_err(|err| warn!("{err}"))
+                    }
+                });
+
+                Rsvp::Loading(task)
+            }
+
+            Ok(None) => Rsvp::None,
+            Err(err) => Rsvp::Error(err.to_string()),
         };
 
         Ok(Self {
-            metadata,
+            msg,
             content,
             content_scroll,
             content_lines,
@@ -824,6 +978,7 @@ impl DecryptedMessage {
         ])
         .areas(area);
 
+        self.rsvp.tick();
         self.draw_headers(frame, headers_area);
         self.draw_banners(frame, banners_area);
         self.draw_rsvp(frame, rsvp_area);
@@ -838,7 +993,7 @@ impl DecryptedMessage {
         let headers = vec![
             Row::new([
                 Cell::from("Subject:"),
-                Cell::from(self.metadata.subject.as_str()),
+                Cell::from(self.msg.subject.as_str()),
             ])
             .bold(),
             Row::new([Cell::from("Date:").bold(), Cell::from(self.date.as_str())]),
@@ -910,56 +1065,69 @@ impl DecryptedMessage {
 
     fn lay_rsvp(&self) -> u16 {
         match &self.rsvp {
-            Some(Ok(rsvp)) => {
-                let status = if rsvp.is_cancelled { 2 } else { 0 };
+            Rsvp::None => 0,
+            Rsvp::Loading(_) => 2,
+
+            Rsvp::Success(rsvp) => {
+                let status = match rsvp.status {
+                    RsvpStatus::Active => 0,
+                    RsvpStatus::Cancelled => 2,
+                };
+
                 let header = 4;
                 let atts = rsvp.attendees.len();
 
                 status + header + atts
             }
-            Some(Err(msg)) => 1 + msg.lines().count(),
-            None => 0,
+
+            Rsvp::Error(msg) => 1 + msg.lines().count(),
         }
         .try_into()
         .unwrap()
     }
 
     fn draw_rsvp(&self, frame: &mut Frame, area: Rect) {
-        let Some(rsvp) = &self.rsvp else {
+        if let Rsvp::None = &self.rsvp {
             return;
-        };
+        }
 
         let [sep_area, body_area] =
             Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(area);
 
         frame.render_widget(Block::new().borders(Borders::TOP), sep_area);
 
-        // ---
-
-        let rsvp = match rsvp {
-            Ok(rsvp) => rsvp,
-
-            Err(err) => {
-                frame.render_widget(Paragraph::new(err.as_str()), body_area);
-                return;
+        match &self.rsvp {
+            Rsvp::None => {
+                unreachable!();
             }
-        };
+            Rsvp::Loading(_) => {
+                Self::draw_rsvp_loading(frame, body_area);
+            }
+            Rsvp::Success(rsvp) => {
+                Self::draw_rsvp_success(frame, body_area, rsvp);
+            }
+            Rsvp::Error(err) => {
+                Self::draw_rsvp_error(frame, body_area, err);
+            }
+        }
+    }
 
-        // ---
+    fn draw_rsvp_loading(frame: &mut Frame, area: Rect) {
+        frame.render_widget(Paragraph::new("Loading event..."), area);
+    }
 
-        let rsvp_status = if rsvp.is_cancelled {
-            vec![
+    fn draw_rsvp_success(frame: &mut Frame, area: Rect, rsvp: &RsvpEvent) {
+        let rsvp_status = match rsvp.status {
+            RsvpStatus::Active => vec![],
+            RsvpStatus::Cancelled => vec![
                 Text::raw("! Event was cancelled").fg(Color::Yellow),
                 Text::raw(""),
-            ]
-        } else {
-            vec![]
+            ],
         };
 
-        let fg = if rsvp.is_cancelled {
-            Color::DarkGray
-        } else {
-            Color::White
+        let fg = match rsvp.status {
+            RsvpStatus::Active => Color::White,
+            RsvpStatus::Cancelled => Color::DarkGray,
         };
 
         let rsvp_summary = rsvp.summary.as_deref().unwrap_or("(no title)");
@@ -1006,7 +1174,11 @@ impl DecryptedMessage {
             .chain(iter::once(Text::raw("")))
             .chain(rsvp_atts);
 
-        frame.render_widget(List::new(rows), body_area);
+        frame.render_widget(List::new(rows), area);
+    }
+
+    fn draw_rsvp_error(frame: &mut Frame, area: Rect, err: &str) {
+        frame.render_widget(Paragraph::new(err), area);
     }
 
     fn draw_content(&mut self, frame: &mut Frame, area: Rect) {

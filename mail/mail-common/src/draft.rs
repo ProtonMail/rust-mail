@@ -288,8 +288,12 @@ pub enum PackageError {
     AttachmentDataMissing,
     #[error("Attachment failed to load: {0}")]
     AttachmentLoad(Box<MailContextError>),
-    #[error("Failed to get attachment remote id")]
-    AttachmentNoRemoteId,
+    #[error("Attachment has no local id")]
+    AttachmentHasNoLocalId,
+    #[error("Attachment has no remote id")]
+    AttachmentHasNoRemoteId,
+    #[error("Attachment already has remote id")]
+    AttachmentAlreadyHasRemoteId,
     #[error("Failed to get attachment address key {0}")]
     AttachmentAddressKeyMissing(AddressId),
     #[error("Failed to write mime body to buffer: {0}")]
@@ -544,12 +548,13 @@ impl Draft {
             Some(d) => d,
             None => {
                 debug!("Failed to sync draft from server, attempting to load from cache.");
-                let Some(d) =
-                    Message::load_decrypted_message_from_cache(message.local_id.unwrap(), tether)
-                        .await
-                        .inspect_err(|e| {
-                            error!("Failed to load decrypted data from cache: {e:?}")
-                        })?
+                let Some(d) = Message::load_decrypted_message_from_cache(
+                    message.id(),
+                    &message.remote_address_id,
+                    tether,
+                )
+                .await
+                .inspect_err(|e| error!("Failed to load decrypted data from cache: {e:?}"))?
                 else {
                     return Err(OpenError::MessageBodyMissing(message.local_id.unwrap()).into());
                 };
@@ -708,10 +713,13 @@ impl Draft {
         };
 
         // Message body must be present to create a reply.
-        let Some(source_message_body) =
-            Message::load_decrypted_message_from_cache(message_id, &tether)
-                .await
-                .inspect_err(|e| error!("Failed to get source decrypted message: {e:?}"))?
+        let Some(source_message_body) = Message::load_decrypted_message_from_cache(
+            message_id,
+            &source_message.remote_address_id,
+            &tether,
+        )
+        .await
+        .inspect_err(|e| error!("Failed to get source decrypted message: {e:?}"))?
         else {
             return Err(OpenError::MessageBodyMissing(message_id).into());
         };

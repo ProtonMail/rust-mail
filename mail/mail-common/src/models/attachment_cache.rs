@@ -1,6 +1,7 @@
+use super::Message;
 use crate::datatypes::exclusive_location::ExclusiveLocation;
 use crate::datatypes::{AttachmentMetadata, Disposition, LocalAttachmentId, SystemLabelId as _};
-use crate::models::Attachment;
+use crate::models::{Attachment, AttachmentType};
 use crate::{AppError, DecryptedAttachment, MailContextError, MailContextResult, MailUserContext};
 use anyhow::Context as _;
 use indoc::indoc;
@@ -29,8 +30,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime};
 use tokio::fs;
 use tracing::{debug, error, info, warn};
-
-use super::{AttachmentType, Message};
 
 /// This is the metadata for where or if the attachment has the data downloaded
 /// It's stored in a separate table because:
@@ -81,11 +80,9 @@ impl Attachment {
     pub async fn content_path(
         &self,
         ctx: &MailUserContext,
-        into_transaction: &mut impl RunTransaction,
+        tx: &mut impl RunTransaction,
     ) -> MailContextResult<PathBuf> {
-        if let Some(path) =
-            Self::path_from_cache_and_update_metadata_atomic(self.id(), into_transaction).await?
-        {
+        if let Some(path) = Self::path_from_cache_and_update_metadata_atomic(self.id(), tx).await? {
             return Ok(path);
         };
 
@@ -94,18 +91,16 @@ impl Attachment {
         // While we were downlaoding, did someone win the race?
         // If so return it. Else store it.
         // TODO(orion): Replace this
-        into_transaction
-            .run_tx(async |tx| {
-                if let Some(path) = Self::path_from_cache_and_update_metadata(self.id(), tx).await?
-                {
-                    debug!("Someone else won the race");
-                    return Ok(path);
-                };
+        tx.run_tx(async |tx| {
+            if let Some(path) = Self::path_from_cache_and_update_metadata(self.id(), tx).await? {
+                debug!("Someone else won the race");
+                return Ok(path);
+            };
 
-                Ok(Self::store_in_cache(ctx, &self.filename, self.id(), data, tx).await?)
-            })
-            .await
-            .map_err(MailContextError::IntoTransactionError)
+            Ok(Self::store_in_cache(ctx, &self.filename, self.id(), data, tx).await?)
+        })
+        .await
+        .map_err(MailContextError::IntoTransactionError)
     }
 
     /// Tries to get the actual bytes of an attachment.
@@ -119,11 +114,9 @@ impl Attachment {
     pub async fn content_data(
         &self,
         ctx: &MailUserContext,
-        into_transaction: &mut impl RunTransaction,
+        tx: &mut impl RunTransaction,
     ) -> MailContextResult<Vec<u8>> {
-        if let Some(path) =
-            Self::path_from_cache_and_update_metadata_atomic(self.id(), into_transaction).await?
-        {
+        if let Some(path) = Self::path_from_cache_and_update_metadata_atomic(self.id(), tx).await? {
             return Ok(fs::read(path).await?);
         };
 
@@ -132,22 +125,20 @@ impl Attachment {
         // While we were downlaoding, did someone win the race?
         // If so return it. Else store it.
         // TODO(orion): Replace this
-        into_transaction
-            .run_tx(async |tx| {
-                if let Some(path) = Self::path_from_cache_and_update_metadata(self.id(), tx).await?
-                {
-                    return Ok(fs::read(path).await?);
-                };
+        tx.run_tx(async |tx| {
+            if let Some(path) = Self::path_from_cache_and_update_metadata(self.id(), tx).await? {
+                return Ok(fs::read(path).await?);
+            };
 
-                if let Err(e) =
-                    Self::store_in_cache(ctx, &self.filename, self.id(), data.clone(), tx).await
-                {
-                    error!("Could not save attachment to disk/database, but will continue: {e:?}");
-                }
-                Ok(data)
-            })
-            .await
-            .map_err(MailContextError::IntoTransactionError)
+            if let Err(e) =
+                Self::store_in_cache(ctx, &self.filename, self.id(), data.clone(), tx).await
+            {
+                error!("Could not save attachment to disk/database, but will continue: {e:?}");
+            }
+            Ok(data)
+        })
+        .await
+        .map_err(MailContextError::IntoTransactionError)
     }
 
     /// Loads the metadata and file path for the given local [`attachment_id`]
@@ -192,9 +183,9 @@ impl Attachment {
     /// Starts a transaction, returns the fs path to the attachment and updates hit/atime metadata
     async fn path_from_cache_and_update_metadata_atomic(
         id: LocalAttachmentId,
-        into_transaction: &mut impl RunTransaction,
+        tx: &mut impl RunTransaction,
     ) -> MailContextResult<Option<PathBuf>> {
-        let res = into_transaction
+        let res = tx
             .run_tx(async |tx| {
                 if let Some(path) = Self::path_from_cache_and_update_metadata(id, tx).await? {
                     return Ok(Some(path));
@@ -361,11 +352,11 @@ impl Attachment {
         let pgp = new_pgp_provider();
 
         let remote_attachment_id = match &self.attachment_type {
-            crate::models::AttachmentType::Remote(Some(id)) => id,
-            crate::models::AttachmentType::Remote(None) => {
+            AttachmentType::Remote(Some(id)) => id,
+            AttachmentType::Remote(None) => {
                 return Err(MailContextError::CalledFetchedAttachmentLocalAttachment);
             }
-            crate::models::AttachmentType::Pgp => {
+            AttachmentType::Pgp => {
                 return Err(MailContextError::CalledFetchedAttachmentOnPgp);
             }
         };
@@ -373,7 +364,7 @@ impl Attachment {
         let encrypted_content = Attachment::fetch_content(remote_attachment_id.clone(), ctx.api())
             .await
             .map_err(|e| {
-                error!("Failed to fetch attachment ({attachment_id:?}) from API: {e:?}",);
+                error!("Failed to fetch attachment ({attachment_id:?}) from API: {e:?}");
                 e
             })?;
 

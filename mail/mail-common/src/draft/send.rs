@@ -1,11 +1,13 @@
+mod attachments;
+
+use self::attachments::*;
 use crate::datatypes::{Disposition, MimeType};
 use crate::draft::recipients::ValidationState;
 use crate::draft::{CancelScheduleSendError, PackageError, SendError, compose::html_to_text};
-use crate::models::{Attachment, DraftMetadata, Message};
+use crate::models::{Attachment, AttachmentType, DraftMetadata, Message};
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use anyhow::anyhow;
 use chrono::{DateTime, Datelike, Days, Local, LocalResult, NaiveTime};
-use proton_action_queue::action::WriterGuard;
 use proton_action_queue::observers::ActionAwaiter;
 use proton_action_queue::queue::{BroadcastMessage, Queue, QueuedError};
 use proton_core_api::consts::Mail;
@@ -32,10 +34,16 @@ use proton_mail_ids::LocalMessageId;
 use stash::stash::{RunTransaction, Tether};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;
-use tracing::{Instrument, debug, debug_span, error, info};
+use tracing::{Instrument, debug, debug_span, error, info, instrument};
 
-/// Loads the send preferences for each recipient of the message.
-pub async fn load_send_preferences_for_recipients<P>(
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MailType {
+    Draft,
+    Direct,
+}
+
+#[instrument(skip_all)]
+pub async fn load_prefs<P>(
     context: &MailUserContext,
     pgp: &P,
     tx: &mut impl RunTransaction,
@@ -63,7 +71,6 @@ where
                     recipient, err
                 );
 
-                // Catch recipient validation errors.
                 if let MailContextError::Api(err) = &err {
                     match ValidationState::from(err) {
                         ValidationState::InvalidEmail => {
@@ -99,21 +106,21 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-/// Builds the email packages for all recipients.
+#[instrument(skip_all)]
 pub async fn build_packages<P>(
     context: &MailUserContext,
+    ty: MailType,
     pgp: &P,
     address_keys: &UnlockedAddressKeys<P>,
     send_preferences: HashMap<String, SendPreferences<P::PublicKey>>,
     mime_type: MimeType,
     stored_message_body: &str,
     attachments: &[Attachment],
-    guard: &mut WriterGuard<'_>,
+    tx: &mut impl RunTransaction,
 ) -> Result<Vec<Package>, PackageError>
 where
     P: PGPProviderSync,
 {
-    // Which packages do we have to generate?
     let demanded_packages: HashSet<_> = send_preferences
         .values()
         .map(|send_preference| send_preference.mime_type)
@@ -126,7 +133,6 @@ where
     let mut encrypted_packages = Vec::with_capacity(demanded_packages.len());
 
     for demanded_package in demanded_packages {
-        // The options for encrypted content are text, html, or multipart mixed.
         let encrypted_package = match demanded_package {
             PackageMimeType::Html => {
                 generate_html_encrypted_package_body(pgp, &primary, stored_message_body)?
@@ -142,7 +148,7 @@ where
                     mime_type,
                     stored_message_body,
                     attachments,
-                    guard,
+                    tx,
                 )
                 .await?
             }
@@ -154,10 +160,6 @@ where
     let mut packages = Vec::with_capacity(encrypted_packages.len());
 
     for encrypted_package in encrypted_packages {
-        // For each encrypted package that contains a specific body type.
-        // Create the per recipient specific encrypted data.
-
-        // Select the matching send preferences for the package.
         let preferences: Vec<_> = send_preferences
             .iter()
             .filter(|(email, send_preference)| {
@@ -172,8 +174,8 @@ where
             })
             .collect();
 
-        // Build the recipient parts of the package
         let package = build_top_package(
+            ty,
             pgp,
             address_keys,
             &preferences,
@@ -187,8 +189,8 @@ where
     Ok(packages)
 }
 
-/// Encrypts an html body.
-pub fn generate_html_encrypted_package_body<P>(
+#[instrument(skip_all)]
+fn generate_html_encrypted_package_body<P>(
     pgp: &P,
     address_key: &PrimaryUnlockedAddressKey<P::PrivateKey, P::PublicKey>,
     body: &str,
@@ -205,10 +207,8 @@ where
     Ok(package_body)
 }
 
-/// Encrypts a text body.
-///
-/// Converts html to text if necessary.
-pub fn generate_text_encrypted_package_body<P>(
+#[instrument(skip_all)]
+fn generate_text_encrypted_package_body<P>(
     pgp: &P,
     address_key: &PrimaryUnlockedAddressKey<P::PrivateKey, P::PublicKey>,
     mime_type: MimeType,
@@ -238,15 +238,15 @@ where
     Ok(package_body)
 }
 
-/// Builds and encrypts a pgp/mime message
-pub async fn generate_mime_top_package<P>(
+#[instrument(skip_all)]
+async fn generate_mime_top_package<P>(
     context: &MailUserContext,
     pgp: &P,
     address_key: &PrimaryUnlockedAddressKey<P::PrivateKey, P::PublicKey>,
     mime_type: MimeType,
     body: &str,
     attachments: &[Attachment],
-    guard: &mut WriterGuard<'_>,
+    tx: &mut impl RunTransaction,
 ) -> Result<EncryptedPackageBody, PackageError>
 where
     P: PGPProviderSync,
@@ -270,17 +270,17 @@ where
     // There is no streaming currently.
     for attachment in attachments {
         match attachment.attachment_type {
-            crate::models::AttachmentType::Remote(Some(_)) => (),
-            crate::models::AttachmentType::Remote(None) => {
-                return Err(PackageError::AttachmentNoRemoteId);
+            AttachmentType::Remote(Some(_)) => (),
+            AttachmentType::Remote(None) => {
+                return Err(PackageError::AttachmentHasNoRemoteId);
             }
-            crate::models::AttachmentType::Pgp => {
+            AttachmentType::Pgp => {
                 continue;
             }
         }
 
         let loaded_data = attachment
-            .content_data(context, guard)
+            .content_data(context, tx)
             .instrument(
                 debug_span!("mime_package::get_attachment_content_data", id = ?attachment.local_id),
             )
@@ -323,8 +323,9 @@ where
     Ok(package_body)
 }
 
-/// Helper function to build a single send request package.
-pub fn build_top_package<P>(
+#[instrument(skip_all)]
+fn build_top_package<P>(
+    ty: MailType,
     pgp: &P,
     sender_keys: &[UnlockedAddressKey<P>],
     recipient_preferences: &[(&String, &SendPreferences<P::PublicKey>)],
@@ -343,12 +344,12 @@ where
         attachment_keys: None,
     };
 
-    // Build a address sub package for each recipient.
     for (recipient_email, recipient_preferences) in recipient_preferences {
         build_address_sub_package(
+            ty,
+            pgp,
             recipient_email,
             &mut package,
-            pgp,
             &encrypted_body.session_key,
             attachments,
             sender_keys,
@@ -356,7 +357,6 @@ where
         )?;
     }
 
-    // The package type is the or of all address sub package types.
     package.package_type = package.addresses.iter().fold(0, |acc, (_, address)| {
         acc | address.address_type.type_value()
     });
@@ -364,11 +364,13 @@ where
     Ok(package)
 }
 
-/// Build an address sub package for a recipient and attaches it to the input `top_package`.`
-pub fn build_address_sub_package<P>(
+#[allow(clippy::too_many_arguments)]
+#[instrument(skip_all)]
+fn build_address_sub_package<P>(
+    ty: MailType,
+    pgp: &P,
     recipient_mail: &str,
     top_package: &mut Package,
-    pgp: &P,
     body_session_key: &InboxSessionKey,
     attachments: &[Attachment],
     sender_keys: &[impl AsRef<P::PrivateKey>],
@@ -409,28 +411,26 @@ where
             // In pgp/mime, they are embedded in the body.
             if recipient_send_preferences.pgp_scheme == PackageCryptoType::ProtonMail {
                 process_attachments(
-                    &mut address_package,
+                    ty,
                     pgp,
                     attachments,
                     sender_keys,
                     recipient_key,
                     recipient_send_preferences.sign,
+                    &mut address_package,
                 )?;
             }
         }
 
         PackageCryptoType::Cleartext => {
-            // Reveal the session key of the body to the server.
             top_package.body_key = Some(body_session_key.to_owned().into());
 
-            // Reveal the session keys of the attachments to the server.
-            process_attachment_cleartext(top_package, pgp, attachments, sender_keys)?;
+            process_attachment_cleartext(ty, pgp, attachments, sender_keys, top_package)?;
 
             address_package.signature = Some(PackageSignaturesMode::None);
         }
 
         PackageCryptoType::ClearMime => {
-            // Reveal the session key of the body to the server.
             top_package.body_key = Some(body_session_key.to_owned().into());
 
             address_package.signature =
@@ -451,12 +451,13 @@ where
     Ok(())
 }
 
-/// Attaches the session keys of all attachments to the top package.
-pub fn process_attachment_cleartext<P>(
-    top_package: &mut Package,
+#[instrument(skip_all)]
+fn process_attachment_cleartext<P>(
+    ty: MailType,
     pgp: &P,
     attachments: &[Attachment],
     sender_keys: &[impl AsRef<P::PrivateKey>],
+    top_package: &mut Package,
 ) -> Result<(), PackageError>
 where
     P: PGPProviderSync,
@@ -466,31 +467,23 @@ where
         return Ok(());
     }
 
-    // Reveal session keys of the attachments to the server.
-    let mut attachment_keys = HashMap::new();
+    let mut attachment_keys = PackageAttachmentEntries::new(ty);
 
     for attachment in attachments {
-        let remote_attachment_id = match &attachment.attachment_type {
-            crate::models::AttachmentType::Remote(Some(id)) => id,
-            crate::models::AttachmentType::Remote(None) => {
-                //TODO(ET-1407): Correctly handle this error.
-                return Err(PackageError::AttachmentNoRemoteId);
-            }
-            crate::models::AttachmentType::Pgp => {
-                continue;
-            }
-        };
+        if attachment.attachment_type.is_pgp() {
+            continue;
+        }
 
-        let attachment_info = attachment.decrypt_attachment_info(pgp, sender_keys)?;
+        let attachment_key = attachment
+            .decrypt_attachment_info(pgp, sender_keys)?
+            .session_key
+            .into();
 
-        attachment_keys.insert(
-            remote_attachment_id.to_string(),
-            attachment_info.session_key.into(),
-        );
+        attachment_keys.insert(attachment, attachment_key)?
     }
 
     if !attachment_keys.is_empty() {
-        top_package.attachment_keys = Some(attachment_keys);
+        top_package.attachment_keys = Some(attachment_keys.into());
     }
 
     Ok(())
@@ -498,32 +491,26 @@ where
 
 /// Encrypts the attachment info (session key, signatures) to the given recipient
 /// and adds them to to to the `address_package`.
+#[instrument(skip_all)]
 fn process_attachments<P>(
-    address_package: &mut AddressSubPackage,
+    ty: MailType,
     pgp: &P,
     attachments: &[Attachment],
     sender_keys: &[impl AsRef<P::PrivateKey>],
     recipient_key: &P::PublicKey,
-    sign: bool,
+    mut sign: bool,
+    address_package: &mut AddressSubPackage,
 ) -> Result<(), PackageError>
 where
     P: PGPProviderSync,
 {
-    let mut attachment_key_packets = HashMap::with_capacity(attachments.len());
-    let mut attachment_enc_signatures = HashMap::with_capacity(attachments.len());
-    let mut sign = sign;
+    let mut attachment_key_packets = PackageAttachmentEntries::new(ty);
+    let mut attachment_enc_signatures = PackageAttachmentEntries::new(ty);
 
-    // Encrypt the attachment towards the recipient.
     for attachment in attachments {
-        let remote_attachment_id = match &attachment.attachment_type {
-            crate::models::AttachmentType::Remote(Some(id)) => id,
-            crate::models::AttachmentType::Remote(None) => {
-                return Err(PackageError::AttachmentNoRemoteId);
-            }
-            crate::models::AttachmentType::Pgp => {
-                continue;
-            }
-        };
+        if attachment.attachment_type.is_pgp() {
+            continue;
+        }
 
         if attachment.signature.is_none() && attachment.enc_signature.is_none() {
             sign = false;
@@ -542,20 +529,17 @@ where
             .encrypt_signature_to_recipient(pgp, recipient_key)
             .map_err(PackageError::PackageAttachmentInfoReEncryptSignature)?
         {
-            attachment_enc_signatures.insert(
-                remote_attachment_id.to_string(),
-                enc_signature.encode_base64(),
-            );
+            attachment_enc_signatures.insert(attachment, enc_signature.encode_base64())?;
         }
 
-        attachment_key_packets.insert(remote_attachment_id.to_string(), recipient_attachment_kp);
+        attachment_key_packets.insert(attachment, recipient_attachment_kp)?;
     }
 
     if !attachment_key_packets.is_empty() {
-        address_package.attachment_key_packets = Some(attachment_key_packets);
+        address_package.attachment_key_packets = Some(attachment_key_packets.into());
     }
     if !attachment_enc_signatures.is_empty() {
-        address_package.attachment_enc_signatures = Some(attachment_enc_signatures);
+        address_package.attachment_enc_signatures = Some(attachment_enc_signatures.into());
     }
 
     address_package.signature = Some(PackageSignaturesMode::from(sign));
@@ -631,7 +615,7 @@ impl<Tz: chrono::TimeZone> ScheduleSendOptions<Tz> {
 /// sent.
 ///
 /// On completion returns the original scheduled time of the message.
-#[tracing::instrument(
+#[instrument(
     level = "debug",
     skip(tether, queue, session, wait_on_completion_duration)
 )]

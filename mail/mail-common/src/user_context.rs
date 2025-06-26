@@ -9,6 +9,7 @@ use crate::draft::attachments::DraftStagingAreaCleaner;
 use crate::events::MailEvent;
 use crate::models::{Conversation, Message};
 use crate::prefetch::{Prefetch, PrefetchJob, PrefetchNotify};
+use crate::rsvp::RsvpCache;
 use crate::user_context::events::subscriber::MailEventSubscriber;
 use crate::user_context::initialization::InitializationMediator;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
@@ -53,6 +54,7 @@ pub struct MailUserContext {
     send_queue_executors: QueueAutoExecutorPool,
     prefetch: PrefetchNotify,
     initialization_mediator: InitializationMediator,
+    rsvp_cache: RsvpCache,
     pub is_cleanup_cache_running: Arc<AtomicBool>,
 }
 
@@ -91,6 +93,7 @@ impl MailUserContext {
             default_queue_executor,
             send_queue_executors,
             initialization_mediator,
+            rsvp_cache: Default::default(),
             is_cleanup_cache_running: Default::default(),
         });
 
@@ -261,6 +264,10 @@ impl MailUserContext {
     /// Get the remote (API) ID of the session associated with this context.
     pub fn session_id(&self) -> &SessionId {
         self.user_context.session_id()
+    }
+
+    pub(crate) fn rsvp_cache(&self) -> &RsvpCache {
+        &self.rsvp_cache
     }
 
     /// Provides a way to get the core::models::User instance.

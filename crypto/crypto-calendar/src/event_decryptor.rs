@@ -100,6 +100,11 @@ where
         })
     }
 
+    #[must_use]
+    pub(crate) fn session_key(&self) -> &P::SessionKey {
+        &self.session_key
+    }
+
     pub fn decrypt(
         &self,
         pgp: &P,

@@ -78,7 +78,7 @@ insta = { version = "1.42.0", features = ["toml"] }
 indexmap = { version = "2.7.1", features = ["serde"] }
 itertools = "0.13.0"
 html2text = "0.14.2"
-jiff = "0.2.4"
+jiff = { version = "0.2.4", features = ["serde"] }
 file-format = { version = "0.26.0", features = ["reader"] }
 mime = "0.3.17"
 num_enum = "0.7.3"

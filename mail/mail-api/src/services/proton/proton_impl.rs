@@ -432,6 +432,32 @@ impl ProtonMail for Proton {
             .into_body_json()?)
     }
 
+    async fn send_direct(
+        &self,
+        message: DirectParams,
+        parent: Option<(MessageId, DraftAction)>,
+        packages: Vec<Package>,
+        auto_save_contacts: bool,
+    ) -> ApiServiceResult<PostSendDirectMessageResponse> {
+        let (parent_id, action) =
+            parent.map_or_else(|| (None, None), |(id, action)| (Some(id), Some(action)));
+
+        let send_request = PostSendDirectRequest {
+            message,
+            parent_id,
+            action,
+            packages,
+            auto_save_contacts,
+        };
+
+        Ok(POST!("{MAIL_V4}/messages/send/direct")
+            .body_json(send_request)?
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
     async fn cancel_send(&self, message_id: MessageId) -> ApiServiceResult<PostCancelSendResponse> {
         Ok(POST!("{MAIL_V4}/messages/{message_id}/cancel_send")
             .send_with(self)

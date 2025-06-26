@@ -4,8 +4,8 @@ use proton_core_api::services::proton::LabelId;
 use proton_core_api::services::proton::common::ApiErrorInfo;
 use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_api::services::proton::prelude::{
-    IncomingDefault, PostCancelSendResponse, PostIncomingDefaultResponse, PostSendRequest,
-    PutMessageHamResponse,
+    IncomingDefault, PostCancelSendResponse, PostIncomingDefaultResponse,
+    PostSendDirectMessageResponse, PostSendRequest, PutMessageHamResponse,
 };
 use proton_mail_api::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
@@ -25,6 +25,7 @@ use proton_mail_api::services::proton::responses::{
     PutMessagesReadResponse, PutMessagesUnlabelResponse, PutMessagesUnreadResponse,
 };
 use serde::Serialize;
+use serde_json::{Value as JsonValue, json};
 use serde_with::{BoolFromInt, serde_as};
 use std::collections::HashSet;
 use wiremock::matchers::{body_json, body_partial_json, method, path};
@@ -329,7 +330,6 @@ impl MailTestContext {
     ///
     /// Note that this mock does not valid the draft body.
     ///
-    #[allow(clippy::doc_markdown)]
     #[function_name::named]
     pub async fn mock_create_draft(
         &self,
@@ -378,7 +378,6 @@ impl MailTestContext {
     ///
     /// Note that this mock does not valid the draft body.
     ///
-    #[allow(clippy::doc_markdown)]
     #[function_name::named]
     pub async fn mock_create_draft_failure(
         &self,
@@ -415,7 +414,6 @@ impl MailTestContext {
     /// Note that this mock does not validate parameters that are cryptographically
     /// generated.
     ///
-    #[allow(clippy::doc_markdown)]
     #[function_name::named]
     pub async fn mock_send_draft(
         &self,
@@ -442,7 +440,6 @@ impl MailTestContext {
 
     /// Generate a new mock for draft send failures.
     ///
-    #[allow(clippy::doc_markdown)]
     #[function_name::named]
     pub async fn mock_send_draft_failure(&self, message_id: MessageId, error: ApiErrorInfo) {
         Mock::given(method("POST"))
@@ -454,11 +451,63 @@ impl MailTestContext {
             .await;
     }
 
+    /// Creates a *partial* mock for the direct mail endpoint.
+    ///
+    /// This endpoint matches only the plain-text metadata (subject, attachment
+    /// file names etc.), ignoring the encrypted stuff.
+    #[function_name::named]
+    pub async fn mock_send_direct(
+        &self,
+        subject: &str,
+        sender: &str,
+        recipient: &str,
+        attachments: &[&str],
+        parent_id: Option<&str>,
+        response: PostSendDirectMessageResponse,
+    ) {
+        let attachments: JsonValue = attachments
+            .iter()
+            .map(|attachment| {
+                json!({
+                    "Filename": attachment,
+                })
+            })
+            .collect();
+
+        let parent_id = parent_id
+            .map(|id| JsonValue::String(id.into()))
+            .unwrap_or_default();
+
+        let request = json!({
+            "Message": {
+                "Subject": subject,
+                "Sender": {
+                    "Address": sender,
+                },
+                "ToList": [
+                    {
+                        "Address": recipient,
+                    }
+                ],
+                "Attachments": attachments,
+            },
+            "ParentID": parent_id,
+        });
+
+        Mock::given(method("POST"))
+            .and(path("/api/mail/v4/messages/send/direct"))
+            .and(body_partial_json(request))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .expect(1)
+            .named(function_name!())
+            .mount(self.mock_server())
+            .await;
+    }
+
     /// Generate a new mock expectation for updating a draft.
     ///
     /// Note that this mock does not valid the draft body.
     ///
-    #[allow(clippy::doc_markdown)]
     #[function_name::named]
     pub async fn mock_update_draft(
         &self,
@@ -487,7 +536,6 @@ impl MailTestContext {
     ///
     /// Note that this mock does not valid the draft body.
     ///
-    #[allow(clippy::doc_markdown)]
     #[function_name::named]
     pub async fn mock_update_draft_failure(
         &self,
@@ -516,7 +564,6 @@ impl MailTestContext {
     /// Note that this mock does not validate parameters that are cryptographically
     /// generated.
     ///
-    #[allow(clippy::doc_markdown)]
     #[function_name::named]
     pub async fn mock_undo_send(
         &self,

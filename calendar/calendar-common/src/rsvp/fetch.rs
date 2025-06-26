@@ -1,3 +1,4 @@
+use super::{RsvpCache, RsvpIntent, RsvpStatus};
 use crate::{
     CalendarBootstrapExt, CalendarEventPayloadExt, RsvpAttendee, RsvpCalendar, RsvpError,
     RsvpEvent, RsvpEventId, RsvpOccurrence, RsvpOrganizer, RsvpResult,
@@ -18,17 +19,18 @@ pub(super) async fn exec<P>(
     api: &Proton,
     pgp: &P,
     keys: &UnlockedAddressKeys<P>,
+    cache: &impl RsvpCache,
     id: &RsvpEventId,
 ) -> RsvpResult<Option<RsvpEvent>>
 where
     P: PGPProviderSync,
 {
-    let Some((calendar, event)) = fetch(api, id).await? else {
+    let Some((calendar, event)) = fetch(api, cache, id).await? else {
         return Ok(None);
     };
 
     let decryptor = calendar.create_decryptor(pgp, keys, &event)?;
-    let event = extract(pgp, calendar, event, &decryptor)?;
+    let event = extract(pgp, id, calendar, event, &decryptor)?;
 
     Ok(Some(event))
 }
@@ -36,18 +38,42 @@ where
 #[instrument(skip_all)]
 async fn fetch(
     api: &Proton,
+    cache: &impl RsvpCache,
     id: &RsvpEventId,
 ) -> RsvpResult<Option<(CalendarBootstrap, CalendarEvent)>> {
     info!("Fetching event data");
 
-    let event = api
-        .get_calendar_event(&id.uid, id.recurrence_id.as_ref())
-        .await?;
+    let event = match id {
+        RsvpEventId::Direct(cid, eid, _) => Some(api.get_calendar_event(cid, eid).await?),
+
+        RsvpEventId::Indirect(uid, rid) => {
+            let events = api.find_calendar_events(uid, *rid).await?;
+
+            // If this is a repeating event, but we're asking the API without
+            // providing the recurrence id - you can imagine we're asking about
+            // the "original" event, so to say - the API will return us both the
+            // original event and all of its single edits.
+            //
+            // Since we're interested only in the original event, we can just
+            // ignore the single edits and pick the first event from the list
+            // (which is guaranteed to be this original we're looking for).
+            events.into_iter().next()
+        }
+    };
 
     if let Some(event) = event {
         info!("Fetching bootstrap data");
 
-        let calendar = api.get_calendar_bootstrap(&event.calendar_id).await?;
+        let calendar = cache
+            .get_calendar_bootstrap(&event.calendar_id, || {
+                // We need for the returned future to be static, otherwise rustc
+                // has hard time proving sendness
+                let api = api.clone();
+                let id = event.calendar_id.clone();
+
+                async move { api.get_calendar_bootstrap(&id).await }
+            })
+            .await?;
 
         Ok(Some((calendar, event)))
     } else {
@@ -60,6 +86,7 @@ async fn fetch(
 
 fn extract<P>(
     pgp: &P,
+    id: &RsvpEventId,
     calendar: CalendarBootstrap,
     event: CalendarEvent,
     decryptor: &CalendarEventDecryptor<P>,
@@ -73,6 +100,11 @@ where
     let organizer = extract_organizer(&event)?;
     let calendar = extract_calendar(calendar, &event);
 
+    let intent = match id {
+        RsvpEventId::Direct(_, _, ty) => *ty,
+        RsvpEventId::Indirect(_, _) => RsvpIntent::Invite,
+    };
+
     Ok(RsvpEvent {
         summary: meta.summary,
         location: meta.location,
@@ -81,7 +113,8 @@ where
         attendees,
         organizer,
         calendar,
-        is_cancelled: meta.is_cancelled,
+        status: meta.status,
+        intent,
         raw: Box::new(event),
     })
 }
@@ -99,7 +132,7 @@ where
     let mut summary = None;
     let mut location = None;
     let mut description = None;
-    let mut is_cancelled = false;
+    let mut status = RsvpStatus::Active;
 
     // Event data is split between shared events (which contain summary,
     // location and description) and calendar event (which contains the status)
@@ -117,14 +150,16 @@ where
         description =
             description.or_else(|| event.description.map(|desc| desc.value.into_string()));
 
-        is_cancelled |= event.status == Some(ical::Status::Cancelled);
+        if event.status == Some(ical::Status::Cancelled) {
+            status = RsvpStatus::Cancelled;
+        }
     }
 
     Ok(Metadata {
         summary,
         location,
         description,
-        is_cancelled,
+        status,
     })
 }
 
@@ -243,7 +278,7 @@ struct Metadata {
     summary: Option<String>,
     location: Option<String>,
     description: Option<String>,
-    is_cancelled: bool,
+    status: RsvpStatus,
 }
 
 #[cfg(test)]
@@ -256,6 +291,7 @@ mod tests {
         CalendarEvent {
             shared_events: Vec::default(),
             calendar_events: Vec::default(),
+            id: "xxx".into(),
             calendar_id: "xxx".into(),
             start_time: 0,
             end_time: 0,
@@ -270,6 +306,9 @@ mod tests {
                 author: "spongebob@squarepants.com".into(),
             }],
             attendees: Vec::default(),
+            notifications: None,
+            color: None,
+            is_proton_proton_invite: true,
         }
     }
 
