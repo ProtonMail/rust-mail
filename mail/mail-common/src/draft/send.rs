@@ -4,7 +4,7 @@ use self::attachments::*;
 use crate::datatypes::{Disposition, MimeType};
 use crate::draft::recipients::ValidationState;
 use crate::draft::{CancelScheduleSendError, PackageError, SendError, compose::html_to_text};
-use crate::models::{Attachment, DraftMetadata, Message};
+use crate::models::{Attachment, AttachmentType, DraftMetadata, Message};
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use anyhow::anyhow;
 use chrono::{DateTime, Datelike, Days, Local, LocalResult, NaiveTime};
@@ -269,6 +269,16 @@ where
     // Load attachments and integrate them into the multipart/mime message.
     // There is no streaming currently.
     for attachment in attachments {
+        match attachment.attachment_type {
+            AttachmentType::Remote(Some(_)) => (),
+            AttachmentType::Remote(None) => {
+                return Err(PackageError::AttachmentHasNoRemoteId);
+            }
+            AttachmentType::Pgp => {
+                continue;
+            }
+        }
+
         let loaded_data = attachment
             .content_data(context, tx)
             .instrument(
