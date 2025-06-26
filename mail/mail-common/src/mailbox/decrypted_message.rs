@@ -382,14 +382,14 @@ impl DecryptedMessageBody {
         &self,
         ctx: &MailUserContext,
     ) -> MailContextResult<Option<RsvpEventId>> {
+        let Some(msg_id) = self.metadata.local_message_id else {
+            return Ok(None);
+        };
+
         if let Some(id) = cal::RsvpEventId::from_headers(&self.metadata.parsed_headers.headers) {
             debug!("Identified RSVP via headers");
 
-            return Ok(Some(RsvpEventId::new(
-                id,
-                self.metadata.local_message_id,
-                self.address_id.clone(),
-            )));
+            return Ok(Some(RsvpEventId::new(id, msg_id, self.address_id.clone())));
         }
 
         let invite = self.metadata.attachments.iter().find_map(|att| {
@@ -419,11 +419,7 @@ impl DecryptedMessageBody {
                 Ok(id) => {
                     debug!("Identified RSVP via attachment");
 
-                    return Ok(Some(RsvpEventId::new(
-                        id,
-                        self.metadata.local_message_id,
-                        self.address_id.clone(),
-                    )));
+                    return Ok(Some(RsvpEventId::new(id, msg_id, self.address_id.clone())));
                 }
 
                 Err(RsvpError::IcsIsNotRsvpRequest) => {

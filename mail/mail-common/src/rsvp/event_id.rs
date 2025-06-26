@@ -10,16 +10,12 @@ use tracing::{debug, info, instrument, warn};
 #[derive(Clone, Debug)]
 pub struct RsvpEventId {
     id: cal::RsvpEventId,
-    msg_id: Option<LocalMessageId>,
+    msg_id: LocalMessageId,
     address_id: AddressId,
 }
 
 impl RsvpEventId {
-    pub(crate) fn new(
-        id: cal::RsvpEventId,
-        msg_id: Option<LocalMessageId>,
-        address_id: AddressId,
-    ) -> Self {
+    pub(crate) fn new(id: cal::RsvpEventId, msg_id: LocalMessageId, address_id: AddressId) -> Self {
         Self {
             id,
             msg_id,

@@ -13,11 +13,11 @@ use tracing::{info, instrument, warn};
 #[derive(Clone, Debug)]
 pub struct RsvpEvent {
     event: cal::RsvpEvent,
-    msg_id: Option<LocalMessageId>,
+    msg_id: LocalMessageId,
 }
 
 impl RsvpEvent {
-    pub(crate) fn new(event: cal::RsvpEvent, msg_id: Option<LocalMessageId>) -> Self {
+    pub(crate) fn new(event: cal::RsvpEvent, msg_id: LocalMessageId) -> Self {
         Self { event, msg_id }
     }
 
@@ -34,12 +34,7 @@ impl RsvpEvent {
     ) -> MailContextResult<()> {
         info!("Answering RSVP");
 
-        let msg_id = self
-            .msg_id
-            .context("Invite's message has no id")
-            .map_err(MailContextError::Other)?;
-
-        let msg = Message::load(msg_id, tether)
+        let msg = Message::load(self.msg_id, tether)
             .await
             .context("Couldn't load invite's message")
             .map_err(MailContextError::Other)?
