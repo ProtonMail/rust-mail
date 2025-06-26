@@ -570,7 +570,7 @@ impl MessagesState {
             return Command::None;
         };
 
-        if rsvp.ty.is_reminder() {
+        if rsvp.intent.is_reminder() {
             // Reminders can't be answered
             return Command::None;
         }

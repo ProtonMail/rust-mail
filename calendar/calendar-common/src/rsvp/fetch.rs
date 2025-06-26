@@ -1,4 +1,4 @@
-use super::{RsvpCache, RsvpEventType, RsvpStatus};
+use super::{RsvpCache, RsvpIntent, RsvpStatus};
 use crate::{
     CalendarBootstrapExt, CalendarEventPayloadExt, RsvpAttendee, RsvpCalendar, RsvpError,
     RsvpEvent, RsvpEventId, RsvpOccurrence, RsvpOrganizer, RsvpResult,
@@ -94,19 +94,18 @@ fn extract<P>(
 where
     P: PGPProviderSync,
 {
-    let ty = match id {
-        RsvpEventId::Direct(_, _, ty) => *ty,
-        RsvpEventId::Indirect(_, _) => RsvpEventType::Invite,
-    };
-
     let meta = extract_metadata(pgp, &event, decryptor)?;
     let occurrence = extract_occurrence(&event)?;
     let attendees = extract_attendees(pgp, &event, decryptor)?;
     let organizer = extract_organizer(&event)?;
     let calendar = extract_calendar(calendar, &event);
 
+    let intent = match id {
+        RsvpEventId::Direct(_, _, ty) => *ty,
+        RsvpEventId::Indirect(_, _) => RsvpIntent::Invite,
+    };
+
     Ok(RsvpEvent {
-        ty,
         summary: meta.summary,
         location: meta.location,
         description: meta.description,
@@ -115,6 +114,7 @@ where
         organizer,
         calendar,
         status: meta.status,
+        intent,
         raw: Box::new(event),
     })
 }

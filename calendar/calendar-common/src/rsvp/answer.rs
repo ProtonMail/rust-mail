@@ -31,7 +31,7 @@ where
 {
     info!(?answer, "Answering");
 
-    if event.ty.is_reminder() {
+    if event.intent.is_reminder() {
         return Err(RsvpError::EventIsReminder.into());
     }
 
