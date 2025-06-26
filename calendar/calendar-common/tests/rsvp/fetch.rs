@@ -98,7 +98,7 @@ async fn recurring() {
 
 /// Make sure we can fetch events with direct id - see [`RsvpEventId::Direct`].
 #[tokio::test]
-async fn direct_invite() {
+async fn direct() {
     let world = world().await;
     let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
 
@@ -123,7 +123,7 @@ async fn direct_invite() {
 }
 
 #[tokio::test]
-async fn direct_reminder() {
+async fn reminder() {
     let world = world().await;
     let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
 
@@ -218,7 +218,7 @@ async fn unknown() {
 }
 
 #[tokio::test]
-async fn err_unknown_attendee_status() {
+async fn err_unknown_attendee() {
     const ATTENDEES_EVENT: &str = indoc! {"
         BEGIN:VCALENDAR
         VERSION:2.0
@@ -265,7 +265,7 @@ async fn err_missing_x_pm_token() {
         VERSION:2.0
         BEGIN:VEVENT
         UID:1Gax95xN@proton.me
-        ATTENDEE;CN=foo@localhost;ROLE=REQ-PARTICIPANT;RSVP=TRUE:mailto:foo@localhost
+        ATTENDEE;CN=bar@localhost;ROLE=REQ-PARTICIPANT;RSVP=TRUE:mailto:bar@localhost
         END:VEVENT
         END:VCALENDAR
     "};

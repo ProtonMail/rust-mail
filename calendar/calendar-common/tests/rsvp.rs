@@ -251,20 +251,12 @@ fn expected_event(raw: CalendarEvent) -> RsvpEvent {
             starts_at: DateTime::from_timestamp(1_744_790_400, 0).unwrap(),
             ends_at: DateTime::from_timestamp(1_744_795_800, 0).unwrap(),
         },
-        attendees: vec![
-            RsvpAttendee {
-                id: "V3FdcecX".into(),
-                token: "245902dc".into(),
-                email: "foo@localhost".into(),
-                status: CalendarAttendeeStatus::Maybe,
-            },
-            RsvpAttendee {
-                id: "gWfsHvDg".into(),
-                token: "d15cf90c".into(),
-                email: "bar@localhost".into(),
-                status: CalendarAttendeeStatus::Unanswered,
-            },
-        ],
+        attendees: vec![RsvpAttendee {
+            id: "gWfsHvDg".into(),
+            token: "d15cf90c".into(),
+            email: "bar@localhost".into(),
+            status: CalendarAttendeeStatus::Unanswered,
+        }],
         organizer: RsvpOrganizer {
             email: "foo@localhost".into(),
         },

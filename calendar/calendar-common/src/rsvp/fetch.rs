@@ -96,8 +96,8 @@ where
 {
     let meta = extract_metadata(pgp, &event, decryptor)?;
     let occurrence = extract_occurrence(&event)?;
-    let attendees = extract_attendees(pgp, &event, decryptor)?;
     let organizer = extract_organizer(&event)?;
+    let attendees = extract_attendees(pgp, &event, decryptor, &organizer)?;
     let calendar = extract_calendar(calendar, &event);
 
     let intent = match id {
@@ -182,10 +182,28 @@ fn extract_occurrence(event: &CalendarEvent) -> RsvpResult<RsvpOccurrence> {
     }
 }
 
+fn extract_organizer(event: &CalendarEvent) -> RsvpResult<RsvpOrganizer> {
+    // All shared events come from the same author (the event organizer), so
+    // let's just pick any and call it a day.
+    //
+    // Alternatively we could actually go through all of the *.ics payloads and
+    // look for `ORGANIZER:...`, but no need to go this crazy for the same piece
+    // of information.
+    let email = event
+        .shared_events
+        .first()
+        .ok_or(RsvpError::OrganizerIsNotKnown)?
+        .author
+        .clone();
+
+    Ok(RsvpOrganizer { email })
+}
+
 fn extract_attendees<P>(
     pgp: &P,
     event: &CalendarEvent,
     decryptor: &CalendarEventDecryptor<P>,
+    organizer: &RsvpOrganizer,
 ) -> RsvpResult<Vec<RsvpAttendee>>
 where
     P: PGPProviderSync,
@@ -207,18 +225,19 @@ where
         .attendees
         .into_iter()
         .enumerate()
-        .map(|(idx, attendee)| {
+        .filter_map(|(idx, attendee)| {
             debug!(?idx, "Processing attendee");
 
-            extract_attendee(&attendees, attendee)
+            extract_attendee(organizer, &attendees, attendee).transpose()
         })
         .collect()
 }
 
 fn extract_attendee(
+    organizer: &RsvpOrganizer,
     attendees: &HashMap<&str, (&CalendarAttendeeId, CalendarAttendeeStatus)>,
     attendee: ical::Attendee,
-) -> RsvpResult<RsvpAttendee> {
+) -> RsvpResult<Option<RsvpAttendee>> {
     #[allow(clippy::match_wildcard_for_single_variants)]
     let email = match attendee.address {
         ical::CalAddress::Email(email) => email.into_value().into_string(),
@@ -226,6 +245,14 @@ fn extract_attendee(
             return Err(RsvpError::AttendeeHasNonEmailAddress);
         }
     };
+
+    // External systems sometimes include organizer as an attendee - in our case
+    // though, we split organizer into a different field within the top-level
+    // rsvp structure, so if we happen to find attendee-organizer in here, let's
+    // remove it to avoid presenting duplicate information
+    if email == organizer.email {
+        return Ok(None);
+    }
 
     let token = attendee
         .x_pm_token
@@ -236,29 +263,12 @@ fn extract_attendee(
         .get(&token.as_str())
         .ok_or(RsvpError::AttendeeIsNotKnown)?;
 
-    Ok(RsvpAttendee {
+    Ok(Some(RsvpAttendee {
         id: (*id).clone(),
         email,
         status: *status,
         token: token.into(),
-    })
-}
-
-fn extract_organizer(event: &CalendarEvent) -> RsvpResult<RsvpOrganizer> {
-    // All shared events come from the same author (the event organizer), so
-    // let's just pick any and call it a day.
-    //
-    // Alternatively we could actually go through all of the *.ics payloads and
-    // look for `ORGANIZER:...`, but no need to go this crazy for the same piece
-    // of information.
-    let email = event
-        .shared_events
-        .first()
-        .ok_or(RsvpError::OrganizerIsNotKnown)?
-        .author
-        .clone();
-
-    Ok(RsvpOrganizer { email })
+    }))
 }
 
 fn extract_calendar(calendar: CalendarBootstrap, event: &CalendarEvent) -> RsvpCalendar {
