@@ -5,7 +5,7 @@ use stash::exports::{
     FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
 };
 use stash::macros::Model;
-use stash::orm::Model;
+use stash::orm::{Model, ModelHooks};
 use stash::stash::{Bond, StashError, Tether};
 
 use crate::Context;
@@ -17,6 +17,7 @@ use smart_default::SmartDefault;
 /// This model is stored in account (shared) database.
 ///
 #[derive(Debug, Clone, PartialEq, Model, SmartDefault)]
+#[ModelHooks]
 #[TableName("app_settings")]
 pub struct AppSettings {
     #[IdField]
@@ -37,6 +38,16 @@ pub struct AppSettings {
     #[DbField]
     #[default = true]
     pub use_alternative_routing: bool,
+}
+
+impl ModelHooks for AppSettings {
+    async fn before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        // Make sure there will be only one row.
+        if Self::get(bond).await?.is_some() {
+            self.local_id = SingleEntryId;
+        }
+        Ok(())
+    }
 }
 
 impl AppSettings {
@@ -72,27 +83,6 @@ impl AppSettings {
 
     pub async fn get(tether: &Tether) -> Result<Option<Self>, StashError> {
         Self::load(SingleEntryId, tether).await
-    }
-
-    /// Save or update a app setting.
-    ///
-    /// It's imperative that you use this method over [`Model::save()`] to
-    /// ensure that the information is updated correctly in the database.
-    ///
-    /// This method ensures that there is only one mail setting in the table.
-    /// Otherwise, it overwrites old record.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the query fails
-    ///
-    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        // Make sure there will be only one row.
-        if let Some(_) = Self::get(bond).await? {
-            self.local_id = SingleEntryId;
-        }
-
-        <Self as Model>::save(self, bond).await
     }
 
     /// Get the mail settings from database, fallback on default
@@ -235,6 +225,7 @@ impl ToSql for ProtectionAutoLock {
 /// Struct keeping track of Pin authentication attempts
 ///
 #[derive(Debug, Clone, PartialEq, Model)]
+#[ModelHooks]
 #[TableName("pin_protection")]
 pub struct PinProtection {
     #[IdField]
@@ -242,6 +233,15 @@ pub struct PinProtection {
 
     #[DbField]
     pub attempts: u8,
+}
+
+impl ModelHooks for PinProtection {
+    async fn before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        if Self::get(bond).await?.is_some() {
+            self.local_id = SingleEntryId;
+        }
+        Ok(())
+    }
 }
 
 #[allow(clippy::new_without_default)]
@@ -266,27 +266,6 @@ impl PinProtection {
     #[must_use]
     pub fn remaining_attempts(&self) -> u32 {
         u32::from(PinCode::MAX_ATTEMPTS.saturating_sub(self.attempts))
-    }
-
-    /// Save or update a pin protection;
-    ///
-    /// It's imperative that you use this method over [`Model::save()`] to
-    /// ensure that the information is updated correctly in the database.
-    ///
-    /// This method ensures that there is only one mail setting in the table.
-    /// Otherwise, it overwrites old record.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the query fails
-    ///
-    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        // Make sure there will be only one row.
-        if Self::get(bond).await?.is_some() {
-            self.local_id = SingleEntryId;
-        }
-
-        <Self as Model>::save(self, bond).await
     }
 }
 

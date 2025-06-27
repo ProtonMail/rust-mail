@@ -12,13 +12,13 @@
 //! with types that are saved to the database.
 //!
 
+use crate::params;
 use crate::stash::{Bond, StashError, Tether};
 use crate::utils::IterMapToSql;
 use anyhow::Context;
 use core::any::Any;
 use core::fmt::{Debug, Display};
 use core::future::Future;
-use core::iter::once;
 use indoc::formatdoc;
 use itertools::Itertools as _;
 use rusqlite::types::FromSql;
@@ -169,7 +169,7 @@ where
 ///
 /// * [`DbRecord`]
 ///
-pub trait Model: DbRecord
+pub trait Model: DbRecord + ModelHooks
 where
     Self: 'static,
     <Self as Model>::Id: Send + Sync + 'static,
@@ -278,13 +278,7 @@ where
             query_logic = query_logic.as_ref(),
             table = Self::table_name(),
         );
-        async move {
-            let mut records: Vec<Self> = tether.query(query, params).await?;
-            for record in &mut records {
-                record.do_on_load(tether).await?;
-            }
-            Ok(records)
-        }
+        Self::load_inner(query, params, tether)
     }
 
     /// Finds the first record in a result set using specific query logic.
@@ -327,7 +321,7 @@ where
     /// # Panics
     ///
     /// This function will panic if the local id has not been set (i.e. if the
-    /// modal hasn't been saved yet).
+    /// model hasn't been saved yet).
     fn id(&self) -> Self::IdType;
 
     /// Gets the name of the ID field for the record type.
@@ -336,38 +330,46 @@ where
     /// creating the table.
     fn id_field_name() -> &'static str;
 
-    /// Loads a record from the database by ID.
-    ///
-    /// This function retrieves a single record from the database by its unique
-    /// ID. It is a convenience method for calling [`Stash::query()`] and then
-    /// converting the first result to the desired type `T`.
-    ///
-    /// If no results are found, [`None`] will be returned. Having no results is
-    /// not considered to be an error case.
     #[must_use]
     async fn load(id: Self::IdType, tether: &Tether) -> Result<Option<Self>, StashError> {
         let query = formatdoc! {"
             SELECT * FROM {table}
-            WHERE
-                {id} = ?
-            LIMIT
-                1
+            WHERE {id} = ?
+            LIMIT 1
             ",
             table = Self::table_name(),
             id = Self::id_field_name(),
         };
-        #[allow(trivial_casts)]
-        Ok(tether
-            .query::<_, Self>(&query, vec![Box::new(id) as Box<dyn ToSql + Send>])
+
+        Ok(Self::load_inner(query, params![id], tether)
             .await?
             .into_iter()
             .next())
+    }
+
+    /// Loads the model and calls after_load hook
+    /// TODO: rename to load
+    #[must_use]
+    fn load_inner(
+        query: impl Into<String>,
+        params: Vec<Box<dyn ToSql + Send>>,
+        tether: &Tether,
+    ) -> impl Future<Output = Result<Vec<Self>, StashError>> + Send {
+        let query = query.into();
+        async {
+            let mut rows = tether.query::<_, Self>(query, params).await?;
+            for row in &mut rows {
+                row.after_load(tether).await?;
+            }
+            Ok(rows)
+        }
     }
 
     /// Saves a record to the database.
     /// If it has a local id it will update the record, otherwise it will insert it.
     ///
     async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        self.before_save(bond).await?;
         // If the ID field is auto-incrementing then it is fully managed by the
         // database, and we exclude it from the list here.
         let (fields, values) = if Self::id_is_autoincrementing() {
@@ -382,27 +384,17 @@ where
         match self.id_value() {
             // ID is set: update
             Ok(id) => {
-                let update_fields = fields.iter().map(|field| format!("{field} = ?")).join(", ");
+                let fields = fields.iter().map(|field| format!("{field} = ?")).join(", ");
                 let query = formatdoc!(
-                    "
-                UPDATE
-                    {}
-                SET
-                    {}
-                WHERE
-                    {} = ?
-            ",
-                    Self::table_name(),
-                    update_fields,
-                    Self::id_field_name(),
+                    "UPDATE {table}
+                    SET {fields}
+                    WHERE {id} = ?",
+                    table = Self::table_name(),
+                    id = Self::id_field_name(),
                 );
-                #[allow(trivial_casts)]
-                let field_values: Vec<Box<dyn ToSql + Send>> = values
-                    .into_iter()
-                    .chain(once(Box::new(id) as Box<dyn ToSql + Send>))
-                    .collect();
-                #[allow(clippy::shadow_reuse)]
-                let affected: usize = bond.execute(&query, field_values).await?;
+
+                let values = values.bridge_sql_extend([id]).collect();
+                let affected: usize = bond.execute(&query, values).await?;
 
                 if affected == 0 {
                     return Err(StashError::NoRowsUpdated);
@@ -444,6 +436,8 @@ where
                 self.set_id_value(id);
             }
         };
+
+        self.after_save(bond).await?;
         Ok(())
     }
 
@@ -485,18 +479,6 @@ where
                 )
                 .await
         }
-    }
-
-    // The following methods are intended to be used within the ORM, generated from the proc macro.
-
-    // This gets overridden by the `on_save` in the struct impl
-    fn do_on_load(&mut self, _: &Tether) -> impl Future<Output = Result<(), StashError>> + Send {
-        async { Ok(()) }
-    }
-
-    // This gets overridden by the `on_save` in the struct impl
-    fn do_on_save(&mut self, _: &Bond<'_>) -> impl Future<Output = Result<(), StashError>> + Send {
-        async { Ok(()) }
     }
 
     fn field_names_without_id() -> Vec<&'static str>;
@@ -544,6 +526,22 @@ impl IntoIterator for DbRecords {
 
     fn into_iter(self) -> Self::IntoIter {
         self.0.into_iter()
+    }
+}
+
+/// This provides hooks that will be called before or after [`Model::load`] and [`Model::save`].
+/// These won't get called with fns like [`Tether::query`] and friends.
+/// To use these, you just need to derive model with the `ModelHooks` attribute and impl the trait
+/// manually.
+pub trait ModelHooks {
+    fn after_load(&mut self, _: &Tether) -> impl Future<Output = Result<(), StashError>> + Send {
+        async { Ok(()) }
+    }
+    fn before_save(&mut self, _: &Bond<'_>) -> impl Future<Output = Result<(), StashError>> + Send {
+        async { Ok(()) }
+    }
+    fn after_save(&mut self, _: &Bond<'_>) -> impl Future<Output = Result<(), StashError>> + Send {
+        async { Ok(()) }
     }
 }
 

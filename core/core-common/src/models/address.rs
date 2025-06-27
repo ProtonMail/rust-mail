@@ -10,7 +10,7 @@ use proton_core_api::services::proton::AddressId;
 use proton_core_api::services::proton::ProtonCore;
 
 use stash::macros::Model;
-use stash::orm::Model;
+use stash::orm::{Model, ModelHooks};
 use stash::params;
 use stash::stash::StashError;
 use stash::stash::Tether;
@@ -22,6 +22,7 @@ use super::{InitializationError, InitializationWatcher, InitializedComponent};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("addresses")]
+#[ModelHooks]
 #[allow(clippy::struct_excessive_bools)]
 pub struct Address {
     #[IdField(autoincrement)]
@@ -70,6 +71,17 @@ pub struct Address {
     pub status: AddressStatus,
 }
 
+impl ModelHooks for Address {
+    async fn before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        if let Some(remote_id) = self.remote_id.clone() {
+            if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
+                self.local_id = existing.local_id;
+            }
+        }
+        Ok(())
+    }
+}
+
 impl ModelIdExtension for Address {
     type RemoteId = AddressId;
 
@@ -79,26 +91,6 @@ impl ModelIdExtension for Address {
 }
 
 impl Address {
-    /// Save an address to the database.
-    ///
-    /// It's imperative that you use this method over [`Model::save()`] to
-    /// ensure that existing conversations are updated.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the local conversation id is not set or the query
-    /// failed.
-    ///
-    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(remote_id) = self.remote_id.clone() {
-            if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
-                self.local_id = existing.local_id;
-            }
-        }
-
-        <Self as Model>::save(self, bond).await
-    }
-
     /// Key used to distinguish between components in the initialization.
     /// It is a string, not an enum for making it open for additional changes from different BU.
     ///

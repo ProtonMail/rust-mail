@@ -390,11 +390,13 @@ async fn action_replace_or_queue() {
     conn.tx(async |tx| updated.create_or_update(first_action_id, tx).await)
         .await
         .unwrap();
-    assert_eq!(stored.id, updated.id);
+    assert_eq!(stored.id(), updated.id());
 
     // Compare against db value
-    let id = stored.id.unwrap();
-    let db_action = StoredAction::load(id, &conn).await.unwrap().unwrap();
+    let db_action = StoredAction::load(stored.id(), &conn)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(updated, db_action);
 
     // Simulate update with different type

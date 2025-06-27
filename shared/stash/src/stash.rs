@@ -748,56 +748,13 @@ impl Tether {
     /// specified `T` type, where `T` is any concrete type implementing the
     /// [`DbRecord`] trait. The requirement to formalise the return type
     /// streamlines the process of handling the results.
-    ///
-    /// Note that the [`params!`](crate::utils::params) macro is available to
-    /// help shorten the syntax for passing in the query parameters.
-    ///
-    /// # Read vs write
-    ///
-    /// Although this function is *designed* for read queries, this is implied
-    /// and a convenience, and it is entirely possible to use it for write
-    /// queries as well. The number of rows returned will be zero for write
-    /// queries. Any semantic difference between read and write queries is left
-    /// to the caller to decide, and does not result in any difference in
-    /// handling by this module. The [`rusqlite`] library will handle the
-    /// distinction as necessary.
-    ///
-    /// # Deserialisation
-    ///
-    /// Note that it is possible to deserialise the results into other types
-    /// too, and indeed serialise types into queries, but those use cases are
-    /// unlikely to be needed, or at least not common, and so are not provided
-    /// by this module. No interface is currently provided to achieve this.
-    ///
-    /// # Errors
-    ///
-    /// The following [`StashError`] variants can be returned:
-    ///
-    ///   - [`DeserializationError`](StashError::DeserializationError) - Problem
-    ///     converting from [`Rows`] to `T`.
-    ///   - [`ExecutionError`](StashError::ExecutionError) - Problem executing
-    ///     the query.
-    ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
-    ///     back to the caller via the oneshot channel.
-    ///   - [`PreparationError`](StashError::PreparationError) - Problem
-    ///     preparing the query.
-    ///   - [`QueueError`](StashError::QueueError) - Problem sending the
-    ///     operation to the queue.
-    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
-    ///     connection from the pool.
-    ///
-    /// # See also
-    ///
-    /// * [`Interface::execute()`]
-    /// * [`params!`](crate::utils::params)
-    ///
     pub async fn query<Q, T>(
         &self,
         query: Q,
         params: Vec<Box<dyn ToSql + Send>>,
     ) -> Result<Vec<T>, StashError>
     where
-        Q: Into<String> + Send,
+        Q: Into<String>,
         T: DbRecord + Send + 'static,
         DbRecords: FromIterator<Box<T>>,
     {

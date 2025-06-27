@@ -30,6 +30,7 @@ use proton_mail_common::MailContext;
 use proton_mail_common::context::ShouldInitializeMailUserContext;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::errors::unexpected::Unexpected;
+use stash::orm::Model;
 use stash::stash::{Stash, WatcherHandle};
 use std::path::PathBuf;
 use std::sync::Arc;

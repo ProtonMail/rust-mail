@@ -32,6 +32,8 @@ use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::request_data::{
     AddressSubPackage, Package, PackageSignaturesMode,
 };
+use proton_mail_ids::LocalMessageId;
+use stash::orm::Model;
 use stash::stash::{RunTransaction, Tether};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;

@@ -45,23 +45,19 @@ impl RollbackItem {
     ///
     /// It's imperative that you use this method over [`Model::save()`] to
     /// ensure that the information is update correctly in the database.
-    ///
-    /// # Errors
-    ///
-    /// When the query fails.
-    ///
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        let None = RollbackItem::find_first(
+        if RollbackItem::find_first(
             "WHERE remote_id=? AND item_type=?",
             params![self.remote_id.clone(), self.item_type],
             bond,
         )
         .await?
-        else {
-            return Ok(());
-        };
-
-        <Self as Model>::save(self, bond).await
+        .is_none()
+        {
+            // Only conditionally call Model::save
+            <Self as Model>::save(self, bond).await?;
+        }
+        Ok(())
     }
 
     /// Synchronize all rollback items with remote counterparts.

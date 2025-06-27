@@ -34,7 +34,7 @@ use proton_crypto_account::keys::UnlockedUserKeys;
 use proton_vcard::vcard::VCard;
 use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
-use stash::orm::Model;
+use stash::orm::{Model, ModelHooks};
 use stash::params;
 use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
 use tokio::task::JoinSet;
@@ -44,7 +44,7 @@ use super::{InitializationError, InitializationWatcher, InitializedComponent, La
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("contacts")]
-#[ModelActions(on_save)]
+#[ModelHooks]
 pub struct Contact {
     #[IdField(autoincrement)]
     pub local_id: Option<LocalContactId>,
@@ -220,36 +220,6 @@ impl Contact {
         )
         .await?;
         Ok(&self.contact_emails)
-    }
-
-    /// Extends [`Model::save()`] to set the contact id for children.
-    ///
-    /// # Errors
-    ///
-    /// See [`Model::save()`].
-    ///
-    pub async fn on_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        for card in &mut self.cards {
-            card.local_contact_id = self.local_id;
-            card.remote_contact_id.clone_from(&self.remote_id);
-        }
-        for email in &mut self.contact_emails {
-            email.local_contact_id = self.local_id;
-            email.remote_contact_id.clone_from(&self.remote_id);
-        }
-        bond.execute(
-            "DELETE FROM contact_cards WHERE local_contact_id = ?",
-            params![self.local_id],
-        )
-        .await?;
-        for card in &mut self.cards {
-            card.local_id = None;
-            card.save(bond).await.map_err(|e| {
-                error!("Failed to update contact cards: {e:?}");
-                e
-            })?;
-        }
-        Ok(())
     }
 
     /// Updates all user contacts including their emails without their cards.
@@ -578,6 +548,32 @@ impl Contact {
         let contacts = Contact::contact_list(&tether).await?;
         let handle = stash.subscribe_to(|sender| Box::new(ContactListWatcher { sender }))?;
         Ok((contacts, handle))
+    }
+}
+
+impl ModelHooks for Contact {
+    async fn after_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        for card in &mut self.cards {
+            card.local_contact_id = self.local_id;
+            card.remote_contact_id.clone_from(&self.remote_id);
+        }
+        for email in &mut self.contact_emails {
+            email.local_contact_id = self.local_id;
+            email.remote_contact_id.clone_from(&self.remote_id);
+        }
+        bond.execute(
+            "DELETE FROM contact_cards WHERE local_contact_id = ?",
+            params![self.local_id],
+        )
+        .await?;
+        for card in &mut self.cards {
+            card.local_id = None;
+            card.save(bond).await.map_err(|e| {
+                error!("Failed to update contact cards: {e:?}");
+                e
+            })?;
+        }
+        Ok(())
     }
 }
 

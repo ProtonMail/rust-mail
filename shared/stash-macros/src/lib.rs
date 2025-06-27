@@ -123,7 +123,7 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///
 /// The `Model` trait implementation can be customised with additional actions
 /// that are called when the model is loaded or saved to/from the database.
-/// These actions can be defined by adding the `ModelActions` attribute to the
+/// These actions can be defined by adding the `ModelHooks]
 /// struct, with the actions specified as a comma-separated list. The available
 /// actions are:
 ///
@@ -205,10 +205,7 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///     value: i32, }
 /// ```
 ///
-#[proc_macro_derive(
-    Model,
-    attributes(DbField, IdField, ModelActions, RowIdField, TableName)
-)]
+#[proc_macro_derive(Model, attributes(DbField, IdField, ModelHooks, TableName))]
 pub fn model_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
@@ -252,25 +249,14 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
     let fn_id_value_impl = generate_fn_id_value_impl(&id_field, is_optional);
     let fn_set_id_value_impl = generate_fn_set_id_value_impl(&id_field, is_optional);
 
-    // Generation custom action code
-    // This is a hack, this should be a trait.
-
-    let (has_on_load, has_on_save) = extract_model_actions(&input);
-    let on_load_impl = has_on_load.then(||
-        quote! {
-            fn do_on_load(&mut self, tether: &Tether) -> impl Future<Output = Result<(), StashError>> + Send {
-                self.on_load(tether)
+    let impl_model_hooks = {
+        let has_hooks = input.attrs.iter().any(|x| x.path().is_ident("ModelHooks"));
+        (!has_hooks).then(|| {
+            quote! {
+                impl ::stash::orm::ModelHooks for #name {}
             }
-        }
-    );
-
-    let on_save_impl = has_on_save.then(||
-        quote! {
-            fn do_on_save(&mut self, bond: &Bond<'_>) -> impl Future<Output = Result<(), StashError>> + Send {
-                self.on_save(bond)
-            }
-        }
-    );
+        })
+    };
 
     (quote! {
         impl #impl_generics stash::orm::DbRecord for #name #ty_generics #where_clause {
@@ -324,10 +310,9 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
             fn table_name() -> &'static str {
                 #table_name
             }
-
-            #on_load_impl
-            #on_save_impl
         }
+
+        #impl_model_hooks
     })
     .into()
 }
@@ -487,40 +472,6 @@ fn extract_id_field(fields: &[&Field]) -> (Ident, Type, bool, bool) {
     )
 }
 
-/// Extract the model actions from the struct attributes.
-///
-/// This function extracts the model actions from the struct attributes. It is
-/// expected that there is no more than one attribute with the name
-/// `ModelActions`, but it can be omitted.
-///
-fn extract_model_actions(input: &DeriveInput) -> (bool, bool) {
-    let mut on_load = false;
-    let mut on_save = false;
-
-    for attr in &input.attrs {
-        if attr.path().is_ident("ModelActions") {
-            attr.parse_args_with(|input: ParseStream| {
-                while !input.is_empty() {
-                    let ident: Ident = input.parse()?;
-                    match ident.to_string().as_str() {
-                        "on_load" => on_load = true,
-                        "on_save" => on_save = true,
-                        _ => return Err(input.error("expected `on_load` or `on_save`")),
-                    }
-                    if input.is_empty() {
-                        break;
-                    }
-                    input.parse::<Token![,]>()?;
-                }
-                Ok(())
-            })
-            .expect("Failed to parse ModelActions");
-        }
-    }
-
-    (on_load, on_save)
-}
-
 /// Extract the table name from the struct attributes.
 ///
 /// This function extracts the table name from the struct attributes. It is
@@ -641,19 +592,6 @@ fn generate_fn_field_values_impl(db_field_values_impl: &[TokenStream2]) -> Token
     }
 }
 
-/// Generate code implementation for the `from_row()` method.
-///
-/// # Parameters
-///
-/// * `internal_fields`      - Internal-used fields for `Model`s: firstly the
-///   field that contains the internal row ID, and then
-///   the field that contains the associated `Stash`.
-///   If [`None`], then these will be excluded from the
-///   generated code.
-/// * `from_row_values_impl` - The code implementation to convert the values
-///   from the database row to the appropriate struct
-///   field types.
-///
 fn generate_fn_from_row_impl(
     db_fields: &[Ident],
     all_fields: &[&Field],

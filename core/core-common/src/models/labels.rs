@@ -16,10 +16,10 @@ use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::Label as ApiLabel;
 use proton_core_api::services::proton::LabelId;
 use proton_core_api::services::proton::ProtonCore;
-use proton_core_api::services::proton::{PatchLabelRequest, PostLabelsRequest, PutLabelRequest};
+use proton_core_api::services::proton::{PatchLabelRequest, PostLabelsRequest};
 use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
-use stash::orm::Model;
+use stash::orm::{Model, ModelHooks};
 use stash::params;
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use stash::utils::{MapToSql as _, placeholders};
@@ -41,7 +41,7 @@ pub enum LabelError {
 }
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
-#[ModelActions(on_load, on_save)]
+#[ModelHooks]
 #[TableName("labels")]
 pub struct Label {
     #[IdField(autoincrement)]
@@ -365,6 +365,47 @@ impl Label {
             return Err(LabelError::CouldNotResolveLocalLabel(label_id));
         };
         Ok(label_id)
+    }
+}
+
+impl ModelHooks for Label {
+    async fn after_load(&mut self, tether: &Tether) -> Result<(), StashError> {
+        if self.remote_parent_id.is_some() && self.local_parent_id.is_none() {
+            self.local_parent_id = Self::remote_id_counterpart(
+                self.remote_parent_id.clone().expect("Should be set"),
+                tether,
+            )
+            .await?;
+        }
+        // TODO: https://jira.protontech.ch/browse/ET-1169 ensure that local_remote_id are resolve for Label
+        Ok(())
+    }
+
+    async fn after_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        let parent_id_option = self.remote_parent_id.clone();
+        self.local_parent_id = match parent_id_option {
+            Some(parent_id) => {
+                let res = Self::remote_id_counterpart(parent_id, bond).await?;
+                if res.is_none() {
+                    // TODO: handle this error
+                    error!(
+                        "A Label({:?}) remote_parent don't have corresponding local_id",
+                        self.remote_id
+                    );
+                }
+                res
+            }
+            None => None,
+        };
+        bond.execute(
+            format!(
+                "UPDATE {} SET local_parent_id=? WHERE local_id=?",
+                Label::table_name()
+            ),
+            params![self.local_parent_id, self.local_id],
+        )
+        .await?;
+        Ok(())
     }
 }
 

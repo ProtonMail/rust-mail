@@ -14,6 +14,7 @@ use proton_mail_common::test_utils::message_body::{
     message_body_test_user_secret,
 };
 use proton_mail_common::test_utils::test_context::MailTestContext;
+use stash::orm::Model;
 use std::str::FromStr;
 
 const CALENDAR_ID: &str = "yXbOd5cP";

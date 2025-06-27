@@ -1,4 +1,4 @@
-use std::any::TypeId;
+use std::any::{TypeId, type_name};
 
 use crate::store::Store;
 use crate::subscriber::{RawSubscriber, TypedSubscribers};
@@ -63,7 +63,10 @@ impl EventPoll {
                     typed_subscribers.add_subscriber(subscriber);
                 } else {
                     // This should never happen, as the raw subscriber is already registered
-                    error!("Subscriber could not be downcast to TypedSubscribers<T>");
+                    error!(
+                        "Subscriber could not be downcast to TypedSubscribers<{}>",
+                        type_name::<T>()
+                    );
                     return Err(EventLoopError::Register(subscriber.name()));
                 }
             }

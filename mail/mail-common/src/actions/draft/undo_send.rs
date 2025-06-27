@@ -16,6 +16,7 @@ use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::MessageId;
 use serde::{Deserialize, Serialize};
+use stash::orm::Model;
 use stash::stash::Bond;
 use tracing::{error, info, warn};
 

@@ -28,7 +28,7 @@ use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
 use stash::exports::*;
 use stash::macros::Model;
-use stash::orm::Model;
+use stash::orm::{Model, ModelHooks};
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use stash::{params, sql_using_serde};
 use std::collections::BTreeSet;
@@ -301,6 +301,7 @@ impl DraftMetadata {
 /// Due to architectural differences on some of the platforms we need to store the
 /// result of the send action in the database rather than relying on the queue observers.
 #[derive(Clone, Debug, Eq, Model, PartialEq, Hash)]
+#[ModelHooks]
 #[TableName("draft_send_result")]
 pub struct DraftSendResult {
     #[IdField]
@@ -329,6 +330,18 @@ pub struct DraftSendResult {
 
     #[DbField]
     pub has_send_action: bool,
+}
+
+impl ModelHooks for DraftSendResult {
+    async fn before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        // Only overwrite if present.
+        if let Some(metadata_id) =
+            DraftMetadata::find_by_message_id(self.local_message_id, bond).await?
+        {
+            self.has_send_action = metadata_id.send_action_id.is_some();
+        }
+        Ok(())
+    }
 }
 
 impl DraftSendResult {
@@ -369,18 +382,6 @@ impl DraftSendResult {
             has_send_action: false,
             origin,
         }
-    }
-
-    /// Overwrite `Model::Save` for create or update.
-    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        // Only overwrite if present.
-        if let Some(metadata_id) =
-            DraftMetadata::find_by_message_id(self.local_message_id, bond).await?
-        {
-            self.has_send_action = metadata_id.send_action_id.is_some();
-        }
-
-        <Self as Model>::save(self, bond).await
     }
 
     /// Returns all unseen send results.
