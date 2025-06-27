@@ -3,6 +3,7 @@ use crate::core::device::{DeviceInfoProviderWrap, DynDeviceInfoProvider};
 use crate::core::verification::{ChallengeNotifierWrap, DynChallengeNotifier};
 use crate::core::{FFIKeyChain, StoredAccountState, StoredSession, StoredSessionState};
 use crate::core::{OSKeyChain, StoredAccount};
+use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{
     OtherErrorReason, PinAuthError, PinSetError, ProtonError, UserContextError, VoidSessionResult,
 };
@@ -1152,6 +1153,22 @@ impl MailSession {
     /// This should be called once the application enters the foreground.
     pub fn resume_work(&self) {
         self.mail_ctx.core_context().task_service().resume_main();
+    }
+
+    /// Export all logs into a single file wih the given `file_path`
+    ///
+    /// Returns the number of bytes written.
+    pub fn export_logs(&self, file_path: String) -> Result<u64, ProtonError> {
+        let path = PathBuf::from(file_path);
+        self.ctx()
+            .core_context()
+            .log_service()
+            .export_logs(&path)
+            .map_err(|e| {
+                error!("Failed to export logs: {e:?}");
+                ProtonError::Unexpected(UnexpectedError::Os)
+            })
+            .map(|v| v as u64)
     }
 }
 
