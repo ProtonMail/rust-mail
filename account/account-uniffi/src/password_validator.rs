@@ -57,14 +57,15 @@ impl PasswordValidatorService {
         .await
     }
 
-    pub async fn validate(
+    #[must_use]
+    pub fn validate(
         &self,
         plain_password: String,
         callback: Box<dyn PasswordValidatorServiceCallback>,
-    ) -> Result<PasswordValidatorServiceHandle, PasswordValidationError> {
-        let password = SecretString::from(plain_password);
-        let service = self.service.clone();
-        uniffi_async::<_, PasswordValidationError, _>(async move {
+    ) -> PasswordValidatorServiceHandle {
+        async_runtime().block_on(async {
+            let password = SecretString::from(plain_password);
+            let service = self.service.clone();
             let guard = service.lock().await;
             let results = guard.validate(&password);
             let token = results
@@ -74,11 +75,10 @@ impl PasswordValidatorService {
             let handle = async_runtime().spawn(async move {
                 callback.on_results(results.into_iter().map(to_service_result).collect(), token);
             });
-            Ok(PasswordValidatorServiceHandle {
+            PasswordValidatorServiceHandle {
                 handle: handle.abort_handle(),
-            })
+            }
         })
-        .await
     }
 }
 
