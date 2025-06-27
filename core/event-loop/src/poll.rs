@@ -77,6 +77,13 @@ impl EventPoll {
     }
 
     pub async fn poll(&self) -> Result<(), EventLoopError> {
+        {
+            let mut l = self.subscribers.lock().await;
+            for s in l.values_mut() {
+                s.cleanup();
+            }
+        }
+
         self.epoll
             .poll_raw(
                 self.store.as_ref(),
