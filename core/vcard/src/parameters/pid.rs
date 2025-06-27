@@ -1,12 +1,13 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
-use crate::errors::{VCardParameterError, VCardParameterResult};
+use crate::{
+    ParameterType,
+    errors::{VCardParameterError, VCardParameterResult},
+};
 use regex::Regex;
 
-use crate::ParameterType;
-
 /// The PID parameter is used to identify a specific property among multiple instances.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Pid {
     /// Values
     pub values: Vec<PidElement>,
@@ -19,12 +20,6 @@ impl Pid {
     ///   *
     pub fn new_validated(values: &[String]) -> VCardParameterResult<Self> {
         Self::try_from(values)
-    }
-}
-
-impl Debug for Pid {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Pid {{{:?}}}", self.values)
     }
 }
 
@@ -48,8 +43,8 @@ impl TryFrom<&[String]> for Pid {
     }
 }
 
-#[derive(Clone)]
-pub struct PidElement(u32, Option<u32>);
+#[derive(Debug, Clone)]
+pub struct PidElement(pub u32, pub Option<u32>);
 
 impl TryFrom<&str> for PidElement {
     type Error = VCardParameterError;
@@ -66,16 +61,6 @@ impl TryFrom<&str> for PidElement {
         } else {
             let value = value.parse().map_err(|_| error(value))?;
             Ok(Self(value, None))
-        }
-    }
-}
-
-impl Debug for PidElement {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        if let Some(second) = self.1 {
-            write!(f, "{}.{second}", self.0)
-        } else {
-            write!(f, "{}", self.0)
         }
     }
 }

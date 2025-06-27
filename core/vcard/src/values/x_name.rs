@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 use regex::Regex;
 
@@ -6,14 +6,8 @@ use crate::errors::{VCardValueError, VCardValueResult};
 use crate::parameters::value::ValueType;
 
 /// Representation for the x-name values from vCard RFC6350
-#[derive(Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub struct XName(pub String);
-
-impl Debug for XName {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "XN({})", self.0)
-    }
-}
 
 impl XName {
     /// Create a new x-name value (no check is done)

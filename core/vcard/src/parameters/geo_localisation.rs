@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 use crate::errors::{VCardParameterError, VCardParameterResult};
 use url::Url;
@@ -8,7 +8,7 @@ use crate::values::uri::Uri;
 
 /// The GEO parameter can be used to indicate global positioning information that is specific to an
 /// address.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct GeoLocalisation {
     /// Value
     pub value: Uri,
@@ -32,12 +32,6 @@ impl GeoLocalisation {
             value: Uri::new_validated(value)
                 .map_err(VCardParameterError::from_value_error(ParameterType::Geo))?,
         })
-    }
-}
-
-impl Debug for GeoLocalisation {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.value)
     }
 }
 

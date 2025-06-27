@@ -1,14 +1,11 @@
 use std::fmt::Debug;
 
 use ical::generator::Property as IcalProperty;
-use velcro::hash_set;
 
-use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::alternative_id::AlternativeId;
 use crate::parameters::preference::Preference;
 use crate::parameters::value::ValueType;
-use crate::properties::{VcardProperty, validate_parameters};
-use crate::validation::get_property_kind;
+use crate::properties::VcardProperty;
 use crate::values::text::Text;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
@@ -72,26 +69,4 @@ impl VcardProperty for Xml {
     fn get_preference(&self) -> Option<Preference> {
         None
     }
-}
-
-/// Validate that the given `property` respect the format for a `XML` property
-///
-/// # Errors
-///   * if a parameter is invalid
-///   * if property have no value
-pub fn validate_xml(property: &IcalProperty) -> VcardValidationResult<()> {
-    // XML-param = "VALUE=text" / altid-param
-    // XML-value = text
-    if property.value.is_some() {
-        validate_parameters(
-            property,
-            ValueType::Text,
-            &hash_set!(ParameterType::Value, ParameterType::AltId),
-        )?;
-    } else {
-        return Err(VcardValidationError::InvalidPropertyValue(
-            get_property_kind(&property.name)?,
-        ));
-    }
-    Ok(())
 }

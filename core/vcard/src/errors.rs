@@ -1,4 +1,3 @@
-use crate::validation::Cardinality;
 use crate::{ParameterType, PropertyKind, ValueType};
 use thiserror::Error;
 
@@ -131,8 +130,6 @@ pub enum VcardValidationError {
     InvalidPropertyParam(PropertyKind, String),
     #[error("Invalid properties order")]
     InvalidPropertiesOrder,
-    #[error("Invalid properties cardinality: {0:?} expected {1:?}")]
-    InvalidPropertiesCardinality(PropertyKind, Cardinality),
     #[error("Invalid properties group name: {0:?}")]
     InvalidPropertyGroupName(String),
     #[error("Unexpected param: {0:?}:{1:?}")]

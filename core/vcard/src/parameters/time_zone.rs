@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 use url::Url;
 
@@ -8,7 +8,7 @@ use crate::values::param_value::{ParamValue, is_param_value};
 use crate::values::uri::Uri;
 
 /// The TZ parameter can be used to indicate time zone information that is specific to an address.
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TimeZone {
     Uri(Uri),
     ParamValue(ParamValue),
@@ -27,15 +27,6 @@ impl TimeZone {
     ///   * if value is neither a valid URL aor param-value
     pub fn new_validated(value: &str) -> VCardParameterResult<Self> {
         Self::try_from(value)
-    }
-}
-
-impl Debug for TimeZone {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TimeZone::Uri(v) => write!(f, "{v:?}"),
-            TimeZone::ParamValue(v) => write!(f, "{v:?}"),
-        }
     }
 }
 

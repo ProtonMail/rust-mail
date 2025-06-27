@@ -3,11 +3,9 @@ use std::collections::HashSet;
 use ical::generator::Property as IcalProperty;
 use url::Url;
 
-use crate::errors::{VcardValidationError, VcardValidationResult};
-use crate::parameters::any::{Any, is_any_param};
+use crate::parameters::any::Any;
 use crate::parameters::preference::Preference;
 use crate::properties::VcardProperty;
-use crate::validation::get_property_kind;
 use crate::values::uri::Uri;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
@@ -109,42 +107,4 @@ impl VcardProperty for ClientPidMap {
     fn get_preference(&self) -> Option<Preference> {
         None
     }
-}
-
-/// Validate that the given `property` respect the format for a `CLIENTPIDMAP` property
-///
-/// # Errors
-///   * if property value is not a number followed by a semicolon followed by an uri (ex: `1;urn:uuid:3df403f4-5924-4bb7-b077-3c711d9eb34b`)
-///   * if any of the parameters is not valid
-pub fn validate_clientpidmap(property: &IcalProperty) -> VcardValidationResult<()> {
-    // CLIENTPIDMAP-param = any-param
-    // CLIENTPIDMAP-value = 1*DIGIT ";" URI
-    if let Some(value) = &property.value {
-        let Some((digits, uri)) = value.split_once(';') else {
-            return Err(VcardValidationError::InvalidPropertyValue(
-                get_property_kind(&property.name)?,
-            ));
-        };
-        if digits.parse::<u32>().is_ok_and(|x| x > 0) && Url::parse(uri).is_ok() {
-            if let Some(params) = &property.params {
-                for (name, values) in params {
-                    if !is_any_param(name, values) {
-                        return Err(VcardValidationError::InvalidPropertyParam(
-                            get_property_kind(&property.name)?,
-                            name.to_owned(),
-                        ));
-                    }
-                }
-            }
-        } else {
-            return Err(VcardValidationError::InvalidPropertyValue(
-                get_property_kind(&property.name)?,
-            ));
-        }
-    } else {
-        return Err(VcardValidationError::InvalidPropertyValue(
-            get_property_kind(&property.name)?,
-        ));
-    }
-    Ok(())
 }

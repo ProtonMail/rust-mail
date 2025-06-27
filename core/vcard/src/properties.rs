@@ -36,29 +36,11 @@ pub mod time_zone;
 pub mod title;
 pub mod uid;
 pub mod url;
-pub mod version;
 pub mod xml;
 pub mod xtended;
 
 use crate::errors::{VcardValidationError, VcardValidationResult};
-use crate::parameters::ParameterType;
-use crate::parameters::alternative_id::is_altid_param;
-use crate::parameters::any::is_any_param;
-use crate::parameters::calendar_scale::is_calscale_param;
-use crate::parameters::geo_localisation::is_geo_param;
-use crate::parameters::label::is_label_param;
-use crate::parameters::language::is_language_param;
-use crate::parameters::mediatype::is_mediatype_param;
-use crate::parameters::pid::is_pid_param;
-use crate::parameters::preference::{Preference, is_pref_param};
-use crate::parameters::sort_as::is_sort_as_param;
-use crate::parameters::time_zone::is_tz_param;
-use crate::parameters::type_generic::is_type_param;
-use crate::parameters::value::ValueType;
-use crate::parameters::value::is_value_param;
-use crate::validation::get_property_kind;
-use ical::property::Property;
-use std::collections::HashSet;
+use crate::parameters::preference::Preference;
 
 /// Trait to define a vCard property
 pub trait VcardProperty {
@@ -243,79 +225,4 @@ impl PartialEq<String> for PropertyKind {
             PropertyKind::Extended(value) => &other == value,
         }
     }
-}
-
-/// Validate that all parameters of the given `property` are valid and in the allowed list for that `property`
-///
-/// # Errors
-///   * at least one of the parameters is invalid
-///   * at least one of the parameters is not authorized
-pub fn validate_parameters<S: ::std::hash::BuildHasher>(
-    property: &Property,
-    value_type: ValueType,
-    allowed: &HashSet<ParameterType, S>,
-) -> VcardValidationResult<()> {
-    if let Some(params) = &property.params {
-        for (name, values) in params {
-            let param_type = ParameterType::from(name.as_str());
-            if allowed.contains(&param_type) {
-                let validate = match param_type {
-                    ParameterType::Value => is_value_param(values, value_type),
-                    ParameterType::AltId => is_altid_param(values),
-                    ParameterType::CalScale => is_calscale_param(values),
-                    ParameterType::Geo => is_geo_param(values),
-                    ParameterType::Label => is_label_param(values),
-                    ParameterType::Language => is_language_param(values),
-                    ParameterType::MediaType => is_mediatype_param(values),
-                    ParameterType::Pid => is_pid_param(values),
-                    ParameterType::Pref => is_pref_param(values),
-                    ParameterType::SortAs => is_sort_as_param(values),
-                    ParameterType::Type => {
-                        let property = get_property_kind(&property.name)?;
-                        is_type_param(&property, values)
-                    }
-                    ParameterType::TZ => is_tz_param(values),
-                    ParameterType::Any => is_any_param(name, values),
-                };
-                if !validate {
-                    return Err(VcardValidationError::InvalidPropertyParam(
-                        get_property_kind(&property.name)?,
-                        name.to_owned(),
-                    ));
-                }
-            } else {
-                return Err(VcardValidationError::UnexpectedPropertyParam(
-                    get_property_kind(&property.name)?,
-                    name.to_owned(),
-                ));
-            }
-        }
-    }
-    Ok(())
-}
-
-/// Get the value type from VALUE parameter if any
-fn get_value_type(property: &Property) -> VcardValidationResult<Option<ValueType>> {
-    if let Some(params) = &property.params {
-        for (name, values) in params {
-            if name.eq_ignore_ascii_case("VALUE") {
-                return if values.len() == 1 {
-                    if let Ok(value) = ValueType::try_from(values[0].as_str()) {
-                        Ok(Some(value))
-                    } else {
-                        Err(VcardValidationError::InvalidPropertyParam(
-                            get_property_kind(property.name.as_str())?,
-                            name.to_owned(),
-                        ))
-                    }
-                } else {
-                    Err(VcardValidationError::InvalidPropertyParam(
-                        get_property_kind(property.name.as_str())?,
-                        name.to_owned(),
-                    ))
-                };
-            }
-        }
-    }
-    Ok(None)
 }

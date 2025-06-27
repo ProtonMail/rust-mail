@@ -1,17 +1,14 @@
 use std::collections::HashSet;
 
 use ical::generator::Property as IcalProperty;
-use velcro::hash_set;
 
-use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::alternative_id::AlternativeId;
 use crate::parameters::any::Any;
 use crate::parameters::pid::Pid;
 use crate::parameters::preference::Preference;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
-use crate::properties::{VcardProperty, validate_parameters};
-use crate::validation::get_property_kind;
+use crate::properties::VcardProperty;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
@@ -125,33 +122,4 @@ impl VcardProperty for Language {
     fn get_preference(&self) -> Option<Preference> {
         self.preference
     }
-}
-
-/// Validate that the given `property` respect the format for a `LANG` property
-///
-/// # Errors
-///   * if property value is not a valid language-tag value
-///   * if any of the parameters is not valid
-pub fn validate_lang(property: &IcalProperty) -> VcardValidationResult<()> {
-    // LANG-param = "VALUE=language-tag" / pid-param / pref-param / altid-param / type-param / any-param
-    // LANG-value = Language-Tag
-    if property.value.is_some() {
-        validate_parameters(
-            property,
-            ValueType::LanguageTag,
-            &hash_set!(
-                ParameterType::Value,
-                ParameterType::Pid,
-                ParameterType::Pref,
-                ParameterType::AltId,
-                ParameterType::Type,
-                ParameterType::Any
-            ),
-        )?;
-    } else {
-        return Err(VcardValidationError::InvalidPropertyValue(
-            get_property_kind(&property.name)?,
-        ));
-    }
-    Ok(())
 }

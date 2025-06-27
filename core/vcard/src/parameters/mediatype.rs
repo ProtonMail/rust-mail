@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 use regex::Regex;
 
@@ -9,7 +9,7 @@ use crate::values::check_list;
 use crate::vcard::split_list;
 
 /// The MEDIATYPE parameter is used with properties whose value is a URI.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct MediaType {
     /// type-name
     pub type_name: String,
@@ -40,16 +40,6 @@ impl MediaType {
     ///   * if given value doesn't have the expected format
     pub fn new_validated(value: &str) -> VCardParameterResult<Self> {
         Self::try_from(value)
-    }
-}
-
-impl Debug for MediaType {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "MediaType {{{}/{}", self.type_name, self.subtype_name)?;
-        for (name, value) in &self.attributes {
-            write!(f, ", {name}={value}")?;
-        }
-        write!(f, "}}")
     }
 }
 

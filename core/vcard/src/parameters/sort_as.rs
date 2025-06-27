@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 use crate::ParameterType;
 use crate::errors::{VCardParameterError, VCardParameterResult};
@@ -6,7 +6,7 @@ use crate::values::param_value::{ParamValue, is_param_value};
 
 /// The "sort-as" parameter is used to specify the string to be used for national-language-specific
 /// sorting.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct SortAs {
     /// Value
     pub values: Vec<ParamValue>,
@@ -36,12 +36,6 @@ impl SortAs {
                 .collect::<Result<_, _>>()
                 .map_err(VCardParameterError::from_value_error(ParameterType::SortAs))?,
         })
-    }
-}
-
-impl Debug for SortAs {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self.values)
     }
 }
 

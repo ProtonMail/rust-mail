@@ -3,7 +3,7 @@
 //! No check here on parameter valid for the corresponding property
 
 use std::collections::HashSet;
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 use ical::generator::Property as IcalProperty;
 
@@ -44,7 +44,7 @@ pub mod type_tel;
 pub mod value;
 
 /// Structure grouping all parameters of a vCard property
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct Parameters {
     pub alternative_id: Option<AlternativeId>,
     pub any: HashSet<Any>,
@@ -62,46 +62,6 @@ pub struct Parameters {
     pub related_types: HashSet<RelatedType>,
     pub time_zone: Option<TimeZone>,
     pub value: Option<ValueType>,
-}
-
-impl Debug for Parameters {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let mut comma = false;
-        write!(f, "Parameters {{")?;
-        if let Some(v) = self.preference {
-            write!(f, "PREF={v:?}")?;
-            comma = true;
-        }
-        if !self.generic_types.is_empty() {
-            if comma {
-                write!(f, ", ")?;
-            }
-            write!(f, "TYPE={:?}", self.generic_types)?;
-            comma = true;
-        }
-        if !self.tel_types.is_empty() {
-            if comma {
-                write!(f, ", ")?;
-            }
-            write!(f, "TYPE={:?}", self.tel_types)?;
-            comma = true;
-        }
-        if !self.related_types.is_empty() {
-            if comma {
-                write!(f, ", ")?;
-            }
-            write!(f, "TYPE={:?}", self.related_types)?;
-            comma = true;
-        }
-        if let Some(v) = self.value {
-            if comma {
-                write!(f, ", ")?;
-            }
-            write!(f, "VALUE={v:?}")?;
-        }
-        write!(f, "}}")?;
-        Ok(())
-    }
 }
 
 macro_rules! set_handler {
@@ -153,14 +113,6 @@ impl Parameters {
     set_handler!(related_type, related_types, RelatedType);
     single_handler!(time_zone, TimeZone);
     single_handler!(value, ValueType);
-
-    /// Check if a parameter is currently set
-    pub(crate) fn is_empty(&self) -> bool {
-        self.preference.is_none()
-            && self.generic_types.is_empty()
-            && self.tel_types.is_empty()
-            && self.related_types.is_empty()
-    }
 }
 
 impl TryFrom<&IcalProperty> for Parameters {
@@ -275,13 +227,5 @@ impl From<&str> for ParameterType {
             "TZ" => Self::TZ,
             _ => Self::Any,
         }
-    }
-}
-
-/// Utility function to check if a Ical property have any parameter set
-pub(crate) fn have_no_param(params: Option<&[(String, Vec<String>)]>) -> bool {
-    match params {
-        None => true,
-        Some(params) => params.is_empty(),
     }
 }

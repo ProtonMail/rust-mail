@@ -2,15 +2,11 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 
 use ical::generator::Property as IcalProperty;
-use url::Url;
-use velcro::hash_set;
 
-use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::any::Any;
 use crate::parameters::preference::Preference;
 use crate::parameters::value::ValueType;
-use crate::properties::{VcardProperty, get_value_type, validate_parameters};
-use crate::validation::get_property_kind;
+use crate::properties::VcardProperty;
 use crate::values::uri::MaybeUri;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
@@ -76,50 +72,4 @@ impl VcardProperty for VcardUid {
     fn get_preference(&self) -> Option<Preference> {
         None
     }
-}
-
-/// Validate that the given `property` respect the format for a `UID` property
-///
-/// # Errors
-///   * property value is not a text neither an uri
-///   * any of the parameters is not valid
-pub fn validate_uid(property: &IcalProperty) -> VcardValidationResult<()> {
-    // UID-param = UID-uri-param / UID-text-param
-    // UID-value = UID-uri-value / UID-text-value
-    //   ; Value and parameter MUST match.
-    //
-    // UID-uri-param = "VALUE=uri"
-    // UID-uri-value = URI
-    //
-    // UID-text-param = "VALUE=text"
-    // UID-text-value = text
-    //
-    // UID-param =/ any-param
-    if let Some(value) = &property.value {
-        let value_type = if let Some(value_type) = get_value_type(property)? {
-            let validated = match value_type {
-                ValueType::Text => true,
-                ValueType::Uri => Url::parse(value).is_ok(),
-                _ => false,
-            };
-            if !validated {
-                return Err(VcardValidationError::InvalidPropertyValue(
-                    get_property_kind(&property.name)?,
-                ));
-            }
-            value_type
-        } else {
-            ValueType::Text
-        };
-        validate_parameters(
-            property,
-            value_type,
-            &hash_set!(ParameterType::Value, ParameterType::Any,),
-        )?;
-    } else {
-        return Err(VcardValidationError::InvalidPropertyValue(
-            get_property_kind(&property.name)?,
-        ));
-    }
-    Ok(())
 }

@@ -3,9 +3,7 @@ use std::collections::HashSet;
 use anyhow::Context as _;
 use ical::generator::Property as IcalProperty;
 use tracing::warn;
-use velcro::hash_set;
 
-use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::alternative_id::AlternativeId;
 use crate::parameters::any::Any;
 use crate::parameters::geo_localisation::GeoLocalisation;
@@ -16,10 +14,8 @@ use crate::parameters::preference::Preference;
 use crate::parameters::time_zone::TimeZone;
 use crate::parameters::type_generic::GenericType;
 use crate::parameters::value::ValueType;
-use crate::properties::{VcardProperty, validate_parameters};
-use crate::validation::get_property_kind;
-use crate::values::check_list;
-use crate::values::list_component::{ListComponent, is_list_component_value};
+use crate::properties::VcardProperty;
+use crate::values::list_component::ListComponent;
 use crate::vcard::{group_from_name, split_list};
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
@@ -164,50 +160,4 @@ impl VcardProperty for Address {
     fn get_preference(&self) -> Option<Preference> {
         self.preference
     }
-}
-
-/// Validate that the given `property` respect the format for a `ADR` property
-///
-/// # Errors
-///   * if property value is not a list of 7 `list_component` separated by semicolon
-///   * if anu parameter is invalid
-pub fn validate_adr(property: &IcalProperty) -> VcardValidationResult<()> {
-    // ADR-param = "VALUE=text" / label-param / language-param / geo-parameter / tz-parameter / altid-param / pid-param / pref-param / type-param / any-param
-    // ADR-value = ADR-component-pobox ";" ADR-component-ext ";" ADR-component-street ";" ADR-component-locality ";" ADR-component-region ";" ADR-component-code ";" ADR-component-country
-    // ADR-component-pobox    = list-component
-    // ADR-component-ext      = list-component
-    // ADR-component-street   = list-component
-    // ADR-component-locality = list-component
-    // ADR-component-region   = list-component
-    // ADR-component-code     = list-component
-    // ADR-component-country  = list-component
-    if let Some(value) = &property.value {
-        if check_list(value, is_list_component_value, ';').is_some_and(|c| c == 7) {
-            validate_parameters(
-                property,
-                ValueType::Text,
-                &hash_set!(
-                    ParameterType::Value,
-                    ParameterType::Label,
-                    ParameterType::Language,
-                    ParameterType::Geo,
-                    ParameterType::TZ,
-                    ParameterType::AltId,
-                    ParameterType::Pid,
-                    ParameterType::Pref,
-                    ParameterType::Type,
-                    ParameterType::Any
-                ),
-            )?;
-        } else {
-            return Err(VcardValidationError::InvalidPropertyValue(
-                get_property_kind(&property.name)?,
-            ));
-        }
-    } else {
-        return Err(VcardValidationError::InvalidPropertyValue(
-            get_property_kind(&property.name)?,
-        ));
-    }
-    Ok(())
 }

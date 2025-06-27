@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::Debug;
 
 use chrono::{DateTime, FixedOffset, MappedLocalTime, TimeZone};
 
@@ -11,7 +11,7 @@ const MINUTE: i32 = 60;
 const HOUR: i32 = 60 * MINUTE;
 
 /// A representation of the timestamp value from vCard RFC6350
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Timestamp(pub(crate) DateTime<FixedOffset>);
 
 impl Timestamp {
@@ -27,12 +27,6 @@ impl Timestamp {
     ///   * if given value do not respect timestamp format (`YYYYMMDDThhmmssZ`)
     pub fn new_validated(value: &str) -> VCardValueResult<Self> {
         Self::try_from(value)
-    }
-}
-
-impl Debug for Timestamp {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Ts({})", self.0)
     }
 }
 

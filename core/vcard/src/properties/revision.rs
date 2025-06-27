@@ -1,14 +1,10 @@
 use std::collections::HashSet;
 
 use ical::generator::Property as IcalProperty;
-use velcro::hash_set;
 
-use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::any::Any;
 use crate::parameters::value::ValueType;
-use crate::properties::validate_parameters;
-use crate::validation::get_property_kind;
-use crate::values::timestamp::{Timestamp, is_timestamp_value};
+use crate::values::timestamp::Timestamp;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
@@ -83,32 +79,4 @@ impl TryFrom<&IcalProperty> for Revision {
         }
         Ok(result)
     }
-}
-
-/// Validate that the given `property` respect the format for a `REV` property
-///
-/// # Errors
-///   * if property value is not a valid timestamp value
-///   * if any of the parameters is not valid
-pub fn validate_rev(property: &IcalProperty) -> VcardValidationResult<()> {
-    // REV-param = "VALUE=timestamp" / any-param
-    // REV-value = timestamp
-    if let Some(value) = &property.value {
-        if is_timestamp_value(value) {
-            validate_parameters(
-                property,
-                ValueType::Timestamp,
-                &hash_set!(ParameterType::Value, ParameterType::Any,),
-            )?;
-        } else {
-            return Err(VcardValidationError::InvalidPropertyValue(
-                get_property_kind(&property.name)?,
-            ));
-        }
-    } else {
-        return Err(VcardValidationError::InvalidPropertyValue(
-            get_property_kind(&property.name)?,
-        ));
-    }
-    Ok(())
 }

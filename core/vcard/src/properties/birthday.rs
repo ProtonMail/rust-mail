@@ -3,17 +3,13 @@ use std::fmt::Debug;
 
 use ical::generator::Property as IcalProperty;
 use tracing::warn;
-use velcro::hash_set;
 
-use crate::errors::{VcardValidationError, VcardValidationResult};
 use crate::parameters::alternative_id::AlternativeId;
 use crate::parameters::any::Any;
 use crate::parameters::calendar_scale::CalendarScale;
 use crate::parameters::language::Language;
 use crate::parameters::value::ValueType;
-use crate::properties::{get_value_type, validate_parameters};
-use crate::validation::get_property_kind;
-use crate::values::date_and_or_time::{MaybeDateAndOrTime, is_date_and_or_time_value};
+use crate::values::date_and_or_time::MaybeDateAndOrTime;
 use crate::vcard::group_from_name;
 use crate::{ParameterType, PropertyKind, VCardError, VCardResult};
 
@@ -112,62 +108,4 @@ impl TryFrom<&IcalProperty> for Birthday {
             group: group_from_name(&property.name),
         })
     }
-}
-
-/// Validate that the given `property` respect the format for a `BDAY` property
-///
-/// # Errors
-///   * if property value is not a date-and-or-time value or a text
-///   * if any parameter is not valid
-pub fn validate_bday(property: &IcalProperty) -> VcardValidationResult<()> {
-    // BDAY-param = BDAY-param-date / BDAY-param-text
-    // BDAY-value = date-and-or-time / text
-    //   ; Value and parameter MUST match.
-    //
-    // BDAY-param-date = "VALUE=date-and-or-time"
-    // BDAY-param-text = "VALUE=text" / language-param
-    //
-    // BDAY-param =/ altid-param / calscale-param / any-param
-    //   ; calscale-param can only be present when BDAY-value is
-    //   ; date-and-or-time and actually contains a date or date-time.
-
-    if let Some(value) = &property.value {
-        let value_type = if let Some(value_type) = get_value_type(property)? {
-            let validated = match value_type {
-                ValueType::DateAndOrTime => is_date_and_or_time_value(value),
-                ValueType::Text => true,
-                _ => false,
-            };
-            if !validated {
-                return Err(VcardValidationError::InvalidPropertyValue(
-                    get_property_kind(&property.name)?,
-                ));
-            }
-            value_type
-        } else if is_date_and_or_time_value(value) {
-            ValueType::DateAndOrTime
-        } else {
-            ValueType::Text
-        };
-
-        validate_parameters(
-            property,
-            value_type,
-            &hash_set!(
-                ParameterType::Value,
-                ParameterType::AltId,
-                if matches!(value_type, ValueType::DateAndOrTime) {
-                    ParameterType::CalScale
-                } else {
-                    ParameterType::Language
-                },
-                ParameterType::Any
-            ),
-        )?;
-    } else {
-        return Err(VcardValidationError::InvalidPropertyValue(
-            get_property_kind(&property.name)?,
-        ));
-    }
-    Ok(())
 }
