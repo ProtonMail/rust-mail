@@ -4,7 +4,7 @@ use crate::core::verification::{ChallengeNotifierWrap, DynChallengeNotifier};
 use crate::core::{FFIKeyChain, StoredAccountState, StoredSession, StoredSessionState};
 use crate::core::{OSKeyChain, StoredAccount};
 use crate::errors::{
-    MailLoginError, PinAuthError, PinSetError, UserContextError, VoidSessionResult,
+    OtherErrorReason, PinAuthError, PinSetError, ProtonError, UserContextError, VoidSessionResult,
 };
 use crate::mail::MailUserSession;
 use crate::mail::logging::init_log;
@@ -16,13 +16,13 @@ use crate::{
 use futures::TryFutureExt;
 use proton_account_uniffi::login::LoginFlow;
 use proton_account_uniffi::signup::SignupFlow;
-use proton_core_common::OnSessionDeletedResponse;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::{AppSettings as RealAppSettings, PinProtection};
 use proton_core_common::os::KeyChainExt;
 use proton_core_common::pin_code::PinCode;
 use proton_core_common::utils::MapVec;
+use proton_core_common::{CoreContextError, OnSessionDeletedResponse};
 use proton_mail_common::MailContext;
 use proton_mail_common::context::ShouldInitializeMailUserContext;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
@@ -255,18 +255,17 @@ async fn create_mail_session_inner(
 #[uniffi_export]
 impl MailSession {
     /// Start new login flow.
-    pub async fn new_login_flow(&self) -> Result<Arc<LoginFlow>, MailLoginError> {
+    pub async fn new_login_flow(&self) -> Result<Arc<LoginFlow>, ProtonError> {
         let mail_ctx = self.mail_ctx.clone();
 
-        uniffi_async::<_, RealProtonMailError, _>(async move {
+        uniffi_async::<_, CoreContextError, _>(async move {
             mail_ctx
                 .new_login_flow()
                 .await
                 .map(|flow| LoginFlow::new(flow))
-                .map_err(RealProtonMailError::from)
         })
         .await
-        .map_err(MailLoginError::from)
+        .map_err(|err| ProtonError::OtherReason(OtherErrorReason::Other(err.to_string())))
     }
 
     /// Resume an existing login flow.
@@ -274,7 +273,7 @@ impl MailSession {
         &self,
         user_id: String,
         session_id: String,
-    ) -> Result<Arc<LoginFlow>, MailLoginError> {
+    ) -> Result<Arc<LoginFlow>, ProtonError> {
         let mail_ctx = self.mail_ctx.clone();
 
         uniffi_async::<_, RealProtonMailError, _>(async move {
@@ -285,22 +284,21 @@ impl MailSession {
                 .await
         })
         .await
-        .map_err(MailLoginError::from)
+        .map_err(ProtonError::from)
     }
 
     /// Start new signup flow.
-    pub async fn new_signup_flow(&self) -> Result<Arc<SignupFlow>, UserContextError> {
+    pub async fn new_signup_flow(&self) -> Result<Arc<SignupFlow>, ProtonError> {
         let mail_ctx = self.mail_ctx.clone();
 
-        uniffi_async::<_, RealProtonMailError, _>(async move {
+        uniffi_async::<_, CoreContextError, _>(async move {
             mail_ctx
                 .new_signup_flow()
                 .await
                 .map(|flow| SignupFlow::new(flow))
-                .map_err(RealProtonMailError::from)
         })
         .await
-        .map_err(UserContextError::from)
+        .map_err(|err| ProtonError::OtherReason(OtherErrorReason::Other(err.to_string())))
     }
 
     /// Get initialized user context from stored session.
@@ -984,7 +982,7 @@ impl MailSession {
     pub async fn to_user_context(
         &self,
         ffi_flow: Arc<LoginFlow>,
-    ) -> Result<Arc<MailUserSession>, MailLoginError> {
+    ) -> Result<Arc<MailUserSession>, ProtonError> {
         let core_flow = ffi_flow.inner_flow();
         let mut guard = core_flow.lock().await;
         async_runtime()
@@ -996,7 +994,7 @@ impl MailSession {
                     .map_err(RealProtonMailError::from)
                     .await
             })
-            .map_err(MailLoginError::from)
+            .map_err(ProtonError::from)
     }
 }
 
