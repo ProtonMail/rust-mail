@@ -410,7 +410,7 @@ where
 }
 
 pub const REPLY_PREFIX: &str = "Re: ";
-pub const FORWARD_PREFIX: &str = "Fwd: ";
+pub const FORWARD_PREFIX: &str = "Fw: ";
 
 pub const DEFAULT_SUBJECT: &str = "(No Subject)";
 pub const ORIGINAL_MESSAGE_BLOCK: &str = "-------- Original Message --------";
