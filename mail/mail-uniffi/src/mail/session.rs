@@ -3,6 +3,7 @@ use crate::core::device::{DeviceInfoProviderWrap, DynDeviceInfoProvider};
 use crate::core::verification::{ChallengeNotifierWrap, DynChallengeNotifier};
 use crate::core::{FFIKeyChain, StoredAccountState, StoredSession, StoredSessionState};
 use crate::core::{OSKeyChain, StoredAccount};
+use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{
     OtherErrorReason, PinAuthError, PinSetError, ProtonError, UserContextError, VoidSessionResult,
 };
@@ -14,6 +15,7 @@ use crate::{
     LiveQueryCallback, WatchHandle, async_runtime, async_runtime_slim, uniffi_async, watch_channel,
 };
 use futures::TryFutureExt;
+use log_service::LogService;
 use proton_account_uniffi::login::LoginFlow;
 use proton_account_uniffi::signup::SignupFlow;
 use proton_core_common::db::account::SessionEncryptionKey;
@@ -31,9 +33,7 @@ use stash::stash::{Stash, WatcherHandle};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Mutex;
 use tracing::{debug, error};
-use tracing_appender::non_blocking::WorkerGuard;
 
 /// Mail context is the entry point for the application. It contains important state such as
 /// database connection pools and the async runtime for rust.
@@ -47,8 +47,6 @@ pub struct MailSession {
     mail_ctx: Arc<MailContext>,
     user_ctx: Arc<MailUserContextMap>,
     params: MailSessionParams,
-    /// This is an Option because it compiles to `None` for iOS.
-    log_guard: Arc<Mutex<Option<WorkerGuard>>>,
 }
 
 /// Configuration parameters for the [`MailSession`]
@@ -162,11 +160,17 @@ async fn create_mail_session_inner(
     hv_notifier: Option<DynChallengeNotifier>,
     device_info_provider: Option<DynDeviceInfoProvider>,
 ) -> Result<Arc<MailSession>, RealProtonMailError> {
-    let mut log_path = PathBuf::from(&params.log_dir);
+    let log_path = PathBuf::from(&params.log_dir);
     std::fs::create_dir_all(&log_path)?;
-    log_path.push("proton-mail-uniffi.log");
 
-    let maybe_log_guard = init_log(&log_path, params.log_debug)?;
+    let log_service = LogService::new(
+        log_service::Config::builder()
+            .name("proton-mail-uniffi".into())
+            .directory(log_path)
+            .build(),
+    );
+
+    init_log(&log_service, params.log_debug)?;
 
     let session_path = PathBuf::from(&params.session_dir);
     let user_path = PathBuf::from(&params.user_dir);
@@ -220,7 +224,7 @@ async fn create_mail_session_inner(
         api_env_config,
         hv_notifier,
         device_info_provider,
-        Some(log_path),
+        log_service,
         EventPollMode::Automatic(Duration::from_secs(30)),
     )
     .await?;
@@ -248,7 +252,6 @@ async fn create_mail_session_inner(
         mail_ctx,
         user_ctx: user_ctx_map,
         params,
-        log_guard: Arc::new(Mutex::new(maybe_log_guard)),
     }))
 }
 
@@ -1150,6 +1153,22 @@ impl MailSession {
     /// This should be called once the application enters the foreground.
     pub fn resume_work(&self) {
         self.mail_ctx.core_context().task_service().resume_main();
+    }
+
+    /// Export all logs into a single file wih the given `file_path`
+    ///
+    /// Returns the number of bytes written.
+    pub fn export_logs(&self, file_path: String) -> Result<u64, ProtonError> {
+        let path = PathBuf::from(file_path);
+        self.ctx()
+            .core_context()
+            .log_service()
+            .export_logs(&path)
+            .map_err(|e| {
+                error!("Failed to export logs: {e:?}");
+                ProtonError::Unexpected(UnexpectedError::Os)
+            })
+            .map(|v| v as u64)
     }
 }
 

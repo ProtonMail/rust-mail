@@ -114,7 +114,7 @@ pub enum ClientType {
 }
 
 /// Maximum number of bytes accepted - 50Mb
-const MAX_LOG_BYTES: u64 = 1024 * 1024 * 50;
+const MAX_LOG_BYTES: usize = 1024 * 1024 * 50;
 type ZippedFile = (String, Vec<u8>);
 
 /// Report an issue functionality.
@@ -149,13 +149,21 @@ pub async fn report_an_issue(
     };
 
     let logs: Option<ZippedFile> = if report.logs {
-        if let Some(log_path) = user_ctx.get_log_path() {
-            Some(zip_file_in_memory(log_path, Utc::now(), MAX_LOG_BYTES).await?)
-        } else {
-            tracing::error!(
-                "Could not attach logs to the bug report due to missing path in user context."
-            );
+        let log_file_name = user_ctx.log_service().default_log_file_name();
+        let ctx_arc = user_ctx.as_arc();
+        let content =
+            tokio::task::spawn_blocking(move || ctx_arc.log_service().export_logs_into_vec())
+                .await??;
+        if content.is_empty() {
+            tracing::error!("Could not attach logs to bug report, empty or missing");
             None
+        } else {
+            let content = if content.len() > MAX_LOG_BYTES {
+                &content[(content.len() - MAX_LOG_BYTES)..]
+            } else {
+                content.as_slice()
+            };
+            Some(zip_contents_into_memory(content, &log_file_name, Utc::now()).await?)
         }
     } else {
         None
@@ -230,6 +238,7 @@ fn create_bug_report_payload(
 /// When IO fails. Most probable issue to encounter is by misusage of `path` parameter as it accepts single file paths only.
 ///
 #[allow(clippy::cast_possible_truncation)]
+#[allow(dead_code)]
 async fn zip_file_in_memory(
     path: impl AsRef<Path>,
     now: DateTime<Utc>,
@@ -266,6 +275,16 @@ async fn zip_file_in_memory(
                 "Path is a file and file should have a name, impossible"
             ))
         })?;
+
+    zip_contents_into_memory(&data_buf, file_name, now).await
+}
+
+#[allow(clippy::cast_possible_truncation)]
+async fn zip_contents_into_memory(
+    data: &[u8],
+    file_name: &str,
+    now: DateTime<Utc>,
+) -> Result<ZippedFile, CoreContextError> {
     let out_name = format!("{}_{file_name}", now.format("%Y%m%dT%H%M%S_%f"));
     let cursor = Cursor::new(Vec::new());
     let compat_cursor = cursor.compat_write(); // Make it compatible with futures-io
@@ -278,7 +297,7 @@ async fn zip_file_in_memory(
         ))
     })?;
 
-    entry_writer.write_all(&data_buf).await.map_err(|e| {
+    entry_writer.write_all(data).await.map_err(|e| {
         CoreContextError::Other(anyhow!("Could not write bytes to the zip, details: {e}"))
     })?;
     entry_writer.close().await.map_err(|e| {
