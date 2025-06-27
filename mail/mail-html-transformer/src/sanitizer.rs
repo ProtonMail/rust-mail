@@ -104,6 +104,7 @@ static TAG_SET: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
         "span",
         "strike",
         "strong",
+        "style",
         "sub",
         "summary",
         "sup",
@@ -251,7 +252,6 @@ static ATTR_SET: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
 static TAGS_TO_REMOVE_WITH_INNER_HTML: LazyLock<HashSet<&'static str>> = LazyLock::new(|| {
     hash_set! {
         "script",
-        "style",
     }
 });
 

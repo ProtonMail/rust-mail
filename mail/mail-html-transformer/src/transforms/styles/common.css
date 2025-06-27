@@ -1,4 +1,6 @@
-*, *::before, *::after {
+*,
+*::before,
+*::after {
     box-sizing: border-box;
 }
 
@@ -43,8 +45,9 @@ figure {
     padding: 0;
 }
 
-button,progress{
-    border: 0
+button,
+progress {
+    border: 0;
 }
 
 p,
@@ -93,7 +96,7 @@ pre,
 code,
 kbd,
 samp {
-    font-family: SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+    font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
     font-size: 1em;
 }
 
@@ -122,9 +125,9 @@ img {
     border-style: none;
 }
 
-audio:not([controls]){
-    display:none;
-    block-size: 0
+audio:not([controls]) {
+    display: none;
+    block-size: 0;
 }
 
 abbr[title] {
@@ -147,49 +150,53 @@ dfn {
     font-style: italic;
 }
 
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
     display: block;
     font-weight: normal;
     margin-inline: 0;
 }
 
 h1 {
-  font-size: 2em; /* equiv 32px */
-  line-height: 1.5;
-  margin-block: .75em;
+    font-size: 2em; /* equiv 32px */
+    line-height: 1.5;
+    margin-block: 0.75em;
 }
 
 h2 {
-  font-size: 1.5em; /* equiv 24px */
-  line-height: 1;
-  margin-block: .5em;
+    font-size: 1.5em; /* equiv 24px */
+    line-height: 1;
+    margin-block: 0.5em;
 }
 
 h3 {
-  font-size: 1.1875em; /* equiv 19px */
-  line-height: 1.26316;
-  margin-block: 1.26316em;
+    font-size: 1.1875em; /* equiv 19px */
+    line-height: 1.26316;
+    margin-block: 1.26316em;
 }
 
 h4 {
-  display: block;
-  font-size: 1em; /* equiv 16px */
-  line-height: 1.5;
-  margin-block: 1.5em;
+    display: block;
+    font-size: 1em; /* equiv 16px */
+    line-height: 1.5;
+    margin-block: 1.5em;
 }
 
 h5 {
-  font-size: .8125em; /* equiv 13px */
-  line-height: 1.84615;
-  margin-block: 1.84615em;
+    font-size: 0.8125em; /* equiv 13px */
+    line-height: 1.84615;
+    margin-block: 1.84615em;
 }
 
 h6 {
-  font-size: .75em; /* equiv 12px */
-  line-height: 2;
-  margin-block: 2em;
+    font-size: 0.75em; /* equiv 12px */
+    line-height: 2;
+    margin-block: 2em;
 }
-
 
 q {
     quotes: none;
@@ -228,27 +235,24 @@ blockquote {
     border-inline-start-width: 3px !important;
 }
 
-blockquote blockquote blockquote blockquote blockquote blockquote{
+blockquote blockquote blockquote blockquote blockquote blockquote {
     padding: 0 !important;
-    border: none !important
+    border: none !important;
 }
 
 [hidden] {
     display: none;
 }
 
-
-
 :root {
     /**
 	  If we want to follow some app themes, we have to inject values and/or update --primary for link/blockquote
-    
+
 	--background-norm: white;
 	--text-norm: #262a33;
     */
 
-    --primary: #8A6EFF; 
-
+    --primary: #8a6eff;
 }
 
 body {
@@ -256,8 +260,9 @@ body {
     inline-size: 100%;
     background: var(--background-norm, Canvas);
     color: var(--text-norm, CanvasText);
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen-Sans, Ubuntu, Cantarell, 'Helvetica Neue',
-        sans-serif;
+    font-family:
+        -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans,
+        Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
     line-height: 1.5;
     word-wrap: break-word;
     width: 100%;
@@ -267,89 +272,31 @@ body {
     overflow-x: hidden;
 }
 
-
 /* From Android V6 */
 
 /* Only override <pre> when it's the first direct child of the body (case when replying to HTML). */
 body > pre:first-child {
-    margin:0;
+    margin: 0;
     font-size: 100%;
     inline-size: 100%;
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;
+    font-family:
+        -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans,
+        Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
     line-height: 1.5;
     background: var(--background-norm, Canvas);
     color: var(--text-norm, CanvasText);
 }
 
 /* This should not be needed, but in some cases the resulting HTML contains a <pre> within a styled body. */
-body:not([class]) > pre:first-child  {
-    margin:0;
-    padding:unset;
+body:not([class]) > pre:first-child {
+    margin: 0;
+    padding: unset;
     font-size: 100%;
     inline-size: 100%;
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;
+    font-family:
+        -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans,
+        Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
     line-height: 1.5;
     background: var(--background-norm, Canvas);
     color: var(--text-norm, CanvasText);
-}
-
-
-@media only screen and (max-width: 600px) {
-    * {
-        max-width: 100% !important;
-    }
-    
-    table {
-        max-width: 100% !important;
-        width: 100% !important;
-        min-width: 0 !important;
-        table-layout: fixed !important;
-        height: fit-content !important;
-    }
-
-    table, tbody {
-        display: block;
-    }
-
-    :not(img):not(td)[style*="max-width"] {
-        max-width: 100% !important;
-        width: 100% !important;
-        min-width: 0 !important;
-    }
-    
-    :not(img):not(td)[style*="width"] {
-        width: 100% !important;
-    }
-
-    :not(img):not(td)[width] {
-        max-width: 100% !important;
-    }
-    
-    tr {
-        display: flex;
-        justify-content: space-between;
-        width: 100% !important;
-    }
-
-    td, th {
-        display: inline-block !important;
-        word-break: break-word !important;
-        overflow-wrap: break-word !important;
-    }
-
-    td:not([width]):not([style*="width"]), th:not([width]):not([style*="width"]) {
-        flex: 1;
-    }
-
-    /* Some emails have empty cells to provide margins. However on mobile, they break the layout. */
-    td:empty, th:empty {
-        display: none !important;
-        width: 0 !important;
-    }
-    
-    img, img[style*="max-width"], img[width], img[style*="width"] {
-        max-inline-size: 100% !important;
-        height: auto !important;
-        max-width: 100%;
-    }
 }

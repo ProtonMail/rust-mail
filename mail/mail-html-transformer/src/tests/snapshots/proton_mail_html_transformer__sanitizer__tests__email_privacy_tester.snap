@@ -22,10 +22,10 @@ expression: html
       <p style="background-image:url('basebackgroundImage');"></p>
       <p style="content:url('basecssContent');"></p>
       <p style="behavior:url('basecssBehavior') url('basecssBehavior');"></p>
-      
-      
+      <style type="text/css"></style>
+      <style type="text/css"></style>
       <div id="cssEscape"></div>
-      
+      <style type="text/css"></style>
       
          
       
