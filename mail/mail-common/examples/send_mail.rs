@@ -73,7 +73,6 @@ async fn main() {
         Config::default(),
         None,
         None,
-        "",
         None,
         EventPollMode::Manual,
     )

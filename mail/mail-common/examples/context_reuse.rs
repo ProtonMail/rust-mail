@@ -55,7 +55,6 @@ async fn main() {
             Config::atlas(),
             None,
             None,
-            "",
             None,
             EventPollMode::Manual,
         )
