@@ -5,7 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [mail-uniffi-v0.93.18] - 2025-06-27
+## [Unreleased]
+
+### Changed
+
+- Suppress context missing error in event loop subscriber
+
+### Features
+
+- [ET-3025] Add size based log rotator
+- [ET-3025] Add `mailsession::export_logs`
 
 ### Fixes
 
