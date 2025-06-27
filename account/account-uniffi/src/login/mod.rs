@@ -329,24 +329,27 @@ impl From<login_api::LoginError> for LoginError {
     fn from(value: login_api::LoginError) -> Self {
         match value {
             login_api::LoginError::InvalidState => LoginError::InvalidState,
-            login_api::LoginError::UserKeySetupNonPrivate => LoginError::UserKeySetupNonPrivate,
-            login_api::LoginError::FlowLogin(ApiServiceError::UnprocessableEntity(..))// HTTP code 422
-            | login_api::LoginError::KeySecretSaltFetch(ApiServiceError::UnprocessableEntity(..)) // HTTP code 422
+            login_api::LoginError::FlowLogin(ApiServiceError::UnprocessableEntity(..))
+            | login_api::LoginError::KeySecretSaltFetch(ApiServiceError::UnprocessableEntity(..))
             | login_api::LoginError::ServerProof(..)
             | login_api::LoginError::SrpProof(..)
             | login_api::LoginError::WrongMailboxPassword => LoginError::InvalidCredentials,
-            login_api::LoginError::MissingPrimaryKey
-            |login_api::LoginError::KeySecretDecryption
-            |login_api::LoginError::KeySecretDerivation(_) => LoginError::CantUnlockUserKey,
             login_api::LoginError::FlowLogin(e) => LoginError::FlowLogin(e.into()),
             login_api::LoginError::FlowTotp(e) => LoginError::FlowTotp(e.into()),
             login_api::LoginError::FlowFido(e) => LoginError::FlowFido(e.into()),
-            login_api::LoginError::AddressKeySetup(e)
-            |login_api::LoginError::AddressSetup(e) => LoginError::AddressSetup(e.to_string()),
+            login_api::LoginError::AddressKeySetup(e) | login_api::LoginError::AddressSetup(e) => {
+                LoginError::AddressSetup(e.to_string())
+            }
             login_api::LoginError::AddressFetch(e) => LoginError::AddressSetup(e.to_string()),
             login_api::LoginError::UserFetch(e) => LoginError::UserFetch(e.into()),
             login_api::LoginError::UserKeySetup(e) => LoginError::UserKeySetup(e),
-            login_api::LoginError::KeySecretSaltFetch(e) => LoginError::KeySecretSaltFetch(e.into()),
+            login_api::LoginError::UserKeySetupNonPrivate => LoginError::UserKeySetupNonPrivate,
+            login_api::LoginError::MissingPrimaryKey
+            | login_api::LoginError::KeySecretDecryption
+            | login_api::LoginError::KeySecretDerivation(_) => LoginError::CantUnlockUserKey,
+            login_api::LoginError::KeySecretSaltFetch(e) => {
+                LoginError::KeySecretSaltFetch(e.into())
+            }
             login_api::LoginError::AuthStore(error) => LoginError::AuthStore(error.to_string()),
             login_api::LoginError::ApiError(e) => LoginError::ApiError(e.to_string()),
             login_api::LoginError::WithCodePollFlowFailed(e) => {

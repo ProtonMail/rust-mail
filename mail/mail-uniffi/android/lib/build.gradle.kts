@@ -8,7 +8,7 @@ plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
     id("signing")
-    id("com.vanniktech.maven.publish") version "0.22.0"
+    id("com.vanniktech.maven.publish") version "0.31.0"
 }
 
 val privateProperties = Properties().apply {
@@ -28,10 +28,10 @@ val mavenSigningKeyPassword = "mavenSigningKeyPassword".fromVariable()
 
 android {
     namespace = "proton.android.mail.commonrust"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
-        minSdk = 24
+        minSdk = 29
         targetSdk = 34
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -61,7 +61,7 @@ android {
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
     }
-    
+
     kotlinOptions {
         jvmTarget = "1.8"
     }
@@ -84,9 +84,9 @@ signing {
 }
 
 dependencies {
-    val ANNOTATION = "1.7.1"
-    val COROUTINES = "1.6.4"
-    val JNA = "5.13.0"
+    val ANNOTATION = "1.9.1"
+    val COROUTINES = "1.10.2"
+    val JNA = "5.14.0"
 
     implementation("androidx.annotation:annotation:${ANNOTATION}")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:${COROUTINES}")

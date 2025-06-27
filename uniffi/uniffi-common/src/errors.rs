@@ -52,19 +52,46 @@ impl From<ApiServiceError> for UserApiServiceError {
         };
 
         match error {
-            BadRequest(_, info) => Self::BadRequest(format!("{info:?}")),
-            Unauthorized(_, info) => Self::Unauthorized(format!("{info:?}")),
-            NotFound(_, info) => Self::NotFound(format!("{info:?}")),
-            UnprocessableEntity(_, info) => Self::UnprocessableEntity(format!("{info:?}")),
-            TooManyRequests(_, info) => Self::TooManyRequests(format!("{info:?}")),
-            InternalServerError(_, info) => Self::InternalServerError(format!("{info:?}")),
-            NotImplemented(_, info) => Self::NotImplemented(format!("{info:?}")),
-            BadGateway(_, info) => Self::BadGateway(format!("{info:?}")),
-            ServiceUnavailable(_, info) => Self::ServiceUnavailable(format!("{info:?}")),
-
-            OtherHttpError(code, _, info) => {
-                Self::OtherHttpError(code.as_u16(), format!("{info:?}"))
+            BadRequest(_, info) => {
+                Self::BadRequest(info.map(|info| format!("{info}")).unwrap_or_default())
             }
+
+            Unauthorized(_, info) => {
+                Self::Unauthorized(info.map(|info| format!("{info}")).unwrap_or_default())
+            }
+
+            NotFound(_, info) => {
+                Self::NotFound(info.map(|info| format!("{info}")).unwrap_or_default())
+            }
+
+            UnprocessableEntity(_, info) => {
+                Self::UnprocessableEntity(info.map(|info| format!("{info}")).unwrap_or_default())
+            }
+
+            TooManyRequests(_, info) => {
+                Self::TooManyRequests(info.map(|info| format!("{info}")).unwrap_or_default())
+            }
+
+            InternalServerError(_, info) => {
+                Self::InternalServerError(info.map(|info| format!("{info}")).unwrap_or_default())
+            }
+
+            NotImplemented(_, info) => {
+                Self::NotImplemented(info.map(|info| format!("{info}")).unwrap_or_default())
+            }
+
+            BadGateway(_, info) => {
+                Self::BadGateway(info.map(|info| format!("{info}")).unwrap_or_default())
+            }
+
+            ServiceUnavailable(_, info) => {
+                Self::ServiceUnavailable(info.map(|info| format!("{info}")).unwrap_or_default())
+            }
+
+            OtherHttpError(code, _, info) => Self::OtherHttpError(
+                code.as_u16(),
+                info.map(|info| format!("{info}")).unwrap_or_default(),
+            ),
 
             ConnectionError(_) | NetworkError(_) | Redirect(_, _) | Timeout(_) => {
                 Self::OtherNetwork(error.to_string())
