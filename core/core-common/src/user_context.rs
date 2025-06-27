@@ -8,6 +8,7 @@ use crate::models::{InitializationWatcher, UserSettings};
 use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse};
 use anyhow::Context as _;
 pub use event_loop::subscriber::CoreEventLoopContext;
+use log_service::LogService;
 use proton_action_queue::queue::Queue;
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::services::proton::{SessionId, UserId};
@@ -53,6 +54,7 @@ pub trait UserDatabaseInitializer: Send + Sync {
 
 /// Contains all the relevant information to an initialize user session.
 pub struct UserContext {
+    this: Weak<Self>,
     session: Session,
     context: Arc<Context>,
     user_stash: Stash,
@@ -98,6 +100,7 @@ impl UserContext {
             let event_ctx = CoreEventLoopContext::from(Weak::clone(this));
 
             Self {
+                this: Weak::clone(this),
                 session,
                 context,
                 user_stash,
@@ -152,6 +155,11 @@ impl UserContext {
         Ok(this)
     }
 
+    #[allow(clippy::missing_panics_doc)]
+    pub fn as_arc(&self) -> Arc<Self> {
+        self.this.upgrade().expect("Should never fail")
+    }
+
     /// Get the network session.
     #[must_use]
     pub fn session(&self) -> &Session {
@@ -201,8 +209,8 @@ impl UserContext {
 
     /// Get path to the log file.
     #[must_use]
-    pub fn get_log_path(&self) -> Option<&Path> {
-        self.context.get_log_path()
+    pub fn log_service(&self) -> &LogService {
+        self.context.log_service()
     }
 
     /// Get path to the database file

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use log_service::LogService;
 use proton_core_api::auth::UserKeySecret;
 use proton_core_api::services::proton::muon::client::flow::{LoginExtraInfo, LoginFlowData};
 use proton_core_api::session::{Config, CoreSession as _};
@@ -36,6 +37,11 @@ async fn prepare_context(tmp_dir: &TempDir) -> (Arc<MailContext>, Arc<dyn KeyCha
     keychain.store(key).unwrap();
     let keychain: Arc<dyn KeyChain> = Arc::new(keychain);
 
+    let config = log_service::Config::builder()
+        .name("log".into())
+        .directory(tmp_dir.path().into())
+        .build();
+
     let context = MailContext::new(
         tmp_dir.path().join("session"),
         tmp_dir.path().join("user"),
@@ -47,7 +53,7 @@ async fn prepare_context(tmp_dir: &TempDir) -> (Arc<MailContext>, Arc<dyn KeyCha
         Config::atlas(),
         None,
         None,
-        None,
+        LogService::new(config),
         EventPollMode::Manual,
     )
     .await

@@ -1,21 +1,14 @@
+use log_service::LogService;
 use std::backtrace::Backtrace;
-use std::fs::OpenOptions;
 use std::panic::{set_hook, take_hook};
-use std::path::Path;
 use tracing::error;
-use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer};
 
-#[cfg(target_os = "ios")]
-pub(super) fn init_log(log_path: &Path, debug: bool) -> std::io::Result<Option<WorkerGuard>> {
-    let log_file = OpenOptions::new()
-        .read(true)
-        .create(true)
-        .append(true)
-        .open(log_path)?;
+pub(super) fn init_log(log_service: &LogService, debug: bool) -> std::io::Result<()> {
+    let log_file = log_service.create_logger()?;
 
     let file_subscriber = tracing_subscriber::fmt::layer()
         .with_file(false)
@@ -29,6 +22,7 @@ pub(super) fn init_log(log_path: &Path, debug: bool) -> std::io::Result<Option<W
             app_tracing_env_filter_default()
         });
 
+    #[cfg(target_os = "ios")]
     let os_log_subscriber =
         tracing_oslog::OsLogger::new("ch.protonmail.protonmail", "[Proton] Rust").with_filter(
             if debug {
@@ -38,58 +32,20 @@ pub(super) fn init_log(log_path: &Path, debug: bool) -> std::io::Result<Option<W
             },
         );
 
-    if let Err(e) = tracing_subscriber::registry()
-        .with(file_subscriber)
-        .with(os_log_subscriber)
-        .try_init()
-    {
+    let registry = tracing_subscriber::registry().with(file_subscriber);
+
+    #[cfg(target_os = "ios")]
+    let registry = { registry.with(os_log_subscriber) };
+
+    if let Err(e) = registry.try_init() {
         tracing::warn!("Failed to initialize logging: {e}");
         eprintln!("Failed to initialize logging: {e}");
     }
 
-    tracing::info!(path=?log_path, "Path to log");
+    tracing::info!(path=?log_service.default_log_path(), "Path to log");
 
     log_backtrace_on_panic();
-    Ok(None)
-}
-
-#[cfg(not(target_os = "ios"))]
-pub(super) fn init_log(log_path: &Path, debug: bool) -> std::io::Result<Option<WorkerGuard>> {
-    use tracing_appender::non_blocking;
-
-    let log_file = OpenOptions::new()
-        .read(true)
-        .create(true)
-        .append(true)
-        .open(log_path)?;
-
-    let (appender, guard) = non_blocking(log_file);
-
-    let file_subscriber = tracing_subscriber::fmt::layer()
-        .with_file(false)
-        .with_line_number(false)
-        .with_writer(appender)
-        .with_target(false)
-        .with_ansi(false)
-        .with_filter(if debug {
-            app_tracing_env_filter_trace()
-        } else {
-            app_tracing_env_filter_default()
-        });
-
-    if let Err(e) = tracing_subscriber::registry()
-        .with(file_subscriber)
-        .try_init()
-    {
-        tracing::warn!("Failed to initialize logging: {e}");
-        eprintln!("Failed to initialize logging: {e}");
-    }
-
-    log_backtrace_on_panic();
-
-    tracing::info!(path=?log_path, "Path to log");
-
-    Ok(Some(guard))
+    Ok(())
 }
 
 pub fn app_tracing_env_filter_default() -> EnvFilter {

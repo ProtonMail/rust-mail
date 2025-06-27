@@ -9,6 +9,7 @@ use crate::{
     db::account::SessionEncryptionKey,
     os::{InMemoryKeyChain, KeyChain, KeyChainExt},
 };
+use log_service::LogService;
 use proton_core_api::auth::{Tokens, UserKeySecret};
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::{Config, Endpoint, EnvId};
@@ -179,6 +180,12 @@ impl TestContext {
             all_initializers.append(&mut additional_initializers);
         }
 
+        let log_config = log_service::Config::builder()
+            .directory(tmp_dir.path().into())
+            .max_log_size(20 * 1024 * 1024)
+            .name("log".into())
+            .build();
+
         // Create core test context
         let context = Context::new(
             tmp_dir.path(),
@@ -190,7 +197,7 @@ impl TestContext {
             None,
             tmp_dir.path().join("core-cache"),
             None,
-            Some(tmp_dir.path().join("logs")),
+            LogService::new(log_config),
             EventPollMode::Manual,
         )
         .await

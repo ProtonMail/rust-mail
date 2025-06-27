@@ -23,6 +23,7 @@ use crate::{KeyHandlingError, UserContext, UserDatabaseInitializer};
 use anyhow::{Error as AnyhowError, anyhow};
 use futures::TryFutureExt;
 use itertools::Itertools;
+use log_service::LogService;
 use proton_action_queue::action::{Action, WriterGuardError};
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
 use proton_core_api::service::ApiServiceError;
@@ -245,7 +246,6 @@ pub struct Context {
     this: Weak<Self>,
     user_db_path: PathBuf,
     account_db_path: PathBuf,
-    log_path: Option<PathBuf>,
     account_stash: Stash,
     key_chain: Arc<dyn KeyChain>,
     user_db_initializers: Vec<Box<dyn UserDatabaseInitializer>>,
@@ -259,6 +259,7 @@ pub struct Context {
     on_session_deleted_broadcast: broadcast::Sender<(SessionId, UserId)>,
     pub event_poll_mode: EventPollMode,
     clock: CoreClock,
+    log_service: LogService,
 }
 
 const SESSION_OBSERVER_BROADCAST_CAPACITY: usize = 8;
@@ -293,7 +294,7 @@ impl Context {
         device_info_provider: Option<DynDeviceInfoProvider>,
         cache_path: impl Into<PathBuf>,
         connection_pool_size: Option<u32>,
-        log_path: Option<PathBuf>,
+        log_service: LogService,
         event_poll_mode: EventPollMode,
     ) -> CoreContextResult<Arc<Self>> {
         let initializers = initializers.into_iter().collect::<Vec<_>>();
@@ -328,7 +329,7 @@ impl Context {
             this: Weak::clone(this),
             user_db_path,
             account_db_path,
-            log_path,
+            log_service,
             key_chain,
             account_stash,
             user_db_initializers: initializers,
@@ -969,8 +970,8 @@ impl Context {
         }
     }
 
-    pub fn get_log_path(&self) -> Option<&Path> {
-        self.log_path.as_deref()
+    pub fn log_service(&self) -> &LogService {
+        &self.log_service
     }
 
     /// Spawns a new task.

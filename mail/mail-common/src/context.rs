@@ -3,6 +3,7 @@ use crate::mail_scroller::MailScrollerError;
 use crate::{AppError, MailUserContext, draft};
 use anyhow::anyhow;
 use futures::executor::block_on;
+use log_service::LogService;
 use proton_account_api::login::LoginFlow;
 use proton_account_api::signup::SignupFlow;
 use proton_action_queue::action::{Action, WriterGuardError};
@@ -238,7 +239,7 @@ impl MailContext {
         api_config: Config,
         hv_notifier: Option<DynChallengeNotifier>,
         device_info_provider: Option<DynDeviceInfoProvider>,
-        log_path: Option<PathBuf>,
+        log_service: LogService,
         event_poll_mode: EventPollMode,
     ) -> Result<Arc<Self>, MailContextError> {
         let initializers: Vec<Box<dyn UserDatabaseInitializer>> =
@@ -254,7 +255,7 @@ impl MailContext {
             device_info_provider,
             core_cache_path,
             connection_pool_size,
-            log_path,
+            log_service,
             event_poll_mode,
         )
         .await?;

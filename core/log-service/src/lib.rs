@@ -39,6 +39,15 @@ impl Config {
         }
     }
 
+    #[must_use]
+    pub fn log_file_name(&self, roll_over_counter: usize) -> String {
+        if roll_over_counter == 0 {
+            format!("{}.{}", self.name, self.suffix)
+        } else {
+            format!("{}_{}.{}", self.name, roll_over_counter, self.suffix)
+        }
+    }
+
     /// Returns all expected log paths in newest to oldest order.
     #[must_use]
     pub fn log_file_paths(&self) -> Vec<PathBuf> {
@@ -114,5 +123,15 @@ impl LogService {
     /// Logs are written from oldest to newest.
     pub fn export_logs_into_vec(&self) -> std::io::Result<Vec<u8>> {
         self.config.export_logs_into_vec()
+    }
+
+    #[must_use]
+    pub fn default_log_path(&self) -> PathBuf {
+        self.config.log_file_path(0)
+    }
+
+    #[must_use]
+    pub fn default_log_file_name(&self) -> String {
+        self.config.log_file_name(0)
     }
 }
