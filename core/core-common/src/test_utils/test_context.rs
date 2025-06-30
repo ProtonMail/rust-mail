@@ -189,7 +189,6 @@ impl TestContext {
             api_config.clone(),
             None,
             None,
-            "v1",
             tmp_dir.path().join("core-cache"),
             None,
             Some(tmp_dir.path().join("logs")),

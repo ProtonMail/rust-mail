@@ -239,7 +239,6 @@ impl MailContext {
         api_config: Config,
         hv_notifier: Option<DynChallengeNotifier>,
         device_info_provider: Option<DynDeviceInfoProvider>,
-        product_name: impl Into<String>,
         log_path: Option<PathBuf>,
         event_poll_mode: EventPollMode,
     ) -> Result<Arc<Self>, MailContextError> {
@@ -254,7 +253,6 @@ impl MailContext {
             api_config,
             hv_notifier,
             device_info_provider,
-            product_name,
             core_cache_path,
             connection_pool_size,
             log_path,
@@ -320,7 +318,7 @@ impl MailContext {
         let device_info = self.core_context.get_device_info().await;
         // Build challenge info
         let challenge_info = ChallengeInfo {
-            product_name: self.core_context.get_product_name(),
+            product_name: self.core_context.get_client_id().to_owned(),
             device_info,
             // Behaviours will be populated during the login flow (if available)
             recovery_behavior: None,
@@ -406,7 +404,7 @@ impl MailContext {
 
         // Build challenge info
         let challenge_info = ChallengeInfo {
-            product_name: self.core_context.get_product_name(),
+            product_name: self.core_context.get_client_id().to_owned(),
             device_info,
             // Behaviours will be populated during the sign up flow (if available)
             recovery_behavior: None,

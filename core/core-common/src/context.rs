@@ -255,7 +255,6 @@ pub struct Context {
     api_config: ApiConfig,
     hv_notifier: Option<DynChallengeNotifier>,
     device_info_provider: Option<DynDeviceInfoProvider>,
-    product_name: String,
     cancellation_token: CancellationToken,
     task_service: BackgroundAwareTaskService,
     on_session_deleted_broadcast: broadcast::Sender<(SessionId, UserId)>,
@@ -293,7 +292,6 @@ impl Context {
         api_config: ApiConfig,
         hv_notifier: Option<DynChallengeNotifier>,
         device_info_provider: Option<DynDeviceInfoProvider>,
-        product_name: impl Into<String>,
         cache_path: impl Into<PathBuf>,
         connection_pool_size: Option<u32>,
         log_path: Option<PathBuf>,
@@ -340,7 +338,6 @@ impl Context {
             api_config,
             hv_notifier,
             device_info_provider,
-            product_name: product_name.into(),
             cancellation_token: CancellationToken::new(),
             task_service: BackgroundAwareTaskService::new(task_service),
             on_session_deleted_broadcast: broadcast_sender,
@@ -1051,13 +1048,6 @@ impl Context {
     pub async fn get_device_info(&self) -> Option<DeviceInfo> {
         let provider = self.device_info_provider.as_ref()?;
         Some(provider.get_device_info().await)
-    }
-
-    /// Returns the product name to be used in a challenge payload (e.g. `mail`)
-    ///
-    #[must_use]
-    pub fn get_product_name(&self) -> String {
-        self.product_name.clone()
     }
 
     /// Retrieves the passphrase for the current session by decrypting the session's key secret.
