@@ -8,7 +8,7 @@ use indexmap::{IndexMap, map::Entry};
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::EventId;
 use tokio::sync::Mutex;
-use tracing::{self, Level, debug, error};
+use tracing::{self, Level, debug, error, info};
 
 pub struct EventPoll {
     epoll: EventPollInternal,
@@ -116,7 +116,7 @@ impl EventPollInternal {
         provider: &dyn Provider,
     ) -> Result<(), EventLoopError> {
         if let Some(e) = store.load().await.map_err(EventLoopError::StoreRead)? {
-            debug!("Last event id = {e}");
+            info!("Last event id = {e}");
         } else {
             debug!("No event id in event store, retrieving latest");
             let event_id = provider.get_latest_event_id().await?;
@@ -145,7 +145,7 @@ impl EventPollInternal {
             return Err(EventLoopError::StoreRead(e));
         };
 
-        debug!("Last Event Id = {last_event_id}");
+        info!("Last Event Id = {last_event_id}");
 
         let raw_events: Vec<RawEvent> = self
             .collect_raw_events(provider, &last_event_id)
@@ -156,15 +156,17 @@ impl EventPollInternal {
             })?;
 
         if raw_events.is_empty() {
-            debug!("No new api events");
+            info!("No new api events");
             return Ok(());
         }
 
-        debug!("Received {} new raw events", raw_events.len());
+        info!("Received {} new events", raw_events.len());
 
         // Run 1 tx per event to avoid having long running transactions
+        let mut previous_event_id = last_event_id.clone();
         for raw_event in raw_events {
             let new_event_id = raw_event.event_id().clone();
+            info!("Applying {:?}", previous_event_id);
             if raw_event.is_refresh() {
                 self.publish_raw_refresh_to_subscribers(&raw_event, subscribers.values())
                     .await?;
@@ -177,7 +179,8 @@ impl EventPollInternal {
                 error!("Failed to store new event id: {e:?}");
                 return Err(EventLoopError::StoreWrite(e));
             }
-            debug!("New Event ID = {}", new_event_id);
+            info!("New Event ID = {}", new_event_id);
+            previous_event_id = new_event_id;
         }
 
         Ok(())

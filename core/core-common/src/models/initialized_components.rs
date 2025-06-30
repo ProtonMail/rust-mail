@@ -148,12 +148,13 @@ impl InitializedComponent {
         E: std::fmt::Debug,
         CTX: Send,
     {
-        tracing::debug!("Initializing");
         if Self::is_initialized(key, &tether).await? {
-            tracing::debug!("Already initialized");
+            tracing::info!("Already initialized");
             // We already initialized it
             return Ok(());
         }
+
+        tracing::info!("Initializing");
 
         // We split the initialization into two phases.
         // First we fetch data. We assume, that fetching from BE does not depend on any
@@ -293,7 +294,7 @@ impl InitializedComponent {
         let states = Self::states_for_deps(dependencies, tether).await?;
         let state = Self::coalesce_states(states);
 
-        tracing::debug!("Checking state of dependencies: {state:?}");
+        tracing::trace!("Checking state of dependencies: {state:?}");
 
         match state {
             InitializedComponentState::Succeeded => Ok(true),

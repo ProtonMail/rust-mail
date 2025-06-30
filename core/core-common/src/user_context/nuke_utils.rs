@@ -127,7 +127,7 @@ pub fn remove_in_background(paths: &[PathBuf]) -> Option<JoinHandle<()>> {
                 tokio::time::sleep(retry_interval).await;
                 failed = remove_files(&failed).await;
                 if failed.is_empty() {
-                    tracing::info!("Whole path was cleared in the background");
+                    tracing::debug!("Whole path was cleared in the background");
                     break;
                 }
                 if start.elapsed() >= max_wait {
