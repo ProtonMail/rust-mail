@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixes
+
+- Update forwarded messages prefix to 'fw: '
+- Reverse css for misaligned content, reverse style sanitization
+- Cancel action queue workers
+- [ET-3321] Improve move_message and move_conversation queries
+- Sender address for draft conversation
+- Remove subscribers when context is dead
+
+
+## [mail-uniffi-v0.93.19] - 2025-06-27
+
 ### Changed
 
 - Suppress context missing error in event loop subscriber
