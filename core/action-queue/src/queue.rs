@@ -13,7 +13,6 @@ use bitflags::bitflags;
 use chrono::DateTime;
 use parking_lot::RwLock;
 use proton_sqlite3::MigratorError;
-use proton_task_service::TaskService;
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, StashError, Tether};
 use std::any::{Any, TypeId};
@@ -776,9 +775,9 @@ impl QueueExecutor {
     pub fn into_auto_executor(
         self,
         online: watch::Receiver<bool>,
-        task_service: &TaskService,
+        task_spawner: &impl TaskSpawner,
     ) -> QueueAutoExecutor {
-        self.into_auto_executor_with_policy(online, task_service, QueueAutoTerminationPolicy::Never)
+        self.into_auto_executor_with_policy(online, task_spawner, QueueAutoTerminationPolicy::Never)
     }
 
     /// Convert this executor into a [`QueueAutoExecutor`] with a custom termination policy
@@ -786,10 +785,10 @@ impl QueueExecutor {
     pub fn into_auto_executor_with_policy(
         self,
         online: watch::Receiver<bool>,
-        task_service: &TaskService,
+        task_spawner: &impl TaskSpawner,
         termination_policy: QueueAutoTerminationPolicy,
     ) -> QueueAutoExecutor {
-        QueueAutoExecutor::new(self, online, task_service, termination_policy)
+        QueueAutoExecutor::new(self, online, task_spawner, termination_policy)
     }
 
     /// Execute one action from the queue.
@@ -918,6 +917,23 @@ impl QueueAutoTerminationPolicy {
     }
 }
 
+pub trait TaskSpawner {
+    fn spawn_task<F>(&self, future: F) -> JoinHandle<()>
+    where
+        F: Future<Output = ()> + Send + 'static;
+}
+
+pub struct TokioTaskSpawner;
+
+impl TaskSpawner for TokioTaskSpawner {
+    fn spawn_task<F>(&self, future: F) -> JoinHandle<()>
+    where
+        F: Future<Output = ()> + Send + 'static,
+    {
+        tokio::spawn(future)
+    }
+}
+
 /// This executor will automatically execute action from the [`Queue`] as soon as they are inserted.
 ///
 /// When executing in the same process, the executor can react very quickly to actions that
@@ -941,12 +957,12 @@ impl QueueAutoExecutor {
     fn new(
         executor: QueueExecutor,
         online: watch::Receiver<bool>,
-        task_service: &TaskService,
+        task_spawner: &impl TaskSpawner,
         termination_policy: QueueAutoTerminationPolicy,
     ) -> Self {
         let id = executor.id.clone();
         let (pause, listener) = watch::channel(false);
-        let handle = task_service.spawn(async move {
+        let handle = task_spawner.spawn_task(async move {
             Self::run(executor, listener, online, termination_policy).await;
         });
 
@@ -1086,14 +1102,14 @@ impl QueueAutoExecutorPool {
         action_group: &ActionGroup,
         count: NonZeroUsize,
         online: watch::Receiver<bool>,
-        task_service: &TaskService,
+        task_spawner: &impl TaskSpawner,
     ) -> Self {
         Self::with_termination_policy(
             queue,
             action_group,
             count,
             online,
-            task_service,
+            task_spawner,
             QueueAutoTerminationPolicy::Never,
         )
     }
@@ -1106,7 +1122,7 @@ impl QueueAutoExecutorPool {
         action_group: &ActionGroup,
         count: NonZeroUsize,
         online: watch::Receiver<bool>,
-        task_service: &TaskService,
+        task_spawner: &impl TaskSpawner,
         termination_policy: QueueAutoTerminationPolicy,
     ) -> Self {
         let executors = std::iter::repeat_n((), count.get())
@@ -1115,7 +1131,7 @@ impl QueueAutoExecutorPool {
                     .new_executor_with_group(action_group.clone())
                     .into_auto_executor_with_policy(
                         online.clone(),
-                        task_service,
+                        task_spawner,
                         termination_policy,
                     )
             })

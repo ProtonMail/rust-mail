@@ -28,7 +28,7 @@ use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::proton_crypto_account::keys::{UnlockedAddressKeys, UnlockedUserKeys};
 use proton_event_loop::{EventPoll, Subscriber};
-use proton_task_service::{AsyncTaskResult, TaskService, TaskSpawner};
+use proton_task_service::{AsyncTaskResult, TaskSpawner};
 use stash::orm::Model;
 use stash::stash::{RunTransaction, Stash, Tether};
 use std::future::Future;
@@ -71,14 +71,17 @@ impl MailUserContext {
 
         let task_service = mail_context.core_context().task_service().task_service();
 
-        let default_queue_executor =
-            Self::new_default_queue_executor(user_context.queue(), online.clone(), task_service);
+        let default_queue_executor = Self::new_default_queue_executor(
+            user_context.queue(),
+            online.clone(),
+            user_context.as_ref(),
+        );
 
         let send_queue_executors = Self::new_send_queue_executor(
             user_context.queue(),
             online,
             NonZeroUsize::new(DEFAULT_SEND_QUEUE_POOL_SIZE).unwrap(),
-            task_service,
+            user_context.as_ref(),
         );
 
         let initialization_mediator = InitializationMediator::new(task_service);
@@ -116,11 +119,11 @@ impl MailUserContext {
     fn new_default_queue_executor(
         queue: &Queue,
         online: watch::Receiver<bool>,
-        task_service: &TaskService,
+        task_spawner: &impl proton_action_queue::queue::TaskSpawner,
     ) -> QueueAutoExecutor {
         queue
             .new_executor()
-            .into_auto_executor(online, task_service)
+            .into_auto_executor(online, task_spawner)
     }
 
     /// Create a new send group action executor.
@@ -128,9 +131,9 @@ impl MailUserContext {
         queue: &Queue,
         online: watch::Receiver<bool>,
         pool_size: NonZeroUsize,
-        task_service: &TaskService,
+        task_spawner: &impl proton_action_queue::queue::TaskSpawner,
     ) -> QueueAutoExecutorPool {
-        QueueAutoExecutorPool::new(queue, &SEND_ACTION_GROUP, pool_size, online, task_service)
+        QueueAutoExecutorPool::new(queue, &SEND_ACTION_GROUP, pool_size, online, task_spawner)
     }
 
     /// Get the current Arc instance for this context.

@@ -25,8 +25,7 @@ use clap::{Parser, Subcommand};
 use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Handler, NoopError, Type, WriterGuard,
 };
-use proton_action_queue::queue::{Queue, QueueAutoExecutorPool};
-use proton_task_service::TaskService;
+use proton_action_queue::queue::{Queue, QueueAutoExecutorPool, TokioTaskSpawner};
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, StashConfiguration};
 use std::num::NonZeroUsize;
@@ -107,14 +106,14 @@ async fn parent_main(process_count: usize, action_count: usize, consume: bool) {
         while executor.execute_one().await.unwrap().is_none() {}
         drop(executor);
         // we can now auto execute from here on forward.
-        let task_service = TaskService::new().unwrap();
+        let task_spawner = TokioTaskSpawner;
         let online = watch::channel(true);
         let _executors = QueueAutoExecutorPool::new(
             &queue,
             &ActionGroup::default(),
             NonZeroUsize::new(process_count * 2).unwrap(),
             online.1,
-            &task_service,
+            &task_spawner,
         );
         wait_on_queue_empty(&queue).await;
     } else {
@@ -159,14 +158,14 @@ async fn child_main(directory: &Path, action_count: Option<usize>) {
             queue.queue_action(TestAction::new()).await.unwrap();
         }
     } else {
-        let task_service = TaskService::new().unwrap();
+        let task_spawner = TokioTaskSpawner;
         let online = watch::channel(true);
         let _executors = QueueAutoExecutorPool::new(
             &queue,
             &ActionGroup::default(),
             NonZeroUsize::new(2).unwrap(),
             online.1,
-            &task_service,
+            &task_spawner,
         );
         notifier.notified().await;
     }

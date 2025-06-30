@@ -393,3 +393,18 @@ pub enum DeleteFilesSafeError {
     /// Not all files could be deleted. Next time they probably will.
     Moved(io::Error),
 }
+
+impl proton_action_queue::queue::TaskSpawner for UserContext {
+    fn spawn_task<F>(&self, future: F) -> JoinHandle<()>
+    where
+        F: Future<Output = ()> + Send + 'static,
+    {
+        let cancellation_token = self.cancellation_token.clone();
+        self.context.task_service().spawn(async move {
+            tokio::select! {
+                () = cancellation_token.cancelled() => (),
+                () = future=> () ,
+            }
+        })
+    }
+}
