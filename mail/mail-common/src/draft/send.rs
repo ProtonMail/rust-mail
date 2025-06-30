@@ -643,6 +643,7 @@ pub async fn cancel_schedule_send(
     session: &Session,
     wait_on_completion_duration: Duration,
 ) -> Result<DateTime<Local>, MailContextError> {
+    info!("Cancelling schedule sent message");
     // Validate if the message is actually scheduled for sending
     let message = Message::find_by_id(message_id, tether)
         .await?

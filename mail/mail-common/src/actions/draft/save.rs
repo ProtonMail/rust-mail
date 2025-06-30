@@ -33,7 +33,7 @@ use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, StashError};
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 /// Action which creates or updates a draft on the server.
 ///
@@ -181,6 +181,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+        info!("Saving Draft {}", action.metadata_id);
         let local_draft_id = local_draft_label_id(bond).await?;
         let local_all_draft_id = local_all_draft_label_id(bond).await?;
         let local_all_mail_id = local_all_mail_label_id(bond).await?;
@@ -222,12 +223,12 @@ impl proton_action_queue::action::Handler for SaveHandler {
             let message_count = Conversation::message_count(id, bond).await?;
             // we should only update the conversation subject if there is only one message.
             if message_count == 1 {
-                debug!("Updating conversation subject");
+                info!("Updating conversation subject");
                 Conversation::update_subject(id, action.subject.clone(), bond).await?;
             }
             id
         } else {
-            debug!("Conversation does not exist, creating");
+            info!("Conversation does not exist, creating");
             let display_order = Conversation::next_display_order(bond)
                 .await
                 .inspect_err(|e| error!("Failed to get next conversation display order: {e:?}"))?;
@@ -250,7 +251,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
 
         let time = draft::compose::create_timestamp();
         let message = if let Some(message_id) = metadata.local_message_id {
-            debug!("Local message id is set, update");
+            info!("Local message id is set, update");
             let Some(mut message) = Message::find_by_id(message_id, bond)
                 .await
                 .inspect_err(|e| error!("Failed to load message: {e:?}"))?
@@ -296,7 +297,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
 
             message
         } else {
-            debug!("Local message id is not set, creating new draft");
+            info!("Local message id is not set, creating new draft");
             let display_order = Message::next_display_order(bond)
                 .await
                 .inspect_err(|e| error!("Failed to get next message display order: {e:?}"))?;
@@ -460,13 +461,9 @@ impl Save {
         // ids.
 
         // Check message id.
-        debug!("Resolving remote message id");
         let remote_message_id = Message::local_id_counterpart(local_message_id, guard.tether())
             .await
             .inspect_err(|e| error!("Failed to resolve remote message id: {e}"))?;
-        if remote_message_id.is_none() {
-            debug!("Message does not have remote id yet");
-        }
 
         // Reload attachments if they don't have remote id or key packets.
         let mut attachments =
@@ -480,7 +477,7 @@ impl Save {
                         // but we can not attach an attachment until it has a remote id. We skip attachments
                         // that still does not have a remote id. Since we always save before send and send
                         // also requires all attachments to be uploaded this will correct itself.
-                        tracing::warn!(
+                        tracing::debug!(
                             "Attachment {} does not have a remote id, skipping",
                             a.local_id.unwrap()
                         );
@@ -493,6 +490,7 @@ impl Save {
 
         // Create draft on the server.
         let new_message = if let Some(remote_message_id) = remote_message_id.clone() {
+            info!("Updating draft {:?}", remote_message_id);
             let result = Draft::remote_update(
                 ctx,
                 session,
@@ -518,7 +516,7 @@ impl Save {
             ) {
                 // if we hit an already sent error, we should delete the draft metadata
                 // move the message to sent and schedule a resync.
-                debug!("Draft is already sent, moving to sent folder");
+                info!("Draft is already sent, moving to sent folder");
 
                 if let Err(e) = guard
                     .tx::<_, _, MailContextError>(async |tx| {
@@ -552,7 +550,8 @@ impl Save {
             }
             result?
         } else {
-            Draft::remote_create(
+            info!("Creating new draft");
+            let message_id = Draft::remote_create(
                 ctx,
                 session,
                 action.address_id.clone(),
@@ -565,7 +564,9 @@ impl Save {
             .await
             .inspect_err(|e| {
                 error!("Failed to create draft on remote: {e:?}");
-            })?
+            })?;
+            info!("Draft created with {message_id:?}");
+            message_id
         };
 
         // Note: This section will be generalized as part of ET-1353 when
@@ -576,7 +577,7 @@ impl Save {
                 // flow.
                 if let Some(remote_conv_local_id) = Conversation::remote_id_counterpart(new_message.metadata.conversation_id.clone(), bond).await? {
                     if remote_conv_local_id != conversation_id {
-                        debug!("Draft conversation was synced by other means, patching data to preserve local changes");
+                        warn!("Draft conversation was synced by other means, patching data to preserve local changes");
                         // Someone else managed to create this before us, but we don't want this
                         // conversation to overwrite our local data so we remove it. This is safe
                         // to do since this only happens when we create a new empty draft. Replies

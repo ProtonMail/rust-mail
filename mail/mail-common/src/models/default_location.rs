@@ -4,7 +4,7 @@ use derive_more::TryFrom;
 use indoc::indoc;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
 use proton_core_api::service::ApiServiceResult;
-use proton_core_api::services::proton::Proton;
+use proton_core_api::services::proton::{PrivateEmail, Proton};
 
 use proton_core_common::{
     datatypes::InitializationKey,
@@ -163,7 +163,7 @@ impl IncomingDefaultLocation {
     ///
     pub async fn action_block(
         queue: &Queue,
-        email: String,
+        email: PrivateEmail,
     ) -> Result<QueuedActionOutput<Block>, QueueActionError<Block>> {
         let action = Block { email };
         queue.queue_action(action).await
@@ -182,7 +182,7 @@ impl IncomingDefaultLocation {
     ///
     pub async fn action_unblock(
         queue: &Queue,
-        email: String,
+        email: PrivateEmail,
     ) -> Result<QueuedActionOutput<Unblock>, QueueActionError<Unblock>> {
         let action = Unblock { email };
         queue.queue_action(action).await

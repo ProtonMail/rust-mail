@@ -107,7 +107,7 @@ impl<T: RemoteSource> DataScrollerSource<T> {
         Ok((items, task))
     }
 
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(ctx, local_label_id, remote_label_id))]
+    #[tracing::instrument(skip_all, fields(label_id=local_label_id.as_u64(), unread=?unread) )]
     async fn sync_first_page(
         ctx: &MailUserContext,
         local_label_id: LocalLabelId,
@@ -177,11 +177,12 @@ impl<T: RemoteSource> DataScrollerSource<T> {
 impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
     type Item = T::Item;
 
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(ctx))]
+    #[tracing::instrument(skip_all, fields(label_id=self.local_label_id.as_u64(), unread=?self.unread) )]
     async fn initialize(
         &mut self,
         ctx: &MailUserContext,
     ) -> Result<MailPaginatorJoinHandle, MailContextError> {
+        tracing::info!("Initializing MailScroller Source");
         let tether = ctx.user_stash().connection();
         let label = self.get_label(&tether).await?;
         let remote_label_id = label.remote_id.clone().unwrap();
@@ -327,7 +328,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         Ok(total)
     }
 
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(ctx))]
+    #[tracing::instrument(skip_all, fields(label_id=self.local_label_id.as_u64(), unread=?self.unread) )]
     async fn sync_next(
         &mut self,
         ctx: &MailUserContext,
@@ -378,7 +379,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                 let items = scroller.fetch_more(&tether).await?;
                 let items = if replace {
                     debug!(
-                        "Items displayed on the screen are unordered, notifing client to reload"
+                        "Items displayed on the screen are unordered, notifying client to reload"
                     );
                     Self::notify_scroller_order_invalid(&self.invalidate).await?;
 

@@ -58,6 +58,7 @@ impl ActionHandler for Handler {
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let data = IncomingDefaultLocation::sync(ctx.api()).await?;
+        tracing::info!("Updating incoming defaults");
         guard
             .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
                 tx.execute("DELETE FROM incoming_default", vec![]).await?;

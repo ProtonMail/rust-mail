@@ -14,7 +14,7 @@ use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_ids::{LocalConversationId, LocalMessageId};
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 /// Action which discards a Draft.
 ///
@@ -67,6 +67,7 @@ impl proton_action_queue::action::Handler for DiscardHandler {
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+        info!("Discarding draft {}", action.metadata_id);
         let Some(metadata) = DraftMetadata::find_by_id(action.metadata_id, bond)
             .await
             .inspect_err(|e| {
@@ -129,6 +130,7 @@ impl proton_action_queue::action::Handler for DiscardHandler {
         else {
             return guard
                 .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
+                    info!("No server state, deleting locally only");
                     // No remote id, we can't issue the request, we should only delete the local data.
                     Message::delete_by_id(local_message_id, tx)
                         .await
@@ -163,6 +165,7 @@ impl proton_action_queue::action::Handler for DiscardHandler {
 
         // Server will take care of deleting orphaned conversations, we do not have
         // to do anything.
+        info!("Deleting {message_id:?}");
         let session = ctx.session();
         let response = session
             .api()

@@ -11,7 +11,7 @@ use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
-use tracing::error;
+use tracing::{error, info};
 
 /// Action which marks messages as unread.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -93,6 +93,7 @@ impl ActionHandler for Handler {
             .cloned()
             .map_into()
             .collect();
+        info!("Marking {message_ids:?} as unread");
         let responses = api.put_messages_unread(message_ids).await?.responses;
 
         // In this case General::NotExists is returned also for messages already marked as unread

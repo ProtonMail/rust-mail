@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, Tether};
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 /// Action to upload attachments for a given draft.
 ///
@@ -231,8 +231,8 @@ impl AttachmentUpload {
             return Err(AttachmentUploadError::AttachmentDataMissing(self.attachment_id).into());
         };
 
-        if attachment.remote_id().is_some() {
-            tracing::warn!("Attachment {} is already synced", self.attachment_id);
+        if let Some(remote_id) = attachment.remote_id() {
+            tracing::warn!("{:?} is already synced ({})", self.attachment_id, remote_id);
             return Ok(());
         }
 
@@ -351,6 +351,8 @@ async fn encrypt_and_upload_attachment(
                 e.into()
             }
         })?;
+
+    info!("Attachment created with id = {}", response.attachment.id);
 
     // Update attachment with data returned from the server.
     attachment.attachment_type = AttachmentType::Remote(Some(response.attachment.id));

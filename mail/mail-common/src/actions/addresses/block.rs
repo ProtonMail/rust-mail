@@ -3,6 +3,7 @@ use crate::actions::MailActionError;
 use crate::models::default_location::IncomingDefaultLocation;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
 use proton_action_queue::action::{ActionId, Handler as ActionHandler};
+use proton_core_api::services::proton::PrivateEmail;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::response_data::IncomingDefaultLocation as ApiIncomingDefaultLocation;
 use serde::{Deserialize, Serialize};
@@ -12,7 +13,7 @@ use stash::stash::Bond;
 /// Action which blocks or unblocks an address
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Block {
-    pub email: String,
+    pub email: PrivateEmail,
 }
 
 impl Action for Block {
@@ -42,6 +43,7 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
+        tracing::info!("Blocking {}", action.email);
         bond.execute(
             "INSERT INTO incoming_default (email, location) VALUES (?,?)",
             params![action.email.clone(), IncomingDefaultLocation::Blocked],
@@ -57,7 +59,12 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        IncomingDefaultLocation::delete_by_email(action.email.clone(), bond).await?;
+        tracing::info!("Removing block for {}", action.email);
+        IncomingDefaultLocation::delete_by_email(
+            action.email.clone().into_clear_text_string(),
+            bond,
+        )
+        .await?;
         Ok(())
     }
 
@@ -68,6 +75,7 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        tracing::info!("Blocking {}", action.email);
         let new_incoming = ctx
             .api()
             .post_incoming_default(ApiIncomingDefaultLocation::Blocked, &action.email)

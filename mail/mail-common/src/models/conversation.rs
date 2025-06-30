@@ -59,7 +59,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use std::future::Future;
 use std::ops::AddAssign;
 use std::sync::Arc;
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, info, warn};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq, SmartDefault)]
 #[TableName("conversations")]
@@ -686,6 +686,7 @@ impl Conversation {
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         for id in ids {
+            info!("Applying {label_id:?} to {id:?}");
             let message_ids = bond
                 .query_values::<_, LocalMessageId>(
                     indoc::indoc! {"
@@ -796,6 +797,7 @@ impl Conversation {
         spam_action: Option<bool>,
         api: &PM,
     ) -> Result<Vec<OperationResult<ConversationId>>, ApiServiceError> {
+        info!("Applying {label_id:?} to {ids:?}",);
         let request = |ids: Vec<ConversationId>| {
             let label_id = label_id.clone();
             async {
@@ -888,6 +890,7 @@ impl Conversation {
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         for id in ids {
+            info!("Marking {id:?} in all mail");
             let Some(mut conversation) = Conversation::find_by_id(id, bond).await? else {
                 continue;
             };
@@ -990,6 +993,7 @@ impl Conversation {
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         for id in ids {
+            info!("Marking {id:?} in {label_id:?}");
             let Some(mut conversation) = Conversation::find_first(
                 "WHERE local_id=? AND deleted=0 AND is_known=1",
                 params![id],
@@ -1130,6 +1134,7 @@ impl Conversation {
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         for id in ids {
+            info!("Unmarking {id:?} as deleted in all mail",);
             let Some(mut conversation) = Conversation::find_by_id(id, bond).await? else {
                 continue;
             };
@@ -1245,6 +1250,7 @@ impl Conversation {
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         for id in ids {
+            info!("Unmarking {id:?} as deleted in {label_id:?}",);
             let Some(mut conversation) =
                 Conversation::find_first("WHERE local_id=? AND is_known=1", params![id], bond)
                     .await?
@@ -1414,6 +1420,7 @@ impl Conversation {
         label_id: LabelId,
         api: &PM,
     ) -> Result<Vec<OperationResult<ConversationId>>, ApiServiceError> {
+        info!("Deleting {ids:?} in {label_id:?}");
         let request = |ids: Vec<ConversationId>| {
             let label_id = label_id.clone();
             async {
@@ -1735,6 +1742,7 @@ impl Conversation {
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         for conversation_id in conversation_ids {
+            info!("Marking {conversation_id:?} as read");
             let mut conversation = Conversation::find_by_id(conversation_id, bond)
                 .await?
                 .ok_or(StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
@@ -1835,6 +1843,7 @@ impl Conversation {
         ids: Vec<ConversationId>,
         api: &PM,
     ) -> Result<Vec<OperationResult<ConversationId>>, ApiServiceError> {
+        info!("Marking {ids:?} as read");
         let request = |ids: Vec<ConversationId>| async {
             api.put_conversations_read(ids).await.map(|r| r.responses)
         };
@@ -1860,6 +1869,7 @@ impl Conversation {
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         for conversation_id in conversation_ids {
+            info!("Marking {conversation_id:?} as unread");
             let Some(mut conversation) = Conversation::find_by_id(conversation_id, bond).await?
             else {
                 warn!("Conversation with id {conversation_id} does not exist!");
@@ -1974,6 +1984,7 @@ impl Conversation {
         ids: Vec<ConversationId>,
         api: &impl ProtonMail,
     ) -> Result<Vec<OperationResult<ConversationId>>, ApiServiceError> {
+        info!("Marking {ids:?} as unread");
         let request = |ids: Vec<ConversationId>| async {
             api.put_conversations_unread(ids).await.map(|r| r.responses)
         };
@@ -2012,6 +2023,7 @@ impl Conversation {
             .ok_or(StashError::ExecutionError(SqliteError::QueryReturnedNoRows))?;
 
         for id in ids {
+            info!("Removing {label_id:?} from {id:?}",);
             // Remove label from messages
             let message_ids = bond
                 .query_values::<_, LocalConversationId>(
@@ -2094,6 +2106,7 @@ impl Conversation {
         ids: Vec<ConversationId>,
         api: &PM,
     ) -> Result<Vec<OperationResult<ConversationId>>, ApiServiceError> {
+        info!("Removing {label_id:?} from {ids:?}");
         let request = |ids: Vec<ConversationId>| {
             let label_id = label_id.clone();
             async {
@@ -2338,7 +2351,8 @@ impl Conversation {
             debug!("List of ids was empty");
             return Ok(());
         }
-        trace!("Moving {n} conversations", n = conversation_ids.len());
+
+        info!("Moving {source_id:?} to {destination_id:?}: {conversation_ids:?}");
 
         let spam = Label::resolve_local_label_id(LabelId::spam(), bond).await?;
         let trash = Label::resolve_local_label_id(LabelId::trash(), bond).await?;

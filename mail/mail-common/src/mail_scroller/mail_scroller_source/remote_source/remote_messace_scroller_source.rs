@@ -163,7 +163,7 @@ impl RemoteMessageScrollerSource {
         Ok(task)
     }
 
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,stash,local_label_id, remote_label_id))]
+    #[tracing::instrument(skip_all, fields(label_id=local_label_id.as_u64(), unread=?unread) )]
     pub(super) async fn sync_first_page(
         session: &Session,
         stash: Stash,
@@ -173,7 +173,7 @@ impl RemoteMessageScrollerSource {
         page_size: usize,
         scroll_order: LabelScrollOrder,
     ) -> Result<Vec<Message>, MailContextError> {
-        debug!("Syncing first page");
+        tracing::info!("Syncing first page in {remote_label_id:?}");
         let response = session
             .api()
             .get_messages(GetMessagesOptions {
@@ -185,7 +185,11 @@ impl RemoteMessageScrollerSource {
             })
             .await?;
 
-        debug!("Fetched {} elements", response.messages.len());
+        debug!(
+            "Fetched {}/{} elements",
+            response.messages.len(),
+            response.total
+        );
 
         if response.messages.is_empty() {
             return Ok(vec![]);
@@ -211,7 +215,7 @@ impl RemoteMessageScrollerSource {
         Ok(messages)
     }
 
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,stash,local_label_id, remote_label_id))]
+    #[tracing::instrument(skip_all, fields(label_id=local_label_id.as_u64(), unread=?unread) )]
     #[allow(clippy::too_many_arguments)]
     async fn sync_next_page(
         session: &Session,
@@ -224,7 +228,9 @@ impl RemoteMessageScrollerSource {
         page_size: usize,
         scroll_order: LabelScrollOrder,
     ) -> Result<Vec<Message>, MailContextError> {
-        debug!("Syncing next page");
+        tracing::info!(
+            "Syncing next page in {remote_label_id:?} with end_id={last_element_id:?} and end={last_element_time}"
+        );
         let mut response = session
             .api()
             .get_messages(GetMessagesOptions {
@@ -250,7 +256,11 @@ impl RemoteMessageScrollerSource {
             }
         }
 
-        debug!("Fetched {} elements", response.messages.len());
+        debug!(
+            "Fetched {}/{} elements",
+            response.messages.len(),
+            response.total
+        );
 
         if response.messages.is_empty() {
             return Ok(vec![]);
@@ -276,7 +286,7 @@ impl RemoteMessageScrollerSource {
         Ok(messages)
     }
 
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,stash,local_label_id, remote_label_id))]
+    #[tracing::instrument(skip_all, fields(label_id=local_label_id.as_u64(), unread=?unread) )]
     #[allow(clippy::too_many_arguments)]
     async fn sync_previous_page(
         session: &Session,
@@ -289,7 +299,9 @@ impl RemoteMessageScrollerSource {
         page_size: usize,
         scroll_order: LabelScrollOrder,
     ) -> Result<Vec<Message>, MailContextError> {
-        debug!("Syncing previous page");
+        tracing::info!(
+            "Syncing previous page in {remote_label_id:?} with begin_id={first_element_id:?} and begin={first_element_time}"
+        );
         let response = session
             .api()
             .get_messages(GetMessagesOptions {
@@ -304,7 +316,11 @@ impl RemoteMessageScrollerSource {
             })
             .await?;
 
-        debug!("Fetched {} elements", response.messages.len());
+        debug!(
+            "Fetched {}/{} elements",
+            response.messages.len(),
+            response.total
+        );
 
         if response.messages.is_empty() {
             return Ok(vec![]);

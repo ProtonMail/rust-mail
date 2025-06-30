@@ -9,7 +9,7 @@ use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
-use tracing::error;
+use tracing::{error, info};
 
 /// Action which marks messages as read.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -87,6 +87,7 @@ impl ActionHandler for Handler {
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let api = ctx.api();
         let message_ids = action.0.remote_target_ids.clone();
+        info!("Marking {message_ids:?} as read");
         let response = api.put_messages_read(message_ids).await?.responses;
 
         // In this case General::NotExists is returned also for messages already marked as read
