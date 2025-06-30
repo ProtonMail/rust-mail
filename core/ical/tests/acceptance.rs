@@ -166,6 +166,7 @@ fn vtimezone() {
 #[test_case("long-event-description")]
 #[test_case("long-event-description-special-chars")]
 #[test_case("lower-case-tz")]
+#[test_case("misquoted-cn")]
 #[test_case("missing-dtstamp")]
 #[test_case("missing-dtstamp-email")]
 #[test_case("missing-organizer")]
