@@ -7,7 +7,6 @@ edition.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-async-trait = { workspace = true }
 bitflags = { workspace = true }
 chrono = { workspace = true }
 derive_more = { workspace = true, features = ["try_from"] }
@@ -15,8 +14,6 @@ include_dir = { workspace = true }
 indoc = { workspace = true }
 parking_lot = { workspace = true }
 proton-sqlite3 = { workspace = true }
-proton-task-service = { workspace = true }
-rmp = { workspace = true }
 rmp-serde = { workspace = true }
 serde = { workspace = true }
 stash = { workspace = true }
@@ -31,7 +28,6 @@ tracing-subscriber = { workspace = true }
 pretty_assertions = { workspace = true }
 clap = { workspace = true }
 tempdir = { workspace = true }
-futures = { workspace = true }
 
 
 [lints]
