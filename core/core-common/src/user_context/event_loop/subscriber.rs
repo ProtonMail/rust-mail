@@ -279,6 +279,10 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
 
         ctx.on_refresh_impl(event.refresh).await
     }
+
+    fn is_alive(&self) -> bool {
+        self.0.strong_count() > 0
+    }
 }
 
 impl UserContext {

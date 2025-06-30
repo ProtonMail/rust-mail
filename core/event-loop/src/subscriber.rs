@@ -35,6 +35,9 @@ pub trait Subscriber<T: Event>: Send + Sync {
 
     /// Handle refresh event
     async fn on_refresh(&self, event: &T) -> Result<(), SubscriberError>;
+
+    /// Whether or not this should be cleaned up
+    fn is_alive(&self) -> bool;
 }
 
 /// A trait for subscribers that handle raw events.
@@ -55,6 +58,9 @@ pub(crate) trait RawSubscriber: Any + Send + Sync {
 
     /// Get mutable reference to self as Any for downcasting
     fn as_any_mut(&mut self) -> &mut dyn Any;
+
+    /// Delete old subscribers
+    fn cleanup(&mut self);
 }
 
 /// A collection of subscribers that handle events of a specific type.
@@ -132,5 +138,8 @@ where
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+    fn cleanup(&mut self) {
+        self.subscribers.retain(|s| s.is_alive());
     }
 }
