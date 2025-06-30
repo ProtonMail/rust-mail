@@ -1,8 +1,8 @@
+use fancy_regex::Regex;
 use proton_account_api::{
     AccountApi, ApiError,
     prelude::{PasswordPolicyResponse, PasswordPolicyState},
 };
-use regex::Regex;
 use secrecy::{ExposeSecret, SecretString};
 use thiserror::Error;
 use tracing::info;
@@ -82,7 +82,10 @@ impl BackendPasswordValidator {
             error_message: self.policy.error_message.clone(),
             hide_if_valid: self.policy.hide_if_valid,
             is_optional: self.policy.state == PasswordPolicyState::Optional,
-            is_valid: self.regex.is_match(password.expose_secret()),
+            is_valid: self
+                .regex
+                .is_match(password.expose_secret())
+                .unwrap_or(false),
             requirement_message: self.policy.requirement_message.clone(),
         }
     }
