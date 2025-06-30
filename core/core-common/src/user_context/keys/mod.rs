@@ -12,6 +12,7 @@ use crate::{
 use crate::{CoreContextResult, UserContext};
 use ical::{VcardParser, parser::ParserError};
 pub use manager::*;
+use proton_core_api::services::proton::PrivateEmailRef;
 use proton_core_api::{auth::UserKeySecret, session::CoreSession};
 use proton_core_api::{services::proton::AddressId, session::Session};
 use proton_crypto_account::{
@@ -184,13 +185,13 @@ impl UserContext {
     /// Returns an error on a database or sync failure.
     /// - A DB/IO error if syncing the contact or accessing the contacts fails.
     /// - A wrapped [`KeyHandlingError`] if `VCard` parsing or signature verification fails.
-    #[tracing::instrument(level = Level::DEBUG, skip_all)]
+    #[tracing::instrument(level = Level::DEBUG, skip_all, fields(email=%email))]
     pub async fn public_address_keys_from_contacts<P>(
         &self,
         pgp: &P,
         tx: &mut impl RunTransaction,
         unlocked_user_keys: &UnlockedUserKeys<P>,
-        email: &str,
+        email: PrivateEmailRef<'_>,
     ) -> CoreContextResult<Option<PinnedPublicKeys<<P>::PublicKey>>>
     where
         P: PGPProviderSync,
@@ -224,7 +225,7 @@ async fn extract_pinned_keys<P>(
     db: &Tether,
     unlocked_user_keys: &UnlockedUserKeys<P>,
     full_contact: &mut Contact,
-    email: &str,
+    email: PrivateEmailRef<'_>,
 ) -> Result<Option<PinnedPublicKeys<<P>::PublicKey>>, KeyHandlingError>
 where
     P: PGPProviderSync,
@@ -257,5 +258,5 @@ where
 
     let vcard = VCard::try_from(vcard_contact)?;
 
-    Ok(vcard_crypto::pinned_keys_for_mail(&vcard, pgp, email))
+    Ok(vcard_crypto::pinned_keys_for_mail(&vcard, pgp, &email))
 }

@@ -16,7 +16,7 @@ use anyhow::anyhow;
 use proton_action_queue::queue::{Queue, QueueAutoExecutor, QueueAutoExecutorPool};
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::crypto_clock;
-use proton_core_api::services::proton::{AddressId, SessionId, UserId};
+use proton_core_api::services::proton::{AddressId, PrivateEmailRef, SessionId, UserId};
 use proton_core_api::services::proton::{Proton, ProtonCore};
 use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::datatypes::{AccountDetails, LocalAddressId};
@@ -380,7 +380,7 @@ impl MailUserContext {
         &self,
         pgp: &P,
         tx: &mut impl RunTransaction,
-        email: &str,
+        email: PrivateEmailRef<'_>,
         settings: CryptoMailSettings,
         composer_preference: ComposerPreference,
     ) -> MailContextResult<SendPreferences<P::PublicKey>>
@@ -390,7 +390,7 @@ impl MailUserContext {
         let encryption_time = crypto_clock::server_crypto_clock().unix_time();
 
         // If the email is from an owned address by the user, use the corresponding keys.
-        if let Some(address) = Address::by_email(email, tx.tether())
+        if let Some(address) = Address::by_email(email.as_str(), tx.tether())
             .await
             .inspect_err(|err| {
                 error!("send preferences: failed to search address by email: {err:?}")
@@ -416,9 +416,11 @@ impl MailUserContext {
 
         let user_keys = self.unlocked_user_keys(pgp, tx.tether()).await?;
 
+        let email_cloned = email.clone();
         // Fetch API keys, and contact-pinned keys concurrently.
         let (api_keys_result, vcard_keys_result) = join!(
-            self.user_context.public_address_keys(pgp, email, false),
+            self.user_context
+                .public_address_keys(pgp, email_cloned.as_str(), false),
             self.user_context
                 .public_address_keys_from_contacts(pgp, tx, &user_keys, email)
         );
