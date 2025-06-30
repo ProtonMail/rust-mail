@@ -458,17 +458,27 @@ impl<'a> IcsReader<'a> {
             return Some(ReadEntry::Param { name });
         }
 
-        let name = loop {
-            if let Some(name) = self.spanned(Self::ident) {
-                break name;
-            }
-
+        let Some(name) = self.spanned(Self::ident) else {
             // Recover by skipping rest of the line
             self.silently(IcsReader::rest);
 
-            if self.is_empty() {
-                return None;
-            }
+            // Since we recovered, we could simply look for the next identifier:
+            //
+            // ```
+            // let name = loop {
+            //     /* loop until we find a valid ident */
+            // };
+            // ```
+            //
+            // ... but depending on context, this might not be legal.
+            //
+            // For instance properties are by definition single-lined, so if
+            // we're currently parsing a property, we can't just willy-nilly
+            // skip to the next line and pretend that nothing happened.
+            //
+            // Fortunately properties etc. can already handle spurious newlines,
+            // we just have to report them as such:
+            return Some(ReadEntry::Newline);
         };
 
         if name.eq_ignore_ascii_case("BEGIN") {
@@ -618,7 +628,7 @@ impl ReadMsgKind {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ReadEntry {
     /// Component's beginning, as in `BEGIN:NAME`.
     Comp { name: Spanned<String> },
@@ -1030,7 +1040,7 @@ mod tests {
 
         r.entry().unwrap().burn(&mut r, Kind::Component).unwrap();
 
-        assert!(r.entry().is_none());
+        assert_eq!(Some(ReadEntry::Newline), r.entry());
 
         let actual = r.finish();
 
@@ -1066,7 +1076,7 @@ mod tests {
         r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
         r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
 
-        assert!(r.entry().is_none());
+        assert_eq!(Some(ReadEntry::Newline), r.entry());
 
         let actual = r.finish();
 
@@ -1116,7 +1126,7 @@ mod tests {
         r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
         r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
 
-        assert!(r.entry().is_none());
+        assert_eq!(Some(ReadEntry::Newline), r.entry());
 
         let actual = r.finish();
 

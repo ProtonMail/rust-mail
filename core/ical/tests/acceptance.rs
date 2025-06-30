@@ -155,6 +155,7 @@ fn vtimezone() {
 #[test_case("broken-attendee-1-email")]
 #[test_case("broken-organizer-broken-cn-non-strict")]
 #[test_case("broken-organizer-broken-cn-strict")]
+#[test_case("broken-param")]
 #[test_case("dtend-before-dtstart")]
 #[test_case("duration-dst")]
 #[test_case("floating-no-wr-timezone")]
