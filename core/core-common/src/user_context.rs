@@ -27,7 +27,7 @@ use std::sync::{Arc, Weak};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 pub mod action_queue;
 pub mod event_loop;
@@ -77,7 +77,7 @@ impl Debug for UserContext {
 
 impl UserContext {
     #[allow(clippy::too_many_arguments)]
-    #[tracing::instrument(name = "NewUserContext", skip_all)]
+    #[tracing::instrument(name = "NewUserContext", skip_all, fields(user_id=%user_id))]
     pub(crate) async fn new(
         session: Session,
         context: Arc<Context>,
@@ -87,6 +87,7 @@ impl UserContext {
         session_id: SessionId,
         cache_path: PathBuf,
     ) -> CoreContextResult<Arc<Self>> {
+        info!("Creating new user context");
         let user_stash = Self::new_user_db(user_stash_path, db_initializers).await?;
         let cancellation_token = context.new_child_cancellation_token();
         let queue = Queue::new(user_stash.clone()).await?;

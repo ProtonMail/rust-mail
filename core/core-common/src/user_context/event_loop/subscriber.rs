@@ -206,7 +206,7 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
             warn!("User context is no longer alive");
             return Ok(());
         };
-        debug!("Handling {} mail events", events.len());
+        debug!("Handling {} events", events.len());
         let user_id = ctx.user_id().clone();
         let stash = ctx.stash().clone();
 

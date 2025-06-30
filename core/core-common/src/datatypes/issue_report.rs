@@ -1,3 +1,4 @@
+use crate::{CoreContextError, UserContext};
 use anyhow::anyhow;
 use async_zip::Compression;
 use async_zip::ZipDateTime;
@@ -16,8 +17,7 @@ use tokio::{
     io::{AsyncReadExt, AsyncSeekExt},
 };
 use tokio_util::compat::TokioAsyncWriteCompatExt;
-
-use crate::{CoreContextError, UserContext};
+use tracing::info;
 
 #[cfg(test)]
 #[path = "../tests/issue_report/zip_file.rs"]
@@ -128,6 +128,7 @@ type ZippedFile = (String, Vec<u8>);
 ///
 /// When logs cannot be zipped or API request fail
 ///
+#[tracing::instrument(level = "debug", skip_all)]
 pub async fn report_an_issue(
     report: IssueReport,
     user_ctx: &UserContext,
@@ -172,6 +173,8 @@ pub async fn report_an_issue(
     let payload = create_bug_report_payload(report, username, email, logs);
 
     user_ctx.session().api().post_report_bug(payload).await?;
+
+    info!("Issue reported");
 
     Ok(())
 }
