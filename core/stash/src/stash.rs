@@ -1133,22 +1133,13 @@ impl Tether {
                             _ = ch.send(Err(e));
                         }
                         Operation::Execution(OperationExec::Instruct(x)) => {
-                            if x.sender.send(Err(e)).is_err() {
-                                // This means that the receiver has dropped.
-                                error!("Oneshot error: Failed sending result back to caller");
-                            };
+                            let _ = x.sender.send(Err(e));
                         }
                         Operation::Execution(OperationExec::Batch(x)) => {
-                            if x.sender.send(Err(e)).is_err() {
-                                // This means that the receiver has dropped.
-                                error!("Oneshot error: Failed sending result back to caller");
-                            };
+                            let _ = x.sender.send(Err(e));
                         }
                         Operation::Execution(OperationExec::Query(x)) => {
-                            if x.sender.send(Err(e)).is_err() {
-                                // This means that the receiver has dropped.
-                                error!("Oneshot error: Failed sending result back to caller");
-                            };
+                            let _ = x.sender.send(Err(e));
                         }
                         Operation::Transaction(OperationTransaction::RollbackAbort) => {
                             unreachable!("This cannot happen at this point")
@@ -1271,7 +1262,7 @@ impl<'tether> Bond<'tether> {
             .await
             .map_err(|_| anyhow!("The stash worker dropped"))?
         {
-            error!("Commit error: {e:?}");
+            error!("Commit error: {e:}");
             self.rollback().await?;
             return Ok(());
         }
@@ -1636,24 +1627,15 @@ impl<'a> TetheredWorkerStateMachine<'a> {
         match operation {
             OperationExec::Instruct(instruction) => {
                 let res = instruction.run(connection);
-                if instruction.sender.send(res).is_err() {
-                    // This means that the receiver has dropped.
-                    error!("Oneshot error: Failed sending result back to caller");
-                }
+                let _ = instruction.sender.send(res);
             }
             OperationExec::Batch(batch) => {
                 let res = batch.run(connection);
-                if batch.sender.send(res).is_err() {
-                    // This means that the receiver has dropped.
-                    error!("Oneshot error: Failed sending result back to caller");
-                }
+                let _ = batch.sender.send(res);
             }
             OperationExec::Query(query) => {
                 let res = query.run(connection);
-                if query.sender.send(res).is_err() {
-                    // This means that the receiver has dropped.
-                    error!("Oneshot error: Failed sending result back to caller");
-                }
+                let _ = query.sender.send(res);
             }
         }
     }
