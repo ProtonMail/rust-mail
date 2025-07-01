@@ -67,6 +67,7 @@ derive_more = { version = "2.0", features = ["full"] }
 either = "1.15.0"
 email_address = { version = "0.2.9", features = ["serde"] }
 ext-php-rs = "0.13.1"
+fancy-regex = "0.14.0"
 flume = "0.11"
 futures = "0.3.31"
 function_name = "0.3.0"

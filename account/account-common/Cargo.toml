@@ -10,7 +10,7 @@ muon = { workspace = true }
 
 # crates.io dependencies
 secrecy.workspace = true
-regex = { workspace = true }
+fancy-regex = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
