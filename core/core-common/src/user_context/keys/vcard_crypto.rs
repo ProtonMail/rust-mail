@@ -49,7 +49,7 @@ where
     let group = vcard
         .get_all_email()
         .into_iter()
-        .find(|(_, email2)| email2.value.value == email.as_str())?
+        .find(|(_, email2)| email2.value.value == email.as_clear_text_str())?
         .1
         .group?;
 

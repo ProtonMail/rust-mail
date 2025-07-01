@@ -4,7 +4,9 @@ use crate::models::MessageReplyTo;
 use non_empty_string::NonEmptyString;
 use parking_lot::{Mutex, RwLock};
 use proton_core_api::service::ApiServiceError;
-use proton_core_api::services::proton::GetKeysAllOptions;
+use proton_core_api::services::proton::{
+    GetKeysAllOptions, PrivateEmail, PrivateEmailRef, PrivateString,
+};
 use proton_core_api::session::CoreSession;
 use proton_core_api::{consts::CoreBundle, services::proton::ProtonCore};
 use proton_core_common::models::ContactEmail;
@@ -95,9 +97,9 @@ impl From<&ApiServiceError> for ValidationState {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SingleRecipient {
     /// Optional display name for the recipient.
-    pub display_name: Option<String>,
+    pub display_name: Option<PrivateString>,
     /// Recipient's email
-    pub email: String,
+    pub email: PrivateEmail,
     /// Validation state.
     pub state: ValidationState,
 }
@@ -116,7 +118,7 @@ pub struct GroupRecipient {
 #[derive(Debug, thiserror::Error)]
 pub enum RecipientError {
     #[error("Address {0} already exists in the recipient list")]
-    DuplicateAddress(String),
+    DuplicateAddress(PrivateEmail),
 }
 
 /// An email recipient.
@@ -128,8 +130,8 @@ pub enum Recipient {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct RecipientEntry {
-    pub display_name: MaybeEmptyString,
-    pub email: String,
+    pub display_name: Option<PrivateString>,
+    pub email: PrivateEmail,
 }
 
 /// Abstraction over possible contact group resolvers.
@@ -208,7 +210,11 @@ impl RecipientList {
         for recipient in recipients {
             let entry = RecipientEntry {
                 email: recipient.address,
-                display_name: recipient.name.into(),
+                display_name: if recipient.name.is_empty() {
+                    None
+                } else {
+                    Some(recipient.name)
+                },
             };
             if let Some(name) = recipient.group.0 {
                 //if group is not found, assume total is the number of entries
@@ -237,7 +243,11 @@ impl RecipientList {
         for recipient in reply_tos {
             let entry = RecipientEntry {
                 email: recipient.address,
-                display_name: recipient.name.into(),
+                display_name: if recipient.name.is_empty() {
+                    None
+                } else {
+                    Some(recipient.name)
+                },
             };
             if let Err(e) = list.add_single(entry) {
                 error!("Failed to add single recipient: {e:?}");
@@ -264,7 +274,7 @@ impl RecipientList {
         entry: RecipientEntry,
         state: ValidationState,
     ) -> Result<&mut SingleRecipient, RecipientError> {
-        if self.is_duplicate_address(&entry.email) {
+        if self.is_duplicate_address(entry.email.as_ref()) {
             return Err(RecipientError::DuplicateAddress(entry.email));
         }
 
@@ -275,7 +285,7 @@ impl RecipientList {
         };
 
         self.recipients.push(Recipient::Single(SingleRecipient {
-            display_name: entry.display_name.into_option(),
+            display_name: entry.display_name,
             email: entry.email,
             state,
         }));
@@ -296,7 +306,7 @@ impl RecipientList {
                 return true;
             };
 
-            recipient.email != *email
+            recipient.email.as_clear_text_str() != email
         });
     }
 
@@ -337,7 +347,7 @@ impl RecipientList {
         let mut recipients = Vec::with_capacity(iter.size_hint().0);
 
         for recipient in iter {
-            if self.is_duplicate_address(&recipient.email) {
+            if self.is_duplicate_address(recipient.email.as_ref()) {
                 duplicates.push(recipient);
                 continue;
             }
@@ -350,7 +360,7 @@ impl RecipientList {
             };
 
             recipients.push(SingleRecipient {
-                display_name: recipient.display_name.into_option(),
+                display_name: recipient.display_name,
                 email: recipient.email,
                 state,
             });
@@ -386,7 +396,9 @@ impl RecipientList {
     ) {
         if let Some(group) = self.find_group_mut(group_name) {
             for email in emails {
-                group.recipients.retain(|r| r.email != *email.as_ref())
+                group
+                    .recipients
+                    .retain(|r| r.email.as_clear_text_str() != email.as_ref())
             }
         }
     }
@@ -458,17 +470,17 @@ impl RecipientList {
         self.recipients.is_empty()
     }
 
-    fn find_recipient_by_email(&self, email: &str) -> Option<&SingleRecipient> {
+    fn find_recipient_by_email(&self, email: PrivateEmailRef) -> Option<&SingleRecipient> {
         for recipient in &self.recipients {
             match recipient {
                 Recipient::Single(single) => {
-                    if single.email == *email {
+                    if single.email.as_ref() == email {
                         return Some(single);
                     }
                 }
                 Recipient::Group(group) => {
                     for recipient in &group.recipients {
-                        if recipient.email == *email {
+                        if recipient.email.as_ref() == email {
                             return Some(recipient);
                         }
                     }
@@ -478,17 +490,20 @@ impl RecipientList {
         None
     }
 
-    fn find_recipient_by_email_mut(&mut self, email: &str) -> Option<&mut SingleRecipient> {
+    fn find_recipient_by_email_mut(
+        &mut self,
+        email: PrivateEmailRef,
+    ) -> Option<&mut SingleRecipient> {
         for recipient in &mut self.recipients {
             match recipient {
                 Recipient::Single(single) => {
-                    if single.email == *email {
+                    if single.email.as_ref() == email {
                         return Some(single);
                     }
                 }
                 Recipient::Group(group) => {
                     for recipient in &mut group.recipients {
-                        if recipient.email == *email {
+                        if recipient.email.as_ref() == email {
                             return Some(recipient);
                         }
                     }
@@ -498,21 +513,28 @@ impl RecipientList {
         None
     }
 
-    fn update_recipient_validation_state(&mut self, email: &str, state: ValidationState) {
+    fn update_recipient_validation_state(
+        &mut self,
+        email: PrivateEmailRef,
+        state: ValidationState,
+    ) {
         if let Some(recipient) = self.find_recipient_by_email_mut(email) {
             recipient.state = state;
         }
     }
 
     /// Check whether this list contains the given `email`.
-    pub fn contains_email(&self, email: &str) -> bool {
-        self.find_recipient_by_email(email).is_some()
+    pub fn contains_email<'e>(&self, email: impl Into<PrivateEmailRef<'e>>) -> bool {
+        self.find_recipient_by_email(email.into()).is_some()
     }
 
     /// Check whether this list contains all the given `emails`.
-    pub fn contains_emails<T: AsRef<str>>(&self, emails: impl IntoIterator<Item = T>) -> bool {
+    pub fn contains_emails<'e, T: Into<PrivateEmailRef<'e>>>(
+        &self,
+        emails: impl IntoIterator<Item = T>,
+    ) -> bool {
         for email in emails {
-            if self.contains_email(email.as_ref()) {
+            if self.contains_email(email.into()) {
                 return true;
             }
         }
@@ -547,17 +569,17 @@ impl RecipientList {
         }
     }
 
-    fn is_duplicate_address(&self, email: &str) -> bool {
+    fn is_duplicate_address(&self, email: PrivateEmailRef) -> bool {
         for recipient in &self.recipients {
             match recipient {
                 Recipient::Single(r) => {
-                    if r.email == email {
+                    if r.email.as_ref() == email {
                         return true;
                     }
                 }
                 Recipient::Group(g) => {
                     for recipient in &g.recipients {
-                        if recipient.email == email {
+                        if recipient.email.as_ref() == email {
                             return true;
                         }
                     }
@@ -648,7 +670,7 @@ impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
                 let new_state = validate_address(&ctx, email.clone()).await;
                 {
                     let mut list = list_cloned.write();
-                    list.update_recipient_validation_state(&email, new_state);
+                    list.update_recipient_validation_state(email.as_ref(), new_state);
                     drop(list);
                 }
                 if let Some(cb) = cb {
@@ -703,7 +725,7 @@ impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
             {
                 let mut list = list_cloned.write();
                 for (email, state) in update_statuses {
-                    list.update_recipient_validation_state(&email, state);
+                    list.update_recipient_validation_state(email.as_ref(), state);
                 }
                 drop(list);
             }
@@ -758,12 +780,15 @@ impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
     }
 
     /// Check whether this list contains the given `email`.
-    pub fn contains_email(&self, email: &str) -> bool {
+    pub fn contains_email(&self, email: PrivateEmailRef) -> bool {
         self.list.read().contains_email(email)
     }
 
     /// Check whether this list contains all the given `emails`.
-    pub fn contains_emails<E: AsRef<str>>(&self, emails: impl IntoIterator<Item = E>) -> bool {
+    pub fn contains_emails<'e, E: Into<PrivateEmailRef<'e>>>(
+        &self,
+        emails: impl IntoIterator<Item = E>,
+    ) -> bool {
         self.list.read().contains_emails(emails)
     }
 
@@ -777,7 +802,7 @@ impl<T: OnBackgroundValidationComplete> ValidatingRecipientList<T> {
 ///
 /// Network failures do not result in errors, but return [`ValidationState::Unchecked`] instead.
 ///
-async fn validate_address(ctx: &MailUserContext, email: String) -> ValidationState {
+async fn validate_address(ctx: &MailUserContext, email: PrivateEmail) -> ValidationState {
     let options = GetKeysAllOptions {
         email,
         internal_only: Some(false),

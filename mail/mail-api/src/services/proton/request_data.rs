@@ -20,6 +20,7 @@
 use crate::services::proton::common::{AttachmentId, MessageId};
 use crate::services::proton::response_data::MimeType;
 use indexmap::IndexMap;
+use proton_core_api::services::proton::{PrivateEmail, PrivateString};
 use proton_crypto_inbox::attachment::{
     Base64AttachmentEncryptedSignature, BinaryAttachmentEncryptedSignature,
     BinaryAttachmentSignature, KeyPackets,
@@ -73,9 +74,9 @@ pub struct DraftReplyOrForwardParams {
 #[serde(rename_all = "PascalCase")]
 pub struct DraftSender {
     /// Email component.
-    pub address: String,
+    pub address: PrivateEmail,
     /// Display name if any
-    pub name: String,
+    pub name: PrivateString,
 }
 
 /// Represents a recipient email address.
@@ -83,9 +84,9 @@ pub struct DraftSender {
 #[serde(rename_all = "PascalCase")]
 pub struct DraftRecipient {
     /// Email component.
-    pub address: String,
+    pub address: PrivateEmail,
     /// Display name if any
-    pub name: String,
+    pub name: PrivateString,
     /// Group if any.
     pub group: Option<String>,
 }

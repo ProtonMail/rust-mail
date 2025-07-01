@@ -28,7 +28,7 @@ use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::draft::Draft;
 use proton_mail_common::draft::compose::DEFAULT_SUBJECT;
 use proton_mail_common::draft::observers::{DraftSendResultWatcher, DraftSendResultWatcherMode};
-use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry};
+use proton_mail_common::draft::recipients::RecipientEntry;
 use proton_mail_common::models::{
     DraftSendFailure, DraftSendFailureSend, DraftSendResult, DraftSendResultOrigin, MailSettings,
     Message, MessageBodyMetadata,
@@ -60,9 +60,9 @@ async fn basic_send_check() {
 
     let mut message = message_body_test_message_simple();
     message.metadata.to_list.push(MessageRecipient {
-        address: "foo@bar.com".to_string(),
+        address: "foo@bar.com".into(),
         is_proton: false,
-        name: "".to_string(),
+        name: "".into(),
         group: None,
     });
     let mut sent_message = message.clone();
@@ -142,7 +142,7 @@ async fn basic_send_check() {
         .to_list
         .add_single(RecipientEntry {
             email: "foo@bar.com".into(),
-            display_name: MaybeEmptyString(None),
+            display_name: None,
         })
         .unwrap();
     draft
@@ -229,9 +229,9 @@ async fn basic_schedule_send_check() {
 
     let mut message = message_body_test_message_simple();
     message.metadata.to_list.push(MessageRecipient {
-        address: "foo@bar.com".to_string(),
+        address: "foo@bar.com".into(),
         is_proton: false,
-        name: "".to_string(),
+        name: "".into(),
         group: None,
     });
     let mut sent_message = message.clone();
@@ -318,7 +318,7 @@ async fn basic_schedule_send_check() {
         .to_list
         .add_single(RecipientEntry {
             email: "foo@bar.com".into(),
-            display_name: MaybeEmptyString(None),
+            display_name: None,
         })
         .unwrap();
     draft
@@ -406,9 +406,9 @@ async fn schedule_send_with_old_delivery_time_fails() {
 
     let mut message = message_body_test_message_simple();
     message.metadata.to_list.push(MessageRecipient {
-        address: "foo@bar.com".to_string(),
+        address: "foo@bar.com".into(),
         is_proton: false,
-        name: "".to_string(),
+        name: "".into(),
         group: None,
     });
     let mut sent_message = message.clone();
@@ -445,7 +445,7 @@ async fn schedule_send_with_old_delivery_time_fails() {
         .to_list
         .add_single(RecipientEntry {
             email: "foo@bar.com".into(),
-            display_name: MaybeEmptyString(None),
+            display_name: None,
         })
         .unwrap();
 
@@ -606,8 +606,8 @@ async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_be
     draft
         .to_list
         .add_single(RecipientEntry {
-            email: "foo@bar.com".to_owned(),
-            display_name: MaybeEmptyString(None),
+            email: "foo@bar.com".into(),
+            display_name: None,
         })
         .unwrap();
     draft
@@ -640,9 +640,9 @@ async fn save_after_send_is_an_error() {
 
     let mut message = message_body_test_message_simple();
     message.metadata.to_list.push(MessageRecipient {
-        address: "foo@bar.com".to_string(),
+        address: "foo@bar.com".into(),
         is_proton: false,
-        name: "".to_string(),
+        name: "".into(),
         group: None,
     });
 
@@ -656,7 +656,7 @@ async fn save_after_send_is_an_error() {
         .to_list
         .add_single(RecipientEntry {
             email: "foo@bar.com".into(),
-            display_name: MaybeEmptyString(None),
+            display_name: None,
         })
         .unwrap();
     draft
@@ -698,9 +698,9 @@ async fn already_sent_error_does_not_produce_error() {
 
     let mut message = message_body_test_message_simple();
     message.metadata.to_list.push(MessageRecipient {
-        address: "foo@bar.com".to_string(),
+        address: "foo@bar.com".into(),
         is_proton: false,
-        name: "".to_string(),
+        name: "".into(),
         group: None,
     });
 
@@ -746,7 +746,7 @@ async fn already_sent_error_does_not_produce_error() {
         .to_list
         .add_single(RecipientEntry {
             email: "foo@bar.com".into(),
-            display_name: MaybeEmptyString(None),
+            display_name: None,
         })
         .unwrap();
     draft
@@ -819,9 +819,9 @@ async fn cancel_schedule_send_on_queued_send() {
 
     let mut message = message_body_test_message_simple();
     message.metadata.to_list.push(MessageRecipient {
-        address: "foo@bar.com".to_string(),
+        address: "foo@bar.com".into(),
         is_proton: false,
-        name: "".to_string(),
+        name: "".into(),
         group: None,
     });
     let mut sent_message = message.clone();
@@ -849,7 +849,7 @@ async fn cancel_schedule_send_on_queued_send() {
         .to_list
         .add_single(RecipientEntry {
             email: "foo@bar.com".into(),
-            display_name: MaybeEmptyString(None),
+            display_name: None,
         })
         .unwrap();
     draft
@@ -1014,9 +1014,9 @@ async fn schedule_send_message_limit() {
 
     let mut message = message_body_test_message_simple();
     message.metadata.to_list.push(MessageRecipient {
-        address: "foo@bar.com".to_string(),
+        address: "foo@bar.com".into(),
         is_proton: false,
-        name: "".to_string(),
+        name: "".into(),
         group: None,
     });
     let mut sent_message = message.clone();
@@ -1043,7 +1043,7 @@ async fn schedule_send_message_limit() {
         .to_list
         .add_single(RecipientEntry {
             email: "foo@bar.com".into(),
-            display_name: MaybeEmptyString(None),
+            display_name: None,
         })
         .unwrap();
 
@@ -1261,9 +1261,9 @@ async fn already_sent_from_even_update() {
 
     let mut message = message_body_test_message_simple();
     message.metadata.to_list.push(MessageRecipient {
-        address: "foo@bar.com".to_string(),
+        address: "foo@bar.com".into(),
         is_proton: false,
-        name: "".to_string(),
+        name: "".into(),
         group: None,
     });
     let mut sent_message = message.clone();
@@ -1299,7 +1299,7 @@ async fn already_sent_from_even_update() {
         .to_list
         .add_single(RecipientEntry {
             email: "foo@bar.com".into(),
-            display_name: MaybeEmptyString(None),
+            display_name: None,
         })
         .unwrap();
     draft
@@ -1355,9 +1355,9 @@ async fn send_fails_if_recipient_is_not_valid_impl(
 
     let mut message = message_body_test_message_simple();
     message.metadata.to_list.push(MessageRecipient {
-        address: "foo@bar.com".to_string(),
+        address: "foo@bar.com".into(),
         is_proton: false,
-        name: "".to_string(),
+        name: "".into(),
         group: None,
     });
     let mut sent_message = message.clone();
@@ -1397,7 +1397,7 @@ async fn send_fails_if_recipient_is_not_valid_impl(
         .to_list
         .add_single(RecipientEntry {
             email: "foo@bar.com".into(),
-            display_name: MaybeEmptyString(None),
+            display_name: None,
         })
         .unwrap();
 
@@ -1490,12 +1490,12 @@ fn expected_create_draft_params() -> DraftParams {
         subject: DEFAULT_SUBJECT.to_owned(),
         unread: false,
         sender: DraftSender {
-            address: address[0].email.clone(),
-            name: address[0].display_name.clone(),
+            address: address[0].email.clone().into(),
+            name: address[0].display_name.clone().into(),
         },
         to_list: vec![DraftRecipient {
-            address: "foo@bar.com".to_owned(),
-            name: String::new(),
+            address: "foo@bar.com".into(),
+            name: String::new().into(),
             group: None,
         }],
         cc_list: vec![],

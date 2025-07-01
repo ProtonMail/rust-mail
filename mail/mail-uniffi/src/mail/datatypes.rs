@@ -1547,12 +1547,12 @@ pub struct MessageSender {
 impl From<MessageSender> for RealMessageSender {
     fn from(value: MessageSender) -> Self {
         RealMessageSender {
-            address: value.address,
+            address: value.address.into(),
             bimi_selector: value.bimi_selector,
             display_sender_image: value.display_sender_image,
             is_proton: value.is_proton,
             is_simple_login: value.is_simple_login,
-            name: value.name,
+            name: value.name.into(),
         }
     }
 }
@@ -1560,12 +1560,12 @@ impl From<MessageSender> for RealMessageSender {
 impl From<RealMessageSender> for MessageSender {
     fn from(value: RealMessageSender) -> Self {
         MessageSender {
-            address: value.address,
+            address: value.address.into_clear_text_string(),
             bimi_selector: value.bimi_selector,
             display_sender_image: value.display_sender_image,
             is_proton: value.is_proton,
             is_simple_login: value.is_simple_login,
-            name: value.name,
+            name: value.name.into_inner(),
         }
     }
 }
@@ -1589,9 +1589,9 @@ pub struct MessageRecipient {
 impl From<RealMessageRecipient> for MessageRecipient {
     fn from(value: RealMessageRecipient) -> Self {
         Self {
-            address: value.address,
+            address: value.address.into_clear_text_string(),
             is_proton: value.is_proton,
-            name: value.name,
+            name: value.name.into_inner(),
             group: value.group.into_option(),
         }
     }
@@ -1603,9 +1603,9 @@ impl From<MessageRecipient> for RealMessageRecipient {
             assert!(!name.is_empty(), "We got passed in an invalid group");
         }
         Self {
-            address: value.address,
+            address: value.address.into(),
             is_proton: value.is_proton,
-            name: value.name,
+            name: value.name.into(),
             group: MaybeEmptyString::from_option(value.group),
         }
     }
@@ -1624,8 +1624,8 @@ pub struct MessageReplyTo {
 impl From<RealMessageReplyTo> for MessageReplyTo {
     fn from(value: RealMessageReplyTo) -> Self {
         Self {
-            address: value.address,
-            name: value.name,
+            address: value.address.into_clear_text_string(),
+            name: value.name.into_inner(),
         }
     }
 }

@@ -85,8 +85,8 @@ fn test_attachment() -> ApiAttachment {
         signature: Some(RealAttachmentSignature::from("signature")),
         enc_signature: Some(RealAttachmentEncryptedSignature::from("enc_signature")),
         sender: Some(ApiMessageSender {
-            address: "fooo".to_owned(),
-            name: "fooo".to_owned(),
+            address: "fooo".into(),
+            name: "fooo".into(),
             is_proton: false,
             display_sender_image: true,
             is_simple_login: false,

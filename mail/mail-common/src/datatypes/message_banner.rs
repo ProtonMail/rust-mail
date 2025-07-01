@@ -120,8 +120,11 @@ impl Message {
             });
         }
 
-        if let Ok(Some(IncomingDefaultLocation::Blocked)) =
-            IncomingDefaultLocation::find(self.sender.address.clone(), tether).await
+        if let Ok(Some(IncomingDefaultLocation::Blocked)) = IncomingDefaultLocation::find(
+            self.sender.address.clone().into_clear_text_string(),
+            tether,
+        )
+        .await
         {
             banners.push(MessageBanner::BlockedSender);
         }

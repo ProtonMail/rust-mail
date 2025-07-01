@@ -10,7 +10,7 @@ use proton_action_queue::observers::ActionAwaiter;
 use proton_action_queue::queue::{BroadcastMessage, Queue, QueuedError};
 use proton_core_api::consts::Mail;
 use proton_core_api::service::ApiServiceError;
-use proton_core_api::services::proton::PrivateEmailRef;
+use proton_core_api::services::proton::{PrivateEmail, PrivateEmailRef};
 use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::models::{ModelExtension, PaidSubscription};
 use proton_crypto_account::keys::{
@@ -40,9 +40,9 @@ pub async fn load_send_preferences_for_recipients<P>(
     context: &MailUserContext,
     pgp: &P,
     tx: &mut impl RunTransaction,
-    recipient_emails: &[String],
+    recipient_emails: &[PrivateEmail],
     crypto_mail_settings: CryptoMailSettings,
-) -> MailContextResult<HashMap<String, SendPreferences<P::PublicKey>>>
+) -> MailContextResult<HashMap<PrivateEmail, SendPreferences<P::PublicKey>>>
 where
     P: PGPProviderSync,
 {
@@ -53,7 +53,7 @@ where
             .recipient_send_preferences(
                 pgp,
                 tx,
-                PrivateEmailRef::new(recipient.as_str()),
+                PrivateEmailRef::new(recipient.as_clear_text_str()),
                 crypto_mail_settings,
                 ComposerPreference::default(),
             )
@@ -105,7 +105,7 @@ pub async fn build_packages<P>(
     context: &MailUserContext,
     pgp: &P,
     address_keys: &UnlockedAddressKeys<P>,
-    send_preferences: HashMap<String, SendPreferences<P::PublicKey>>,
+    send_preferences: HashMap<PrivateEmail, SendPreferences<P::PublicKey>>,
     mime_type: MimeType,
     stored_message_body: &str,
     attachments: &[Attachment],
@@ -328,7 +328,7 @@ where
 pub fn build_top_package<P>(
     pgp: &P,
     sender_keys: &[UnlockedAddressKey<P>],
-    recipient_preferences: &[(&String, &SendPreferences<P::PublicKey>)],
+    recipient_preferences: &[(&PrivateEmail, &SendPreferences<P::PublicKey>)],
     encrypted_body: &EncryptedPackageBody,
     attachments: &[Attachment],
 ) -> Result<Package, PackageError>

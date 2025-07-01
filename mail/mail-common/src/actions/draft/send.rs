@@ -17,6 +17,7 @@ use proton_action_queue::action::{
     VersionConverterError, WriterGuard, WriterGuardError, deserialize,
 };
 use proton_core_api::consts::Mail;
+use proton_core_api::services::proton::PrivateEmail;
 use proton_core_api::services::proton::prelude::AddressId;
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::ModelExtension;
@@ -35,7 +36,7 @@ pub struct Send {
     metadata_id: MetadataId,
     address_id: AddressId,
     local_message_id: Option<LocalMessageId>,
-    recipients: Vec<String>,
+    recipients: Vec<PrivateEmail>,
     mime_type: MimeType,
     #[serde(default)]
     delivery_time: Option<UnixTimestamp>,
@@ -64,11 +65,11 @@ impl Send {
         }
     }
 
-    fn combine_recipients(draft: &Draft) -> Vec<String> {
+    fn combine_recipients(draft: &Draft) -> Vec<PrivateEmail> {
         let to_list = draft.to_list.to_message_recipients();
         let cc_list = draft.cc_list.to_message_recipients();
         let bcc_list = draft.bcc_list.to_message_recipients();
-        let recipient_emails: HashSet<String> = HashSet::from_iter(
+        let recipient_emails: HashSet<PrivateEmail> = HashSet::from_iter(
             to_list
                 .into_iter()
                 .chain(cc_list)

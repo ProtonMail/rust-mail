@@ -129,7 +129,7 @@ MailEvent {
                 ),
                 action: None,
                 email: Some(
-                    "email@pm.me",
+                    eXXXX@XXXXX,
                 ),
                 id: "Ik65N-aChBuWFd...UvkFTwJFJPQg==",
                 domain: None,
@@ -268,12 +268,12 @@ MailEvent {
                         num_attachments: 2,
                         order: 456,
                         sender: MessageSender {
-                            address: "foo@protonmail.dev",
+                            address: fXX@XXXXXXXXXXXXXX,
                             bimi_selector: None,
                             display_sender_image: true,
                             is_proton: true,
                             is_simple_login: true,
-                            name: "Joe",
+                            name: xxx,
                         },
                         size: 148,
                         snooze_time: 1433890289,
@@ -281,9 +281,9 @@ MailEvent {
                         time: 1433890289,
                         to_list: [
                             MessageRecipient {
-                                address: "foo@protonmail.dev",
+                                address: fXX@XXXXXXXXXXXXXX,
                                 is_proton: true,
-                                name: "Joe",
+                                name: xxx,
                                 group: Some(
                                     "string",
                                 ),

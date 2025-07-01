@@ -1897,8 +1897,8 @@ async fn test_update_message_and_body() {
             },
             body: "my_message".to_owned(),
             reply_to: ApiMessageReplyTo {
-                address: "foo@foo.com".to_string(),
-                name: "foo".to_string(),
+                address: "foo@foo.com".into(),
+                name: "foo".into(),
                 bimi_selector: None,
                 display_sender_image: true,
                 is_proton: true,
@@ -1907,8 +1907,8 @@ async fn test_update_message_and_body() {
             mime_type: ApiMimeType::TextPlain,
             attachments: vec![],
             reply_tos: vec![ApiMessageReplyTo {
-                address: "foo@foo.com".to_string(),
-                name: "foo".to_string(),
+                address: "foo@foo.com".into(),
+                name: "foo".into(),
                 bimi_selector: None,
                 display_sender_image: true,
                 is_proton: true,
@@ -1951,13 +1951,13 @@ async fn test_update_message_and_body() {
             mime_type: MimeType::TextHtml,
             header: "new header".to_string(),
             reply_to: MessageReplyTo {
-                address: "bar@bar.com".to_string(),
-                name: "bar".to_string(),
+                address: "bar@bar.com".into(),
+                name: "bar".into(),
                 ..Default::default()
             },
             reply_tos: vec![MessageReplyTo {
-                address: "bar@bar.com".to_string(),
-                name: "bar".to_string(),
+                address: "bar@bar.com".into(),
+                name: "bar".into(),
                 ..Default::default()
             }],
             ..body_metadata
@@ -1982,13 +1982,13 @@ async fn test_update_message_and_body() {
         },
         mime_type: MimeType::TextHtml,
         reply_to: MessageReplyTo {
-            address: "bar@bar.com".to_string(),
-            name: "bar".to_string(),
+            address: "bar@bar.com".into(),
+            name: "bar".into(),
             ..Default::default()
         },
         reply_tos: vec![MessageReplyTo {
-            address: "bar@bar.com".to_string(),
-            name: "bar".to_string(),
+            address: "bar@bar.com".into(),
+            name: "bar".into(),
             ..Default::default()
         }],
         row_id: Some(1),
@@ -3002,8 +3002,8 @@ fn test_message_metadata(
         external_id: None,
         subject: "Hello ".to_owned(),
         sender: ApiMessageSender {
-            address: "hello@world.com".to_owned(),
-            name: "hello".to_owned(),
+            address: "hello@world.com".into(),
+            name: "hello".into(),
             is_proton: Default::default(),
             display_sender_image: Default::default(),
             is_simple_login: Default::default(),
@@ -3049,8 +3049,8 @@ fn test_message_with_metadata(
             external_id: None,
             subject: "Hello ".to_owned(),
             sender: ApiMessageSender {
-                address: "hello@world.com".to_owned(),
-                name: "hello".to_owned(),
+                address: "hello@world.com".into(),
+                name: "hello".into(),
                 is_proton: Default::default(),
                 display_sender_image: Default::default(),
                 is_simple_login: Default::default(),

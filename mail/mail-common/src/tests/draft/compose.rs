@@ -37,7 +37,11 @@ async fn reply_draft_message_creation() {
         draft.subject,
         apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject)
     );
-    assert!(draft.to_list.contains_email(&source_message.sender.address));
+    assert!(
+        draft
+            .to_list
+            .contains_email(source_message.sender.address.as_ref())
+    );
     assert!(draft.cc_list.is_empty());
     assert!(draft.bcc_list.is_empty());
     assert_eq!(attachments, vec![inline_attachment()])
@@ -50,11 +54,19 @@ async fn reply_all_draft_message_creation() {
         draft.subject,
         apply_prefix_to_subject(REPLY_PREFIX, &source_message.subject)
     );
-    assert!(draft.to_list.contains_email(&source_message.sender.address));
     assert!(
         draft
-            .cc_list
-            .contains_emails(source_message.cc_list.value.into_iter().map(|v| v.address))
+            .to_list
+            .contains_email(source_message.sender.address.as_ref())
+    );
+    assert!(
+        draft.cc_list.contains_emails(
+            source_message
+                .cc_list
+                .value
+                .iter()
+                .map(|v| v.address.as_ref())
+        )
     );
     assert!(draft.bcc_list.is_empty());
     assert_eq!(attachments, vec![inline_attachment()])
@@ -94,7 +106,7 @@ async fn check_reply_simple_login_alias() {
     let mut source_body_metadata = existing_message_body_metadata();
     source_body_metadata.mime_type = MimeType::TextPlain;
     let expected_email = "hiddin_from_view@simplelogin.net".to_owned();
-    source_body_metadata.reply_to.address = expected_email.clone();
+    source_body_metadata.reply_to.address = expected_email.clone().into();
     let source_body = "Hello World".to_owned();
     let expected_email = source_body_metadata.reply_to.address.clone();
     let (draft, _, _) = create_reply_with_mime_and_body(
@@ -104,11 +116,11 @@ async fn check_reply_simple_login_alias() {
         source_body,
     )
     .await;
-    assert!(draft.to_list.contains_email(&expected_email));
+    assert!(draft.to_list.contains_email(expected_email.as_ref()));
     assert!(
         !draft
             .to_list
-            .contains_email(&existing_message().sender.address)
+            .contains_email(existing_message().sender.address.as_ref())
     );
 }
 
@@ -118,7 +130,7 @@ async fn check_reply_all_simple_login_alias() {
     let mut source_body_metadata = existing_message_body_metadata();
     source_body_metadata.mime_type = MimeType::TextPlain;
     let expected_email = "hiddin_from_view@simplelogin.net".to_owned();
-    source_body_metadata.reply_tos[0].address = expected_email.clone();
+    source_body_metadata.reply_tos[0].address = expected_email.clone().into();
     let source_body = "Hello World".to_owned();
     let expected_email = source_body_metadata.reply_tos[0].address.clone();
     let (draft, _, _) = create_reply_with_mime_and_body(
@@ -128,11 +140,11 @@ async fn check_reply_all_simple_login_alias() {
         source_body,
     )
     .await;
-    assert!(draft.to_list.contains_email(&expected_email));
+    assert!(draft.to_list.contains_email(expected_email.as_ref()));
     assert!(
         !draft
             .to_list
-            .contains_email(&existing_message().sender.address)
+            .contains_email(existing_message().sender.address.as_ref())
     );
 }
 
@@ -146,9 +158,9 @@ async fn reply_to_email_alias() {
     let source_body = "Hello World".to_owned();
     let mut source_message = existing_message();
     source_message.to_list.push(MessageRecipient {
-        address: TEST_EMAIL_ALIAS.to_owned(),
+        address: TEST_EMAIL_ALIAS.to_owned().into(),
         is_proton: false,
-        name: TEST_EMAIL_DISPLAY_NAME.to_owned(),
+        name: TEST_EMAIL_DISPLAY_NAME.to_owned().into(),
         group: Default::default(),
     });
     let (draft, _, _) = create_reply_with_mime_and_body_and_message(
@@ -173,15 +185,15 @@ async fn reply_strips_duplicate_sender_emails_and_aliases() {
     let source_body = "Hello World".to_owned();
     let mut source_message = existing_message();
     source_message.to_list.push(MessageRecipient {
-        address: TEST_EMAIL_ALIAS.to_owned(),
+        address: TEST_EMAIL_ALIAS.to_owned().into(),
         is_proton: false,
-        name: TEST_EMAIL_DISPLAY_NAME.to_owned(),
+        name: TEST_EMAIL_DISPLAY_NAME.to_owned().into(),
         group: Default::default(),
     });
     source_message.cc_list.push(MessageRecipient {
-        address: TEST_EMAIL_ALIAS_ALT.to_owned(),
+        address: TEST_EMAIL_ALIAS_ALT.to_owned().into(),
         is_proton: false,
-        name: TEST_EMAIL_DISPLAY_NAME.to_owned(),
+        name: TEST_EMAIL_DISPLAY_NAME.to_owned().into(),
         group: Default::default(),
     });
     let (draft, _, _) = create_reply_with_mime_and_body_and_message(
@@ -297,9 +309,9 @@ async fn reply_to_sent_message_should_use_to_list_rather_than_sender(reply_mode:
     message.flags |= MessageFlags::SENT;
     message.label_ids.push(LabelId::sent());
     message.to_list.value.push(MessageRecipient {
-        address: to_address.clone(),
+        address: to_address.clone().into(),
         is_proton: false,
-        name: "ToRecipient".to_owned(),
+        name: "ToRecipient".into(),
         group: Default::default(),
     });
     let source_body = "Hello World".to_owned();
@@ -313,7 +325,7 @@ async fn reply_to_sent_message_should_use_to_list_rather_than_sender(reply_mode:
     .await;
 
     assert!(draft.to_list.contains_email(&to_address));
-    assert!(!draft.to_list.contains_email(&sender_address));
+    assert!(!draft.to_list.contains_email(sender_address.as_ref()));
 }
 
 fn sanitize_message_body_metadata(mime_type: MimeType) -> MessageBodyMetadata {
@@ -485,9 +497,9 @@ fn existing_message() -> Message {
         attachments_metadata: vec![],
         cc_list: MessageRecipients {
             value: vec![MessageRecipient {
-                address: "cc_contact_1@pm.me".to_string(),
+                address: "cc_contact_1@pm.me".into(),
                 is_proton: false,
-                name: "CC Contact".to_string(),
+                name: "CC Contact".into(),
                 group: MaybeEmptyString(None),
             }],
         },
@@ -504,12 +516,12 @@ fn existing_message() -> Message {
         num_attachments: 0,
         display_order: 0,
         sender: MessageSender {
-            address: "sender@void.org".to_owned(),
+            address: "sender@void.org".into(),
             bimi_selector: None,
             display_sender_image: false,
             is_proton: false,
             is_simple_login: false,
-            name: "Send InToVoid".to_string(),
+            name: "Send InToVoid".into(),
         },
         size: 0,
         snooze_time: 0.into(),
@@ -532,20 +544,20 @@ fn existing_message_body_metadata() -> MessageBodyMetadata {
         attachments: vec![inline_attachment(), normal_attachment()],
         row_id: None,
         reply_to: MessageReplyTo {
-            address: "sender@void.org".to_owned(),
+            address: "sender@void.org".into(),
             bimi_selector: None,
             display_sender_image: false,
             is_proton: false,
             is_simple_login: false,
-            name: "Send InToVoid".to_string(),
+            name: "Send InToVoid".into(),
         },
         reply_tos: vec![MessageReplyTo {
-            address: "sender@void.org".to_owned(),
+            address: "sender@void.org".into(),
             bimi_selector: None,
             display_sender_image: false,
             is_proton: false,
             is_simple_login: false,
-            name: "Send InToVoid".to_string(),
+            name: "Send InToVoid".into(),
         }],
     }
 }

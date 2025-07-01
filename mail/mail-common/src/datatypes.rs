@@ -73,7 +73,7 @@ use crate::models::{Attachment, AttachmentType, MailSettings, MessageBodyMetadat
 use crate::{AppError, MailContextError, MailUserContext};
 use attachment::ContentId;
 use core::fmt;
-use proton_core_api::services::proton::LabelId;
+use proton_core_api::services::proton::{LabelId, PrivateEmail, PrivateString};
 use proton_core_common::datatypes::{
     AvatarInformation, LabelColor, LabelType, LocalLabelId, SystemLabel,
 };
@@ -1168,7 +1168,7 @@ sql_using_serde!(KeyPackets);
 pub struct MessageSender {
     /// Recipient email address.
     // TODO: Proper email parsing
-    pub address: String,
+    pub address: PrivateEmail,
 
     /// TODO: Document this field.
     pub bimi_selector: Option<String>,
@@ -1183,7 +1183,7 @@ pub struct MessageSender {
     pub is_simple_login: bool,
 
     /// Recipient display name.
-    pub name: String,
+    pub name: PrivateString,
 }
 
 impl MessageSender {
@@ -1201,13 +1201,13 @@ impl MessageSender {
 
 impl From<MessageSender> for AvatarInformation {
     fn from(address: MessageSender) -> AvatarInformation {
-        AvatarInformation::from(&address.name).or_else(&address.address)
+        AvatarInformation::from(address.name.as_str()).or_else(address.address.as_clear_text_str())
     }
 }
 
 impl From<&MessageSender> for AvatarInformation {
     fn from(address: &MessageSender) -> AvatarInformation {
-        AvatarInformation::from(&address.name).or_else(&address.address)
+        AvatarInformation::from(address.name.as_str()).or_else(address.address.as_clear_text_str())
     }
 }
 
@@ -1227,7 +1227,7 @@ impl From<ApiMessageSender> for MessageSender {
 impl From<&str> for MessageSender {
     fn from(value: &str) -> Self {
         Self {
-            address: value.to_owned(),
+            address: value.into(),
             ..Default::default()
         }
     }
@@ -1239,13 +1239,13 @@ sql_using_serde!(MessageSender);
 #[derive(Debug, Default, Clone, Serialize, Deserialize, Eq, PartialEq)]
 pub struct MessageRecipient {
     /// Email of the recipient
-    pub address: String,
+    pub address: PrivateEmail,
 
     /// Whether the recipient is a proton address.
     pub is_proton: bool,
 
     /// Display name of the recipient, empty if none.
-    pub name: String,
+    pub name: PrivateString,
 
     /// Name of the address group this recipient belongs too.
     pub group: MaybeEmptyString,
@@ -1287,7 +1287,7 @@ impl From<MessageRecipient> for ApiMessageRecipient {
 
 impl From<MessageRecipient> for AvatarInformation {
     fn from(address: MessageRecipient) -> AvatarInformation {
-        AvatarInformation::from(&address.name).or_else(&address.address)
+        AvatarInformation::from(address.name.as_str()).or_else(address.address.as_clear_text_str())
     }
 }
 
@@ -1304,14 +1304,14 @@ impl From<MessageSender> for MessageRecipient {
 
 impl From<&MessageRecipient> for AvatarInformation {
     fn from(address: &MessageRecipient) -> AvatarInformation {
-        AvatarInformation::from(&address.name).or_else(&address.address)
+        AvatarInformation::from(address.name.as_str()).or_else(address.address.as_clear_text_str())
     }
 }
 
 impl From<&str> for MessageRecipient {
     fn from(value: &str) -> Self {
         Self {
-            address: value.to_owned(),
+            address: PrivateEmail::new(value),
             ..Default::default()
         }
     }

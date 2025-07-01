@@ -5,9 +5,9 @@ use crate::models::Address;
 use crate::models::{ModelIdExtension, User};
 use crate::{CoreContextError, CoreContextResult, UserContext};
 use parking_lot::RwLock;
-use proton_core_api::services::proton::GetKeysAllOptions;
 use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::services::proton::{AddressId, UserId};
+use proton_core_api::services::proton::{GetKeysAllOptions, PrivateEmailRef};
 use proton_core_api::session::CoreSession;
 use proton_crypto_account::keys::PublicAddressKeys;
 use proton_crypto_account::keys::{
@@ -130,7 +130,7 @@ impl CryptoKeyManager {
     pub async fn public_address_keys<P>(
         &self,
         pgp: &P,
-        email: &str,
+        email: PrivateEmailRef<'_>,
         internal_only: bool,
         user_context: &UserContext,
     ) -> CoreContextResult<PublicAddressKeys<<P>::PublicKey>>

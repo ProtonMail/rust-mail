@@ -3,8 +3,8 @@ use proton_core_api::services::proton::GetKeysAllResponse;
 use proton_core_api::services::proton::UserId;
 use proton_core_api::services::proton::common::ApiErrorInfo;
 use proton_mail_common::draft::recipients::{
-    ChannelBackgroundValidationComplete, MaybeEmptyString, Recipient, RecipientEntry,
-    ValidatingRecipientList, ValidationState,
+    ChannelBackgroundValidationComplete, Recipient, RecipientEntry, ValidatingRecipientList,
+    ValidationState,
 };
 use proton_mail_common::test_utils::init::Params;
 use proton_mail_common::test_utils::message_body::{TEST_USER_ID, message_body_test_user_secret};
@@ -63,8 +63,8 @@ async fn single_recipient_validation(email: &str, response: Response, state: Val
     list.add_single(
         &user_ctx,
         RecipientEntry {
-            display_name: MaybeEmptyString(None),
-            email: email.to_owned(),
+            display_name: None,
+            email: email.into(),
         },
     )
     .unwrap();
@@ -75,7 +75,7 @@ async fn single_recipient_validation(email: &str, response: Response, state: Val
     assert_eq!(recipients.len(), 1);
     match &recipients[0] {
         Recipient::Single(r) => {
-            assert_eq!(r.email, email);
+            assert_eq!(r.email.as_clear_text_str(), email);
             assert_eq!(r.state, state);
         }
         Recipient::Group(_) => {
@@ -137,8 +137,8 @@ async fn group_recipient_validation(email: &str, response: Response, state: Vali
         &user_ctx,
         "my_group".to_owned().try_into().unwrap(),
         [RecipientEntry {
-            display_name: MaybeEmptyString(None),
-            email: email.to_owned(),
+            display_name: None,
+            email: email.into(),
         }],
         1,
     );
@@ -150,7 +150,7 @@ async fn group_recipient_validation(email: &str, response: Response, state: Vali
     match &recipients[0] {
         Recipient::Group(group) => {
             let r = &group.recipients[0];
-            assert_eq!(r.email, email);
+            assert_eq!(r.email.as_clear_text_str(), email);
             assert_eq!(r.state, state);
         }
         Recipient::Single(_) => {

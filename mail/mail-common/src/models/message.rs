@@ -45,8 +45,8 @@ use crate::{AppError, MailUserContext};
 use anyhow::{Context, anyhow};
 use itertools::Itertools;
 use proton_core_api::service::ApiServiceError;
-use proton_core_api::services::proton::Proton;
 use proton_core_api::services::proton::{AddressId, LabelId};
+use proton_core_api::services::proton::{PrivateEmail, PrivateString, Proton};
 use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::datatypes::{
     LabelType, LocalAddressId, LocalLabelId, SystemLabel, UnixTimestamp,
@@ -1688,7 +1688,7 @@ impl Message {
     pub async fn message_body_with_sender(
         user_context: &MailUserContext,
         id: LocalMessageId,
-    ) -> MailContextResult<(String, DecryptedMessageBody)> {
+    ) -> MailContextResult<(PrivateEmail, DecryptedMessageBody)> {
         let tether = &mut user_context.user_stash().connection();
         let saved_message = Message::load(id, tether)
             .await?
@@ -3435,11 +3435,11 @@ impl TableObserver for MessageCounterWatcher {
 pub struct MessageReplyTo {
     /// Email of the recipient
     #[DbField]
-    pub address: String,
+    pub address: PrivateEmail,
 
     /// Display name of the recipient,empty if none.
     #[DbField]
-    pub name: String,
+    pub name: PrivateString,
 
     #[DbField]
     pub bimi_selector: Option<String>,
