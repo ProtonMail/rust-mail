@@ -23,7 +23,9 @@ use proton_mail_common::datatypes::{
 use proton_mail_common::draft::attachments::DraftAttachment;
 use proton_mail_common::draft::compose::DraftAddressChangeOutput;
 use proton_mail_common::models::{Attachment, LabelWithCounters, Message as MailMessage};
-use proton_mail_common::proton_mail_api::proton_core_api::services::proton::AddressId;
+use proton_mail_common::proton_mail_api::proton_core_api::services::proton::{
+    AddressId, PrivateEmail,
+};
 use proton_mail_common::{MailUserContext, Mailbox};
 use search::{Search, SearchStatusBar};
 use std::path::PathBuf;
@@ -103,7 +105,7 @@ pub enum MessageMessage {
     ReportPhishing(LocalMessageId),
     StarMessage(LocalMessageId),
     UnstarMessage(LocalMessageId),
-    BlockSender(String, BlockOrUnblock),
+    BlockSender(PrivateEmail, BlockOrUnblock),
     HasMore,
     CancelScheduleSend(LocalMessageId),
 }

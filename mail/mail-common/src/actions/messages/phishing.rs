@@ -9,6 +9,7 @@ use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
+use tracing::info;
 
 /// Action which reports a message as phishing.
 ///
@@ -87,6 +88,8 @@ impl ActionHandler for Handler {
         let remote_id = Message::local_id_counterpart(action.message_id, tether)
             .await?
             .ok_or_else(|| AppError::MessageHasNoRemoteId(action.message_id))?;
+
+        info!("Reporting phishing for {remote_id:?}");
 
         ctx.api()
             .report_phishing(remote_id, body.metadata.mime_type.into(), &body.body)

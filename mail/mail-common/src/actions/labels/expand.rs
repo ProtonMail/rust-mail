@@ -8,7 +8,7 @@ use proton_core_common::models::Label;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::Bond;
-use tracing::debug;
+use tracing::{debug, info};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Expand {
@@ -90,6 +90,11 @@ impl proton_action_queue::action::Handler for Handler {
         action.remote_id.clone_from(&label.remote_id);
 
         label.expanded = action.expand;
+        info!(
+            "Patching expanded for {:?} value={}",
+            label.id(),
+            action.expand
+        );
 
         label.save(tx).await?;
 
@@ -164,6 +169,10 @@ impl proton_action_queue::action::Handler for Handler {
             }
         };
 
+        info!(
+            "Patching expanded for {:?} value={}",
+            remote_id, action.expand
+        );
         Label::patch_expanded(remote_id, action.expand, ctx.api()).await?;
 
         Ok(())

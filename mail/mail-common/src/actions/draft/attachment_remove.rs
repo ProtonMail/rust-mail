@@ -15,7 +15,7 @@ use serde::Deserialize;
 use serde_with::serde_derive::Serialize;
 use stash::params;
 use stash::stash::{Bond, Tether};
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 #[derive(Serialize, Deserialize)]
 pub struct AttachmentRemove {
@@ -172,11 +172,11 @@ impl proton_action_queue::action::Handler for Handler {
             attachment_metadata.ownership,
             DraftAttachmentOwnership::Owned
         ) {
-            debug!("Deleting attachment on server");
             if let Some(AttachmentType::Remote(Some(remote_id))) =
                 Attachment::local_id_counterpart(action.attachment_id, writer_guard.tether())
                     .await?
             {
+                info!("Deleting {remote_id:?}");
                 ctx.api()
                     .delete_attachment(remote_id)
                     .await
@@ -192,7 +192,7 @@ impl proton_action_queue::action::Handler for Handler {
                     attachment_metadata.ownership,
                     DraftAttachmentOwnership::Owned
                 ) {
-                    debug!("Deleting attachment locally");
+                    info!("Deleting {:?} locally", action.attachment_id);
                     Attachment::delete_by_id(action.attachment_id, tx)
                         .await
                         .inspect_err(|e| {

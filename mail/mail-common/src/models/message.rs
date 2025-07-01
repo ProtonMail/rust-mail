@@ -496,7 +496,7 @@ impl Message {
             debug!("List of ids was empty");
             return Ok(());
         }
-        trace!("Moving {n} messages", n = message_ids.len());
+        info!("Moving from {source_id:?} to {destination_id:?}: {message_ids:?}");
 
         let spam = Label::resolve_local_label_id(LabelId::spam(), bond).await?;
         let trash = Label::resolve_local_label_id(LabelId::trash(), bond).await?;
@@ -723,12 +723,13 @@ impl Message {
     /// * `message_ids` - List of the messages IDs.
     /// * `interface`   - The database interface.
     ///
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
+    #[tracing::instrument(skip_all, fields(label_id=current_label_id.as_u64()))]
     pub async fn all_available_bottom_bar_actions_for_messages(
         current_label_id: LocalLabelId,
         message_ids: Vec<LocalMessageId>,
         tether: &Tether,
     ) -> Result<AllBottomBarMessageActions, AppError> {
+        debug!("{message_ids:?}");
         let messages_fut = async {
             Self::find_by_ids(message_ids.to_vec(), tether)
                 .await
@@ -1004,6 +1005,7 @@ impl Message {
     /// Returns an error if the data could not be written to the database.
     ///
     pub async fn mark_deleted(ids: Vec<LocalMessageId>, bond: &Bond<'_>) -> Result<(), AppError> {
+        info!("Marking {ids:?} as deleted");
         let (query, params) = find_in_query!("WHERE deleted = 0 AND local_id IN ({})", ids);
         let messages = Message::find(query, params, bond).await?;
         let mut messages_by_conversation = HashMap::new();
@@ -1073,6 +1075,7 @@ impl Message {
     /// Returns an error if the data could not be written to the database.
     ///
     pub async fn mark_undeleted(ids: Vec<LocalMessageId>, bond: &Bond<'_>) -> Result<(), AppError> {
+        info!("Unmarking {ids:?} as deleted");
         let (query, params) = find_in_query!("WHERE deleted = 1 AND local_id IN ({})", ids);
         let messages = Message::find(query, params, bond).await?;
         let mut messages_by_conversation = HashMap::new();
@@ -1839,6 +1842,10 @@ impl Message {
 
         // update unread flag
         for id in ids {
+            info!(
+                "Marking {id:?} as {}",
+                if mark_read { "read" } else { "unread" }
+            );
             if let Some(mut message) = Message::find_first(
                 "WHERE local_id=? AND unread=?",
                 params![id, if mark_read { 1 } else { 0 }],
@@ -2068,6 +2075,7 @@ impl Message {
         let mut conversation_messages = BTreeMap::<LocalConversationId, Vec<LocalMessageId>>::new();
 
         for id in ids {
+            info!("Applying {local_label_id:?} to {id:?}");
             if bond
                 .query_value_opt::<LocalConversationId>(
                     indoc::indoc! {
@@ -2141,6 +2149,7 @@ impl Message {
             .await?;
 
         for id in ids {
+            info!("Removing {local_label_id:?} from {id:?}");
             // unlabel the message and return whether it was unlabeled
             if bond
                 .query_value_opt::<LocalMessageId>(

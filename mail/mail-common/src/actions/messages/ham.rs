@@ -10,6 +10,7 @@ use proton_core_common::models::{Label, LabelError, ModelIdExtension};
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
+use tracing::info;
 
 /// Action which marks messages as Ham.
 /// Ham means that a message is not spam (get it?)
@@ -110,6 +111,7 @@ impl ActionHandler for Handler {
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let tether = guard.tether();
         let ids = Message::local_ids_counterpart(action.0.clone(), tether).await?;
+        info!("Marking {ids:?} as not spam");
         let iter = ids.iter().map(|id| ctx.api().put_message_ham(id));
 
         _ = try_join_all(iter).await?;

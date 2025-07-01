@@ -153,6 +153,12 @@ impl proton_action_queue::action::Handler for SendHandler {
             return Err(SendError::NoRecipients.into());
         }
 
+        info!(
+            "Sending draft {} (scheduled={})",
+            action.metadata_id,
+            action.is_scheduled()
+        );
+
         let local_draft_label_id = local_draft_label_id(tx).await?;
         let local_outbox_label_id = local_outbox_label_id(tx).await?;
         let local_all_draft_label_id = local_all_draft_label_id(tx).await?;
@@ -393,7 +399,6 @@ impl Send {
                 .await
                 .inspect_err(|e| error!("Failed to load draft attachments : {e:?}"))?;
 
-        // TODO(ET-1407): PGP/Embedded attachments
         let packages = build_packages(
             context,
             &pgp,
@@ -412,6 +417,7 @@ impl Send {
 
         let auto_save_contacts = Some(mail_settings.auto_save_contacts);
 
+        info!("Sending {:?}", remote_message_id);
         let delivery_time = match context
             .api()
             .send_mail(
@@ -427,6 +433,7 @@ impl Send {
                 // Update conversation
                 guard
                     .tx::<_, _, <Self as Action>::Error>(async |tx| {
+                        info!("Message sent/scheduled");
                         let mut conversation: Conversation = response.conversation.into();
                         conversation.save(tx).await.inspect_err(|err| {
                             error!("Failed to update conversation after send: {err:?}")

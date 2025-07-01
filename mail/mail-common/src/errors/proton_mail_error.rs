@@ -122,10 +122,7 @@ impl From<ApiServiceError> for ProtonMailError {
         match UserApiServiceError::try_from(error) {
             Ok(api_service_error) => Self::ServerError(api_service_error),
 
-            Err(unexpected) => {
-                error!("unexpected error from ApiServiceError: {unexpected:?}");
-                Self::from(unexpected)
-            }
+            Err(unexpected) => Self::from(unexpected),
         }
     }
 }

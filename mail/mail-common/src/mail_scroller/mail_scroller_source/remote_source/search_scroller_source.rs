@@ -123,7 +123,7 @@ impl SearchScrollerSource {
         Ok(task)
     }
 
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,tether,remote_label_id))]
+    #[tracing::instrument(skip_all, fields(label_id=?remote_label_id) )]
     async fn sync_first_page(
         session: &Session,
         total: &Mutex<u64>,
@@ -132,7 +132,7 @@ impl SearchScrollerSource {
         search: SearchOptions,
         page_size: usize,
     ) -> Result<Vec<Message>, MailContextError> {
-        debug!("Syncing first page");
+        tracing::info!("Syncing first page in {remote_label_id:?}");
         let response = session
             .api()
             .get_messages(GetMessagesOptions {
@@ -168,7 +168,7 @@ impl SearchScrollerSource {
         Ok(messages)
     }
 
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(session,tether,remote_label_id))]
+    #[tracing::instrument(skip_all, fields(label_id=?remote_label_id) )]
     #[allow(clippy::too_many_arguments)]
     async fn sync_next_page(
         session: &Session,
@@ -179,7 +179,9 @@ impl SearchScrollerSource {
         search: SearchOptions,
         page_size: usize,
     ) -> Result<Vec<Message>, MailContextError> {
-        debug!("Syncing next page");
+        tracing::info!(
+            "Syncing next page in {remote_label_id:?} with end_id={last_element_id:?} and end={last_time}"
+        );
         let mut response = session
             .api()
             .get_messages(GetMessagesOptions {
@@ -204,7 +206,11 @@ impl SearchScrollerSource {
             }
         }
 
-        debug!("Fetched {} elements", response.messages.len());
+        debug!(
+            "Fetched {}/{} elements",
+            response.messages.len(),
+            response.total
+        );
 
         if response.messages.is_empty() {
             return Ok(vec![]);
@@ -269,7 +275,7 @@ impl SearchScrollerSource {
 impl MailScrollerSource for SearchScrollerSource {
     type Item = Message;
 
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(ctx))]
+    #[tracing::instrument(skip_all)]
     async fn initialize(
         &mut self,
         ctx: &MailUserContext,
