@@ -390,7 +390,7 @@ impl MailUserContext {
         let encryption_time = crypto_clock::server_crypto_clock().unix_time();
 
         // If the email is from an owned address by the user, use the corresponding keys.
-        if let Some(address) = Address::by_email(email.as_str(), tx.tether())
+        if let Some(address) = Address::by_email(email.as_clear_text_str(), tx.tether())
             .await
             .inspect_err(|err| {
                 error!("send preferences: failed to search address by email: {err:?}")
@@ -420,7 +420,7 @@ impl MailUserContext {
         // Fetch API keys, and contact-pinned keys concurrently.
         let (api_keys_result, vcard_keys_result) = join!(
             self.user_context
-                .public_address_keys(pgp, email_cloned.as_str(), false),
+                .public_address_keys(pgp, email_cloned, false),
             self.user_context
                 .public_address_keys_from_contacts(pgp, tx, &user_keys, email)
         );

@@ -84,7 +84,7 @@ async fn test_partial_contact() {
     .expect("failed to query email")
     .expect("expected to find contact email");
     assert_eq!(
-        mail.canonical_email.as_str(),
+        mail.canonical_email.as_clear_text_str(),
         "contact_email_1@contact.test"
     );
 

@@ -136,8 +136,8 @@ impl Params {
                 order: 0,
                 subject: "Hello".to_owned(),
                 senders: vec![ApiMessageSender {
-                    address: "jsmith@test.com".to_owned(),
-                    name: "John Smith".to_owned(),
+                    address: "jsmith@test.com".into(),
+                    name: "John Smith".into(),
                     is_proton: true,
                     display_sender_image: true,
                     is_simple_login: false,

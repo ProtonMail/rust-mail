@@ -1,7 +1,7 @@
+use super::proton::common::MessageId;
+use proton_core_api::services::proton::{PrivateEmail, PrivateString};
 use serde::Deserialize;
 use serde_with::{BoolFromInt, serde_as};
-
-use super::proton::common::MessageId;
 
 /// Who sent the notification
 ///
@@ -12,15 +12,15 @@ use super::proton::common::MessageId;
 pub struct NotificationSender {
     /// Name of the sender
     ///
-    pub name: String,
+    pub name: PrivateString,
 
     /// Email address of the sender
     ///
-    pub address: String,
+    pub address: PrivateEmail,
 
     /// Contact group of the sender
     ///
-    pub group: String,
+    pub group: PrivateString,
 }
 
 /// Decrypted notification for Inbox application

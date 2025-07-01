@@ -23,7 +23,7 @@ use proton_action_queue::action::{ActionId, MetadataBuilder};
 use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput, QueuedError};
 use proton_core_api::consts::Mail;
 use proton_core_api::service::ApiServiceError;
-use proton_core_api::services::proton::AddressId;
+use proton_core_api::services::proton::{AddressId, PrivateEmail};
 use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::datatypes::LocalAddressId;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
@@ -311,9 +311,9 @@ pub enum PackageError {
     #[error("Primary key not found")]
     PrimaryKeyNotFound,
     #[error("Invalid Recipient Email: {0}")]
-    RecipientEmailInvalid(String),
+    RecipientEmailInvalid(PrivateEmail),
     #[error("Proton Email {0} does not exist")]
-    ProtonRecipientDoesNotExist(String),
+    ProtonRecipientDoesNotExist(PrivateEmail),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -573,7 +573,7 @@ impl Draft {
 
         let mut draft = Self {
             metadata_id: metadata.id.unwrap(),
-            sender: message.sender.address,
+            sender: message.sender.address.into_clear_text_string(),
             to_list,
             cc_list,
             bcc_list,

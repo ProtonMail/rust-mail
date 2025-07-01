@@ -588,8 +588,8 @@ async fn create_draft_reply_with_override_impl(
 
     // Create one message we can reply to.
     let mut remote_existing_message = draft_message_with_attachments();
-    remote_existing_message.metadata.sender.address = "me@proton.me".to_owned();
-    remote_existing_message.body.reply_to.address = "me@proton.me".to_owned();
+    remote_existing_message.metadata.sender.address = "me@proton.me".into();
+    remote_existing_message.body.reply_to.address = "me@proton.me".into();
     remote_existing_message.metadata.id = "FancyRemoteId".into();
     remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
     if let Some(alias_override) = &alias_override {
@@ -619,7 +619,7 @@ async fn create_draft_reply_with_override_impl(
         expected_create_reply_draft_params(&existing_message, mime_type, reply_mode);
     // override alias if present
     if let Some(alias_override) = &alias_override {
-        expected_draft_params.sender.address = alias_override.clone();
+        expected_draft_params.sender.address = alias_override.clone().into();
     }
 
     let mut message = draft_message();
@@ -751,14 +751,14 @@ async fn create_draft_reply_with_override_impl(
             .to_list
             .value
             .iter()
-            .any(|v| { v.address == sender_address.email })
+            .any(|v| { v.address.as_clear_text_str() == sender_address.email })
     );
     assert!(
         !draft_message
             .cc_list
             .value
             .iter()
-            .any(|v| { v.address == sender_address.email })
+            .any(|v| { v.address.as_clear_text_str() == sender_address.email })
     );
 
     // Local conversation id match the source message,
@@ -1226,7 +1226,7 @@ async fn prepare_draft_reply_attach_public_key(
 
     // Create one message we can reply to.
     let mut remote_existing_message = draft_message();
-    remote_existing_message.metadata.sender.address = "me@proton.me".to_owned();
+    remote_existing_message.metadata.sender.address = "me@proton.me".into();
     remote_existing_message.metadata.id = "FancyRemoteId".into();
     remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
 

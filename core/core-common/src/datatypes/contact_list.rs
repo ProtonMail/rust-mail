@@ -155,7 +155,7 @@ impl From<Contact> for ContactItem {
                     value
                         .contact_emails
                         .first()
-                        .map(|email| email.email.as_str())
+                        .map(|email| email.email.as_clear_text_str())
                         .unwrap_or_default(),
                 )
                 .or_else_unchecked("?"),
@@ -190,7 +190,7 @@ impl From<ContactEmail> for ContactEmailItem {
     fn from(value: ContactEmail) -> Self {
         let local_id = value.id();
         let name = if value.name.is_empty() {
-            value.email.clone().into_inner()
+            value.email.clone().into_clear_text_string()
         } else {
             value.name
         };
@@ -437,10 +437,10 @@ impl ContactSuggestion {
     pub fn email(&self) -> Option<&str> {
         match &self.kind {
             ContactSuggestionKind::ContactItem(contact_email_item) => {
-                Some(contact_email_item.email.as_str())
+                Some(contact_email_item.email.as_clear_text_str())
             }
             ContactSuggestionKind::DeviceContact(device_contact_suggestion) => {
-                Some(device_contact_suggestion.email.as_str())
+                Some(device_contact_suggestion.email.as_clear_text_str())
             }
             ContactSuggestionKind::ContactGroup(_) => None,
         }

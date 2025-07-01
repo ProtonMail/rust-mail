@@ -119,7 +119,7 @@ impl GetEventOptions {
 #[serde(rename_all = "PascalCase")]
 pub struct GetKeysAllOptions {
     /// The email address to get keys for.
-    pub email: String,
+    pub email: PrivateEmail,
 
     /// Whether to only get internal keys.
     #[serde_as(as = "Option<BoolFromInt>")]
@@ -133,7 +133,7 @@ pub struct GetKeysAllOptions {
 pub struct GetImagesLogoOptions {
     /// The percent encoded address. Either Domain or Address are required.
     /// Ex: `Address=noreply%40amazon.com`
-    pub address: Option<String>,
+    pub address: Option<PrivateEmail>,
 
     /// The bimi-selector of the message
     pub bimi_selector: Option<String>,

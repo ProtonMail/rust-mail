@@ -117,7 +117,7 @@ impl From<RealContactEmailItem> for ContactEmailItem {
     fn from(value: RealContactEmailItem) -> Self {
         Self {
             id: value.local_id.into(),
-            email: value.email.into_inner(),
+            email: value.email.into_clear_text_string(),
             is_proton: value.is_proton,
             last_used_time: value.last_used_time.into(),
             avatar_information: value.avatar_information.into(),
@@ -254,7 +254,7 @@ pub struct DeviceContactSuggestion {
 impl From<RealDeviceContactSuggestion> for DeviceContactSuggestion {
     fn from(value: RealDeviceContactSuggestion) -> Self {
         Self {
-            email: value.email.into_inner(),
+            email: value.email.into_clear_text_string(),
         }
     }
 }

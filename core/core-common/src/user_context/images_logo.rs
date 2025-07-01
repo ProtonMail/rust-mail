@@ -3,8 +3,8 @@ use crate::os::safe_write_async;
 use crate::{CoreContextResult, UserContext};
 use anyhow::Context as _;
 use indoc::indoc;
-use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::services::proton::prelude::GetImagesLogoOptions;
+use proton_core_api::services::proton::{PrivateEmail, ProtonCore};
 use proton_core_api::session::CoreSession;
 use stash::exports::{SqliteError, ToSql};
 use stash::params;
@@ -43,7 +43,7 @@ impl UserContext {
     /// If cache metadata are unset
     pub async fn image_for_sender(
         &self,
-        address: String,
+        address: PrivateEmail,
         bimi_selector: Option<String>,
         format: Option<String>,
         mode: Option<LightOrDarkMode>,
@@ -124,9 +124,10 @@ impl UserContext {
 
                 // We will write the image to
                 // {CACHE_PATH}/sender_images/{hash in hex}.{svg/webp/png}
-                let path = self
-                    .sender_images_cache_path()
-                    .join(format!("{address}-{opts_hash:#x}.{image_format}"));
+                let path = self.sender_images_cache_path().join(format!(
+                    "{}-{opts_hash:#x}.{image_format}",
+                    address.as_clear_text_str()
+                ));
 
                 let image_size = image.len();
                 safe_write_async(&path, image)
@@ -157,7 +158,7 @@ impl UserContext {
 
 async fn insert(
     tx: &Bond<'_>,
-    address: String,
+    address: PrivateEmail,
     bimi_selector: Option<String>,
     mode: Option<LightOrDarkMode>,
     size: Option<u32>,
@@ -184,7 +185,7 @@ enum ImageInCache {
 
 async fn find_sender_image_in_cache(
     tether: &Tether,
-    address: String,
+    address: PrivateEmail,
     bimi_selector: Option<String>,
     format: Option<String>,
     mode: Option<LightOrDarkMode>,
@@ -204,7 +205,7 @@ async fn find_sender_image_in_cache(
 
 async fn select(
     tether: &Tether,
-    address: String,
+    address: PrivateEmail,
     bimi_selector: Option<String>,
     format: Option<String>,
     mode: Option<LightOrDarkMode>,

@@ -154,7 +154,7 @@ impl UserContext {
     pub async fn public_address_keys<P>(
         &self,
         pgp: &P,
-        email: &str,
+        email: PrivateEmailRef<'_>,
         internal_only: bool,
     ) -> CoreContextResult<PublicAddressKeys<<P>::PublicKey>>
     where

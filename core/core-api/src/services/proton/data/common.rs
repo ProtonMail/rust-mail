@@ -14,17 +14,17 @@ pub struct PrivateEmail(String);
 
 impl PrivateEmail {
     #[must_use]
-    pub fn new(email: String) -> Self {
-        Self(email)
+    pub fn new(email: impl Into<String>) -> Self {
+        Self(email.into())
     }
 
     #[must_use]
-    pub fn into_inner(self) -> String {
+    pub fn into_clear_text_string(self) -> String {
         self.0
     }
 
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub fn as_clear_text_str(&self) -> &str {
         &self.0
     }
 
@@ -36,13 +36,13 @@ impl PrivateEmail {
 
 impl std::fmt::Display for PrivateEmail {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-        write!(f, "{}", sanitize(&self.0))
+        write!(f, "{}", sanitize_email(&self.0))
     }
 }
 
 impl std::fmt::Debug for PrivateEmail {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-        write!(f, "{}", sanitize(&self.0))
+        write!(f, "{}", sanitize_email(&self.0))
     }
 }
 
@@ -69,7 +69,7 @@ impl std::ops::Deref for PrivateEmail {
 #[cfg(feature = "sql")]
 impl ::stash::exports::ToSql for PrivateEmail {
     fn to_sql(&self) -> Result<::stash::exports::ToSqlOutput<'_>, ::stash::exports::SqliteError> {
-        self.as_str().to_sql()
+        self.as_clear_text_str().to_sql()
     }
 }
 
@@ -90,7 +90,7 @@ impl<'s> PrivateEmailRef<'s> {
     }
 
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub fn as_clear_text_str(&self) -> &str {
         self.0
     }
 
@@ -102,17 +102,35 @@ impl<'s> PrivateEmailRef<'s> {
 
 impl std::fmt::Display for PrivateEmailRef<'_> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-        write!(f, "{}", sanitize(self.0))
+        write!(f, "{}", sanitize_email(self.0))
     }
 }
 
 impl std::fmt::Debug for PrivateEmailRef<'_> {
     fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-        write!(f, "PrivateEmailRef({})", sanitize(self.0))
+        write!(f, "{}", sanitize_email(self.0))
     }
 }
 
-fn sanitize(value: &str) -> String {
+impl<'s, T: AsRef<str>> From<&'s T> for PrivateEmailRef<'s> {
+    fn from(value: &'s T) -> Self {
+        Self(value.as_ref())
+    }
+}
+
+impl<'s> From<&'s str> for PrivateEmailRef<'s> {
+    fn from(value: &'s str) -> Self {
+        Self(value)
+    }
+}
+
+impl<'s> From<&'s PrivateString> for PrivateEmailRef<'s> {
+    fn from(value: &'s PrivateString) -> PrivateEmailRef<'s> {
+        value.as_ref()
+    }
+}
+
+fn sanitize_email(value: &str) -> String {
     value
         .chars()
         .enumerate()
@@ -126,4 +144,82 @@ fn sanitize(value: &str) -> String {
             }
         })
         .collect()
+}
+
+fn sanitize_string(value: &str) -> String {
+    std::iter::repeat_n('x', value.chars().count()).collect()
+}
+
+/// New type wrapper which hides the string from Display and Debug outputs.
+#[derive(
+    Default, Clone, serde::Deserialize, Eq, Hash, PartialEq, Ord, PartialOrd, serde::Serialize,
+)]
+pub struct PrivateString(String);
+
+impl PrivateString {
+    #[must_use]
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
+    #[must_use]
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    #[must_use]
+    pub fn as_ref(&self) -> PrivateEmailRef<'_> {
+        PrivateEmailRef(self.0.as_str())
+    }
+}
+
+impl std::fmt::Display for PrivateString {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        write!(f, "{}", sanitize_string(&self.0))
+    }
+}
+
+impl std::fmt::Debug for PrivateString {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+        write!(f, "{}", sanitize_string(&self.0))
+    }
+}
+
+impl From<String> for PrivateString {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for PrivateString {
+    fn from(value: &str) -> Self {
+        Self(value.to_owned())
+    }
+}
+
+impl std::ops::Deref for PrivateString {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_str()
+    }
+}
+
+#[cfg(feature = "sql")]
+impl ::stash::exports::ToSql for PrivateString {
+    fn to_sql(&self) -> Result<::stash::exports::ToSqlOutput<'_>, ::stash::exports::SqliteError> {
+        self.as_str().to_sql()
+    }
+}
+
+#[cfg(feature = "sql")]
+impl ::stash::exports::FromSql for PrivateString {
+    fn column_result(value: stash::exports::ValueRef<'_>) -> ::stash::exports::FromSqlResult<Self> {
+        String::column_result(value).map(Self)
+    }
 }

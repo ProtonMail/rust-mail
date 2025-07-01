@@ -3,10 +3,10 @@ use crate::mail::draft::Draft;
 use crate::mail::state::MailUserContextPtr;
 use itertools::Itertools;
 use non_empty_string::NonEmptyString;
+use proton_core_api::services::proton::PrivateString;
 use proton_mail_common::draft::recipients::{
-    GroupRecipient, MaybeEmptyString, OnBackgroundValidationComplete, Recipient as RealRecipient,
-    RecipientEntry, RecipientError, RecipientList, SingleRecipient, ValidatingRecipientList,
-    ValidationState,
+    GroupRecipient, OnBackgroundValidationComplete, Recipient as RealRecipient, RecipientEntry,
+    RecipientError, RecipientList, SingleRecipient, ValidatingRecipientList, ValidationState,
 };
 use proton_mail_common::{MailContextError, MailUserContext};
 use std::sync::{Arc, Weak};
@@ -24,8 +24,8 @@ pub struct SingleRecipientEntry {
 impl From<SingleRecipientEntry> for RecipientEntry {
     fn from(value: SingleRecipientEntry) -> Self {
         Self {
-            display_name: MaybeEmptyString::from_option(value.name),
-            email: value.email,
+            display_name: value.name.map(Into::into),
+            email: value.email.into(),
         }
     }
 }
@@ -90,8 +90,8 @@ pub struct ComposerRecipientSingle {
 impl From<SingleRecipient> for ComposerRecipientSingle {
     fn from(value: SingleRecipient) -> Self {
         Self {
-            display_name: value.display_name,
-            address: value.email,
+            display_name: value.display_name.map(PrivateString::into_inner),
+            address: value.email.into_clear_text_string(),
             valid_state: value.state.into(),
         }
     }
@@ -314,7 +314,12 @@ impl ComposerRecipientList {
             if duplicates.is_empty() {
                 AddGroupRecipientError::Ok
             } else {
-                AddGroupRecipientError::Duplicate(duplicates.into_iter().map(|v| v.email).collect())
+                AddGroupRecipientError::Duplicate(
+                    duplicates
+                        .into_iter()
+                        .map(|v| v.email.into_clear_text_string())
+                        .collect(),
+                )
             }
         })
     }

@@ -785,8 +785,8 @@ impl Save {
             num_attachments: total_attachment_count.try_into().unwrap_or_default(),
             display_order,
             sender: MessageSender {
-                address: sender_email,
-                name: address.display_name.clone(),
+                address: sender_email.into(),
+                name: address.display_name.clone().into(),
                 ..Default::default()
             },
             size: body_len,
@@ -816,12 +816,12 @@ impl Save {
         message.bcc_list = self.bcc_list.to_message_recipients().into();
         message.num_attachments = total_attachment_count.try_into().unwrap_or_default();
         message.sender = MessageSender {
-            address: sender_email.clone(),
+            address: sender_email.clone().into(),
             bimi_selector: None,
             display_sender_image: false,
             is_proton: false,
             is_simple_login: false,
-            name: address.display_name.clone(),
+            name: address.display_name.clone().into(),
         };
         message.size = body_len;
         message.subject = self.subject.clone();
@@ -861,12 +861,12 @@ impl Save {
             recipients: Default::default(),
             senders: MessageSenders {
                 value: vec![MessageSender {
-                    address: sender_email.clone(),
+                    address: sender_email.clone().into(),
                     bimi_selector: None,
                     display_sender_image: false,
                     is_proton: true,
                     is_simple_login: false,
-                    name: address.display_name.clone(),
+                    name: address.display_name.clone().into(),
                 }],
             },
             size: body_len,

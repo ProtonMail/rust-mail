@@ -764,14 +764,14 @@ mod contact_suggestions {
                         format!(
                             "{} <{}>",
                             suggestion.name,
-                            contact_email_item.email.as_str()
+                            contact_email_item.email.as_clear_text_str()
                         )
                     }
                     ContactSuggestionKind::DeviceContact(device_contact_suggestion) => {
                         format!(
                             "{} <{}>",
                             suggestion.name,
-                            device_contact_suggestion.email.as_str()
+                            device_contact_suggestion.email.as_clear_text_str()
                         )
                     }
                     ContactSuggestionKind::ContactGroup(vec) => {
