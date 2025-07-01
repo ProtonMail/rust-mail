@@ -14,7 +14,7 @@ use std::time::Duration;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, trace};
+use tracing::{error, info, trace};
 
 thread_local! {
     static DRAIN: Cell<bool> = const { Cell::new(false) };
@@ -47,9 +47,9 @@ impl TaskService {
         })
     }
 
-    #[tracing::instrument(skip(receiver))]
+    #[tracing::instrument(level = "debug", skip_all)]
     fn run(receiver: &mpsc::Receiver<Command>) {
-        debug!("Starting task service");
+        info!("Starting task service");
 
         let mut wakers: HashMap<usize, Waker> = HashMap::new();
         let mut paused = false;
@@ -125,7 +125,7 @@ impl TaskService {
             }
         }
 
-        debug!("Stopping task service");
+        info!("Stopping task service");
     }
 
     /// Pauses the currently running (and possible future) tasks until you call
