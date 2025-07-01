@@ -20,7 +20,6 @@ val privateProperties = Properties().apply {
 }
 
 val gitHubDomain = "githubProtonMailDomain".fromVariable()
-val mavenUrl = "mavenUrl".fromVariable()
 val mavenUser = "mavenCentralUsername".fromVariable()
 val mavenPassword = "mavenCentralPassword".fromVariable()
 val mavenSigningKey = "mavenSigningKey".fromVariable()
