@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use std::mem;
 
 use crossterm::event::KeyEvent;
+use itertools::Itertools;
 use ratatui::prelude::Constraint::Length;
 use ratatui::prelude::*;
 use ratatui::style::Styled;
@@ -81,6 +82,22 @@ impl ScrollableTableState {
             ("Ctrl + d", "Remove attachment"),
         ]);
     }
+
+    pub fn selected_items(&self) -> Vec<usize> {
+        let items = self.marked.iter().copied().collect_vec();
+        if !items.is_empty() {
+            items
+        } else if let Some(idx) = self.selected() {
+            vec![idx]
+        } else {
+            vec![]
+        }
+    }
+}
+
+pub enum SelectedItems {
+    One(usize),
+    Many(Vec<usize>),
 }
 
 pub struct ScrollableTable<'a> {

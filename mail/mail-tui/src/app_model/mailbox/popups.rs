@@ -1,5 +1,5 @@
 use crate::app::Command;
-use crate::app_model::mailbox::{ConversationMessage, Item, Message, MessageMessage};
+use crate::app_model::mailbox::{ConversationMessage, Items, Message, MessageMessage};
 use crate::messages::Messages;
 use crate::widgets::{AsList, ScrollableList, ScrollableListState};
 use proton_core_common::datatypes::{LabelType, LocalLabelId};
@@ -21,11 +21,11 @@ use super::LabelAs;
 pub struct MoveItemPopup {
     folders: Vec<Label>,
     list_state: ScrollableListState,
-    item: Item,
+    item: Items,
 }
 
 impl MoveItemPopup {
-    pub async fn new(ctx: &MailUserContext, item: Item) -> MailContextResult<Self> {
+    pub async fn new(ctx: &MailUserContext, item: Items) -> MailContextResult<Self> {
         //TODO: improve
         let tether = ctx.user_stash().connection();
         let mut folders = Label::find_by_kind(LabelType::Folder, &tether).await?;
@@ -59,12 +59,12 @@ impl crate::app_model::Popup for MoveItemPopup {
         match key.code {
             KeyCode::Enter => self
                 .selected_label_id()
-                .map(|id| match self.item {
-                    Item::Conversation(item_id) => Command::batch([
+                .map(|id| match self.item.clone() {
+                    Items::Conversation(item_id) => Command::batch([
                         Command::message(Messages::DismissPopup),
                         Command::message(ConversationMessage::MoveConversation(item_id, id).into()),
                     ]),
-                    Item::Message(item_id) => Command::batch([
+                    Items::Message(item_id) => Command::batch([
                         Command::message(Messages::DismissPopup),
                         Command::message(MessageMessage::MoveMessage(item_id, id).into()),
                     ]),
@@ -84,23 +84,20 @@ impl crate::app_model::Popup for MoveItemPopup {
 pub struct LabelItemPopup {
     labels: Vec<LabelAsAction>,
     list_state: ScrollableListState,
-    item: Item,
+    item: Items,
 }
 
 impl LabelItemPopup {
-    pub async fn new(ctx: &MailUserContext, item: Item) -> MailContextResult<Self> {
+    pub async fn new(ctx: &MailUserContext, item: Items) -> MailContextResult<Self> {
         let stash = ctx.user_stash();
         let tether = stash.connection();
-        let labels = match item {
-            Item::Conversation(local_id) => {
-                Conversation::available_label_as_actions(vec![local_id], &tether).await?
+        let labels = match item.clone() {
+            Items::Conversation(local_ids) => {
+                Conversation::available_label_as_actions(local_ids, &tether).await?
             }
-            Item::Message(local_id) => {
-                proton_mail_common::models::Message::available_label_as_actions(
-                    vec![local_id],
-                    &tether,
-                )
-                .await?
+            Items::Message(local_ids) => {
+                proton_mail_common::models::Message::available_label_as_actions(local_ids, &tether)
+                    .await?
             }
         };
 
@@ -165,11 +162,11 @@ impl crate::app_model::Popup for LabelItemPopup {
                         Some(false) => (),
                     }
                 }
-                match self.item {
-                    Item::Conversation(id) => {
+                match self.item.clone() {
+                    Items::Conversation(item_ids) => {
                         let label_as = Box::new(LabelAs {
                             source_label_id: action.label_id,
-                            item_ids: vec![id],
+                            item_ids,
                             selected_label_ids,
                             partially_selected_label_ids,
                             must_archive: false, // TODO: add this button
@@ -181,10 +178,10 @@ impl crate::app_model::Popup for LabelItemPopup {
                             ),
                         ])
                     }
-                    Item::Message(id) => {
+                    Items::Message(item_ids) => {
                         let label_as = Box::new(LabelAs {
                             source_label_id: action.label_id,
-                            item_ids: vec![id],
+                            item_ids,
                             selected_label_ids,
                             partially_selected_label_ids,
                             must_archive: false, // TODO: add this button

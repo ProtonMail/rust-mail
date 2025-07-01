@@ -4,7 +4,7 @@ use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::conversations::ConversationsState;
 use crate::app_model::mailbox::messages::MessagesState;
 use crate::app_model::mailbox::popups::{LabelItemPopup, LabelSelectPopup, MoveItemPopup};
-use crate::app_model::mailbox::{Item, Message, poll_event_loop, refresh};
+use crate::app_model::mailbox::{Items, Message, poll_event_loop, refresh};
 use crate::app_model::watcher::TuiWatchHandle;
 use crate::app_model::{AppState, AppStateHandler, YesNoPopup};
 use crate::messages::Messages;
@@ -238,7 +238,7 @@ impl MailboxModel {
         })
     }
 
-    fn open_move_item_popup(&mut self, item: Item) -> Command<Messages> {
+    fn open_move_item_popup(&mut self, item: Items) -> Command<Messages> {
         if matches!(&self.state, State::Syncing(_)) {
             return Command::None;
         }
@@ -256,7 +256,7 @@ impl MailboxModel {
         })
     }
 
-    fn open_label_popup(&mut self, item: Item) -> Command<Messages> {
+    fn open_label_popup(&mut self, item: Items) -> Command<Messages> {
         if matches!(&self.state, State::Syncing(_)) {
             return Command::None;
         }
@@ -423,7 +423,7 @@ impl AppStateHandler for MailboxModel {
             Message::OpenSearchView(mbox, state) => self.open_search_view(mbox, state),
             Message::OpenLabelSelectPopup => self.open_label_select_popup(),
             Message::SelectLabel(label_id) => self.select_label(label_id),
-            Message::OpenMoveItemPopup(item) => self.open_move_item_popup(item),
+            Message::OpenMoveItemsPopup(item) => self.open_move_item_popup(item),
             Message::OpenLabelItemPopup(item) => self.open_label_popup(item),
             Message::ConversationState(_) | Message::MessageState(_) => {
                 self.state.update(&self.ctx, message, &self.mailbox)
