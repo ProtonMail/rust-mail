@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use clap::Parser;
+use log_service::LogService;
 use proton_action_queue::observers::ActionAwaiter;
 use proton_action_queue::queue::BroadcastMessage;
 use proton_core_api::session::Config;
@@ -62,6 +63,11 @@ async fn main() {
 
     info!("TMP DIR: {:?}", tmp_dir.path());
 
+    let config = log_service::Config::builder()
+        .name("log".into())
+        .directory(tmp_dir.path().into())
+        .build();
+
     let ctx = MailContext::new(
         tmp_dir.path().join("session"),
         tmp_dir.path().join("user"),
@@ -73,7 +79,7 @@ async fn main() {
         Config::default(),
         None,
         None,
-        None,
+        LogService::new(config),
         EventPollMode::Manual,
     )
     .await

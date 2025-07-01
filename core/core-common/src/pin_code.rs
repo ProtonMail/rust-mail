@@ -63,6 +63,7 @@ impl PinCode {
     /// verification.
     ///
     pub async fn set_pin(ctx: Arc<Context>, pin: Vec<u32>) -> Result<(), PinError> {
+        tracing::info!("Setting pin code");
         let pin_len = pin.len();
 
         if pin_len < Self::MIN_PASSWD_LEN {
@@ -110,6 +111,7 @@ impl PinCode {
     /// This method will be utilized to verify user if he is eligible person to access the app.
     ///
     pub async fn validate_pin(ctx: Arc<Context>, pin: Vec<u32>) -> Result<(), PinError> {
+        tracing::info!("Validating pin");
         let pin = Self::sanitize_pin(pin)?;
         let mut tether = ctx.account_stash().connection();
         let app_settings = AppSettings::get_or_default(&tether).await;
@@ -156,7 +158,7 @@ impl PinCode {
             if success {
                 Ok(())
             } else if pin_protection.remaining_attempts() == 0 {
-                tracing::error!("All attemps to validate PIN have been used");
+                tracing::error!("All attempts to validate PIN have been used");
 
                 Err(PinError::TooManyAttempts)
             } else {

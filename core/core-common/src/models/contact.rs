@@ -38,7 +38,7 @@ use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
 use tokio::task::JoinSet;
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 use super::{InitializationError, InitializationWatcher, InitializedComponent, Label};
 
@@ -269,6 +269,7 @@ impl Contact {
     #[tracing::instrument(skip(api))]
     #[allow(clippy::too_many_lines)]
     pub async fn sync(api: &Proton) -> Result<SyncedContacts, ApiServiceError> {
+        info!("Syncing contacts");
         // In order to maximize throughput we do as follows:
         // 1. We download the first batch
         // 2. We calculate how many batches are left and request them all in parallel.
@@ -358,11 +359,7 @@ impl Contact {
         );
 
         // We are splitting the store and download functions in two so that it's faster.
-        Ok(SyncedContacts {
-            contacts,
-            emails,
-            t0,
-        })
+        Ok(SyncedContacts { contacts, emails })
     }
 
     /// Key used to distinguish between components in the initialization.
@@ -425,7 +422,7 @@ impl Contact {
         api: &Proton,
         tx: &mut impl RunTransaction,
     ) -> CoreContextResult<()> {
-        debug!("Syncing full contact for contact id {local_id}");
+        info!("Syncing full contact for contact id {local_id}");
         let remote_id = Contact::local_id_counterpart(local_id, tx.tether())
             .await?
             .ok_or_else(|| {
@@ -567,6 +564,7 @@ impl Contact {
         remote_ids: &[ContactId],
         api: &Proton,
     ) -> CoreContextResult<Vec<ContactId>> {
+        info!("Deleting contacts {remote_ids:?}");
         let response = api
             .put_delete_contacts(remote_ids.iter().cloned().map_into().collect())
             .await?;
@@ -688,7 +686,6 @@ impl TableObserver for ContactListWatcher {
 pub struct SyncedContacts {
     contacts: Vec<Contact>,
     emails: Vec<ContactEmail>,
-    t0: Instant,
 }
 
 impl SyncedContacts {
@@ -700,7 +697,6 @@ impl SyncedContacts {
         let Self {
             contacts,
             mut emails,
-            t0,
         } = self;
         // Let's start with a clean database
         tx.execute("DELETE FROM contacts", vec![]).await?;
@@ -750,7 +746,6 @@ impl SyncedContacts {
         );
 
         debug!("Stored all to the db in {:?}", t1.elapsed());
-        debug!("Synced all contacts in {:?}", t0.elapsed());
         Ok(())
     }
 }

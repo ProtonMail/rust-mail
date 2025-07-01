@@ -182,13 +182,6 @@ impl Provider for CoreEventLoopContext {
 pub struct CoreEventSubscriber(Weak<UserContext>);
 
 impl CoreEventSubscriber {
-    pub fn inner(&self) -> Result<Arc<UserContext>, anyhow::Error> {
-        match self.0.upgrade() {
-            Some(ctx) => Ok(ctx),
-            None => bail!("UserContext no longer alive"),
-        }
-    }
-
     #[must_use]
     pub fn boxed(self) -> Box<Self> {
         Box::new(self)
@@ -209,7 +202,11 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
 
     #[tracing::instrument(level = tracing::Level::DEBUG, skip(self, events))]
     async fn on_events(&self, events: &mut [CoreEvent]) -> Result<(), SubscriberError> {
-        let ctx = self.inner()?;
+        let Some(ctx) = self.0.upgrade() else {
+            warn!("User context is no longer alive");
+            return Ok(());
+        };
+        debug!("Handling {} events", events.len());
         let user_id = ctx.user_id().clone();
         let stash = ctx.stash().clone();
 
@@ -275,9 +272,16 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
     }
 
     async fn on_refresh(&self, event: &CoreEvent) -> Result<(), SubscriberError> {
-        let ctx = self.inner()?;
+        let Some(ctx) = self.0.upgrade() else {
+            warn!("User context is no longer alive");
+            return Ok(());
+        };
 
         ctx.on_refresh_impl(event.refresh).await
+    }
+
+    fn is_alive(&self) -> bool {
+        self.0.strong_count() > 0
     }
 }
 

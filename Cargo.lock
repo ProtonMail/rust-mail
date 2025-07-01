@@ -3931,6 +3931,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
 
 [[package]]
+name = "log-service"
+version = "0.1.0"
+dependencies = [
+ "parking_lot",
+ "tempdir",
+ "tracing-subscriber",
+ "typed-builder",
+]
+
+[[package]]
 name = "lru"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5563,19 +5573,15 @@ name = "proton-action-queue"
 version = "0.7.29"
 dependencies = [
  "anyhow",
- "async-trait",
  "bitflags 2.9.1",
  "chrono",
  "clap",
  "derive_more 2.0.1",
- "futures",
  "include_dir",
  "indoc",
  "parking_lot",
  "pretty_assertions",
  "proton-sqlite3",
- "proton-task-service",
- "rmp",
  "rmp-serde",
  "serde",
  "stash",
@@ -5696,6 +5702,7 @@ dependencies = [
  "insta",
  "itertools 0.13.0",
  "jiff",
+ "log-service",
  "num_enum",
  "parking_lot",
  "pretty_assertions",
@@ -5943,6 +5950,7 @@ dependencies = [
  "insta",
  "itertools 0.13.0",
  "jiff",
+ "log-service",
  "mime",
  "non-empty-string",
  "parking_lot",
@@ -6036,6 +6044,7 @@ dependencies = [
  "itertools 0.13.0",
  "keyring",
  "log",
+ "log-service",
  "proton-account-api",
  "proton-action-queue",
  "proton-calendar-api",
@@ -6071,6 +6080,7 @@ dependencies = [
  "flume",
  "futures",
  "itertools 0.13.0",
+ "log-service",
  "muon",
  "non-empty-string",
  "parking_lot",

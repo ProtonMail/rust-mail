@@ -28,7 +28,7 @@ use stash::{
     stash::{StashError, Tether},
 };
 use thiserror::Error;
-use tracing::{Level, debug};
+use tracing::Level;
 
 #[allow(clippy::module_name_repetitions)]
 type CachedUserKeys = Vec<CachedUserKey>;
@@ -162,7 +162,7 @@ impl UserContext {
     /// Returns an error on a database or sync failure.
     /// - A DB/IO error if syncing the contact or accessing the contacts fails.
     /// - A wrapped [`KeyHandlingError`] if `VCard` parsing or signature verification fails.
-    #[tracing::instrument(level = Level::DEBUG, skip(self, pgp, tx, unlocked_user_keys))]
+    #[tracing::instrument(level = Level::DEBUG, skip_all)]
     pub async fn public_address_keys_from_contacts<P>(
         &self,
         pgp: &P,
@@ -173,9 +173,6 @@ impl UserContext {
     where
         P: PGPProviderSync,
     {
-        // First, we try to load an contact emails that matches the email.
-        debug!("Try to load the contact email for {email} from the db");
-
         let contact_email =
             ContactEmail::find_first("WHERE email = ?", params![email.to_owned()], tx.tether())
                 .await?
@@ -194,8 +191,6 @@ impl UserContext {
         let mut contact = Contact::load(local_contact_id, tx.tether())
             .await?
             .ok_or(ContactError::FullContactNotFound(email.to_owned()))?;
-
-        debug!("Full contact with cards found");
 
         Ok(extract_pinned_keys(pgp, tx.tether(), unlocked_user_keys, &mut contact, email).await?)
     }

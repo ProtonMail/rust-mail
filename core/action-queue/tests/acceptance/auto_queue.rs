@@ -3,8 +3,9 @@ use super::common::new_queue_typed;
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard, WriterGuardError,
 };
-use proton_action_queue::queue::{BroadcastMessage, QueuedActionReason, QueuedActionState};
-use proton_task_service::TaskService;
+use proton_action_queue::queue::{
+    BroadcastMessage, QueuedActionReason, QueuedActionState, TokioTaskSpawner,
+};
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use std::time::Duration;
@@ -30,12 +31,12 @@ async fn auto_queued_on_network_failure() {
 async fn auto_queued_on_pause() {
     let queue = new_queue_typed::<SuccessAction>().await;
     let mut broadcast = queue.new_broadcast_receiver();
-    let task_service = TaskService::new().unwrap();
+    let task_spawner = TokioTaskSpawner;
     let online = watch::channel(true);
 
     let auto_executor = queue
         .new_executor()
-        .into_auto_executor(online.1, &task_service);
+        .into_auto_executor(online.1, &task_spawner);
 
     auto_executor.pause();
     queue.queue_action(SuccessAction {}).await.unwrap();
@@ -59,12 +60,12 @@ async fn auto_queued_on_multiple_unpause() {
 
     queue.queue_action(SuccessAction {}).await.unwrap();
 
-    let task_service = TaskService::new().unwrap();
+    let task_spawner = TokioTaskSpawner;
     let online = watch::channel(true);
 
     let auto_executor = queue
         .new_executor()
-        .into_auto_executor(online.1, &task_service);
+        .into_auto_executor(online.1, &task_spawner);
 
     // Calling unpause should have no effect as auto executors starts unpaused.
     auto_executor.unpause();
@@ -82,12 +83,12 @@ async fn auto_queued_on_multiple_unpause() {
 async fn auto_queued_on_multiple_pause() {
     let queue = new_queue_typed::<SuccessAction>().await;
     let mut broadcast = queue.new_broadcast_receiver();
-    let task_service = TaskService::new().unwrap();
+    let task_spawner = TokioTaskSpawner;
     let online = watch::channel(true);
 
     let auto_executor = queue
         .new_executor()
-        .into_auto_executor(online.1, &task_service);
+        .into_auto_executor(online.1, &task_spawner);
 
     // Calling pause multiple times should still end up in paused state.
     auto_executor.pause();
@@ -114,12 +115,12 @@ async fn auto_queued_on_multiple_pause() {
 async fn auto_queued_on_pause_and_partially_manual_execution() {
     let queue = new_queue_typed::<SuccessAction>().await;
     let mut broadcast = queue.new_broadcast_receiver();
-    let task_service = TaskService::new().unwrap();
+    let task_spawner = TokioTaskSpawner;
     let online = watch::channel(true);
 
     let auto_executor = queue
         .new_executor()
-        .into_auto_executor(online.1, &task_service);
+        .into_auto_executor(online.1, &task_spawner);
 
     auto_executor.pause();
     queue.queue_action(SuccessAction {}).await.unwrap();
@@ -179,11 +180,11 @@ async fn execute_all_waits_for_network_to_reoccur() {
     let online = watch::channel(false);
     let queue = new_queue_typed::<ErrorAction>().await;
     let mut broadcast = queue.new_broadcast_receiver();
-    let task_service = TaskService::new().unwrap();
+    let task_spawner = TokioTaskSpawner;
 
     let auto_executor = queue
         .new_executor()
-        .into_auto_executor(online.1, &task_service);
+        .into_auto_executor(online.1, &task_spawner);
 
     auto_executor.pause();
     queue.queue_action(ErrorAction {}).await.unwrap();

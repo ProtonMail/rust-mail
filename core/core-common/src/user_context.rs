@@ -8,6 +8,7 @@ use crate::models::{InitializationWatcher, UserSettings};
 use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse};
 use anyhow::Context as _;
 pub use event_loop::subscriber::CoreEventLoopContext;
+use log_service::LogService;
 use proton_action_queue::queue::Queue;
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::services::proton::{SessionId, UserId};
@@ -26,7 +27,7 @@ use std::sync::{Arc, Weak};
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 pub mod action_queue;
 pub mod event_loop;
@@ -53,6 +54,7 @@ pub trait UserDatabaseInitializer: Send + Sync {
 
 /// Contains all the relevant information to an initialize user session.
 pub struct UserContext {
+    this: Weak<Self>,
     session: Session,
     context: Arc<Context>,
     user_stash: Stash,
@@ -75,7 +77,7 @@ impl Debug for UserContext {
 
 impl UserContext {
     #[allow(clippy::too_many_arguments)]
-    #[tracing::instrument(name = "NewUserContext", skip_all)]
+    #[tracing::instrument(name = "NewUserContext", skip_all, fields(user_id=%user_id))]
     pub(crate) async fn new(
         session: Session,
         context: Arc<Context>,
@@ -85,6 +87,7 @@ impl UserContext {
         session_id: SessionId,
         cache_path: PathBuf,
     ) -> CoreContextResult<Arc<Self>> {
+        info!("Creating new user context");
         let user_stash = Self::new_user_db(user_stash_path, db_initializers).await?;
         let cancellation_token = context.new_child_cancellation_token();
         let queue = Queue::new(user_stash.clone()).await?;
@@ -98,6 +101,7 @@ impl UserContext {
             let event_ctx = CoreEventLoopContext::from(Weak::clone(this));
 
             Self {
+                this: Weak::clone(this),
                 session,
                 context,
                 user_stash,
@@ -152,6 +156,11 @@ impl UserContext {
         Ok(this)
     }
 
+    #[allow(clippy::missing_panics_doc)]
+    pub fn as_arc(&self) -> Arc<Self> {
+        self.this.upgrade().expect("Should never fail")
+    }
+
     /// Get the network session.
     #[must_use]
     pub fn session(&self) -> &Session {
@@ -201,8 +210,8 @@ impl UserContext {
 
     /// Get path to the log file.
     #[must_use]
-    pub fn get_log_path(&self) -> Option<&Path> {
-        self.context.get_log_path()
+    pub fn log_service(&self) -> &LogService {
+        self.context.log_service()
     }
 
     /// Get path to the database file
@@ -384,4 +393,19 @@ pub enum DeleteFilesSafeError {
 
     /// Not all files could be deleted. Next time they probably will.
     Moved(io::Error),
+}
+
+impl proton_action_queue::queue::TaskSpawner for UserContext {
+    fn spawn_task<F>(&self, future: F) -> JoinHandle<()>
+    where
+        F: Future<Output = ()> + Send + 'static,
+    {
+        let cancellation_token = self.cancellation_token.clone();
+        self.context.task_service().spawn(async move {
+            tokio::select! {
+                () = cancellation_token.cancelled() => (),
+                () = future=> () ,
+            }
+        })
+    }
 }

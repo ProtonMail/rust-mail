@@ -13,7 +13,7 @@ use crate::user_context::events::messages::handle_message_events;
 use crate::{MailContextError, MailUserContext};
 use crate::{datatypes::ConversationLabelsCount, events::MailEvent};
 use anyhow::Context;
-use anyhow::{anyhow, bail};
+use anyhow::anyhow;
 use async_trait::async_trait;
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedActionOutput};
 use proton_core_common::datatypes::{Refresh, SystemLabel};
@@ -32,15 +32,6 @@ use proton_core_common::event_loop::{join_task, try_refresh};
 use stash::stash::Tether;
 
 pub struct MailEventSubscriber(Weak<MailUserContext>);
-
-impl MailEventSubscriber {
-    pub fn inner(&self) -> Result<Arc<MailUserContext>, anyhow::Error> {
-        match self.0.upgrade() {
-            Some(ctx) => Ok(ctx),
-            None => bail!("MailUserContext no longer alive"),
-        }
-    }
-}
 
 impl MailEventSubscriber {
     pub fn new(ctx: Weak<MailUserContext>) -> Self {
@@ -63,7 +54,11 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
     }
 
     async fn on_events(&self, events: &mut [MailEvent]) -> Result<(), SubscriberError> {
-        let ctx = self.inner()?;
+        let Some(ctx) = self.0.upgrade() else {
+            warn!("Mail user context is no longer alive");
+            return Ok(());
+        };
+
         debug!("Handling {} mail events", events.len());
 
         let mut tether = ctx.user_context.stash().connection();
@@ -168,9 +163,15 @@ impl Subscriber<MailEvent> for MailEventSubscriber {
     }
 
     async fn on_refresh(&self, event: &MailEvent) -> Result<(), SubscriberError> {
-        let ctx = self.inner()?;
-
+        let Some(ctx) = self.0.upgrade() else {
+            warn!("Mail user context is no longer alive");
+            return Ok(());
+        };
         ctx.on_refresh_impl(event.refresh).await
+    }
+
+    fn is_alive(&self) -> bool {
+        self.0.strong_count() > 0
     }
 }
 

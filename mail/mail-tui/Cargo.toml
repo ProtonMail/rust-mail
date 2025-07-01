@@ -21,6 +21,7 @@ proton-calendar-common = { workspace = true }
 proton-core-common = { workspace = true }
 proton-mail-common = { workspace = true }
 proton-mail-html-transformer = { workspace = true }
+log-service = { workspace = true }
 ratatui = { version = "0.28.1", features = ["all-widgets"] }
 ratatui-explorer = { version = "=0.1.2", features = ["crossterm"] }
 secrecy = { workspace = true }

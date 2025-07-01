@@ -23,6 +23,7 @@ use crate::widgets::Backdrop;
 use crate::widgets::ScrollableListState;
 use anyhow::anyhow;
 use futures::FutureExt;
+use log_service::LogService;
 use proton_core_common::OnSessionDeletedResponse;
 use proton_core_common::event_loop::EventPollMode;
 use proton_mail_common::MailContext;
@@ -32,9 +33,8 @@ use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, List, Paragraph, Row, Table, Wrap};
 use session_select::SessionSelectModel;
 use std::backtrace::Backtrace;
-use std::fs::{File, read_to_string};
+use std::fs::read_to_string;
 use std::panic::{set_hook, take_hook};
-use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use throbber_widgets_tui::ThrobberState;
@@ -146,8 +146,12 @@ impl AppModel {
         std::fs::create_dir_all(&core_cache_dir)?;
         std::fs::create_dir_all(&user_db_path)?;
 
-        let log_file = cache_dir.join("app.log");
-        let log_guard = init_log(&log_file)?;
+        let config = log_service::Config::builder()
+            .name("app".into())
+            .directory(cache_dir.clone())
+            .build();
+        let log_service = LogService::new(config);
+        let log_guard = init_log(&log_service)?;
 
         tracing::info!("Creating Async Runtime...");
         let mut keychain = AppKeyChain::new()?;
@@ -163,7 +167,7 @@ impl AppModel {
             app_config.api_config(),
             None, // TODO(jhoulahan): Support HV challenge (at least sms/email)
             None, // TODO: Add DeviceInfoProvider support for mail-tui.
-            Some(log_file),
+            log_service,
             EventPollMode::Automatic(Duration::from_secs(CLI_ARGS.event_loop_time.unwrap_or(15))),
         )
         .await?;
@@ -533,8 +537,8 @@ fn app_tracing_env_filter() -> EnvFilter {
         .expect("Error parsing tracing directives")
 }
 
-fn init_log(log_path: impl AsRef<Path>) -> anyhow::Result<WorkerGuard> {
-    let log_file = File::create(log_path)?;
+fn init_log(log_service: &LogService) -> anyhow::Result<WorkerGuard> {
+    let log_file = log_service.create_logger()?;
     let (appender, guard) = non_blocking(log_file);
     let file_subscriber = tracing_subscriber::fmt::layer()
         .with_file(false)

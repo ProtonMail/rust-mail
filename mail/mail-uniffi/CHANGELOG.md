@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Features
+
+- [ET-1969] Remove need for clients to pass product name
+
+### Fixes
+
+- [ET-3497] Make validate fn non-async
+
+
 ## [mail-uniffi-v0.93.18] - 2025-06-27
 
 ### Fixes
@@ -13,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Correct formatting of userapiserviceerror
 
 
-## [mail-uniffi-v0.93.17] - 2025-06-26
+## [mail-uniffi-v0.96.0] - 2025-06-26
 
 ### Features
 

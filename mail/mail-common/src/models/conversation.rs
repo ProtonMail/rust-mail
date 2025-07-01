@@ -2056,7 +2056,7 @@ impl Conversation {
         let label_ids: Vec<LocalLabelId> = bond
             .query_values(
                 formatdoc! {"
-                SELECT local_label_id AS value
+                SELECT DISTINCT local_label_id AS value
                 FROM conversation_labels
                 WHERE
                     local_conversation_id in ({})"

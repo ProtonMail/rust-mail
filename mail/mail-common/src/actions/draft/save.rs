@@ -233,6 +233,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 .inspect_err(|e| error!("Failed to get next conversation display order: {e:?}"))?;
             let mut conversation = action.create_new_conversation(
                 &address,
+                sender_email.clone(),
                 display_order,
                 body_len,
                 attachment_metadata.clone(),
@@ -827,9 +828,11 @@ impl Save {
         message.time = time;
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn create_new_conversation(
         &self,
         address: &Address,
+        sender_email: String,
         display_order: u64,
         body_len: u64,
         attachments: Vec<AttachmentMetadata>,
@@ -858,9 +861,12 @@ impl Save {
             recipients: Default::default(),
             senders: MessageSenders {
                 value: vec![MessageSender {
-                    address: address.email.clone(),
+                    address: sender_email.clone(),
+                    bimi_selector: None,
+                    display_sender_image: false,
                     is_proton: true,
-                    ..Default::default()
+                    is_simple_login: false,
+                    name: address.display_name.clone(),
                 }],
             },
             size: body_len,

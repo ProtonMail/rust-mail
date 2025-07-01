@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use log_service::LogService;
 use proton_core_api::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::event_loop::EventPollMode;
@@ -34,6 +35,10 @@ async fn main() {
         let keychain = InMemoryKeyChain::default();
         let key = SessionEncryptionKey::random();
         keychain.store(key).unwrap();
+        let config = log_service::Config::builder()
+            .name("log".into())
+            .directory(tmp_dir.path().into())
+            .build();
 
         MailContext::new(
             tmp_dir.path().join("session"),
@@ -46,7 +51,7 @@ async fn main() {
             Config::atlas(),
             None,
             None,
-            None,
+            LogService::new(config),
             EventPollMode::Manual,
         )
         .await

@@ -13,6 +13,7 @@ members = [
   "core/event-loop",
   "core/ical",
   "core/ical-cli",
+  "core/log-service",
   "core/proton-canonical-email",
   "core/sqlite3",
   "core/stash",
@@ -270,14 +271,9 @@ git = "https://gitlab.protontech.ch/jhoulahan/muon.git"
 rev = "97ab1546108bd6026e8aebbec1c552ee5ad5e5b3"
 features = ["unsealed"]
 
-[workspace.dependencies.proton-core-test-utils]
+[workspace.dependencies.log-service]
+path = "core/log-service"
 version = "0.1"
-path = "core/core-test-utils"
-registry = "proton"
-
-[workspace.dependencies.proton-mail-test-utils]
-version = "0.1"
-path = "mail/mail-test-utils"
 registry = "proton"
 
 [workspace.dependencies.proton-task-service]

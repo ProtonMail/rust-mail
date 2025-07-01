@@ -2,9 +2,10 @@ use super::common::{new_factory, new_queue};
 use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
-use proton_action_queue::queue::{QueueAutoExecutorPool, QueueAutoTerminationPolicy};
+use proton_action_queue::queue::{
+    QueueAutoExecutorPool, QueueAutoTerminationPolicy, TokioTaskSpawner,
+};
 use proton_action_queue::tests::common::DefaultError;
-use proton_task_service::TaskService;
 use stash::stash::Bond;
 use std::num::NonZeroUsize;
 use std::time::Duration;
@@ -13,7 +14,7 @@ use tokio::sync::watch;
 #[tokio::test]
 async fn auto_execute_until_empty() {
     let queue = new_queue(new_factory::<TestAction>()).await;
-    let task_service = TaskService::new().unwrap();
+    let task_spawner = TokioTaskSpawner;
     let online = watch::channel(true);
 
     queue
@@ -33,7 +34,7 @@ async fn auto_execute_until_empty() {
 
     let executor = queue.new_executor().into_auto_executor_with_policy(
         online.1,
-        &task_service,
+        &task_spawner,
         QueueAutoTerminationPolicy::Empty,
     );
 
@@ -44,7 +45,7 @@ async fn auto_execute_until_empty() {
 #[tokio::test]
 async fn auto_execute_until_network_failure() {
     let queue = new_queue(new_factory::<TestAction>()).await;
-    let task_service = TaskService::new().unwrap();
+    let task_spawner = TokioTaskSpawner;
     let online = watch::channel(true);
 
     queue
@@ -70,7 +71,7 @@ async fn auto_execute_until_network_failure() {
 
     let executor = queue.new_executor().into_auto_executor_with_policy(
         online.1,
-        &task_service,
+        &task_spawner,
         QueueAutoTerminationPolicy::NetworkLoss,
     );
 
@@ -81,7 +82,7 @@ async fn auto_execute_until_network_failure() {
 #[tokio::test]
 async fn auto_execute_until_empty_or_network_failure() {
     let queue = new_queue(new_factory::<TestAction>()).await;
-    let task_service = TaskService::new().unwrap();
+    let task_spawner = TokioTaskSpawner;
     let online = watch::channel(true);
 
     let action_id = queue
@@ -108,7 +109,7 @@ async fn auto_execute_until_empty_or_network_failure() {
 
     let executor = queue.new_executor().into_auto_executor_with_policy(
         online.1.clone(),
-        &task_service,
+        &task_spawner,
         QueueAutoTerminationPolicy::EmptyOrNetworkLoss,
     );
 
@@ -121,7 +122,7 @@ async fn auto_execute_until_empty_or_network_failure() {
 
     let executor = queue.new_executor().into_auto_executor_with_policy(
         online.1,
-        &task_service,
+        &task_spawner,
         QueueAutoTerminationPolicy::EmptyOrNetworkLoss,
     );
 
@@ -132,7 +133,7 @@ async fn auto_execute_until_empty_or_network_failure() {
 #[tokio::test]
 async fn auto_execute_pool() {
     let queue = new_queue(new_factory::<TestAction>()).await;
-    let task_service = TaskService::new().unwrap();
+    let task_spawner = TokioTaskSpawner;
     let online = watch::channel(true);
 
     for _ in 0..20 {
@@ -151,7 +152,7 @@ async fn auto_execute_pool() {
         &ActionGroup::default(),
         NonZeroUsize::new(3).unwrap(),
         online.1,
-        &task_service,
+        &task_spawner,
         QueueAutoTerminationPolicy::Empty,
     );
 
@@ -167,7 +168,7 @@ async fn auto_execute_pool() {
 #[tokio::test]
 async fn auto_execute_forever() {
     let queue = new_queue(new_factory::<TestAction>()).await;
-    let task_service = TaskService::new().unwrap();
+    let task_spawner = TokioTaskSpawner;
     let online = watch::channel(true);
 
     queue
@@ -181,7 +182,7 @@ async fn auto_execute_forever() {
 
     let executor = queue.new_executor().into_auto_executor_with_policy(
         online.1,
-        &task_service,
+        &task_spawner,
         QueueAutoTerminationPolicy::Never,
     );
 

@@ -24,7 +24,7 @@ use stash::params;
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use stash::utils::{MapToSql as _, placeholders};
 use thiserror::Error;
-use tracing::{debug, error};
+use tracing::error;
 
 #[derive(Debug, Error)]
 pub enum LabelError {
@@ -196,10 +196,11 @@ impl Label {
     where
         API: ProtonCore,
     {
-        let label_requests = futures::future::join_all(label_types.iter().map(|category| {
-            debug!("Fetching labels ({:?})", category);
-            api.get_labels((*category).into())
-        }))
+        let label_requests = futures::future::join_all(
+            label_types
+                .iter()
+                .map(|category| api.get_labels((*category).into())),
+        )
         .await;
 
         Ok(label_requests
@@ -247,7 +248,6 @@ impl Label {
         tx: &Bond<'_>,
         labels: Vec<Label>,
     ) -> Result<Vec<LocalLabelId>, LabelError> {
-        debug!("Storing labels into database");
         let mut label_ids = Vec::with_capacity(labels.len());
         for mut label in labels {
             label.save(tx).await?;
