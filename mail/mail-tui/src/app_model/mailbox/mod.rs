@@ -66,20 +66,20 @@ pub struct LabelAs<T: LocalIdMarker> {
 
 /// Messages related to conversation actions.
 pub enum ConversationMessage {
-    MarkConversationsRead(Vec<LocalConversationId>),
-    MarkConversationsUnread(Vec<LocalConversationId>),
-    DeleteConversations(Vec<LocalConversationId>),
-    MoveConversation(Vec<LocalConversationId>, LocalLabelId),
-    LabelConversation(Box<LabelAs<LocalConversationId>>),
-    StarConversation(Vec<LocalConversationId>),
-    UnstarConversation(Vec<LocalConversationId>),
-    OpenConversation(LocalConversationId),
-    OpenConversationSuccess(Box<MessagesState>),
-    OpenConversationFailed(anyhow::Error),
+    MarkRead(Vec<LocalConversationId>),
+    MarkUnread(Vec<LocalConversationId>),
+    DeletePermanently(Vec<LocalConversationId>),
+    MoveTo(Vec<LocalConversationId>, LocalLabelId),
+    LabelAs(Box<LabelAs<LocalConversationId>>),
+    Star(Vec<LocalConversationId>),
+    Unstar(Vec<LocalConversationId>),
+    Open(LocalConversationId),
+    OpenSuccess(Box<MessagesState>),
+    OpenFailed(anyhow::Error),
+    Close,
     Refreshed(Vec<ContextualConversation>),
     NextPage(Vec<ContextualConversation>),
     HasMore,
-    CloseConversation,
     DeleteAll(LocalLabelId),
 }
 
@@ -91,19 +91,19 @@ impl From<ConversationMessage> for Messages {
 
 /// Messages related to message actions.
 pub enum MessageMessage {
-    OpenMessageBody,
-    OpenMessageBodyResult(anyhow::Result<Box<DecryptedMessage>>),
-    CloseMessageBody,
+    OpenBody,
+    OpenBodyResult(anyhow::Result<Box<DecryptedMessage>>),
+    CloseBody,
     Refreshed(Vec<MailMessage>),
     NextPage(Vec<MailMessage>),
-    DeleteMessage(Vec<LocalMessageId>),
-    MoveMessage(Vec<LocalMessageId>, LocalLabelId),
-    LabelMessage(Box<LabelAs<LocalMessageId>>), // TODO: Handle selection
-    MarkMessageRead(Vec<LocalMessageId>),
-    MarkMessageUnread(Vec<LocalMessageId>),
+    DeletePermanently(Vec<LocalMessageId>),
+    MoveTo(Vec<LocalMessageId>, LocalLabelId),
+    LabelAs(Box<LabelAs<LocalMessageId>>), // TODO: Handle selection
+    MarkRead(Vec<LocalMessageId>),
+    MarkUnread(Vec<LocalMessageId>),
     ReportPhishing(LocalMessageId),
-    StarMessage(Vec<LocalMessageId>),
-    UnstarMessage(Vec<LocalMessageId>),
+    Star(Vec<LocalMessageId>),
+    Unstar(Vec<LocalMessageId>),
     BlockSender(String, BlockOrUnblock),
     HasMore,
     CancelScheduleSend(LocalMessageId),

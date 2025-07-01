@@ -189,15 +189,13 @@ impl MessagesState {
         Command::task(async move {
             match Self::from_conversation_impl(ctx, label_id, conversation_id).await {
                 Ok((state, background_command)) => Command::batch([
-                    Command::message(
-                        ConversationMessage::OpenConversationSuccess(Box::new(state)).into(),
-                    ),
+                    Command::message(ConversationMessage::OpenSuccess(Box::new(state)).into()),
                     background_command,
                 ]),
                 Err(e) => {
                     let e = anyhow!("Failed to open conversation {conversation_id}: {e}");
                     tracing::error!("{e:?}");
-                    Command::message(ConversationMessage::OpenConversationFailed(e).into())
+                    Command::message(ConversationMessage::OpenFailed(e).into())
                 }
             }
         })
@@ -280,7 +278,7 @@ impl MessagesState {
             })()
             .await;
 
-            Command::message(MessageMessage::OpenMessageBodyResult(c).into())
+            Command::message(MessageMessage::OpenBodyResult(c).into())
         })
     }
 
@@ -319,12 +317,9 @@ impl MessagesState {
         and(self.messages[idx].id())
     }
 
-    fn msgs(&self) -> Vec<LocalMessageId> {
+    fn msgs(&mut self) -> Vec<LocalMessageId> {
         self.table_state
-            .selected_items()
-            .into_iter()
-            .map(|idx| self.messages[idx].id())
-            .collect()
+            .take_selected_items(&|idx| self.messages[idx].id())
     }
 
     fn selected_email(&self) -> Option<String> {
@@ -363,7 +358,7 @@ impl MessagesState {
             DecryptedMessageStatus::Success(_) | DecryptedMessageStatus::Error(_)
         ) && key.code == KeyCode::Esc
         {
-            return Command::message(MessageMessage::CloseMessageBody.into());
+            return Command::message(MessageMessage::CloseBody.into());
         }
 
         if let DecryptedMessageStatus::Success(state) = &mut self.open_message {
@@ -395,7 +390,7 @@ impl MessagesState {
 
                 if let Mode::Label(paginator) = &self.mode {
                     if self.table_state.selected().unwrap_or_default()
-                        == self.messages.len().saturating_sub(1)
+                        >= self.messages.len().saturating_sub(1)
                     {
                         return paginator.next_page_command(|v| {
                             Command::message(MessageMessage::NextPage(v).into())
@@ -419,11 +414,11 @@ impl MessagesState {
                 self.table_state.toggle();
                 Command::None
             }
-            KeyCode::Char('a') => {
+            KeyCode::Char('g') => {
                 self.table_state.mark_many(0..self.messages.len());
                 Command::None
             }
-            KeyCode::Char('A') => {
+            KeyCode::Char('G') => {
                 self.table_state.unmark_many(0..self.messages.len());
                 Command::None
             }
@@ -433,14 +428,16 @@ impl MessagesState {
                 .selected_id()
                 .map(|id| Composer::open(ctx.to_owned(), id))
                 .unwrap_or_default(),
+
             KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.selected_id_and(|id| Composer::reply(ctx.to_owned(), id, ReplyMode::Sender))
             }
-            KeyCode::Char('r') => MessageMessage::MarkMessageRead(self.msgs()).into(),
-            KeyCode::Char('u') => MessageMessage::MarkMessageUnread(self.msgs()).into(),
-            KeyCode::Char('t') | KeyCode::Char('R')
-                if key.modifiers.contains(KeyModifiers::CONTROL) =>
-            {
+
+            KeyCode::Char('r') => MessageMessage::MarkRead(self.msgs()).into(),
+
+            KeyCode::Char('u') => MessageMessage::MarkUnread(self.msgs()).into(),
+
+            KeyCode::Char('t') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 self.selected_id_and(|id| Composer::reply(ctx.to_owned(), id, ReplyMode::All))
             }
 
@@ -448,9 +445,12 @@ impl MessagesState {
                 self.selected_id_and(|id| Composer::reply(ctx.to_owned(), id, ReplyMode::Forward))
             }
 
-            KeyCode::Char('f') => MessageMessage::StarMessage(self.msgs()).into(),
-            KeyCode::Char('F') => MessageMessage::UnstarMessage(self.msgs()).into(),
-            KeyCode::Char('d') => MessageMessage::DeleteMessage(self.msgs()).into(),
+            KeyCode::Char('f') => MessageMessage::Star(self.msgs()).into(),
+
+            KeyCode::Char('F') => MessageMessage::Unstar(self.msgs()).into(),
+
+            KeyCode::Char('d') => MessageMessage::DeletePermanently(self.msgs()).into(),
+
             KeyCode::Char('b') => self
                 .selected_email()
                 .map(|email| MessageMessage::BlockSender(email, BlockOrUnblock::Block).into())
@@ -469,7 +469,7 @@ impl MessagesState {
 
             KeyCode::Char('h') => MessageMessage::HasMore.into(),
 
-            KeyCode::Enter => self.selected_id_and(|_| MessageMessage::OpenMessageBody.into()),
+            KeyCode::Enter => self.selected_id_and(|_| MessageMessage::OpenBody.into()),
 
             KeyCode::Char('z') => {
                 self.selected_id_and(|id| MessageMessage::CancelScheduleSend(id).into())
@@ -478,6 +478,7 @@ impl MessagesState {
             KeyCode::Char('p') => {
                 self.selected_id_and(|id| MessageMessage::ReportPhishing(id).into())
             }
+
             KeyCode::Char('A') => self.handle_answer_rsvp(ctx),
 
             _ => Command::None,
@@ -629,38 +630,38 @@ impl MessagesState {
         };
 
         match message {
-            MessageMessage::OpenMessageBody => {
+            MessageMessage::OpenBody => {
                 return self.open_message_body(user_ctx.to_owned());
             }
-            MessageMessage::OpenMessageBodyResult(r) => {
+            MessageMessage::OpenBodyResult(r) => {
                 self.display_message(r);
             }
-            MessageMessage::CloseMessageBody => {
+            MessageMessage::CloseBody => {
                 self.close_message();
             }
             MessageMessage::Refreshed(messages) => self.messages_refreshed(messages),
-            MessageMessage::DeleteMessage(id) => {
+            MessageMessage::DeletePermanently(id) => {
                 return delete_messages(user_ctx.to_owned(), mbox, id);
             }
-            MessageMessage::MoveMessage(msg_id, id) => {
+            MessageMessage::MoveTo(msg_id, id) => {
                 return move_message(user_ctx.to_owned(), mbox, msg_id, id);
             }
-            MessageMessage::LabelMessage(label_as) => {
+            MessageMessage::LabelAs(label_as) => {
                 return label_message(user_ctx.to_owned(), *label_as);
             }
-            MessageMessage::MarkMessageRead(id) => {
+            MessageMessage::MarkRead(id) => {
                 return mark_message_read(user_ctx.to_owned(), id);
             }
-            MessageMessage::MarkMessageUnread(id) => {
+            MessageMessage::MarkUnread(id) => {
                 return mark_message_unread(user_ctx.to_owned(), id);
             }
-            MessageMessage::StarMessage(id) => {
+            MessageMessage::Star(id) => {
                 return star_message(user_ctx.to_owned(), id);
             }
             MessageMessage::BlockSender(id, action) => {
                 return block_sender(user_ctx.to_owned(), id, action);
             }
-            MessageMessage::UnstarMessage(id) => {
+            MessageMessage::Unstar(id) => {
                 return unstar_message(user_ctx.to_owned(), id);
             }
             MessageMessage::ReportPhishing(id) => {
@@ -744,6 +745,7 @@ impl MessagesState {
         vec.extend_from_slice(&[
             ("esc", "Close message"),
             ("F3", "Download all attachments"),
+            ("A", "Answer RSVP"),
             ("e", "Open composer"),
             ("Ctrl + r", "Reply"),
             ("Ctrl + R", "Reply to all"),

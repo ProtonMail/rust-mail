@@ -1,6 +1,6 @@
 #![allow(unused, clippy::module_name_repetitions)]
 use std::collections::HashSet;
-use std::mem;
+use std::{iter, mem};
 
 use crossterm::event::KeyEvent;
 use itertools::Itertools;
@@ -16,7 +16,7 @@ use crate::widgets::IntoTable;
 pub struct ScrollableTableState {
     table_state: TableState,
     scroll_state: ScrollbarState,
-    marked: HashSet<usize>,
+    pub marked: HashSet<usize>,
 }
 
 impl ScrollableTableState {
@@ -24,7 +24,7 @@ impl ScrollableTableState {
         Self {
             table_state: TableState::default().with_selected(selected),
             scroll_state: ScrollbarState::default(),
-            marked: Default::default(),
+            marked: HashSet::default(),
         }
     }
 
@@ -32,24 +32,19 @@ impl ScrollableTableState {
         self.table_state.selected()
     }
 
-    pub fn select(&mut self, index: Option<usize>) {
-        self.table_state.select(index);
-    }
-
-    pub fn set_offset(&mut self, offset: usize) {
-        *self.table_state.offset_mut() = offset;
+    pub fn select(&mut self, index: usize) {
+        self.table_state.select(Some(index));
     }
 
     pub fn next(&mut self) {
         if let Some(index) = self.table_state.selected() {
-            self.table_state.select(Some(index.saturating_add(1)));
+            self.select(index.saturating_add(1));
         }
     }
 
     pub fn prev(&mut self) {
-        if let Some(index) = self.table_state.selected() {
-            self.table_state.select(Some(index.saturating_sub(1)));
-        }
+        let index = self.table_state.selected().unwrap_or_default();
+        self.select(index.saturating_sub(1));
     }
 
     pub fn toggle(&mut self) {
@@ -72,23 +67,12 @@ impl ScrollableTableState {
         }
     }
 
-    pub fn help_options(vec: &mut Vec<(&'static str, &'static str)>) {
-        vec.extend_from_slice(&[
-            ("esc", "Exit composer"),
-            ("tab", "Toggle between fields"),
-            ("Ctrl + s", "Save"),
-            ("Ctrl + t", "Send"),
-            ("Ctrl + a", "Add attachment"),
-            ("Ctrl + d", "Remove attachment"),
-        ]);
-    }
-
-    pub fn selected_items(&self) -> Vec<usize> {
-        let items = self.marked.iter().copied().collect_vec();
-        if !items.is_empty() {
-            items
+    /// Gets the selected items and unselects them.
+    pub fn take_selected_items<T>(&mut self, f: &dyn Fn(usize) -> T) -> Vec<T> {
+        if !self.marked.is_empty() {
+            mem::take(&mut self.marked).into_iter().map(f).collect()
         } else if let Some(idx) = self.selected() {
-            vec![idx]
+            vec![f(idx)]
         } else {
             vec![]
         }
@@ -125,7 +109,7 @@ impl StatefulWidget for ScrollableTable<'_> {
         let visible_area = main_area.height as usize;
 
         if let Some(index) = state.selected() {
-            state.select(Some(index.min(self.num_rows.saturating_sub(1))));
+            state.select(index.min(self.num_rows.saturating_sub(1)));
         }
 
         let draw_scroll_bar = if total_height >= visible_area {

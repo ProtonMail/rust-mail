@@ -105,6 +105,11 @@ impl ConversationsState {
     }
 
     pub fn draw_status_bar(&mut self, frame: &mut Frame, area: Rect) {
+        let len = self.table_state.marked.len();
+        if len > 0 {
+            frame.render_widget(Text::from(format!(" {len} items selected |")), area);
+        }
+
         if let MessagesStatus::Ready(_) = &self.messages {
             frame.render_widget(Text::from(" > Conversation Messages"), area);
         }
@@ -121,12 +126,10 @@ impl ConversationsState {
         and(self.conversations[idx].local_id)
     }
 
-    fn convs(&self) -> Vec<LocalConversationId> {
+    /// Gets the selected conversations and unselects them.
+    fn convs(&mut self) -> Vec<LocalConversationId> {
         self.table_state
-            .selected_items()
-            .into_iter()
-            .map(|idx| self.conversations[idx].local_id)
-            .collect()
+            .take_selected_items(&|idx| self.conversations[idx].local_id)
     }
 }
 
@@ -147,7 +150,7 @@ impl ConversationsState {
                 let is_esc = key.code == KeyCode::Esc;
                 let msg = message_state.handle_event(ctx, mbox, event);
                 return if msg.is_none() && is_esc {
-                    Command::message(ConversationMessage::CloseConversation.into())
+                    Command::message(ConversationMessage::Close.into())
                 } else {
                     msg
                 };
@@ -162,7 +165,7 @@ impl ConversationsState {
             KeyCode::Char('j') | KeyCode::Down => {
                 self.table_state.next();
                 if self.table_state.selected().unwrap_or_default()
-                    == self.conversations.len().saturating_sub(1)
+                    >= self.conversations.len().saturating_sub(1)
                 {
                     return self.paginator.next_page_command(move |v| {
                         Command::message(ConversationMessage::NextPage(v).into())
@@ -190,15 +193,13 @@ impl ConversationsState {
                 Message::OpenLabelItemPopup(Items::Conversation(self.convs())).into()
             }
             KeyCode::Char('h') => ConversationMessage::HasMore.into(),
-            KeyCode::Char('u') => ConversationMessage::MarkConversationsUnread(self.convs()).into(),
-            KeyCode::Char('r') => ConversationMessage::MarkConversationsRead(self.convs()).into(),
-            KeyCode::Char('d') => ConversationMessage::DeleteConversations(self.convs()).into(),
-            KeyCode::Char('f') => ConversationMessage::StarConversation(self.convs()).into(),
-            KeyCode::Char('F') => ConversationMessage::UnstarConversation(self.convs()).into(),
+            KeyCode::Char('u') => ConversationMessage::MarkUnread(self.convs()).into(),
+            KeyCode::Char('r') => ConversationMessage::MarkRead(self.convs()).into(),
+            KeyCode::Char('d') => ConversationMessage::DeletePermanently(self.convs()).into(),
+            KeyCode::Char('f') => ConversationMessage::Star(self.convs()).into(),
+            KeyCode::Char('F') => ConversationMessage::Unstar(self.convs()).into(),
             KeyCode::Char('E') => ConversationMessage::DeleteAll(self.opened_label).into(),
-            KeyCode::Enter => {
-                self.selected_id_and(|id| ConversationMessage::OpenConversation(id).into())
-            }
+            KeyCode::Enter => self.selected_id_and(|id| ConversationMessage::Open(id).into()),
             _ => Command::None,
         }
     }
@@ -221,34 +222,30 @@ impl ConversationsState {
                 };
 
                 match message {
-                    ConversationMessage::MarkConversationsRead(id) => {
+                    ConversationMessage::MarkRead(id) => {
                         mark_conversation_read(user_ctx.to_owned(), mbox, id)
                     }
-                    ConversationMessage::MarkConversationsUnread(id) => {
+                    ConversationMessage::MarkUnread(id) => {
                         mark_conversation_unread(user_ctx.to_owned(), mbox, id)
                     }
-                    ConversationMessage::DeleteConversations(id) => {
+                    ConversationMessage::DeletePermanently(id) => {
                         delete_conversation(user_ctx.to_owned(), mbox, id)
                     }
-                    ConversationMessage::MoveConversation(id, label_id) => {
+                    ConversationMessage::MoveTo(id, label_id) => {
                         move_conversation(user_ctx.to_owned(), mbox, id, label_id)
                     }
-                    ConversationMessage::LabelConversation(label_as) => {
+                    ConversationMessage::LabelAs(label_as) => {
                         label_conversation(user_ctx.to_owned(), *label_as)
                     }
-                    ConversationMessage::OpenConversation(id) => {
+                    ConversationMessage::Open(id) => {
                         self.open_conversation(user_ctx.to_owned(), mbox, id)
                     }
                     ConversationMessage::Refreshed(conversations) => {
                         self.conversations_refreshed(conversations);
                         Command::None
                     }
-                    ConversationMessage::StarConversation(id) => {
-                        star_conversation(user_ctx.to_owned(), id)
-                    }
-                    ConversationMessage::UnstarConversation(id) => {
-                        unstar_conversation(user_ctx.to_owned(), id)
-                    }
+                    ConversationMessage::Star(id) => star_conversation(user_ctx.to_owned(), id),
+                    ConversationMessage::Unstar(id) => unstar_conversation(user_ctx.to_owned(), id),
                     ConversationMessage::NextPage(conversations) => {
                         self.conversations.extend(conversations);
                         Command::None
@@ -272,19 +269,18 @@ impl ConversationsState {
             }
 
             MessagesStatus::Loading(_) => match message {
-                Message::ConversationState(ConversationMessage::OpenConversationSuccess(state)) => {
+                Message::ConversationState(ConversationMessage::OpenSuccess(state)) => {
                     self.messages = MessagesStatus::Ready(state);
                     Command::None
                 }
-                Message::ConversationState(ConversationMessage::OpenConversationFailed(e)) => {
+                Message::ConversationState(ConversationMessage::OpenFailed(e)) => {
                     self.messages = MessagesStatus::None;
                     Command::message(Messages::DisplayError(None, e))
                 }
                 _ => Command::None,
             },
             MessagesStatus::Ready(state) => {
-                if let Message::ConversationState(ConversationMessage::CloseConversation) = &message
-                {
+                if let Message::ConversationState(ConversationMessage::Close) = &message {
                     self.close_conversation();
                     return Command::None;
                 }
