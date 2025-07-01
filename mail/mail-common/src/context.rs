@@ -228,6 +228,7 @@ impl MailContext {
     ///
     /// Returns error if the context creation failed.
     #[allow(clippy::too_many_arguments)]
+    #[tracing::instrument("MailContextNew", skip_all)]
     pub async fn new(
         session_db_path: impl Into<PathBuf>,
         user_db_path: impl Into<PathBuf>,

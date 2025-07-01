@@ -19,8 +19,8 @@ use stash::{
     stash::{Bond, Stash, StashError, Tether},
 };
 use tokio::task::JoinSet;
+use tracing::debug;
 use tracing::error;
-use tracing::{Level, debug};
 
 use crate::MailContextError;
 use crate::actions::addresses::block::Block;
@@ -82,7 +82,7 @@ impl IncomingDefaultLocation {
     }
 
     /// Downloads all `IncomingDefault`s
-    #[tracing::instrument(level = Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all)]
     pub async fn sync(api: &Proton) -> ApiServiceResult<Vec<IncomingDefault>> {
         let t0 = Instant::now();
         let initial = api.get_incoming_defaults(0).await?;

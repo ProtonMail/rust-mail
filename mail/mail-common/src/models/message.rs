@@ -1474,7 +1474,7 @@ impl Message {
     ///
     /// Returns error if the database request fail.
     ///
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
+    #[tracing::instrument(skip_all, fields(label_id=%view.id(), message_id=message_id.as_u64()))]
     pub async fn available_actions(
         view: Label,
         message_id: LocalMessageId,
@@ -1546,7 +1546,7 @@ impl Message {
     ///
     /// Returns error if the database request fail.
     ///
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
+    #[tracing::instrument(skip_all)]
     pub async fn available_label_as_actions(
         message_ids: Vec<LocalMessageId>,
         tether: &Tether,
@@ -1554,6 +1554,8 @@ impl Message {
         if message_ids.is_empty() {
             return Err(AppError::EmptyListOfMessages);
         }
+
+        debug!("{message_ids:?}");
 
         let all_label_as = Label::find_by_kind(LabelType::Label, tether).await?;
         let messages = Message::find(
@@ -1597,7 +1599,7 @@ impl Message {
     ///
     /// Returns error if the database request fail.
     ///
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
+    #[tracing::instrument(skip_all)]
     pub async fn watch_available_label_as_actions(
         message_ids: Vec<LocalMessageId>,
         tether: &Tether,
@@ -1605,6 +1607,8 @@ impl Message {
         if message_ids.is_empty() {
             return Err(AppError::EmptyListOfMessages);
         }
+
+        debug!("{message_ids:?}");
 
         let handle = tether.subscribe_to(|sender| Box::new(MessageWatcher { sender }))?;
 
@@ -1637,7 +1641,7 @@ impl Message {
     ///
     /// Returns error if the database request fail.
     ///
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
+    #[tracing::instrument(skip_all, fields(label_id=view.id().as_u64()))]
     pub async fn available_move_to_actions(
         view: Label,
         message_ids: Vec<LocalMessageId>,
@@ -1646,6 +1650,8 @@ impl Message {
         if message_ids.is_empty() {
             return Err(AppError::EmptyListOfMessages);
         }
+
+        debug!("{message_ids:?}");
 
         let all_system = Label::find_by_kind(LabelType::System, tether).await?;
         let all_system_excluding_view = all_system
@@ -1674,7 +1680,7 @@ impl Message {
     /// - if the db query failed
     /// - if the message body could not be written to the cache
     /// - if a message with the given id could not be found
-    #[tracing::instrument(level=tracing::Level::DEBUG,skip(user_context))]
+    #[tracing::instrument(skip(user_context))]
     pub async fn message_body(
         user_context: &MailUserContext,
         id: LocalMessageId,
@@ -1687,7 +1693,7 @@ impl Message {
         saved_message.fetch_message_body(user_context, tether).await
     }
 
-    #[tracing::instrument(level=tracing::Level::DEBUG,skip(user_context))]
+    #[tracing::instrument(skip(user_context))]
     pub async fn message_body_with_sender(
         user_context: &MailUserContext,
         id: LocalMessageId,
@@ -1724,7 +1730,7 @@ impl Message {
     /// Returns error if the message failed to download, the db query failed or
     /// the message body could not be written to the cache.
     ///
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all, fields(message_id=%self.id()))]
     pub async fn fetch_message_body(
         &self,
         ctx: &MailUserContext,
@@ -1736,7 +1742,7 @@ impl Message {
             debug!("Found message body in cache.");
             return Ok(decrypted);
         }
-        trace!("Message body not in cache. Fetching...");
+        debug!("Message body not in cache. Fetching...");
 
         let Some(remote_id) = self.remote_id.clone() else {
             return Err(AppError::MessageHasNoRemoteId(self.id()).into());
@@ -1749,6 +1755,7 @@ impl Message {
             )));
         }
 
+        info!("Fetching {remote_id:?}");
         let (_, encrypted_body) =
             Self::sync_message_and_body(remote_id, ctx.api(), &mut tx).await?;
         trace!("Message successfully downloaded. Decrypting...");
@@ -1771,7 +1778,7 @@ impl Message {
         .await
         .map_err(MailContextError::Other)?;
 
-        debug!("Message successfully synced.");
+        info!("Message successfully synced.");
         Ok(decrypted)
     }
 
@@ -2066,7 +2073,7 @@ impl Message {
     /// # Errors
     ///
     /// Returns error if the queries fail.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(ids, bond))]
+    #[tracing::instrument(skip_all)]
     pub async fn apply_label(
         local_label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalMessageId>,
@@ -2095,7 +2102,7 @@ impl Message {
                         .or_insert_with(|| vec![id]);
                 }
             } else {
-                warn!("{id:?} already labeled {local_label_id:?}");
+                trace!("{id:?} already labeled {local_label_id:?}");
             }
         }
 
@@ -2113,7 +2120,7 @@ impl Message {
     /// # Errors
     ///
     /// Returns error if the queries fail.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all)]
     pub async fn remove_label(
         local_label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalMessageId>,
@@ -2164,7 +2171,7 @@ impl Message {
                 .await?
                 .is_none()
             {
-                tracing::debug!("Message {id} was not labeled with {local_label_id}");
+                tracing::trace!("Message {id} was not labeled with {local_label_id}");
                 //  Notice that we're not updating updated_count
                 continue;
             };
@@ -2281,7 +2288,7 @@ impl Message {
                             conv_counters.unread = conv_counters.unread.saturating_sub(1);
                         }
                     } else {
-                        tracing::warn!("Conversation {conversation_id} was not labeled");
+                        tracing::trace!("Conversation {conversation_id} was not unlabeled");
                         continue;
                     }
                 }
@@ -2508,7 +2515,7 @@ impl Message {
     /// - if the message failed to download
     /// - if the db query failed
     /// - if the message body could not be written to the cache
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(ctx, tether))]
+    #[tracing::instrument(skip(ctx, tether, with_attachment_prefetch))]
     pub async fn force_sync_message_and_body(
         ctx: &MailUserContext,
         message_id: MessageId,
@@ -2544,7 +2551,7 @@ impl Message {
     ///
     /// Returns error if the message failed to fetch from the server or update the
     /// metadata on the server.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(api, tx))]
+    #[tracing::instrument(skip(api, tx))]
     async fn sync_message_and_body(
         message_id: MessageId,
         api: &Proton,
@@ -2613,7 +2620,7 @@ impl Message {
     /// # Errors
     ///
     /// Returns error if the db query or cache load fails.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(tether))]
+    #[tracing::instrument(skip(tether))]
     pub(crate) async fn load_decrypted_message_from_cache(
         local_id: LocalMessageId,
         tether: &Tether,

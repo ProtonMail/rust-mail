@@ -108,7 +108,7 @@ impl RollbackItem {
     ///
     /// Look at the documentation of the `sync_all` method.
     ///
-    #[tracing::instrument(level = "debug", skip_all)]
+    #[tracing::instrument(skip_all)]
     pub async fn sync_labels<I>(
         session: &Session,
         tx: &mut impl RunTransaction,
@@ -126,7 +126,7 @@ impl RollbackItem {
     ///
     /// Look at the documentation of the `sync_all` method.
     ///
-    #[tracing::instrument(level = "debug", skip_all)]
+    #[tracing::instrument(skip_all)]
     pub async fn sync_messages<I>(
         session: &Session,
         tx: &mut impl RunTransaction,
@@ -144,7 +144,7 @@ impl RollbackItem {
     ///
     /// Look at the documentation of the `sync_all` method.
     ///
-    #[tracing::instrument(level = "debug", skip_all)]
+    #[tracing::instrument(skip_all)]
     pub async fn sync_conversations<I>(
         session: &Session,
         tx: &mut impl RunTransaction,

@@ -150,7 +150,7 @@ impl<T: MailScrollerSource> MailScroller<T> {
                 }
                 tracing::trace!("MailScroller notified about database changes");
             }
-            tracing::warn!("MailScroller receiver closed, despawn watcher");
+            tracing::trace!("MailScroller receiver closed, despawn watcher");
         });
 
         Ok(WatcherHandle::new(new_receiver, handle))

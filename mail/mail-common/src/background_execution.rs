@@ -66,7 +66,7 @@ impl BackgroundExecutionContext {
             .pause_background_and_wait(Duration::from_millis(100))
             .await
         {
-            tracing::error!("Pausing Background queue executors... Failed: {e:?}");
+            tracing::warn!("Pausing Background queue executors... Failed: {e:?}");
         } else {
             tracing::info!("Pausing executors... Done");
         }

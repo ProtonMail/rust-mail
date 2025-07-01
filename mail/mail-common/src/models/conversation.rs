@@ -2003,7 +2003,7 @@ impl Conversation {
     ///
     /// Returns an error if the data could not be written to the database.
     ///
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all)]
     pub async fn remove_label(
         label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalConversationId>,
@@ -2339,7 +2339,7 @@ impl Conversation {
     ///
     /// Note that the logic is the same as [`Message::move_messages`],
     /// so any changes made here should be reflected there.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all)]
     pub async fn move_conversations(
         source_id: LocalLabelId,
         destination_id: LocalLabelId,
@@ -2348,7 +2348,7 @@ impl Conversation {
     ) -> Result<(), AppError> {
         debug_assert_ne!(source_id, destination_id);
         if conversation_ids.is_empty() {
-            debug!("List of ids was empty");
+            warn!("List of ids was empty");
             return Ok(());
         }
 
@@ -2371,7 +2371,6 @@ impl Conversation {
         // When moving in Trash or Spam, remove all labels (but AllMail)
         if [trash, spam].contains(&destination_id) {
             // When moving to trash or spam we delete all labels except all mail.
-            debug!("Deleting all labels except AllMail");
             Self::remove_all_labels_except_all_mail(&conversation_ids, bond).await?;
         } else if source_label.is_movable_folder() {
             Conversation::remove_label(source_id, conversation_ids.clone(), bond)
@@ -2418,12 +2417,13 @@ impl Conversation {
     /// * empty list of conversations is provided
     /// * conversation is not in the view
     ///
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
+    #[tracing::instrument(skip_all, fields(label_id=view.id().as_u64()))]
     pub async fn available_actions(
         view: Label,
         conversation_ids: Vec<LocalConversationId>,
         tether: &Tether,
     ) -> Result<ConversationAvailableActions, AppError> {
+        debug!("{conversation_ids:?}");
         if conversation_ids.is_empty() {
             return Err(AppError::EmptyListOfConversations);
         }
@@ -2469,7 +2469,7 @@ impl Conversation {
     ///
     /// Returns error if the database request fail.
     ///
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
+    #[tracing::instrument(skip_all)]
     pub async fn available_label_as_actions(
         local_ids: Vec<LocalConversationId>,
         tether: &Tether,
@@ -2477,6 +2477,8 @@ impl Conversation {
         if local_ids.is_empty() {
             return Err(AppError::EmptyListOfConversations);
         }
+
+        debug!("{local_ids:?}");
 
         // If all messages of all conversations are labeled we show a full selection.
         // If only some are labeled we show a partial selection.
@@ -2513,7 +2515,7 @@ impl Conversation {
     ///
     /// Returns error if the database request fail.
     ///
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
+    #[tracing::instrument(skip_all)]
     pub async fn watch_available_label_as_actions(
         local_ids: Vec<LocalConversationId>,
         tether: &Tether,
@@ -2521,6 +2523,8 @@ impl Conversation {
         if local_ids.is_empty() {
             return Err(AppError::EmptyListOfConversations);
         }
+
+        debug!("{local_ids:?}");
 
         let all_label_as = Label::find_by_kind(LabelType::Label, tether).await?;
         let conversations =
@@ -2554,7 +2558,7 @@ impl Conversation {
     ///
     /// Returns error if the database request fail.
     ///
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
+    #[tracing::instrument(skip_all, fields(label_id=view.id().as_u64()))]
     pub async fn available_move_to_actions(
         view: Label,
         local_ids: Vec<LocalConversationId>,
@@ -2563,6 +2567,8 @@ impl Conversation {
         if local_ids.is_empty() {
             return Err(AppError::EmptyListOfConversations);
         }
+
+        debug!("{local_ids:?}");
 
         let all_system = Label::find_by_kind(LabelType::System, tether).await?;
         let all_system_excluding_view = all_system
@@ -2828,6 +2834,7 @@ impl Conversation {
     /// # Errors
     ///
     /// Returns error if the queries failed or if the server request failed.
+    #[tracing::instrument(skip(tx, session))]
     pub async fn sync_conversation_messages(
         local_conversation_id: LocalConversationId,
         tx: &mut impl RunTransaction,
@@ -2842,7 +2849,7 @@ impl Conversation {
             let Some(ref rid) = conversation.remote_id else {
                 return Err(AppError::ConversationHasNoRemoteId(local_conversation_id));
             };
-            debug!("Syncing conversation messages");
+            info!("Syncing {rid:?}'s messages");
 
             if session.graceful_status().await.is_offline() {
                 debug!("No connection, skipping sync");
@@ -2872,12 +2879,14 @@ impl Conversation {
                     })?;
 
                 if conversation.is_known {
+                    debug!("Conversation was known");
                     conversation.has_messages = true;
                     conversation.save(tx).await.map_err(|e| {
                         error!("Failed to write conversation: {e:?}");
                         e
                     })?;
                 } else {
+                    debug!("Conversation was not known");
                     let mut new_conversation: Conversation =
                         conversation_response.conversation.into();
 
@@ -2896,7 +2905,7 @@ impl Conversation {
             .await
             .map_err(AppError::Other)?;
         } else {
-            debug!("Conversation messages already synced")
+            info!("Conversation messages already synced")
         }
 
         Ok(())
