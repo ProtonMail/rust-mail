@@ -13,7 +13,11 @@ use crate::core::datatypes::Id;
 use crate::errors::{ActionError, VoidActionResult};
 use crate::mail::datatypes::{
     AllBottomBarMessageActions, AutoDeleteBanner, Conversation, ConversationAvailableActions,
-    ConversationSearchOptions, LabelAsAction, Message, MoveAction, ReadFilter,
+    ConversationSearchOptions, LabelAsAction, Message, MoveAction,
+};
+use crate::mail::mail_scroller::{
+    ConversationScroller, ConversationScrollerLiveQueryCallback, ReadFilter,
+    spawn_conversation_scroller_watcher,
 };
 use crate::mail::{MailUserSession, Mailbox};
 use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
@@ -32,9 +36,7 @@ use proton_mail_common::models::Conversation as RealConversation;
 use stash::orm::Model;
 use stash::stash::Stash;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
-use super::datatypes::ConversationScroller;
 use super::messages::WatchedLabelAs;
 
 /// Label the given conversations with the given label id.
@@ -465,18 +467,18 @@ pub async fn scroll_conversations_for_label(
     session: Arc<MailUserSession>,
     label_id: Id,
     filter: ReadFilter,
-    callback: Box<dyn LiveQueryCallback>,
+    callback: Box<dyn ConversationScrollerLiveQueryCallback>,
 ) -> Result<Arc<ConversationScroller>, ActionError> {
     let context = session.ctx()?;
     uniffi_async(async move {
-        let mut scroller =
+        let (scroller, handle) =
             MailScroller::conversations(context.as_weak(), label_id.into(), filter.into(), 50)
                 .await?;
-        let handle = scroller.watch().await?;
+        let handle = spawn_conversation_scroller_watcher(&context, handle, callback);
 
         Result::<_, RealProtonMailError>::Ok(Arc::new(ConversationScroller {
-            scroller: Mutex::new(scroller),
-            handle: watch_channel(context, handle, callback),
+            scroller: Arc::new(scroller),
+            handle,
         }))
     })
     .await

@@ -24,7 +24,7 @@ pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
     /// Model of the Data
     type Model: ModelExtension;
     /// Item type returned by the Data
-    type Item: Send;
+    type Item: Send + Sync + PartialEq + Clone;
 
     /// Find the first record with matching:
     /// * label_id,

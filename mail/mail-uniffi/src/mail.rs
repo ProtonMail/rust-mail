@@ -7,6 +7,7 @@ pub mod datatypes;
 mod device;
 mod draft;
 mod logging;
+pub mod mail_scroller;
 pub mod mailbox;
 pub mod messages;
 mod notifications;

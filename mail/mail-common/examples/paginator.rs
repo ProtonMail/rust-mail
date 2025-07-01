@@ -8,8 +8,9 @@ use proton_core_common::models::ModelIdExtension;
 use proton_core_common::os::{InMemoryKeyChain, KeyChainExt};
 use proton_log_service::LogService;
 use proton_mail_common::MailContext;
+use proton_mail_common::datatypes::ContextualConversation;
 use proton_mail_common::datatypes::{ReadFilter, SystemLabelId};
-use proton_mail_common::mail_scroller::{MailScroller, MailScrollerSource};
+use proton_mail_common::test_utils::scroller::TestScroller;
 use stash::orm::Model;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -94,7 +95,7 @@ async fn main() {
 
     let filter = ReadFilter::Unread;
     let mut paginator =
-        MailScroller::conversations(user_ctx.as_weak(), label.id(), filter, page_count as usize)
+        TestScroller::conversations(&user_ctx, label.id(), filter, page_count as usize)
             .await
             .unwrap();
 
@@ -111,57 +112,22 @@ async fn main() {
         v1.local_id == v2.local_id && v1.remote_id == v2.remote_id
     })
     .await;
-    /*
-    if messages {
-        let counter = MessageCounters::find_by_id(label.local_id, &tether)
-            .await
-            .unwrap()
-            .unwrap();
-        let paginator = Message::paginate_in_label(
-            &user_ctx,
-            label.id(),
-            page_count,
-            PaginatorFilter::default(),
-            PaginatorSearchOptions::default(),
-            true,
-        )
-        .await
-        .unwrap();
-        paginate(&paginator, counter.total).await;
-    } else {
-        let counter = ConversationCounters::find_by_id(label.local_id, &tether)
-            .await
-            .unwrap()
-            .unwrap();
-        let paginator = Conversation::paginate_in_label(
-            &user_ctx,
-            label.id(),
-            page_count,
-            PaginatorFilter::default(),
-            true,
-        )
-        .await
-        .unwrap();
-        paginate(&paginator, counter.total).await;
-    }*/
 }
 
-async fn paginate_mail<T: MailScrollerSource>(
-    paginator: &mut MailScroller<T>,
-    is_eq: impl Fn(&T::Item, &T::Item) -> bool,
-) where
-    <T as MailScrollerSource>::Item: PartialEq + Debug,
-{
+async fn paginate_mail(
+    paginator: &mut TestScroller<ContextualConversation>,
+    is_eq: impl Fn(&ContextualConversation, &ContextualConversation) -> bool,
+) {
     let mut element_count = 0_u64;
     let total_elements = paginator.total().await.unwrap();
     #[allow(clippy::cast_possible_truncation)]
     let mut all_elements = Vec::with_capacity(total_elements as usize);
 
     while paginator.has_more().await.unwrap() {
-        let page = paginator.fetch_more().await.unwrap();
+        let page = paginator.fetch_more_and_wait().await.unwrap();
         element_count += page.len() as u64;
         all_elements.extend(page);
-        let visible = paginator.all_items().await.unwrap();
+        let visible = paginator.items();
         for i in 0..visible.len() {
             assert!(
                 is_eq(&all_elements[i], &visible[i]),

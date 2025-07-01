@@ -14,7 +14,7 @@ mod search_scroller_source;
 use crate::datatypes::labels::LabelScrollOrder;
 pub use search_scroller_source::SearchScrollerSource;
 
-pub trait RemoteSource: ScrollData + Send {
+pub trait RemoteSource: ScrollData + Send + Sync {
     fn sync_first_page(
         ctx: &MailUserContext,
         local_label_id: LocalLabelId,

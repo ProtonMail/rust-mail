@@ -29,7 +29,7 @@ use serde_json::{Value as JsonValue, json};
 use serde_with::{BoolFromInt, serde_as};
 use std::collections::HashSet;
 use wiremock::matchers::{body_json, body_partial_json, method, path};
-use wiremock::{Mock, ResponseTemplate};
+use wiremock::{Mock, ResponseTemplate, Times};
 
 impl MailTestContext {
     /// Generate new mock expectations for message fetch request for `message_id`.
@@ -61,7 +61,7 @@ impl MailTestContext {
         &self,
         message_id: &MessageId,
         message: ApiMessage,
-        expected: u64,
+        expected: impl Into<Times>,
     ) {
         let resp = GetMessageResponse { message };
 
@@ -87,7 +87,7 @@ impl MailTestContext {
         &self,
         messages: Vec<MessageMetadata>,
         total: u64,
-        expect: u64,
+        expect: impl Into<Times>,
     ) {
         let resp = GetMessagesResponse {
             total,

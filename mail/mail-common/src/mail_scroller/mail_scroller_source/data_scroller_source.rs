@@ -203,6 +203,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                 .low_latency_status(ctx.api().clone())
                 .await
                 .is_offline();
+        debug!("Might be offline: {}", is_offline);
 
         self.sync_scroller(&tether).await?;
 
@@ -388,17 +389,23 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                     items
                 };
 
-                let should_not_load_more_from_remote =
-                    scroller.has_more_than_a_page(&tether).await?
-                        || total < self.page_size as u64
-                        || is_offline;
+                let has_more_than_a_page = scroller.has_more_than_a_page(&tether).await?;
+                let is_small_label = total < self.page_size as u64 && has_more_than_a_page;
 
-                let task = if should_not_load_more_from_remote {
-                    None
-                } else {
+                let should_load_more_from_remote =
+                    (!has_more_than_a_page || is_small_label) && is_online;
+
+                debug!(
+                    "Should load more from remote: {}, is small label: {}, has more than a page: {}",
+                    should_load_more_from_remote, is_small_label, has_more_than_a_page
+                );
+
+                let task = if should_load_more_from_remote {
                     let cp = scroller.scroll_data_end(&tether).await?;
                     self.sync_next_page(ctx, &cp, label.remote_id.clone().unwrap())
                         .await?
+                } else {
+                    None
                 };
 
                 (items, task)

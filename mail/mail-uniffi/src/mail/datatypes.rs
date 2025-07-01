@@ -52,7 +52,6 @@ mod attachment;
 mod available_action;
 mod folder_banner;
 pub(crate) mod labels;
-mod mail_scroller;
 mod system_folder;
 mod system_label;
 
@@ -62,7 +61,6 @@ pub use attachment::*;
 pub use available_action::*;
 use core::fmt;
 pub use folder_banner::*;
-pub use mail_scroller::*;
 use proton_core_common::datatypes::{
     AvatarInformation as RealAvatarInformation, LabelColor as RealLabelColor,
     LabelType as RealLabelType, LocalAddressId, LocalLabelId,

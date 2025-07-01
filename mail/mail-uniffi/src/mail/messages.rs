@@ -8,7 +8,7 @@
 //! of working with messages, and hence their placement in this module, won't.
 //!
 
-use super::datatypes::{AllBottomBarMessageActions, Message, ReadFilter, SearchScroller};
+use super::datatypes::{AllBottomBarMessageActions, Message};
 use super::datatypes::{LabelAsAction, MessageAvailableActions, MimeType, MoveAction};
 use super::state::MailUserContextPtr;
 use super::{MailUserSession, Mailbox};
@@ -17,8 +17,11 @@ use crate::core::datatypes::{Id, RemoteId, UnixTimestamp};
 use crate::errors::{
     ActionError, BodyOutputResult, EmbeddedAttachmentInfoResult, ProtonError, VoidActionResult,
 };
-use crate::mail::datatypes::MessageScroller;
 use crate::mail::datatypes::MessageSearchOptions;
+use crate::mail::mail_scroller::{
+    MessageScroller, MessageScrollerLiveQueryCallback, ReadFilter, SearchScroller,
+    spawn_message_scroller_watcher,
+};
 use crate::{LiveQueryCallback, WatchHandle, uniffi_async, watch_channel};
 use itertools::Itertools as _;
 use proton_core_common::datatypes::LocalLabelId;
@@ -45,7 +48,6 @@ use proton_mail_common::models::default_location::IncomingDefaultLocation;
 use proton_mail_common::models::{self, Message as RealMessage, MessageBodyMetadata};
 use stash::orm::Model as _;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 
 #[derive(uniffi::Object)]
 pub struct DecryptedMessage {
@@ -508,17 +510,17 @@ pub async fn scroll_messages_for_label(
     session: Arc<MailUserSession>,
     label_id: Id,
     filter: ReadFilter,
-    callback: Box<dyn LiveQueryCallback>,
+    callback: Box<dyn MessageScrollerLiveQueryCallback>,
 ) -> Result<Arc<MessageScroller>, ActionError> {
     let context = session.ctx()?;
     uniffi_async(async move {
-        let mut scroller =
+        let (scroller, handle) =
             MailScroller::messages(context.as_weak(), label_id.into(), filter.into(), 50).await?;
-        let handle = scroller.watch().await?;
+        let handle = spawn_message_scroller_watcher(&context, handle, callback);
 
         Result::<_, RealProtonMailError>::Ok(Arc::new(MessageScroller {
-            scroller: Mutex::new(scroller),
-            handle: watch_channel(context, handle, callback),
+            scroller: Arc::new(scroller),
+            handle,
         }))
     })
     .await
@@ -539,16 +541,17 @@ pub async fn scroll_messages_for_label(
 pub async fn scroller_search(
     session: Arc<MailUserSession>,
     options: PaginatorSearchOptions,
-    callback: Box<dyn LiveQueryCallback>,
+    callback: Box<dyn MessageScrollerLiveQueryCallback>,
 ) -> Result<Arc<SearchScroller>, ActionError> {
     let context = session.ctx()?;
     uniffi_async(async move {
-        let mut scroller = MailScroller::search(context.as_weak(), options.into(), 50).await?;
-        let handle = scroller.watch().await?;
+        let (scroller, handle) =
+            MailScroller::search(context.as_weak(), options.into(), 50).await?;
+        let handle = spawn_message_scroller_watcher(&context, handle, callback);
 
         Result::<_, RealProtonMailError>::Ok(Arc::new(SearchScroller {
-            scroller: Mutex::new(scroller),
-            handle: watch_channel(context, handle, callback),
+            scroller: Arc::new(scroller),
+            handle,
         }))
     })
     .await
