@@ -397,8 +397,19 @@ impl MessagesState {
 
                 Command::None
             }
-
-            KeyCode::Char('a') => self.handle_download_attachments(ctx),
+            KeyCode::Char(' ') => {
+                self.table_state.toggle();
+                Command::None
+            }
+            KeyCode::Char('a') => {
+                self.table_state.mark_many(0..self.messages.len());
+                Command::None
+            }
+            KeyCode::Char('A') => {
+                self.table_state.unmark_many(0..self.messages.len());
+                Command::None
+            }
+            KeyCode::F(3) => self.handle_download_attachments(ctx),
 
             KeyCode::Char('e') => self
                 .selected_message_id()
@@ -769,7 +780,7 @@ impl MessagesState {
         }
         vec.extend_from_slice(&[
             ("esc", "Close message"),
-            ("a", "Download all attachments"),
+            ("F3", "Download all attachments"),
             ("e", "Open composer"),
             ("Ctrl + r", "Reply"),
             ("Ctrl + R", "Reply to all"),

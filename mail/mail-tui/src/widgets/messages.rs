@@ -1,15 +1,15 @@
-use crate::widgets::AsTable;
 use crate::widgets::utils::{date_from_timestamp, format_recipients, sender_name};
+use crate::widgets::{AsIntoTable, IntoTable};
 use proton_mail_common::datatypes::MessageRecipientDisplayMode;
 use proton_mail_common::models::Message;
 use ratatui::layout::Constraint;
 use ratatui::prelude::*;
-use ratatui::widgets::{Cell, Row, Table};
+use ratatui::widgets::{Cell, Row};
 
 use super::utils::format_flags;
 
-impl AsTable for Vec<Message> {
-    fn as_table(&self) -> Table<'_> {
+impl AsIntoTable for Vec<Message> {
+    fn as_table(&self) -> IntoTable<'_> {
         message_as_table(self, MessageRecipientDisplayMode::Sender)
     }
 }
@@ -17,7 +17,7 @@ impl AsTable for Vec<Message> {
 pub fn message_as_table(
     messages: &[Message],
     recipient_display_mode: MessageRecipientDisplayMode,
-) -> Table<'_> {
+) -> IntoTable<'_> {
     let rows = messages.iter().map(|msg| {
         let flags = format_flags(msg.is_starred(), msg.is_rsvp());
         let date = date_from_timestamp(msg.time);
@@ -58,7 +58,7 @@ pub fn message_as_table(
         Constraint::Fill(4),    // Subject
     ];
 
-    let headers = Row::new([
+    let header = Row::new([
         Cell::from("Date"),
         Cell::from("#L"),
         Cell::from("#A"),
@@ -71,10 +71,7 @@ pub fn message_as_table(
     ])
     .bold();
 
-    Table::new(rows, widths)
-        .column_spacing(1)
-        .header(headers)
-        .highlight_style(Style::new().reversed())
+    IntoTable::new(rows, widths, header)
 }
 
 // TODO:

@@ -314,10 +314,13 @@ impl AppStateHandler for MailboxModel {
             }),
         ])
     }
+
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
         if let Some(composer) = &mut self.composer {
             return composer.handle_event(&self.ctx, &self.mailbox, event);
-        } else if let Event::Key(key) = &event {
+        }
+
+        if let Event::Key(key) = &event {
             match key.code {
                 KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     return Composer::empty(Arc::clone(&self.ctx));
@@ -476,6 +479,8 @@ impl AppStateHandler for MailboxModel {
         let mut items = vec![
             ("k, ▲", "Go up"),
             ("j, ▼", "Go down"),
+            ("[space]", "toggle selection of current item"),
+            ("a/A", "Select/Deselect all loaded items"),
             ("Tab", "Toggle"),
             ("s", "Select a label or a folder"),
             ("m", "Move the selected item"),

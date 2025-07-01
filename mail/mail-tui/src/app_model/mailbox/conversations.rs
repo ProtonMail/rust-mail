@@ -4,7 +4,7 @@ use crate::app_model::mailbox::messages::MessagesState;
 use crate::app_model::mailbox::paginator::Paginator;
 use crate::app_model::mailbox::{ConversationMessage, ITEM_LIMIT, Item, Message};
 use crate::messages::Messages;
-use crate::widgets::{AsTable, CenteredThrobber, ScrollableTable, ScrollableTableState};
+use crate::widgets::{AsIntoTable, CenteredThrobber, ScrollableTable, ScrollableTableState};
 use anyhow::anyhow;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_mail_common::datatypes::folder_banner::{AutoDeleteBanner, AutoDeleteState};
@@ -155,6 +155,18 @@ impl ConversationsState {
                         Command::message(ConversationMessage::NextPage(v).into())
                     });
                 }
+                Command::None
+            }
+            KeyCode::Char(' ') => {
+                self.table_state.toggle();
+                Command::None
+            }
+            KeyCode::Char('a') => {
+                self.table_state.mark_many(0..self.conversations.len());
+                Command::None
+            }
+            KeyCode::Char('A') => {
+                self.table_state.unmark_many(0..self.conversations.len());
                 Command::None
             }
             KeyCode::Char('s') => Command::message(Message::OpenLabelSelectPopup.into()),
@@ -334,7 +346,6 @@ impl ConversationsState {
     }
 
     pub fn help_options(&self, vec: &mut Vec<(&'static str, &'static str)>) {
-        info!("This was called!");
         if let MessagesStatus::Ready(message_state) = &self.messages {
             message_state.help_options(vec);
         } else {

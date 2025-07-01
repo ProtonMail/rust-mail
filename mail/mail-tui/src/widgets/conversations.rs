@@ -1,13 +1,13 @@
 use super::utils::{date_from_timestamp, format_flags};
-use crate::widgets::AsTable;
 use crate::widgets::utils::format_senders;
+use crate::widgets::{AsIntoTable, IntoTable};
 use proton_mail_common::datatypes::ContextualConversation;
 use ratatui::layout::Constraint;
 use ratatui::prelude::*;
-use ratatui::widgets::{Cell, Row, Table};
+use ratatui::widgets::{Cell, Row};
 
-impl AsTable for Vec<ContextualConversation> {
-    fn as_table(&self) -> Table<'_> {
+impl AsIntoTable for Vec<ContextualConversation> {
+    fn as_table(&self) -> IntoTable<'_> {
         let rows = self.iter().map(|conv| {
             let flags = format_flags(conv.is_starred, false);
             let date = date_from_timestamp(conv.time);
@@ -69,9 +69,6 @@ impl AsTable for Vec<ContextualConversation> {
         ])
         .bold();
 
-        Table::new(rows, widths)
-            .column_spacing(1)
-            .header(headers)
-            .highlight_style(Style::new().reversed())
+        IntoTable::new(rows, widths, headers)
     }
 }

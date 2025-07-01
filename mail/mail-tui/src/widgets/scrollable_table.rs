@@ -1,13 +1,21 @@
 #![allow(unused, clippy::module_name_repetitions)]
+use std::collections::HashSet;
+use std::mem;
+
+use crossterm::event::KeyEvent;
 use ratatui::prelude::Constraint::Length;
 use ratatui::prelude::*;
+use ratatui::style::Styled;
 use ratatui::symbols::scrollbar;
 use ratatui::widgets::ScrollbarOrientation::VerticalRight;
 use ratatui::widgets::{List, ListState, Scrollbar, ScrollbarState, Table, TableState};
 
+use crate::widgets::IntoTable;
+
 pub struct ScrollableTableState {
     table_state: TableState,
     scroll_state: ScrollbarState,
+    marked: HashSet<usize>,
 }
 
 impl ScrollableTableState {
@@ -15,6 +23,7 @@ impl ScrollableTableState {
         Self {
             table_state: TableState::default().with_selected(selected),
             scroll_state: ScrollbarState::default(),
+            marked: Default::default(),
         }
     }
 
@@ -41,15 +50,46 @@ impl ScrollableTableState {
             self.table_state.select(Some(index.saturating_sub(1)));
         }
     }
+
+    pub fn toggle(&mut self) {
+        if let Some(idx) = self.selected() {
+            if !self.marked.insert(idx) {
+                self.marked.remove(&idx);
+            }
+        }
+    }
+
+    pub fn mark_many(&mut self, indices: impl IntoIterator<Item = usize>) {
+        for idx in indices {
+            self.marked.insert(idx);
+        }
+    }
+
+    pub fn unmark_many(&mut self, indices: impl IntoIterator<Item = usize>) {
+        for idx in indices {
+            self.marked.remove(&idx);
+        }
+    }
+
+    pub fn help_options(vec: &mut Vec<(&'static str, &'static str)>) {
+        vec.extend_from_slice(&[
+            ("esc", "Exit composer"),
+            ("tab", "Toggle between fields"),
+            ("Ctrl + s", "Save"),
+            ("Ctrl + t", "Send"),
+            ("Ctrl + a", "Add attachment"),
+            ("Ctrl + d", "Remove attachment"),
+        ]);
+    }
 }
 
 pub struct ScrollableTable<'a> {
-    widget: Table<'a>,
+    widget: IntoTable<'a>,
     num_rows: usize,
 }
 
 impl<'a> ScrollableTable<'a> {
-    pub fn new(table: Table<'a>, num_rows: usize) -> Self {
+    pub fn new(table: IntoTable<'a>, num_rows: usize) -> Self {
         Self {
             widget: table,
             num_rows,
@@ -60,7 +100,7 @@ impl<'a> ScrollableTable<'a> {
 impl StatefulWidget for ScrollableTable<'_> {
     type State = ScrollableTableState;
 
-    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+    fn render(mut self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let [main_area, scroll_area] =
             Layout::horizontal([Constraint::Fill(10), Length(1)]).areas(area);
 
@@ -84,7 +124,21 @@ impl StatefulWidget for ScrollableTable<'_> {
         };
 
         let main_area = if draw_scroll_bar { main_area } else { area };
-        StatefulWidget::render(self.widget, main_area, buf, &mut state.table_state);
+
+        for (idx, row) in self.widget.rows.iter_mut().enumerate() {
+            if state.marked.contains(&idx) {
+                let row_2 = mem::take(row);
+                *row = row_2.style(Style::new().bg(Color::LightBlue));
+            } else {
+                let row_2 = mem::take(row);
+                *row = row_2.style(Style::new().bg(Color::Black));
+            }
+        }
+
+        let table = self.widget.into_table();
+
+        StatefulWidget::render(table, main_area, buf, &mut state.table_state);
+
         if draw_scroll_bar {
             Scrollbar::new(VerticalRight)
                 .symbols(scrollbar::VERTICAL)
