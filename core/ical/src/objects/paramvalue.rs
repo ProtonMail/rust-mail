@@ -97,102 +97,146 @@ where
 
 impl IcsRead<Value> for ParamValue {
     fn read(r: &mut IcsReader) -> Option<Self> {
+        #[derive(Clone, Copy, Debug)]
+        enum Mode {
+            Quoted { quote_span: Span },
+            Plain,
+        }
+
         let mut value = String::new();
+        let mut mode;
         let mut quote;
 
-        if r.try_eat('"').is_some() {
+        if let Some(q) = r.spanned(|r| r.try_eat('"')) {
+            mode = Mode::Quoted { quote_span: q.span };
             quote = true;
+        } else {
+            mode = Mode::Plain;
+            quote = false;
+        }
 
-            while let Some(ch) = r.peek() {
-                match ch {
-                    '"' => {
-                        _ = r.char();
+        while let Some(ch) = r.peek() {
+            match (ch, mode) {
+                ('"', Mode::Quoted { .. }) => {
+                    _ = r.char();
+                    break;
+                }
+
+                (';' | ':' | '"', Mode::Plain) => {
+                    break;
+                }
+
+                (',', Mode::Plain) => {
+                    if r.hints().inside_array {
                         break;
                     }
 
-                    '\t' => {
-                        r.warn(Span::one(r.pos()), "quirky tab");
-                        _ = r.char();
+                    r.warn(Span::one(r.pos()), "quirky comma");
+                    value.push(r.char()?);
 
-                        // param-values don't support tabs even in quotes, so
-                        // let's sanitize it into a space for better
-                        // compatibility
-                        value.push(' ');
-                    }
+                    // Even though we can read this comma, it's not supposed to
+                    // be here - so when printing back, enquote the string for
+                    // better compatibility
+                    quote = true;
+                }
 
-                    ch if ch.is_control() => {
-                        break;
-                    }
+                ('\\', Mode::Plain) => {
+                    _ = r.char();
 
-                    _ => {
-                        value.push(r.char()?);
+                    let span = Span::new(r.pos().prev(), r.pos());
+
+                    match r.char()? {
+                        ch @ (';' | ':' | ',') => {
+                            r.warn(span, "quirky escape sequence");
+                            value.push(ch);
+
+                            // Even though we can read this escape, it's not
+                            // supposed to be here - so when printing back,
+                            // enquote the string for better compatibility
+                            quote = true;
+                        }
+
+                        _ => {
+                            r.error(span, "unrecognized escape sequence");
+                        }
                     }
                 }
-            }
-        } else {
-            quote = false;
 
-            while let Some(ch) = r.peek() {
-                match ch {
-                    ';' | ':' | '"' => {
-                        break;
+                ('\\', Mode::Quoted { quote_span }) => {
+                    // Usually strings are either unquoted:
+                    //
+                    // ```
+                    // ORGANIZER;CN=Jon:mailto:jon.snow@localhost
+                    //              ^-^
+                    // ```
+                    //
+                    // ... or quoted from both sides:
+                    //
+                    // ```
+                    // ORGANIZER;CN="Jon Snow":mailto:jon.snow@localhost
+                    //              ^--------^
+                    // ```
+                    //
+                    // But if the original string happens to *begin* with a
+                    // quote, as in:
+                    //
+                    // ```
+                    // let organizer = r#""Jon Snow", Ostéopathe"#;
+                    // ```
+                    //
+                    // ... some clients will only escape its right-hand side:
+                    //
+                    // ```
+                    // ORGANIZER;CN="Jon Snow\", Ostéopathe:mailto:jon.snow@localhost
+                    //              ^------- !! ----------^
+                    // ```
+                    //
+                    // We discover this by stumbling upon the `\"` sigil - this
+                    // means that the first `"` we saw was a literal quote char,
+                    // not the beginning of a quoted-string we thought it was.
+                    //
+                    // This also means we have to switch the parsing mode, since
+                    // we are not - in fact - inside a quoted string.
+                    //
+                    // (which matters, because quoted strings end on `"`, which
+                    // is not the case here - we must parse up to `:`, as if
+                    // this was a plain string.)
+                    //
+                    // Note that even though we know the string is supposed to
+                    // contain quotes, we remove them - we will parse this
+                    // string as:
+                    //
+                    // ```
+                    // let organizer = r#"Jon Snow, Ostéopathe"#;
+                    // ```
+                    //
+                    // That's because even though we can read quotes, they are
+                    // not supported by the standard, so there's no way for us
+                    // to reliably print those back; they just shouldn't be
+                    // here whatsoever.
+                    if r.try_string("\\\"").is_some() {
+                        r.warn(quote_span, "quirky quote");
+
+                        mode = Mode::Plain;
+                        quote = false;
                     }
+                }
 
-                    ',' => {
-                        if r.hints().inside_array {
-                            break;
-                        }
+                ('\t', _) => {
+                    r.warn(Span::one(r.pos()), "quirky tab");
+                    _ = r.char();
 
-                        r.warn(Span::one(r.pos()), "quirky comma");
-                        value.push(r.char()?);
+                    // param-values don't support tabs even in quotes, so let's
+                    // sanitize it into a space for better compatibility
+                    value.push(' ');
+                }
 
-                        // Even though we can read this comma, it's not supposed
-                        // to be here - so when printing back, enquote the
-                        // string for better compatibility
-                        quote = true;
-                    }
+                (ch, _) if ch.is_control() => {
+                    break;
+                }
 
-                    '\t' => {
-                        r.warn(Span::one(r.pos()), "quirky tab");
-                        _ = r.char();
-
-                        // param-values don't support tabs even in quotes, so
-                        // let's sanitize it into a space for better
-                        // compatibility
-                        value.push(' ');
-                    }
-
-                    ch if ch.is_control() => {
-                        break;
-                    }
-
-                    '\\' => {
-                        _ = r.char();
-
-                        let span = Span::new(r.pos().prev(), r.pos());
-
-                        match r.char()? {
-                            ch @ (';' | ':' | ',') => {
-                                r.warn(span, "quirky escape sequence");
-                                value.push(ch);
-
-                                // Even though we can read escaped strings, they
-                                // are not supported by the standard - so when
-                                // printing, let's convert them into quoted
-                                // strings they should've been from the
-                                // beginning for better compatibility
-                                quote = true;
-                            }
-
-                            _ => {
-                                r.error(span, "unrecognized escape sequence");
-                            }
-                        }
-                    }
-
-                    _ => {
-                        value.push(r.char()?);
-                    }
+                _ => {
+                    value.push(r.char()?);
                 }
             }
         }
@@ -384,7 +428,7 @@ mod tests {
     }
 
     #[test]
-    fn comma() {
+    fn quirky_comma() {
         let (obj, msgs) = ParamValue::from_str_ex("Gregory House, MD", Value);
 
         assert_eq!(
@@ -424,7 +468,7 @@ mod tests {
     }
 
     #[test]
-    fn tab() {
+    fn quirky_tab() {
         let (obj, msgs) = ParamValue::from_str_ex("Grzegorz\tBrzęczyszczykiewicz", Value);
 
         assert_eq!(
@@ -442,6 +486,60 @@ mod tests {
                 kind: ReadMsgKind::Warning,
                 context: Vec::new(),
             }],
+            msgs,
+        );
+    }
+
+    #[test]
+    fn quirky_quote() {
+        let (obj, msgs) = ParamValue::from_str_ex("\"John Smith\\\"", Value);
+
+        assert_eq!(
+            Some(ParamValue {
+                value: "John Smith".into(),
+                quote: false,
+            }),
+            obj,
+        );
+
+        assert_eq!(
+            vec![ReadMsg {
+                at: Some(Span::new((1, 1), (1, 1))),
+                body: "quirky quote".into(),
+                kind: ReadMsgKind::Warning,
+                context: Vec::new(),
+            },],
+            msgs,
+        );
+    }
+
+    #[test]
+    fn quirky_quote_and_quirky_comma() {
+        let (obj, msgs) = ParamValue::from_str_ex("\"John Smith\\\", M.D.", Value);
+
+        assert_eq!(
+            Some(ParamValue {
+                value: "John Smith, M.D.".into(),
+                quote: true,
+            }),
+            obj,
+        );
+
+        assert_eq!(
+            vec![
+                ReadMsg {
+                    at: Some(Span::new((1, 1), (1, 1))),
+                    body: "quirky quote".into(),
+                    kind: ReadMsgKind::Warning,
+                    context: Vec::new(),
+                },
+                ReadMsg {
+                    at: Some(Span::new((1, 14), (1, 14))),
+                    body: "quirky comma".into(),
+                    kind: ReadMsgKind::Warning,
+                    context: Vec::new(),
+                },
+            ],
             msgs,
         );
     }
