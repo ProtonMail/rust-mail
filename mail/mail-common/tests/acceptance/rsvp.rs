@@ -2,7 +2,7 @@ use indoc::formatdoc;
 use jiff::Zoned;
 use proton_calendar_api::{self as cal, ProtonCalendarMock};
 use proton_calendar_common::{RsvpAnswerStatus, RsvpEventId};
-use proton_core_api::services::proton::{GetKeysAllResponse, UserId};
+use proton_core_api::services::proton::{GetKeysAllResponse, PrivateString, UserId};
 use proton_core_common::models::ModelExtension;
 use proton_crypto_calendar::{CalendarEventEncryptor, KeyPacket, UnlockedCalendarKey};
 use proton_crypto_inbox::attachment::KeyPackets;
@@ -100,7 +100,7 @@ async fn fetch_and_answer() {
         msg.metadata.to_list = vec![mail::MessageRecipient {
             address: TEST_MAIL.into(),
             is_proton: true,
-            name: String::default(),
+            name: PrivateString::default(),
             group: None,
         }];
 

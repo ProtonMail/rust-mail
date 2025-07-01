@@ -38,7 +38,7 @@ impl MailUserSession {
             let mode = light_or_dark_mode_from_string(mode)?;
             Ok::<_, RealProtonMailError>(
                 ctx.image_for_sender(
-                    address,
+                    address.into(),
                     bimi_selector,
                     display_sender_image,
                     size,

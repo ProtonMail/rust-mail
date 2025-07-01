@@ -10,7 +10,7 @@ use crate::models::Message;
 use crate::models::{Attachment, MailSettings};
 use anyhow::Context;
 use proton_calendar_common::{self as cal};
-use proton_core_api::services::proton::AddressId;
+use proton_core_api::services::proton::{AddressId, PrivateEmailRef, PrivateString};
 use proton_crypto_account::keys::{PrimaryUnlockedAddressKey, UnlockedAddressKeys};
 use proton_crypto_inbox::attachment::{EncryptableAttachment, EncryptedAttachment};
 use proton_crypto_inbox::message::EncryptableDraft;
@@ -70,7 +70,7 @@ where
         let message = {
             debug!("Building message");
 
-            self.build_message(to, body, &key, &ics)?
+            self.build_message(to.into(), body, &key, &ics)?
         };
 
         let parent = Some((self.msg_id.clone(), DraftAction::Reply));
@@ -78,7 +78,7 @@ where
         let (packages, mut ics) = {
             debug!("Building packages");
 
-            self.build_packages(to, body, ics).await?
+            self.build_packages(to.into(), body, ics).await?
         };
 
         let auto_save_contacts = false;
@@ -141,7 +141,7 @@ where
 {
     fn build_message(
         &self,
-        to: &str,
+        to: PrivateEmailRef,
         body: &str,
         key: &PrimaryUnlockedAddressKey<P::PrivateKey, P::PublicKey>,
         ics: &EncryptedAttachment,
@@ -161,8 +161,8 @@ where
             })?;
 
         let to = DraftRecipient {
-            address: to.to_string(),
-            name: to.to_string(),
+            address: to.to_owned(),
+            name: PrivateString::default(),
             group: None,
         };
 
@@ -179,11 +179,11 @@ where
 
     async fn build_packages(
         &mut self,
-        to: &str,
+        to: PrivateEmailRef<'_>,
         body: &str,
         ics: EncryptedAttachment,
     ) -> Result<(Vec<Package>, Attachment), MailContextError> {
-        let to = to.to_string();
+        let to = to.to_owned();
 
         let ics = self
             .tether

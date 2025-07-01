@@ -1,11 +1,12 @@
 ---
 source: core/core-common/src/tests/models/contact.rs
 expression: display_suggestions(res)
+snapshot_kind: text
 ---
 2 suggestions:
 
 contact/234: Michael Scott
-M (#4989FF): m.scott@pm.me <m.scott@pm.me>,  local_id: 234, Proton address, last used: 1
+M (#4989FF): m.scott@pm.me <mXXXXXX@XXXXX>,  local_id: 234, Proton address, last used: 1
 
 contact/123: Barbara Lox
-B (#2E8378): barbara@lox.com <barbara@lox.com>,  local_id: 123, last used: 1
+B (#2E8378): barbara@lox.com <bXXXXXX@XXXXXXX>,  local_id: 123, last used: 1

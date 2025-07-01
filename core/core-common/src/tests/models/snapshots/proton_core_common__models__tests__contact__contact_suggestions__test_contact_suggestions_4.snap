@@ -1,17 +1,18 @@
 ---
 source: core/core-common/src/tests/models/contact.rs
 expression: display_suggestions(res)
+snapshot_kind: text
 ---
 4 suggestions:
 
 contact/678: Jason Mendoza
-J (#764AC4): jianyu.li@pm.me <jianyu.li@pm.me>,  local_id: 678, Proton address, last used: 2
+J (#764AC4): jianyu.li@pm.me <jXXXXXXXX@XXXXX>,  local_id: 678, Proton address, last used: 2
 
 contact/234: Michael Scott
-M (#4989FF): m.scott@pm.me <m.scott@pm.me>,  local_id: 234, Proton address, last used: 2
+M (#4989FF): m.scott@pm.me <mXXXXXX@XXXXX>,  local_id: 234, Proton address, last used: 2
 
 contact/123: Barbara Lox
-B (#9E66FC): barbara@pm.me <barbara@pm.me>,  local_id: 123, Proton address, last used: 1
+B (#9E66FC): barbara@pm.me <bXXXXXX@XXXXX>,  local_id: 123, Proton address, last used: 1
 
 contact/456: Jake Peralta
-J (#9C89FF): jake.peralta@99.com <jake.peralta@99.com>,  local_id: 456, last used: 3
+J (#9C89FF): jake.peralta@99.com <jXXXXXXXXXXX@XXXXXX>,  local_id: 456, last used: 3

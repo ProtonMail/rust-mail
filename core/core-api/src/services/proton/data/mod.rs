@@ -2,9 +2,12 @@ mod data_impl;
 mod request_data;
 mod requests;
 
+mod common;
+
 pub use self::request_data::*;
 pub use self::requests::*;
 use crate::service::ApiServiceResult;
+pub use common::*;
 
 /// The Proton Data API base path (v1).
 pub const DATA_V1: &str = "/data/v1";

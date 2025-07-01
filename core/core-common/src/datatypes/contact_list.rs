@@ -5,7 +5,7 @@ use crate::datatypes::{
 use crate::models::{Contact, ContactEmail, Label};
 use crate::utils::MapVec as _;
 use itertools::Itertools;
-use proton_core_api::services::proton::LabelId;
+use proton_core_api::services::proton::{LabelId, PrivateEmail};
 use stash::orm::Model;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -151,7 +151,7 @@ impl From<Contact> for ContactItem {
                     value
                         .contact_emails
                         .first()
-                        .map(|email| email.email.as_str())
+                        .map(|email| email.email.as_clear_text_str())
                         .unwrap_or_default(),
                 )
                 .or_else_unchecked("?"),
@@ -174,7 +174,7 @@ pub struct ContactGroupItem {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContactEmailItem {
     pub local_id: LocalContactEmailId,
-    pub email: String,
+    pub email: PrivateEmail,
     /// The field represents if the email is a proton email like foo@pm.me
     pub is_proton: bool,
     pub last_used_time: UnixTimestamp,
@@ -186,7 +186,7 @@ impl From<ContactEmail> for ContactEmailItem {
     fn from(value: ContactEmail) -> Self {
         let local_id = value.id();
         let name = if value.name.is_empty() {
-            value.email.clone()
+            value.email.clone().into_clear_text_string()
         } else {
             value.name
         };
@@ -214,7 +214,7 @@ pub struct DeviceContact {
     pub name: String,
 
     /// List of email addresses assigned to the contact. That list has an arbitrary order given by the user
-    pub emails: Vec<String>,
+    pub emails: Vec<PrivateEmail>,
 }
 
 /// Collection of sorted contact suggestions
@@ -428,10 +428,10 @@ impl ContactSuggestion {
     pub fn email(&self) -> Option<&str> {
         match &self.kind {
             ContactSuggestionKind::ContactItem(contact_email_item) => {
-                Some(contact_email_item.email.as_str())
+                Some(contact_email_item.email.as_clear_text_str())
             }
             ContactSuggestionKind::DeviceContact(device_contact_suggestion) => {
-                Some(device_contact_suggestion.email.as_str())
+                Some(device_contact_suggestion.email.as_clear_text_str())
             }
             ContactSuggestionKind::ContactGroup(_) => None,
         }
@@ -566,5 +566,5 @@ impl FollowingSuggestion {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct DeviceContactSuggestion {
     /// The field represents the email address used in the device contact
-    pub email: String,
+    pub email: PrivateEmail,
 }

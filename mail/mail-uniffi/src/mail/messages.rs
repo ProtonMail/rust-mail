@@ -28,6 +28,7 @@ use proton_mail_common::MailUserContext;
 use proton_mail_common::errors::unexpected::Unexpected;
 
 use proton_core_api::services::proton::AddressId;
+use proton_core_api::services::proton::PrivateEmail;
 use proton_mail_common::datatypes::LocalConversationId;
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::message_banner::MessageBanner as RealMessageBanner;
@@ -50,7 +51,7 @@ use tokio::sync::Mutex;
 pub struct DecryptedMessage {
     pub(crate) ctx: MailUserContextPtr,
     /// The email address of the sender. Example: `test@pm.me`
-    pub(crate) sender: String,
+    pub(crate) sender: PrivateEmail,
     pub(crate) body: DecryptedMessageBody,
 }
 
@@ -750,7 +751,6 @@ pub fn test_stub_message_body(
     let ctx = session.ptr();
     let msg = Arc::new(DecryptedMessage {
         ctx,
-        sender,
         body: DecryptedMessageBody {
             body: content,
             metadata: MessageBodyMetadata {
@@ -761,6 +761,7 @@ pub fn test_stub_message_body(
             address_id: AddressId::from("Unknown"),
             in_flight: parking_lot::Mutex::default(),
         },
+        sender: sender.into(),
     });
 
     Ok(msg)

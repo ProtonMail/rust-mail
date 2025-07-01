@@ -1,4 +1,4 @@
-use proton_core_api::services::proton::AddressId;
+use proton_core_api::services::proton::{AddressId, PrivateEmail};
 
 /// Specific Reason for error occurrence
 ///
@@ -146,9 +146,9 @@ pub enum DraftSendErrorReason {
     /// Message has no recipients
     NoRecipients,
     /// Recipient email is invalid
-    RecipientEmailInvalid(String),
+    RecipientEmailInvalid(PrivateEmail),
     /// This Proton recipient does not exist.
-    ProtonRecipientDoesNotExist(String),
+    ProtonRecipientDoesNotExist(PrivateEmail),
     /// A packaging error occurred
     PackageError(String),
     /// This message no longer exists.

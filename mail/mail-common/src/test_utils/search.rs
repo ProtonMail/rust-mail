@@ -331,19 +331,19 @@ pub fn test_conversation(
         order: 50,
         subject: "Hello World".to_owned(),
         senders: vec![ApiMessageSender {
-            address: "hello@world.com".to_owned(),
-            name: "HelloWorld".to_owned(),
+            address: "hello@world.com".into(),
+            name: "HelloWorld".into(),
             ..Default::default()
         }],
         recipients: vec![
             ApiMessageRecipient {
-                address: "foo@bar.com".to_owned(),
-                name: "Foo".to_owned(),
+                address: "foo@bar.com".into(),
+                name: "Foo".into(),
                 ..Default::default()
             },
             ApiMessageRecipient {
-                address: "Bar@bar.com".to_owned(),
-                name: "bar".to_owned(),
+                address: "Bar@bar.com".into(),
+                name: "bar".into(),
                 ..Default::default()
             },
         ],

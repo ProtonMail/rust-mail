@@ -3,7 +3,7 @@ use crate::datatypes::{
     UnixTimestamp,
 };
 use crate::models::{Contact, Label, ModelIdExtension};
-use proton_core_api::services::proton::ContactEmail as ApiContactEmail;
+use proton_core_api::services::proton::{ContactEmail as ApiContactEmail, PrivateEmail};
 use proton_core_api::services::proton::{ContactEmailId, ContactId, LabelId};
 use stash::macros::Model;
 use stash::orm::Model;
@@ -30,7 +30,7 @@ pub struct ContactEmail {
     pub local_contact_id: Option<LocalContactId>,
 
     #[DbField]
-    pub canonical_email: String,
+    pub canonical_email: PrivateEmail,
 
     #[DbField]
     pub contact_type: ContactTypes,
@@ -42,7 +42,7 @@ pub struct ContactEmail {
     pub display_order: u32,
 
     #[DbField]
-    pub email: String,
+    pub email: PrivateEmail,
 
     #[DbField]
     pub is_proton: bool,

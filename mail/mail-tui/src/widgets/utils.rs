@@ -12,7 +12,7 @@ pub fn date_from_timestamp(timestamp: UnixTimestamp) -> String {
 
 pub fn sender_name(sender: &MessageSender) -> &str {
     if sender.name.is_empty() {
-        sender.address.as_str()
+        sender.address.as_clear_text_str()
     } else {
         sender.name.as_str()
     }
@@ -20,17 +20,17 @@ pub fn sender_name(sender: &MessageSender) -> &str {
 
 pub fn format_sender(sender: &MessageSender) -> String {
     if sender.name.is_empty() {
-        sender.address.clone()
+        sender.address.clone().into_clear_text_string()
     } else {
-        format!("{} <{}>", sender.name, sender.name)
+        format!("{} <{}>", sender.name, sender.address.as_clear_text_str())
     }
 }
 
 pub fn format_recipient(sender: &MessageRecipient) -> String {
     if sender.name.is_empty() {
-        sender.address.clone()
+        sender.address.clone().into_clear_text_string()
     } else {
-        format!("{} <{}>", sender.name, sender.name)
+        format!("{} <{}>", sender.name, sender.address.as_clear_text_str())
     }
 }
 

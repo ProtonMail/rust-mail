@@ -38,10 +38,10 @@ impl From<OldDraftSendFailure> for DraftSendFailure {
                 Self::Save(DraftSendFailureSave::AddressDoesNotHavePrimaryKey(v))
             }
             OldDraftSendFailure::RecipientEmailInvalid(v) => {
-                Self::Send(DraftSendFailureSend::RecipientEmailInvalid(v))
+                Self::Send(DraftSendFailureSend::RecipientEmailInvalid(v.into()))
             }
             OldDraftSendFailure::ProtonRecipientDoesNotExist(v) => {
-                Self::Send(DraftSendFailureSend::ProtonRecipientDoesNotExist(v))
+                Self::Send(DraftSendFailureSend::ProtonRecipientDoesNotExist(v.into()))
             }
             OldDraftSendFailure::AddressDisabled(v) => {
                 Self::Save(DraftSendFailureSave::AddressDisabled(v))

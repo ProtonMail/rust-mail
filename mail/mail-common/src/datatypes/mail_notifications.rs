@@ -9,6 +9,8 @@ use proton_mail_api::services::push_notifications::DecryptedEmailPushNotificatio
 use proton_mail_api::services::push_notifications::DecryptedInboxPushNotification as ApiDecryptedInboxPushNotification;
 use proton_mail_api::services::push_notifications::NotificationSender as ApiNotificationSender;
 
+use crate::MailContextError;
+use proton_core_api::services::proton::{PrivateEmail, PrivateString};
 use proton_core_common::datatypes::EncryptedPushNotification;
 use proton_core_common::datatypes::StoredDevicePrivateKey;
 use proton_core_common::os::KeyChain;
@@ -18,8 +20,6 @@ use proton_crypto_account::proton_crypto;
 use secrecy::ExposeSecret;
 use std::sync::Arc;
 use tracing::error;
-
-use crate::MailContextError;
 
 /// Quick actions available for mail related push notifications.
 /// It operates on remote ids since local ids are unknown at this point.
@@ -154,15 +154,15 @@ pub struct DecryptedOpenUrlPushNotification {
 pub struct NotificationSender {
     /// Name of the sender
     ///
-    pub name: String,
+    pub name: PrivateString,
 
     /// Email address of the sender
     ///
-    pub address: String,
+    pub address: PrivateEmail,
 
     /// Contact group of the sender
     ///
-    pub group: String,
+    pub group: PrivateString,
 }
 
 impl From<ApiNotificationSender> for NotificationSender {

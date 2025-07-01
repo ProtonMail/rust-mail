@@ -18,7 +18,7 @@ use derive_more::derive::TryFrom;
 use indoc::formatdoc;
 use proton_action_queue::action::ActionId;
 use proton_core_api::service::ApiServiceError;
-use proton_core_api::services::proton::AddressId;
+use proton_core_api::services::proton::{AddressId, PrivateEmail};
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_api::services::proton::common::MessageId;
@@ -548,8 +548,8 @@ pub enum DraftSendFailureSave {
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
 pub enum DraftSendFailureSend {
     NoRecipients,
-    RecipientEmailInvalid(String),
-    ProtonRecipientDoesNotExist(String),
+    RecipientEmailInvalid(PrivateEmail),
+    ProtonRecipientDoesNotExist(PrivateEmail),
     PackageError(String),
     MessageDoesNotExist,
     ScheduleSendExpired,

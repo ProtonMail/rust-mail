@@ -1,5 +1,6 @@
 use crate::models::MailSettings;
 use crate::{MailContextResult, MailUserContext};
+use proton_core_api::services::proton::PrivateEmail;
 use proton_core_common::datatypes::LightOrDarkMode;
 
 impl MailUserContext {
@@ -27,7 +28,7 @@ impl MailUserContext {
     #[allow(clippy::too_many_arguments)]
     pub async fn image_for_sender(
         &self,
-        address: String,
+        address: PrivateEmail,
         bimi_selector: Option<String>,
         display_sender_image: bool,
         size: Option<u32>,

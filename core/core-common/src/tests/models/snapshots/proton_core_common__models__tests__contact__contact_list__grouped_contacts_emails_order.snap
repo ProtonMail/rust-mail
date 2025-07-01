@@ -1,11 +1,12 @@
 ---
 source: core/core-common/src/tests/models/contact.rs
 expression: display_group(result)
+snapshot_kind: text
 ---
 1 keys:
 
 B (1 item)
 Contact B (#52CD96): Barbara Fox (3 addresses)
-B (#2E8378): bfox@proton.me <bfox@proton.me>,  local_id: 3, Proton address
-B (#52CD96): barbara@fox.us <barbara@fox.us>,  local_id: 2
-B (#7B3185): barbara1984@yahoo.com <barbara1984@yahoo.com>,  local_id: 1
+B (#2E8378): bfox@proton.me <bXXX@XXXXXXXXX>,  local_id: 3, Proton address
+B (#52CD96): barbara@fox.us <bXXXXXX@XXXXXX>,  local_id: 2
+B (#7B3185): barbara1984@yahoo.com <bXXXXXXXXXX@XXXXXXXXX>,  local_id: 1
