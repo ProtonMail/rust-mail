@@ -19,7 +19,7 @@ use proton_mail_api::services::proton::response_data::{
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::draft::ReplyMode;
 use proton_mail_common::draft::compose::{DEFAULT_SUBJECT, FORWARD_PREFIX, REPLY_PREFIX};
-use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry, RecipientList};
+use proton_mail_common::draft::recipients::{RecipientEntry, RecipientList};
 use proton_mail_common::models::Message;
 use proton_mail_common::test_utils::init::Params as TestParams;
 use proton_mail_common::test_utils::message_body::{
@@ -95,8 +95,8 @@ pub fn expected_create_draft_params() -> DraftParams {
         subject: DEFAULT_SUBJECT.to_owned(),
         unread: false,
         sender: DraftSender {
-            address: address[0].email.clone(),
-            name: address[0].display_name.clone(),
+            address: address[0].email.clone().into(),
+            name: address[0].display_name.clone().into(),
         },
         to_list: vec![],
         cc_list: vec![],
@@ -125,8 +125,8 @@ pub fn expected_create_reply_draft_params(
         ),
         unread: false,
         sender: DraftSender {
-            address: address[0].email.clone(),
-            name: address[0].display_name.clone(),
+            address: address[0].email.clone().into(),
+            name: address[0].display_name.clone().into(),
         },
         to_list: vec![DraftRecipient {
             address: message.sender.address.clone(),
@@ -211,8 +211,8 @@ pub fn gen_normal_attachment() -> MessageAttachment {
 pub fn new_recipient_list_with_single_address(email: String) -> RecipientList {
     let mut list = RecipientList::new();
     list.add_single(RecipientEntry {
-        email,
-        display_name: MaybeEmptyString(None),
+        email: email.into(),
+        display_name: None,
     })
     .unwrap();
     list

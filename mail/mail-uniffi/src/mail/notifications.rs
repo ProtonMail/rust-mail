@@ -176,9 +176,9 @@ pub struct NotificationSender {
 impl From<RealNotificationSender> for NotificationSender {
     fn from(value: RealNotificationSender) -> Self {
         Self {
-            name: value.name,
-            address: value.address,
-            group: value.group,
+            name: value.name.into_inner(),
+            address: value.address.into_clear_text_string(),
+            group: value.group.into_inner(),
         }
     }
 }

@@ -311,7 +311,9 @@ impl MessagesState {
 
     fn selected_email(&self) -> Option<String> {
         let index = self.table_state.selected()?;
-        self.messages.get(index).map(|c| c.sender.address.clone())
+        self.messages
+            .get(index)
+            .map(|c| c.sender.address.clone().into_clear_text_string())
     }
 }
 

@@ -2,6 +2,7 @@ use base64::{DecodeError, Engine as _, prelude::BASE64_STANDARD as BASE_64};
 use itertools::Itertools as _;
 use proton_vcard::{parameters::preference::Preference, vcard::VCard};
 
+use proton_core_api::services::proton::PrivateEmailRef;
 use proton_crypto_account::{
     keys::{PGPScheme, PinnedPublicKeys},
     proton_crypto::{
@@ -36,7 +37,7 @@ pub const X_PM_SIGN: &str = "X-PM-SIGN";
 pub fn pinned_keys_for_mail<P>(
     vcard: &VCard,
     pgp: &P,
-    email: &str,
+    email: &PrivateEmailRef<'_>,
 ) -> Option<PinnedPublicKeys<<P>::PublicKey>>
 where
     P: PGPProviderSync,
@@ -44,7 +45,7 @@ where
     let group = vcard
         .get_all_email()
         .into_iter()
-        .find(|(_, email2)| email2.value.value == email)?
+        .find(|(_, email2)| email2.value.value == email.as_clear_text_str())?
         .1
         .group?;
 

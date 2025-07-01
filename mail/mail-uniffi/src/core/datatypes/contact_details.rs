@@ -183,7 +183,7 @@ impl From<RealContactDetailsEmail> for ContactDetailsEmail {
     fn from(value: RealContactDetailsEmail) -> Self {
         Self {
             email_type: value.email_type.map_vec(),
-            email: value.email,
+            email: value.email.into_clear_text_string(),
         }
     }
 }

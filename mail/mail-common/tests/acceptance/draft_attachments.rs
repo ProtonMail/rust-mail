@@ -451,7 +451,7 @@ async fn draft_reply_or_forward_creates_new_attachments() {
 
     // Create one message we can reply to.
     let mut remote_existing_message = message_body_test_message_mime();
-    remote_existing_message.metadata.sender.address = "me@proton.me".to_owned();
+    remote_existing_message.metadata.sender.address = "me@proton.me".into();
     remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
 
     remote_existing_message.body.attachments.reverse();
@@ -619,7 +619,7 @@ async fn deleting_draft_metadata_cleans_not_uploaded_attachments() {
 
     // Create one message we can reply to.
     let mut remote_existing_message = message_body_test_message_mime();
-    remote_existing_message.metadata.sender.address = "me@proton.me".to_owned();
+    remote_existing_message.metadata.sender.address = "me@proton.me".into();
     remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
 
     remote_existing_message.body.attachments.reverse();

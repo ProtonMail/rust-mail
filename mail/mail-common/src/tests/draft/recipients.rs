@@ -9,8 +9,8 @@ use stash::stash::StashError;
 fn duplicate_single_recipient_reports_error() {
     let mut list = RecipientList::default();
     let entry = RecipientEntry {
-        display_name: MaybeEmptyString(None),
-        email: "foo@example.com".to_owned(),
+        display_name: None,
+        email: "foo@example.com".into(),
     };
 
     list.add_single(entry.clone()).unwrap();
@@ -23,8 +23,8 @@ fn remove_single_recipient() {
     let mut list = RecipientList::default();
     let email = "foo@example.com".to_owned();
     let entry = RecipientEntry {
-        display_name: MaybeEmptyString(None),
-        email: email.clone(),
+        display_name: None,
+        email: email.clone().into(),
     };
 
     list.add_single(entry).unwrap();
@@ -39,8 +39,8 @@ fn invalid_email_is_added_to_list_with_error_status() {
 
     for invalid_email in invalid_emails {
         let entry = RecipientEntry {
-            display_name: MaybeEmptyString(None),
-            email: invalid_email.to_owned(),
+            display_name: None,
+            email: invalid_email.into(),
         };
 
         let mut list = RecipientList::default();
@@ -63,8 +63,8 @@ fn invalid_email_is_added_to_list_with_error_status() {
 fn invalid_email_is_added_to_list_with_error_status_group() {
     let mut list = RecipientList::default();
     let entry = RecipientEntry {
-        display_name: MaybeEmptyString(None),
-        email: "borkenEmail!".to_owned(),
+        display_name: None,
+        email: "borkenEmail!".into(),
     };
 
     list.add_group(group_name_always(), [entry.clone()], 1);
@@ -85,12 +85,12 @@ fn invalid_email_is_added_to_list_with_error_status_group() {
 fn duplicate_group_recipient_are_returned() {
     let mut list = RecipientList::default();
     let entry = RecipientEntry {
-        display_name: MaybeEmptyString(None),
-        email: "foo@example.com".to_owned(),
+        display_name: None,
+        email: "foo@example.com".into(),
     };
     let entry2 = RecipientEntry {
-        display_name: MaybeEmptyString(None),
-        email: "bar@example.com".to_owned(),
+        display_name: None,
+        email: "bar@example.com".into(),
     };
 
     list.add_single(entry.clone()).unwrap();
@@ -112,12 +112,12 @@ fn duplicate_group_recipient_are_returned() {
 fn group_extend() {
     let mut list = RecipientList::default();
     let entry = RecipientEntry {
-        display_name: group_name_maybe(),
-        email: "foo@example.com".to_owned(),
+        display_name: None,
+        email: "foo@example.com".into(),
     };
     let entry2 = RecipientEntry {
-        display_name: group_name_maybe(),
-        email: "bar@example.com".to_owned(),
+        display_name: None,
+        email: "bar@example.com".into(),
     };
 
     let (_, duplicates) = list.add_group(group_name_always(), [entry.clone()], 1);
@@ -151,12 +151,12 @@ fn group_extend() {
 fn remove_group_recipient() {
     let mut list = RecipientList::default();
     let entry = RecipientEntry {
-        display_name: MaybeEmptyString(None),
-        email: "foo@example.com".to_owned(),
+        display_name: None,
+        email: "foo@example.com".into(),
     };
     let entry2 = RecipientEntry {
-        display_name: MaybeEmptyString(None),
-        email: "bar@example.com".to_owned(),
+        display_name: None,
+        email: "bar@example.com".into(),
     };
 
     list.add_group(group_name_always(), [entry, entry2], 2);
@@ -171,12 +171,12 @@ fn remove_single_recipient_from_group() {
     let email1 = "foo@example.com".to_owned();
     let email2 = "bar@example.com".to_owned();
     let entry = RecipientEntry {
-        display_name: MaybeEmptyString(None),
-        email: email1.clone(),
+        display_name: None,
+        email: email1.clone().into(),
     };
     let entry2 = RecipientEntry {
-        display_name: MaybeEmptyString(None),
-        email: email2.clone(),
+        display_name: None,
+        email: email2.clone().into(),
     };
 
     list.add_group(group_name_always(), [entry, entry2], 2);
@@ -189,7 +189,7 @@ fn remove_single_recipient_from_group() {
             assert_eq!(entry.group_name, group_name_always());
             assert_eq!(entry.total_in_group, 2);
             assert_eq!(entry.recipients.len(), 1);
-            assert_eq!(entry.recipients[0].email, email2);
+            assert_eq!(entry.recipients[0].email.as_clear_text_str(), email2);
         }
         _ => panic!("unexpected entry"),
     }
@@ -200,33 +200,33 @@ fn to_message_recipient_only_copies_valid_values() {
     let mut list = RecipientList::default();
 
     let valid_entry = RecipientEntry {
-        display_name: "Foo Ext".to_owned().into(),
-        email: "foo@example.com".to_owned(),
+        display_name: Some("Foo Ext".into()),
+        email: "foo@example.com".into(),
     };
 
     let valid_proton_entry = RecipientEntry {
-        display_name: "Foo Proton".to_owned().into(),
-        email: "foo@proton.ch".to_owned(),
+        display_name: Some("Foo Proton".into()),
+        email: "foo@proton.ch".into(),
     };
 
     let validating_entry = RecipientEntry {
-        display_name: MaybeEmptyString(None),
-        email: "validating@example.com".to_owned(),
+        display_name: None,
+        email: "validating@example.com".into(),
     };
 
     let unchecked_entry = RecipientEntry {
-        display_name: MaybeEmptyString(None),
-        email: "unchecked@example.com".to_owned(),
+        display_name: None,
+        email: "unchecked@example.com".into(),
     };
 
     let invalid_email_entry = RecipientEntry {
-        display_name: MaybeEmptyString(None),
-        email: "@".to_owned(),
+        display_name: None,
+        email: "@".into(),
     };
 
     let unknown_error_entry = RecipientEntry {
-        display_name: MaybeEmptyString(None),
-        email: "unknown@error.org".to_owned(),
+        display_name: None,
+        email: "unknown@error.org".into(),
     };
 
     list.add_single_with_state(valid_entry.clone(), ValidationState::Valid(false))
@@ -247,25 +247,25 @@ fn to_message_recipient_only_copies_valid_values() {
         MessageRecipient {
             address: valid_entry.email,
             is_proton: false,
-            name: valid_entry.display_name.into_string(),
+            name: valid_entry.display_name.unwrap_or_default(),
             group: MaybeEmptyString(None),
         },
         MessageRecipient {
             address: valid_proton_entry.email,
             is_proton: true,
-            name: valid_proton_entry.display_name.into_string(),
+            name: valid_proton_entry.display_name.unwrap_or_default(),
             group: MaybeEmptyString(None),
         },
         MessageRecipient {
             address: validating_entry.email,
             is_proton: false,
-            name: validating_entry.display_name.into_string(),
+            name: validating_entry.display_name.unwrap_or_default(),
             group: MaybeEmptyString(None),
         },
         MessageRecipient {
             address: unchecked_entry.email,
             is_proton: false,
-            name: unchecked_entry.display_name.into_string(),
+            name: unchecked_entry.display_name.unwrap_or_default(),
             group: MaybeEmptyString(None),
         },
     ];
@@ -278,33 +278,33 @@ fn to_message_recipient_only_copies_valid_values_group() {
     let mut list = RecipientList::default();
 
     let valid_entry = RecipientEntry {
-        display_name: "Foo Ext".to_owned().into(),
-        email: "foo@example.com".to_owned(),
+        display_name: Some("Foo Ext".into()),
+        email: "foo@example.com".into(),
     };
 
     let valid_proton_entry = RecipientEntry {
-        display_name: "Foo Proton".to_owned().into(),
-        email: "foo@proton.ch".to_owned(),
+        display_name: Some("Foo Proton".into()),
+        email: "foo@proton.ch".into(),
     };
 
     let validating_entry = RecipientEntry {
-        display_name: MaybeEmptyString(None),
-        email: "validating@example.com".to_owned(),
+        display_name: None,
+        email: "validating@example.com".into(),
     };
 
     let unchecked_entry = RecipientEntry {
-        display_name: MaybeEmptyString(None),
-        email: "unchecked@example.com".to_owned(),
+        display_name: None,
+        email: "unchecked@example.com".into(),
     };
 
     let invalid_email_entry = RecipientEntry {
-        display_name: MaybeEmptyString(None),
-        email: "@".to_owned(),
+        display_name: None,
+        email: "@".to_owned().into(),
     };
 
     let unknown_error_entry = RecipientEntry {
-        display_name: MaybeEmptyString(None),
-        email: "unknown@error.org".to_owned(),
+        display_name: None,
+        email: "unknown@error.org".into(),
     };
 
     list.add_group_with_state(
@@ -341,25 +341,25 @@ fn to_message_recipient_only_copies_valid_values_group() {
         MessageRecipient {
             address: valid_entry.email,
             is_proton: false,
-            name: valid_entry.display_name.into_string(),
+            name: valid_entry.display_name.unwrap_or_default(),
             group: group_name_maybe(),
         },
         MessageRecipient {
             address: valid_proton_entry.email,
             is_proton: true,
-            name: valid_proton_entry.display_name.into_string(),
+            name: valid_proton_entry.display_name.unwrap_or_default(),
             group: group_name_maybe(),
         },
         MessageRecipient {
             address: validating_entry.email,
             is_proton: false,
-            name: validating_entry.display_name.into_string(),
+            name: validating_entry.display_name.unwrap_or_default(),
             group: group_name_maybe(),
         },
         MessageRecipient {
             address: unchecked_entry.email,
             is_proton: false,
-            name: unchecked_entry.display_name.into_string(),
+            name: unchecked_entry.display_name.unwrap_or_default(),
             group: group_name_maybe(),
         },
     ];
@@ -421,21 +421,21 @@ async fn contact_group_resolution_from_message_recipients() {
     // the total numer of contact in that group is reported correctly.
     let message_recipients = vec![
         MessageRecipient {
-            address: "foo@proton.ch".to_owned(),
+            address: "foo@proton.ch".into(),
             is_proton: false,
-            name: "".to_string(),
+            name: "".into(),
             group: MaybeEmptyString::from(contact_group_name.clone()),
         },
         MessageRecipient {
-            address: "bar@proton.ch".to_owned(),
+            address: "bar@proton.ch".into(),
             is_proton: false,
-            name: "".to_string(),
+            name: "".into(),
             group: MaybeEmptyString::from(unknown_contact_group_name.clone()),
         },
         MessageRecipient {
-            address: "zzz@proton.ch".to_owned(),
+            address: "zzz@proton.ch".into(),
             is_proton: false,
-            name: "".to_string(),
+            name: "".into(),
             group: MaybeEmptyString::from(unknown_contact_group_name.clone()),
         },
     ];

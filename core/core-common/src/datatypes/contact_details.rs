@@ -15,9 +15,9 @@ use tracing::warn;
 use core::fmt;
 use std::fmt::Display;
 
-use proton_crypto::new_pgp_provider;
-
 use crate::datatypes::{AvatarInformation, LocalContactId};
+use proton_core_api::services::proton::PrivateEmail;
+use proton_crypto::new_pgp_provider;
 
 use crate::UserContext;
 use crate::models::Contact;
@@ -134,7 +134,7 @@ impl InspectableContactDetails {
             ContactField::Emails(emails) => {
                 emails.extend(vcard.emails.to_sorted_iter(|email| ContactDetailsEmail {
                     email_type: email.r#type.iter().cloned().map_vec(),
-                    email: email.value.value,
+                    email: email.value.value.into(),
                 }));
             }
             _ => unreachable!("The first and only field should always be the emails field"),
@@ -267,7 +267,7 @@ pub struct VCardUrl {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ContactDetailsEmail {
     pub email_type: Vec<VcardPropType>,
-    pub email: String,
+    pub email: PrivateEmail,
 }
 
 #[derive(Clone, Debug, PartialEq, PartialOrd, Eq, Ord)]

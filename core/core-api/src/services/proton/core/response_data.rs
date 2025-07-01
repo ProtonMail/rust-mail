@@ -461,7 +461,7 @@ pub struct ContactEmail {
     pub contact_id: ContactId,
 
     /// TODO: Document this field.
-    pub canonical_email: String,
+    pub canonical_email: PrivateEmail,
 
     /// TODO: Document this field.
     #[serde(rename = "Type")]
@@ -471,7 +471,7 @@ pub struct ContactEmail {
     pub defaults: ContactSendingPreferences,
 
     /// TODO: Document this field.
-    pub email: String,
+    pub email: PrivateEmail,
 
     /// TODO: Document this field.
     #[serde_as(as = "BoolFromInt")]

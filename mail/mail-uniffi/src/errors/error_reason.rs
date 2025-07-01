@@ -163,10 +163,10 @@ impl From<RealDraftSendErrorReason> for DraftSendErrorReason {
         match value {
             RealDraftSendErrorReason::NoRecipients => Self::NoRecipients,
             RealDraftSendErrorReason::RecipientEmailInvalid(value) => {
-                Self::RecipientEmailInvalid(value)
+                Self::RecipientEmailInvalid(value.into_clear_text_string())
             }
             RealDraftSendErrorReason::ProtonRecipientDoesNotExist(value) => {
-                Self::ProtonRecipientDoesNotExist(value)
+                Self::ProtonRecipientDoesNotExist(value.into_clear_text_string())
             }
             RealDraftSendErrorReason::PackageError(value) => Self::PackageError(value),
             RealDraftSendErrorReason::MessageDoesNotExist => Self::MessageDoesNotExist,

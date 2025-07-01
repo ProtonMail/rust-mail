@@ -51,7 +51,7 @@ async fn banners() {
     test_ctx.mock_delete_incoming_default().await;
     test_ctx
         .mock_post_incoming_default(IncomingDefault {
-            email: Some("normal@email".to_string()),
+            email: Some("normal@email".into()),
             ..Default::default()
         })
         .await;
@@ -92,7 +92,7 @@ async fn banners() {
         remote_address_id: addr.remote_id.clone().unwrap(),
         remote_id: Some(message_id),
         sender: proton_mail_common::datatypes::MessageSender {
-            address: "normal@email".to_string(),
+            address: "normal@email".into(),
             ..Default::default()
         },
         ..Default::default()
@@ -126,7 +126,7 @@ async fn banners() {
     let msg_blocked = Message {
         remote_id: Some("blocked".into()),
         sender: proton_mail_common::datatypes::MessageSender {
-            address: "blocked@email".to_string(),
+            address: "blocked@email".into(),
             ..Default::default()
         },
         ..msg_normal.clone()

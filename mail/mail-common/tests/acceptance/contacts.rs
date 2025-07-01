@@ -29,9 +29,9 @@ async fn contact_list() {
     params.emails = vec![ApiContactEmail {
         id: "321".into(),
         contact_id: "123".into(),
-        email: "banksy@proton.me".to_string(),
+        email: "banksy@proton.me".into(),
         name: "Mr Banksy".to_string(),
-        canonical_email: "".to_string(),
+        canonical_email: "".into(),
 
         contact_type: vec![],
         defaults: ContactSendingPreferences::Default,
@@ -69,7 +69,7 @@ async fn contact_list() {
                         color: "#52CD96".to_string()
                     },
                     local_id: 1.into(),
-                    email: "banksy@proton.me".to_string(),
+                    email: "banksy@proton.me".into(),
                     is_proton: true,
                     last_used_time: 0.into()
                 }]
@@ -96,10 +96,10 @@ async fn delete_contacts() {
     params.emails = vec![ApiContactEmail {
         id: "321".into(),
         contact_id: "123".into(),
-        canonical_email: "".to_string(),
+        canonical_email: "".into(),
         contact_type: vec![],
         defaults: ContactSendingPreferences::Default,
-        email: "banksy@proton.me".to_string(),
+        email: "banksy@proton.me".into(),
         is_proton: true,
         label_ids: vec![],
         last_used_time: 0,

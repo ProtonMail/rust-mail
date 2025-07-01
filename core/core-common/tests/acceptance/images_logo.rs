@@ -23,7 +23,7 @@ async fn get_empty_sender_image() {
 
     let image_path = user_ctx
         .image_for_sender(
-            test_address(),
+            test_address().into(),
             None,
             None,
             None,
@@ -57,7 +57,7 @@ async fn concurrency() {
         async move {
             let mut tether = ctx_clone.stash().connection();
             ctx_clone
-                .image_for_sender(test_address(), None, None, None, None, &mut tether)
+                .image_for_sender(test_address().into(), None, None, None, None, &mut tether)
                 .await
         }
     });
@@ -69,7 +69,7 @@ async fn concurrency() {
 
     let mut tether = user_ctx.stash().connection();
     let path_given = user_ctx
-        .image_for_sender(test_address(), None, None, None, None, &mut tether)
+        .image_for_sender(test_address().into(), None, None, None, None, &mut tether)
         .await
         .unwrap()
         .unwrap();
@@ -99,7 +99,7 @@ async fn image_extension(bytes: &[u8], expected: &str) {
 
     let image_path = user_ctx
         .image_for_sender(
-            test_address(),
+            test_address().into(),
             None,
             None,
             None,
@@ -116,7 +116,7 @@ async fn image_extension(bytes: &[u8], expected: &str) {
     // Called two times but only calls the api once.
     let image_path_2 = user_ctx
         .image_for_sender(
-            test_address(),
+            test_address().into(),
             None,
             None,
             None,

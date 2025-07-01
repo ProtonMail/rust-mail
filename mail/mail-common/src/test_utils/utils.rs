@@ -136,7 +136,7 @@ pub async fn prepare_and_patch_db_state_and_skip(
             if !addresses
                 .value
                 .iter_mut()
-                .any(|a| a.address == *addr.address)
+                .any(|a| a.address == addr.address)
             {
                 addresses.value.push(addr.clone());
             }
@@ -149,7 +149,7 @@ pub async fn prepare_and_patch_db_state_and_skip(
             if !recipients
                 .value
                 .iter_mut()
-                .any(|a| a.address == *addr.address)
+                .any(|a| a.address == addr.address)
             {
                 recipients.value.push(addr.clone());
             }

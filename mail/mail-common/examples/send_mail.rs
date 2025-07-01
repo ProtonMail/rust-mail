@@ -11,7 +11,7 @@ use proton_core_common::os::{InMemoryKeyChain, KeyChainExt};
 use proton_mail_common::MailContext;
 use proton_mail_common::datatypes::Disposition;
 use proton_mail_common::draft::Draft;
-use proton_mail_common::draft::recipients::{MaybeEmptyString, RecipientEntry};
+use proton_mail_common::draft::recipients::RecipientEntry;
 use proton_mail_common::models::Attachment;
 use tempdir::TempDir;
 use tracing::{error, info};
@@ -101,8 +101,8 @@ async fn main() {
     draft
         .to_list
         .add_single(RecipientEntry {
-            display_name: MaybeEmptyString(None),
-            email: recipient,
+            display_name: None,
+            email: recipient.into(),
         })
         .unwrap();
 

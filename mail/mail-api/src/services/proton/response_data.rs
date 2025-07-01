@@ -25,7 +25,7 @@
 
 use crate::services::proton::common::{AttachmentId, ConversationId, ExternalId, MessageId};
 use proton_core_api::services::proton::common::ApiErrorInfo;
-use proton_core_api::services::proton::{Action, EventId, LabelEvent};
+use proton_core_api::services::proton::{Action, EventId, LabelEvent, PrivateEmail, PrivateString};
 use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_crypto_inbox::attachment::{
     AttachmentEncryptedSignature, AttachmentSignature, KeyPackets,
@@ -1148,7 +1148,7 @@ impl Default for MessageMetadata {
 pub struct MessageSender {
     /// TODO: Document this field.
     // TODO: Proper email parsing
-    pub address: String,
+    pub address: PrivateEmail,
 
     /// TODO: Document this field.
     pub bimi_selector: Option<String>,
@@ -1169,7 +1169,7 @@ pub struct MessageSender {
     pub is_simple_login: bool,
 
     /// TODO: Document this field.
-    pub name: String,
+    pub name: PrivateString,
 }
 
 /// Recipient of a message.
@@ -1179,7 +1179,7 @@ pub struct MessageSender {
 #[serde(rename_all = "PascalCase")]
 pub struct MessageRecipient {
     /// Email of the recipient
-    pub address: String,
+    pub address: PrivateEmail,
 
     /// Whether the recipient is a proton address.
     #[serde(default)]
@@ -1187,7 +1187,7 @@ pub struct MessageRecipient {
     pub is_proton: bool,
 
     /// Display name of the recipient,empty if none.
-    pub name: String,
+    pub name: PrivateString,
 
     /// Name of the address group this recipient belongs too.
     #[serde(default)]
@@ -1291,7 +1291,7 @@ pub struct IncomingDefault {
     #[serde(rename = "Type")]
     pub action: Option<Action>,
 
-    pub email: Option<String>,
+    pub email: Option<PrivateEmail>,
     // These are unused
     //
     #[serde(rename = "ID")]

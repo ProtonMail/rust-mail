@@ -16,7 +16,6 @@ use proton_mail_common::datatypes::{Disposition, LocalAttachmentId, LocalMessage
 use proton_mail_common::draft::attachments::{DraftAttachment, DraftAttachmentState};
 use proton_mail_common::draft::compose::DraftAddressChangeOutput;
 use proton_mail_common::draft::observers::DraftAttachmentObserver;
-use proton_mail_common::draft::recipients::MaybeEmptyString;
 use proton_mail_common::draft::{
     Draft, DraftSaveActionQueuer, DraftSyncStatus, ReplyMode, recipients,
 };
@@ -869,8 +868,8 @@ fn recipients_value_to_list(
     let mut list = recipients::RecipientList::default();
     for addr in recipients.split(',') {
         list.add_single(recipients::RecipientEntry {
-            email: addr.to_owned(),
-            display_name: MaybeEmptyString(None),
+            email: addr.into(),
+            display_name: None,
         })?;
     }
     Ok(list)
@@ -879,7 +878,7 @@ fn recipients_value_to_list(
 fn recipient_list_to_display_value(list: &recipients::RecipientList) -> String {
     list.to_message_recipients()
         .into_iter()
-        .map(|v| v.address)
+        .map(|v| v.address.into_clear_text_string())
         .collect::<Vec<_>>()
         .join(", ")
 }

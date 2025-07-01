@@ -83,7 +83,10 @@ async fn test_partial_contact() {
     .await
     .expect("failed to query email")
     .expect("expected to find contact email");
-    assert_eq!(mail.canonical_email, "contact_email_1@contact.test");
+    assert_eq!(
+        mail.canonical_email.as_clear_text_str(),
+        "contact_email_1@contact.test"
+    );
 
     // Query all test contact mails.
     let mails = ContactEmail::find("LIMIT 100", vec![], &tether)
@@ -163,14 +166,14 @@ fn create_test_contact_emails() -> Vec<ContactEmail> {
             local_id: None,
             remote_id: Some(ContactEmailId::from("aefew4323jFv0BhSMw==")),
             name: "contact_email_name_1".to_owned(),
-            email: "contact_email_1@contact.test".to_owned(),
+            email: "contact_email_1@contact.test".into(),
             contact_type: ContactTypes::new(vec!["work".to_owned()]),
             defaults: ContactSendingPreferences::Default,
             display_order: 1,
             remote_contact_id: Some(ContactId::from("a29olIjFv0rnXxBhSMw==")),
             local_contact_id: None,
             label_ids: Labels::new(vec![LabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
-            canonical_email: "contact_email_1@contact.test".to_owned(),
+            canonical_email: "contact_email_1@contact.test".into(),
             last_used_time: 0.into(),
             is_proton: true,
             row_id: None,
@@ -179,14 +182,14 @@ fn create_test_contact_emails() -> Vec<ContactEmail> {
             local_id: None,
             remote_id: Some(ContactEmailId::from("aefew4323jFv0BhSMz==")),
             name: "contact_email_name_2".to_owned(),
-            email: "contact_email_2@contact.test".to_owned(),
+            email: "contact_email_2@contact.test".into(),
             contact_type: ContactTypes::new(vec!["work".to_owned()]),
             defaults: ContactSendingPreferences::Default,
             display_order: 1,
             remote_contact_id: Some(ContactId::from("a29olIjFv0rnXxBhSMw==")),
             local_contact_id: None,
             label_ids: Labels::new(vec![LabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
-            canonical_email: "contact_email_2@contact.test".to_owned(),
+            canonical_email: "contact_email_2@contact.test".into(),
             last_used_time: 0.into(),
             is_proton: true,
             row_id: None,
