@@ -1,3 +1,4 @@
+use proton_core_api::services::proton::PrivateEmailRef;
 use proton_crypto_inbox::keys::PackageCryptoType;
 use proton_crypto_inbox::message::packages::PackageMimeType;
 use proton_crypto_inbox::proton_crypto;
@@ -33,7 +34,7 @@ async fn load_sending_preferences() {
         .recipient_send_preferences(
             &pgp,
             &mut tether,
-            recipient_email,
+            PrivateEmailRef::new(recipient_email),
             mail_settings.crypto_mail_settings(),
             Default::default(),
         )
@@ -73,7 +74,7 @@ async fn load_sending_preferences_for_self() {
         .recipient_send_preferences(
             &pgp,
             &mut tether,
-            self_address,
+            PrivateEmailRef::new(self_address),
             mail_settings.crypto_mail_settings(),
             Default::default(),
         )

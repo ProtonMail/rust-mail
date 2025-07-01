@@ -10,6 +10,7 @@ use proton_action_queue::observers::ActionAwaiter;
 use proton_action_queue::queue::{BroadcastMessage, Queue, QueuedError};
 use proton_core_api::consts::Mail;
 use proton_core_api::service::ApiServiceError;
+use proton_core_api::services::proton::PrivateEmailRef;
 use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::models::{ModelExtension, PaidSubscription};
 use proton_crypto_account::keys::{
@@ -52,7 +53,7 @@ where
             .recipient_send_preferences(
                 pgp,
                 tx,
-                recipient,
+                PrivateEmailRef::new(recipient.as_str()),
                 crypto_mail_settings,
                 ComposerPreference::default(),
             )

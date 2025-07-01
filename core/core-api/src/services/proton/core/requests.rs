@@ -47,7 +47,7 @@ pub struct GetCaptchaOptions {
 pub struct GetContactsEmailsOptions {
     /// Email address to filter on
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub email: Option<String>,
+    pub email: Option<PrivateEmail>,
 
     /// Label ID to filter on.
     #[serde(rename = "LabelID")]

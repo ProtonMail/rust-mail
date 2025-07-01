@@ -27,7 +27,7 @@ use log_service::LogService;
 use proton_action_queue::action::{Action, WriterGuardError};
 use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
 use proton_core_api::service::ApiServiceError;
-use proton_core_api::services::proton::BuildError;
+use proton_core_api::services::proton::{BuildError, PrivateEmail};
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::Config as ApiConfig;
 use proton_core_api::session::Session as ApiSession;
@@ -140,11 +140,11 @@ impl proton_action_queue::action::Error for CoreContextError {
 #[derive(Debug, Error)]
 pub enum ContactError {
     #[error("ContactCard not found for email: {0}")]
-    CardNotFound(String),
+    CardNotFound(PrivateEmail),
     #[error("RemoteId not present for ContactCard for email: {0}")]
-    ContactCardRemoteIdNotPresent(String),
+    ContactCardRemoteIdNotPresent(PrivateEmail),
     #[error("Contact not found for email: {0}")]
-    FullContactNotFound(String),
+    FullContactNotFound(PrivateEmail),
     #[error("Validation: {0}")]
     Validation(#[from] VcardValidationError),
     #[error("Contact {0} does not have remote id")]

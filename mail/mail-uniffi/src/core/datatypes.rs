@@ -983,11 +983,11 @@ impl ContactEmail {
     ///
     pub async fn try_from_real(value: RealContactEmail, tether: &Tether) -> Result<Self, AppError> {
         Ok(Self {
-            canonical_email: value.canonical_email,
+            canonical_email: value.canonical_email.into_inner(),
             contact_type: value.contact_type.deref().clone(),
             defaults: value.defaults.into(),
             display_order: value.display_order,
-            email: value.email,
+            email: value.email.into_inner(),
             is_proton: value.is_proton,
             label_ids: RealLabel::remote_ids_counterpart(value.label_ids.into_inner(), tether)
                 .await?

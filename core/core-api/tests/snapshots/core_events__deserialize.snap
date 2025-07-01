@@ -1,6 +1,7 @@
 ---
 source: core/core-api/tests/core_events.rs
 expression: mail_event
+snapshot_kind: text
 ---
 CoreEvent {
     event_id: EventId(
@@ -315,12 +316,12 @@ CoreEvent {
                         contact_id: ContactId(
                             "a29olIjFv0rnXxBhSMw==",
                         ),
-                        canonical_email: "features@protonmail.black",
+                        canonical_email: fXXXXXXX@XXXXXXXXXXXXXXXX,
                         contact_type: [
                             "work",
                         ],
                         defaults: Default,
-                        email: "features@protonmail.black",
+                        email: fXXXXXXX@XXXXXXXXXXXXXXXX,
                         is_proton: true,
                         label_ids: [
                             LabelId(
