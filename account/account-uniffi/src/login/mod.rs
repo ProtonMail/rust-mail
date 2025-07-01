@@ -1,4 +1,4 @@
-use crate::{common::MuonClient, user_behavior::UserBehavior};
+use crate::{password_validator::PasswordValidatorService, user_behavior::UserBehavior};
 use datatypes::MigrationData;
 use proton_account_api::login as login_api;
 use proton_account_api::login::state::want_qr_confirmation::ProcessTargetDeviceQrError as RealProcessTargetDeviceQrError;
@@ -161,12 +161,14 @@ impl LoginFlow {
         .into()
     }
 
-    /// Returns a muon Client
-    pub async fn api(&self) -> Option<Arc<MuonClient>> {
+    /// Returns a password validator service.
+    pub async fn password_validator(&self) -> Option<Arc<PasswordValidatorService>> {
         let flow = self.flow.clone();
+
         uniffi_async::<_, JoinError, _>(async move {
-            let guard = flow.lock().await;
-            Ok(Arc::new(MuonClient::new(guard.api())))
+            Ok(Arc::new(PasswordValidatorService::new(
+                flow.lock().await.api().to_owned(),
+            )))
         })
         .await
         .ok()

@@ -12,8 +12,6 @@ use tokio::task::JoinError;
 use uniffi_runtime::async_runtime;
 use uniffi_runtime::uniffi_async;
 
-use crate::common::MuonClient;
-
 #[derive(uniffi::Object)]
 pub struct PasswordValidatorService {
     service: Arc<Mutex<RealPasswordValidatorService>>,
@@ -31,20 +29,20 @@ pub enum FetchValidatorsError {
     Other(String),
 }
 
-#[uniffi::export]
 impl PasswordValidatorService {
-    #[uniffi::constructor]
     #[must_use]
-    pub fn create(client: &Arc<MuonClient>) -> PasswordValidatorService {
-        let client: &muon::Client = client.as_inner();
+    pub fn new(client: muon::Client) -> PasswordValidatorService {
         PasswordValidatorService {
             service: Arc::new(Mutex::new(RealPasswordValidatorService {
-                client: client.clone(),
+                client,
                 policies: Vec::new(),
             })),
         }
     }
+}
 
+#[uniffi::export]
+impl PasswordValidatorService {
     pub async fn fetch_validators(&self) -> Result<(), FetchValidatorsError> {
         let service = self.service.clone();
         uniffi_async::<_, FetchValidatorsError, _>(async move {
