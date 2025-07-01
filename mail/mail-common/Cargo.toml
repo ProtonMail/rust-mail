@@ -17,16 +17,9 @@ test-utils = [
   "proton-core-common/test-utils",
 ]
 
-demo = ["dep:tao", "dep:wry"]
+gtk = ["dep:tao", "dep:wry"]
 sql = ["proton-core-api/sql", "proton-mail-api/sql"]
 proton_mail_error_log = []
-
-[[example]]
-name = "demo"
-required-features = ["demo"]
-
-[[example]]
-name = "context_reuse"
 
 [dependencies]
 anyhow = { workspace = true }

@@ -1,10 +1,14 @@
 #![allow(clippy::print_stdout)]
 
-use crate::app::App;
 use crate::cli::Cli;
-use futures::TryFutureExt;
-use tao::event_loop::EventLoopBuilder;
+use anyhow::Result;
 use tracing_subscriber::EnvFilter;
+
+#[macro_use]
+extern crate anyhow;
+
+#[macro_use]
+extern crate cfg_if;
 
 #[macro_use]
 extern crate clap;
@@ -17,8 +21,6 @@ mod cli;
 mod keychain;
 mod notifier;
 
-type Result<T, E = Box<dyn std::error::Error + Send + Sync>> = std::result::Result<T, E>;
-
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -26,9 +28,36 @@ async fn main() -> Result<()> {
         .pretty()
         .init();
 
+    cfg_if! {
+        if #[cfg(feature = "gtk")] {
+            main_gtk().await
+        } else {
+            main_cli().await
+        }
+    }
+}
+
+#[cfg(feature = "gtk")]
+async fn main_gtk() -> Result<()> {
+    use crate::app::backend::App;
+    use futures::TryFutureExt;
+    use tao::event_loop::EventLoopBuilder;
+
     let events = EventLoopBuilder::with_user_event().build();
 
     tokio::spawn(Cli::run(events.create_proxy()).inspect_err(|e| error!("{e:?}")));
 
     App::new(&events)?.run(events)
+}
+
+#[cfg(not(feature = "gtk"))]
+async fn main_cli() -> Result<()> {
+    use crate::app::events::Proxy;
+
+    #[derive(Clone)]
+    struct DummyProxy;
+
+    impl Proxy for DummyProxy {}
+
+    Cli::run(DummyProxy).await
 }

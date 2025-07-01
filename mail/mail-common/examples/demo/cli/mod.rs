@@ -1,22 +1,21 @@
-use crate::Result;
-use crate::app::UserEvent;
+use crate::app::events::{Proxy, UserEvent};
+use crate::cli::cfg::new_api_config;
+use crate::cli::ctx::new_mail_ctx;
 use crate::keychain::OnDiskKeyChain;
 use crate::notifier::HvNotifier;
+use anyhow::Result;
 use clap::Parser;
-use proton_core_api::session::Config;
-use proton_core_api::verification::ChallengeNotifier;
-use proton_core_common::CoreAccountState;
-use proton_core_common::event_loop::EventPollMode;
-use proton_core_common::os::KeyChain;
-use proton_mail_common::context::ShouldInitializeMailUserContext;
-use proton_mail_common::{MailContext, MailUserContext};
+use proton_mail_common::MailContext;
 use std::io::{Result as IoResult, Write, stdin, stdout};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
-use tao::event_loop::EventLoopProxy;
 
+mod cfg;
+mod ctx;
 mod payments;
 mod user;
+
+const APP_NAME: &str = "proton-mail-common-demo";
 
 #[derive(Debug, Parser)]
 pub struct Cli {
@@ -36,7 +35,7 @@ pub struct Cli {
 }
 
 impl Cli {
-    pub async fn run(proxy: EventLoopProxy<UserEvent>) -> Result<()> {
+    pub async fn run(proxy: impl Proxy + 'static) -> Result<()> {
         Self::parse().run_cmd(proxy.clone()).await.unwrap();
 
         proxy.send_event(UserEvent::Exit)?;
@@ -44,11 +43,11 @@ impl Cli {
         Ok(())
     }
 
-    async fn run_cmd(self, proxy: EventLoopProxy<UserEvent>) -> Result<()> {
+    async fn run_cmd(self, proxy: impl Proxy + 'static) -> Result<()> {
         let dir = tempdir(self.device).inspect(|dir| info!("{}", dir.display()))?;
         let kch = Arc::new(OnDiskKeyChain::new(&dir)?);
         let hvn = Arc::new(HvNotifier::new(proxy));
-        let cfg = build_config(self.app, self.env)?;
+        let cfg = new_api_config(self.app, self.env)?;
         let ctx = new_mail_ctx(&dir, cfg, kch, hvn).await?;
 
         self.cmd.run(ctx).await
@@ -70,73 +69,6 @@ impl Cmd {
     }
 }
 
-fn build_config(app: Option<String>, env: Option<String>) -> Result<Config> {
-    let mut cfg = Config::default();
-
-    if let Some(app) = app {
-        cfg.app_version = app;
-    }
-
-    if let Some(env) = env {
-        cfg.env_id = env.parse()?;
-    }
-
-    Ok(cfg)
-}
-
-async fn new_mail_ctx<K, N>(
-    dir: &Path,
-    cfg: Config,
-    kch: Arc<K>,
-    hvn: Arc<N>,
-) -> Result<Arc<MailContext>>
-where
-    K: KeyChain + 'static,
-    N: ChallengeNotifier + 'static,
-{
-    const CACHE_SIZE: u64 = 1 << 20;
-
-    Ok(MailContext::new(
-        dir.join("session"),
-        dir.join("user"),
-        dir.join("cache").join("core"),
-        dir.join("cache").join("mail"),
-        CACHE_SIZE,
-        None,
-        kch,
-        cfg,
-        Some(hvn),
-        None,
-        None,
-        EventPollMode::Manual,
-    )
-    .await?)
-}
-
-async fn get_user_ctx(ctx: &Arc<MailContext>, username: &str) -> Result<Arc<MailUserContext>> {
-    for acc in ctx.get_accounts().await? {
-        if acc.name_or_addr != username {
-            continue;
-        }
-
-        let Some(CoreAccountState::LoggedIn(mut s)) =
-            ctx.get_account_state(acc.remote_id.clone()).await?
-        else {
-            continue;
-        };
-
-        let Some(session) = ctx.get_session(s.pop().unwrap()).await? else {
-            continue;
-        };
-
-        return Ok(ctx
-            .user_context_from_session(&session, None, ShouldInitializeMailUserContext::Yes)
-            .await?);
-    }
-
-    Err("account not found")?
-}
-
 fn read(prompt: &str) -> IoResult<String> {
     print!("{prompt}: ");
     stdout().flush()?;
@@ -148,7 +80,7 @@ fn read(prompt: &str) -> IoResult<String> {
 }
 
 fn tempdir(device: Option<String>) -> Result<PathBuf> {
-    let mut dir = std::env::temp_dir().join("proton-mail-common-demo");
+    let mut dir = std::env::temp_dir().join(APP_NAME);
 
     if let Some(device_dir) = device {
         dir = dir.join(device_dir);
