@@ -14,6 +14,7 @@ use crate::{LiveQueryCallback, async_runtime, spawn_async, uniffi_async};
 use futures::TryFutureExt;
 use proton_account_api::login::state::want_qr_confirmation::process_target_device_qr_code;
 use proton_account_uniffi::login::ProcessTargetDeviceQrError;
+use proton_account_uniffi::password_validator::PasswordValidatorService;
 use proton_core_api::services::proton::{ProtonAuth, ProtonPayments};
 use proton_mail_common::MailUserContext;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
@@ -173,6 +174,18 @@ impl MailUserSession {
         })
         .await
         .into()
+    }
+
+    /// Returns a password validator service.
+    #[must_use]
+    pub fn password_validator(&self) -> Option<Arc<PasswordValidatorService>> {
+        let ctx = self
+            .ctx()
+            .inspect_err(|err| error!("Failed to get Context: {err:?}"))
+            .ok()?;
+        Some(Arc::new(PasswordValidatorService::new(
+            ctx.api().to_owned(),
+        )))
     }
 
     /// Provides a way to get the datatypes::User FFI instance.
