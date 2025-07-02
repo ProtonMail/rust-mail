@@ -2,5 +2,5 @@
 plugins {
     id("com.android.application") version "8.10.1" apply false
     id("org.jetbrains.kotlin.android") version "2.1.21" apply false
-    id("com.vanniktech.maven.publish") version "0.31.0" apply false
+    id("com.vanniktech.maven.publish") version "0.33.0" apply false
 }
