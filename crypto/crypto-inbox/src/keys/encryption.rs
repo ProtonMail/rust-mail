@@ -522,6 +522,7 @@ impl<Pub: PublicKey> SendPreferences<Pub> {
             api_keys,
             pinned_keys,
             encryption_time,
+            true, // prefer v6/pqc keys for mail.
         );
 
         let encryption_preferences = EncryptionPreferences::from_key_model_and_settings(
