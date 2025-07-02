@@ -3,7 +3,7 @@ use datatypes::MigrationData;
 use proton_account_api::login as login_api;
 use proton_account_api::login::state::want_qr_confirmation::ProcessTargetDeviceQrError as RealProcessTargetDeviceQrError;
 use proton_account_api::responses as responses_api;
-use proton_core_api::service::ApiServiceError;
+use proton_core_api::{consts::CoreBundle, service::ApiServiceError};
 use std::sync::Arc;
 use tokio::{sync::Mutex, task::JoinError};
 use uniffi::Enum as UniffiEnum;
@@ -280,6 +280,10 @@ pub enum LoginError {
     InvalidState,
 
     InvalidCredentials,
+
+    /// Returned if Incorrect 2FA code was provided by the user
+    Incorrect2FACode,
+
     CantUnlockUserKey,
 
     /// Returned if the initial auth request fails.
@@ -336,6 +340,10 @@ impl From<login_api::LoginError> for LoginError {
             | login_api::LoginError::ServerProof(..)
             | login_api::LoginError::SrpProof(..)
             | login_api::LoginError::WrongMailboxPassword => LoginError::InvalidCredentials,
+            login_api::LoginError::FlowTotp(ApiServiceError::UnprocessableEntity(
+                _,
+                Some(info),
+            )) if info.code == CoreBundle::PasswordWrong as u32 => LoginError::Incorrect2FACode,
             login_api::LoginError::FlowLogin(e) => LoginError::FlowLogin(e.into()),
             login_api::LoginError::FlowTotp(e) => LoginError::FlowTotp(e.into()),
             login_api::LoginError::FlowFido(e) => LoginError::FlowFido(e.into()),
