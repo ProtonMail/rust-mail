@@ -206,7 +206,7 @@ async fn create_mail_session_inner(
         .clone()
         .unwrap_or_default()
         .try_into()
-        .inspect_err(|e| error!("{e:?}"))
+        .inspect_err(|e| error!("Failed to get api_env_config {e:?}"))
         .map_err(|_| Unexpected::Config)?;
 
     let hv_notifier = hv_notifier.map(ChallengeNotifierWrap::wrap);

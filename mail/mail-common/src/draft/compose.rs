@@ -470,7 +470,7 @@ impl DraftAddressChangeRequest {
         }
     }
 
-    #[tracing::instrument(level = "debug", skip(self, context, tether))]
+    #[tracing::instrument(skip(self, context, tether))]
     pub async fn apply(
         self,
         context: &MailUserContext,

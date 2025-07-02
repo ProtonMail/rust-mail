@@ -339,7 +339,7 @@ impl MailScrollerSource for SearchScrollerSource {
         Ok(self.total(&tether).await?)
     }
 
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(ctx))]
+    #[tracing::instrument(skip(ctx))]
     async fn sync_next(
         &mut self,
         ctx: &MailUserContext,

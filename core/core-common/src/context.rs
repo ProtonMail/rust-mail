@@ -49,7 +49,7 @@ use thiserror::Error;
 use tokio::sync::{Mutex, broadcast};
 use tokio::task::{JoinError, JoinHandle};
 use tokio_util::sync::CancellationToken;
-use tracing::{Level, error, info, warn};
+use tracing::{error, info, warn};
 
 #[derive(Debug, Error)]
 pub enum CoreContextError {
@@ -717,7 +717,7 @@ impl Context {
     ///  Function assumes separate database files for
     /// `Account` and `User` databases
     ///
-    #[tracing::instrument(level=Level::DEBUG, skip(self,caches))]
+    #[tracing::instrument(skip(self, caches))]
     pub async fn logout_and_delete_user_data(
         &self,
         user_id: UserId,
@@ -776,7 +776,7 @@ impl Context {
     ///  Function assumes separate database files for
     /// `Account` and `User` databases
     ///
-    #[tracing::instrument(level=Level::DEBUG, skip(self,caches))]
+    #[tracing::instrument(skip(self, caches))]
     pub async fn delete_account(
         &self,
         user_id: UserId,

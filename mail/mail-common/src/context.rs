@@ -40,7 +40,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Weak};
 use tokio::sync::Mutex;
 use tokio::task::{JoinError, JoinHandle};
-use tracing::{Level, error};
+use tracing::error;
 
 /// Whether we should initialize MailUserContext on creation
 #[derive(Debug, Clone, Copy)]
@@ -438,7 +438,7 @@ impl MailContext {
     /// # Errors
     /// Returns error if the flow is in an invalid state or there was an issue initializing
     /// the user database.
-    #[tracing::instrument(level=Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all)]
     pub async fn user_context_from_login_flow(
         self: &Arc<Self>,
         flow: &mut LoginFlow,

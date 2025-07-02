@@ -33,8 +33,8 @@ impl From<RealMailErrorReason> for ProtonError {
         match reason {
             RealMailErrorReason::OtherReason(reason) => ProtonError::OtherReason(reason.into()),
             reason => {
-                tracing::error!(
-                    "Reason mapping failed, this is serious bug, expected OtherErrorReason: {:?}",
+                tracing::warn!(
+                    "Reason mapping failed, expected OtherErrorReason but have {:?}",
                     reason
                 );
 

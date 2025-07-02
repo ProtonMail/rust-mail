@@ -609,7 +609,7 @@ impl Attachment {
     ///
     /// By default, the file name of the attachment will be the file name component of the specified
     /// `path`.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(ctx, tether, path, file_name_override))]
+    #[tracing::instrument(skip(ctx, tether, path, file_name_override))]
     pub async fn create_local(
         ctx: &MailUserContext,
         address_id: AddressId,

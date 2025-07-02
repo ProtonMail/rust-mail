@@ -25,7 +25,7 @@ use std::sync::{Arc, Weak};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use topological_sort::TopologicalSort;
-use tracing::{Instrument, Level, debug, error, info};
+use tracing::{Instrument, debug, error, info};
 use uuid::Uuid;
 
 /// Execution context errors
@@ -454,8 +454,7 @@ impl Queue {
     /// # Errors
     ///
     /// Returns error if action could not be executed locally.
-    #[tracing::instrument(level = Level::DEBUG, skip(self, metadata, action), name =
-    "QueueAction")]
+    #[tracing::instrument(skip(self, metadata, action), name = "QueueAction")]
     pub async fn replace_or_queue_action_with_metadata<T: Action>(
         &self,
         existing_id: ActionId,
