@@ -17,7 +17,6 @@ use crate::{
 };
 use chrono::Local;
 use futures::TryFutureExt;
-use log_service::LogService;
 use proton_account_uniffi::login::LoginFlow;
 use proton_account_uniffi::signup::SignupFlow;
 use proton_core_common::db::account::SessionEncryptionKey;
@@ -27,6 +26,7 @@ use proton_core_common::os::KeyChainExt;
 use proton_core_common::pin_code::PinCode;
 use proton_core_common::utils::MapVec;
 use proton_core_common::{CoreContextError, OnSessionDeletedResponse};
+use proton_log_service::LogService;
 use proton_mail_common::MailContext;
 use proton_mail_common::context::ShouldInitializeMailUserContext;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
@@ -131,7 +131,7 @@ async fn create_mail_session_inner(
     std::fs::create_dir_all(&log_path)?;
 
     let log_service = LogService::new(
-        log_service::Config::builder()
+        proton_log_service::Config::builder()
             .name("proton-mail-uniffi".into())
             .header(|| {
                 format!(

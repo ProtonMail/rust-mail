@@ -272,7 +272,7 @@ git = "https://gitlab.protontech.ch/jhoulahan/muon.git"
 rev = "3fefba39394af1c5392c7008e5c4835fc06cc06b"
 features = ["unsealed"]
 
-[workspace.dependencies.log-service]
+[workspace.dependencies.proton-log-service]
 path = "core/log-service"
 version = "0.1"
 registry = "proton"

@@ -1,5 +1,5 @@
 [package]
-name = "log-service"
+name = "proton-log-service"
 version = "0.1.0"
 edition.workspace = true
 

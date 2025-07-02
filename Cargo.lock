@@ -3957,16 +3957,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
 
 [[package]]
-name = "log-service"
-version = "0.1.0"
-dependencies = [
- "parking_lot",
- "tempdir",
- "tracing-subscriber",
- "typed-builder",
-]
-
-[[package]]
 name = "lru"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5664,7 +5654,6 @@ dependencies = [
  "insta",
  "itertools 0.13.0",
  "jiff",
- "log-service",
  "num_enum",
  "parking_lot",
  "pretty_assertions",
@@ -5676,6 +5665,7 @@ dependencies = [
  "proton-crypto-notifications",
  "proton-crypto-pin-hash",
  "proton-event-loop",
+ "proton-log-service",
  "proton-sqlite3",
  "proton-task-service",
  "proton-vcard",
@@ -5862,6 +5852,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "proton-log-service"
+version = "0.1.0"
+dependencies = [
+ "parking_lot",
+ "tempdir",
+ "tracing-subscriber",
+ "typed-builder",
+]
+
+[[package]]
 name = "proton-mail-api"
 version = "0.5.0"
 dependencies = [
@@ -5912,7 +5912,6 @@ dependencies = [
  "insta",
  "itertools 0.13.0",
  "jiff",
- "log-service",
  "mime",
  "non-empty-string",
  "parking_lot",
@@ -5928,6 +5927,7 @@ dependencies = [
  "proton-crypto-calendar",
  "proton-crypto-inbox",
  "proton-event-loop",
+ "proton-log-service",
  "proton-mail-api",
  "proton-mail-common",
  "proton-mail-html-transformer",
@@ -6006,12 +6006,12 @@ dependencies = [
  "itertools 0.13.0",
  "keyring",
  "log",
- "log-service",
  "proton-account-api",
  "proton-action-queue",
  "proton-calendar-api",
  "proton-calendar-common",
  "proton-core-common",
+ "proton-log-service",
  "proton-mail-common",
  "proton-mail-html-transformer",
  "qrcode",
@@ -6042,7 +6042,6 @@ dependencies = [
  "flume",
  "futures",
  "itertools 0.13.0",
- "log-service",
  "muon",
  "non-empty-string",
  "parking_lot",
@@ -6053,6 +6052,7 @@ dependencies = [
  "proton-core-common",
  "proton-crypto-account",
  "proton-event-loop",
+ "proton-log-service",
  "proton-mail-api",
  "proton-mail-common",
  "proton-task-service",
