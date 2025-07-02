@@ -26,7 +26,7 @@ impl BackgroundExecutionContext {
 
     /// Create new queue executors to run tasks separate from the main queue executors until
     /// `abort` returns.
-    #[tracing::instrument(level = "trace", skip_all)]
+    #[tracing::instrument(skip_all)]
     pub async fn run(
         &self,
         ctx: &Arc<MailContext>,

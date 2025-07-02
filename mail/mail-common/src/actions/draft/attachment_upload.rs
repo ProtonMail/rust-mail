@@ -287,7 +287,7 @@ impl AttachmentUpload {
     }
 }
 
-#[tracing::instrument(level=tracing::Level::DEBUG, skip_all, fields(attachment_id = %attachment.id()))]
+#[tracing::instrument(skip_all, fields(attachment_id = %attachment.id()))]
 async fn encrypt_and_upload_attachment(
     ctx: &MailUserContext,
     address_id: &AddressId,

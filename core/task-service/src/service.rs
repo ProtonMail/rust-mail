@@ -47,7 +47,7 @@ impl TaskService {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip_all)]
+    #[tracing::instrument(skip_all)]
     fn run(receiver: &mpsc::Receiver<Command>) {
         info!("Starting task service");
 
