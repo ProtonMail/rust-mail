@@ -38,8 +38,8 @@ pub enum Message {
     OpenMessageView(Mailbox, LabelWithCounters, MessagesState),
     OpenSearchView(Mailbox, MessagesState),
     OpenLabelSelectPopup,
-    OpenMoveItemPopup(Item),
-    OpenLabelItemPopup(Item),
+    OpenMoveItemsPopup(Items),
+    OpenLabelItemPopup(Items),
     SelectLabel(LocalLabelId),
     ConversationState(ConversationMessage),
     LabelRefreshed(LabelWithCounters),
@@ -66,20 +66,20 @@ pub struct LabelAs<T: LocalIdMarker> {
 
 /// Messages related to conversation actions.
 pub enum ConversationMessage {
-    MarkConversationRead(LocalConversationId),
-    MarkConversationUnread(LocalConversationId),
-    DeleteConversation(LocalConversationId),
-    MoveConversation(LocalConversationId, LocalLabelId),
-    LabelConversation(Box<LabelAs<LocalConversationId>>),
-    StarConversation(LocalConversationId),
-    UnstarConversation(LocalConversationId),
-    OpenConversation(LocalConversationId),
-    OpenConversationSuccess(Box<MessagesState>),
-    OpenConversationFailed(anyhow::Error),
+    MarkRead(Vec<LocalConversationId>),
+    MarkUnread(Vec<LocalConversationId>),
+    DeletePermanently(Vec<LocalConversationId>),
+    MoveTo(Vec<LocalConversationId>, LocalLabelId),
+    LabelAs(Box<LabelAs<LocalConversationId>>),
+    Star(Vec<LocalConversationId>),
+    Unstar(Vec<LocalConversationId>),
+    Open(LocalConversationId),
+    OpenSuccess(Box<MessagesState>),
+    OpenFailed(anyhow::Error),
+    Close,
     Refreshed(Vec<ContextualConversation>),
     NextPage(Vec<ContextualConversation>),
     HasMore,
-    CloseConversation,
     DeleteAll(LocalLabelId),
 }
 
@@ -91,23 +91,30 @@ impl From<ConversationMessage> for Messages {
 
 /// Messages related to message actions.
 pub enum MessageMessage {
-    OpenMessageBody,
-    OpenMessageBodyResult(anyhow::Result<Box<DecryptedMessage>>),
-    CloseMessageBody,
+    OpenBody,
+    OpenBodyResult(anyhow::Result<Box<DecryptedMessage>>),
+    CloseBody,
     Refreshed(Vec<MailMessage>),
     NextPage(Vec<MailMessage>),
-    DeleteMessage(LocalMessageId),
-    MoveMessage(LocalMessageId, LocalLabelId),
-    LabelMessage(Box<LabelAs<LocalMessageId>>), // TODO: Handle selection
-    MarkMessageRead(LocalMessageId),
-    MarkMessageUnread(LocalMessageId),
+    DeletePermanently(Vec<LocalMessageId>),
+    MoveTo(Vec<LocalMessageId>, LocalLabelId),
+    LabelAs(Box<LabelAs<LocalMessageId>>), // TODO: Handle selection
+    MarkRead(Vec<LocalMessageId>),
+    MarkUnread(Vec<LocalMessageId>),
     ReportPhishing(LocalMessageId),
-    StarMessage(LocalMessageId),
-    UnstarMessage(LocalMessageId),
+    Star(Vec<LocalMessageId>),
+    Unstar(Vec<LocalMessageId>),
     BlockSender(String, BlockOrUnblock),
     HasMore,
     CancelScheduleSend(LocalMessageId),
     UpdateRsvp(Box<RsvpEvent>),
+}
+
+impl<I: Into<Messages>> From<I> for Command<Messages> {
+    fn from(value: I) -> Self {
+        let v = value.into();
+        Command::Message(v)
+    }
 }
 
 impl From<MessageMessage> for Messages {
@@ -137,11 +144,11 @@ impl From<ComposerMessage> for Messages {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum Item {
-    Conversation(LocalConversationId),
+#[derive(Debug, Clone)]
+pub enum Items {
+    Conversation(Vec<LocalConversationId>),
     //TODO:message actions
-    Message(LocalMessageId),
+    Message(Vec<LocalMessageId>),
 }
 
 impl From<Message> for Messages {

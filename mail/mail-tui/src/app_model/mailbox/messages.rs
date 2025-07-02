@@ -4,7 +4,7 @@ use crate::CLI_ARGS;
 use crate::app::Command;
 use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::paginator::Paginator;
-use crate::app_model::mailbox::{ConversationMessage, ITEM_LIMIT, Item, Message, MessageMessage};
+use crate::app_model::mailbox::{ConversationMessage, ITEM_LIMIT, Items, Message, MessageMessage};
 use crate::app_model::watcher::TuiWatchHandle;
 use crate::app_model::{ChoosePopup, YesNoPopup};
 use crate::messages::Messages;
@@ -189,15 +189,13 @@ impl MessagesState {
         Command::task(async move {
             match Self::from_conversation_impl(ctx, label_id, conversation_id).await {
                 Ok((state, background_command)) => Command::batch([
-                    Command::message(
-                        ConversationMessage::OpenConversationSuccess(Box::new(state)).into(),
-                    ),
+                    Command::message(ConversationMessage::OpenSuccess(Box::new(state)).into()),
                     background_command,
                 ]),
                 Err(e) => {
                     let e = anyhow!("Failed to open conversation {conversation_id}: {e}");
                     tracing::error!("{e:?}");
-                    Command::message(ConversationMessage::OpenConversationFailed(e).into())
+                    Command::message(ConversationMessage::OpenFailed(e).into())
                 }
             }
         })
@@ -280,7 +278,7 @@ impl MessagesState {
             })()
             .await;
 
-            Command::message(MessageMessage::OpenMessageBodyResult(c).into())
+            Command::message(MessageMessage::OpenBodyResult(c).into())
         })
     }
 
@@ -304,9 +302,24 @@ impl MessagesState {
         self.messages.get(index).cloned()
     }
 
-    fn selected_message_id(&self) -> Option<LocalMessageId> {
+    fn selected_id(&self) -> Option<LocalMessageId> {
         let index = self.table_state.selected()?;
         self.messages.get(index).map(Model::id)
+    }
+
+    fn selected_id_and(
+        &self,
+        and: impl Fn(LocalMessageId) -> Command<Messages>,
+    ) -> Command<Messages> {
+        let Some(idx) = self.table_state.selected() else {
+            return Command::none();
+        };
+        and(self.messages[idx].id())
+    }
+
+    fn msgs(&mut self) -> Vec<LocalMessageId> {
+        self.table_state
+            .take_selected_items(&|idx| self.messages[idx].id())
     }
 
     fn selected_email(&self) -> Option<String> {
@@ -345,7 +358,7 @@ impl MessagesState {
             DecryptedMessageStatus::Success(_) | DecryptedMessageStatus::Error(_)
         ) && key.code == KeyCode::Esc
         {
-            return Command::message(MessageMessage::CloseMessageBody.into());
+            return Command::message(MessageMessage::CloseBody.into());
         }
 
         if let DecryptedMessageStatus::Success(state) = &mut self.open_message {
@@ -377,7 +390,7 @@ impl MessagesState {
 
                 if let Mode::Label(paginator) = &self.mode {
                     if self.table_state.selected().unwrap_or_default()
-                        == self.messages.len().saturating_sub(1)
+                        >= self.messages.len().saturating_sub(1)
                     {
                         return paginator.next_page_command(|v| {
                             Command::message(MessageMessage::NextPage(v).into())
@@ -397,112 +410,74 @@ impl MessagesState {
 
                 Command::None
             }
-
-            KeyCode::Char('a') => self.handle_download_attachments(ctx),
+            KeyCode::Char(' ') => {
+                self.table_state.toggle();
+                Command::None
+            }
+            KeyCode::Char('g') => {
+                self.table_state.mark_many(0..self.messages.len());
+                Command::None
+            }
+            KeyCode::Char('G') => {
+                self.table_state.unmark_many(0..self.messages.len());
+                Command::None
+            }
+            KeyCode::F(3) => self.handle_download_attachments(ctx),
 
             KeyCode::Char('e') => self
-                .selected_message_id()
+                .selected_id()
                 .map(|id| Composer::open(ctx.to_owned(), id))
                 .unwrap_or_default(),
 
-            KeyCode::Char('u') => self
-                .selected_message_id()
-                .map(|id| Command::message(MessageMessage::MarkMessageUnread(id).into()))
-                .unwrap_or_default(),
-
-            KeyCode::Char('r') => self
-                .selected_message_id()
-                .map(|id| {
-                    if key.modifiers.contains(KeyModifiers::CONTROL) {
-                        if key.modifiers.contains(KeyModifiers::SHIFT) {
-                            Composer::reply(ctx.to_owned(), id, ReplyMode::All)
-                        } else {
-                            Composer::reply(ctx.to_owned(), id, ReplyMode::Sender)
-                        }
-                    } else {
-                        Command::message(MessageMessage::MarkMessageRead(id).into())
-                    }
-                })
-                .unwrap_or_default(),
-
-            KeyCode::Char('f') => {
-                if key.modifiers.contains(KeyModifiers::CONTROL) {
-                    self.selected_message_id()
-                        .map(|id| Composer::reply(ctx.to_owned(), id, ReplyMode::Forward))
-                        .unwrap_or_default()
-                } else {
-                    self.selected_message_id()
-                        .map(|id| Command::message(MessageMessage::StarMessage(id).into()))
-                        .unwrap_or_default()
-                }
+            KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.selected_id_and(|id| Composer::reply(ctx.to_owned(), id, ReplyMode::Sender))
             }
 
-            KeyCode::Char('F') => self
-                .selected_message_id()
-                .map(|id| Command::message(MessageMessage::UnstarMessage(id).into()))
-                .unwrap_or_default(),
+            KeyCode::Char('r') => MessageMessage::MarkRead(self.msgs()).into(),
 
-            KeyCode::Char('t') => {
-                if key.modifiers.contains(KeyModifiers::CONTROL) {
-                    self.selected_message_id()
-                        .map(|id| Composer::reply(ctx.to_owned(), id, ReplyMode::All))
-                        .unwrap_or_default()
-                } else {
-                    Command::None
-                }
+            KeyCode::Char('u') => MessageMessage::MarkUnread(self.msgs()).into(),
+
+            KeyCode::Char('t') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.selected_id_and(|id| Composer::reply(ctx.to_owned(), id, ReplyMode::All))
             }
 
-            KeyCode::Char('d') => self
-                .selected_message_id()
-                .map(|id| Command::message(MessageMessage::DeleteMessage(id).into()))
-                .unwrap_or_default(),
+            KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.selected_id_and(|id| Composer::reply(ctx.to_owned(), id, ReplyMode::Forward))
+            }
+
+            KeyCode::Char('f') => MessageMessage::Star(self.msgs()).into(),
+
+            KeyCode::Char('F') => MessageMessage::Unstar(self.msgs()).into(),
+
+            KeyCode::Char('d') => MessageMessage::DeletePermanently(self.msgs()).into(),
 
             KeyCode::Char('b') => self
                 .selected_email()
-                .map(|email| {
-                    Command::message(
-                        MessageMessage::BlockSender(email, BlockOrUnblock::Block).into(),
-                    )
-                })
+                .map(|email| MessageMessage::BlockSender(email, BlockOrUnblock::Block).into())
                 .unwrap_or_default(),
 
             KeyCode::Char('B') => self
                 .selected_email()
-                .map(|email| {
-                    Command::message(
-                        MessageMessage::BlockSender(email, BlockOrUnblock::Unblock).into(),
-                    )
-                })
+                .map(|email| MessageMessage::BlockSender(email, BlockOrUnblock::Unblock).into())
                 .unwrap_or_default(),
 
-            KeyCode::Char('s') => Command::message(Message::OpenLabelSelectPopup.into()),
+            KeyCode::Char('s') => Message::OpenLabelSelectPopup.into(),
 
-            KeyCode::Char('m') => self
-                .selected_message_id()
-                .map(|id| Command::message(Message::OpenMoveItemPopup(Item::Message(id)).into()))
-                .unwrap_or_default(),
+            KeyCode::Char('m') => Message::OpenMoveItemsPopup(Items::Message(self.msgs())).into(),
 
-            KeyCode::Char('l') => self
-                .selected_message_id()
-                .map(|id| Command::message(Message::OpenLabelItemPopup(Item::Message(id)).into()))
-                .unwrap_or_default(),
+            KeyCode::Char('l') => Message::OpenLabelItemPopup(Items::Message(self.msgs())).into(),
 
-            KeyCode::Char('h') => Command::message(MessageMessage::HasMore.into()),
+            KeyCode::Char('h') => MessageMessage::HasMore.into(),
 
-            KeyCode::Enter => self
-                .selected_message_id()
-                .map(|_| Command::message(MessageMessage::OpenMessageBody.into()))
-                .unwrap_or_default(),
+            KeyCode::Enter => self.selected_id_and(|_| MessageMessage::OpenBody.into()),
 
-            KeyCode::Char('z') => self
-                .selected_message_id()
-                .map(|id| Command::message(MessageMessage::CancelScheduleSend(id).into()))
-                .unwrap_or_default(),
+            KeyCode::Char('z') => {
+                self.selected_id_and(|id| MessageMessage::CancelScheduleSend(id).into())
+            }
 
-            KeyCode::Char('p') => self
-                .selected_message_id()
-                .map(|id| Command::message(MessageMessage::ReportPhishing(id).into()))
-                .unwrap_or_default(),
+            KeyCode::Char('p') => {
+                self.selected_id_and(|id| MessageMessage::ReportPhishing(id).into())
+            }
 
             KeyCode::Char('A') => self.handle_answer_rsvp(ctx),
 
@@ -655,38 +630,38 @@ impl MessagesState {
         };
 
         match message {
-            MessageMessage::OpenMessageBody => {
+            MessageMessage::OpenBody => {
                 return self.open_message_body(user_ctx.to_owned());
             }
-            MessageMessage::OpenMessageBodyResult(r) => {
+            MessageMessage::OpenBodyResult(r) => {
                 self.display_message(r);
             }
-            MessageMessage::CloseMessageBody => {
+            MessageMessage::CloseBody => {
                 self.close_message();
             }
             MessageMessage::Refreshed(messages) => self.messages_refreshed(messages),
-            MessageMessage::DeleteMessage(id) => {
-                return delete_message(user_ctx.to_owned(), mbox, id);
+            MessageMessage::DeletePermanently(id) => {
+                return delete_messages(user_ctx.to_owned(), mbox, id);
             }
-            MessageMessage::MoveMessage(msg_id, id) => {
+            MessageMessage::MoveTo(msg_id, id) => {
                 return move_message(user_ctx.to_owned(), mbox, msg_id, id);
             }
-            MessageMessage::LabelMessage(label_as) => {
+            MessageMessage::LabelAs(label_as) => {
                 return label_message(user_ctx.to_owned(), *label_as);
             }
-            MessageMessage::MarkMessageRead(id) => {
+            MessageMessage::MarkRead(id) => {
                 return mark_message_read(user_ctx.to_owned(), id);
             }
-            MessageMessage::MarkMessageUnread(id) => {
+            MessageMessage::MarkUnread(id) => {
                 return mark_message_unread(user_ctx.to_owned(), id);
             }
-            MessageMessage::StarMessage(id) => {
+            MessageMessage::Star(id) => {
                 return star_message(user_ctx.to_owned(), id);
             }
             MessageMessage::BlockSender(id, action) => {
                 return block_sender(user_ctx.to_owned(), id, action);
             }
-            MessageMessage::UnstarMessage(id) => {
+            MessageMessage::Unstar(id) => {
                 return unstar_message(user_ctx.to_owned(), id);
             }
             MessageMessage::ReportPhishing(id) => {
@@ -769,7 +744,8 @@ impl MessagesState {
         }
         vec.extend_from_slice(&[
             ("esc", "Close message"),
-            ("a", "Download all attachments"),
+            ("F3", "Download all attachments"),
+            ("A", "Answer RSVP"),
             ("e", "Open composer"),
             ("Ctrl + r", "Reply"),
             ("Ctrl + R", "Reply to all"),
@@ -1210,26 +1186,26 @@ fn html_to_text(message: &str) -> Result<String> {
         .map_err(|e| anyhow!("Failed to parse HTML: {e}"))
 }
 
-fn mark_message_read(ctx: Arc<MailUserContext>, id: LocalMessageId) -> Command<Messages> {
+fn mark_message_read(ctx: Arc<MailUserContext>, ids: Vec<LocalMessageId>) -> Command<Messages> {
     Command::from_future(async move {
-        MailMessage::action_mark_read(ctx.action_queue(), vec![id])
+        MailMessage::action_mark_read(ctx.action_queue(), ids)
             .await
             .context("Failed to mark message as read")
     })
 }
 
-fn mark_message_unread(ctx: Arc<MailUserContext>, id: LocalMessageId) -> Command<Messages> {
+fn mark_message_unread(ctx: Arc<MailUserContext>, ids: Vec<LocalMessageId>) -> Command<Messages> {
     Command::from_future(async move {
-        MailMessage::action_mark_unread(ctx.action_queue(), vec![id])
+        MailMessage::action_mark_unread(ctx.action_queue(), ids)
             .await
             .context("Failed to mark message as unread")
     })
 }
 
-fn delete_message(
+fn delete_messages(
     ctx: Arc<MailUserContext>,
     mailbox: &Mailbox,
-    id: LocalMessageId,
+    ids: Vec<LocalMessageId>,
 ) -> Command<Messages> {
     let current_label_id = mailbox.label_id();
     Command::message(Messages::raise_popup(
@@ -1238,7 +1214,7 @@ fn delete_message(
             "Are you sure you wish to permanently delete the currently selected message?",
         )
         .on_accept(Command::from_future(async move {
-            MailMessage::action_delete(ctx.action_queue(), current_label_id, vec![id])
+            MailMessage::action_delete(ctx.action_queue(), current_label_id, ids)
                 .await
                 .context("Failed to delete message: {e}")
                 .map(|_| ())
@@ -1246,18 +1222,18 @@ fn delete_message(
     ))
 }
 
-fn star_message(ctx: Arc<MailUserContext>, id: LocalMessageId) -> Command<Messages> {
+fn star_message(ctx: Arc<MailUserContext>, ids: Vec<LocalMessageId>) -> Command<Messages> {
     Command::from_future(async move {
-        MailMessage::action_star(ctx.action_queue(), vec![id])
+        MailMessage::action_star(ctx.action_queue(), ids)
             .await
             .context("Failed to star message")
             .map(|_| ())
     })
 }
 
-fn unstar_message(ctx: Arc<MailUserContext>, id: LocalMessageId) -> Command<Messages> {
+fn unstar_message(ctx: Arc<MailUserContext>, ids: Vec<LocalMessageId>) -> Command<Messages> {
     Command::from_future(async move {
-        MailMessage::action_unstar(ctx.action_queue(), vec![id])
+        MailMessage::action_unstar(ctx.action_queue(), ids)
             .await
             .context("Failed to star message")
             .map(|_| ())
@@ -1292,12 +1268,12 @@ fn label_message(
 fn move_message(
     ctx: Arc<MailUserContext>,
     mailbox: &Mailbox,
-    id: LocalMessageId,
+    ids: Vec<LocalMessageId>,
     label_id: LocalLabelId,
 ) -> Command<Messages> {
     let current_label_id = mailbox.label_id();
     Command::from_future(async move {
-        MailMessage::action_move(ctx.action_queue(), current_label_id, label_id, vec![id])
+        MailMessage::action_move(ctx.action_queue(), current_label_id, label_id, ids)
             .await
             .context("Failed to move message")
             .map(|_| ())

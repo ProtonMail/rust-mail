@@ -4,7 +4,7 @@ use crate::app_model::mailbox::composer::Composer;
 use crate::app_model::mailbox::conversations::ConversationsState;
 use crate::app_model::mailbox::messages::MessagesState;
 use crate::app_model::mailbox::popups::{LabelItemPopup, LabelSelectPopup, MoveItemPopup};
-use crate::app_model::mailbox::{Item, Message, poll_event_loop, refresh};
+use crate::app_model::mailbox::{Items, Message, poll_event_loop, refresh};
 use crate::app_model::watcher::TuiWatchHandle;
 use crate::app_model::{AppState, AppStateHandler, YesNoPopup};
 use crate::messages::Messages;
@@ -238,7 +238,7 @@ impl MailboxModel {
         })
     }
 
-    fn open_move_item_popup(&mut self, item: Item) -> Command<Messages> {
+    fn open_move_item_popup(&mut self, item: Items) -> Command<Messages> {
         if matches!(&self.state, State::Syncing(_)) {
             return Command::None;
         }
@@ -256,7 +256,7 @@ impl MailboxModel {
         })
     }
 
-    fn open_label_popup(&mut self, item: Item) -> Command<Messages> {
+    fn open_label_popup(&mut self, item: Items) -> Command<Messages> {
         if matches!(&self.state, State::Syncing(_)) {
             return Command::None;
         }
@@ -314,10 +314,13 @@ impl AppStateHandler for MailboxModel {
             }),
         ])
     }
+
     fn handle_event(&mut self, event: Event) -> Command<Messages> {
         if let Some(composer) = &mut self.composer {
             return composer.handle_event(&self.ctx, &self.mailbox, event);
-        } else if let Event::Key(key) = &event {
+        }
+
+        if let Event::Key(key) = &event {
             match key.code {
                 KeyCode::Char('n') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                     return Composer::empty(Arc::clone(&self.ctx));
@@ -420,7 +423,7 @@ impl AppStateHandler for MailboxModel {
             Message::OpenSearchView(mbox, state) => self.open_search_view(mbox, state),
             Message::OpenLabelSelectPopup => self.open_label_select_popup(),
             Message::SelectLabel(label_id) => self.select_label(label_id),
-            Message::OpenMoveItemPopup(item) => self.open_move_item_popup(item),
+            Message::OpenMoveItemsPopup(item) => self.open_move_item_popup(item),
             Message::OpenLabelItemPopup(item) => self.open_label_popup(item),
             Message::ConversationState(_) | Message::MessageState(_) => {
                 self.state.update(&self.ctx, message, &self.mailbox)
@@ -476,6 +479,8 @@ impl AppStateHandler for MailboxModel {
         let mut items = vec![
             ("k, ▲", "Go up"),
             ("j, ▼", "Go down"),
+            ("[space]", "toggle selection of current item"),
+            ("g/G", "Select/Deselect all loaded items"),
             ("Tab", "Toggle"),
             ("s", "Select a label or a folder"),
             ("m", "Move the selected item"),
@@ -483,10 +488,10 @@ impl AppStateHandler for MailboxModel {
             ("u", "Mark a message as unread"),
             ("l", "Label a message"),
             ("d", "Delete a message permanently"),
-            ("Ctrl + N", "Create a new message"),
-            ("Ctrl + U", "Show only unread messages"),
-            ("Ctrl + R", "Show only read messages"),
-            ("Ctrl + A", "Show all messages"),
+            ("Ctrl + n", "Create a new message"),
+            ("Ctrl + u", "Show only unread messages"),
+            ("Ctrl + t", "Show only read messages"),
+            ("Ctrl + a", "Show all messages"),
             ("/", "Open the search bar"),
             ("C", "Show the contact list"),
             ("f/F", "Star/Unstar the selected item"),

@@ -2,9 +2,9 @@ use crate::app::Command;
 use crate::app_model::YesNoPopup;
 use crate::app_model::mailbox::messages::MessagesState;
 use crate::app_model::mailbox::paginator::Paginator;
-use crate::app_model::mailbox::{ConversationMessage, ITEM_LIMIT, Item, Message};
+use crate::app_model::mailbox::{ConversationMessage, ITEM_LIMIT, Items, Message};
 use crate::messages::Messages;
-use crate::widgets::{AsTable, CenteredThrobber, ScrollableTable, ScrollableTableState};
+use crate::widgets::{AsIntoTable, CenteredThrobber, ScrollableTable, ScrollableTableState};
 use anyhow::anyhow;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_mail_common::datatypes::folder_banner::{AutoDeleteBanner, AutoDeleteState};
@@ -20,7 +20,6 @@ use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use std::sync::Arc;
 use throbber_widgets_tui::ThrobberState;
-use tracing::info;
 
 use super::LabelAs;
 
@@ -106,14 +105,31 @@ impl ConversationsState {
     }
 
     pub fn draw_status_bar(&mut self, frame: &mut Frame, area: Rect) {
+        let len = self.table_state.marked.len();
+        if len > 0 {
+            frame.render_widget(Text::from(format!(" {len} items selected |")), area);
+        }
+
         if let MessagesStatus::Ready(_) = &self.messages {
             frame.render_widget(Text::from(" > Conversation Messages"), area);
         }
     }
 
-    fn selected_conversation(&self) -> Option<LocalConversationId> {
-        let index = self.table_state.selected()?;
-        self.conversations.get(index).map(|c| c.local_id)
+    fn selected_id_and(
+        &self,
+        and: impl Fn(LocalConversationId) -> Command<Messages>,
+    ) -> Command<Messages> {
+        let Some(idx) = self.table_state.selected() else {
+            return Command::none();
+        };
+
+        and(self.conversations[idx].local_id)
+    }
+
+    /// Gets the selected conversations and unselects them.
+    fn convs(&mut self) -> Vec<LocalConversationId> {
+        self.table_state
+            .take_selected_items(&|idx| self.conversations[idx].local_id)
     }
 }
 
@@ -134,7 +150,7 @@ impl ConversationsState {
                 let is_esc = key.code == KeyCode::Esc;
                 let msg = message_state.handle_event(ctx, mbox, event);
                 return if msg.is_none() && is_esc {
-                    Command::message(ConversationMessage::CloseConversation.into())
+                    Command::message(ConversationMessage::Close.into())
                 } else {
                     msg
                 };
@@ -149,7 +165,7 @@ impl ConversationsState {
             KeyCode::Char('j') | KeyCode::Down => {
                 self.table_state.next();
                 if self.table_state.selected().unwrap_or_default()
-                    == self.conversations.len().saturating_sub(1)
+                    >= self.conversations.len().saturating_sub(1)
                 {
                     return self.paginator.next_page_command(move |v| {
                         Command::message(ConversationMessage::NextPage(v).into())
@@ -157,47 +173,33 @@ impl ConversationsState {
                 }
                 Command::None
             }
-            KeyCode::Char('s') => Command::message(Message::OpenLabelSelectPopup.into()),
-            KeyCode::Char('h') => Command::message(ConversationMessage::HasMore.into()),
-            KeyCode::Char('u') => self
-                .selected_conversation()
-                .map(|id| Command::message(ConversationMessage::MarkConversationUnread(id).into()))
-                .unwrap_or_default(),
-            KeyCode::Char('r') => self
-                .selected_conversation()
-                .map(|id| Command::message(ConversationMessage::MarkConversationRead(id).into()))
-                .unwrap_or_default(),
-            KeyCode::Char('d') => self
-                .selected_conversation()
-                .map(|id| Command::message(ConversationMessage::DeleteConversation(id).into()))
-                .unwrap_or_default(),
-            KeyCode::Char('m') => self
-                .selected_conversation()
-                .map(|id| {
-                    Command::message(Message::OpenMoveItemPopup(Item::Conversation(id)).into())
-                })
-                .unwrap_or_default(),
-            KeyCode::Char('l') => self
-                .selected_conversation()
-                .map(|id| {
-                    Command::message(Message::OpenLabelItemPopup(Item::Conversation(id)).into())
-                })
-                .unwrap_or_default(),
-            KeyCode::Char('f') => self
-                .selected_conversation()
-                .map(|id| Command::message(ConversationMessage::StarConversation(id).into()))
-                .unwrap_or_default(),
-            KeyCode::Char('F') => self
-                .selected_conversation()
-                .map(|id| Command::message(ConversationMessage::UnstarConversation(id).into()))
-                .unwrap_or_default(),
-            KeyCode::Char('E') => {
-                Command::message(ConversationMessage::DeleteAll(self.opened_label).into())
+            KeyCode::Char(' ') => {
+                self.table_state.toggle();
+                Command::None
             }
-            KeyCode::Enter => self
-                .selected_conversation()
-                .map(|id| Command::message(ConversationMessage::OpenConversation(id).into()))
-                .unwrap_or_default(),
+            KeyCode::Char('a') => {
+                self.table_state.mark_many(0..self.conversations.len());
+                Command::None
+            }
+            KeyCode::Char('A') => {
+                self.table_state.unmark_many(0..self.conversations.len());
+                Command::None
+            }
+            KeyCode::Char('s') => Message::OpenLabelSelectPopup.into(),
+            KeyCode::Char('m') => {
+                Message::OpenMoveItemsPopup(Items::Conversation(self.convs())).into()
+            }
+            KeyCode::Char('l') => {
+                Message::OpenLabelItemPopup(Items::Conversation(self.convs())).into()
+            }
+            KeyCode::Char('h') => ConversationMessage::HasMore.into(),
+            KeyCode::Char('u') => ConversationMessage::MarkUnread(self.convs()).into(),
+            KeyCode::Char('r') => ConversationMessage::MarkRead(self.convs()).into(),
+            KeyCode::Char('d') => ConversationMessage::DeletePermanently(self.convs()).into(),
+            KeyCode::Char('f') => ConversationMessage::Star(self.convs()).into(),
+            KeyCode::Char('F') => ConversationMessage::Unstar(self.convs()).into(),
+            KeyCode::Char('E') => ConversationMessage::DeleteAll(self.opened_label).into(),
+            KeyCode::Enter => self.selected_id_and(|id| ConversationMessage::Open(id).into()),
             _ => Command::None,
         }
     }
@@ -220,34 +222,30 @@ impl ConversationsState {
                 };
 
                 match message {
-                    ConversationMessage::MarkConversationRead(id) => {
+                    ConversationMessage::MarkRead(id) => {
                         mark_conversation_read(user_ctx.to_owned(), mbox, id)
                     }
-                    ConversationMessage::MarkConversationUnread(id) => {
+                    ConversationMessage::MarkUnread(id) => {
                         mark_conversation_unread(user_ctx.to_owned(), mbox, id)
                     }
-                    ConversationMessage::DeleteConversation(id) => {
+                    ConversationMessage::DeletePermanently(id) => {
                         delete_conversation(user_ctx.to_owned(), mbox, id)
                     }
-                    ConversationMessage::MoveConversation(id, label_id) => {
+                    ConversationMessage::MoveTo(id, label_id) => {
                         move_conversation(user_ctx.to_owned(), mbox, id, label_id)
                     }
-                    ConversationMessage::LabelConversation(label_as) => {
+                    ConversationMessage::LabelAs(label_as) => {
                         label_conversation(user_ctx.to_owned(), *label_as)
                     }
-                    ConversationMessage::OpenConversation(id) => {
+                    ConversationMessage::Open(id) => {
                         self.open_conversation(user_ctx.to_owned(), mbox, id)
                     }
                     ConversationMessage::Refreshed(conversations) => {
                         self.conversations_refreshed(conversations);
                         Command::None
                     }
-                    ConversationMessage::StarConversation(id) => {
-                        star_conversation(user_ctx.to_owned(), id)
-                    }
-                    ConversationMessage::UnstarConversation(id) => {
-                        unstar_conversation(user_ctx.to_owned(), id)
-                    }
+                    ConversationMessage::Star(id) => star_conversation(user_ctx.to_owned(), id),
+                    ConversationMessage::Unstar(id) => unstar_conversation(user_ctx.to_owned(), id),
                     ConversationMessage::NextPage(conversations) => {
                         self.conversations.extend(conversations);
                         Command::None
@@ -271,19 +269,18 @@ impl ConversationsState {
             }
 
             MessagesStatus::Loading(_) => match message {
-                Message::ConversationState(ConversationMessage::OpenConversationSuccess(state)) => {
+                Message::ConversationState(ConversationMessage::OpenSuccess(state)) => {
                     self.messages = MessagesStatus::Ready(state);
                     Command::None
                 }
-                Message::ConversationState(ConversationMessage::OpenConversationFailed(e)) => {
+                Message::ConversationState(ConversationMessage::OpenFailed(e)) => {
                     self.messages = MessagesStatus::None;
                     Command::message(Messages::DisplayError(None, e))
                 }
                 _ => Command::None,
             },
             MessagesStatus::Ready(state) => {
-                if let Message::ConversationState(ConversationMessage::CloseConversation) = &message
-                {
+                if let Message::ConversationState(ConversationMessage::Close) = &message {
                     self.close_conversation();
                     return Command::None;
                 }
@@ -334,7 +331,6 @@ impl ConversationsState {
     }
 
     pub fn help_options(&self, vec: &mut Vec<(&'static str, &'static str)>) {
-        info!("This was called!");
         if let MessagesStatus::Ready(message_state) = &self.messages {
             message_state.help_options(vec);
         } else {
@@ -352,11 +348,11 @@ enum MessagesStatus {
 fn mark_conversation_read(
     ctx: Arc<MailUserContext>,
     mailbox: &Mailbox,
-    id: LocalConversationId,
+    ids: Vec<LocalConversationId>,
 ) -> Command<Messages> {
     let local_label_id = mailbox.label_id();
     Command::task(async move {
-        match Conversation::action_mark_read(ctx.action_queue(), local_label_id, vec![id]).await {
+        match Conversation::action_mark_read(ctx.action_queue(), local_label_id, ids).await {
             Ok(()) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to mark conversation as read: {e}");
@@ -370,12 +366,11 @@ fn mark_conversation_read(
 fn mark_conversation_unread(
     ctx: Arc<MailUserContext>,
     mailbox: &Mailbox,
-    id: LocalConversationId,
+    ids: Vec<LocalConversationId>,
 ) -> Command<Messages> {
     let current_label_id = mailbox.label_id();
     Command::task(async move {
-        match Conversation::action_mark_unread(ctx.action_queue(), current_label_id, vec![id]).await
-        {
+        match Conversation::action_mark_unread(ctx.action_queue(), current_label_id, ids).await {
             Ok(()) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to mark conversation as read: {e}");
@@ -389,7 +384,7 @@ fn mark_conversation_unread(
 fn delete_conversation(
     ctx: Arc<MailUserContext>,
     mailbox: &Mailbox,
-    id: LocalConversationId,
+    ids: Vec<LocalConversationId>,
 ) -> Command<Messages> {
     let current_label_id = mailbox.label_id();
     Command::message(Messages::raise_popup(
@@ -398,8 +393,7 @@ fn delete_conversation(
             "Are you sure you wish to permanently delete the currently selected conversation?",
         )
         .on_accept(Command::task(async move {
-            match Conversation::action_mark_deleted(ctx.action_queue(), current_label_id, [id])
-                .await
+            match Conversation::action_mark_deleted(ctx.action_queue(), current_label_id, ids).await
             {
                 Ok(_) => Command::None,
                 Err(e) => {
@@ -415,19 +409,12 @@ fn delete_conversation(
 fn move_conversation(
     ctx: Arc<MailUserContext>,
     mailbox: &Mailbox,
-    conversation_id: LocalConversationId,
+    ids: Vec<LocalConversationId>,
     label_id: LocalLabelId,
 ) -> Command<Messages> {
     let current_label_id = mailbox.label_id();
     Command::task(async move {
-        match Conversation::action_move(
-            ctx.action_queue(),
-            current_label_id,
-            label_id,
-            vec![conversation_id],
-        )
-        .await
-        {
+        match Conversation::action_move(ctx.action_queue(), current_label_id, label_id, ids).await {
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to move conversation: {e}");
@@ -440,10 +427,10 @@ fn move_conversation(
 
 fn star_conversation(
     ctx: Arc<MailUserContext>,
-    conversation_id: LocalConversationId,
+    ids: Vec<LocalConversationId>,
 ) -> Command<Messages> {
     Command::task(async move {
-        match Conversation::action_star(ctx.action_queue(), vec![conversation_id]).await {
+        match Conversation::action_star(ctx.action_queue(), ids).await {
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to label conversation: {e}");
@@ -456,10 +443,10 @@ fn star_conversation(
 
 fn unstar_conversation(
     ctx: Arc<MailUserContext>,
-    conversation_id: LocalConversationId,
+    ids: Vec<LocalConversationId>,
 ) -> Command<Messages> {
     Command::task(async move {
-        match Conversation::action_unstar(ctx.action_queue(), vec![conversation_id]).await {
+        match Conversation::action_unstar(ctx.action_queue(), ids).await {
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to label conversation: {e}");
