@@ -53,8 +53,8 @@ pub fn app_tracing_env_filter_default() -> EnvFilter {
         .with_default_directive(LevelFilter::DEBUG.into())
         .parse(format!(
             "info,\
-            muon=debug,\
-            muon_impl=debug,\
+            muon=info,\
+            muon_impl=info,\
             proton_mail_uniffi=debug,\
             proton_sqlite3=debug,\
             proton_core_common=debug,\
