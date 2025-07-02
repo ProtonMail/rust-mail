@@ -29,7 +29,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime};
 use tokio::fs;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 
 /// This is the metadata for where or if the attachment has the data downloaded
 /// It's stored in a separate table because:
@@ -208,7 +208,7 @@ impl Attachment {
 
     /// Returns a fs path to an attachment in the filesystem.
     /// Also updates hit/atime metadata
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tx))]
+    #[tracing::instrument(skip(tx))]
     pub async fn path_from_cache_and_update_metadata(
         id: LocalAttachmentId,
         tx: &Bond<'_>,
@@ -260,7 +260,7 @@ impl Attachment {
 
     /// Creates the attachment in the attachment_cache table and stores it in the disk
     /// Returns the path as a String.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(ctx, data, bond))]
+    #[tracing::instrument(skip(ctx, data, bond))]
     pub async fn store_in_cache(
         ctx: &MailUserContext,
         name: &str,
@@ -293,7 +293,7 @@ impl Attachment {
     /// # Errors
     ///
     /// Returns error if the copy of the data or the db query failed.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(ctx, bond))]
+    #[tracing::instrument(skip(ctx, bond))]
     pub async fn copy_attachment_to_cache(
         ctx: &MailUserContext,
         name: &str,
@@ -464,7 +464,7 @@ impl Attachment {
     /// being accessed.
     #[allow(clippy::cast_possible_truncation)]
     #[allow(clippy::cast_possible_wrap)]
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all)]
     pub async fn do_cleanup_cache(ctx: &MailUserContext) -> anyhow::Result<()> {
         // First let's check whether we should run. We run on two conditions:
         // 1. If the cache is too big
@@ -480,10 +480,10 @@ impl Attachment {
 
         let max_size = ctx.mail_context().attachment_cache_size;
         if current_size < max_size {
-            debug!("Not deleting attachments from cache yet.");
+            trace!("Not deleting attachments from cache yet.");
             return Ok(());
         }
-        debug!("Cache is too large, trying to delete attachments...");
+        info!("Cache is too large, trying to delete attachments...");
 
         let all_cache_items = AttachmentCacheMetadata::find("", vec![], &tether).await?;
 
@@ -530,7 +530,7 @@ impl Attachment {
         }
 
         if ids.is_empty() {
-            debug!("No attachments to delete");
+            info!("No attachments to delete");
             return Ok(());
         }
         info!("Deleting {} attachments", ids.len());

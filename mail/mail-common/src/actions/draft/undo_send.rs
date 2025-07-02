@@ -17,7 +17,7 @@ use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_ids::LocalMessageId;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 
 /// Action to cancel sending of a sent message.
 ///
@@ -71,6 +71,7 @@ impl proton_action_queue::action::Handler for UndoSendHandler {
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         // Check if message is in sent folder or outbox + sent flag
+        info!("Undo send for {:?}", action.id);
 
         let Some(mut message) = Message::find_by_id(action.id, tx).await? else {
             return Err(AppError::MessageMissing(action.id).into());
@@ -166,6 +167,7 @@ impl proton_action_queue::action::Handler for UndoSendHandler {
             .clone()
             .expect("remote id should not be None");
 
+        info!("Undo sending {:?}", remote_id);
         let response = match ctx.api().cancel_send(remote_id.clone()).await {
             Ok(r) => r,
             Err(e) => {

@@ -206,7 +206,7 @@ async fn banners() {
 
     // Let's block, unblock and report phishing to see how labels change
 
-    IncomingDefaultLocation::action_unblock(ctx.action_queue(), "blocked@email".to_string())
+    IncomingDefaultLocation::action_unblock(ctx.action_queue(), "blocked@email".into())
         .await
         .unwrap();
     Message::action_ham(ctx.action_queue(), vec![msg_spam.id(), msg_phishing.id()])
@@ -245,7 +245,7 @@ async fn banners() {
     );
 
     // Let's make sure that action_report_phishing gets reverted and that blocking works
-    IncomingDefaultLocation::action_block(ctx.action_queue(), "normal@email".to_string())
+    IncomingDefaultLocation::action_block(ctx.action_queue(), "normal@email".into())
         .await
         .unwrap();
 

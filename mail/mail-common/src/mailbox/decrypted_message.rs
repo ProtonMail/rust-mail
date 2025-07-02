@@ -571,6 +571,6 @@ mime_type: {mime_type:?}"
         transform_opts: opts.into(),
         body_banners: prev_banners,
     };
-    debug!("HTML Transform done");
+    trace!("HTML Transform done");
     output
 }

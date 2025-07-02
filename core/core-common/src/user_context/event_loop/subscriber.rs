@@ -200,7 +200,7 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
         "proton-core-event-subscriber"
     }
 
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(self, events))]
+    #[tracing::instrument(skip(self, events))]
     async fn on_events(&self, events: &mut [CoreEvent]) -> Result<(), SubscriberError> {
         let Some(ctx) = self.0.upgrade() else {
             warn!("User context is no longer alive");
@@ -359,7 +359,7 @@ impl UserContext {
     }
 }
 
-#[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+#[tracing::instrument(skip_all)]
 async fn refresh_core(ctx: Arc<UserContext>) -> Result<(), SubscriberError> {
     let api = ctx.session().api().clone();
     let contacts = ctx.spawn(async move { Contact::sync(&api).await });
@@ -453,7 +453,7 @@ async fn refresh_core(ctx: Arc<UserContext>) -> Result<(), SubscriberError> {
     Ok(())
 }
 
-#[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+#[tracing::instrument(skip_all)]
 async fn refresh_contacts(ctx: Arc<UserContext>) -> Result<(), SubscriberError> {
     let api = ctx.session().api().clone();
     let contacts = ctx.spawn(async move { Contact::sync(&api).await });

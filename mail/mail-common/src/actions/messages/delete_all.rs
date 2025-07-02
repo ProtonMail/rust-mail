@@ -9,7 +9,7 @@ use proton_mail_api::services::proton::ProtonMail as _;
 use proton_mail_ids::LocalMessageId;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
-use tracing::error;
+use tracing::{error, info};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DeleteAllMessagesInLabel {
@@ -86,6 +86,7 @@ impl proton_action_queue::action::Handler for Handler {
                 LabelError::CouldNotResolveRemoteLabel(action.local_id)
             })?;
 
+        info!("Deleting all messages in {id}");
         ctx.api().delete_all_messages_in_label(id).await?;
         Ok(())
     }

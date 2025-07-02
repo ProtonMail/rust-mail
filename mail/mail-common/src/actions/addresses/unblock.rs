@@ -3,7 +3,7 @@ use crate::actions::MailActionError;
 use crate::models::default_location::IncomingDefaultLocation;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
 use proton_action_queue::action::{ActionId, Handler as ActionHandler};
-use proton_core_api::services::proton::IncomingDefaultId;
+use proton_core_api::services::proton::{IncomingDefaultId, PrivateEmail};
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
 use stash::params;
@@ -12,7 +12,7 @@ use stash::stash::Bond;
 /// Action which blocks or unblocks an address
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Unblock {
-    pub email: String,
+    pub email: PrivateEmail,
 }
 
 impl Action for Unblock {
@@ -42,6 +42,7 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
+        tracing::info!("Unblocking {}", action.email);
         bond.execute(
             "UPDATE incoming_default SET location = NULL WHERE email = ?",
             params![action.email.clone()],
@@ -57,6 +58,7 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
+        tracing::info!("Restoring block for {}", action.email);
         bond.execute(
             "UPDATE incoming_default SET location = ? WHERE email = ?",
             params![IncomingDefaultLocation::Blocked, action.email.clone()],
@@ -72,6 +74,7 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        tracing::info!("Unblocking {}", action.email);
         let id = guard
             .tether()
             .query_value::<_, IncomingDefaultId>(

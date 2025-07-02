@@ -33,6 +33,7 @@ use proton_mail_common::models::default_location::IncomingDefaultLocation;
 use proton_mail_common::models::{
     Attachment, LabelWithCounters, Message as MailMessage, MessageScrollData,
 };
+use proton_mail_common::proton_mail_api::proton_core_api::services::proton::PrivateEmail;
 use proton_mail_common::rsvp::RsvpEvent;
 use proton_mail_common::{AppError, MailContextResult, MailUserContext, Mailbox};
 use proton_mail_html_transformer::Html2TextOptions;
@@ -322,11 +323,9 @@ impl MessagesState {
             .take_selected_items(&|idx| self.messages[idx].id())
     }
 
-    fn selected_email(&self) -> Option<String> {
+    fn selected_email(&self) -> Option<PrivateEmail> {
         let index = self.table_state.selected()?;
-        self.messages
-            .get(index)
-            .map(|c| c.sender.address.clone().into_clear_text_string())
+        self.messages.get(index).map(|c| c.sender.address.clone())
     }
 }
 
@@ -1282,7 +1281,7 @@ fn move_message(
 
 fn block_sender(
     ctx: Arc<MailUserContext>,
-    email: String,
+    email: PrivateEmail,
     block_or_unblock: BlockOrUnblock,
 ) -> Command<Messages> {
     Command::from_future(async move {

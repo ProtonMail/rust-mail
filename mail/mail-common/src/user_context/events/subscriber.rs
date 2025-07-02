@@ -211,7 +211,7 @@ impl MailUserContext {
     }
 }
 
-#[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+#[tracing::instrument(skip_all)]
 async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> {
     let api = ctx.api().clone();
     let all_remote_labels = ctx.spawn(async move { Label::fetch_mail_labels(&api).await });

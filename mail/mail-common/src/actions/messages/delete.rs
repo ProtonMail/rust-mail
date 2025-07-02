@@ -13,7 +13,7 @@ use stash::exports::SqliteError;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, StashError};
-use tracing::error;
+use tracing::{error, info};
 
 /// Action which marks messages as deleted.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -98,6 +98,7 @@ impl ActionHandler for Handler {
         } else {
             let api = ctx.api();
             let message_ids = action.0.data.remote_target_ids.clone();
+            info!("Deleting {message_ids:?}");
             let label_id = action.0.remote_label_id.clone();
             let response = api
                 .put_messages_delete(message_ids, label_id)

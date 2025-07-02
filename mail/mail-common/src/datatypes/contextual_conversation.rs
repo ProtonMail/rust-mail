@@ -1,6 +1,8 @@
 use std::collections::BTreeSet;
 use std::time::Instant;
 
+use super::SystemLabelId as _;
+use super::folder_banner::{AutoDeleteBanner, AutoDeleteState, SpamOrTrash};
 use crate::actions::{AllBottomBarMessageActions, BottomBarActions, MovableSystemFolderAction};
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, ExclusiveLocation, LocalMessageId, MessageRecipients,
@@ -25,9 +27,6 @@ use stash::orm::Model;
 use stash::params;
 use stash::stash::{Stash, StashError, Tether, WatcherHandle};
 use tracing::{debug, warn};
-
-use super::SystemLabelId as _;
-use super::folder_banner::{AutoDeleteBanner, AutoDeleteState, SpamOrTrash};
 
 /// Contextual representation of a [`Conversation`] when it is opened for display
 /// in a [`Label`].
@@ -196,7 +195,7 @@ impl ContextualConversation {
     ///
     /// Returns error if the query failed, syncing the data failed or
     /// the conversation has no messages.
-    #[tracing::instrument(level=tracing::Level::DEBUG,skip(stash,api))]
+    #[tracing::instrument(skip(stash, api))]
     pub async fn conversation_and_messages(
         local_conversation_id: LocalConversationId,
         local_label_id: LocalLabelId,
@@ -244,12 +243,13 @@ impl ContextualConversation {
 
     /// Get the available actions from bottom bar for given conversations
     ///
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
+    #[tracing::instrument(skip_all, fields(label_id=current_label_id.as_u64()))]
     pub async fn all_available_bottom_bar_actions_for_conversations(
         current_label_id: LocalLabelId,
         conversation_ids: Vec<LocalConversationId>,
         tether: &Tether,
     ) -> Result<AllBottomBarMessageActions, AppError> {
+        debug!("{conversation_ids:?}");
         let current_label_fut = async {
             Label::resolve_remote_label_id(current_label_id, tether)
                 .await

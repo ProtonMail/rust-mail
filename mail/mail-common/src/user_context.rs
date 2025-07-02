@@ -60,6 +60,8 @@ pub struct MailUserContext {
 
 impl MailUserContext {
     /// Create a new user context.
+    #[allow(clippy::too_many_arguments)]
+    #[tracing::instrument(name = "NewMailUserContext", skip_all, fields(user_id=%user_context.user_id()))]
     pub(crate) async fn new(
         mail_context: Arc<MailContext>,
         user_context: Arc<UserContext>,

@@ -29,7 +29,6 @@ use stash::{
     stash::{StashError, Tether},
 };
 use thiserror::Error;
-use tracing::Level;
 
 #[allow(clippy::module_name_repetitions)]
 type CachedUserKeys = Vec<CachedUserKey>;
@@ -163,7 +162,7 @@ impl UserContext {
     /// Returns an error on a database or sync failure.
     /// - A DB/IO error if syncing the contact or accessing the contacts fails.
     /// - A wrapped [`KeyHandlingError`] if `VCard` parsing or signature verification fails.
-    #[tracing::instrument(level = Level::DEBUG, skip_all, fields(email=%email))]
+    #[tracing::instrument(skip_all, fields(email=%email))]
     pub async fn public_address_keys_from_contacts<P>(
         &self,
         pgp: &P,

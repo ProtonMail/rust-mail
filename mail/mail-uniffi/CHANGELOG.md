@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
+- Use `fancy_regex` for backend password validators.
+- [ET-2969] Add ability to create password validator from user session
+
+
+## [mail-uniffi-v0.97.0] - 2025-07-01
+
+### Features
+
 - [ET-1969] Remove need for clients to pass product name
 
 ### Fixes

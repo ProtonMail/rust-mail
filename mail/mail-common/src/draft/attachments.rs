@@ -145,8 +145,8 @@ impl DraftStagingAreaCleaner {
             .inspect_err(|e| error!("failed to create draft staging area: {e:?}"))?;
 
         let weak_context = Arc::downgrade(&context);
-        context.spawn(
-            async move {
+        context.spawn(async move {
+            async {
                 loop {
                     let Some(ctx) = weak_context.upgrade() else {
                         return;
@@ -166,8 +166,9 @@ impl DraftStagingAreaCleaner {
                     tokio::time::sleep(self.interval).await;
                 }
             }
-            .instrument(debug_span!("draft-staging-cleanup")),
-        );
+            .instrument(debug_span!("draft-staging-cleanup"))
+            .await;
+        });
         Ok(())
     }
 

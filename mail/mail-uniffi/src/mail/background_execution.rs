@@ -21,7 +21,7 @@ impl MailSession {
     ///
     /// A default time out of 30 seconds is assigned to this method, for more control use
     /// [`start_background_execution_with_duration`].
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn start_background_execution(
         &self,
         callback: Arc<dyn BackgroundExecutionCallback>,
@@ -34,7 +34,7 @@ impl MailSession {
     /// Note that the duration is the maximum time we will wait for either the background work
     /// to finish or the abort handle to be called. We can still  spend some time after that
     /// waiting for task completion.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn start_background_execution_with_duration(
         &self,
         duration_seconds: u64,

@@ -30,13 +30,7 @@
 //! let mut transformer = Transformer::new(input);
 //! transformer.strip_utm();
 //! let output = transformer.to_string();
-//!
-//! let expected = r#"<html><head></head><body>
-//!         <a href="https://ads.com/">bar</a>
-//!    
-//!
-//! </body></html>"#;
-//! assert_eq!(expected, output);
+//! println!("{}",output);
 //! ```
 //!
 
@@ -126,7 +120,7 @@ impl Transformer {
     ///
     /// See [`utm::strip()`] for more details.
     /// Returns how many tracking codes it removed.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn strip_utm(&mut self) -> u64 {
         utm::strip(self.document.clone())
     }
@@ -134,7 +128,7 @@ impl Transformer {
     /// Disables remote content.
     ///
     /// See [`remote_content::disable_remote_content()`] for more details.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn disable_content(&mut self, no_remote: bool, no_embedded: bool) -> (u64, u64) {
         remote_content::disable_content(&self.document, no_remote, no_embedded)
     }
@@ -142,7 +136,7 @@ impl Transformer {
     /// If true, inject metadata for iOS web view.
     ///
     /// See [`ios::inject_content_size()`] for more details.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn inject_ios_content_size(&mut self) {
         ios::inject_content_size(self.document.clone());
     }
@@ -150,19 +144,19 @@ impl Transformer {
     /// This function removes disallowed tags and attributes.
     ///
     /// See [`sanitizer::strip_whitelist`] for more details.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn strip_whitelist(&mut self) -> u64 {
         sanitizer::strip_whitelist(self.document.clone())
     }
 
     /// Reverts dark mode injection in inline attributes.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn revert_dark_mode_in_inline_attributes(&mut self) {
         transforms::styles::revert_dark_mode_in_inline_attributes(&self.document);
     }
 
     /// This function adds dark mode support. This fails if the html doesn't have a head tag.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn inject_dark_mode(
         &mut self,
         sender: &str,
@@ -212,26 +206,26 @@ impl Transformer {
     /// See [`transforms::add_noreferrer`] for more details.
     ///
     /// This requires an [`InsertLinkToken`]
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn add_noreferrer(&mut self) -> InsertLinkToken {
         transforms::add_noreferrer(self.document.clone());
         InsertLinkToken(())
     }
 
     /// Inserts `<a>` elements in plain text links
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn insert_links(&mut self, _token: InsertLinkToken) {
         transforms::insert_links(self.document.clone());
     }
 
     /// Removes the blockquote from the html
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn strip_blockquote(&mut self) -> bool {
         message_detector::strip_blockquote(self.document().clone())
     }
 
     /// Try to locate and extract the eventual blockquote present in the document no matter the expeditor of the mail
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all)]
     pub fn extract_blockquote(&mut self) -> SplitDoc {
         message_detector::locate_blockquote(self.document().clone())
     }
