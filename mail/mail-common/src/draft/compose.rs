@@ -373,18 +373,21 @@ fn generate_sender_reply(sender: &MessageSender, formatted_date: String, is_text
         if is_text {
             format!(
                 "{formatted_date} {} <{}> wrote:",
-                sender.name.as_str(),
+                sender.name.as_clear_text_str(),
                 sender.address.as_clear_text_str()
             )
         } else {
             format!(
                 "{formatted_date} {} &lt;{}&gt; wrote:",
-                sender.name.as_str(),
+                sender.name.as_clear_text_str(),
                 sender.address.as_clear_text_str()
             )
         }
     } else if !sender.name.is_empty() {
-        format!("{formatted_date} {} wrote:", sender.name.as_str())
+        format!(
+            "{formatted_date} {} wrote:",
+            sender.name.as_clear_text_str()
+        )
     } else {
         format!(
             "{formatted_date} {} wrote:",

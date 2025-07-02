@@ -124,12 +124,6 @@ impl<'s> From<&'s str> for PrivateEmailRef<'s> {
     }
 }
 
-impl<'s> From<&'s PrivateString> for PrivateEmailRef<'s> {
-    fn from(value: &'s PrivateString) -> PrivateEmailRef<'s> {
-        value.as_ref()
-    }
-}
-
 fn sanitize_email(value: &str) -> String {
     value
         .chars()
@@ -163,18 +157,13 @@ impl PrivateString {
     }
 
     #[must_use]
-    pub fn into_inner(self) -> String {
+    pub fn into_clear_text_string(self) -> String {
         self.0
     }
 
     #[must_use]
-    pub fn as_str(&self) -> &str {
+    pub fn as_clear_text_str(&self) -> &str {
         &self.0
-    }
-
-    #[must_use]
-    pub fn as_ref(&self) -> PrivateEmailRef<'_> {
-        PrivateEmailRef(self.0.as_str())
     }
 }
 
@@ -213,7 +202,7 @@ impl std::ops::Deref for PrivateString {
 #[cfg(feature = "sql")]
 impl ::stash::exports::ToSql for PrivateString {
     fn to_sql(&self) -> Result<::stash::exports::ToSqlOutput<'_>, ::stash::exports::SqliteError> {
-        self.as_str().to_sql()
+        self.as_clear_text_str().to_sql()
     }
 }
 

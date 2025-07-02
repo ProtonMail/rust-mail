@@ -1216,13 +1216,15 @@ impl MessageSender {
 
 impl From<MessageSender> for AvatarInformation {
     fn from(address: MessageSender) -> AvatarInformation {
-        AvatarInformation::from(address.name.as_str()).or_else(address.address.as_clear_text_str())
+        AvatarInformation::from(address.name.as_clear_text_str())
+            .or_else(address.address.as_clear_text_str())
     }
 }
 
 impl From<&MessageSender> for AvatarInformation {
     fn from(address: &MessageSender) -> AvatarInformation {
-        AvatarInformation::from(address.name.as_str()).or_else(address.address.as_clear_text_str())
+        AvatarInformation::from(address.name.as_clear_text_str())
+            .or_else(address.address.as_clear_text_str())
     }
 }
 
@@ -1302,7 +1304,8 @@ impl From<MessageRecipient> for ApiMessageRecipient {
 
 impl From<MessageRecipient> for AvatarInformation {
     fn from(address: MessageRecipient) -> AvatarInformation {
-        AvatarInformation::from(address.name.as_str()).or_else(address.address.as_clear_text_str())
+        AvatarInformation::from(address.name.as_clear_text_str())
+            .or_else(address.address.as_clear_text_str())
     }
 }
 
@@ -1319,7 +1322,8 @@ impl From<MessageSender> for MessageRecipient {
 
 impl From<&MessageRecipient> for AvatarInformation {
     fn from(address: &MessageRecipient) -> AvatarInformation {
-        AvatarInformation::from(address.name.as_str()).or_else(address.address.as_clear_text_str())
+        AvatarInformation::from(address.name.as_clear_text_str())
+            .or_else(address.address.as_clear_text_str())
     }
 }
 

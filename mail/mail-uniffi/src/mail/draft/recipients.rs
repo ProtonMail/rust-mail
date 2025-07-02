@@ -90,7 +90,9 @@ pub struct ComposerRecipientSingle {
 impl From<SingleRecipient> for ComposerRecipientSingle {
     fn from(value: SingleRecipient) -> Self {
         Self {
-            display_name: value.display_name.map(PrivateString::into_inner),
+            display_name: value
+                .display_name
+                .map(PrivateString::into_clear_text_string),
             address: value.email.into_clear_text_string(),
             valid_state: value.state.into(),
         }

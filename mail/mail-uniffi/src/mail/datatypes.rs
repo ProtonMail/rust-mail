@@ -1552,7 +1552,7 @@ impl From<RealMessageSender> for MessageSender {
             display_sender_image: value.display_sender_image,
             is_proton: value.is_proton,
             is_simple_login: value.is_simple_login,
-            name: value.name.into_inner(),
+            name: value.name.into_clear_text_string(),
         }
     }
 }
@@ -1578,7 +1578,7 @@ impl From<RealMessageRecipient> for MessageRecipient {
         Self {
             address: value.address.into_clear_text_string(),
             is_proton: value.is_proton,
-            name: value.name.into_inner(),
+            name: value.name.into_clear_text_string(),
             group: value.group.into_option(),
         }
     }
@@ -1612,7 +1612,7 @@ impl From<RealMessageReplyTo> for MessageReplyTo {
     fn from(value: RealMessageReplyTo) -> Self {
         Self {
             address: value.address.into_clear_text_string(),
-            name: value.name.into_inner(),
+            name: value.name.into_clear_text_string(),
         }
     }
 }
