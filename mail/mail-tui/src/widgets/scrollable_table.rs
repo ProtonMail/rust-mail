@@ -130,9 +130,6 @@ impl StatefulWidget for ScrollableTable<'_> {
             if state.marked.contains(&idx) {
                 let row_2 = mem::take(row);
                 *row = row_2.style(Style::new().bg(Color::LightBlue));
-            } else {
-                let row_2 = mem::take(row);
-                *row = row_2.style(Style::new().bg(Color::Black));
             }
         }
 
