@@ -205,7 +205,10 @@ pub fn db_record_derive(input: TokenStream) -> TokenStream {
 ///     value: i32, }
 /// ```
 ///
-#[proc_macro_derive(Model, attributes(DbField, IdField, ModelHooks, TableName))]
+#[proc_macro_derive(
+    Model,
+    attributes(DbField, IdField, ModelHooks, ModelHooksSync, TableName)
+)]
 pub fn model_derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     let name = &input.ident;
@@ -254,6 +257,18 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
         (!has_hooks).then(|| {
             quote! {
                 impl ::stash::orm::ModelHooks for #name {}
+            }
+        })
+    };
+
+    let impl_model_hooks_sync = {
+        let has_hooks = input
+            .attrs
+            .iter()
+            .any(|x| x.path().is_ident("ModelHooksSync"));
+        (!has_hooks).then(|| {
+            quote! {
+                impl ::stash::orm::ModelHooksSync for #name {}
             }
         })
     };
@@ -313,6 +328,7 @@ pub fn model_derive(input: TokenStream) -> TokenStream {
         }
 
         #impl_model_hooks
+        #impl_model_hooks_sync
     })
     .into()
 }
