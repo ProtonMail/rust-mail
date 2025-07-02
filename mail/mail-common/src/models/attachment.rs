@@ -38,7 +38,7 @@ use stash::{params, sql_using_serde};
 use std::os::unix::fs::MetadataExt;
 use std::path::Path;
 use std::str::FromStr;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, trace};
 
 /// Represents a mail attachment.
 ///
@@ -609,7 +609,7 @@ impl Attachment {
     ///
     /// By default, the file name of the attachment will be the file name component of the specified
     /// `path`.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(ctx, tether, path))]
+    #[tracing::instrument(level = tracing::Level::DEBUG, skip(ctx, tether, path, file_name_override))]
     pub async fn create_local(
         ctx: &MailUserContext,
         address_id: AddressId,
@@ -696,10 +696,10 @@ impl Attachment {
 
         tether
             .tx(async |tx| {
-                debug!("Saving new attachment record");
+                trace!("Saving new attachment record");
                 attachment.save(tx).await?;
 
-                debug!("Storing attachment in cache");
+                trace!("Storing attachment in cache");
 
                 let data = tokio::fs::read(path).await?;
                 Attachment::store_in_cache(ctx, &attachment.filename, attachment.id(), data, tx)

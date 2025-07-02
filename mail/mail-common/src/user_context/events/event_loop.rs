@@ -20,8 +20,8 @@ impl MailUserContext {
         let mut interval = tokio::time::interval(duration);
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         let watcher = self.user_context.initialization_watcher.clone();
-        self.spawn(
-            async move {
+        self.spawn(async move {
+            async {
                 // Wait until `MailUserContext` is initialized.
                 tracing::info!("Starting event poll init loop");
                 loop {
@@ -54,8 +54,9 @@ impl MailUserContext {
                     }
                 }
             }
-            .instrument(tracing::debug_span!("event_loop")),
-        );
+            .instrument(tracing::debug_span!("event_loop"))
+            .await;
+        });
         Ok(())
     }
 

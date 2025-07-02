@@ -74,7 +74,8 @@ impl Mailbox {
     ///
     /// # Errors
     /// Returns error if API request or database changes failed.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all)]
+    #[cfg(feature = "test-utils")]
     pub async fn sync(
         &self,
         tether: &mut Tether,
