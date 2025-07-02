@@ -22,7 +22,11 @@ pub fn format_sender(sender: &MessageSender) -> String {
     if sender.name.is_empty() {
         sender.address.clone().into_clear_text_string()
     } else {
-        format!("{} <{}>", sender.name, sender.address.as_clear_text_str())
+        format!(
+            "{} <{}>",
+            sender.name.as_str(),
+            sender.address.as_clear_text_str()
+        )
     }
 }
 
@@ -30,7 +34,11 @@ pub fn format_recipient(sender: &MessageRecipient) -> String {
     if sender.name.is_empty() {
         sender.address.clone().into_clear_text_string()
     } else {
-        format!("{} <{}>", sender.name, sender.address.as_clear_text_str())
+        format!(
+            "{} <{}>",
+            sender.name.as_str(),
+            sender.address.as_clear_text_str()
+        )
     }
 }
 
