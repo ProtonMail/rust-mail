@@ -24,9 +24,9 @@ use crate::widgets::ScrollableListState;
 use anyhow::anyhow;
 use chrono::Local;
 use futures::FutureExt;
-use log_service::LogService;
 use proton_core_common::OnSessionDeletedResponse;
 use proton_core_common::event_loop::EventPollMode;
+use proton_log_service::LogService;
 use proton_mail_common::MailContext;
 use ratatui::crossterm::event::{Event, KeyCode, KeyEventKind};
 use ratatui::layout::{Constraint, Flex};
@@ -147,7 +147,7 @@ impl AppModel {
         std::fs::create_dir_all(&core_cache_dir)?;
         std::fs::create_dir_all(&user_db_path)?;
 
-        let config = log_service::Config::builder()
+        let config = proton_log_service::Config::builder()
             .name("app".into())
             .directory(cache_dir.clone())
             .header(|| format!("\n--- Proton Mail TUI ---- Started at {}\n", Local::now()))

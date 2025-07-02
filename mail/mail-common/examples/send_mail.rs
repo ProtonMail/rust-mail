@@ -1,13 +1,13 @@
 use std::sync::Arc;
 
 use clap::Parser;
-use log_service::LogService;
 use proton_action_queue::observers::ActionAwaiter;
 use proton_action_queue::queue::BroadcastMessage;
 use proton_core_api::session::Config;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::os::{InMemoryKeyChain, KeyChainExt};
+use proton_log_service::LogService;
 use proton_mail_common::MailContext;
 use proton_mail_common::datatypes::Disposition;
 use proton_mail_common::draft::Draft;
@@ -63,7 +63,7 @@ async fn main() {
 
     info!("TMP DIR: {:?}", tmp_dir.path());
 
-    let config = log_service::Config::builder()
+    let config = proton_log_service::Config::builder()
         .name("log".into())
         .directory(tmp_dir.path().into())
         .build();

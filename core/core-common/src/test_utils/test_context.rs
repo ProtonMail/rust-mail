@@ -9,13 +9,13 @@ use crate::{
     db::account::SessionEncryptionKey,
     os::{InMemoryKeyChain, KeyChain, KeyChainExt},
 };
-use log_service::LogService;
 use proton_core_api::auth::{Tokens, UserKeySecret};
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::{Config, Endpoint, EnvId};
 use proton_core_api::status_observer::StatusObserver;
 use proton_core_api::status_watcher::StatusWatcher;
 use proton_event_loop::subscriber::SubscriberError;
+use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
 use stash::stash::{Stash, StashError};
 use std::io::stdout;
@@ -181,7 +181,7 @@ impl TestContext {
             all_initializers.append(&mut additional_initializers);
         }
 
-        let log_config = log_service::Config::builder()
+        let log_config = proton_log_service::Config::builder()
             .directory(tmp_dir.path().into())
             .max_log_size(20 * 1024 * 1024)
             .name("log".into())

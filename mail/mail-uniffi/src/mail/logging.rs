@@ -1,4 +1,4 @@
-use log_service::LogService;
+use proton_log_service::LogService;
 use std::backtrace::Backtrace;
 use std::panic::{set_hook, take_hook};
 use tracing::error;
