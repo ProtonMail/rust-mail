@@ -14,7 +14,7 @@ pub fn sender_name(sender: &MessageSender) -> &str {
     if sender.name.is_empty() {
         sender.address.as_clear_text_str()
     } else {
-        sender.name.as_str()
+        sender.name.as_clear_text_str()
     }
 }
 
@@ -24,7 +24,7 @@ pub fn format_sender(sender: &MessageSender) -> String {
     } else {
         format!(
             "{} <{}>",
-            sender.name.as_str(),
+            sender.name.as_clear_text_str(),
             sender.address.as_clear_text_str()
         )
     }
@@ -36,7 +36,7 @@ pub fn format_recipient(sender: &MessageRecipient) -> String {
     } else {
         format!(
             "{} <{}>",
-            sender.name.as_str(),
+            sender.name.as_clear_text_str(),
             sender.address.as_clear_text_str()
         )
     }
