@@ -130,6 +130,9 @@ enum OperationExec {
     /// read query, but could be any query where results are expected, such as
     /// an `INSERT` query that returns the ID of the inserted row.
     Query(Query),
+
+    /// This can be either a query or a transaction.
+    Sync(SyncClosure),
 }
 
 /// Error type for the [`Stash`] module.
@@ -145,7 +148,7 @@ pub enum StashError {
     /// Note that this refers to executing a prepared statement,
     /// e.g. actually running a query, and not the process of preparing the statement/query.
     #[error("Statement execution error: {0}")]
-    ExecutionError(SqliteError),
+    ExecutionError(#[from] SqliteError),
 
     #[error("Trying to update a record that hasn't been saved yet")]
     IdNotSet,
@@ -182,9 +185,11 @@ pub enum StashError {
     ConnectionAcquireTimedOut,
 
     /// Custom variant that is not critical
-    #[error("Critical error: {0}")]
+    #[error("{0}")]
     Custom(anyhow::Error),
 }
+
+pub type StashResult<T> = Result<T, StashError>;
 
 impl StashError {
     pub fn interrupted() -> Self {
@@ -1008,6 +1013,92 @@ impl Tether {
             tx_lock: Arc::clone(&stash.tx_lock),
         })
     }
+
+    pub async fn sync_query<T: Send + 'static>(
+        &self,
+        callback: impl FnOnce(&rusqlite::Connection) -> Result<T, StashError> + Send + 'static,
+    ) -> Result<T, StashError> {
+        let closure = Box::new(move |conn: &rusqlite::Connection| {
+            callback(conn).map(|x| Box::new(x) as Box<dyn Any + Send>)
+        });
+
+        let (sender, receiver) = oneshot::channel();
+        let sync_closure = SyncClosure {
+            closure,
+            sender,
+            is_transaction: false,
+        };
+        let operation = Operation::Execution(OperationExec::Sync(sync_closure));
+
+        self.sender
+            .send(operation)
+            .map_err(|_| anyhow!("The stash worker dropped"))?;
+        let ret = receiver
+            .await
+            .map_err(|_| anyhow!("The stash worker dropped"))?;
+        // This cannot fail as the type system assures us that the return type of `callback` is T
+        ret.map(|x| *x.downcast().expect("Downcast failed?"))
+    }
+
+    pub async fn sync_tx(
+        &self,
+        callback: impl FnOnce(&rusqlite::Transaction<'_>) -> StashResult<()> + Send + 'static,
+    ) -> StashResult<()> {
+        self.sync_tx_returning(callback).await
+    }
+
+    pub async fn sync_tx_returning<T: Send + 'static>(
+        &self,
+        callback: impl FnOnce(&rusqlite::Transaction) -> StashResult<T> + Send + 'static,
+    ) -> StashResult<T> {
+        self.sync_tx_impl(callback, TransactionTrackingPolicy::Tracking)
+            .await
+    }
+
+    async fn sync_tx_impl<T: Send + 'static>(
+        &self,
+        callback: impl FnOnce(&rusqlite::Transaction<'_>) -> StashResult<T> + Send + 'static,
+        policy: TransactionTrackingPolicy,
+    ) -> StashResult<T> {
+        let tx_lock = self.tx_lock.clone();
+        let _guard = tx_lock.lock().await;
+        let closure = Box::new(move |conn: &rusqlite::Connection| {
+            let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)
+                .map_err(StashError::TransactionError)?;
+            match callback(&tx) {
+                Ok(x) => tx
+                    .commit()
+                    .map(|()| Box::new(x) as Box<dyn Any + Send>)
+                    .map_err(StashError::ExecutionError),
+                Err(user_err) => {
+                    if let Err(rollback_err) = tx.rollback() {
+                        Err(StashError::Critical(anyhow!(
+                            "Rollback error occurred {rollback_err:?} when rolling back the transaction after this error: {user_err:?}"
+                        )))
+                    } else {
+                        Err(user_err)
+                    }
+                }
+            }
+        });
+
+        let (sender, receiver) = oneshot::channel();
+        let sync_closure = SyncClosure {
+            closure,
+            sender,
+            is_transaction: policy == TransactionTrackingPolicy::Tracking,
+        };
+        let operation = Operation::Execution(OperationExec::Sync(sync_closure));
+
+        self.sender
+            .send(operation)
+            .map_err(|_| anyhow!("The stash worker dropped"))?;
+        let ret = receiver
+            .await
+            .map_err(|_| anyhow!("The stash worker dropped"))?;
+        // This cannot fail as the type system assures us that the return type of `callback` is T
+        ret.map(|x| *x.downcast().expect("Downcast failed?"))
+    }
 }
 
 impl Debug for Tether {
@@ -1093,6 +1184,20 @@ pub(crate) struct PooledTetherInterruptNotifier(flume::Sender<Operation>);
 impl PooledTetherInterruptNotifier {
     pub fn interrupt(&self) {
         let _ = self.0.send(Operation::Interrupt);
+    }
+}
+
+type SyncClosureRetTy = Result<Box<dyn Any + Send>, StashError>;
+struct SyncClosure {
+    closure: Box<dyn FnOnce(&Connection) -> SyncClosureRetTy + Send>,
+    sender: OneshotSender<SyncClosureRetTy>,
+    /// Used to know whether or not to notify the watcher
+    is_transaction: bool,
+}
+
+impl Debug for SyncClosure {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SyncClosure").finish()
     }
 }
 
@@ -1235,6 +1340,16 @@ impl RunTransaction for Tether {
                 .context("Could not start transaction for tether")
         }
     }
+
+    async fn run_tx_sync<T, F>(&mut self, closure: F) -> anyhow::Result<T>
+    where
+        F: FnOnce(&rusqlite::Transaction<'_>) -> StashResult<T> + Send + 'static,
+        T: Send + 'static,
+    {
+        self.sync_tx_returning(closure)
+            .await
+            .context("Could not start sync transaction for tether")
+    }
 }
 
 /// This trait should only be used in functions that have to create and commit several
@@ -1248,6 +1363,11 @@ pub trait RunTransaction {
     fn run_tx<T, F>(&mut self, closure: F) -> impl Future<Output = anyhow::Result<T>>
     where
         F: AsyncFnOnce(&Bond<'_>) -> Result<T, anyhow::Error>;
+
+    fn run_tx_sync<T, F>(&mut self, closure: F) -> impl Future<Output = anyhow::Result<T>> + Send
+    where
+        F: FnOnce(&rusqlite::Transaction<'_>) -> StashResult<T> + Send + 'static,
+        T: Send + 'static;
 }
 
 impl<RT: RunTransaction> RunTransaction for &mut RT {
@@ -1260,7 +1380,16 @@ impl<RT: RunTransaction> RunTransaction for &mut RT {
     where
         F: AsyncFnOnce(&Bond<'_>) -> Result<T, anyhow::Error>,
     {
-        async move { RT::run_tx(self, closure).await }
+        RT::run_tx(self, closure)
+    }
+
+    #[allow(clippy::manual_async_fn)]
+    fn run_tx_sync<T, F>(&mut self, closure: F) -> impl Future<Output = anyhow::Result<T>> + Send
+    where
+        F: FnOnce(&rusqlite::Transaction<'_>) -> StashResult<T> + Send + 'static,
+        T: Send + 'static,
+    {
+        RT::run_tx_sync(self, closure)
     }
 }
 
@@ -1316,6 +1445,9 @@ impl<'a> TetheredWorkerStateMachine<'a> {
                         let _ = o.sender.send(Err(StashError::interrupted()));
                     }
                     OperationExec::Query(o) => {
+                        let _ = o.sender.send(Err(StashError::interrupted()));
+                    }
+                    OperationExec::Sync(o) => {
                         let _ = o.sender.send(Err(StashError::interrupted()));
                     }
                 },
@@ -1505,7 +1637,7 @@ impl<'a> TetheredWorkerStateMachine<'a> {
         Ok(())
     }
 
-    fn handle_exec(&self, operation: OperationExec) {
+    fn handle_exec(&mut self, operation: OperationExec) {
         let connection: &Connection = match self.transaction {
             Some(ref tx) => tx,
             None => self.connection,
@@ -1522,6 +1654,24 @@ impl<'a> TetheredWorkerStateMachine<'a> {
             }
             OperationExec::Query(query) => {
                 query.run_and_send(connection);
+            }
+            OperationExec::Sync(sync) => {
+                if sync.is_transaction {
+                    if let Err(e) = self
+                        .state
+                        .sync_tables(self.watcher)
+                        .execute(self.connection)
+                    {
+                        error!("Failed to sync tables: {e:?}");
+                        let _ = sync
+                            .sender
+                            .send(Err(StashError::WatcherError(e.to_string())));
+                        return;
+                    }
+                }
+
+                let res = (sync.closure)(connection);
+                let _ = sync.sender.send(res);
             }
         }
     }

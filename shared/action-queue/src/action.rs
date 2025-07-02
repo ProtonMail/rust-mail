@@ -8,7 +8,8 @@ use derive_more::derive::TryFrom;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use stash::exports::{
-    FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Value, ValueRef,
+    FromSql, FromSqlError, FromSqlResult, SqliteError, ToSql, ToSqlOutput, Transaction, Value,
+    ValueRef,
 };
 use stash::sql_using_serde;
 use stash::stash::{Bond, RunTransaction, StashError, Tether};
@@ -361,6 +362,17 @@ impl RunTransaction for WriterGuard<'_> {
                 .await
                 .context("Could not create transaction for writerguard")
         }
+    }
+
+    async fn run_tx_sync<T, F>(&mut self, closure: F) -> anyhow::Result<T>
+    where
+        F: FnOnce(&Transaction<'_>) -> stash::stash::StashResult<T> + Send + 'static,
+        T: Send + 'static,
+    {
+        self.tether
+            .sync_tx_returning(closure)
+            .await
+            .context("Could not create transaction for writerguard")
     }
 }
 

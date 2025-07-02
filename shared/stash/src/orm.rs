@@ -13,7 +13,7 @@
 //!
 
 use crate::params;
-use crate::stash::{Bond, StashError, Tether};
+use crate::stash::{Bond, StashError, StashResult, Tether};
 use crate::utils::IterMapToSql;
 use anyhow::{Context, anyhow};
 use core::any::Any;
@@ -22,7 +22,10 @@ use core::future::Future;
 use indoc::formatdoc;
 use itertools::Itertools as _;
 use rusqlite::types::FromSql;
-use rusqlite::{Error as SqliteError, Row, ToSql};
+use rusqlite::{
+    Connection, Error as SqliteError, OptionalExtension, Row, Rows, ToSql, Transaction,
+};
+use rusqlite::{Params, params_from_iter};
 use serde::de::Error as DeserializationError;
 use serde::ser::Error as SerializationError;
 use std::vec::IntoIter;
@@ -169,7 +172,7 @@ where
 ///
 /// * [`DbRecord`]
 ///
-pub trait Model: DbRecord + ModelHooks
+pub trait Model: DbRecord + ModelHooks + ModelHooksSync
 where
     Self: 'static,
     <Self as Model>::Id: Send + Sync + 'static,
@@ -380,6 +383,36 @@ where
         }
     }
 
+    fn load_sync(
+        query: impl AsRef<str>,
+        params: impl Params,
+        conn: &Connection,
+    ) -> StashResult<Vec<Self>> {
+        let mut stmt = conn
+            .prepare(query.as_ref())
+            .context("Error preparing the query for load")?;
+        let rows = stmt.query(params).map_err(StashError::ExecutionError)?;
+        let mut records = from_rows::<Self>(rows)?;
+
+        for record in &mut records {
+            record.after_load_sync(conn)?;
+        }
+        Ok(records)
+    }
+
+    fn load_by_id_sync(id: Self::IdType, conn: &Connection) -> StashResult<Option<Self>> {
+        let query = formatdoc! {"
+            SELECT * FROM {table}
+            WHERE {id} = ?
+            LIMIT 1
+            ",
+            table = Self::table_name(),
+            id = Self::id_field_name(),
+        };
+
+        Ok(Self::load_sync(query, (id,), conn)?.into_iter().next())
+    }
+
     /// Saves a record to the database.
     /// If it has a local id it will update the record, otherwise it will insert it.
     ///
@@ -406,6 +439,41 @@ where
             return self.update(bond).await;
         }
         self.insert(bond).await
+    }
+
+    fn insert_sync(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
+        let (fields, values) = if Self::id_is_autoincrementing() {
+            if Self::id_value(self).is_ok() {
+                // This should have been an upgrade
+                return Err(StashError::Critical(anyhow!(
+                    "Attempting to insert a record with id autoincrement whose id is set"
+                )));
+            }
+            (
+                Self::field_names_without_id(),
+                Self::field_values_without_id(self),
+            )
+        } else {
+            (Self::field_names(), Self::field_values(self))
+        };
+
+        let placeholders = crate::utils::placeholders(&fields);
+        let query = formatdoc! {"
+                    INSERT INTO {table} ({fields})
+                    VALUES ({placeholders})
+                    RETURNING {id} AS value
+                    ",
+            table = Self::table_name(),
+            fields = fields.join(", "),
+            id = Self::id_field_name(),
+        };
+
+        let id: Self::IdType = tx.query_row(&query, params_from_iter(values), |r| r.get(0))?;
+
+        self.set_id_value(id);
+
+        self.after_save_sync(tx)?;
+        Ok(())
     }
 
     /// Forcefully insert, even if it has the ID set.
@@ -448,6 +516,39 @@ where
         Ok(())
     }
 
+    fn update_sync(&mut self, tx: &Transaction<'_>) -> Result<(), StashError> {
+        let id = self.id_value().map_err(|_| StashError::IdNotSet)?;
+
+        // If the ID field is auto-incrementing then it is fully managed by the
+        // database, and we exclude it from the list here.
+        let (fields, values) = if Self::id_is_autoincrementing() {
+            (
+                Self::field_names_without_id(),
+                Self::field_values_without_id(self),
+            )
+        } else {
+            (Self::field_names(), Self::field_values(self))
+        };
+
+        let fields = fields.iter().map(|field| format!("{field} = ?")).join(", ");
+        let query = formatdoc!(
+            "UPDATE {table}
+                    SET {fields}
+                    WHERE {id} = ?",
+            table = Self::table_name(),
+            id = Self::id_field_name(),
+        );
+
+        let values = values.bridge_sql_extend([id]);
+        let affected: usize = tx.execute(&query, params_from_iter(values))?;
+
+        if affected == 0 {
+            return Err(StashError::NoRowsUpdated);
+        }
+        self.after_save_sync(tx)?;
+        Ok(())
+    }
+
     async fn update(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         let id = self.id_value().map_err(|_| StashError::IdNotSet)?;
 
@@ -480,6 +581,100 @@ where
         self.after_save(bond).await?;
         Ok(())
     }
+
+    fn save_sync(&mut self, tx: &Transaction<'_>) -> StashResult<()> {
+        self.before_save_sync(tx)?;
+        //
+        // HACK: This is not great but we're forced to do it since there's no guarantee that the
+        // row does or doesn't exist.
+        let query = formatdoc! {"
+                        SELECT {id_name}
+                        FROM {table}
+                        WHERE {id_name} = ?
+                        ",
+            table = Self::table_name(),
+            id_name = Self::id_field_name(),
+        };
+
+        if let Ok(id) = self.id_value() {
+            if tx
+                .query_row(&query, (id,), |r| r.get::<_, usize>(0))
+                .optional()?
+                .is_some()
+            {
+                return self.update_sync(tx);
+            }
+        }
+        self.insert_sync(tx)
+    }
+
+    //     match self.id_value() {
+    //         // ID is set: update
+    //         Ok(id) => {
+    //             let fields = fields.iter().map(|field| format!("{field} = ?")).join(", ");
+    //             let query = formatdoc!(
+    //                 "UPDATE {table}
+    //                 SET {fields}
+    //                 WHERE {id} = ?",
+    //                 table = Self::table_name(),
+    //                 id = Self::id_field_name(),
+    //             );
+    //
+    //             let values = values
+    //                 .iter()
+    //                 .map(|x| x as &dyn ToSql)
+    //                 .chain(std::iter::once(&id as &dyn ToSql));
+    //             let values = params_from_iter(values);
+    //
+    //             let affected: usize = tx
+    //                 .execute(&query, values)
+    //                 .map_err(StashError::ExecutionError)?;
+    //
+    //             if affected == 0 {
+    //                 return Err(StashError::NoRowsUpdated);
+    //             }
+    //         }
+    //         // ID is not set: insert
+    //         Err(_) => {
+    //             if Self::id_is_autoincrementing() && self.id_value().is_ok() {
+    //                 // If the ID field is configured as auto-incrementing and is set, but the
+    //                 // row ID is not set, then the state is invalid, because it should have been
+    //                 // loaded from the database.
+    //                 return Err(StashError::InvalidIdState);
+    //             }
+    //             if Self::id_is_optional()
+    //                 && !Self::id_is_autoincrementing()
+    //                 && self.id_value().is_err()
+    //             {
+    //                 // If the ID field is configured as optional but NOT auto-incrementing, and
+    //                 // is not set, then the state is invalid, because it is under manual control
+    //                 // and needs to be set before saving.
+    //                 return Err(StashError::IdNotSet);
+    //             }
+    //             let placeholders = crate::utils::placeholders(&fields);
+    //             let query = formatdoc! {"
+    //                 INSERT INTO {table} ({fields})
+    //                 VALUES ({placeholders})
+    //                 RETURNING {id} AS value
+    //                 ",
+    //                 table = Self::table_name(),
+    //                 fields = fields.join(", "),
+    //                 id = Self::id_field_name(),
+    //             };
+    //
+    //             let values = params_from_iter(values);
+    //
+    //             let id: Self::IdType = tx
+    //                 .query_row_and_then(&query, values, |row| row.get(0))
+    //                 .map_err(StashError::ExecutionError)?;
+    //
+    //             self.set_id_value(id);
+    //         }
+    //     };
+    //
+    //     self.after_save_sync(tx)?;
+    //     Ok(())
+    // }
 
     /// Gets the name of the table for the record type.
     fn table_name() -> &'static str;
@@ -606,4 +801,24 @@ pub trait ModelHooks {
     fn after_save(&mut self, _: &Bond<'_>) -> impl Future<Output = Result<(), StashError>> + Send {
         async { Ok(()) }
     }
+}
+pub trait ModelHooksSync {
+    fn after_load_sync(&mut self, _: &Connection) -> StashResult<()> {
+        Ok(())
+    }
+    fn before_save_sync(&mut self, _: &Transaction<'_>) -> StashResult<()> {
+        Ok(())
+    }
+    fn after_save_sync(&mut self, _: &Transaction<'_>) -> StashResult<()> {
+        Ok(())
+    }
+}
+
+// TODO: rewrite this fn.
+pub fn from_rows<T: DbRecord>(mut rows: Rows<'_>) -> Result<Vec<T>, ConversionError> {
+    let mut results = vec![];
+    while let Some(row) = rows.next()? {
+        results.push(T::from_row(row)?);
+    }
+    Ok(results)
 }
