@@ -151,7 +151,7 @@ impl EventPollInternal {
             .collect_raw_events(provider, &last_event_id)
             .await
             .map_err(|e| {
-                error!("Failed to collect events: {e:?}");
+                error!("Failed to collect events: {e}");
                 e
             })?;
 
@@ -176,7 +176,7 @@ impl EventPollInternal {
             }
 
             if let Err(e) = store.store(new_event_id.clone()).await {
-                error!("Failed to store new event id: {e:?}");
+                error!("Failed to store new event id: {e}");
                 return Err(EventLoopError::StoreWrite(e));
             }
             info!("New Event ID = {}", new_event_id);

@@ -47,7 +47,7 @@ impl TaskService {
         })
     }
 
-    #[tracing::instrument(level = "debug", skip_all)]
+    #[tracing::instrument(skip_all)]
     fn run(receiver: &mpsc::Receiver<Command>) {
         info!("Starting task service");
 
@@ -353,6 +353,7 @@ impl BackgroundAwareTaskService {
     /// Pause tasks when the main application is about to go into a suspended state. If a background
     /// task is running, the pause request will be ignored.
     pub fn pause_main(&self) {
+        info!("Request to pause work from main thread");
         if self.state.lock().pause_main() {
             self.service.pause();
         }
@@ -362,6 +363,7 @@ impl BackgroundAwareTaskService {
     /// into a suspended state. If a background task is running, the pause request will be ignored
     /// and we will return immediately.
     pub async fn pause_main_and_wait(&self, timeout: Duration) -> anyhow::Result<()> {
+        info!("Request to pause work and wait from main thread");
         if self.state.lock().pause_main() {
             self.service.pause_and_wait(timeout).await
         } else {
@@ -372,6 +374,7 @@ impl BackgroundAwareTaskService {
     /// Pause tasks when the background task has finished running. If the main application is not
     /// in a suspended state, teh request will be ignored an we will return immediately.
     pub fn pause_background(&self) {
+        info!("Request to pause work from background thread");
         if self.state.lock().pause_background() {
             self.service.pause();
         }
@@ -380,6 +383,7 @@ impl BackgroundAwareTaskService {
     /// Pause tasks and wait for all task to be paused when the background task has finished running.
     /// If the main application is not in a suspended state, teh request will be ignored.
     pub async fn pause_background_and_wait(&self, timeout: Duration) -> anyhow::Result<()> {
+        info!("Request to pause work and wait from background thread");
         if self.state.lock().pause_background() {
             self.service.pause_and_wait(timeout).await
         } else {
@@ -390,6 +394,7 @@ impl BackgroundAwareTaskService {
     /// Resume all tasks if the main application and the background task are not suspended. In all
     /// other combinations, the request will be ignored.
     pub fn resume_main(&self) {
+        info!("Request to resume work from main thread");
         let mut state = self.state.lock();
         if state.resume_main() {
             self.service.resume();
@@ -399,6 +404,7 @@ impl BackgroundAwareTaskService {
     /// Resume all tasks if the main application and the background task are not suspended. In all
     /// other combinations, the request will be ignored.
     pub fn resume_background(&self) {
+        info!("Request to resume work from background thread");
         let mut state = self.state.lock();
         if state.resume_background() {
             self.service.resume();

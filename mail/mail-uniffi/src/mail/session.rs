@@ -10,10 +10,12 @@ use crate::errors::{
 use crate::mail::MailUserSession;
 use crate::mail::logging::init_log;
 use crate::mail::state::MailUserContextMap;
+use crate::version::rust_sdk_version;
 use crate::{AsyncLiveQueryCallback, watch_channel_async};
 use crate::{
     LiveQueryCallback, WatchHandle, async_runtime, async_runtime_slim, uniffi_async, watch_channel,
 };
+use chrono::Local;
 use futures::TryFutureExt;
 use log_service::LogService;
 use proton_account_uniffi::login::LoginFlow;
@@ -131,6 +133,13 @@ async fn create_mail_session_inner(
     let log_service = LogService::new(
         log_service::Config::builder()
             .name("proton-mail-uniffi".into())
+            .header(|| {
+                format!(
+                    "\n ---- Proton Mail Uniffi ({}) ---- Started at {}\n",
+                    rust_sdk_version(),
+                    Local::now()
+                )
+            })
             .directory(log_path)
             .build(),
     );
@@ -171,7 +180,7 @@ async fn create_mail_session_inner(
         .clone()
         .unwrap_or_default()
         .try_into()
-        .inspect_err(|e| error!("{e:?}"))
+        .inspect_err(|e| error!("Failed to get api_env_config {e:?}"))
         .map_err(|_| Unexpected::Config)?;
 
     let hv_notifier = hv_notifier.map(ChallengeNotifierWrap::wrap);

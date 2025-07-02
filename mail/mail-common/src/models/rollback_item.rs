@@ -99,7 +99,7 @@ impl RollbackItem {
 
     /// Synchronize all labels with remote counterparts.
     ///
-    #[tracing::instrument(level = "debug", skip_all)]
+    #[tracing::instrument(skip_all)]
     pub async fn sync_labels<I>(
         session: &Session,
         tx: &mut impl RunTransaction,
@@ -113,7 +113,7 @@ impl RollbackItem {
 
     /// Synchronize all messages with remote counterparts.
     ///
-    #[tracing::instrument(level = "debug", skip_all)]
+    #[tracing::instrument(skip_all)]
     pub async fn sync_messages<I>(
         session: &Session,
         tx: &mut impl RunTransaction,
@@ -127,7 +127,7 @@ impl RollbackItem {
 
     /// Synchronize all conversations with remote counterparts.
     ///
-    #[tracing::instrument(level = "debug", skip_all)]
+    #[tracing::instrument(skip_all)]
     pub async fn sync_conversations<I>(
         session: &Session,
         tx: &mut impl RunTransaction,

@@ -13,7 +13,7 @@ use proton_core_common::models::{
 use proton_event_loop::EventLoopError;
 use proton_task_service::{AsyncTaskResult, TaskService};
 use tokio::task::JoinHandle;
-use tracing::{Level, debug, error, warn};
+use tracing::{debug, error, warn};
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 enum MailUserContextLoadingStage {
@@ -45,7 +45,6 @@ impl MailUserContext {
     ///
     /// An error if the initialization failed for any reason
     ///
-    #[tracing::instrument(level = Level::DEBUG, skip(ctx))]
     pub async fn initialize_async(ctx: Arc<Self>) -> Result<(), MailContextError> {
         let ctx_cloned = Arc::clone(&ctx);
         ctx.initialization_mediator.initialize(ctx_cloned).await
@@ -74,7 +73,7 @@ impl MailUserContext {
     }
 
     /// Initialize a component.
-    #[tracing::instrument(level = Level::DEBUG, skip(handle))]
+    #[tracing::instrument(skip(handle))]
     async fn initial_sync_for<E>(
         stage: MailUserContextLoadingStage,
         handle: JoinHandle<AsyncTaskResult<Result<(), InitializationError<E>>>>,
@@ -210,6 +209,7 @@ impl InitializationMediator {
         })
     }
 
+    #[tracing::instrument(skip_all, fields(user_id=%ctx.user_id()))]
     async fn initialize_context(ctx: Arc<MailUserContext>) -> Result<(), MailContextError> {
         tracing::info!("Initializing mail user context");
         if ctx.is_initialized().await? {

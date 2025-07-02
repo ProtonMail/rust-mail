@@ -4,7 +4,7 @@ use derive_more::TryFrom;
 use indoc::indoc;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
 use proton_core_api::service::ApiServiceResult;
-use proton_core_api::services::proton::Proton;
+use proton_core_api::services::proton::{PrivateEmail, Proton};
 
 use proton_core_common::{
     datatypes::InitializationKey,
@@ -19,8 +19,8 @@ use stash::{
     stash::{Bond, Stash, StashError, Tether},
 };
 use tokio::task::JoinSet;
+use tracing::debug;
 use tracing::error;
-use tracing::{Level, debug};
 
 use crate::MailContextError;
 use crate::actions::addresses::block::Block;
@@ -82,7 +82,7 @@ impl IncomingDefaultLocation {
     }
 
     /// Downloads all `IncomingDefault`s
-    #[tracing::instrument(level = Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all)]
     pub async fn sync(api: &Proton) -> ApiServiceResult<Vec<IncomingDefault>> {
         let t0 = Instant::now();
         let initial = api.get_incoming_defaults(0).await?;
@@ -158,7 +158,7 @@ impl IncomingDefaultLocation {
     ///
     pub async fn action_block(
         queue: &Queue,
-        email: String,
+        email: PrivateEmail,
     ) -> Result<QueuedActionOutput<Block>, QueueActionError<Block>> {
         let action = Block { email };
         queue.queue_action(action).await
@@ -172,7 +172,7 @@ impl IncomingDefaultLocation {
     ///
     pub async fn action_unblock(
         queue: &Queue,
-        email: String,
+        email: PrivateEmail,
     ) -> Result<QueuedActionOutput<Unblock>, QueueActionError<Unblock>> {
         let action = Unblock { email };
         queue.queue_action(action).await

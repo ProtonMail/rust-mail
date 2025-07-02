@@ -46,7 +46,7 @@ use stash::orm::Model;
 use stash::stash::{StashError, Tether};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 pub mod attachments;
 pub mod compose;
@@ -445,11 +445,12 @@ impl Draft {
     ///
     /// Returns error if the draft failed to load, the message can't be found
     /// or the message is not a draft.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(context))]
+    #[tracing::instrument(skip(context))]
     pub async fn open(
         context: &MailUserContext,
         message_id: LocalMessageId,
     ) -> Result<(Self, DraftSyncStatus), MailContextError> {
+        info!("Opening draft");
         let tether = &mut context.user_stash().connection();
 
         let Some(mut message) = Message::find_by_id(message_id, tether).await? else {
@@ -509,10 +510,10 @@ impl Draft {
         let (decrypted, sync_status) = if metadata.has_pending_changes(tether).await? {
             // If we have pending changes we should not sync the data from the server
             // as that will override local state.
-            debug!("Draft metadata has pending changes, sync skipped.");
+            info!("Draft metadata has pending changes, sync skipped.");
             (None, DraftSyncStatus::Synced)
         } else if let Some(remote_id) = message.remote_id.clone() {
-            debug!("Draft metadata has no pending changes, syncing.");
+            info!("Draft metadata has no pending changes, syncing.");
             match Message::force_sync_message_and_body(context, remote_id, true, tether).await {
                 Ok((message_new, decrypted)) => {
                     message = message_new;
@@ -590,6 +591,7 @@ impl Draft {
         };
         draft.sanitize_body();
 
+        info!("Draft loaded with id = {}", draft.metadata_id);
         Ok((draft, sync_status))
     }
 
@@ -599,8 +601,9 @@ impl Draft {
     ///
     /// Returns error if we can not load or modify the required data or write the
     /// body into the cache.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all)]
     pub async fn empty(context: &MailUserContext) -> Result<Self, MailContextError> {
+        info!("Creating new empty draft");
         let mut tether = context.user_stash().connection();
         // Default address should have display_order 0
         let addresses = Address::find("ORDER BY display_order ASC LIMIT 1", vec![], &tether)
@@ -640,6 +643,7 @@ impl Draft {
             })
             .await?;
 
+        info!("New draft created with id = {}", metadata.id.unwrap());
         Ok(Self::new_empty_draft(
             metadata.id.unwrap(),
             address,
@@ -681,7 +685,7 @@ impl Draft {
     ///
     /// Returns error if we can not load or modify the required data or write the
     /// body into the cache.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(context))]
+    #[tracing::instrument(skip(context, use_utc, mime_type_override))]
     pub async fn reply(
         context: &MailUserContext,
         message_id: LocalMessageId,
@@ -689,6 +693,7 @@ impl Draft {
         use_utc: bool,
         mime_type_override: Option<MimeType>,
     ) -> Result<Self, MailContextError> {
+        info!("Creating new draft reply ");
         let mut tether = context.user_stash().connection();
         // Load the message we reply to.
         let Some(source_message) = Message::find_by_id(message_id, &tether).await? else {
@@ -727,8 +732,8 @@ impl Draft {
         };
 
         let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
-        tether
-            .tx(async |tx| {
+        let draft = tether
+            .tx::<_, _, MailContextError>(async |tx| {
                 let metadata = DraftMetadata::reply(
                     reply_mode,
                     source_message.local_id.unwrap(),
@@ -818,7 +823,9 @@ impl Draft {
                 }
                 Ok(draft)
             })
-            .await
+            .await?;
+        info!("New draft created with id = {}", draft.metadata_id);
+        Ok(draft)
     }
 
     /// Create a draft reply.
@@ -956,7 +963,6 @@ impl Draft {
         let encrypted = encrypt_draft_body(context, &address_id, message_body).await?;
         let params = save_action.crate_draft_params(encrypted);
 
-        debug!("Draft create with {} attachments", attachments.len());
         let attachment_key_packets =
             build_attachment_key_packets(context, &address_id, attachments, tether).await?;
 
@@ -1001,7 +1007,6 @@ impl Draft {
         let encrypted = encrypt_draft_body(context, &address_id, message_body).await?;
         let params = save_action.crate_draft_params(encrypted);
 
-        debug!("Draft update with {} attachments", attachments.len());
         let attachment_key_packets =
             build_attachment_key_packets(context, &address_id, attachments, tether).await?;
 
@@ -1633,7 +1638,7 @@ impl DraftSaveActionQueuer {
     }
 
     /// Consume and queue this action.
-    #[tracing::instrument(level=tracing::Level::DEBUG, name="draft::save",skip_all)]
+    #[tracing::instrument(name = "draft::save", skip_all)]
     pub async fn queue(
         self,
         queue: &Queue,
@@ -1718,7 +1723,7 @@ impl DraftSendActionQueuer {
     }
 
     /// Consume and queue this action.
-    #[tracing::instrument(level=tracing::Level::DEBUG, name="draft::send",skip_all)]
+    #[tracing::instrument(name = "draft::send", skip_all)]
     pub async fn queue(
         self,
         queue: &Queue,
@@ -1749,7 +1754,7 @@ impl DraftDiscardActionQueuer {
     }
 
     /// Consume and queue this action.
-    #[tracing::instrument(level=tracing::Level::DEBUG, name="draft::discard",skip_all)]
+    #[tracing::instrument(name = "draft::discard", skip_all)]
     pub async fn queue(
         self,
         queue: &Queue,
@@ -1796,7 +1801,7 @@ impl DraftAttachmentUploadQueuer {
     }
 
     /// Consume and queue this action.
-    #[tracing::instrument(level=tracing::Level::DEBUG, name="draft::attachment_upload",skip_all)]
+    #[tracing::instrument(name = "draft::attachment_upload", skip_all)]
     pub async fn queue(
         self,
         queue: &Queue,
@@ -1890,7 +1895,7 @@ impl DraftAttachmentRemovalQueuer {
     }
 
     /// Consume and queue this action.
-    #[tracing::instrument(level=tracing::Level::DEBUG, name="draft::attachment_remove",skip_all)]
+    #[tracing::instrument(name = "draft::attachment_remove", skip_all)]
     pub async fn queue(
         self,
         queue: &Queue,

@@ -10,7 +10,7 @@ use proton_mail_ids::LocalConversationId;
 use serde::{self, Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::Bond;
-use tracing::error;
+use tracing::{error, info};
 
 /// Prefetch conversation data action.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -76,6 +76,7 @@ impl proton_action_queue::action::Handler for Handler {
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        info!("Prefetching {:?}", action.local_id);
         let session = ctx.session();
         let _ =
             Conversation::sync_conversation_messages(action.local_id, &mut guard, session).await;

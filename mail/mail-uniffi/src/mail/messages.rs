@@ -1047,7 +1047,7 @@ pub async fn block_address(
 ) -> Result<(), ActionError> {
     let ctx = session.ctx()?;
     uniffi_async(async move {
-        IncomingDefaultLocation::action_block(ctx.action_queue(), email)
+        IncomingDefaultLocation::action_block(ctx.action_queue(), email.into())
             .await
             .map(|_| ())
             .map_err(RealProtonMailError::from)
@@ -1069,7 +1069,7 @@ pub async fn block_address(
 pub async fn unblock_address(mailbox: Arc<Mailbox>, email: String) -> Result<(), ActionError> {
     let ctx = mailbox.ctx()?;
     uniffi_async(async move {
-        IncomingDefaultLocation::action_unblock(ctx.action_queue(), email)
+        IncomingDefaultLocation::action_unblock(ctx.action_queue(), email.into())
             .await
             .map(|_| ())
             .map_err(RealProtonMailError::from)

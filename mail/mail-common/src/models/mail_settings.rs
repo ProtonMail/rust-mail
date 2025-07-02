@@ -19,7 +19,6 @@ use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
-use tracing::debug;
 
 /// Mail related use settings.
 ///
@@ -207,7 +206,6 @@ impl MailSettings {
     pub async fn sync_mail_settings<PM: ProtonMail>(
         api: &PM,
     ) -> Result<SyncedMailSettings, AppError> {
-        debug!("Storing settings into database");
         let settings = MailSettings::from(api.get_mail_settings().await?.mail_settings);
 
         Ok(SyncedMailSettings { settings })
@@ -346,7 +344,7 @@ pub struct SyncedMailSettings {
 impl SyncedMailSettings {
     /// Consume this manual closure by storing data in the Database.
     ///
-    #[tracing::instrument(skip(tx))]
+    #[tracing::instrument(skip_all)]
     pub async fn store(mut self, tx: &Bond<'_>) -> Result<(), StashError> {
         self.settings.save(tx).await?;
         Ok(())

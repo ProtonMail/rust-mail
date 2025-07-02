@@ -22,6 +22,7 @@ use crate::messages::Messages;
 use crate::widgets::Backdrop;
 use crate::widgets::ScrollableListState;
 use anyhow::anyhow;
+use chrono::Local;
 use futures::FutureExt;
 use log_service::LogService;
 use proton_core_common::OnSessionDeletedResponse;
@@ -149,6 +150,7 @@ impl AppModel {
         let config = log_service::Config::builder()
             .name("app".into())
             .directory(cache_dir.clone())
+            .header(|| format!("\n--- Proton Mail TUI ---- Started at {}\n", Local::now()))
             .build();
         let log_service = LogService::new(config);
         let log_guard = init_log(&log_service)?;
@@ -516,8 +518,8 @@ fn app_tracing_env_filter() -> EnvFilter {
         .as_deref()
         .unwrap_or(
             "info,
-        muon=debug,
-        muon_impl=debug,
+        muon=info,
+        muon_impl=info,
         proton_mail_tui=debug,
         proton_core_api=debug,
         proton_mail_db=trace,

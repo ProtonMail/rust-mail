@@ -26,7 +26,7 @@ impl BackgroundExecutionContext {
 
     /// Create new queue executors to run tasks separate from the main queue executors until
     /// `abort` returns.
-    #[tracing::instrument(level = "trace", skip_all)]
+    #[tracing::instrument(skip_all)]
     pub async fn run(
         &self,
         ctx: &Arc<MailContext>,
@@ -66,7 +66,7 @@ impl BackgroundExecutionContext {
             .pause_background_and_wait(Duration::from_millis(100))
             .await
         {
-            tracing::error!("Pausing Background queue executors... Failed: {e:?}");
+            tracing::warn!("Pausing Background queue executors... Failed: {e:?}");
         } else {
             tracing::info!("Pausing executors... Done");
         }

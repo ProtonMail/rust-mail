@@ -71,7 +71,7 @@ use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandl
 use std::collections::hash_map::Entry as HmEntry;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::future::Future;
-use tracing::{debug, error, trace, warn};
+use tracing::{debug, error, info, trace, warn};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("messages")]
@@ -431,7 +431,7 @@ impl Message {
             debug!("List of ids was empty");
             return Ok(());
         }
-        trace!("Moving {n} messages", n = message_ids.len());
+        info!("Moving from {source_id:?} to {destination_id:?}: {message_ids:?}");
 
         let spam = Label::resolve_local_label_id(LabelId::spam(), bond).await?;
         let trash = Label::resolve_local_label_id(LabelId::trash(), bond).await?;
@@ -630,12 +630,13 @@ impl Message {
 
     /// Get the available actions from bottom bar for given messages
     ///
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
+    #[tracing::instrument(skip_all, fields(label_id=current_label_id.as_u64()))]
     pub async fn all_available_bottom_bar_actions_for_messages(
         current_label_id: LocalLabelId,
         message_ids: Vec<LocalMessageId>,
         tether: &Tether,
     ) -> Result<AllBottomBarMessageActions, AppError> {
+        debug!("{message_ids:?}");
         let messages_fut = async {
             Self::find_by_ids(message_ids.to_vec(), tether)
                 .await
@@ -904,6 +905,7 @@ impl Message {
     /// Returns an error if the data could not be written to the database.
     ///
     pub async fn mark_deleted(ids: Vec<LocalMessageId>, bond: &Bond<'_>) -> Result<(), AppError> {
+        info!("Marking {ids:?} as deleted");
         let (query, params) = find_in_query!("WHERE deleted = 0 AND local_id IN ({})", ids);
         let messages = Message::find(query, params, bond).await?;
         let mut messages_by_conversation = HashMap::new();
@@ -968,6 +970,7 @@ impl Message {
     /// Returns an error if the data could not be written to the database.
     ///
     pub async fn mark_undeleted(ids: Vec<LocalMessageId>, bond: &Bond<'_>) -> Result<(), AppError> {
+        info!("Unmarking {ids:?} as deleted");
         let (query, params) = find_in_query!("WHERE deleted = 1 AND local_id IN ({})", ids);
         let messages = Message::find(query, params, bond).await?;
         let mut messages_by_conversation = HashMap::new();
@@ -1332,7 +1335,7 @@ impl Message {
     ///
     /// Returns error if the database request fail.
     ///
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
+    #[tracing::instrument(skip_all, fields(label_id=%view.id(), message_id=message_id.as_u64()))]
     pub async fn available_actions(
         view: Label,
         message_id: LocalMessageId,
@@ -1399,7 +1402,7 @@ impl Message {
     ///
     /// Returns error if the database request fail.
     ///
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
+    #[tracing::instrument(skip_all)]
     pub async fn available_label_as_actions(
         message_ids: Vec<LocalMessageId>,
         tether: &Tether,
@@ -1407,6 +1410,8 @@ impl Message {
         if message_ids.is_empty() {
             return Err(AppError::EmptyListOfMessages);
         }
+
+        debug!("{message_ids:?}");
 
         let all_label_as = Label::find_by_kind(LabelType::Label, tether).await?;
         let messages = Message::find(
@@ -1444,7 +1449,7 @@ impl Message {
     ///
     /// Returns error if the database request fail.
     ///
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
+    #[tracing::instrument(skip_all)]
     pub async fn watch_available_label_as_actions(
         message_ids: Vec<LocalMessageId>,
         tether: &Tether,
@@ -1452,6 +1457,8 @@ impl Message {
         if message_ids.is_empty() {
             return Err(AppError::EmptyListOfMessages);
         }
+
+        debug!("{message_ids:?}");
 
         let handle = tether.subscribe_to(|sender| Box::new(MessageWatcher { sender }))?;
 
@@ -1478,7 +1485,7 @@ impl Message {
     ///
     /// Returns error if the database request fail.
     ///
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(tether))]
+    #[tracing::instrument(skip_all, fields(label_id=view.id().as_u64()))]
     pub async fn available_move_to_actions(
         view: Label,
         message_ids: Vec<LocalMessageId>,
@@ -1487,6 +1494,8 @@ impl Message {
         if message_ids.is_empty() {
             return Err(AppError::EmptyListOfMessages);
         }
+
+        debug!("{message_ids:?}");
 
         let all_system = Label::find_by_kind(LabelType::System, tether).await?;
         let all_system_excluding_view = all_system
@@ -1515,7 +1524,7 @@ impl Message {
     /// - if the db query failed
     /// - if the message body could not be written to the cache
     /// - if a message with the given id could not be found
-    #[tracing::instrument(level=tracing::Level::DEBUG,skip(user_context))]
+    #[tracing::instrument(skip(user_context))]
     pub async fn message_body(
         user_context: &MailUserContext,
         id: LocalMessageId,
@@ -1528,7 +1537,7 @@ impl Message {
         saved_message.fetch_message_body(user_context, tether).await
     }
 
-    #[tracing::instrument(level=tracing::Level::DEBUG,skip(user_context))]
+    #[tracing::instrument(skip(user_context))]
     pub async fn message_body_with_sender(
         user_context: &MailUserContext,
         id: LocalMessageId,
@@ -1556,7 +1565,7 @@ impl Message {
     /// Returns error if the message failed to download, the db query failed or
     /// the message body could not be written to the cache.
     ///
-    // #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all, fields(message_id=%self.id()))]
     pub async fn fetch_message_body(
         &self,
         ctx: &MailUserContext,
@@ -1569,8 +1578,7 @@ impl Message {
             debug!("Found message body in cache.");
             return Ok(decrypted);
         }
-
-        trace!("Message body not in cache. Fetching...");
+        debug!("Message body not in cache. Fetching...");
 
         let Some(remote_id) = self.remote_id.clone() else {
             return Err(AppError::MessageHasNoRemoteId(self.id()).into());
@@ -1583,6 +1591,7 @@ impl Message {
             )));
         }
 
+        info!("Fetching {remote_id:?}");
         let (_, encrypted_body) =
             Self::sync_message_and_body(remote_id, ctx.api(), &mut tx).await?;
         trace!("Message successfully downloaded. Decrypting...");
@@ -1606,7 +1615,7 @@ impl Message {
         .await
         .map_err(MailContextError::Other)?;
 
-        debug!("Message successfully synced.");
+        info!("Message successfully synced.");
         Ok(decrypted)
     }
 
@@ -1677,6 +1686,10 @@ impl Message {
 
         // update unread flag
         for id in ids {
+            info!(
+                "Marking {id:?} as {}",
+                if mark_read { "read" } else { "unread" }
+            );
             if let Some(mut message) = Message::find_first(
                 "WHERE local_id=? AND unread=?",
                 params![id, if mark_read { 1 } else { 0 }],
@@ -1885,7 +1898,7 @@ impl Message {
     /// # Errors
     ///
     /// Returns error if the queries fail.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip(ids, bond))]
+    #[tracing::instrument(skip_all)]
     pub async fn apply_label(
         local_label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalMessageId>,
@@ -1894,6 +1907,7 @@ impl Message {
         let mut conversation_messages = BTreeMap::<LocalConversationId, Vec<LocalMessageId>>::new();
 
         for id in ids {
+            info!("Applying {local_label_id:?} to {id:?}");
             if bond
                 .query_value_opt::<LocalConversationId>(
                     indoc::indoc! {
@@ -1913,7 +1927,7 @@ impl Message {
                         .or_insert_with(|| vec![id]);
                 }
             } else {
-                warn!("{id:?} already labeled {local_label_id:?}");
+                trace!("{id:?} already labeled {local_label_id:?}");
             }
         }
 
@@ -1931,7 +1945,7 @@ impl Message {
     /// # Errors
     ///
     /// Returns error if the queries fail.
-    #[tracing::instrument(level = tracing::Level::DEBUG, skip_all)]
+    #[tracing::instrument(skip_all)]
     pub async fn remove_label(
         local_label_id: LocalLabelId,
         ids: impl IntoIterator<Item = LocalMessageId>,
@@ -1967,6 +1981,7 @@ impl Message {
             .await?;
 
         for id in ids {
+            info!("Removing {local_label_id:?} from {id:?}");
             // unlabel the message and return whether it was unlabeled
             if bond
                 .query_value_opt::<LocalMessageId>(
@@ -1981,7 +1996,7 @@ impl Message {
                 .await?
                 .is_none()
             {
-                tracing::debug!("Message {id} was not labeled with {local_label_id}");
+                tracing::trace!("Message {id} was not labeled with {local_label_id}");
                 //  Notice that we're not updating updated_count
                 continue;
             };
@@ -2098,7 +2113,7 @@ impl Message {
                             conv_counters.unread = conv_counters.unread.saturating_sub(1);
                         }
                     } else {
-                        tracing::warn!("Conversation {conversation_id} was not labeled");
+                        tracing::trace!("Conversation {conversation_id} was not unlabeled");
                         continue;
                     }
                 }
@@ -2325,7 +2340,7 @@ impl Message {
     /// - if the message failed to download
     /// - if the db query failed
     /// - if the message body could not be written to the cache
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(ctx, tether))]
+    #[tracing::instrument(skip(ctx, tether, with_attachment_prefetch))]
     pub async fn force_sync_message_and_body(
         ctx: &MailUserContext,
         message_id: MessageId,
@@ -2361,7 +2376,7 @@ impl Message {
     ///
     /// Returns error if the message failed to fetch from the server or update the
     /// metadata on the server.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(api, tx))]
+    #[tracing::instrument(skip(api, tx))]
     async fn sync_message_and_body(
         message_id: MessageId,
         api: &Proton,
@@ -2430,7 +2445,7 @@ impl Message {
     /// # Errors
     ///
     /// Returns error if the db query or cache load fails.
-    #[tracing::instrument(level=tracing::Level::DEBUG, skip(tether))]
+    #[tracing::instrument(skip(tether))]
     pub(crate) async fn load_decrypted_message_from_cache(
         local_id: LocalMessageId,
         address_id: &AddressId,

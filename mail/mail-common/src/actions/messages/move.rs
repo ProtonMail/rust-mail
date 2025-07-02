@@ -10,7 +10,7 @@ use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
-use tracing::error;
+use tracing::{error, info};
 
 /// Action which applies a label to messages.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -115,6 +115,7 @@ impl ActionHandler for Handler {
             .remote_destination_label_id
             .clone()
             .expect("Should be set");
+        info!("Applying {label_id:?} to {message_ids:?}");
         let response = api
             .put_messages_label(message_ids, label_id, None)
             .await?
