@@ -1,12 +1,12 @@
 use crate::cli::APP_NAME;
 use anyhow::Result;
-use log_service::{Config as LogConfig, LogService};
 use proton_account_api::login::LoginFlow;
 use proton_core_api::session::Config;
 use proton_core_api::verification::ChallengeNotifier;
 use proton_core_common::CoreAccountState;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::os::KeyChain;
+use proton_log_service::{Config as LogConfig, LogService};
 use proton_mail_common::context::ShouldInitializeMailUserContext as Init;
 use proton_mail_common::{MailContext, MailUserContext};
 use std::path::Path;
