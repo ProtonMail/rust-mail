@@ -20,6 +20,7 @@ pub enum BackgroundExecutionStatus {
 pub struct BackgroundExecutionContext {}
 
 impl BackgroundExecutionContext {
+    #[allow(clippy::result_large_err)]
     pub fn new() -> MailContextResult<Self> {
         Ok(Self {})
     }

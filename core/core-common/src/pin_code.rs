@@ -205,6 +205,7 @@ impl PinCode {
         Ok(())
     }
 
+    #[allow(clippy::result_large_err)]
     fn sanitize_pin(pin: Vec<u32>) -> Result<Vec<u8>, PinError> {
         pin.into_iter()
             .map(|num| {

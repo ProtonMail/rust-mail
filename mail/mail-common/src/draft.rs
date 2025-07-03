@@ -1499,7 +1499,7 @@ impl Draft {
             BrowserCapabilities {
                 supports_dark_mode_via_media_query: theme_opts.supports_dark_mode_via_media_query,
             },
-            format!(r#"[id="{}"]"#, editor_id),
+            format!(r#"[id="{editor_id}"]"#),
         );
         self.body = injection.body;
 

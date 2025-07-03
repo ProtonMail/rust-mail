@@ -97,7 +97,7 @@ impl FromStr for MimeType {
     fn from_str(mime: &str) -> Result<Self, Self::Err> {
         let category = MimeTypeCategory::new(mime);
         let mime = mime.parse::<Mime>().map_err(|e| {
-            AppError::InvalidMimeType(format!("`{}` couldn not be parsed, details: {}", mime, e))
+            AppError::InvalidMimeType(format!("`{mime}` could not be parsed, details: {e}"))
         })?;
 
         Ok(MimeType { mime, category })
@@ -412,7 +412,7 @@ mod tests {
     #[test]
     fn test_deser_mime() {
         for mime_str in super::MIME_MAP.keys() {
-            let expected_json = format!(r#"{{"mime_type":"{}"}}"#, mime_str);
+            let expected_json = format!(r#"{{"mime_type":"{mime_str}"}}"#);
             let mime: MimeType = serde_json::from_str(&expected_json).unwrap();
             let actual = serde_json::to_string(&mime).unwrap();
 

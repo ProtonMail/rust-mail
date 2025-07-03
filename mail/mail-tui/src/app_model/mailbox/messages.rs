@@ -505,8 +505,9 @@ impl MessagesState {
                         .await
                         .map(|att| {
                             format!(
-                                "{} -> {:?}",
-                                att.attachment_metadata.filename, att.data_path,
+                                "{} -> {}",
+                                att.attachment_metadata.filename,
+                                att.data_path.display(),
                             )
                         })
                 }

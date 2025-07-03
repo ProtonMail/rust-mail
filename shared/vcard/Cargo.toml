@@ -2,6 +2,7 @@
 name = "proton-vcard"
 version = "0.2.1"
 edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 anyhow = { workspace = true }

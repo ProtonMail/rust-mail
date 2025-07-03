@@ -801,6 +801,7 @@ impl Context {
     }
 
     #[tracing::instrument(err, skip(self))]
+    #[allow(clippy::result_large_err)]
     pub fn get_encryption_key(&self) -> CoreContextResult<SessionEncryptionKey> {
         let Some(key) = self.load_secret::<SessionEncryptionKey>()? else {
             return Err(CoreContextError::KeyChainHasNoKey);
@@ -818,6 +819,7 @@ impl Context {
     ///
     /// It may return an error if crypto operation fails or if it fails to store key in the keychain.
     ///
+    #[allow(clippy::result_large_err)]
     pub fn gen_device_key_pair<P>(&self, pgp: &P) -> CoreContextResult<StoredDevicePublicKey>
     where
         P: PGPProviderSync,

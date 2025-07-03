@@ -17,7 +17,7 @@ impl SizeRollingAppender {
         if !config.directory.is_dir() {
             return Err(std::io::Error::new(
                 ErrorKind::NotADirectory,
-                format!("Path is not a directory: {:?}", config.directory),
+                format!("Path is not a directory: {}", config.directory.display()),
             ));
         }
         let mut log_file = LogFile::new(&config)?;

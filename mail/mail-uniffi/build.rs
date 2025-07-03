@@ -5,6 +5,7 @@ fn main() {
     setup_x86_64_android_workaround();
 }
 
+const DEFAULT_CLANG_VERSION: &str = "19";
 fn setup_x86_64_android_workaround() {
     // FIXME: hack to ensure that libs compile correctly for android x86_64bit emulator versions
     //        see https://github.com/rusqlite/rusqlite/issues/1380#issuecomment-1689765485
@@ -29,31 +30,19 @@ fn setup_x86_64_android_workaround() {
         ndk_path.push("prebuilt");
         ndk_path.push(format!("{build_os}-x86_64"));
 
-        let mut ndk_25_path = ndk_path.join("lib64");
-        ndk_25_path.push("clang");
-        let mut ndk_26_path = ndk_path.join("lib");
-        ndk_26_path.push("clang");
+        let mut linux_x86_64_lib_dir = ndk_path.join("lib");
+        linux_x86_64_lib_dir.push("clang");
 
-        let linux_x86_64_lib_dir = if ndk_25_path.exists() {
-            const DEFAULT_CLANG_VERSION: &str = "14.0.7";
-            let clang_version = std::env::var("NDK_CLANG_VERSION")
-                .unwrap_or_else(|_| DEFAULT_CLANG_VERSION.to_owned());
+        let clang_version =
+            std::env::var("NDK_CLANG_VERSION").unwrap_or_else(|_| DEFAULT_CLANG_VERSION.to_owned());
+        linux_x86_64_lib_dir.push(&clang_version);
+        linux_x86_64_lib_dir.push("lib");
+        linux_x86_64_lib_dir.push("linux");
 
-            ndk_25_path.push(&clang_version);
-            ndk_25_path.push("lib");
-            ndk_25_path.push("linux");
-            ndk_25_path
-        } else if ndk_26_path.exists() {
-            const DEFAULT_CLANG_VERSION: &str = "17";
-            let clang_version = std::env::var("NDK_CLANG_VERSION")
-                .unwrap_or_else(|_| DEFAULT_CLANG_VERSION.to_owned());
-            ndk_26_path.push(&clang_version);
-            ndk_26_path.push("lib");
-            ndk_26_path.push("linux");
-            ndk_26_path
-        } else {
-            panic!("clang path not known! Is the ndk version 25 or 26?")
-        };
+        assert!(
+            linux_x86_64_lib_dir.exists(),
+            "clang path not known! Is the ndk version 28?"
+        );
 
         println!(
             "cargo:rustc-link-search={}",

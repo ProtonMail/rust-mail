@@ -1,3 +1,4 @@
+#![allow(clippy::large_enum_variant)]
 mod app;
 mod app_model;
 mod keychain;
