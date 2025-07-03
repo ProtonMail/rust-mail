@@ -108,8 +108,8 @@ impl<T> From<PackageAttachmentEntries<T>> for api::PackageAttachmentEntries<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::datatypes::LocalAttachmentId;
     use crate::models::AttachmentType;
-    use proton_mail_ids::LocalAttachmentId;
 
     fn att(local_id: Option<u64>, remote_id: Option<&str>) -> Attachment {
         let local_id = local_id.map(LocalAttachmentId::from);

@@ -1,4 +1,5 @@
 use crate::actions::draft::SEND_ACTION_GROUP;
+use crate::datatypes::{LocalAttachmentId, LocalMessageId};
 use crate::draft::{AttachmentRemoveError, AttachmentUploadError};
 use crate::models::{
     Attachment, AttachmentType, DraftAttachmentMetadata, DraftAttachmentOwnership, DraftMetadata,
@@ -10,7 +11,6 @@ use proton_action_queue::action::{
 };
 use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::ProtonMail;
-use proton_mail_ids::{LocalAttachmentId, LocalMessageId};
 use serde::Deserialize;
 use serde_with::serde_derive::Serialize;
 use stash::params;

@@ -1,6 +1,7 @@
 use crate::actions::draft::{
     SEND_ACTION_GROUP, local_all_draft_label_id, local_draft_label_id, local_sent_label_id,
 };
+use crate::datatypes::LocalMessageId;
 use crate::datatypes::{MessageFlags, SystemLabelId};
 use crate::draft::UndoError;
 use crate::draft::compose::create_timestamp;
@@ -14,7 +15,6 @@ use proton_core_api::services::proton::LabelId;
 use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::MessageId;
-use proton_mail_ids::LocalMessageId;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use tracing::{error, info, warn};

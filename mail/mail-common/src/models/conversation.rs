@@ -10,6 +10,7 @@ use crate::actions::{
     ConversationAction, ConversationAvailableActions, GeneralActions, LabelAsAction,
     MailActionError, MoveAction, MoveItemAction, filter_responses,
 };
+use crate::datatypes::LocalConversationId;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::{
     AttachmentMetadata, ConversationLabelsCount, CustomLabel, Disposition, ExclusiveLocation,
@@ -44,7 +45,6 @@ use proton_mail_api::services::proton::response_data::{
     Conversation as ApiConversation, ConversationLabel as ApiConversationLabel,
     MessageMetadata as ApiMessageMetadata, OperationResult,
 };
-use proton_mail_ids::LocalConversationId;
 use smart_default::SmartDefault;
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;

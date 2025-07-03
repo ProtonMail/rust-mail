@@ -1,5 +1,6 @@
 use crate::actions::draft::SEND_ACTION_GROUP;
 use crate::datatypes::Disposition;
+use crate::datatypes::{LocalAttachmentId, LocalMessageId};
 use crate::draft::AttachmentUploadError;
 use crate::models::{
     Attachment, AttachmentType, DraftAttachmentMetadata, DraftAttachmentUploadError,
@@ -17,7 +18,6 @@ use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_api::services::proton::prelude::{NewAttachmentDisposition, NewAttachmentParams};
-use proton_mail_ids::{LocalAttachmentId, LocalMessageId};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::params;

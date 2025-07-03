@@ -6,6 +6,7 @@ use crate::datatypes::{
     AttachmentMetadata, Disposition, LocalMessageId, MessageSender, MessageSenders, MimeType,
     RollbackItemType, SystemLabelId,
 };
+use crate::datatypes::{LocalAttachmentId, LocalConversationId};
 use crate::draft::compose::maybe_sanitize;
 use crate::draft::recipients::RecipientList;
 use crate::draft::{Draft, ReplyMode, SaveError, compose};
@@ -28,7 +29,6 @@ use proton_mail_api::services::proton::prelude::{
     DraftParams, DraftReplyOrForwardParams, ExternalId,
 };
 use proton_mail_api::services::proton::request_data::DraftSender;
-use proton_mail_ids::{LocalAttachmentId, LocalConversationId};
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::params;

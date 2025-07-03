@@ -32,6 +32,7 @@ use crate::MailContextResult;
 use crate::actions::{
     LabelAsAction, MessageAction, MessageAvailableActions, MoveAction, MoveItemAction, ReplyAction,
 };
+use crate::datatypes::LocalConversationId;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, Disposition, EncryptedMessageBody, ExclusiveLocation,
@@ -62,7 +63,6 @@ use proton_mail_api::services::proton::response_data::{
     MessageMetadata, OperationResult,
 };
 use proton_mail_api::services::proton::responses::GetMessagesResponse;
-use proton_mail_ids::LocalConversationId;
 use stash::exports::ToSql;
 use stash::macros::{DbRecord, Model};
 use stash::orm::Model;

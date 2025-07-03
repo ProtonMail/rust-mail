@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use crate::actions::MailActionError;
+use crate::datatypes::LocalMessageId;
 use crate::models::{Message, MessageScrollData};
 use crate::{AppError, MailUserContext};
 use itertools::Itertools;
@@ -8,7 +9,6 @@ use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
 };
 use proton_core_common::models::ModelExtension;
-use proton_mail_ids::LocalMessageId;
 use serde::{self, Deserialize, Serialize};
 use stash::stash::Bond;
 

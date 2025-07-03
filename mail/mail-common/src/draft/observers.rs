@@ -1,7 +1,7 @@
+use crate::datatypes::LocalAttachmentId;
 use crate::models::{
     DraftAttachmentMetadata, DraftAttachmentUploadState, DraftSendResult, MetadataId,
 };
-use proton_mail_ids::LocalAttachmentId;
 use stash::stash::{Stash, StashError, Tether, WatcherHandle};
 use std::collections::HashSet;
 

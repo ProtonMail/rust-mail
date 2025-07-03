@@ -1,6 +1,7 @@
 mod attachments;
 
 use self::attachments::*;
+use crate::datatypes::LocalMessageId;
 use crate::datatypes::{Disposition, MimeType};
 use crate::draft::recipients::ValidationState;
 use crate::draft::{CancelScheduleSendError, PackageError, SendError, compose::html_to_text};
@@ -31,7 +32,6 @@ use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::request_data::{
     AddressSubPackage, Package, PackageSignaturesMode,
 };
-use proton_mail_ids::LocalMessageId;
 use stash::stash::{RunTransaction, Tether};
 use std::collections::{HashMap, HashSet};
 use std::time::Duration;

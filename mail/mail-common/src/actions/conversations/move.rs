@@ -1,5 +1,6 @@
 use crate::MailUserContext;
 use crate::actions::{ActionMoveData, MailActionError, filter_responses};
+use crate::datatypes::LocalConversationId;
 use crate::datatypes::RollbackItemType;
 use crate::models::{Conversation, RollbackItem};
 use itertools::Itertools;
@@ -8,7 +9,6 @@ use proton_action_queue::action::{ActionId, Handler as ActionHandler};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
-use proton_mail_ids::LocalConversationId;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use tracing::error;

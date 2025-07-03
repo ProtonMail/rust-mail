@@ -1,12 +1,12 @@
 use std::mem;
 
+use crate::datatypes::LocalMessageId;
 use crate::models::Message;
 use crate::{MailUserContext, actions::MailActionError};
 use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, LabelError, ModelIdExtension as _};
 use proton_mail_api::services::proton::ProtonMail as _;
-use proton_mail_ids::LocalMessageId;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use tracing::{error, info};
