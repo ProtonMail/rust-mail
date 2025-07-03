@@ -9,22 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-- Use `fancy_regex` for backend password validators.
-- [ET-2969] Add ability to create password validator from user session
+- [ET-3592] Add incorrect2facode error variant to loginerror
+
+### Fixes
+
+- Ios 0xdead10cc
 
 
-## [mail-uniffi-v0.97.0] - 2025-07-01
+## [mail-uniffi-v0.98.0] - 2025-07-02
 
 ### Features
 
 - [ET-1969] Remove need for clients to pass product name
+- Use `fancy_regex` for backend password validators.
+- [ET-2969] Add ability to create password validator from user session
 
 ### Fixes
 
 - [ET-3497] Make validate fn non-async
 
 
-## [mail-uniffi-v0.93.20] - 2025-06-30
+## [mail-uniffi-v0.93.21] - 2025-07-02
 
 ### Fixes
 
@@ -32,6 +37,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Reverse css for misaligned content, reverse style sanitization
 - Cancel action queue workers
 - [ET-3321] Improve move_message and move_conversation queries
+
+
+## [mail-uniffi-v0.93.20] - 2025-06-30
+
+### Fixes
+
 - Sender address for draft conversation
 - Remove subscribers when context is dead
 
