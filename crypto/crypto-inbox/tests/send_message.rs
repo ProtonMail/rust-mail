@@ -23,9 +23,9 @@ use proton_crypto_inbox::{
         SendPreferences, SessionKeyExposed,
     },
     message::{
+        DecryptableMessage, DecryptedBody, GettablePGPMessage, SessionKeyAndDataPacketsExtractable,
         packages::{EncryptablePackage, EncryptedPackageBody, PackageMimeType},
-        to_sanitized_string, DecryptableMessage, DecryptedBody, GettablePGPMessage,
-        SessionKeyAndDataPacketsExtractable,
+        to_sanitized_string,
     },
     proton_crypto::{
         crypto::{
@@ -36,7 +36,7 @@ use proton_crypto_inbox::{
     },
 };
 
-use proton_crypto_inbox_mime::{write::InboxMimeBuilder, MimeProcessor, ProcessMime};
+use proton_crypto_inbox_mime::{MimeProcessor, ProcessMime, write::InboxMimeBuilder};
 
 mod common;
 
@@ -446,11 +446,7 @@ mod send_request {
 
     impl From<bool> for PackageSignaturesMode {
         fn from(value: bool) -> Self {
-            if value {
-                Self::Attachments
-            } else {
-                Self::None
-            }
+            if value { Self::Attachments } else { Self::None }
         }
     }
 }
@@ -607,10 +603,14 @@ mod recipient_keys {
             min_epoch_id: Some(175),
             max_epoch_id: Some(178),
             expected_min_epoch_id: None,
-            data: Some(SKLDataJson::from(r#"[{\"Primary\":1,\"Flags\":3,\"Fingerprint\":\"80b99adabe61e96d7462fe628c786b027b0a7c25\",\"SHA256Fingerprints\":[\"65cf7d74c8e50fb0b864c1a5ea8c49b31e3ecd7bfd0c76363860851b81c6c1dc\",\"6f9071e34e2076a72e111ed123cbf77ddbbc749af8dca41fc8a30489c1fa04ae\"]}]"#)),
+            data: Some(SKLDataJson::from(
+                r#"[{\"Primary\":1,\"Flags\":3,\"Fingerprint\":\"80b99adabe61e96d7462fe628c786b027b0a7c25\",\"SHA256Fingerprints\":[\"65cf7d74c8e50fb0b864c1a5ea8c49b31e3ecd7bfd0c76363860851b81c6c1dc\",\"6f9071e34e2076a72e111ed123cbf77ddbbc749af8dca41fc8a30489c1fa04ae\"]}]"#,
+            )),
             obsolescence_token: None,
             revision: 1,
-            signature: Some(SKLSignature::from("-----BEGIN PGP SIGNATURE-----\nVersion: ProtonMail\n\nwqkEARYKAFsFgmbDWPwJkIx4awJ7CnwlMxSAAAAAABEAGWNvbnRleHRAcHJv\ndG9uLmNoa2V5LXRyYW5zcGFyZW5jeS5rZXktbGlzdBYhBIC5mtq+YeltdGL+\nYox4awJ7CnwlAACw9gD/dfcPJFW1rBhRWr3geEU2v9955hhAqXmy1JJrOeYV\noMcA/jsXeIa+F/ovtKbtilQl965obBISN409xZiRSDzDieMF\n=bnsy\n-----END PGP SIGNATURE-----\n")),
+            signature: Some(SKLSignature::from(
+                "-----BEGIN PGP SIGNATURE-----\nVersion: ProtonMail\n\nwqkEARYKAFsFgmbDWPwJkIx4awJ7CnwlMxSAAAAAABEAGWNvbnRleHRAcHJv\ndG9uLmNoa2V5LXRyYW5zcGFyZW5jeS5rZXktbGlzdBYhBIC5mtq+YeltdGL+\nYox4awJ7CnwlAACw9gD/dfcPJFW1rBhRWr3geEU2v9955hhAqXmy1JJrOeYV\noMcA/jsXeIa+F/ovtKbtilQl965obBISN409xZiRSDzDieMF\n=bnsy\n-----END PGP SIGNATURE-----\n",
+            )),
         };
 
         let address_key_keygroup = APIPublicAddressKeyGroup {
@@ -649,10 +649,14 @@ mod recipient_keys {
             min_epoch_id: Some(19),
             max_epoch_id: Some(31),
             expected_min_epoch_id: None,
-            data: Some(SKLDataJson::from(r#"[{\"Primary\":1,\"Flags\":3,\"Fingerprint\":\"1531ad0eeda28b1a3dee703f4c12c138fd7343e0\",\"SHA256Fingerprints\":[\"d57141c407d73870968842ca4898398897f49999c740495862f0039ffd978d7c\",\"2dcbe9648eaa7bec07bdb466c8c9934469851c808c26e80b4bf03476a7e09d51\"]},{\"Primary\":1,\"Flags\":3,\"Fingerprint\":\"41f48cafcec27e8d61a5bd580c805cb5aaa17541bb842fc43fb158c1e123a113\",\"SHA256Fingerprints\":[\"41f48cafcec27e8d61a5bd580c805cb5aaa17541bb842fc43fb158c1e123a113\",\"ba6610eaeb34f2fbd8e9aadf6df59202adb9a8627bd901d3200a3ab2208f77b1\"]}]"#)),
+            data: Some(SKLDataJson::from(
+                r#"[{\"Primary\":1,\"Flags\":3,\"Fingerprint\":\"1531ad0eeda28b1a3dee703f4c12c138fd7343e0\",\"SHA256Fingerprints\":[\"d57141c407d73870968842ca4898398897f49999c740495862f0039ffd978d7c\",\"2dcbe9648eaa7bec07bdb466c8c9934469851c808c26e80b4bf03476a7e09d51\"]},{\"Primary\":1,\"Flags\":3,\"Fingerprint\":\"41f48cafcec27e8d61a5bd580c805cb5aaa17541bb842fc43fb158c1e123a113\",\"SHA256Fingerprints\":[\"41f48cafcec27e8d61a5bd580c805cb5aaa17541bb842fc43fb158c1e123a113\",\"ba6610eaeb34f2fbd8e9aadf6df59202adb9a8627bd901d3200a3ab2208f77b1\"]}]"#,
+            )),
             obsolescence_token: None,
             revision: 7,
-            signature: Some(SKLSignature::from("-----BEGIN PGP SIGNATURE-----\nVersion: ProtonMail\n\nwsAvBAEWCgChBYJnUepmCZBMEsE4/XND4DMUgAAAAAARABljb250ZXh0QHBy\nb3Rvbi5jaGtleS10cmFuc3BhcmVuY3kua2V5LWxpc3RFFAAAAAAAHAAgc2Fs\ndEBub3RhdGlvbnMub3BlbnBncGpzLm9yZzCfASjbrFGVAE7c6Jzb28nrmc0K\n+s8OiBHrDnoAnEztFiEEFTGtDu2iixo97nA/TBLBOP1zQ+AAAGEHAQCjxEzK\n3oeMYrvzejqZW0LTZf5Qz+rKgGjKG/Ep3BUjEwEAxdRX20z9SwDv3tB2JEDW\neH8zAvwMfSMkI6J3M5xDyQHCwAwGARsKAAAAXQWCZ1HqZjMUgAAAAAARABlj\nb250ZXh0QHByb3Rvbi5jaGtleS10cmFuc3BhcmVuY3kua2V5LWxpc3QioQZB\n9IyvzsJ+jWGlvVgMgFy1qqF1QbuEL8Q/sVjB4SOhEwAAAADa5CCfgtMLYqz3\n2WSbiW5nu6Hlzcl+xK4vL4ssUl4mQ9UsDmioI6HHyJ1Pe1aPq1dw6lNjBOJn\nltYkIw4ePM7SXZ7UDzxOPXGqk0VA2gLbgLh8NHDrNEjmMzHy2MX7cR7ePwU=\n=Pfkv\n-----END PGP SIGNATURE-----\n")),
+            signature: Some(SKLSignature::from(
+                "-----BEGIN PGP SIGNATURE-----\nVersion: ProtonMail\n\nwsAvBAEWCgChBYJnUepmCZBMEsE4/XND4DMUgAAAAAARABljb250ZXh0QHBy\nb3Rvbi5jaGtleS10cmFuc3BhcmVuY3kua2V5LWxpc3RFFAAAAAAAHAAgc2Fs\ndEBub3RhdGlvbnMub3BlbnBncGpzLm9yZzCfASjbrFGVAE7c6Jzb28nrmc0K\n+s8OiBHrDnoAnEztFiEEFTGtDu2iixo97nA/TBLBOP1zQ+AAAGEHAQCjxEzK\n3oeMYrvzejqZW0LTZf5Qz+rKgGjKG/Ep3BUjEwEAxdRX20z9SwDv3tB2JEDW\neH8zAvwMfSMkI6J3M5xDyQHCwAwGARsKAAAAXQWCZ1HqZjMUgAAAAAARABlj\nb250ZXh0QHByb3Rvbi5jaGtleS10cmFuc3BhcmVuY3kua2V5LWxpc3QioQZB\n9IyvzsJ+jWGlvVgMgFy1qqF1QbuEL8Q/sVjB4SOhEwAAAADa5CCfgtMLYqz3\n2WSbiW5nu6Hlzcl+xK4vL4ssUl4mQ9UsDmioI6HHyJ1Pe1aPq1dw6lNjBOJn\nltYkIw4ePM7SXZ7UDzxOPXGqk0VA2gLbgLh8NHDrNEjmMzHy2MX7cR7ePwU=\n=Pfkv\n-----END PGP SIGNATURE-----\n",
+            )),
         };
 
         let address_key_keygroup = APIPublicAddressKeyGroup {

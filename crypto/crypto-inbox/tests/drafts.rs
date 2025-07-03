@@ -5,8 +5,8 @@ use proton_crypto_inbox::{
 
 mod common;
 use common::{
-    create_account_unlocked_address_keys, create_account_unlocked_address_keys_v6,
-    TEST_DECRYPTION_KEY_V6,
+    TEST_DECRYPTION_KEY_V6, create_account_unlocked_address_keys,
+    create_account_unlocked_address_keys_v6,
 };
 
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;

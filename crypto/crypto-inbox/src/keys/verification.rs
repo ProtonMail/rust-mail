@@ -4,7 +4,7 @@ use proton_crypto_account::{
     keys::{DecryptedAddressKey, PinnedPublicKeys, PublicAddressKeys},
     proton_crypto::{
         crypto::{AsPublicKeyRef, OpenPGPFingerprint, PrivateKey, PublicKey},
-        keytransparency::{KTVerificationResult, KT_UNVERIFIED, KT_VERIFIED},
+        keytransparency::{KT_UNVERIFIED, KT_VERIFIED, KTVerificationResult},
     },
 };
 

@@ -441,7 +441,9 @@ fn create_test_decrypted_address_key<T: PGPProviderSync>(
         .unwrap();
     let public_key = provider.private_key_to_public_key(&private_key).unwrap();
     vec![DecryptedAddressKey {
-        id: KeyId::from("G8URRzoYaBW6mSPQjbbo2yYgwI828DVcEs8dDRKxByd1A_qSRYF49TOtw_m4wvDGb76M-r3AVdXuDzSHObR5hQ=="),
+        id: KeyId::from(
+            "G8URRzoYaBW6mSPQjbbo2yYgwI828DVcEs8dDRKxByd1A_qSRYF49TOtw_m4wvDGb76M-r3AVdXuDzSHObR5hQ==",
+        ),
         private_key,
         public_key,
         flags: KeyFlag::from(3_u32),

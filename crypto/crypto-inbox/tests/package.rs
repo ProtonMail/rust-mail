@@ -7,7 +7,7 @@ use proton_crypto_inbox::{
 
 mod common;
 use common::{
-    create_account_unlocked_address_keys, create_test_recipient_keys, TEST_DECRYPTION_KEY,
+    TEST_DECRYPTION_KEY, create_account_unlocked_address_keys, create_test_recipient_keys,
 };
 
 const PLAINTEXT: &str = "<b>Hello World</b>      \n";

@@ -219,13 +219,13 @@ fn prepare_notifs(
 /// Sends an email notifying organizer about our status.
 #[instrument(skip_all, fields(organizer = event.organizer.email))]
 #[allow(clippy::needless_lifetimes)] // false-positive
-async fn notify<'a, P, M>(
+async fn notify<P, M>(
     api: &Proton,
     pgp: &P,
     sender: M,
     event: &RsvpEvent,
     answer: &RsvpAnswer<'_>,
-    decryptor: &CalendarEventDecryptor<'a, P>,
+    decryptor: &CalendarEventDecryptor<'_, P>,
 ) -> RsvpAnswerResult<(), M>
 where
     P: PGPProviderSync,

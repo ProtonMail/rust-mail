@@ -139,6 +139,7 @@ impl<P> RsvpMailSender<'_, P>
 where
     P: PGPProviderSync,
 {
+    #[allow(clippy::result_large_err)]
     fn build_message(
         &self,
         to: PrivateEmailRef,

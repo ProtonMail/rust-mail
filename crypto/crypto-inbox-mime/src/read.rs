@@ -10,8 +10,8 @@ use mail_parser::{Message, MessageParser};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
 
-use crate::constants::mime_extensions;
 use crate::Disposition;
+use crate::constants::mime_extensions;
 
 /// Mime processing errors.
 #[derive(Debug, thiserror::Error)]

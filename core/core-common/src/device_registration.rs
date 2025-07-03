@@ -41,6 +41,7 @@ const MISSING_SCOPES_ERROR_CODE: u32 = 9100;
 ///
 /// * `device_rx` - stream of device registration details. If changed it must contain `Some`
 ///
+#[allow(clippy::result_large_err)]
 #[tracing::instrument(err, skip_all)]
 pub fn spawn_registered_device_task(
     ctx: Arc<Context>,

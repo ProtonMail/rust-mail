@@ -6,11 +6,11 @@ use std::{
 use proton_crypto_account::{
     keys::PrimaryUnlockedAddressKey,
     proton_crypto::{
+        CryptoError,
         crypto::{
             AsPublicKeyRef, DataEncoding, DetachedSignatureVariant, Encryptor,
             EncryptorDetachedSignatureWriter, EncryptorSync, EncryptorWriter, PGPProviderSync,
         },
-        CryptoError,
     },
 };
 

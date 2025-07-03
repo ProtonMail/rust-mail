@@ -4,10 +4,10 @@ use proton_crypto_account::proton_crypto::crypto::{
 
 use proton_crypto_inbox_mime::{MimeProcessor, ProcessMime, ProcessedMessage};
 
-use super::utils::to_sanitized_string;
 use super::GettablePGPMessage;
 use super::MessageError;
 use super::VerifiableBody;
+use super::utils::to_sanitized_string;
 
 /// A decrypted message body that either contains a plain body or a decrypted `mime` body.
 #[derive(Debug, PartialEq, Eq, Clone, Hash)]

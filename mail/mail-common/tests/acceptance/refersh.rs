@@ -26,7 +26,7 @@ async fn refresh(ctx: &MailUserContext, refresh: Refresh) -> Result<(), anyhow::
     match result {
         Ok(_) => Ok(()),
         Err(QueuedError::Action(error, _id)) => Err(anyhow::anyhow!(error)),
-        _ => panic!("Unexpected message: {:?}", result),
+        _ => panic!("Unexpected message: {result:?}"),
     }
 }
 

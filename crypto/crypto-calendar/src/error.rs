@@ -1,4 +1,4 @@
-use proton_crypto::{crypto::VerificationError, CryptoError};
+use proton_crypto::{CryptoError, crypto::VerificationError};
 use std::result;
 use thiserror::Error;
 
