@@ -242,11 +242,29 @@ pub struct AddressSubPackage {
 
     /// TODO: add docs
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub auth: Option<()>,
+    pub auth: Option<AuthInput>,
 
     /// TODO: add docs
     #[serde(skip_serializing_if = "Option::is_none")]
     pub password_hint: Option<String>,
+}
+
+/// Represents authentication input for EO.
+#[derive(Clone, Debug, Serialize, Eq, PartialEq)]
+#[serde(rename_all = "PascalCase")]
+pub struct AuthInput {
+    /// The version of the authentication.
+    pub version: u8,
+
+    /// The modulus ID for authentication.
+    #[serde(rename = "ModulusID")]
+    pub modulus_id: String,
+
+    /// The salt used in authentication.
+    pub salt: String,
+
+    /// The verifier for authentication.
+    pub verifier: String,
 }
 
 /// A session key that is exposed to the backend.

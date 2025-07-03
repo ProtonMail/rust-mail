@@ -6,7 +6,7 @@ use proton_crypto_inbox::{
         AttachmentEncryptedSignature, AttachmentSignature, DecryptableAttachment,
         EncryptableAttachment, EncryptedAttachmentMetadata, KeyPackets, encrypt_and_sign_to_writer,
     },
-    proton_crypto::crypto::PGPProviderSync,
+    proton_crypto::crypto::{Decryptor, DecryptorSync, PGPProviderSync, SessionKey},
 };
 
 mod common;
@@ -250,6 +250,40 @@ fn test_attachment_re_encrypt() {
         );
         assert!(dec_result_fail.is_err());
     }
+}
+
+#[test]
+fn test_attachment_re_encrypt_password() {
+    let pgp = proton_crypto_inbox::proton_crypto::new_pgp_provider();
+
+    let address_keys = create_account_unlocked_address_keys(&pgp, TEST_DECRYPTION_KEY, "password");
+    let primary_address_key = address_keys.primary_for_mail().expect("No primary key");
+
+    let attachment_raw = TestAttachmentRaw(TEST_ATTACHMENT_PLAIN_DATA);
+    let encrypted_attachment = attachment_raw
+        .attachment_encrypt_and_sign(&pgp, &primary_address_key)
+        .unwrap();
+
+    let attachment_info = DecryptableAttachmentMetadata::new(&pgp, &encrypted_attachment.metadata)
+        .decrypt_attachment_info(&pgp, &address_keys)
+        .expect("must decrypt");
+
+    let kp = attachment_info
+        .encrypt_session_key_to_password(&pgp, "password")
+        .unwrap();
+
+    let out = pgp
+        .new_decryptor()
+        .with_passphrase("password")
+        .decrypt_session_key(kp.decode().unwrap())
+        .unwrap();
+    let b64 = base64::engine::general_purpose::GeneralPurpose::new(
+        &base64::alphabet::STANDARD,
+        base64::engine::general_purpose::PAD,
+    );
+    let expected = b64.encode(out.export());
+
+    assert_eq!(attachment_info.session_key.expose_secret().0, expected);
 }
 
 #[test]

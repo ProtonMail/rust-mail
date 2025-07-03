@@ -4,7 +4,7 @@ use crate::actions::draft::{
 };
 use crate::datatypes::{LocalMessageId, MessageFlags, MimeType, RollbackItemType};
 use crate::draft::compose::create_timestamp;
-use crate::draft::send::{MailType, build_packages, load_prefs};
+use crate::draft::send::{EoData, MailType, build_packages, load_prefs};
 use crate::draft::{Draft, ReplyMode, SendError, draft_attachment_staging_path};
 use crate::models::{
     Conversation, DraftAttachmentMetadata, DraftMetadata, DraftSendFailure, DraftSendResult,
@@ -302,6 +302,12 @@ impl Send {
         action: &mut Self,
         guard: &mut WriterGuard<'_>,
     ) -> Result<<Self as Action>::RemoteOutput, <Self as Action>::Error> {
+        // TODO(Leander): This needs to be loaded.
+        // If the user selects encrypt with password, the password should appear here.
+        // The send preference logic will decide for each email if password encryption should be applied.
+        // It will only use the password if the recipient is external and has no encryption.
+        let eo_data: Option<EoData> = None;
+
         let local_message_id = action.local_message_id.expect("Should be set");
 
         if let Some(delivery_time) = action.delivery_time {
@@ -384,6 +390,7 @@ impl Send {
             guard,
             &action.recipients,
             mail_settings.crypto_mail_settings(),
+            eo_data.is_some(),
         )
         .await
         .inspect_err(|err| error!("Failed to load send preferences for recipients: {err:?}"))?;
@@ -408,6 +415,7 @@ impl Send {
             action.mime_type,
             &stored_message_body,
             &attachments,
+            eo_data,
             guard,
         )
         .await

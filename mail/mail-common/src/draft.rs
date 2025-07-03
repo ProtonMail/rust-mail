@@ -29,6 +29,7 @@ use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::datatypes::LocalAddressId;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::attachment::{AttachmentDecryptionError, AttachmentEncryptionError};
+use proton_crypto_inbox::eo::EoError;
 use proton_crypto_inbox::keys::{PackageCryptoType, SessionKeyError};
 use proton_crypto_inbox::message::MessageError;
 use proton_mail_api::services::proton::ProtonMail;
@@ -304,6 +305,10 @@ pub enum PackageError {
     PackageBodyInfoReEncrypt(SessionKeyError),
     #[error("Failed to extract attachment info for address: {0}")]
     PackageAttachmentInfo(#[from] AttachmentDecryptionError),
+    #[error("Failed to build package for encrypt-to-outside (EO): {0}")]
+    PackageEo(#[from] EoError),
+    #[error("EO selected but no password found")]
+    PackageEoPasswordMissing,
     #[error("Failed to encrypt attachment info to recipient: {0}")]
     PackageAttachmentInfoReEncrypt(SessionKeyError),
     #[error("Failed to encrypt attachment signature to recipient: {0}")]
