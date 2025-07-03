@@ -3,17 +3,17 @@ use std::io::{self, Write};
 use base64::Engine;
 use proton_crypto_inbox::{
     attachment::{
-        encrypt_and_sign_to_writer, AttachmentEncryptedSignature, AttachmentSignature,
-        DecryptableAttachment, EncryptableAttachment, EncryptedAttachmentMetadata, KeyPackets,
+        AttachmentEncryptedSignature, AttachmentSignature, DecryptableAttachment,
+        EncryptableAttachment, EncryptedAttachmentMetadata, KeyPackets, encrypt_and_sign_to_writer,
     },
     proton_crypto::crypto::PGPProviderSync,
 };
 
 mod common;
 use common::{
-    create_account_unlocked_address_keys, create_account_unlocked_address_keys_v6,
-    create_test_recipient_keys, get_test_address_keys, get_test_public_address_keys,
-    TEST_DECRYPTION_KEY, TEST_DECRYPTION_KEY_V6,
+    TEST_DECRYPTION_KEY, TEST_DECRYPTION_KEY_V6, create_account_unlocked_address_keys,
+    create_account_unlocked_address_keys_v6, create_test_recipient_keys, get_test_address_keys,
+    get_test_public_address_keys,
 };
 
 const TEST_ATTACHMENT_METADATA_KP: &str = "wV4Di5gBfuEszfESAQdAUGm56qPuhgLjuStIEcL07fKh10ptOYc0UnB2kTwqqhMw2ivOpsuDSOM17OPsxG35znCodjKBxM1O+DeFuYhel8TsuJjNxKltBgv/jVs48LGw";

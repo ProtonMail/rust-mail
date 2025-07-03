@@ -1,4 +1,4 @@
-use base64::{prelude::BASE64_STANDARD, Engine};
+use base64::{Engine, prelude::BASE64_STANDARD};
 
 #[derive(Clone, Debug)]
 pub struct EncryptedIcs(String);

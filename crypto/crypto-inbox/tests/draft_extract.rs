@@ -1,6 +1,6 @@
 use core::str;
 
-use base64::{prelude::BASE64_STANDARD as BASE_64, Engine as _};
+use base64::{Engine as _, prelude::BASE64_STANDARD as BASE_64};
 use proton_crypto_inbox::message::{GettablePGPMessage, SessionKeyAndDataPacketsExtractable};
 use proton_crypto_inbox::proton_crypto::crypto::{
     DataEncoding, Decryptor, DecryptorSync, Encryptor, EncryptorSync, PGPProviderSync,

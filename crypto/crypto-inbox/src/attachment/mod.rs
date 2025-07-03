@@ -10,10 +10,10 @@ pub use decrypt::*;
 mod encrypt;
 pub use encrypt::*;
 
-use base64::{prelude::BASE64_STANDARD as BASE_64, Engine as _};
+use base64::{Engine as _, prelude::BASE64_STANDARD as BASE_64};
 use proton_crypto_account::proton_crypto::{
-    crypto::{ArmorerSync, PGPProviderSync},
     CryptoError,
+    crypto::{ArmorerSync, PGPProviderSync},
 };
 
 use crate::{keys::KeyPacket, string_id};
