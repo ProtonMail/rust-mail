@@ -6,32 +6,6 @@ use proton_core_common::CoreSessionState;
 use std::sync::Arc;
 
 impl MailContext {
-    /// Check if any message for all logged in accounts is still pending to send
-    ///
-    /// # Errors
-    ///
-    /// Returns error if we failed to retrieve the user context or perform the checks.
-    pub async fn has_users_with_unsent_messages(
-        self: &Arc<Self>,
-    ) -> Result<bool, MailContextError> {
-        let all_user_ctxs = self
-            .get_all_logged_in_and_initialized_user_contexts()
-            .await?;
-        let mut all_messages_were_sent = true;
-
-        for user_ctx in &all_user_ctxs {
-            let send_task_count_eq_zero = user_ctx
-                .action_queue()
-                .typed_actions_count::<crate::actions::draft::Send>()
-                .await?
-                == 0;
-
-            all_messages_were_sent &= send_task_count_eq_zero;
-        }
-
-        Ok(all_messages_were_sent)
-    }
-
     /// Get all unsent message ids for given `user_id`.
     ///
     /// # Errors

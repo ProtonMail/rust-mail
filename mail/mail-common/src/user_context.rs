@@ -593,4 +593,12 @@ impl MailUserContext {
     {
         self.user_context.spawn_with::<S, _>(task)
     }
+
+    pub async fn has_unsent_messages(&self) -> Result<bool, MailContextError> {
+        Ok(self
+            .action_queue()
+            .typed_actions_count::<crate::actions::draft::Send>()
+            .await?
+            != 0)
+    }
 }

@@ -8,7 +8,7 @@ use crossterm::event::{Event, KeyCode};
 use futures::FutureExt;
 use proton_core_common::models::{ModelExtension, User};
 use proton_mail_common::background_execution::{
-    BackgroundExecutionContext, BackgroundExecutionStatus,
+    BackgroundExecutionContext, BackgroundExecutionResult, BackgroundExecutionStatus,
 };
 use proton_mail_common::{MailContext, MailContextResult, MailUserContext};
 use ratatui::Frame;
@@ -107,12 +107,15 @@ impl BackgroundModel {
 
     fn on_background_execution_finished(
         &mut self,
-        result: MailContextResult<BackgroundExecutionStatus>,
+        result: MailContextResult<BackgroundExecutionResult>,
     ) -> Command<Messages> {
         self.background_execution_state = BackgroundExecutionState::Stopped;
         match result {
-            Ok(status) => {
-                self.last_execution_status = Some(status);
+            Ok(result) => {
+                self.last_execution_status = Some(result.status);
+                if let Some(stats) = self.stats.as_mut() {
+                    stats.has_unsent_messages = result.has_unsent_messages;
+                }
                 Command::none()
             }
             Err(e) => Command::message(Messages::DisplayError(
@@ -129,16 +132,6 @@ impl BackgroundModel {
         Command::task(async move {
             tokio::time::sleep(Duration::from_secs(1)).await;
             tracing::info!("Updating background stats");
-            let has_unsent_messages = match ctx.has_users_with_unsent_messages().await {
-                Ok(v) => !v,
-                Err(e) => {
-                    return Command::Message(Messages::DisplayError(
-                        None,
-                        anyhow!("Failed to check for unsent messages: {e}"),
-                    ));
-                }
-            };
-
             let user_ctxs = match ctx.get_all_logged_in_and_initialized_user_contexts().await {
                 Ok(ctxs) => ctxs,
                 Err(e) => {
@@ -150,6 +143,7 @@ impl BackgroundModel {
             };
 
             let mut user_stats = BTreeMap::new();
+            let mut has_unsent_messages = false;
             for user_ctx in user_ctxs {
                 let user = match User::find_by_id(
                     user_ctx.user_id().clone(),
@@ -198,6 +192,9 @@ impl BackgroundModel {
                     }
                 };
 
+                has_unsent_messages =
+                    has_unsent_messages || user_ctx.has_unsent_messages().await.unwrap_or(false);
+
                 user_stats.insert(
                     user.email,
                     BackgroundExecutionUserStats {
@@ -228,7 +225,7 @@ pub enum Message {
     Init,
     StartBackgroundWorker,
     StopBackgroundWorker,
-    BackgroundExecutionFinished(MailContextResult<BackgroundExecutionStatus>),
+    BackgroundExecutionFinished(MailContextResult<BackgroundExecutionResult>),
     BackgroundStatsRefreshed(BackgroundExecutionStats),
     Exit,
 }
