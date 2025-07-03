@@ -7,19 +7,19 @@ members = [
   "account/account-uniffi",
   "calendar/calendar-api",
   "calendar/calendar-common",
-  "core/action-queue",
+  "shared/action-queue",
   "core/core-api",
   "core/core-common",
   "core/event-loop",
-  "core/ical",
-  "core/ical-cli",
-  "core/log-service",
-  "core/proton-canonical-email",
-  "core/sqlite3",
-  "core/stash",
-  "core/stash-macros",
-  "core/task-service",
-  "core/vcard",
+  "shared/ical",
+  "shared/ical-cli",
+  "shared/log-service",
+  "shared/proton-canonical-email",
+  "shared/sqlite3",
+  "shared/stash",
+  "shared/stash-macros",
+  "shared/task-service",
+  "shared/vcard",
   "crypto/crypto-calendar",
   "crypto/crypto-inbox",
   "crypto/crypto-inbox-mime",
@@ -152,7 +152,7 @@ registry = "proton"
 
 [workspace.dependencies.proton-action-queue]
 version = "0.7"
-path = "core/action-queue"
+path = "shared/action-queue"
 registry = "proton"
 
 [workspace.dependencies.proton-core-api]
@@ -173,33 +173,33 @@ registry = "proton"
 
 [workspace.dependencies.proton-sqlite3]
 version = "0.7"
-path = "core/sqlite3"
+path = "shared/sqlite3"
 registry = "proton"
 
 [workspace.dependencies.proton-canonical-email]
 version = "0.1"
-path = "core/proton-canonical-email"
+path = "shared/proton-canonical-email"
 registry = "proton"
 
 [workspace.dependencies.proton-ical]
-path = "core/ical"
+path = "shared/ical"
 
 [workspace.dependencies.proton-ical-cli]
-path = "core/ical-cli"
+path = "shared/ical-cli"
 
 [workspace.dependencies.proton-vcard]
 version = "0.2"
-path = "core/vcard"
+path = "shared/vcard"
 registry = "proton"
 
 [workspace.dependencies.stash]
 version = "0.2"
-path = "core/stash"
+path = "shared/stash"
 registry = "proton"
 
 [workspace.dependencies.stash-macros]
 version = "0.2"
-path = "core/stash-macros"
+path = "shared/stash-macros"
 registry = "proton"
 
 [workspace.dependencies.proton-mail-api]
@@ -273,13 +273,13 @@ rev = "3fefba39394af1c5392c7008e5c4835fc06cc06b"
 features = ["unsealed"]
 
 [workspace.dependencies.proton-log-service]
-path = "core/log-service"
+path = "shared/log-service"
 version = "0.1"
 registry = "proton"
 
 [workspace.dependencies.proton-task-service]
 version = "0.1"
-path = "core/task-service"
+path = "shared/task-service"
 registry = "proton"
 
 [workspace.dependencies.proton-payment-sdk]
