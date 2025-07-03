@@ -1,4 +1,4 @@
-use crate::Result;
+use anyhow::Result;
 use proton_core_common::CoreAccountState;
 use proton_mail_common::MailContext;
 use std::sync::Arc;

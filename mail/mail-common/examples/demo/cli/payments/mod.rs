@@ -1,5 +1,5 @@
-use crate::Result;
-use crate::cli::get_user_ctx;
+use crate::cli::ctx::MailContextExt;
+use anyhow::Result;
 use proton_mail_common::{MailContext, MailUserContext};
 use std::sync::Arc;
 
@@ -18,7 +18,7 @@ pub struct Cmd {
 
 impl Cmd {
     pub async fn run(self, ctx: Arc<MailContext>) -> Result<()> {
-        let ctx = get_user_ctx(&ctx, &self.username).await?;
+        let ctx = ctx.get_user_ctx(&self.username).await?;
 
         self.cmd.run(ctx).await
     }

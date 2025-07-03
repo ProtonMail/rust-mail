@@ -1,8 +1,8 @@
-use crate::Result;
+use crate::cli::ctx::MailContextExt;
 use crate::cli::read;
+use anyhow::Result;
 use futures::TryFutureExt;
 use proton_account_api::login::LoginFlow;
-use proton_core_common::CoreAccountState;
 use proton_mail_common::{MailContext, MailUserContext};
 use std::sync::Arc;
 
@@ -22,7 +22,7 @@ impl Cmd {
         ctx: Arc<MailContext>,
         username: &str,
     ) -> Result<(LoginFlow, Arc<MailUserContext>)> {
-        let mut flow = new_login_flow(&ctx, username).await?;
+        let mut flow = ctx.new_login_flow(Some(username)).await?;
 
         if flow.is_logged_out() {
             flow.login_with_credentials(username.to_owned(), read("password")?, None)
@@ -44,23 +44,4 @@ impl Cmd {
 
         Ok((flow, user_ctx))
     }
-}
-
-async fn new_login_flow(ctx: &MailContext, username: &str) -> Result<LoginFlow> {
-    for acc in ctx.get_accounts().await? {
-        if acc.name_or_addr != username {
-            continue;
-        }
-
-        let session = match ctx.get_account_state(acc.remote_id.clone()).await? {
-            Some(CoreAccountState::LoggedIn(_)) => Err("account already logged in")?,
-            Some(CoreAccountState::NeedMbp(mut s)) => s.pop().unwrap(),
-            Some(CoreAccountState::NeedTfa(mut s)) => s.pop().unwrap(),
-            _ => continue,
-        };
-
-        return Ok(ctx.resume_login_flow(acc.remote_id, session).await?);
-    }
-
-    Ok(ctx.new_login_flow().await?)
 }

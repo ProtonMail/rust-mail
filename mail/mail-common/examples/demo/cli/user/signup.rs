@@ -1,5 +1,5 @@
-use crate::Result;
 use crate::cli::read;
+use anyhow::Result;
 use proton_account_api::signup::state::StateKind;
 use proton_account_api::signup::{SignupError, SignupFlow};
 use proton_mail_common::MailContext;

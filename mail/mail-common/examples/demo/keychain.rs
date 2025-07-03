@@ -1,4 +1,4 @@
-use crate::Result;
+use anyhow::Result;
 use proton_core_api::services::proton::muon::util::BoxErrExt;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::os::{KeyChain, KeyChainEntryKind, KeyChainError};

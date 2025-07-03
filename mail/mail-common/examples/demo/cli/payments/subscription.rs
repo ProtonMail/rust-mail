@@ -1,4 +1,4 @@
-use crate::Result;
+use anyhow::Result;
 use proton_core_api::services::proton::ProtonPayments;
 use proton_mail_common::MailUserContext;
 use std::sync::Arc;

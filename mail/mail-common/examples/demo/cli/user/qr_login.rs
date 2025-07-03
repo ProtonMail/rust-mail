@@ -1,9 +1,8 @@
-use crate::Result;
+use crate::cli::ctx::MailContextExt;
 use crate::cli::read;
+use anyhow::Result;
 use futures::TryFutureExt;
-use proton_account_api::login::LoginFlow;
 use proton_account_api::login::state::want_qr_confirmation::process_target_device_qr_code;
-use proton_core_common::CoreAccountState;
 use proton_mail_common::MailContext;
 use std::sync::Arc;
 use std::time::Duration;
@@ -15,13 +14,14 @@ pub struct TargetCmd {}
 
 impl TargetCmd {
     pub async fn run(self, ctx: Arc<MailContext>) -> Result<()> {
-        let mut flow = new_login_flow(&ctx).await?;
+        let mut flow = ctx.new_login_flow(None).await?;
 
         let qr = flow.generate_sign_in_qr_code(true).await?;
         println!("QR: {qr}");
         let _ = read("Copy the QR code and press enter when the Host device confirmed the login")?;
 
         assert!(flow.is_awaiting_host_device_confirmation());
+
         loop {
             if let Err(_e) = flow.check_host_device_confirmation().await {
                 break;
@@ -34,6 +34,7 @@ impl TargetCmd {
         }
 
         assert!(flow.is_logged_in());
+
         _ = ctx
             .user_context_from_login_flow(&mut flow)
             .inspect_err(|err| error!("failed to create user context: {err:?}"))
@@ -67,19 +68,4 @@ impl HostCmd {
 
         Ok(())
     }
-}
-
-async fn new_login_flow(ctx: &MailContext) -> Result<LoginFlow> {
-    for acc in ctx.get_accounts().await? {
-        let session = match ctx.get_account_state(acc.remote_id.clone()).await? {
-            Some(CoreAccountState::LoggedIn(mut s)) => s.pop().unwrap(),
-            Some(CoreAccountState::NeedMbp(mut s)) => s.pop().unwrap(),
-            Some(CoreAccountState::NeedTfa(mut s)) => s.pop().unwrap(),
-            _ => continue,
-        };
-
-        return Ok(ctx.resume_login_flow(acc.remote_id, session).await?);
-    }
-
-    Ok(ctx.new_login_flow().await?)
 }

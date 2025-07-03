@@ -1,11 +1,10 @@
-use crate::Result;
-use crate::app::{NewChallengeEvent, UserEvent};
+use crate::app::events::{NewChallengeEvent, Proxy, UserEvent};
+use anyhow::Result;
 use async_trait::async_trait;
 use futures::TryFutureExt;
 use proton_core_api::verification::{ChallengeNotifier, ChallengePayload, ChallengeResponse};
 use serde::Deserialize;
 use std::sync::mpsc::channel;
-use tao::event_loop::EventLoopProxy;
 
 #[allow(unused)]
 #[derive(Debug, Deserialize)]
@@ -38,12 +37,12 @@ pub enum HvMessage {
     },
 }
 
-pub struct HvNotifier {
-    tx: EventLoopProxy<UserEvent>,
+pub struct HvNotifier<P> {
+    tx: P,
 }
 
-impl HvNotifier {
-    pub fn new(tx: EventLoopProxy<UserEvent>) -> Self {
+impl<P: Proxy> HvNotifier<P> {
+    pub fn new(tx: P) -> Self {
         Self { tx }
     }
 
@@ -60,7 +59,7 @@ impl HvNotifier {
 }
 
 #[async_trait]
-impl ChallengeNotifier for HvNotifier {
+impl<P: Proxy> ChallengeNotifier for HvNotifier<P> {
     async fn on_challenge(&self, payload: ChallengePayload) -> ChallengeResponse {
         self.handle_challenge(payload)
             .inspect_err(|e| error!("failed to handle challenge: {e:?}"))
