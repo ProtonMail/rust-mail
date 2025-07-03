@@ -1,3 +1,4 @@
+use crate::datatypes::LocalConversationId;
 use crate::datatypes::attachment::ContentId;
 use crate::datatypes::attachment::MimeType;
 use crate::datatypes::{
@@ -28,7 +29,6 @@ use proton_mail_api::services::proton::response_data::{
     Attachment as ApiAttachment, MessageAttachment as ApiMessageAttachment,
 };
 use proton_mail_api::services::proton::responses::GetAttachmentMetadataResponse;
-use proton_mail_ids::LocalConversationId;
 use serde::{Deserialize, Serialize};
 use stash::exports::{SqliteError, ToSql};
 use stash::macros::Model;

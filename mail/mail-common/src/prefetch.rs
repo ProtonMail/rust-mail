@@ -1,8 +1,8 @@
 use std::sync::{Arc, OnceLock};
 
+use crate::datatypes::{LocalConversationId, LocalMessageId};
 use flume::Receiver;
 use proton_core_common::datatypes::LocalLabelId;
-use proton_mail_ids::{LocalConversationId, LocalMessageId};
 use tracing::instrument;
 
 use crate::{

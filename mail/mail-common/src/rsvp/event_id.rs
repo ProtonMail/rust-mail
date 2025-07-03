@@ -1,8 +1,8 @@
+use crate::datatypes::LocalMessageId;
 use crate::{MailContextResult, MailUserContext, RsvpEvent};
 use proton_calendar_common::{self as cal};
 use proton_core_api::services::proton::AddressId;
 use proton_crypto_inbox::proton_crypto;
-use proton_mail_ids::LocalMessageId;
 use stash::stash::Tether;
 use std::ops;
 use tracing::{debug, info, instrument, warn};

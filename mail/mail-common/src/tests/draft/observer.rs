@@ -1,3 +1,4 @@
+use crate::datatypes::LocalMessageId;
 use crate::draft::observers::{
     DraftAttachmentObserver, DraftSendResultWatcher, DraftSendResultWatcherMode,
 };
@@ -12,7 +13,6 @@ use proton_core_common::datatypes::{AddressStatus, AddressType};
 use proton_core_common::models::Address;
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
 use proton_mail_common::test_utils::db::new_test_connection_file;
-use proton_mail_ids::LocalMessageId;
 use stash::orm::Model;
 use stash::stash::{Bond, StashError};
 #[tokio::test]

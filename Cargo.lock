@@ -5902,7 +5902,6 @@ dependencies = [
  "color-backtrace",
  "ctor",
  "derive_more 2.0.1",
- "either",
  "file-format",
  "flume",
  "function_name",
@@ -5931,7 +5930,6 @@ dependencies = [
  "proton-mail-api",
  "proton-mail-common",
  "proton-mail-html-transformer",
- "proton-mail-ids",
  "proton-sqlite3",
  "proton-task-service",
  "secrecy",
@@ -5979,16 +5977,6 @@ dependencies = [
  "tracing",
  "url",
  "velcro",
-]
-
-[[package]]
-name = "proton-mail-ids"
-version = "0.1.0"
-dependencies = [
- "proton-core-common",
- "proton-mail-api",
- "serde",
- "stash",
 ]
 
 [[package]]

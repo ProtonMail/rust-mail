@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::AppError;
 use crate::actions::MailActionError;
+use crate::datatypes::LocalConversationId;
 use crate::models::{Conversation, ConversationScrollData};
 use crate::{MailUserContext, models::Message};
 use proton_action_queue::action::{
@@ -11,7 +12,6 @@ use proton_action_queue::action::{
 };
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_api::services::proton::prelude::GetMessagesOptions;
-use proton_mail_ids::LocalConversationId;
 use proton_task_service::AsyncTaskResult;
 use serde::{self, Deserialize, Serialize};
 use stash::stash::Bond;

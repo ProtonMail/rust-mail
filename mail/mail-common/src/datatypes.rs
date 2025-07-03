@@ -43,6 +43,7 @@ pub(crate) mod contextual_conversation;
 pub mod dependencies;
 pub mod exclusive_location;
 pub mod folder_banner;
+mod ids;
 pub mod labels;
 pub mod mail_notifications;
 pub mod message_banner;
@@ -59,6 +60,7 @@ pub use assigned_actions::*;
 pub use contextual_conversation::*;
 use derive_more::derive::TryFrom;
 pub use exclusive_location::ExclusiveLocation;
+pub use ids::*;
 use indoc::formatdoc;
 use proton_core_common::models::Label;
 pub use read_filter::ReadFilter;
@@ -2113,6 +2115,6 @@ impl From<LabelDescription> for LabelType {
     }
 }
 
-pub use proton_mail_ids::LocalAttachmentId;
-pub use proton_mail_ids::LocalConversationId;
-pub use proton_mail_ids::LocalMessageId;
+pub use crate::datatypes::LocalAttachmentId;
+pub use crate::datatypes::LocalConversationId;
+pub use crate::datatypes::LocalMessageId;

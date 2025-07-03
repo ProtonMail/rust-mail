@@ -1,4 +1,5 @@
 use crate::actions::{LabelAsData, MailActionError, filter_responses};
+use crate::datatypes::LocalConversationId;
 use crate::datatypes::{ExclusiveLocation, RollbackItemType, SystemLabelId};
 use crate::models::{Conversation, ConversationCounters, ConversationLabel};
 use crate::{AppError, MailUserContext};
@@ -11,7 +12,6 @@ use proton_core_api::session::CoreSession;
 use proton_core_common::datatypes::{LabelType, LocalLabelId};
 use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_mail_api::services::proton::ProtonMail;
-use proton_mail_ids::LocalConversationId;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{Bond, Tether};

@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 use crate as proton_mail_common;
+use crate::datatypes::LocalConversationId;
 use crate::datatypes::labels::LabelScrollOrder;
 use crate::datatypes::{ContextualConversation, ReadFilter};
 use crate::models::{CachedScrollData, ConversationScrollData, ScrollData};
@@ -11,7 +12,6 @@ use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
 use proton_mail_api::services::proton::common::ConversationId;
 use proton_mail_common::test_utils::db::new_test_connection;
 use proton_mail_common::{conv_id, conv_label, conversation, label, lbl_id};
-use proton_mail_ids::LocalConversationId;
 use stash::orm::Model;
 use stash::stash::{Bond, StashError, Tether};
 use velcro::btree_map;

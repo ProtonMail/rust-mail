@@ -5,6 +5,7 @@ use crate::actions::draft::{
 use crate::datatypes::attachment::ContentId;
 use crate::datatypes::{Disposition, LocalAttachmentId, LocalMessageId, MimeType};
 
+use crate::datatypes::LocalConversationId;
 use crate::decrypted_message::{DecryptedMessageBody, ParsedHeaderValue, ThemeOpts};
 use crate::draft::attachments::{DraftAttachment, build_attachment_key_packets};
 use crate::draft::recipients::{ContactGroupResolver, ProtonContactGroupResolver, RecipientList};
@@ -37,7 +38,6 @@ use proton_mail_api::services::proton::request_data::DraftAction;
 use proton_mail_api::services::proton::response_data::Message as ApiMessage;
 use proton_mail_html_transformer::Transformer;
 use proton_mail_html_transformer::transforms::styles::BrowserCapabilities;
-use proton_mail_ids::LocalConversationId;
 use proton_sqlite3::rusqlite;
 use rusqlite::types::{FromSqlError, FromSqlResult, ValueRef};
 use serde::{Deserialize, Serialize};

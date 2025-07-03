@@ -1,5 +1,6 @@
 use crate::actions::draft::SEND_ACTION_GROUP;
 use crate::datatypes::SystemLabelId;
+use crate::datatypes::{LocalConversationId, LocalMessageId};
 use crate::draft::DiscardError;
 use crate::models::{Conversation, DraftMetadata, Message, MetadataId};
 use crate::{MailContextError, MailUserContext};
@@ -11,7 +12,6 @@ use proton_core_api::services::proton::LabelId;
 use proton_core_api::session::CoreSession;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_api::services::proton::ProtonMail;
-use proton_mail_ids::{LocalConversationId, LocalMessageId};
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use tracing::{debug, error, info};

@@ -23,6 +23,7 @@ use proton_mail_api::services::proton::request_data::{
 use proton_mail_api::services::proton::response_data::{
     Conversation as ApiConversation, ConversationLabel, MessageFlags, MessageRecipient,
 };
+use proton_mail_common::datatypes::LocalMessageId;
 use proton_mail_common::datatypes::{MimeType, SystemLabelId};
 use proton_mail_common::draft::Draft;
 use proton_mail_common::draft::compose::DEFAULT_SUBJECT;
@@ -37,7 +38,6 @@ use proton_mail_common::test_utils::message_body::*;
 use proton_mail_common::test_utils::messages::TestDraftSendRequest;
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use proton_mail_common::{MailContextError, MailUserContext, draft};
-use proton_mail_ids::LocalMessageId;
 use stash::orm::Model;
 use stash::stash::Bond;
 use std::sync::Arc;

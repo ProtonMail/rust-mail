@@ -1,4 +1,5 @@
 use crate as proton_mail_common;
+use crate::datatypes::LocalConversationId;
 use proton_core_api::services::proton::GetLabelsByIdsOptions;
 use proton_core_api::services::proton::GetLabelsResponse;
 use proton_core_api::session::{Config, EnvId, Session};
@@ -15,7 +16,6 @@ use proton_mail_common::{
     api_conversation, api_label, api_message_meta, conversation, label, message,
     test_utils::utils::create_address,
 };
-use proton_mail_ids::LocalConversationId;
 use test_case::test_case;
 #[allow(unused_imports)]
 use wiremock::{

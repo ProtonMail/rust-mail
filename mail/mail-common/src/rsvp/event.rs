@@ -1,10 +1,10 @@
+use crate::datatypes::LocalMessageId;
 use crate::rsvp::RsvpMailSender;
 use crate::{AppError, MailContextError, MailContextResult};
 use crate::{MailUserContext, models::Message};
 use anyhow::Context;
 use proton_calendar_common::{self as cal, RsvpAnswer, RsvpAnswerError, RsvpAnswerStatus};
 use proton_crypto_inbox::proton_crypto;
-use proton_mail_ids::LocalMessageId;
 use stash::orm::Model;
 use stash::stash::Tether;
 use std::ops;

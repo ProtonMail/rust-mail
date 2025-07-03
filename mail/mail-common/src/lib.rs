@@ -37,9 +37,9 @@ use proton_core_common::datatypes::{LocalAddressId, LocalLabelId};
 pub use proton_mail_api;
 use stash::stash::StashError;
 
+use crate::datatypes::LocalConversationId;
 use datatypes::attachment::ContentId;
 use proton_crypto_inbox::attachment::AttachmentDecryptionError;
-use proton_mail_ids::LocalConversationId;
 use thiserror::Error;
 
 #[macro_export]

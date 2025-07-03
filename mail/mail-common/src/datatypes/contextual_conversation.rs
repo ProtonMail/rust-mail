@@ -4,6 +4,7 @@ use std::time::Instant;
 use super::SystemLabelId as _;
 use super::folder_banner::{AutoDeleteBanner, AutoDeleteState, SpamOrTrash};
 use crate::actions::{AllBottomBarMessageActions, BottomBarActions, MovableSystemFolderAction};
+use crate::datatypes::LocalConversationId;
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, ExclusiveLocation, LocalMessageId, MessageRecipients,
     MessageSenders, MobileActions,
@@ -21,7 +22,6 @@ use proton_core_common::models::{
     Label, LabelError, ModelExtension, ModelIdExtension as _, PaidSubscription, User,
 };
 use proton_mail_api::services::proton::common::ConversationId;
-use proton_mail_ids::LocalConversationId;
 use sqlite_watcher::watcher::TableObserver;
 use stash::orm::Model;
 use stash::params;

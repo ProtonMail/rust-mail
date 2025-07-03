@@ -1,12 +1,12 @@
 use crate::MailUserContext;
 use crate::actions::MailActionError;
+use crate::datatypes::LocalConversationId;
 use crate::models::{Conversation, Message};
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
 };
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label;
-use proton_mail_ids::LocalConversationId;
 use serde::{self, Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::Bond;

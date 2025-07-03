@@ -1,4 +1,5 @@
 use crate::datatypes::AttachmentMetadata;
+use crate::datatypes::LocalAttachmentId;
 use crate::draft::SaveError;
 use crate::models::{
     Attachment, DraftAttachmentMetadata, DraftAttachmentUploadError, DraftAttachmentUploadState,
@@ -10,7 +11,6 @@ use proton_crypto_inbox::attachment::{DecryptableAttachment, KeyPackets};
 use proton_crypto_inbox::proton_crypto::crypto::AsPublicKeyRef;
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_api::services::proton::prelude::DraftAttachmentKeyPackets;
-use proton_mail_ids::LocalAttachmentId;
 use stash::orm::Model;
 use stash::stash::{StashError, Tether};
 use std::collections::HashMap;

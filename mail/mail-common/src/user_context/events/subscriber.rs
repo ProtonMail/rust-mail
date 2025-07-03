@@ -1,5 +1,6 @@
 use crate::actions::refresh::ActionRefresh;
 use crate::actions::{conversations, messages};
+use crate::datatypes::{LocalConversationId, LocalMessageId};
 use crate::datatypes::{MessageLabelsCount, ReadFilter, ViewMode};
 use crate::models::default_location::IncomingDefaultLocation;
 use crate::models::{
@@ -19,7 +20,6 @@ use proton_action_queue::queue::{ActionError as QueueActionError, QueuedActionOu
 use proton_core_common::datatypes::{Refresh, SystemLabel};
 use proton_core_common::models::{Label, ModelExtension};
 use proton_event_loop::subscriber::{Subscriber, SubscriberError};
-use proton_mail_ids::{LocalConversationId, LocalMessageId};
 use stash::orm::Model;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};

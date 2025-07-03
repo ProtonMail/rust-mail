@@ -1,5 +1,6 @@
 use super::{ConversationCounters, MessageCounters};
 use crate::AppError;
+use crate::datatypes::LocalMessageId;
 use crate::datatypes::labels::LabelScrollOrder;
 use crate::datatypes::{ContextualConversation, ReadFilter};
 use crate::models::{Conversation, ConversationLabel, Message, MessageLabel};
@@ -8,7 +9,6 @@ use indoc::formatdoc;
 use proton_core_common::datatypes::{LocalLabelId, UnixTimestamp};
 use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::prelude::{ConversationId, MessageId};
-use proton_mail_ids::LocalMessageId;
 use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
