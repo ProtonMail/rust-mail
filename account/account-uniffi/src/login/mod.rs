@@ -2,6 +2,7 @@ use datatypes::MigrationData;
 use muon::client::flow::LoginExtraInfo;
 use proton_account_api::login as login_api;
 use proton_account_api::responses as responses_api;
+use proton_core_api::consts::CoreBundle;
 use proton_core_api::service::ApiServiceError;
 use std::sync::Arc;
 use tokio::{sync::Mutex, task::JoinError};
@@ -208,7 +209,11 @@ pub enum LoginError {
     InvalidState,
 
     InvalidCredentials,
+
     CantUnlockUserKey,
+
+    /// Returned if Incorrect 2FA code was provided by the user
+    Incorrect2FACode,
 
     /// Returned if the initial auth request fails.
     FlowLogin(UserApiServiceError),
@@ -270,6 +275,10 @@ impl From<login_api::LoginError> for LoginError {
             | login_api::LoginError::ServerProof(..)
             | login_api::LoginError::SrpProof(..)
             | login_api::LoginError::WrongMailboxPassword => LoginError::InvalidCredentials,
+            login_api::LoginError::FlowTotp(ApiServiceError::UnprocessableEntity(
+                _,
+                Some(info),
+            )) if info.code == CoreBundle::PasswordWrong as u32 => LoginError::Incorrect2FACode,
             login_api::LoginError::FlowLogin(e) => LoginError::FlowLogin(e.into()),
             login_api::LoginError::FlowTotp(e) => LoginError::FlowTotp(e.into()),
             login_api::LoginError::FlowFido(e) => LoginError::FlowFido(e.into()),
