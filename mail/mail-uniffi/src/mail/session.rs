@@ -1,4 +1,4 @@
-use crate::core::datatypes::{ApiConfig, AppProtection, AppSettings, AppSettingsDiff, Id};
+use crate::core::datatypes::{ApiConfig, AppProtection, AppSettings, AppSettingsDiff};
 use crate::core::device::{DeviceInfoProviderWrap, DynDeviceInfoProvider};
 use crate::core::verification::{ChallengeNotifierWrap, DynChallengeNotifier};
 use crate::core::{FFIKeyChain, StoredAccountState, StoredSession, StoredSessionState};
@@ -24,7 +24,6 @@ use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::{AppSettings as RealAppSettings, PinProtection};
 use proton_core_common::os::KeyChainExt;
 use proton_core_common::pin_code::PinCode;
-use proton_core_common::utils::MapVec;
 use proton_core_common::{CoreContextError, OnSessionDeletedResponse};
 use proton_log_service::LogService;
 use proton_mail_common::MailContext;
@@ -714,37 +713,6 @@ impl MailSession {
         .await
         .map_err(UserContextError::from)
         .into()
-    }
-
-    /// Check if any message for all logged in accounts is still pending to send
-    ///
-    pub async fn all_messages_were_sent(&self) -> Result<bool, UserContextError> {
-        let ctx = self.mail_ctx.clone();
-        uniffi_async(async move {
-            Result::<_, RealProtonMailError>::Ok(ctx.has_users_with_unsent_messages().await?)
-        })
-        .await
-        .map_err(UserContextError::from)
-    }
-
-    /// Get all unsent message ids for given user id
-    ///
-    pub async fn get_unsent_messages_ids_in_queue(
-        &self,
-        user_id: String,
-    ) -> Result<Vec<Id>, UserContextError> {
-        let ctx = self.mail_ctx.clone();
-
-        uniffi_async(async move {
-            Result::<_, RealProtonMailError>::Ok(
-                ctx.get_unsent_messages_ids_for_user(user_id.into())
-                    .await?
-                    .into_iter()
-                    .map_vec(),
-            )
-        })
-        .await
-        .map_err(UserContextError::from)
     }
 
     /// What aditional protection of the App is configured.

@@ -3,7 +3,8 @@ use crate::mail::MailSession;
 use crate::{async_runtime, spawn_async};
 use proton_mail_common::MailContext;
 use proton_mail_common::background_execution::{
-    BackgroundExecutionContext, BackgroundExecutionStatus as RealBackgroundExecutionStatus,
+    BackgroundExecutionContext, BackgroundExecutionResult as RealBackgroundExecutionResult,
+    BackgroundExecutionStatus as RealBackgroundExecutionStatus,
 };
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use std::sync::{Arc, Weak};
@@ -59,7 +60,7 @@ impl MailSession {
             BackgroundExecutionContext::new().map_err(RealProtonMailError::from)?;
         // This task needs to run a free task that won't get paused or it may get stuck.
         async_runtime().spawn(async move {
-            let status = match background_context
+            let result = match background_context
                 .run(
                     &ctx,
                     async { abort.recv().await.unwrap_or(false) },
@@ -68,9 +69,12 @@ impl MailSession {
                 .await
             {
                 Ok(s) => s.into(),
-                Err(e) => BackgroundExecutionStatus::Failed(e.to_string()),
+                Err(e) => BackgroundExecutionResult {
+                    has_unsent_messages: false,
+                    status: BackgroundExecutionStatus::Failed(e.to_string()),
+                },
             };
-            callback.on_execution_completed(status).await;
+            callback.on_execution_completed(result).await;
         });
 
         Ok(Arc::new(BackgroundExecutionHandle {
@@ -108,14 +112,28 @@ impl From<RealBackgroundExecutionStatus> for BackgroundExecutionStatus {
     }
 }
 
+#[derive(uniffi::Record)]
+pub struct BackgroundExecutionResult {
+    pub status: BackgroundExecutionStatus,
+    pub has_unsent_messages: bool,
+}
+
+impl From<RealBackgroundExecutionResult> for BackgroundExecutionResult {
+    fn from(value: RealBackgroundExecutionResult) -> Self {
+        Self {
+            status: value.status.into(),
+            has_unsent_messages: value.has_unsent_messages,
+        }
+    }
+}
 /// Callback to be notified when background execution completes.
 #[uniffi::export(with_foreign)]
 #[async_trait::async_trait]
 pub trait BackgroundExecutionCallback: Send + Sync {
     /// Called when the background execution has terminated.
     ///
-    /// Check the returned `status` for more details.
-    async fn on_execution_completed(&self, status: BackgroundExecutionStatus);
+    /// Check the returned `result` for more details.
+    async fn on_execution_completed(&self, result: BackgroundExecutionResult);
 }
 
 /// Handle for background activites execution.

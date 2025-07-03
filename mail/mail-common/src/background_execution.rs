@@ -1,6 +1,7 @@
 use crate::{MailContext, MailContextResult};
 use std::sync::Arc;
 use std::time::Duration;
+use tracing::error;
 
 #[derive(Debug, Copy, Clone)]
 pub enum BackgroundExecutionStatus {
@@ -14,6 +15,20 @@ pub enum BackgroundExecutionStatus {
     AbortedInForeground,
     /// We ran more than the allotted time.
     TimedOut,
+}
+
+pub struct BackgroundExecutionResult {
+    pub status: BackgroundExecutionStatus,
+    pub has_unsent_messages: bool,
+}
+
+impl BackgroundExecutionResult {
+    fn no_active_contexts() -> Self {
+        Self {
+            status: BackgroundExecutionStatus::SkippedNoActiveContexts,
+            has_unsent_messages: false,
+        }
+    }
 }
 
 /// Contains all relevant state to successfully execute actions in the background.
@@ -33,7 +48,7 @@ impl BackgroundExecutionContext {
         ctx: &Arc<MailContext>,
         abort: impl Future<Output = bool>,
         max_duration: Duration,
-    ) -> MailContextResult<BackgroundExecutionStatus> {
+    ) -> MailContextResult<BackgroundExecutionResult> {
         tracing::debug!("Background execution is gathering user contexts");
 
         let all_user_ctxs = ctx
@@ -45,7 +60,7 @@ impl BackgroundExecutionContext {
 
         if all_user_ctxs.is_empty() {
             tracing::warn!("There are no logged in users, skipping background execution");
-            return Ok(BackgroundExecutionStatus::SkippedNoActiveContexts);
+            return Ok(BackgroundExecutionResult::no_active_contexts());
         }
 
         ctx.core_context().task_service().resume_background();
@@ -72,6 +87,25 @@ impl BackgroundExecutionContext {
             tracing::info!("Pausing executors... Done");
         }
         tracing::info!("Background execution finished");
-        Ok(status)
+
+        let mut has_unsent_messages = false;
+        for ctx in all_user_ctxs {
+            has_unsent_messages = has_unsent_messages
+                || ctx
+                    .has_unsent_messages()
+                    .await
+                    .inspect_err(|e| {
+                        error!(
+                            "Failed to check {} for unsent messages: {e:?}",
+                            ctx.user_id()
+                        )
+                    })
+                    .unwrap_or(false);
+        }
+
+        Ok(BackgroundExecutionResult {
+            status,
+            has_unsent_messages,
+        })
     }
 }
