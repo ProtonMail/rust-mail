@@ -54,8 +54,12 @@ impl RollbackItem {
         .await?
         .is_none()
         {
-            // Only conditionally call Model::save
-            <Self as Model>::save(self, bond).await?;
+            // Only conditionally call Model::insert
+            // Crucially this is not Model::save
+            <Self as Model>::insert(self, bond).await?;
+        } else {
+            // We can skip the insert since it's already there.
+            // An update would do nothing.
         }
         Ok(())
     }

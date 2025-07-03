@@ -252,7 +252,7 @@ impl TestContext {
                 .tx::<_, _, StashError>(async |tx| {
                     // Create
                     let account = CoreAccount::new(user_id.clone(), Self::test_user_mail())
-                        .with_save(tx)
+                        .with_insert(tx)
                         .await
                         .expect("fake account should save");
 

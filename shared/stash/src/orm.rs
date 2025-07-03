@@ -370,6 +370,67 @@ where
     ///
     async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         self.before_save(bond).await?;
+
+        // HACK: This is not great but we're forced to do it since there's no guarantee that the
+        // row does or doesn't exist.
+        let query = formatdoc! {"
+                        SELECT {id_name} AS value
+                        FROM {table} 
+                        WHERE {id_name} = ?
+                        ",
+            table = Self::table_name(),
+            id_name = Self::id_field_name(),
+        };
+
+        if let Ok(id) = self.id_value() {
+            if bond
+                .query_value_opt::<Self::IdType>(query, params![id])
+                .await?
+                .is_some()
+            {
+                return self.update(bond).await;
+            }
+        }
+        self.insert(bond).await
+    }
+
+    /// Forcefully insert, even if it has the ID set.
+    async fn insert(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        // database, and we exclude it from the list here.
+        let (fields, values) = if Self::id_is_autoincrementing() {
+            (
+                Self::field_names_without_id(),
+                Self::field_values_without_id(self),
+            )
+        } else {
+            (Self::field_names(), Self::field_values(self))
+        };
+
+        let placeholders = crate::utils::placeholders(&fields);
+        let query = formatdoc! {"
+                    INSERT INTO {table} ({fields})
+                    VALUES ({placeholders})
+                    RETURNING {id} AS value
+                    ",
+            table = Self::table_name(),
+            fields = fields.join(", "),
+            id = Self::id_field_name(),
+        };
+
+        let id = bond
+            .query_value_opt::<Self::IdType>(query, values.bridge_sql())
+            .await?
+            .context("Insert did not return an id")?;
+
+        self.set_id_value(id);
+
+        self.after_save(bond).await?;
+        Ok(())
+    }
+
+    async fn update(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        let id = self.id_value().map_err(|_| StashError::IdNotSet)?;
+
         // If the ID field is auto-incrementing then it is fully managed by the
         // database, and we exclude it from the list here.
         let (fields, values) = if Self::id_is_autoincrementing() {
@@ -381,62 +442,21 @@ where
             (Self::field_names(), Self::field_values(self))
         };
 
-        match self.id_value() {
-            // ID is set: update
-            Ok(id) => {
-                let fields = fields.iter().map(|field| format!("{field} = ?")).join(", ");
-                let query = formatdoc!(
-                    "UPDATE {table}
+        let fields = fields.iter().map(|field| format!("{field} = ?")).join(", ");
+        let query = formatdoc!(
+            "UPDATE {table}
                     SET {fields}
                     WHERE {id} = ?",
-                    table = Self::table_name(),
-                    id = Self::id_field_name(),
-                );
+            table = Self::table_name(),
+            id = Self::id_field_name(),
+        );
 
-                let values = values.bridge_sql_extend([id]).collect();
-                let affected: usize = bond.execute(&query, values).await?;
+        let values = values.bridge_sql_extend([id]).collect();
+        let affected: usize = bond.execute(&query, values).await?;
 
-                if affected == 0 {
-                    return Err(StashError::NoRowsUpdated);
-                }
-            }
-            // ID is not set: insert
-            Err(_) => {
-                if Self::id_is_autoincrementing() && self.id_value().is_ok() {
-                    // If the ID field is configured as auto-incrementing and is set, but the
-                    // row ID is not set, then the state is invalid, because it should have been
-                    // loaded from the database.
-                    return Err(StashError::InvalidIdState);
-                }
-                if Self::id_is_optional()
-                    && !Self::id_is_autoincrementing()
-                    && self.id_value().is_err()
-                {
-                    // If the ID field is configured as optional but NOT auto-incrementing, and
-                    // is not set, then the state is invalid, because it is under manual control
-                    // and needs to be set before saving.
-                    return Err(StashError::IdNotSet);
-                }
-                let placeholders = crate::utils::placeholders(&fields);
-                let query = formatdoc! {"
-                    INSERT INTO {table} ({fields})
-                    VALUES ({placeholders})
-                    RETURNING {id} AS value
-                    ",
-                    table = Self::table_name(),
-                    fields = fields.join(", "),
-                    id = Self::id_field_name(),
-                };
-
-                let id = bond
-                    .query_value_opt::<Self::IdType>(query, values.bridge_sql())
-                    .await?
-                    .context("Insert did not return an id")?;
-
-                self.set_id_value(id);
-            }
-        };
-
+        if affected == 0 {
+            return Err(StashError::NoRowsUpdated);
+        }
         self.after_save(bond).await?;
         Ok(())
     }

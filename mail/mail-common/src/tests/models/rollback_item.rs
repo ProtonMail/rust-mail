@@ -110,11 +110,13 @@ async fn test_store_and_delete_remote_items(
     let mut tether = stash.connection();
     tether
         .tx::<_, _, StashError>(async |tx| {
-            for item in expected.iter_mut().flat_map(|x| x.iter_mut()) {
-                item.save(tx).await.unwrap();
+            if let Some(items) = &mut expected {
+                for item in items {
+                    item.save(tx).await.unwrap();
+                }
             }
 
-            for item in input.iter_mut() {
+            for item in &mut input {
                 item.save(tx).await.unwrap();
             }
 
