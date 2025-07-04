@@ -4,7 +4,6 @@ use secrecy::{ExposeSecret, SecretString};
 
 /// Errors for keychain operations.
 #[derive(Debug, thiserror::Error, uniffi::Error)]
-#[uniffi(flat_error)]
 pub enum OSKeyChainError {
     /// OS operation failed.
     #[error("OS: {0}")]
