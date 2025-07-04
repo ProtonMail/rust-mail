@@ -1,6 +1,6 @@
 [package]
 name = "proton-mail-uniffi"
-version = "0.93.21"
+version = "0.93.22"
 edition.workspace = true
 publish = false
 
