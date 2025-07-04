@@ -317,40 +317,31 @@ impl State {
             .map_err(LoginError::UserFetch)
             .await?;
 
+        // Is the user forbidden from logging in?
+        if user.flags.no_login {
+            data.parts.store.write().await.clear_account().await?;
+            return Err(LoginError::NoLogin);
+        }
+
+        // Does the user have a proton address?
+        if user.flags.no_proton_address {
+            data.parts.store.write().await.clear_account().await?;
+            return Err(LoginError::NoProtonAddress);
+        }
+
         // Fetch user addresses.
-        let mut addresses = ProtonCore::get_addresses(&client)
+        let mut addr = ProtonCore::get_addresses(&client)
             .map_ok(|res| res.addresses)
             .map_err(LoginError::AddressFetch)
             .await?;
 
-        // Does the user have an address?
-        if addresses.is_empty() {
-            Self::setup_address(&client, &user).await?;
-
-            addresses = ProtonCore::get_addresses(&client)
-                .map_ok(|res| res.addresses)
-                .map_err(LoginError::AddressFetch)
-                .await?;
-        }
-
         // Does the user have a key?
         if user.keys.as_ref().is_empty() {
-            if !user.private {
+            if user.private {
+                (user, addr) = Self::setup_keys(&srp, &pgp, &client, &addr, &pass).await?;
+            } else {
                 return Err(LoginError::UserKeySetupNonPrivate);
             }
-
-            Self::setup_keys(&srp, &pgp, &client, &addresses, &pass).await?;
-
-            user = client
-                .get_users()
-                .map_ok(|res| res.user)
-                .map_err(LoginError::UserFetch)
-                .await?;
-
-            addresses = ProtonCore::get_addresses(&client)
-                .map_ok(|res| res.addresses)
-                .map_err(LoginError::AddressFetch)
-                .await?;
         }
 
         // Fetch the user's key salts.
@@ -385,13 +376,8 @@ impl State {
             .ok_or(LoginError::MissingPrimaryKey)?;
 
         // Do all the user's addresses have keys?
-        if addresses.iter().any(|addr| addr.keys.as_ref().is_empty()) {
-            Self::setup_address_keys(&pgp, &client, user_key, &addresses).await?;
-
-            let _ = ProtonCore::get_addresses(&client)
-                .map_ok(|res| res.addresses)
-                .map_err(LoginError::AddressFetch)
-                .await?;
+        if addr.iter().any(|addr| addr.keys.as_ref().is_empty()) {
+            Self::setup_address_keys(&pgp, &client, user_key, &addr).await?;
         }
 
         // Save user data to store
@@ -414,7 +400,7 @@ impl State {
         client: &muon::Client,
         addr: &[Address],
         pass: &str,
-    ) -> Result<(), LoginError> {
+    ) -> Result<(User, Vec<Address>), LoginError> {
         use crate::requests::{AddressKeyInput, AsyncUserInitialization, SetupKeysRequest};
 
         let user_key = NewUserKey::init(srp, pgp, pass)
@@ -462,10 +448,22 @@ impl State {
             .await
             .map_err(|e| LoginError::UserKeySetup(e.to_string()))?;
 
-        Ok(())
+        let user = client
+            .get_users()
+            .map_ok(|res| res.user)
+            .map_err(LoginError::UserFetch)
+            .await?;
+
+        let addresses = ProtonCore::get_addresses(client)
+            .map_ok(|res| res.addresses)
+            .map_err(LoginError::AddressFetch)
+            .await?;
+
+        Ok((user, addresses))
     }
 
     /// Set up a new address for an external account that doesn't have any addresses.
+    #[allow(unused)]
     async fn setup_address(client: &muon::Client, user: &User) -> Result<(), LoginError> {
         use crate::requests::PostAddressesSetupRequest;
 
@@ -496,14 +494,19 @@ impl State {
         client: &muon::Client,
         user_key: &UnlockedUserKey<P>,
         addresses: &[Address],
-    ) -> Result<(), LoginError> {
+    ) -> Result<Vec<Address>, LoginError> {
         for address in addresses {
             if address.keys.as_ref().is_empty() {
                 Self::setup_address_key(pgp, client, user_key, address).await?;
             }
         }
 
-        Ok(())
+        let addresses = ProtonCore::get_addresses(client)
+            .map_ok(|res| res.addresses)
+            .map_err(LoginError::AddressFetch)
+            .await?;
+
+        Ok(addresses)
     }
 
     /// Set up keys for an address that doesn't have any keys.

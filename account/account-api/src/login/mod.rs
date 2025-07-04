@@ -36,6 +36,14 @@ pub enum LoginError {
     #[error("Failed to submit FIDO2 challenge response: {0}")]
     FlowFido(#[source] ApiServiceError),
 
+    /// Returned if the user is forbidden from logging in.
+    #[error("User is forbidden from logging in")]
+    NoLogin,
+
+    /// Returned if the user has no proton address.
+    #[error("User has no proton address")]
+    NoProtonAddress,
+
     /// Returned if we fail to fetch the user info after login.
     #[error("Failed to fetch user info: {0}")]
     UserFetch(#[source] ApiServiceError),
@@ -83,10 +91,6 @@ pub enum LoginError {
     /// TODO: Document this variant.
     #[error("Failed to calculate SRP Proof: {0}")]
     SrpProof(String),
-
-    /// TODO: Document this variant.
-    #[error("Wrong mailbox password provided")]
-    WrongMailboxPassword,
 
     /// Authentication Store operation failed.
     #[error("Authentication Store error: {0}")]
@@ -244,8 +248,8 @@ impl LoginFlow {
     ///
     /// # Errors
     ///
-    /// Returns error if the request failed.
-    /// If the password fails to decrypt the user key it returns a [`LoginError::WrongMailboxPassword`].
+    /// Returns [`LoginError::KeySecretDecryption`] if the password cannot unlock the user key,
+    /// or another variant of [`LoginError`] if the request failed.
     pub async fn submit_mailbox_password(&mut self, pass: String) -> Result<(), LoginError> {
         self.transition(|s: State| s.submit_mbp(pass))
             .await

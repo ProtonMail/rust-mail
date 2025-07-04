@@ -279,12 +279,20 @@ pub enum LoginError {
     /// TODO: Document this variant.
     InvalidState,
 
+    /// Returned if the credentials are invalid.
     InvalidCredentials,
 
     /// Returned if Incorrect 2FA code was provided by the user
     Incorrect2FACode,
 
+    /// Returned if the user key cannot be unlocked.
     CantUnlockUserKey,
+
+    /// Returned if the user is forbidden from logging in.
+    NoLogin,
+
+    /// Returned if the user has no proton address.
+    NoProtonAddress,
 
     /// Returned if the initial auth request fails.
     FlowLogin(UserApiServiceError),
@@ -335,11 +343,12 @@ impl From<login_api::LoginError> for LoginError {
     fn from(value: login_api::LoginError) -> Self {
         match value {
             login_api::LoginError::InvalidState => LoginError::InvalidState,
+            login_api::LoginError::NoLogin => Self::NoLogin,
+            login_api::LoginError::NoProtonAddress => Self::NoProtonAddress,
             login_api::LoginError::FlowLogin(ApiServiceError::UnprocessableEntity(..))
             | login_api::LoginError::KeySecretSaltFetch(ApiServiceError::UnprocessableEntity(..))
             | login_api::LoginError::ServerProof(..)
-            | login_api::LoginError::SrpProof(..)
-            | login_api::LoginError::WrongMailboxPassword => LoginError::InvalidCredentials,
+            | login_api::LoginError::SrpProof(..) => LoginError::InvalidCredentials,
             login_api::LoginError::FlowTotp(ApiServiceError::UnprocessableEntity(
                 _,
                 Some(info),
@@ -365,7 +374,8 @@ impl From<login_api::LoginError> for LoginError {
             login_api::LoginError::WithCodePollFlowFailed(e) => {
                 LoginError::WithCodePollFlowFailed(e.to_string())
             }
-            login_api::LoginError::QRLoginEncoding => LoginError::QRLoginEncoding,
+
+            login_api::LoginError::QRLoginEncoding => Self::QRLoginEncoding,
         }
     }
 }

@@ -121,8 +121,11 @@ pub trait Store: Send + Sync + 'static {
     /// Clear the temporary password.
     async fn clear_temp_pass(&mut self) -> Result<(), StoreError>;
 
-    /// Clear all stored data.
-    async fn clear(&mut self) -> Result<(), StoreError>;
+    /// Clear all session data.
+    async fn clear_session(&mut self) -> Result<(), StoreError>;
+
+    /// Clear all account data.
+    async fn clear_account(&mut self) -> Result<(), StoreError>;
 }
 
 #[async_trait]
@@ -160,8 +163,12 @@ impl<S: ?Sized + Store> Store for Box<S> {
         self.deref_mut().clear_temp_pass().await
     }
 
-    async fn clear(&mut self) -> Result<(), StoreError> {
-        self.deref_mut().clear().await
+    async fn clear_session(&mut self) -> Result<(), StoreError> {
+        self.deref_mut().clear_session().await
+    }
+
+    async fn clear_account(&mut self) -> Result<(), StoreError> {
+        self.deref_mut().clear_account().await
     }
 }
 
@@ -220,9 +227,14 @@ impl Store for TempStore {
         bail!("unsupported")
     }
 
-    async fn clear(&mut self) -> Result<(), StoreError> {
-        self.auth = Auth::None;
-        self.data = None;
+    async fn clear_session(&mut self) -> Result<(), StoreError> {
+        *self = Self::default();
+
+        Ok(())
+    }
+
+    async fn clear_account(&mut self) -> Result<(), StoreError> {
+        *self = Self::default();
 
         Ok(())
     }
