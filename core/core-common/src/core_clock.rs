@@ -84,7 +84,7 @@ impl ActivityClock {
     pub fn new(now: Instant) -> Self {
         Self {
             last_activity: Mutex::new(now),
-            accessed: AtomicBool::new(true),
+            accessed: AtomicBool::new(false),
             just_created: AtomicBool::new(true),
         }
     }
