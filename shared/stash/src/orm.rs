@@ -398,7 +398,7 @@ where
     async fn insert(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         // database, and we exclude it from the list here.
         let (fields, values) = if Self::id_is_autoincrementing() {
-            if Self::id_value(&self).is_ok() {
+            if Self::id_value(self).is_ok() {
                 // This should have been an upgrade
                 return Err(StashError::Critical(anyhow!(
                     "Attempting to insert a record with id autoincrement whose id is set"

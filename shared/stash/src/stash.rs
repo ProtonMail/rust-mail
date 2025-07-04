@@ -235,7 +235,7 @@ impl Instruction {
             .prepare(&self.query)
             .map_err(StashError::PreparationError)?;
         let affected = statement
-            .execute(&*prepare_params(&self.params))
+            .execute(params_from_iter(&self.params))
             .map_err(StashError::ExecutionError)?;
         // I'm not sure if we should do this.
         // TODO : Put this behind a feature flag (next MR)
@@ -342,7 +342,7 @@ impl Query {
             .map_err(StashError::PreparationError)?;
         let rows: Result<DbRecords, ConversionError> = (self.converter)(
             statement
-                .query(&*prepare_params(&self.params))
+                .query(params_from_iter(&self.params))
                 .map_err(StashError::ExecutionError)?,
         );
         if let Some(query) = statement.expanded_sql() {
@@ -1506,22 +1506,6 @@ impl<'a> TetheredWorkerStateMachine<'a> {
             error!("Failed to roll back transaction upon connection closure");
         }
     }
-}
-
-/// Prepares parameters ready to be used with a query.
-///
-/// This function prepares the parameters for a query, converting them into
-/// a form that can be used with the [`rusqlite`] library.
-///
-fn prepare_params(params: &[Box<dyn ToSql + Send>]) -> Vec<&dyn ToSql> {
-    params
-        .iter()
-        .map(|p| {
-            #[allow(clippy::shadow_same)]
-            let p: &dyn ToSql = &**p;
-            p
-        })
-        .collect()
 }
 
 /// Converts the query results into the desired type.

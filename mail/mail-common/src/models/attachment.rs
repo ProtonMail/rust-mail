@@ -368,7 +368,7 @@ impl Attachment {
     ) -> Result<Option<()>, AppError> {
         let remote_id = self
             .remote_id()
-            .context("Trying to sync a local attachment with no remote id")?;
+            .ok_or_else(|| AppError::AttachmentHasNoRemoteId(self.id()))?;
         let mut attachment = Self::from(Self::fetch_metadata(remote_id, api).await?.attachment);
         attachment.local_id = self.local_id;
         tether.tx(async |tx| attachment.save(tx).await).await?;
