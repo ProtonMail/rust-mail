@@ -80,20 +80,20 @@ pub fn new_mailbox(ctx: &MailUserSession, label_id: Id) -> Result<Arc<Mailbox>, 
 /// Returns an error if the mailbox could not be created or synced.
 ///
 #[uniffi_export]
-pub async fn new_inbox_mailbox(ctx: &MailUserSession) -> Result<Arc<Mailbox>, UserContextError> {
+pub fn new_inbox_mailbox(ctx: &MailUserSession) -> Result<Arc<Mailbox>, UserContextError> {
     let ptr = ctx.ptr();
     let ctx = ctx.ctx()?;
 
-    uniffi_async(async move {
-        let stash = ctx.user_stash();
-        let tether = stash.connection();
-        let mbox = RealMailbox::with_remote_id(&tether, RealLabelId::inbox()).await?;
+    async_runtime()
+        .block_on(async move {
+            let stash = ctx.user_stash();
+            let tether = stash.connection();
+            let mbox = RealMailbox::with_remote_id(&tether, RealLabelId::inbox()).await?;
 
-        Result::<_, RealProtonMailError>::Ok(Arc::new(Mailbox { ctx: ptr, mbox }))
-    })
-    .await
-    .map_err(UserContextError::from)
-    .into()
+            Result::<_, RealProtonMailError>::Ok(Arc::new(Mailbox { ctx: ptr, mbox }))
+        })
+        .map_err(UserContextError::from)
+        .into()
 }
 
 /// Create a new mailbox for all mail items.
@@ -111,20 +111,20 @@ pub async fn new_inbox_mailbox(ctx: &MailUserSession) -> Result<Arc<Mailbox>, Us
 /// Returns an error if the mailbox could not be created or synced.
 ///
 #[uniffi_export]
-pub async fn new_all_mail_mailbox(ctx: &MailUserSession) -> Result<Arc<Mailbox>, UserContextError> {
+pub fn new_all_mail_mailbox(ctx: &MailUserSession) -> Result<Arc<Mailbox>, UserContextError> {
     let ptr = ctx.ptr();
     let ctx = ctx.ctx()?;
 
-    uniffi_async(async move {
-        let stash = ctx.user_stash();
-        let tether = stash.connection();
-        let mbox = RealMailbox::with_remote_id(&tether, RealLabelId::all_mail()).await?;
+    async_runtime()
+        .block_on(async move {
+            let stash = ctx.user_stash();
+            let tether = stash.connection();
+            let mbox = RealMailbox::with_remote_id(&tether, RealLabelId::all_mail()).await?;
 
-        Result::<_, RealProtonMailError>::Ok(Arc::new(Mailbox { ctx: ptr, mbox }))
-    })
-    .await
-    .map_err(UserContextError::from)
-    .into()
+            Result::<_, RealProtonMailError>::Ok(Arc::new(Mailbox { ctx: ptr, mbox }))
+        })
+        .map_err(UserContextError::from)
+        .into()
 }
 
 #[uniffi_export]
