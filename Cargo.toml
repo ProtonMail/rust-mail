@@ -37,6 +37,7 @@ members = [
   "uniffi/uniffi-common",
   "uniffi/uniffi-macros",
   "uniffi/uniffi-runtime",
+  "shared/proton-event-service",
 ]
 
 [workspace.package]
