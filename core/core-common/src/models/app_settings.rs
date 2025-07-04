@@ -414,11 +414,18 @@ mod tests {
         app_settings.set_biometrics();
         app_settings.auto_lock = ProtectionAutoLock::Minutes(10);
 
-        // Last lock defaults to true
+        // First calls to should_auto_lock will return true
         assert!(app_settings.should_auto_lock(core_ctx).await);
+        assert!(app_settings.should_auto_lock(core_ctx).await);
+        // Ticking the clock will not change the result
         core_ctx.clock().auto_lock_tick();
+        assert!(app_settings.should_auto_lock(core_ctx).await);
+        // We need to mark that the auto lock has been accessed
+        // in order to reset the timer
+        core_ctx.clock().auto_lock_accessed();
+        core_ctx.clock().auto_lock_tick();
+        // Now the app is unlocked for the next 10 minutes
         let last_lock_1 = core_ctx.clock().auto_lock_elapsed();
-        // and any subsequent call for next 10 minutes will also return `false`
         assert!(!app_settings.should_auto_lock(core_ctx).await);
         assert!(!app_settings.should_auto_lock(core_ctx).await);
         let last_lock_2 = core_ctx.clock().auto_lock_elapsed();
