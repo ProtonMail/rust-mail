@@ -1,6 +1,8 @@
-use proton_core_common::{datatypes::SystemLabel, models::ModelExtension};
+use proton_core_common::{
+    datatypes::SystemLabel,
+    models::{LabelError, ModelExtension},
+};
 use proton_mail_api::services::proton::common::MessageId;
-use stash::stash::StashError;
 
 use crate::{
     MailContextResult, MailUserContext,
@@ -51,7 +53,7 @@ async fn move_to_system_label(
     let destination_label = system_label
         .local_id(&tether)
         .await?
-        .ok_or_else(|| StashError::IdNotSet)?;
+        .ok_or_else(|| LabelError::CouldNotResolveLocalLabel(system_label.remote_id()))?;
 
     ctx.queue_action(Move::new(
         source_label,

@@ -35,6 +35,7 @@ use rusqlite::hooks::Action;
 use rusqlite::types::FromSql;
 use rusqlite::{
     Connection, Error as SqliteError, Rows, ToSql, Transaction, TransactionBehavior, ffi,
+    params_from_iter,
 };
 use sqlite_watcher::connection::State;
 use sqlite_watcher::statement::Statement;
@@ -136,51 +137,32 @@ enum OperationExec {
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum StashError {
-    /// There was a problem with deserialising the query results. This means
-    /// that serde failed to convert the query results into the desired type,
-    /// which could be due to a mismatch between the query results and the
-    /// expected type.
+    /// There was a problem with deserialising the query results.
+    /// This is either a serde error or there's a mismatch between the record and the DB table.
     #[error("Query results deserialization error: {0}")]
     DeserializationError(#[from] ConversionError),
 
-    /// There was a problem with statement execution. Note that this refers to
-    /// executing a prepared statement, e.g. actually running a query, and not
-    /// the process of preparing the statement/query.
+    ///jThere was a problem with statement execution.
+    /// Note that this refers to executing a prepared statement,
+    /// e.g. actually running a query, and not the process of preparing the statement/query.
     #[error("Statement execution error: {0}")]
     ExecutionError(SqliteError),
 
-    /// The primary key ID was received as [`None`] in a location where it was
-    /// expected to be [`Some`]. This implies that either the records were not
-    /// previously saved, and were expected to be, or that there is some kind of
-    /// misconfiguration relating to primary keys, such as `AUTOINCREMENT` not
-    /// being set when it should be.
-    #[error("ID not set")]
+    #[error("Trying to update a record that hasn't been saved yet")]
     IdNotSet,
-
-    /// There is a row ID, but no primary ID field value — or, no row ID, but
-    /// the primary ID field is set when configured as auto-incrementing.
-    /// Neither of these situations should ever happen in normal practice, and
-    /// if they do, it means some manual process has taken place that has
-    /// resulted in an invalid state.
-    #[error("Row ID and ID field are in an invalid state")]
-    InvalidIdState,
-
-    /// The row ID was missing from the query results. This should never happen
-    /// in practice as the only places that rely on it are responsible for
-    /// specifying it in the queries that get run. Manual queries may not
-    /// specify it, but that doesn't matter.
-    #[error("Missing row ID")]
-    MissingRowId,
 
     /// An operation requiring a transaction was attempted, such as a commit or
     /// rollback, but no active transaction was found.
     #[error("No active transaction")]
     NoActiveTransaction,
 
-    /// There was a problem with statement preparation. Note that this refers to
-    /// preparing a statement from a query and parameters, prior to execution.
-    #[error("Statement preparation error: {0}")]
+    /// There was a problem when parsing and validating a statement.
+    /// Note that this refers to preparing a statement from a query and parameters, prior to execution.
+    #[error("Error while parsing the query: {0}")]
     PreparationError(SqliteError),
+
+    #[error("Transaction error: {0}")]
+    TransactionError(SqliteError),
 
     /// There was a problem with subscriptions. For some reason the subscription
     /// has ended up in the wrong place. This should never happen in practice.
@@ -192,22 +174,6 @@ pub enum StashError {
     /// situations, it would signify a problem.
     #[error("No rows updated upon saving record")]
     NoRowsUpdated,
-
-    /// An attempt was made to start a transaction, but one is already active.
-    #[error("Transaction already started")]
-    TransactionAlreadyStarted,
-
-    /// An attempt was made to use transaction operations without a [`Tether`].
-    #[error("Transaction command without Tether")]
-    TransactionCommandWithoutTether,
-
-    /// There was a problem with a transaction.
-    #[error("Error starting the transaction")]
-    TransactionStartError,
-
-    /// There was a problem with a transaction.
-    #[error("Transaction error: {0}")]
-    TransactionError(SqliteError),
 
     /// Critical internal error that cannot be recovered from.
     #[error("Critical internal stash error: {0}")]
