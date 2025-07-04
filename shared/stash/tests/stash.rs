@@ -515,19 +515,17 @@ mod concurrency_mixed {
 mod orm_tests {
     use crate::params;
     use stash::{
-        orm::Model,
+        orm::{Model, ModelHooks},
         stash::{Bond, Stash, StashError, Tether},
     };
     use stash_macros::Model;
 
     #[derive(Clone, Debug, Eq, Model, PartialEq)]
     #[TableName("my_model")]
-    #[ModelActions(on_load, on_save)]
+    #[ModelHooks]
     struct MyModel {
         #[IdField(autoincrement)]
         id: Option<u64>,
-        #[RowIdField]
-        row_id: Option<u64>,
 
         /// Keeps track of all queries. should be equal among all records.
         #[DbField]
@@ -542,27 +540,8 @@ mod orm_tests {
         rustacean: String,
     }
 
-    impl MyModel {
-        pub async fn on_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-            bond.execute(
-                "UPDATE my_model SET all_rustaceans = all_rustaceans + 1",
-                vec![],
-            )
-            .await?;
-            self.all_rustaceans += 1;
-            Ok(())
-        }
-        pub async fn on_load(&mut self, _: &Tether) -> Result<(), StashError> {
-            if self.mascot == "ferris" {
-                self.other_mascot = "corro".to_string();
-            } else if self.mascot == "corro" {
-                self.other_mascot = "ferris".to_owned();
-            } else {
-                panic!("unknown mascot {}", self.mascot);
-            }
-            Ok(())
-        }
-        pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+    impl ModelHooks for MyModel {
+        async fn before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
             if self.mascot == "ferris" {
                 assert_eq!(self.other_mascot, "corro")
             } else if self.mascot == "corro" {
@@ -573,8 +552,28 @@ mod orm_tests {
             self.all_rustaceans = bond
                 .query_value("SELECT COUNT(*) as value from my_model", vec![])
                 .await?;
+            Ok(())
+        }
 
-            <Self as Model>::save(self, bond).await
+        async fn after_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+            bond.execute(
+                "UPDATE my_model SET all_rustaceans = all_rustaceans + 1",
+                vec![],
+            )
+            .await?;
+            self.all_rustaceans += 1;
+            Ok(())
+        }
+
+        async fn after_load(&mut self, _: &Tether) -> Result<(), StashError> {
+            if self.mascot == "ferris" {
+                self.other_mascot = "corro".to_string();
+            } else if self.mascot == "corro" {
+                self.other_mascot = "ferris".to_owned();
+            } else {
+                panic!("unknown mascot {}", self.mascot);
+            }
+            Ok(())
         }
     }
 
@@ -602,7 +601,6 @@ mod orm_tests {
 
         let mut boats = MyModel {
             id: None,
-            row_id: None,
             all_rustaceans: 0,
             mascot: "ferris".to_owned(),
             other_mascot: "corro".to_owned(),
@@ -610,7 +608,6 @@ mod orm_tests {
         };
         let mut niko = MyModel {
             id: None,
-            row_id: None,
             all_rustaceans: 0,
             mascot: "corro".to_owned(),
             other_mascot: "ferris".to_owned(),

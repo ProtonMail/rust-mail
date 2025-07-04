@@ -26,7 +26,6 @@ async fn test_mark_labels_as_initialized() {
                 notify: false,
                 path: None,
                 sticky: false,
-                row_id: None,
             };
             new_label.save(tx).await.expect("failed to create label");
             let new_label_id = new_label.id();

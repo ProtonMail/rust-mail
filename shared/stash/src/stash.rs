@@ -18,7 +18,7 @@
 //! to interface with sqlite.
 //!
 
-use crate::orm::{ConversionError, DbRecord, DbRecords, Model, from_rows, perform_load};
+use crate::orm::{ConversionError, DbRecord, DbRecords, from_rows};
 use anyhow::{Context, anyhow};
 use core::fmt;
 use core::fmt::Debug;
@@ -35,6 +35,7 @@ use rusqlite::hooks::Action;
 use rusqlite::types::FromSql;
 use rusqlite::{
     Connection, Error as SqliteError, Rows, ToSql, Transaction, TransactionBehavior, ffi,
+    params_from_iter,
 };
 use sqlite_watcher::connection::State;
 use sqlite_watcher::statement::Statement;
@@ -136,55 +137,32 @@ enum OperationExec {
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum StashError {
-    /// There was a problem with deserialising the query results. This means
-    /// that serde failed to convert the query results into the desired type,
-    /// which could be due to a mismatch between the query results and the
-    /// expected type.
+    /// There was a problem with deserialising the query results.
+    /// This is either a serde error or there's a mismatch between the record and the DB table.
     #[error("Query results deserialization error: {0}")]
     DeserializationError(#[from] ConversionError),
 
-    /// There was a problem with statement execution. Note that this refers to
-    /// executing a prepared statement, e.g. actually running a query, and not
-    /// the process of preparing the statement/query.
+    ///jThere was a problem with statement execution.
+    /// Note that this refers to executing a prepared statement,
+    /// e.g. actually running a query, and not the process of preparing the statement/query.
     #[error("Statement execution error: {0}")]
     ExecutionError(SqliteError),
 
-    /// The primary key ID was received as [`None`] in a location where it was
-    /// expected to be [`Some`]. This implies that either the records were not
-    /// previously saved, and were expected to be, or that there is some kind of
-    /// misconfiguration relating to primary keys, such as `AUTOINCREMENT` not
-    /// being set when it should be.
-    #[error("ID not set")]
+    #[error("Trying to update a record that hasn't been saved yet")]
     IdNotSet,
-
-    /// There is a row ID, but no primary ID field value — or, no row ID, but
-    /// the primary ID field is set when configured as auto-incrementing.
-    /// Neither of these situations should ever happen in normal practice, and
-    /// if they do, it means some manual process has taken place that has
-    /// resulted in an invalid state.
-    #[error("Row ID and ID field are in an invalid state")]
-    InvalidIdState,
-
-    /// The row ID was missing from the query results. This should never happen
-    /// in practice as the only places that rely on it are responsible for
-    /// specifying it in the queries that get run. Manual queries may not
-    /// specify it, but that doesn't matter.
-    #[error("Missing row ID")]
-    MissingRowId,
 
     /// An operation requiring a transaction was attempted, such as a commit or
     /// rollback, but no active transaction was found.
     #[error("No active transaction")]
     NoActiveTransaction,
 
-    /// There was a problem with statement preparation. Note that this refers to
-    /// preparing a statement from a query and parameters, prior to execution.
-    #[error("Statement preparation error: {0}")]
+    /// There was a problem when parsing and validating a statement.
+    /// Note that this refers to preparing a statement from a query and parameters, prior to execution.
+    #[error("Error while parsing the query: {0}")]
     PreparationError(SqliteError),
 
-    /// No row ID was returned after saving a record. This should never happen.
-    #[error("No row ID returned after saving record")]
-    NoRowIdReturned,
+    #[error("Transaction error: {0}")]
+    TransactionError(SqliteError),
 
     /// There was a problem with subscriptions. For some reason the subscription
     /// has ended up in the wrong place. This should never happen in practice.
@@ -197,24 +175,8 @@ pub enum StashError {
     #[error("No rows updated upon saving record")]
     NoRowsUpdated,
 
-    /// An attempt was made to start a transaction, but one is already active.
-    #[error("Transaction already started")]
-    TransactionAlreadyStarted,
-
-    /// An attempt was made to use transaction operations without a [`Tether`].
-    #[error("Transaction command without Tether")]
-    TransactionCommandWithoutTether,
-
-    /// There was a problem with a transaction.
-    #[error("Error starting the transaction")]
-    TransactionStartError,
-
-    /// There was a problem with a transaction.
-    #[error("Transaction error: {0}")]
-    TransactionError(SqliteError),
-
-    /// Critical error that cannot be recovered from.
-    #[error("Critical error: {0}")]
+    /// Critical internal error that cannot be recovered from.
+    #[error("Critical internal stash error: {0}")]
     Critical(#[from] anyhow::Error),
 
     /// Custom variant that is not critical
@@ -273,7 +235,7 @@ impl Instruction {
             .prepare(&self.query)
             .map_err(StashError::PreparationError)?;
         let affected = statement
-            .execute(&*prepare_params(&self.params))
+            .execute(params_from_iter(&self.params))
             .map_err(StashError::ExecutionError)?;
         // I'm not sure if we should do this.
         // TODO : Put this behind a feature flag (next MR)
@@ -380,7 +342,7 @@ impl Query {
             .map_err(StashError::PreparationError)?;
         let rows: Result<DbRecords, ConversionError> = (self.converter)(
             statement
-                .query(&*prepare_params(&self.params))
+                .query(params_from_iter(&self.params))
                 .map_err(StashError::ExecutionError)?,
         );
         if let Some(query) = statement.expanded_sql() {
@@ -745,25 +707,6 @@ impl Tether {
             .expect("Tether closed its channel with handles still open")
     }
 
-    /// Loads a record from the database by ID.
-    ///
-    /// This function retrieves a single record from the database by its unique
-    /// ID, as an instance of the specified type `T`, where `T` is any concrete
-    /// type implementing the [`Model`] trait.
-    ///
-    /// For full usage details, see [`Model::load()`].
-    ///
-    /// # Errors
-    ///
-    /// See [`Model::load()`].
-    pub async fn load<T, I>(&self, id: I) -> Result<Option<T>, StashError>
-    where
-        T: Model,
-        I: ToSql + Send + 'static,
-    {
-        perform_load(id, self).await
-    }
-
     /// Runs a query and returns any rows of data emitted.
     ///
     /// This function prepares a query and executes it on the database, and
@@ -771,56 +714,13 @@ impl Tether {
     /// specified `T` type, where `T` is any concrete type implementing the
     /// [`DbRecord`] trait. The requirement to formalise the return type
     /// streamlines the process of handling the results.
-    ///
-    /// Note that the [`params!`](crate::utils::params) macro is available to
-    /// help shorten the syntax for passing in the query parameters.
-    ///
-    /// # Read vs write
-    ///
-    /// Although this function is *designed* for read queries, this is implied
-    /// and a convenience, and it is entirely possible to use it for write
-    /// queries as well. The number of rows returned will be zero for write
-    /// queries. Any semantic difference between read and write queries is left
-    /// to the caller to decide, and does not result in any difference in
-    /// handling by this module. The [`rusqlite`] library will handle the
-    /// distinction as necessary.
-    ///
-    /// # Deserialisation
-    ///
-    /// Note that it is possible to deserialise the results into other types
-    /// too, and indeed serialise types into queries, but those use cases are
-    /// unlikely to be needed, or at least not common, and so are not provided
-    /// by this module. No interface is currently provided to achieve this.
-    ///
-    /// # Errors
-    ///
-    /// The following [`StashError`] variants can be returned:
-    ///
-    ///   - [`DeserializationError`](StashError::DeserializationError) - Problem
-    ///     converting from [`Rows`] to `T`.
-    ///   - [`ExecutionError`](StashError::ExecutionError) - Problem executing
-    ///     the query.
-    ///   - [`OneShotError`](StashError::OneShotError) - Problem receiving data
-    ///     back to the caller via the oneshot channel.
-    ///   - [`PreparationError`](StashError::PreparationError) - Problem
-    ///     preparing the query.
-    ///   - [`QueueError`](StashError::QueueError) - Problem sending the
-    ///     operation to the queue.
-    ///   - [`TetherError`](StashError::TetherError) - Problem obtaining a
-    ///     connection from the pool.
-    ///
-    /// # See also
-    ///
-    /// * [`Interface::execute()`]
-    /// * [`params!`](crate::utils::params)
-    ///
     pub async fn query<Q, T>(
         &self,
         query: Q,
         params: Vec<Box<dyn ToSql + Send>>,
     ) -> Result<Vec<T>, StashError>
     where
-        Q: Into<String> + Send,
+        Q: Into<String>,
         T: DbRecord + Send + 'static,
         DbRecords: FromIterator<Box<T>>,
     {
@@ -1606,22 +1506,6 @@ impl<'a> TetheredWorkerStateMachine<'a> {
             error!("Failed to roll back transaction upon connection closure");
         }
     }
-}
-
-/// Prepares parameters ready to be used with a query.
-///
-/// This function prepares the parameters for a query, converting them into
-/// a form that can be used with the [`rusqlite`] library.
-///
-fn prepare_params(params: &[Box<dyn ToSql + Send>]) -> Vec<&dyn ToSql> {
-    params
-        .iter()
-        .map(|p| {
-            #[allow(clippy::shadow_same)]
-            let p: &dyn ToSql = &**p;
-            p
-        })
-        .collect()
 }
 
 /// Converts the query results into the desired type.

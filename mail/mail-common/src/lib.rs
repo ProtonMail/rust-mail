@@ -106,6 +106,8 @@ pub enum AppError {
     Stash(#[from] StashError),
     #[error("Label error: {0}")]
     Label(#[from] LabelError),
+    #[error("Attachment with ID {0} not found")]
+    AttachmentHasNoRemoteId(LocalAttachmentId),
     #[error("Attachment {0} has no address id")]
     AttachmentHasNoAddressId(LocalAttachmentId),
     #[error("Attachment {0} does not have key packets")]

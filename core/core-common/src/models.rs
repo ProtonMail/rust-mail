@@ -156,13 +156,14 @@ pub trait ModelExtension: Model {
     }
 
     /// Saves the model by value, returning the updated model.
-    ///
-    /// # Errors
-    ///
-    /// See [`Model::save()`].
-    ///
     async fn with_save(mut self, bond: &Bond<'_>) -> Result<Self, StashError> {
         self.save(bond).await?;
+        Ok(self)
+    }
+
+    /// Forcefully inserts the model by value, returning the updated model.
+    async fn with_insert(mut self, bond: &Bond<'_>) -> Result<Self, StashError> {
+        self.insert(bond).await?;
         Ok(self)
     }
 

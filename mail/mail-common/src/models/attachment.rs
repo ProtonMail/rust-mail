@@ -156,9 +156,6 @@ pub struct Attachment {
 
     #[DbField]
     pub image_height: Option<String>,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -278,7 +275,6 @@ impl Attachment {
             Attachment::find_by_remote_id(&self.attachment_type, bond).await?
         {
             self.local_id = existing.local_id;
-            self.row_id = existing.row_id;
         }
 
         if self.local_address_id.is_none() {
@@ -370,12 +366,11 @@ impl Attachment {
         api: &PM,
         tether: &mut Tether,
     ) -> Result<Option<()>, AppError> {
-        let Some(remote_id) = self.remote_id() else {
-            return Err(StashError::IdNotSet.into());
-        };
+        let remote_id = self
+            .remote_id()
+            .ok_or_else(|| AppError::AttachmentHasNoRemoteId(self.id()))?;
         let mut attachment = Self::from(Self::fetch_metadata(remote_id, api).await?.attachment);
         attachment.local_id = self.local_id;
-        attachment.row_id = self.row_id;
         tether.tx(async |tx| attachment.save(tx).await).await?;
         *self = attachment;
         Ok(Some(()))
@@ -695,7 +690,6 @@ impl Attachment {
             transfer_encoding: None,
             image_width: None,
             image_height: None,
-            row_id: None,
         };
 
         tether
@@ -839,7 +833,6 @@ impl Attachment {
         };
 
         new_attachment.local_id = None;
-        new_attachment.row_id = None;
         new_attachment.attachment_type = AttachmentType::Remote(None);
         new_attachment.local_message_id = None;
         new_attachment.remote_message_id = None;
@@ -923,7 +916,6 @@ impl Attachment {
                 transfer_encoding: None,
                 image_width: None,
                 image_height: None,
-                row_id: None,
             },
             key,
         })
@@ -1023,7 +1015,6 @@ impl From<ApiAttachment> for Attachment {
             transfer_encoding: None,
             image_width: None,
             image_height: None,
-            row_id: None,
         }
     }
 }
@@ -1052,7 +1043,6 @@ impl From<ApiMessageAttachment> for Attachment {
             transfer_encoding: value.headers.content_transfer_encoding,
             image_width: value.headers.image_width,
             image_height: value.headers.image_height,
-            row_id: None,
         }
     }
 }
@@ -1081,7 +1071,6 @@ impl From<AttachmentMetadata> for Attachment {
             transfer_encoding: None,
             image_width: None,
             image_height: None,
-            row_id: None,
         }
     }
 }

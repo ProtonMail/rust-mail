@@ -254,7 +254,6 @@ async fn draft_send_observer_only_triggers_when_send_action_is_queued() {
         resources: Default::default(),
         dependency_keys: Default::default(),
         version: 1,
-        row_id: None,
     };
     let mut conn = stash.connection();
     let mut draft_metadata = DraftMetadata::builder()
@@ -357,7 +356,6 @@ async fn draft_attachment_observer_updates_when_attachment_is_removed() {
         transfer_encoding: None,
         image_width: None,
         image_height: None,
-        row_id: None,
     };
     let metadata = conn
         .tx::<_, _, StashError>(async |tx| {
@@ -420,7 +418,6 @@ async fn create_test_messages(count: usize, bond: &Bond<'_>) {
         signature: "".to_string(),
         signed_key_list: Default::default(),
         status: AddressStatus::Disabled,
-        row_id: None,
     };
     address.save(bond).await.unwrap();
     let mut conversation = Conversation {

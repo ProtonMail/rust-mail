@@ -1,3 +1,4 @@
+use stash::orm::Model;
 use std::io::Error as IoError;
 use std::ops::Deref;
 use std::sync::Arc;

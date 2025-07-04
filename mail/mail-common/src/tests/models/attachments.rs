@@ -33,7 +33,6 @@ async fn test_attachment_create_without_metadata() {
     let mut expected = Attachment::from(api_attachment);
     expected.local_address_id = Some(1.into());
     expected.local_id = Some(local_id);
-    expected.row_id = attachment.row_id;
     expected.local_message_id = Some(1.into());
     expected.local_conversation_id = Some(1.into());
     let db_attachment = Attachment::load(local_id, &conn).await.unwrap().unwrap();
@@ -67,7 +66,6 @@ async fn test_attachment_create_with_metadata() {
     assert!(attachment.has_complete_metadata());
     let mut expected = attachment.clone();
     expected.local_id = local_id;
-    expected.row_id = attachment.row_id;
     let db_attachment = Attachment::load(local_id.unwrap(), &conn)
         .await
         .unwrap()
@@ -132,7 +130,6 @@ async fn create_attachment_dependencies(
                 catch_all: false,
                 proton_mx: false,
                 signed_key_list: Default::default(),
-                row_id: None,
             }
             .save(tx)
             .await?;

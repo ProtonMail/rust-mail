@@ -50,7 +50,6 @@ async fn test_mail_settings_store_read() {
         hide_remote_images: Default::default(),
         hide_embedded_images: Default::default(),
         hide_sender_images: Default::default(),
-        row_id: None,
     };
     tether
         .tx::<_, _, StashError>(async |tx| settings.save(tx).await)

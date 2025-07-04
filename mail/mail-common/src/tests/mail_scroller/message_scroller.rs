@@ -142,7 +142,6 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
         .tx::<_, _, StashError>(async |bond| {
             let mut message = data.get(REMOTE_LABEL_ID).unwrap().first().cloned().unwrap();
             message.local_id = None;
-            message.row_id = None;
             message.remote_id = msg_id!(51);
             message.display_order = 0;
             message.time = 0.into();
@@ -164,7 +163,6 @@ async fn test_scroller_reads_correct_items_within_visible_range() {
     tether
         .tx::<_, _, StashError>(async |bond| {
             message.local_id = None;
-            message.row_id = None;
             message.remote_id = msg_id!(300);
             message.display_order = 300;
             message.time = 300.into();
@@ -263,7 +261,6 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
     tether
         .tx::<_, _, StashError>(async |bond| {
             message.local_id = None;
-            message.row_id = None;
             message.remote_id = msg_id!(51);
             message.display_order = 0;
             message.time = 0.into();
@@ -285,7 +282,6 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
     tether
         .tx::<_, _, StashError>(async |bond| {
             message.local_id = None;
-            message.row_id = None;
             message.remote_id = msg_id!(300);
             message.display_order = 300;
             message.time = 300.into();
@@ -419,7 +415,6 @@ async fn test_cashed_scroller_reads_correct_items_within_visible_range() {
         .tx::<_, _, StashError>(async |bond| {
             for msg in msgs.iter_mut().rev().take(page_size * 4) {
                 msg.local_id = None;
-                msg.row_id = None;
 
                 msg.save(bond).await.unwrap();
                 msg.reload(bond).await.unwrap();

@@ -13,6 +13,7 @@ use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::Deserialize;
 use serde_with::serde_derive::Serialize;
+use stash::orm::Model as _;
 use stash::params;
 use stash::stash::{Bond, Tether};
 use tracing::{debug, error, info};

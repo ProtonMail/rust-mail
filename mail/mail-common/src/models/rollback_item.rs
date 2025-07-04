@@ -31,9 +31,6 @@ pub struct RollbackItem {
 
     #[DbField]
     pub item_type: RollbackItemType,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl RollbackItem {
@@ -41,7 +38,6 @@ impl RollbackItem {
         Self {
             remote_id,
             item_type,
-            row_id: Default::default(),
         }
     }
 
@@ -49,23 +45,23 @@ impl RollbackItem {
     ///
     /// It's imperative that you use this method over [`Model::save()`] to
     /// ensure that the information is update correctly in the database.
-    ///
-    /// # Errors
-    ///
-    /// When the query fails.
-    ///
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        let None = RollbackItem::find_first(
+        if RollbackItem::find_first(
             "WHERE remote_id=? AND item_type=?",
             params![self.remote_id.clone(), self.item_type],
             bond,
         )
         .await?
-        else {
-            return Ok(());
-        };
-
-        <Self as Model>::save(self, bond).await
+        .is_none()
+        {
+            // Only conditionally call Model::insert
+            // Crucially this is not Model::save
+            <Self as Model>::insert(self, bond).await?;
+        } else {
+            // We can skip the insert since it's already there.
+            // An update would do nothing.
+        }
+        Ok(())
     }
 
     /// Synchronize all rollback items with remote counterparts.
@@ -385,7 +381,6 @@ mod test_utils {
             Self {
                 remote_id: label.remote_id.clone().unwrap().into_inner(),
                 item_type: RollbackItemType::Label,
-                row_id: None,
             }
         }
     }
@@ -401,7 +396,6 @@ mod test_utils {
             Self {
                 remote_id: message.remote_id.clone().unwrap().into_inner(),
                 item_type: RollbackItemType::Message,
-                row_id: None,
             }
         }
     }
@@ -417,7 +411,6 @@ mod test_utils {
             Self {
                 remote_id: conversation.remote_id.clone().unwrap().into_inner(),
                 item_type: RollbackItemType::Conversation,
-                row_id: None,
             }
         }
     }

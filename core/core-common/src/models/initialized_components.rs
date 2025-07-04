@@ -21,32 +21,9 @@ pub struct InitializedComponent {
 
     #[DbField]
     state: InitializedComponentState,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl InitializedComponent {
-    /// Save or update initialized component.
-    ///
-    /// It's imperative that you use this method over [`Model::save()`] to
-    /// ensure that the information is updated correctly in the database.
-    ///
-    /// This method ensures that there is only one initialization status per key in the table.
-    /// Otherwise, it overwrites old record.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the query fails
-    ///
-    async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(existing) = Self::find_by_id(self.key.clone(), bond).await? {
-            self.row_id = existing.row_id;
-        }
-
-        <Self as Model>::save(self, bond).await
-    }
-
     /// Returns a list of states for all dependencies with a single SQL query
     ///
     async fn states_for_deps(
@@ -196,7 +173,6 @@ impl InitializedComponent {
                 Self {
                     key: key.into(),
                     state,
-                    row_id: None,
                 }
                 .save(tx)
                 .await?;
@@ -238,7 +214,6 @@ impl InitializedComponent {
         Self {
             key: key.into(),
             state,
-            row_id: None,
         }
         .save(bond)
         .await

@@ -1126,11 +1126,9 @@ async fn test_conversation_create_starred() {
             .expect("failed to get conversation")
             .expect("should have value");
         let mut local_conversation = Conversation::from(conv.clone());
-        local_conversation.row_id = Some(1);
         local_conversation.local_id = Some(LocalConversationId::from(1));
         local_conversation.labels[0].local_id = Some(1);
         local_conversation.labels[0].local_conversation_id = Some(1.into());
-        local_conversation.labels[0].row_id = Some(1);
         local_conversation.labels[0].local_label_id = db_conversation.labels[0].local_label_id;
 
         assert_eq!(db_conversation, local_conversation);
@@ -1159,7 +1157,6 @@ async fn test_conversation_create_starred() {
             context_expiration_time: 0.into(),
             context_snooze_time: 0.into(),
             deleted: false,
-            row_id: None,
         }];
         tether
             .tx::<_, _, StashError>(async |tx| {
@@ -1250,7 +1247,6 @@ async fn test_conversation_create_with_labels() {
         context_expiration_time: 0.into(),
         context_snooze_time: 0.into(),
         deleted: false,
-        row_id: None,
     }];
     tether
         .tx::<_, _, StashError>(async |tx| {
@@ -1448,7 +1444,6 @@ async fn test_conversation_update() {
             context_expiration_time: 0.into(),
             context_snooze_time: 0.into(),
             deleted: false,
-            row_id: None,
         },
         ConversationLabel {
             local_id: None,
@@ -1463,11 +1458,9 @@ async fn test_conversation_update() {
             context_expiration_time: 0.into(),
             context_snooze_time: 0.into(),
             deleted: false,
-            row_id: None,
         },
     ];
     local_conversation2.local_id = local_conversation1.local_id;
-    local_conversation2.row_id = local_conversation1.row_id;
     tether
         .tx::<_, _, StashError>(async |tx| {
             local_conversation2

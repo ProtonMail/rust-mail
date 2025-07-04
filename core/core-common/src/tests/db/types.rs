@@ -18,7 +18,6 @@ impl Default for CoreAccount {
             password_mode: None,
             primary_at: None,
             is_ready: false,
-            row_id: None,
         }
     }
 }

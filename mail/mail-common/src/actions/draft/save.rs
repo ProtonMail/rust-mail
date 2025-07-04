@@ -325,7 +325,6 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 attachments,
                 reply_to: Default::default(),
                 reply_tos: vec![],
-                row_id: None,
             };
 
             message_body_metadata
@@ -743,7 +742,6 @@ impl Save {
                     }) {
                         tracing::info!("Detected address change on attachment ({}/{})", original_attachment.local_id.unwrap(), original_attachment.remote_id().as_ref().unwrap());
                         new_attachment.local_id = original_attachment.local_id;
-                        new_attachment.row_id = original_attachment.row_id;
                         new_attachment.attachment_type = original_attachment.attachment_type.clone();
                         new_attachment.update_after_draft_address_change(bond).await?;
                     }
@@ -875,7 +873,6 @@ impl Save {
             is_known: false,
             custom_labels: vec![],
             has_messages: true,
-            row_id: None,
         }
     }
 

@@ -201,6 +201,7 @@ impl From<AppError> for ProtonMailError {
             AppError::AttachmentIsNotInCache(_) => Self::Unexpected(Unexpected::Internal),
             AppError::AttachmentDecryption(_) => Self::Unexpected(Unexpected::Crypto),
             AppError::AttachmentDecryptionIO(_) => Self::Unexpected(Unexpected::Os),
+            AppError::AttachmentHasNoRemoteId(_) => Self::Unexpected(Unexpected::Internal),
         }
     }
 }

@@ -20,6 +20,7 @@ use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_api::services::proton::prelude::{
     DirectAttachment, DirectParams, DraftAction, DraftRecipient, DraftSender, Package,
 };
+use stash::orm::Model as _;
 use stash::stash::Tether;
 use std::slice;
 use tracing::debug;

@@ -114,7 +114,6 @@ async fn test_core_store_and_load_user_settings() {
             value: true,
         },
         session_account_recovery: true,
-        row_id: None,
     };
 
     tether
@@ -198,6 +197,5 @@ fn new_test_user() -> User {
             sso: false,
             no_proton_address: true,
         },
-        row_id: None,
     }
 }

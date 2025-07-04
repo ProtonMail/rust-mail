@@ -42,7 +42,6 @@ impl UsedVariables {
             hit_count: self.hit_count,
             size: self.size,
             path: String::from(self.attachment_name),
-            row_id: Default::default(),
             ctime: Default::default(),
         };
 
@@ -296,7 +295,7 @@ async fn integration() -> anyhow::Result<()> {
 
     tether
         .tx::<_, _, MailContextError>(async |tx| {
-            for (n, var) in comprehensive().enumerate() {
+            for var in comprehensive() {
                 let (mut at_cache, mut at, mut msg) = var.unpack(now);
                 msg.local_conversation_id = conv.local_id;
                 msg.remote_conversation_id = conv.remote_id.clone();
@@ -322,7 +321,6 @@ async fn integration() -> anyhow::Result<()> {
                 // Then override locally ;)
                 at_cache.attachment_id = at.id();
                 at_cache.path = path.into_os_string().into_string().unwrap();
-                at_cache.row_id = Some(n.try_into().unwrap()); // Evil rowid hack
                 at_cache.save(tx).await?;
             }
 

@@ -16,7 +16,7 @@ use proton_sqlite3::rusqlite::types::ValueRef;
 use stash::exports::{FromSql, FromSqlError, FromSqlResult, ToSql, ToSqlOutput};
 use stash::exports::{SqliteError, Value};
 use stash::macros::{DbRecord, Model};
-use stash::orm::Model;
+use stash::orm::{Model, ModelHooks};
 use stash::params;
 use stash::stash::{Bond, StashError, Tether};
 use stash::utils::{IterMapToSql, placeholders};
@@ -82,7 +82,7 @@ impl ActionDependency {
 /// Associated action resource.
 #[derive(Debug, Eq, PartialEq, Model, Clone)]
 #[TableName("action_queue")]
-#[ModelActions(on_load, on_save)]
+#[ModelHooks]
 pub struct StoredAction {
     #[IdField(autoincrement)]
     pub id: Option<ActionId>,
@@ -117,9 +117,6 @@ pub struct StoredAction {
 
     // Note this field is only used for storage into the db.
     pub dependency_keys: ActionDependencyKeys,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl StoredAction {
@@ -167,7 +164,6 @@ impl StoredAction {
             version: T::VERSION,
             action_group: metadata.group_override.unwrap_or(T::GROUP).to_string(),
             dependency_keys,
-            row_id: None,
         }
     }
 
@@ -257,134 +253,6 @@ impl StoredAction {
                 }
             }
         }
-    }
-
-    /// Extends [`Model::load()`] to load associated data.
-    ///
-    /// # Errors
-    ///
-    /// See [`Model::save()`].
-    ///
-    pub async fn on_load(&mut self, tether: &Tether) -> Result<(), StashError> {
-        // Dependencies
-        let dependencies = tether
-            .query::<_, ActionDependency>(
-                "SELECT * FROM action_queue_dependencies WHERE action_id = ?",
-                params![self.id],
-            )
-            .await
-            .inspect_err(|e| error!("failed to load action deps: {e:?}"))?;
-        self.dependencies.extend(dependencies);
-
-        // Resources
-        match tether
-            .query_value::<_, Resources>(
-                "SELECT resource AS value FROM action_queue_resources WHERE action_id = ?",
-                params![self.id],
-            )
-            .await
-        {
-            Ok(r) => self.resources = r,
-            Err(e) => {
-                error!("failed to load resources: {e:?}");
-                if !matches!(
-                    e,
-                    StashError::ExecutionError(SqliteError::QueryReturnedNoRows)
-                ) {
-                    return Err(e);
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Extends [`Model::save()`] to save associated data.
-    ///
-    /// # Errors
-    ///
-    /// See [`Model::save()`].
-    ///
-    pub async fn on_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        // Resolve dependencies from keys
-        let direct_dependencies = ActionDependencyKeysTable::resolve_dependency_keys(
-            self.dependency_keys.direct.clone(),
-            bond,
-        )
-        .await?
-        .into_iter()
-        .map(ActionDependency::direct)
-        .collect::<Vec<_>>();
-        let sequential_dependencies = ActionDependencyKeysTable::resolve_dependency_keys(
-            self.dependency_keys.sequential.clone(),
-            bond,
-        )
-        .await?
-        .into_iter()
-        .map(ActionDependency::sequential)
-        .collect::<Vec<_>>();
-
-        let dependency_set: HashSet<ActionDependency> = self
-            .dependencies
-            .iter()
-            .chain(sequential_dependencies.iter())
-            .chain(direct_dependencies.iter())
-            .cloned()
-            .collect();
-
-        // Create dependencies.
-        if !dependency_set.is_empty() {
-            // Insert or ignore doesn't take into account that the foreign key does not exist.
-            // This is an SQLite limitation. So we need to manually check this before inserts.
-            #[allow(trivial_casts)]
-            let parameters = dependency_set
-                .iter()
-                .map(|dep| dep.dependency_id)
-                .bridge_sql();
-            let placeholders = placeholders(&parameters);
-            let existing_action_ids: HashSet<ActionId, RandomState> = HashSet::from_iter(
-                bond.query_values::<_, ActionId>(
-                    format!(
-                        "SELECT id AS value FROM {} WHERE id IN ({placeholders})",
-                        Self::table_name()
-                    ),
-                    parameters,
-                )
-                .await?,
-            );
-
-            for dep in dependency_set {
-                if existing_action_ids.contains(&dep.dependency_id) {
-                    bond.execute(
-                        "INSERT OR IGNORE INTO action_queue_dependencies (action_id, dependency_id, dependency_type) VALUES (?,?, ?)",
-                        params![self.id, dep.dependency_id, dep.dependency_type],
-                    )
-                    .await?;
-                }
-            }
-        }
-
-        // Create resources
-        bond.execute(
-            "INSERT OR REPLACE INTO action_queue_resources VALUES (?,?)",
-            params![self.id, self.resources.clone()],
-        )
-        .await?;
-
-        // Update direct dependency keys
-        ActionDependencyKeysTable::store_dependency_keys(
-            self.dependency_keys
-                .direct
-                .iter()
-                .chain(self.dependency_keys.record.iter())
-                .cloned()
-                .collect(),
-            self.id(),
-            bond,
-        )
-        .await?;
-
-        Ok(())
     }
 
     /// Delete action with `id` from the database.
@@ -528,7 +396,6 @@ impl StoredAction {
             let is_executing = ExecutionGuard::has_executor(existing_id, bond).await?;
             if existing.action_type == self.action_type && !is_executing {
                 self.id = existing.id;
-                self.row_id = existing.row_id;
                 // failsafe, filter out any dependencies on self.
                 // We also check this at submission time.
                 self.dependencies.retain(|v| v.dependency_id != existing_id);
@@ -565,6 +432,114 @@ impl StoredAction {
                 Ok(Some((guard, next_action)))
             })
             .await
+    }
+}
+
+impl ModelHooks for StoredAction {
+    async fn after_load(&mut self, tether: &Tether) -> Result<(), StashError> {
+        // Dependencies
+        let dependencies = Self::all_dependencies(tether, self.id())
+            .await
+            .inspect_err(|e| error!("failed to load action deps: {e:?}"))?;
+        self.dependencies.extend(dependencies);
+
+        // Resources
+        match tether
+            .query_value_opt::<Resources>(
+                "SELECT resource AS value FROM action_queue_resources WHERE action_id = ?",
+                params![self.id],
+            )
+            .await?
+        {
+            Some(r) => self.resources = r,
+            None => {
+                error!("failed to load resources");
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn after_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        // Resolve dependencies from keys
+        let direct_dependencies = ActionDependencyKeysTable::resolve_dependency_keys(
+            self.dependency_keys.direct.clone(),
+            bond,
+        )
+        .await?
+        .into_iter()
+        .map(ActionDependency::direct)
+        .collect::<Vec<_>>();
+        let sequential_dependencies = ActionDependencyKeysTable::resolve_dependency_keys(
+            self.dependency_keys.sequential.clone(),
+            bond,
+        )
+        .await?
+        .into_iter()
+        .map(ActionDependency::sequential)
+        .collect::<Vec<_>>();
+
+        let dependency_set: HashSet<ActionDependency> = self
+            .dependencies
+            .iter()
+            .chain(sequential_dependencies.iter())
+            .chain(direct_dependencies.iter())
+            .cloned()
+            .collect();
+
+        // Create dependencies.
+        if !dependency_set.is_empty() {
+            // Insert or ignore doesn't take into account that the foreign key does not exist.
+            // This is an SQLite limitation. So we need to manually check this before inserts.
+            #[allow(trivial_casts)]
+            let parameters = dependency_set
+                .iter()
+                .map(|dep| dep.dependency_id)
+                .bridge_sql();
+            let placeholders = placeholders(&parameters);
+            let existing_action_ids: HashSet<ActionId, RandomState> = HashSet::from_iter(
+                bond.query_values::<_, ActionId>(
+                    format!(
+                        "SELECT id AS value FROM {} WHERE id IN ({placeholders})",
+                        Self::table_name()
+                    ),
+                    parameters,
+                )
+                .await?,
+            );
+
+            for dep in dependency_set {
+                if existing_action_ids.contains(&dep.dependency_id) {
+                    bond.execute(
+                        "INSERT OR IGNORE INTO action_queue_dependencies (action_id, dependency_id, dependency_type) VALUES (?,?, ?)",
+                        params![self.id, dep.dependency_id, dep.dependency_type],
+                    )
+                    .await?;
+                }
+            }
+        }
+
+        // Create resources
+        bond.execute(
+            "INSERT OR REPLACE INTO action_queue_resources VALUES (?,?)",
+            params![self.id, self.resources.clone()],
+        )
+        .await?;
+
+        // Update direct dependency keys
+        ActionDependencyKeysTable::store_dependency_keys(
+            self.dependency_keys
+                .direct
+                .iter()
+                .chain(self.dependency_keys.record.iter())
+                .cloned()
+                .collect(),
+            self.id(),
+            bond,
+        )
+        .await?;
+
+        Ok(())
     }
 }
 

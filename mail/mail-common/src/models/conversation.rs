@@ -51,6 +51,7 @@ use stash::exports::SqliteError;
 use stash::exports::ToSql;
 use stash::macros::Model;
 use stash::orm::Model;
+use stash::orm::ModelHooks;
 use stash::params;
 use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
 use stash::utils::{MapToSql as _, placeholders};
@@ -63,7 +64,7 @@ use tracing::{debug, error, info, warn};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq, SmartDefault)]
 #[TableName("conversations")]
-#[ModelActions(on_load, on_save)]
+#[ModelHooks]
 pub struct Conversation {
     #[IdField(autoincrement)]
     pub local_id: Option<LocalConversationId>,
@@ -138,9 +139,6 @@ pub struct Conversation {
     /// Whether the conversation has synced its messages.
     #[DbField]
     pub has_messages: bool,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl ModelIdExtension for Conversation {
@@ -520,33 +518,8 @@ impl Conversation {
             subject: "".to_string(),
             is_known: false,
             custom_labels: vec![],
-            row_id: None,
             has_messages: false,
         }
-    }
-
-    /// Save a conversation to the database.
-    ///
-    /// It's imperative that you use this method over [`Model::save()`] to
-    /// ensure that existing conversations are updated.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the local conversation id is not set or the query
-    /// failed.
-    ///
-    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(remote_id) = self.remote_id.clone() {
-            if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
-                self.local_id = existing.local_id;
-                self.row_id = existing.row_id;
-                // We want to preserve this to prevent unnecessary resyncing of conversations
-                // messages if we update something.
-                self.has_messages = self.has_messages || existing.has_messages;
-            }
-        }
-
-        <Self as Model>::save(self, bond).await
     }
 
     /// Save a non existing conversation to the database.
@@ -652,7 +625,6 @@ impl Conversation {
                         context_snooze_time: 0.into(),
                         context_time: 0.into(),
                         deleted: false,
-                        row_id: None,
                     };
                     let conversation_labels =
                         ConversationLabel::find("WHERE local_conversation_id=?", params![id], bond)
@@ -1392,156 +1364,6 @@ impl Conversation {
         .await?;
 
         Ok(labels)
-    }
-
-    /// Extends [`Model::load()`] to pre-load child records.
-    ///
-    /// # Errors
-    ///
-    /// See [`Model::load()`].
-    ///
-    async fn on_load(&mut self, tether: &Tether) -> Result<(), StashError> {
-        self.labels = ConversationLabel::find(
-            "WHERE local_conversation_id = ?",
-            params![self.local_id],
-            tether,
-        )
-        .await?;
-        let labels = self.load_labels(tether).await?;
-        self.exclusive_location = ExclusiveLocation::from_labels(&labels);
-        self.attachments_metadata =
-            Attachment::load_conversation_attachment_metadata(self.id(), tether).await?;
-        self.custom_labels = labels
-            .into_iter()
-            .filter(|l| l.label_type == LabelType::Label)
-            .map(CustomLabel::from)
-            .collect();
-
-        // Example... not good to do this here, though, as the total number comes
-        // from the API.
-        // self.num_messages = stash.query::<_, QueryResultU64>(
-        //     "SELECT COUNT(*) as value FROM messages WHERE local_conversation_id = ?",
-        //     params![self.local_id],
-        // ).await?.into_iter().next().unwrap().value;
-
-        Ok(())
-    }
-
-    /// Extends [`Model::save()`] to set the contact id for children.
-    ///
-    /// # Errors
-    ///
-    /// See [`Model::save()`].
-    ///
-    pub async fn on_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        // Remove any labels that are no longer associated with this conversation.
-        if !self.labels.is_empty() {
-            #[allow(trivial_casts)]
-            bond.execute(
-                formatdoc!(
-                    "
-                DELETE FROM
-                    conversation_labels
-                WHERE
-                    local_conversation_id = ?
-                    AND remote_label_id NOT IN ({})
-                ",
-                    stash::utils::placeholders_n(self.labels.len()),
-                ),
-                vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
-                    .into_iter()
-                    .chain(self.labels.iter().map(|label| {
-                        Box::new(label.remote_label_id.clone()) as Box<dyn ToSql + Send>
-                    }))
-                    .collect(),
-            )
-            .await?;
-        } else {
-            bond.execute(
-                formatdoc!(
-                    "
-                DELETE FROM
-                    conversation_labels
-                WHERE
-                    local_conversation_id = ?
-                ",
-                ),
-                params![self.local_id],
-            )
-            .await?;
-        }
-
-        // Remove any attachments that are no longer associated with this conversation.
-        if !self.attachments_metadata.is_empty() {
-            let local_ids =
-                Attachment::create_or_update_from_conversation_metadata(self, bond).await?;
-            for id in &local_ids {
-                bond.execute(
-                    "INSERT OR IGNORE INTO conversation_attachments VALUES (?,?)",
-                    params![self.id(), *id],
-                )
-                .await?;
-            }
-
-            #[allow(trivial_casts)]
-            bond.execute(
-                formatdoc!(
-                    "
-                DELETE FROM
-                    conversation_attachments
-                WHERE
-                    local_conversation_id = ?
-                    AND local_attachment_id NOT IN ({})
-                ",
-                    stash::utils::placeholders_n(local_ids.len()),
-                ),
-                vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
-                    .into_iter()
-                    .chain(
-                        local_ids
-                            .into_iter()
-                            .map(|attachment| Box::new(attachment) as Box<dyn ToSql + Send>),
-                    )
-                    .collect(),
-            )
-            .await?;
-        } else {
-            bond.execute(
-                formatdoc!(
-                    "
-                DELETE FROM
-                    conversation_attachments
-                WHERE
-                    local_conversation_id = ?
-                ",
-                ),
-                params![self.local_id],
-            )
-            .await?;
-        }
-
-        for label in &mut self.labels {
-            label.local_conversation_id = self.local_id;
-            label.save(bond).await.inspect_err(|e| {
-                error!(
-                    "Failed to save conversation label ({}): {e}",
-                    label.remote_label_id.as_deref().unwrap_or("?"),
-                )
-            })?;
-        }
-
-        // If exclusive location is not set, we try to calculate it now.
-        if self.exclusive_location.is_none() && !self.labels.is_empty() {
-            let label_ids = self
-                .labels
-                .iter()
-                .filter_map(|label| label.remote_label_id.clone())
-                .map_into()
-                .collect_vec();
-            self.exclusive_location = ExclusiveLocation::from_label_ids(&label_ids, bond).await?;
-        }
-
-        Ok(())
     }
 
     /// Mark multiple conversations as read.
@@ -2526,7 +2348,6 @@ impl Conversation {
                 context_snooze_time: stats.snooze_time,
                 context_time: stats.time,
                 deleted: false,
-                row_id: None,
             }
         };
 
@@ -2628,7 +2449,6 @@ impl Conversation {
                         conversation_response.conversation.into();
 
                     new_conversation.local_id = conversation.local_id;
-                    new_conversation.row_id = conversation.row_id;
                     new_conversation.has_messages = true;
 
                     new_conversation.save(tx).await.map_err(|e| {
@@ -2794,6 +2614,157 @@ impl Conversation {
     }
 }
 
+impl ModelHooks for Conversation {
+    async fn after_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        // Remove any labels that are no longer associated with this conversation.
+        if !self.labels.is_empty() {
+            #[allow(trivial_casts)]
+            bond.execute(
+                formatdoc!(
+                    "
+                DELETE FROM
+                    conversation_labels
+                WHERE
+                    local_conversation_id = ?
+                    AND remote_label_id NOT IN ({})
+                ",
+                    stash::utils::placeholders_n(self.labels.len()),
+                ),
+                vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
+                    .into_iter()
+                    .chain(self.labels.iter().map(|label| {
+                        Box::new(label.remote_label_id.clone()) as Box<dyn ToSql + Send>
+                    }))
+                    .collect(),
+            )
+            .await?;
+        } else {
+            bond.execute(
+                formatdoc!(
+                    "
+                DELETE FROM
+                    conversation_labels
+                WHERE
+                    local_conversation_id = ?
+                ",
+                ),
+                params![self.local_id],
+            )
+            .await?;
+        }
+
+        // Remove any attachments that are no longer associated with this conversation.
+        if !self.attachments_metadata.is_empty() {
+            let local_ids =
+                Attachment::create_or_update_from_conversation_metadata(self, bond).await?;
+            for id in &local_ids {
+                bond.execute(
+                    "INSERT OR IGNORE INTO conversation_attachments VALUES (?,?)",
+                    params![self.id(), *id],
+                )
+                .await?;
+            }
+
+            #[allow(trivial_casts)]
+            bond.execute(
+                formatdoc!(
+                    "
+                DELETE FROM
+                    conversation_attachments
+                WHERE
+                    local_conversation_id = ?
+                    AND local_attachment_id NOT IN ({})
+                ",
+                    stash::utils::placeholders_n(local_ids.len()),
+                ),
+                vec![Box::new(self.local_id) as Box<dyn ToSql + Send>]
+                    .into_iter()
+                    .chain(
+                        local_ids
+                            .into_iter()
+                            .map(|attachment| Box::new(attachment) as Box<dyn ToSql + Send>),
+                    )
+                    .collect(),
+            )
+            .await?;
+        } else {
+            bond.execute(
+                formatdoc!(
+                    "
+                DELETE FROM
+                    conversation_attachments
+                WHERE
+                    local_conversation_id = ?
+                ",
+                ),
+                params![self.local_id],
+            )
+            .await?;
+        }
+
+        for label in &mut self.labels {
+            label.local_conversation_id = self.local_id;
+            label.save(bond).await.inspect_err(|e| {
+                error!(
+                    "Failed to save conversation label ({}): {e}",
+                    label.remote_label_id.as_deref().unwrap_or("?"),
+                )
+            })?;
+        }
+
+        // If exclusive location is not set, we try to calculate it now.
+        if self.exclusive_location.is_none() && !self.labels.is_empty() {
+            let label_ids = self
+                .labels
+                .iter()
+                .filter_map(|label| label.remote_label_id.clone())
+                .map_into()
+                .collect_vec();
+            self.exclusive_location = ExclusiveLocation::from_label_ids(&label_ids, bond).await?;
+        }
+
+        Ok(())
+    }
+    async fn after_load(&mut self, tether: &Tether) -> Result<(), StashError> {
+        self.labels = ConversationLabel::find(
+            "WHERE local_conversation_id = ?",
+            params![self.local_id],
+            tether,
+        )
+        .await?;
+        let labels = self.load_labels(tether).await?;
+        self.exclusive_location = ExclusiveLocation::from_labels(&labels);
+        self.attachments_metadata =
+            Attachment::load_conversation_attachment_metadata(self.id(), tether).await?;
+        self.custom_labels = labels
+            .into_iter()
+            .filter(|l| l.label_type == LabelType::Label)
+            .map(CustomLabel::from)
+            .collect();
+
+        // Example... not good to do this here, though, as the total number comes
+        // from the API.
+        // self.num_messages = stash.query::<_, QueryResultU64>(
+        //     "SELECT COUNT(*) as value FROM messages WHERE local_conversation_id = ?",
+        //     params![self.local_id],
+        // ).await?.into_iter().next().unwrap().value;
+
+        Ok(())
+    }
+
+    async fn before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        if let Some(remote_id) = self.remote_id.clone() {
+            if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
+                self.local_id = existing.local_id;
+                // We want to preserve this to prevent unnecessary resyncing of conversations
+                // messages if we update something.
+                self.has_messages = self.has_messages || existing.has_messages;
+            }
+        }
+        Ok(())
+    }
+}
+
 impl From<ApiConversation> for Conversation {
     fn from(value: ApiConversation) -> Self {
         Self {
@@ -2829,7 +2800,6 @@ impl From<ApiConversation> for Conversation {
             custom_labels: vec![],
             size: value.size,
             subject: value.subject,
-            row_id: None,
             is_known: true,
             has_messages: false,
         }
@@ -2911,9 +2881,6 @@ pub struct ConversationLabel {
 
     #[DbField]
     pub deleted: bool,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl ConversationLabel {
@@ -2997,7 +2964,6 @@ impl ConversationLabel {
         .await?
         {
             self.local_id = label.local_id;
-            self.row_id = label.row_id;
         }
 
         <Self as Model>::save(self, bond).await
@@ -3153,7 +3119,6 @@ impl From<ApiConversationLabel> for ConversationLabel {
             context_snooze_time: value.context_snooze_time.into(),
             context_time: value.context_time.into(),
             deleted: false,
-            row_id: None,
         }
     }
 }
@@ -3269,9 +3234,6 @@ pub struct ConversationCounters {
 
     #[DbField]
     pub unread: u64,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl ConversationCounters {
@@ -3282,25 +3244,7 @@ impl ConversationCounters {
             local_label_id,
             total: Default::default(),
             unread: Default::default(),
-            row_id: Default::default(),
         }
-    }
-
-    /// Save conversation counters to the database.
-    ///
-    /// It's imperative that you use this method over [`Model::save()`] to ensure
-    /// that if the counter already exists it is updated, and not inserted with a conflict.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the query fails.
-    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if self.row_id.is_none() {
-            if let Some(existing) = Self::find_by_id(self.local_label_id, bond).await? {
-                self.row_id = existing.row_id;
-            }
-        }
-        <Self as Model>::save(self, bond).await
     }
 
     /// Get all conversation counters linked to labels with given kind

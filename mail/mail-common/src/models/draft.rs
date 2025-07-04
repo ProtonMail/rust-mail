@@ -21,14 +21,14 @@ use proton_action_queue::action::ActionId;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{AddressId, PrivateEmail};
 use proton_core_common::datatypes::UnixTimestamp;
-use proton_core_common::models::{ModelExtension, ModelIdExtension};
+use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::common::MessageId;
 use serde::{Deserialize, Serialize};
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
 use stash::exports::*;
 use stash::macros::Model;
-use stash::orm::Model;
+use stash::orm::{Model, ModelHooks};
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 use stash::{params, sql_using_serde};
 use std::collections::BTreeSet;
@@ -94,10 +94,6 @@ pub struct DraftMetadata {
     #[builder(default, setter(strip_option))]
     #[DbField]
     pub send_action_id: Option<ActionId>,
-
-    #[builder(default, setter(strip_option))]
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl DraftMetadata {
@@ -115,7 +111,6 @@ impl DraftMetadata {
             reply_mode: None,
             save_action_id: None,
             send_action_id: None,
-            row_id: None,
         };
 
         metadata.save(bond).await?;
@@ -142,7 +137,6 @@ impl DraftMetadata {
             reply_mode: Some(reply_mode),
             send_action_id: None,
             save_action_id: None,
-            row_id: None,
         };
 
         metadata.save(bond).await?;
@@ -307,6 +301,7 @@ impl DraftMetadata {
 /// Due to architectural differences on some of the platforms we need to store the
 /// result of the send action in the database rather than relying on the queue observers.
 #[derive(Clone, Debug, Eq, Model, PartialEq, Hash)]
+#[ModelHooks]
 #[TableName("draft_send_result")]
 pub struct DraftSendResult {
     #[IdField]
@@ -335,9 +330,18 @@ pub struct DraftSendResult {
 
     #[DbField]
     pub has_send_action: bool,
+}
 
-    #[RowIdField]
-    pub row_id: Option<u64>,
+impl ModelHooks for DraftSendResult {
+    async fn before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        // Only overwrite if present.
+        if let Some(metadata_id) =
+            DraftMetadata::find_by_message_id(self.local_message_id, bond).await?
+        {
+            self.has_send_action = metadata_id.send_action_id.is_some();
+        }
+        Ok(())
+    }
 }
 
 impl DraftSendResult {
@@ -358,7 +362,6 @@ impl DraftSendResult {
             seen: false,
             origin,
             has_send_action: false,
-            row_id: None,
         }
     }
 
@@ -376,26 +379,9 @@ impl DraftSendResult {
             undo_timestamp: 0.into(),
             seen: false,
             error: Some(error),
-            row_id: None,
             has_send_action: false,
             origin,
         }
-    }
-
-    /// Overwrite `Model::Save` for create or update.
-    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(existing) = Self::find_by_id(self.local_message_id, bond).await? {
-            self.row_id = existing.row_id;
-        }
-
-        // Only overwrite if present.
-        if let Some(metadata_id) =
-            DraftMetadata::find_by_message_id(self.local_message_id, bond).await?
-        {
-            self.has_send_action = metadata_id.send_action_id.is_some();
-        }
-
-        <Self as Model>::save(self, bond).await
     }
 
     /// Returns all unseen send results.
@@ -817,9 +803,6 @@ pub struct DraftAttachmentMetadata {
 
     #[DbField]
     pub is_public_key: bool,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl DraftAttachmentMetadata {
@@ -839,7 +822,6 @@ impl DraftAttachmentMetadata {
             error: None,
             ownership: DraftAttachmentOwnership::Owned,
             display_order,
-            row_id: None,
             deleted: false,
             is_public_key,
         }
@@ -864,7 +846,6 @@ impl DraftAttachmentMetadata {
             error: None,
             ownership: DraftAttachmentOwnership::Owned,
             display_order,
-            row_id: None,
             deleted: false,
             is_public_key,
         }
@@ -888,7 +869,6 @@ impl DraftAttachmentMetadata {
             state: DraftAttachmentUploadState::Uploaded,
             ownership: DraftAttachmentOwnership::Inherited,
             display_order,
-            row_id: None,
             deleted: false,
             is_public_key: attachment.is_public_key_attachment(),
         }
@@ -910,19 +890,9 @@ impl DraftAttachmentMetadata {
             state: DraftAttachmentUploadState::Uploaded,
             ownership: DraftAttachmentOwnership::Owned,
             display_order,
-            row_id: None,
             deleted: false,
             is_public_key,
         }
-    }
-
-    /// Overwrite `Model::Save` for create or update.
-    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(existing) = Self::find_by_id(self.local_attachment_id, bond).await? {
-            self.row_id = existing.row_id;
-        }
-
-        <Self as Model>::save(self, bond).await
     }
 
     /// Update state.
@@ -1102,7 +1072,6 @@ impl DraftAttachmentMetadata {
                 error: None,
                 action_id: None,
                 display_order: order,
-                row_id: None,
                 deleted: false,
                 is_public_key: a.is_public_key_attachment(),
             })

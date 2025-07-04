@@ -7,6 +7,7 @@ use proton_core_common::models::{Address, Label, ModelIdExtension};
 use proton_mail_api::services::proton::response_data::{
     Conversation as ApiConversation, MessageMetadata as ApiMessageMetadata,
 };
+use stash::orm::Model;
 use stash::stash::{RunTransaction, StashError, Tether};
 use std::collections::HashSet;
 use tracing::info;

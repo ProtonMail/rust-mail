@@ -5,11 +5,6 @@ use crate::datatypes::{
 use proton_core_api::services::proton::UserId;
 use proton_core_api::services::proton::UserSettings as ApiUserSettings;
 use stash::macros::Model;
-use stash::orm::Model;
-use stash::stash::Bond;
-use stash::stash::StashError;
-
-use crate::models::ModelExtension as _;
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("user_settings")]
@@ -83,31 +78,6 @@ pub struct UserSettings {
 
     #[DbField]
     pub welcome: bool,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
-}
-
-impl UserSettings {
-    /// Save a user's settings to the database.
-    ///
-    /// It's imperative that you use this method over [`Model::save()`] to
-    /// ensure that existing conversations are updated.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the local conversation id is not set or the query
-    /// failed.
-    ///
-    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(remote_id) = self.remote_id.clone() {
-            if let Some(existing) = Self::find_by_id(remote_id, bond).await? {
-                self.row_id = existing.row_id;
-            }
-        }
-
-        <Self as Model>::save(self, bond).await
-    }
 }
 
 impl From<ApiUserSettings> for UserSettings {
@@ -136,7 +106,6 @@ impl From<ApiUserSettings> for UserSettings {
             two_factor_auth: value.two_factor_auth.into(),
             week_start: value.week_start.into(),
             welcome: value.welcome,
-            row_id: None,
         }
     }
 }

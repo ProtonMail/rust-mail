@@ -26,7 +26,6 @@ macro_rules! prune_email {
     ($email:expr) => {{
         $email.local_id = None;
         $email.local_contact_id = None;
-        $email.row_id = None;
     }};
 }
 
@@ -42,7 +41,6 @@ macro_rules! prune_card {
     ($card:expr) => {{
         $card.local_id = None;
         $card.local_contact_id = None;
-        $card.row_id = None;
     }};
 }
 
@@ -57,7 +55,6 @@ macro_rules! prune_cards {
 macro_rules! prune_contact {
     ($contact:expr) => {{
         $contact.local_id = None;
-        $contact.row_id = None;
 
         prune_emails!(&mut $contact.contact_emails);
         prune_cards!(&mut $contact.cards);
@@ -446,7 +443,6 @@ fn create_test_local_partial_contacts() -> Vec<Contact> {
             size: 1443,
             uid: ContactUID::from("proton-legacy-139892c2-f691-4118-8c29-061196013e04"),
             deleted: false,
-            row_id: None,
         },
         Contact {
             local_id: None,
@@ -462,7 +458,6 @@ fn create_test_local_partial_contacts() -> Vec<Contact> {
             size: 1445,
             uid: ContactUID::from("proton-legacy-139892c2-f691-4118-8c29-061196013e01"),
             deleted: false,
-            row_id: None,
         },
     ]
 }
@@ -510,7 +505,6 @@ fn create_test_local_contact_emails() -> Vec<ContactEmail> {
             )]),
             last_used_time: 0.into(),
             name: "contact_email_name_1".to_owned(),
-            row_id: None,
         },
         ContactEmail {
             local_id: None,
@@ -526,7 +520,6 @@ fn create_test_local_contact_emails() -> Vec<ContactEmail> {
             label_ids: Labels::new(vec![LabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
             last_used_time: 0.into(),
             name: "contact_email_name_2".to_owned(),
-            row_id: None,
         },
         ContactEmail {
             local_id: None,
@@ -542,7 +535,6 @@ fn create_test_local_contact_emails() -> Vec<ContactEmail> {
             label_ids: Labels::new(vec![LabelId::from("I6hgx3Ol-d3HYa3E394T_ACXDmTaBub14w==")]),
             last_used_time: 0.into(),
             name: "contact_email_name_3".to_owned(),
-            row_id: None,
         },
     ]
 }
@@ -614,7 +606,6 @@ fn expected_local_contacts() -> Vec<Contact> {
                     label_ids: email.label_ids.clone(),
                     last_used_time: email.last_used_time,
                     name: email.name.clone(),
-                    row_id: None,
                 })
                 .collect();
             contact.contact_emails = contact_emails;
@@ -658,7 +649,6 @@ fn create_test_local_full_contact() -> Contact {
                 card_type: ContactCardType::Signed,
                 data: VCARD.to_owned(),
                 signature: Some(VCARD_SIGNATURE.to_owned()),
-                row_id: None,
             },
             ContactCard {
                 local_id: None,
@@ -669,10 +659,8 @@ fn create_test_local_full_contact() -> Contact {
                 signature: Some(
                     "-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----".to_owned(),
                 ),
-                row_id: None,
             },
         ],
-        row_id: None,
     }
 }
 
@@ -733,7 +721,6 @@ fn create_test_local_full_modified_contact() -> (Contact, ContactEmail, ContactE
         )]),
         last_used_time: 0.into(),
         name: "contact_email_name_mod".to_owned(),
-        row_id: None,
     };
     contact.modify_time += 1;
     contact.size += 1;
@@ -746,7 +733,6 @@ fn create_test_local_full_modified_contact() -> (Contact, ContactEmail, ContactE
             card_type: ContactCardType::Signed,
             data: r"    BEGIN:VCARD\n    VERSION:4.0\n    FN:ProtonMail Features\n    UID:proton-legacy-129892c2-f691-4118-8c29-061196013e04\n    item1.EMAIL;TYPE=work;PREF=1:sdfsdf@protonmail.black\n    item2.EMAIL;TYPE=home;PREF=2:features@protonmail.ch\n    END:VCARD".to_owned(),
             signature: Some("-----BEGIN PGP SIGNATURE-----.*-----END PGP SIGNATURE-----".to_owned()),
-            row_id: None,
         },
         ContactCard {
             local_id: None,
@@ -755,7 +741,6 @@ fn create_test_local_full_modified_contact() -> (Contact, ContactEmail, ContactE
             card_type: ContactCardType::EncryptedAndSigned,
             data: "-----BEGIN PGP MESSAGE-----modified.*-----END PGP MESSAGE-----".to_owned(),
             signature: Some("-----BEGIN PGP SIGNATURE-----modified.*-----END PGP SIGNATURE-----".to_owned()),
-            row_id: None,
         }
     ];
     (contact, removed_mail, new_email)

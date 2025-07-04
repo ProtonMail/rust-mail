@@ -42,7 +42,7 @@ use proton_sqlite3::rusqlite;
 use rusqlite::types::{FromSqlError, FromSqlResult, ValueRef};
 use serde::{Deserialize, Serialize};
 use stash::exports::{FromSql, SqliteError, ToSql, ToSqlOutput};
-use stash::orm::Model;
+use stash::orm::Model as _;
 use stash::stash::{StashError, Tether};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -485,7 +485,6 @@ impl Draft {
                 reply_mode: None,
                 send_action_id: None,
                 save_action_id: None,
-                row_id: None,
             };
             tether
                 .tx::<_, _, MailContextError>(async |tx| {

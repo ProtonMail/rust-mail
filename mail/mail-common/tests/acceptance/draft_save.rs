@@ -994,7 +994,6 @@ async fn new_draft_conversation_remote_id_updated_externally() {
     assert!(fetched_conv.remote_id.is_none());
     fetched_conv.remote_id = Some(message.metadata.conversation_id.clone());
     fetched_conv.local_id = None;
-    fetched_conv.row_id = None;
 
     tether
         .tx(async |tx| fetched_conv.save(tx).await)

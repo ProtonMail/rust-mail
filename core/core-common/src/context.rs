@@ -41,6 +41,7 @@ use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use proton_task_service::{BackgroundAwareTaskService, TaskService};
 use proton_vcard::VcardValidationError;
 use secrecy::SecretVec;
+use stash::orm::Model as _;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
 use std::collections::HashMap;
 use std::future::Future;

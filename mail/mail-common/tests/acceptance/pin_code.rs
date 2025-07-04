@@ -6,6 +6,7 @@ use proton_core_common::pin_code::{PinCode, PinError};
 use proton_mail_common::test_utils::init::Params as TestParams;
 use proton_mail_common::test_utils::test_context::MailTestContext;
 use proton_mail_common::{MailContextError, MailUserContext};
+use stash::orm::Model;
 use test_case::test_case;
 
 const CACHED_FILE_NAME: &str = "my_file.txt";

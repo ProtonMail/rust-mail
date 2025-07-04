@@ -152,7 +152,6 @@ fn create_test_address() -> Address {
             signature: None,
             revision: 20,
         },
-        row_id: None,
     }
 }
 
@@ -182,6 +181,5 @@ fn create_test_address_updated() -> Address {
             signature: None,
             revision: 20,
         },
-        row_id: None,
     }
 }

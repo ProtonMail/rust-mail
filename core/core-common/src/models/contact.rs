@@ -34,7 +34,7 @@ use proton_crypto_account::keys::UnlockedUserKeys;
 use proton_vcard::vcard::VCard;
 use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
-use stash::orm::Model;
+use stash::orm::{Model, ModelHooks};
 use stash::params;
 use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
 use tokio::task::JoinSet;
@@ -44,7 +44,7 @@ use super::{InitializationError, InitializationWatcher, InitializedComponent, La
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("contacts")]
-#[ModelActions(on_save)]
+#[ModelHooks]
 pub struct Contact {
     #[IdField(autoincrement)]
     pub local_id: Option<LocalContactId>,
@@ -79,9 +79,6 @@ pub struct Contact {
     /// by event loop update.
     #[DbField]
     pub deleted: bool,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl ModelIdExtension for Contact {
@@ -105,12 +102,10 @@ impl Contact {
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
-                self.row_id = existing.row_id;
                 self.local_id = existing.local_id;
             }
         } else if let Some(local_id) = self.local_id {
             if let Some(existing) = Self::find_by_id(local_id, bond).await? {
-                self.row_id = existing.row_id;
                 self.remote_id = existing.remote_id;
             }
         }
@@ -225,37 +220,6 @@ impl Contact {
         )
         .await?;
         Ok(&self.contact_emails)
-    }
-
-    /// Extends [`Model::save()`] to set the contact id for children.
-    ///
-    /// # Errors
-    ///
-    /// See [`Model::save()`].
-    ///
-    pub async fn on_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        for card in &mut self.cards {
-            card.local_contact_id = self.local_id;
-            card.remote_contact_id.clone_from(&self.remote_id);
-        }
-        for email in &mut self.contact_emails {
-            email.local_contact_id = self.local_id;
-            email.remote_contact_id.clone_from(&self.remote_id);
-        }
-        bond.execute(
-            "DELETE FROM contact_cards WHERE local_contact_id = ?",
-            params![self.local_id],
-        )
-        .await?;
-        for card in &mut self.cards {
-            card.local_id = None;
-            card.row_id = None;
-            card.save(bond).await.map_err(|e| {
-                error!("Failed to update contact cards: {e:?}");
-                e
-            })?;
-        }
-        Ok(())
     }
 
     /// Updates all user contacts including their emails without their cards.
@@ -587,6 +551,32 @@ impl Contact {
     }
 }
 
+impl ModelHooks for Contact {
+    async fn after_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        for card in &mut self.cards {
+            card.local_contact_id = self.local_id;
+            card.remote_contact_id.clone_from(&self.remote_id);
+        }
+        for email in &mut self.contact_emails {
+            email.local_contact_id = self.local_id;
+            email.remote_contact_id.clone_from(&self.remote_id);
+        }
+        bond.execute(
+            "DELETE FROM contact_cards WHERE local_contact_id = ?",
+            params![self.local_id],
+        )
+        .await?;
+        for card in &mut self.cards {
+            card.local_id = None;
+            card.save(bond).await.map_err(|e| {
+                error!("Failed to update contact cards: {e:?}");
+                e
+            })?;
+        }
+        Ok(())
+    }
+}
+
 impl From<ApiContactBasic> for Contact {
     fn from(value: ApiContactBasic) -> Self {
         Self {
@@ -601,7 +591,6 @@ impl From<ApiContactBasic> for Contact {
             size: value.size,
             uid: value.uid,
             deleted: false,
-            row_id: None,
         }
     }
 }
@@ -622,7 +611,6 @@ impl Default for Contact {
             size: Default::default(),
             uid: ContactUID::from(String::default()),
             deleted: Default::default(),
-            row_id: Default::default(),
         }
     }
 }
@@ -645,7 +633,6 @@ impl From<ApiContactFull> for Contact {
             size: value.size,
             uid: value.uid,
             deleted: false,
-            row_id: None,
         }
     }
 }

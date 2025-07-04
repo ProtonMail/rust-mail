@@ -2,6 +2,7 @@ use crate::AppError;
 use crate::models::{ConversationCounters, MessageCounters};
 use proton_core_common::events::{Action, LabelEvent};
 use proton_core_common::models::{Label, ModelIdExtension};
+use stash::orm::Model;
 use stash::stash::Bond;
 
 pub async fn handle_label_events(

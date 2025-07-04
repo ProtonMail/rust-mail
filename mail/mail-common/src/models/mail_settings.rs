@@ -17,8 +17,18 @@ use proton_mail_api::services::proton::response_data::MailSettings as ApiMailSet
 use smart_default::SmartDefault;
 use sqlite_watcher::watcher::TableObserver;
 use stash::macros::Model;
-use stash::orm::Model;
+use stash::orm::{Model, ModelHooks};
 use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
+
+impl ModelHooks for MailSettings {
+    async fn before_save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
+        // Make sure there will be only one row.
+        if Self::get(bond).await?.is_some() {
+            self.local_id = MailSettingsId;
+        }
+        Ok(())
+    }
+}
 
 /// Mail related use settings.
 ///
@@ -29,6 +39,7 @@ use stash::stash::{Bond, Stash, StashError, Tether, WatcherHandle};
 #[derive(Clone, Debug, Eq, Model, PartialEq, SmartDefault)]
 #[allow(clippy::struct_excessive_bools)]
 #[TableName("mail_settings")]
+#[ModelHooks]
 pub struct MailSettings {
     #[IdField]
     pub local_id: MailSettingsId,
@@ -161,9 +172,6 @@ pub struct MailSettings {
 
     #[DbField]
     pub view_mode: ViewMode,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl MailSettings {
@@ -214,28 +222,6 @@ impl MailSettings {
     /// Get the mail settings from database
     pub async fn get(tether: &Tether) -> Result<Option<Self>, StashError> {
         Self::load(MailSettingsId, tether).await
-    }
-
-    /// Save or update a mail setting.
-    ///
-    /// It's imperative that you use this method over [`Model::save()`] to
-    /// ensure that the information is updated correctly in the database.
-    ///
-    /// This method ensures that there is only one mail setting in the table.
-    /// Otherwise, it overwrites old record.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the query fails
-    ///
-    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        // // Make sure there will be only one row.
-        if let Some(existing) = Self::get(bond).await? {
-            self.row_id = existing.row_id;
-            self.local_id = MailSettingsId;
-        }
-
-        <Self as Model>::save(self, bond).await
     }
 
     /// Get the mail settings from database, fallback on default
@@ -327,7 +313,6 @@ impl From<ApiMailSettings> for MailSettings {
             theme: value.theme,
             view_layout: value.view_layout.into(),
             view_mode: value.view_mode.into(),
-            row_id: None,
         }
     }
 }

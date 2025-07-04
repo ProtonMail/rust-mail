@@ -17,10 +17,7 @@ use stash::orm::Model;
 use stash::stash::StashError;
 use stash::stash::{Bond, Stash};
 
-use super::{
-    InitializationError, InitializationWatcher, InitializedComponent, ModelExtension as _,
-    UserSettings,
-};
+use super::{InitializationError, InitializationWatcher, InitializedComponent, UserSettings};
 
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("users")]
@@ -89,9 +86,6 @@ pub struct User {
 
     #[DbField]
     pub user_type: UserType,
-
-    #[RowIdField]
-    pub row_id: Option<u64>,
 }
 
 impl From<ApiUser> for User {
@@ -118,7 +112,6 @@ impl From<ApiUser> for User {
             to_migrate: value.to_migrate,
             used_space: value.used_space,
             user_type: value.user_type.into(),
-            row_id: None,
         }
     }
 }
@@ -135,26 +128,6 @@ impl User {
     //         &self.email
     //     }
     // }
-
-    /// Save a user to the database.
-    ///
-    /// It's imperative that you use this method over [`Model::save()`] to
-    /// ensure that existing conversations are updated.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the local conversation id is not set or the query
-    /// failed.
-    ///
-    pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
-        if let Some(remote_id) = self.remote_id.clone() {
-            if let Some(existing) = Self::find_by_id(remote_id, bond).await? {
-                self.row_id = existing.row_id;
-            }
-        }
-
-        <Self as Model>::save(self, bond).await
-    }
 
     /// Download and store user info and settings into the database
     ///
