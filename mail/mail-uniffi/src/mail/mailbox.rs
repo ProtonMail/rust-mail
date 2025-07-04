@@ -16,6 +16,7 @@ use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use stash::stash::Stash;
 use std::sync::Arc;
+use uniffi_runtime::async_runtime;
 
 /// A [`Mailbox`] provides a gateway to manipulating messages and conversations for a given label.
 #[derive(uniffi::Object)]
@@ -53,23 +54,20 @@ pub trait MailboxBackgroundResult: Send + Sync {
 
 /// Create a new mailbox for a given label id.
 #[uniffi_export]
-pub async fn new_mailbox(
-    ctx: &MailUserSession,
-    label_id: Id,
-) -> Result<Arc<Mailbox>, UserContextError> {
+pub fn new_mailbox(ctx: &MailUserSession, label_id: Id) -> Result<Arc<Mailbox>, UserContextError> {
     let ptr = ctx.ptr();
     let ctx = ctx.ctx()?;
 
-    uniffi_async(async move {
-        let stash = ctx.user_stash();
-        let tether = stash.connection();
-        let mbox = RealMailbox::new(&tether, label_id.into()).await?;
+    async_runtime()
+        .block_on(async move {
+            let stash = ctx.user_stash();
+            let tether = stash.connection();
+            let mbox = RealMailbox::new(&tether, label_id.into()).await?;
 
-        Result::<_, RealProtonMailError>::Ok(Arc::new(Mailbox { ctx: ptr, mbox }))
-    })
-    .await
-    .map_err(UserContextError::from)
-    .into()
+            Result::<_, RealProtonMailError>::Ok(Arc::new(Mailbox { ctx: ptr, mbox }))
+        })
+        .map_err(UserContextError::from)
+        .into()
 }
 
 /// Create a new mailbox for Inbox.
