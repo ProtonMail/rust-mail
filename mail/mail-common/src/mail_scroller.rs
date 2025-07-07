@@ -66,7 +66,7 @@ pub enum ScrollerUpdate<T: Send + Sync + Clone + ScrollerEq + 'static> {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Display)]
 pub enum ScrollerSource {
-    ScrollEvent(String), // UUID of the scroll event
+    ScrollEvent(Uuid), // UUID of the scroll event
     Database,
     Invalidation,
 }
@@ -209,7 +209,7 @@ impl MailScroller {
     }
 
     pub fn fetch_more(&self) -> Result<(), MailContextError> {
-        let uuid = Uuid::new_v4().to_string();
+        let uuid = Uuid::new_v4();
         tracing::trace!("Sending `FetchMore` command with uuid: {uuid}");
         self.ordered_command
             .send(ScrollerOrderedCommand::FetchMore(
@@ -221,7 +221,7 @@ impl MailScroller {
     }
 
     pub fn refresh(&self) -> Result<(), MailContextError> {
-        let uuid = Uuid::new_v4().to_string();
+        let uuid = Uuid::new_v4();
         tracing::trace!("Sending `Refresh` command with uuid: {uuid}");
         self.ordered_command
             .send(ScrollerOrderedCommand::Refresh(
@@ -233,7 +233,7 @@ impl MailScroller {
     }
 
     pub fn force_refresh(&self) -> Result<(), MailContextError> {
-        let uuid = Uuid::new_v4().to_string();
+        let uuid = Uuid::new_v4();
         tracing::trace!("Sending `ForceRefresh` command with uuid: {uuid}");
         self.ordered_command
             .send(ScrollerOrderedCommand::ForceRefresh(
@@ -848,7 +848,7 @@ mod tests {
 
     // Helper function to create a test ScrollerSource
     fn test_source() -> ScrollerSource {
-        ScrollerSource::ScrollEvent("test".to_string())
+        ScrollerSource::ScrollEvent(Uuid::new_v4())
     }
 
     // Test cases for calculate_scroller_update function
