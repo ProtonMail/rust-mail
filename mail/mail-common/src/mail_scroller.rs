@@ -99,6 +99,18 @@ pub struct MailScroller {
     aborts: Vec<AbortHandle>,
 }
 
+impl Drop for MailScroller {
+    fn drop(&mut self) {
+        tracing::trace!(
+            "Dropping MailScroller, aborting {} tasks",
+            self.aborts.len()
+        );
+        for abort in self.aborts.drain(..) {
+            abort.abort();
+        }
+    }
+}
+
 pub struct MailScrollerHandle<T: Send + Sync + Clone + ScrollerEq + 'static> {
     pub updates: flume::Receiver<ScrollerUpdate<T>>,
     pub handle: DropRemoveTableObserverHandle,
@@ -123,9 +135,7 @@ impl MailScroller {
         );
         MailScroller::new(ctx, source, page_size).await
     }
-}
 
-impl MailScroller {
     pub async fn messages(
         ctx: Weak<MailUserContext>,
         local_label_id: LocalLabelId,
@@ -144,9 +154,7 @@ impl MailScroller {
         );
         MailScroller::new(ctx, source, page_size).await
     }
-}
 
-impl MailScroller {
     pub async fn search(
         ctx: Weak<MailUserContext>,
         search: SearchOptions,
@@ -156,21 +164,7 @@ impl MailScroller {
         let source = SearchScrollerSource::new(search, page_size);
         MailScroller::new(ctx, source, page_size).await
     }
-}
 
-impl Drop for MailScroller {
-    fn drop(&mut self) {
-        tracing::trace!(
-            "Dropping MailScroller, aborting {} tasks",
-            self.aborts.len()
-        );
-        for abort in self.aborts.drain(..) {
-            abort.abort();
-        }
-    }
-}
-
-impl MailScroller {
     async fn new<T: MailScrollerSource + 'static>(
         ctx: Arc<MailUserContext>,
         source: T,
