@@ -1,9 +1,11 @@
 mod address_list;
+mod password_protect;
 mod schedule_send;
 
 use crate::app::Command;
 use crate::app_model::YesNoPopup;
 use crate::app_model::mailbox::composer::address_list::AddressListPopup;
+use crate::app_model::mailbox::composer::password_protect::PasswordProtectPopup;
 use crate::app_model::mailbox::composer::schedule_send::ScheduleSendPopup;
 use crate::app_model::mailbox::{ComposerMessage, Message};
 use crate::messages::Messages;
@@ -28,6 +30,7 @@ use ratatui::crossterm::event::Event;
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use ratatui::widgets::{Block, Borders, Clear, List};
+use secrecy::{ExposeSecret, SecretString};
 use stash::stash::{Stash, StashError, Tether};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -484,6 +487,40 @@ impl Composer {
         self.text_area = TextArea::new(self.draft.body().split('\n').map(str::to_owned).collect());
         self.refresh_attachment_list(context)
     }
+
+    fn apply_password_protection(
+        &mut self,
+        context: Arc<MailUserContext>,
+        password: SecretString,
+        hint: Option<String>,
+    ) -> Command<Messages> {
+        let id = self.draft.metadata_id;
+        Command::batch([
+            Command::message(Messages::DisplayBackgroundProgress(
+                "Applying password".to_owned(),
+            )),
+            Command::task(async move {
+                let cmd = match Draft::set_password_by_id(
+                    &context,
+                    id,
+                    password.expose_secret().as_str(),
+                    hint,
+                )
+                .await
+                {
+                    Ok(()) => Command::message(Messages::DisplayInfo(
+                        None,
+                        "Password applied successfully".to_owned(),
+                    )),
+                    Err(e) => Command::message(Messages::DisplayError(
+                        None,
+                        anyhow!("Failed to apply password: {e}"),
+                    )),
+                };
+                Command::batch([Command::message(Messages::DismissBackgroundProgress), cmd])
+            }),
+        ])
+    }
 }
 
 struct AttachmentInfo {
@@ -661,6 +698,8 @@ impl Composer {
             Span::from("Schedule"),
             Span::from(" Ctrl+k: ").bold(),
             Span::from("Change Address"),
+            Span::from(" Ctrl+p: ").bold(),
+            Span::from("Password"),
         ];
         frame.render_widget(Block::new().style(Style::new().reversed()), footer);
         frame.render_widget(Line::from(help_text), footer);
@@ -762,6 +801,11 @@ impl Composer {
                         return AddressListPopup::open(ctx);
                     }
                 }
+                KeyCode::Char('p') => {
+                    if key.modifiers.contains(KeyModifiers::CONTROL) {
+                        return PasswordProtectPopup::open();
+                    }
+                }
                 _ => {}
             }
         }
@@ -836,6 +880,9 @@ impl Composer {
             }
             ComposerMessage::FinishChangeAddress(output) => {
                 self.finish_sender_address_change(user_ctx.to_owned(), output)
+            }
+            ComposerMessage::SetPasswordProtection(password, hint) => {
+                self.apply_password_protection(user_ctx.to_owned(), password, hint)
             }
         }
     }

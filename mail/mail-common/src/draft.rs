@@ -1640,10 +1640,19 @@ impl Draft {
         password: &str,
         hint: Option<String>,
     ) -> Result<(), MailContextError> {
+        Self::set_password_by_id(ctx, self.metadata_id, password, hint).await
+    }
+
+    pub async fn set_password_by_id(
+        ctx: &MailUserContext,
+        metadata_id: MetadataId,
+        password: &str,
+        hint: Option<String>,
+    ) -> Result<(), MailContextError> {
         let mut tether = ctx.user_stash().connection();
-        let mut metadata = DraftMetadata::find_by_id(self.metadata_id, &tether)
+        let mut metadata = DraftMetadata::find_by_id(metadata_id, &tether)
             .await?
-            .ok_or(SaveError::MetadataNotFound(self.metadata_id))?;
+            .ok_or(SaveError::MetadataNotFound(metadata_id))?;
 
         let session_encryption_key = ctx.core_context().get_encryption_key()?;
         let encrypted_password = EncryptedPassword::new(password, &session_encryption_key)
