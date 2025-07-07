@@ -337,7 +337,7 @@ impl State {
 
         // Does the user have a key?
         if user.keys.as_ref().is_empty() {
-            if user.private {
+            if user.private && !user.flags.has_temporary_password {
                 (user, addr) = Self::setup_keys(&srp, &pgp, &client, &addr, &pass).await?;
             } else {
                 return Err(LoginError::UserKeySetupNonPrivate);
