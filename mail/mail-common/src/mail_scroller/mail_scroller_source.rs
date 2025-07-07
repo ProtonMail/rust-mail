@@ -1,8 +1,9 @@
-use std::future::Future;
+use std::{fmt::Debug, future::Future};
 
 use proton_task_service::AsyncTaskResult;
 use tokio::task::JoinHandle;
 
+use crate::mail_scroller::ScrollerEq;
 use crate::{MailContextError, MailUserContext};
 
 mod data_scroller_source;
@@ -16,7 +17,7 @@ pub use self::remote_source::*;
 pub type MailPaginatorJoinHandle =
     Option<JoinHandle<AsyncTaskResult<Result<(), MailContextError>>>>;
 pub trait MailScrollerSource: Send + Sync {
-    type Item: Send + 'static;
+    type Item: Send + Sync + Clone + ScrollerEq + Debug + 'static;
 
     /// Initialize the data source and retrieve up to `element_count` elements from the server.
     ///

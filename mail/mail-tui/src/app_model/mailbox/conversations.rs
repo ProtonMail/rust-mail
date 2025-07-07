@@ -9,16 +9,15 @@ use anyhow::anyhow;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_mail_common::datatypes::folder_banner::{AutoDeleteBanner, AutoDeleteState};
 use proton_mail_common::datatypes::{ContextualConversation, LocalConversationId, ReadFilter};
-use proton_mail_common::mail_scroller::{DataScrollerSource, MailScroller};
-use proton_mail_common::models::{
-    Conversation, ConversationScrollData, LabelWithCounters, Message as MailMessage,
-};
+use proton_mail_common::mail_scroller::{MailScroller, ScrollerUpdate};
+use proton_mail_common::models::{Conversation, LabelWithCounters, Message as MailMessage};
 use proton_mail_common::{MailContextResult, MailUserContext, Mailbox};
 use ratatui::Frame;
 use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use throbber_widgets_tui::ThrobberState;
 
 use super::LabelAs;
@@ -26,12 +25,13 @@ use super::LabelAs;
 /// Displays the list of conversations in the current mailbox. If a conversation is opened it
 /// will display the list of messages for said conversation.
 pub struct ConversationsState {
-    paginator: Paginator<DataScrollerSource<ConversationScrollData>>,
+    paginator: Paginator,
     conversations: Vec<ContextualConversation>,
     table_state: ScrollableTableState,
     messages: MessagesStatus,
     opened_label: LocalLabelId,
     autodelete_banner: Option<AutoDeleteBanner>,
+    ready: AtomicBool,
 }
 
 impl ConversationsState {
@@ -58,20 +58,26 @@ impl ConversationsState {
         label_id: LocalLabelId,
         filter: ReadFilter,
     ) -> MailContextResult<(Self, Command<Messages>)> {
-        let paginator =
+        let (scroller, handle) =
             MailScroller::conversations(ctx.as_weak(), label_id, filter, ITEM_LIMIT).await?;
-        let (paginator, command) = Paginator::new(paginator, |result| match result {
-            Ok(conversation) => ConversationMessage::Refreshed(conversation).into(),
-            Err(e) => {
-                let e = anyhow!("Conversation Reload Query error: {e}");
+        let (paginator, command) = Paginator::new(scroller, handle, |update| match update {
+            ScrollerUpdate::Append { src: _, items } => ConversationMessage::NextPage(items).into(),
+            ScrollerUpdate::ReplaceFrom { src: _, idx, items } => {
+                ConversationMessage::ReplaceFrom(idx, items).into()
+            }
+            ScrollerUpdate::ReplaceBefore { src: _, idx, items } => {
+                ConversationMessage::ReplaceBefore(idx, items).into()
+            }
+            ScrollerUpdate::Error { src, error } => {
+                let e = anyhow!("Conversation Reload Query src: {src:?}, error: {error}");
                 tracing::error!("{e:?}");
                 e.into()
             }
-        })
-        .await?;
+        });
 
         let autodelete_banner = ContextualConversation::auto_delete_banner(label_id, &ctx).await?;
-        let conversations = paginator.fetch_more().await?;
+        paginator.next_page_command();
+        let conversations = vec![];
         Ok((
             Self {
                 paginator,
@@ -80,6 +86,7 @@ impl ConversationsState {
                 conversations,
                 opened_label: label_id,
                 autodelete_banner,
+                ready: AtomicBool::new(false),
             },
             command,
         ))
@@ -98,10 +105,6 @@ impl ConversationsState {
 
     fn close_conversation(&mut self) {
         self.messages = MessagesStatus::None;
-    }
-
-    fn conversations_refreshed(&mut self, conversations: Vec<ContextualConversation>) {
-        self.conversations = conversations;
     }
 
     pub fn draw_status_bar(&mut self, frame: &mut Frame, area: Rect) {
@@ -130,6 +133,17 @@ impl ConversationsState {
     fn convs(&mut self) -> Vec<LocalConversationId> {
         self.table_state
             .take_selected_items(&|idx| self.conversations[idx].local_id)
+    }
+
+    fn try_select_non_empty_list(&mut self) -> Command<Messages> {
+        if !self.ready.load(Ordering::Acquire) {
+            self.ready.store(true, Ordering::Release);
+            self.table_state.select(0);
+        } else if self.conversations.is_empty() {
+            self.ready.store(false, Ordering::Release);
+        }
+
+        Command::None
     }
 }
 
@@ -167,9 +181,7 @@ impl ConversationsState {
                 if self.table_state.selected().unwrap_or_default()
                     >= self.conversations.len().saturating_sub(1)
                 {
-                    return self.paginator.next_page_command(move |v| {
-                        Command::message(ConversationMessage::NextPage(v).into())
-                    });
+                    return self.paginator.next_page_command();
                 }
                 Command::None
             }
@@ -210,11 +222,6 @@ impl ConversationsState {
         message: Message,
         mbox: &Mailbox,
     ) -> Command<Messages> {
-        if let Message::ConversationState(ConversationMessage::Refreshed(conversations)) = message {
-            self.conversations_refreshed(conversations);
-            return Command::None;
-        }
-
         match &mut self.messages {
             MessagesStatus::None => {
                 let Message::ConversationState(message) = message else {
@@ -240,20 +247,23 @@ impl ConversationsState {
                     ConversationMessage::Open(id) => {
                         self.open_conversation(user_ctx.to_owned(), mbox, id)
                     }
-                    ConversationMessage::Refreshed(conversations) => {
-                        self.conversations_refreshed(conversations);
-                        Command::None
-                    }
                     ConversationMessage::Star(id) => star_conversation(user_ctx.to_owned(), id),
                     ConversationMessage::Unstar(id) => unstar_conversation(user_ctx.to_owned(), id),
                     ConversationMessage::NextPage(conversations) => {
                         self.conversations.extend(conversations);
-                        Command::None
+                        self.try_select_non_empty_list()
+                    }
+                    ConversationMessage::ReplaceFrom(idx, conversations) => {
+                        self.conversations.splice(idx.., conversations);
+                        self.try_select_non_empty_list()
+                    }
+                    ConversationMessage::ReplaceBefore(idx, conversations) => {
+                        self.conversations.splice(..idx, conversations);
+                        self.try_select_non_empty_list()
                     }
                     ConversationMessage::HasMore => {
-                        let paginator_clone = self.paginator.clone_paginator();
+                        let paginator = self.paginator.clone_inner();
                         Command::task(async move {
-                            let paginator = paginator_clone.lock().await;
                             let has_more = paginator.has_more().await.unwrap();
                             let total = paginator.total().await.unwrap();
                             let seen = paginator.seen().await.unwrap();

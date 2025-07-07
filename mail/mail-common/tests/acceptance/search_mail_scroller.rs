@@ -1,21 +1,18 @@
 use itertools::Itertools;
-use proton_core_common::{
-    datatypes::SystemLabel,
-    models::{Address, Label, ModelIdExtension},
-};
+use proton_core_common::datatypes::SystemLabel;
 use proton_mail_api::services::proton::{
     common::MessageId, prelude::GetMessagesResponse,
     response_data::MessageMetadata as ApiMessageMetadata,
 };
+use proton_mail_common::api_message_meta;
+use proton_mail_common::datatypes::SearchOptions;
+use proton_mail_common::models::Message;
+use proton_mail_common::msg_id;
+use proton_mail_common::test_utils::scroller::{TestScroller, save_single_message};
 use proton_mail_common::test_utils::{init::Params as TestParams, test_context::MailTestContext};
-use proton_mail_common::{api_message_meta, test_utils::scroller::save_single_message};
-use proton_mail_common::{
-    datatypes::SearchOptions, mail_scroller::MailScroller, models::Conversation,
-};
-use proton_mail_common::{message, msg_id};
-
 use stash::stash::StashError;
-use stash::{orm::Model, stash::WatcherHandle};
+
+use std::time::Duration;
 use std::vec;
 use wiremock::{
     Mock, ResponseTemplate,
@@ -42,24 +39,21 @@ async fn test_search_mail_scroller_reads_one_item_from_online_scroll_data() {
     let user_ctx = ctx.mail_user_context().await;
 
     let page_size = 5;
-    let mut scroller =
-        MailScroller::search(user_ctx.as_weak(), SearchOptions::default(), page_size)
-            .await
-            .unwrap();
+    let mut test_scroller = TestScroller::search(&user_ctx, SearchOptions::default(), page_size)
+        .await
+        .unwrap();
 
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 0);
-    let expected = scroller.fetch_more().await.unwrap();
-    let mut actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual, expected);
+    // Search scroller needs explicit fetch_more() call to start fetching data
+    test_scroller.fetch_more_and_wait().await.unwrap();
+    let actual = test_scroller.items();
     assert_eq!(actual.len(), 1);
-    let actual = actual.pop().unwrap();
-    assert_eq!(actual.remote_id, msg_id!("mymsg"));
-    assert!(!scroller.has_more().await.unwrap());
+    assert_eq!(test_scroller.items().len(), 1);
+    assert_eq!(actual[0].remote_id.clone(), msg_id!("mymsg"));
+    assert!(!test_scroller.has_more().await.unwrap());
 
-    let next_page = scroller.fetch_more().await.unwrap();
-
-    assert_eq!(next_page.len(), 0);
+    // Additional fetch_more should result in no new data
+    let next_page = test_scroller.fetch_more_and_wait().await.unwrap();
+    assert!(next_page.is_empty());
 }
 
 #[tokio::test]
@@ -73,16 +67,14 @@ async fn test_search_mail_scroller_reads_two_pages_from_online_scroll_data() {
     let user_ctx = ctx.mail_user_context().await;
 
     // Online
-    let mut scroller = MailScroller::search(
-        user_ctx.as_weak(),
-        SearchOptions::from(search_phrase),
-        page_size,
-    )
-    .await
-    .unwrap();
-    scroller.fetch_more().await.unwrap();
+    let mut test_scroller =
+        TestScroller::search(&user_ctx, SearchOptions::from(search_phrase), page_size)
+            .await
+            .unwrap();
 
-    let actual = scroller.all_items().await.unwrap();
+    test_scroller.fetch_more_and_wait().await.unwrap();
+
+    let actual = test_scroller.items();
     assert_eq!(actual.len(), 5);
 
     let actual_rids = actual.iter().map(|msg| msg.remote_id.clone()).collect_vec();
@@ -96,18 +88,16 @@ async fn test_search_mail_scroller_reads_two_pages_from_online_scroll_data() {
             msg_id!("mymsg_5"),
         ]
     );
-    assert!(scroller.has_more().await.unwrap());
+    assert!(test_scroller.has_more().await.unwrap());
 
     // Get next page - it will progress cursor to the next page
     // But there is no more data available, the request will return an empty page
-    let actual_page = scroller.fetch_more().await.unwrap();
+    let actual_page = test_scroller.fetch_more_and_wait().await.unwrap();
     assert_eq!(actual_page.len(), 5);
-    let actual = scroller.all_items().await.unwrap();
+
+    let actual = test_scroller.items();
     assert_eq!(actual.len(), 10);
-    let actual_rids = actual
-        .iter()
-        .map(|conv| conv.remote_id.clone())
-        .collect_vec();
+    let actual_rids = actual.iter().map(|msg| msg.remote_id.clone()).collect_vec();
     assert_eq!(
         actual_rids,
         vec![
@@ -123,25 +113,23 @@ async fn test_search_mail_scroller_reads_two_pages_from_online_scroll_data() {
             msg_id!("mymsg_0"),
         ]
     );
-    assert!(!scroller.has_more().await.unwrap());
-    assert!(scroller.fetch_more().await.unwrap().is_empty());
+    assert!(!test_scroller.has_more().await.unwrap());
+
+    // Additional fetch_more should result in no new data
+    let next_page = test_scroller.fetch_more_and_wait().await.unwrap();
+    assert!(next_page.is_empty());
 
     // Search always relay on online data even for the same options used just before.
-    let mut scroller = MailScroller::search(
-        user_ctx.as_weak(),
-        SearchOptions::from(search_phrase),
-        page_size,
-    )
-    .await
-    .unwrap();
-    scroller.fetch_more().await.unwrap();
+    let mut test_scroller =
+        TestScroller::search(&user_ctx, SearchOptions::from(search_phrase), page_size)
+            .await
+            .unwrap();
 
-    let actual = scroller.all_items().await.unwrap();
+    test_scroller.fetch_more_and_wait().await.unwrap();
+
+    let actual = test_scroller.items();
     assert_eq!(actual.len(), 5);
-    let actual_rids = actual
-        .iter()
-        .map(|conv| conv.remote_id.clone())
-        .collect_vec();
+    let actual_rids = actual.iter().map(|msg| msg.remote_id.clone()).collect_vec();
     assert_eq!(
         actual_rids,
         vec![
@@ -152,16 +140,14 @@ async fn test_search_mail_scroller_reads_two_pages_from_online_scroll_data() {
             msg_id!("mymsg_5"),
         ]
     );
-    assert!(scroller.has_more().await.unwrap());
-    assert_eq!(scroller.total().await.unwrap(), 10);
+    assert!(test_scroller.has_more().await.unwrap());
+    assert_eq!(test_scroller.total().await.unwrap(), 10);
 
-    scroller.fetch_more().await.unwrap();
-    let actual = scroller.all_items().await.unwrap();
+    test_scroller.fetch_more_and_wait().await.unwrap();
+
+    let actual = test_scroller.items();
     assert_eq!(actual.len(), 10);
-    let actual_rids = actual
-        .iter()
-        .map(|conv| conv.remote_id.clone())
-        .collect_vec();
+    let actual_rids = actual.iter().map(|msg| msg.remote_id.clone()).collect_vec();
     assert_eq!(
         actual_rids,
         vec![
@@ -177,153 +163,132 @@ async fn test_search_mail_scroller_reads_two_pages_from_online_scroll_data() {
             msg_id!("mymsg_0"),
         ]
     );
-    assert!(!scroller.has_more().await.unwrap());
-    assert_eq!(scroller.total().await.unwrap(), 10);
-    assert!(scroller.fetch_more().await.unwrap().is_empty());
+    assert!(!test_scroller.has_more().await.unwrap());
+    assert_eq!(test_scroller.total().await.unwrap(), 10);
+
+    // Additional fetch_more should result in no new data
+    let next_page = test_scroller.fetch_more_and_wait().await.unwrap();
+    assert!(next_page.is_empty());
 }
 
 #[tokio::test]
-async fn test_search_mail_scroller_notificate_about_changes() {
+async fn test_search_mail_scroller_does_not_refresh_on_new_message_in_database() {
     let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
-    let page_size = 5;
-    let search_phrase = "123";
-    let local_label_id = SystemLabel::AllMail
-        .local_id(&tether)
-        .await
-        .unwrap()
-        .unwrap();
-    let params = setup_api_message_pages(&ctx, page_size, search_phrase, 1).await;
-
+    let params = TestParams::default_basic();
+    let conversation = params.conversations.first().cloned().unwrap();
+    let address = params.addresses.first().cloned().unwrap();
+    let message = api_message_meta!(
+        id: MessageId::from("mymsg"),
+        conversation_id: conversation.id,
+        address_id: address.id,
+        label_ids: vec![SystemLabel::AllMail.remote_id()]
+    );
+    let mut new_message = message.clone();
+    new_message.id = "new_mymsg".into();
+    ctx.mock_get_messages_total_expect(vec![message], 1, 2)
+        .await;
+    ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
-    ctx.initialize_uninitialized_ctx(&user_ctx).await;
-
-    let mut scroller = MailScroller::search(
-        user_ctx.as_weak(),
-        SearchOptions::from(search_phrase),
-        page_size,
-    )
-    .await
-    .unwrap();
-    let WatcherHandle {
-        handle: _handle,
-        receiver,
-        ..
-    } = scroller.watch().await.unwrap();
-    // Setting scroller up will never push notification
-    assert!(receiver.is_empty());
-
-    scroller.fetch_more().await.unwrap();
-
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 5);
-    let actual_rids = actual
-        .iter()
-        .map(|conv| conv.remote_id.clone())
-        .collect_vec();
-    assert_eq!(
-        actual_rids,
-        vec![
-            msg_id!("mymsg_9"),
-            msg_id!("mymsg_8"),
-            msg_id!("mymsg_7"),
-            msg_id!("mymsg_6"),
-            msg_id!("mymsg_5"),
-        ]
-    );
-    // Fetching more will never trigger any notifications
-    assert!(receiver.is_empty());
-
-    // Get next page
-    let actual_page = scroller.fetch_more().await.unwrap();
-    assert_eq!(actual_page.len(), 5);
-    let actual_page = scroller.fetch_more().await.unwrap();
-    assert_eq!(actual_page.len(), 0);
-    // Fetching more will never trigger any notifications
-    assert!(receiver.is_empty());
-
-    // Fetching for next, empty page will not trigger any notification
-
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 10);
-    let actual_rids = actual
-        .iter()
-        .map(|conv| conv.remote_id.clone())
-        .collect_vec();
-    assert_eq!(
-        actual_rids,
-        vec![
-            msg_id!("mymsg_9"),
-            msg_id!("mymsg_8"),
-            msg_id!("mymsg_7"),
-            msg_id!("mymsg_6"),
-            msg_id!("mymsg_5"),
-            msg_id!("mymsg_4"),
-            msg_id!("mymsg_3"),
-            msg_id!("mymsg_2"),
-            msg_id!("mymsg_1"),
-            msg_id!("mymsg_0"),
-        ]
-    );
-
-    // Lets create a new message and check if it is added to the scroller
-    let conversation = params.conversations.first().cloned().unwrap();
-    let conversation = Conversation::find_by_remote_id(conversation.id, &tether)
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
+    let new_message = Message::from_api_metadata(new_message, &tether)
         .await
-        .unwrap()
         .unwrap();
-    let address = params.addresses.first().cloned().unwrap();
-    let address = Address::find_by_remote_id(address.id, &tether)
-        .await
-        .unwrap()
-        .unwrap();
-    let test_message = message!(
-        remote_id: msg_id!("mymsg_100"),
-        local_conversation_id: conversation.local_id,
-        remote_conversation_id: conversation.remote_id,
-        local_address_id: address.id(),
-        remote_address_id: address.remote_id.unwrap(),
-        label_ids: vec![SystemLabel::Inbox.remote_id()],
-        display_order: 100,
-        time: 100.into()
-    );
 
+    let page_size = 5;
+    let mut test_scroller = TestScroller::search(&user_ctx, SearchOptions::default(), page_size)
+        .await
+        .unwrap();
+
+    test_scroller.fetch_more_and_wait().await.unwrap();
+    let actual = test_scroller.items();
+    assert_eq!(actual.len(), 1);
+    assert_eq!(test_scroller.items().len(), 1);
+    assert_eq!(actual[0].remote_id.clone(), msg_id!("mymsg"));
+    assert!(!test_scroller.has_more().await.unwrap());
+
+    // Add a new message to the database
+    let label = SystemLabel::AllMail.load(&tether).await.unwrap().unwrap();
     tether
         .tx::<_, _, StashError>(async |bond| {
-            let label = Label::load(local_label_id, bond).await.unwrap().unwrap();
-            save_single_message(&[label], &mut test_message.clone(), bond).await;
+            save_single_message(&[label], &mut new_message.clone(), bond).await;
             Ok(())
         })
         .await
         .unwrap();
-    // Getting an update will trigger a notification
-    receiver.recv_async().await.unwrap();
+    let possible_update = test_scroller
+        .try_wait_for_update(Duration::from_secs(1))
+        .await
+        .unwrap();
 
-    // The new message will not be included in the scroller as it may not match the search criteria
-    // It is up to client to run the search again to get the new message
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 10);
-    let actual_rids = actual
-        .iter()
-        .map(|conv| conv.remote_id.clone())
-        .collect_vec();
-    assert_eq!(
-        actual_rids,
-        vec![
-            msg_id!("mymsg_9"),
-            msg_id!("mymsg_8"),
-            msg_id!("mymsg_7"),
-            msg_id!("mymsg_6"),
-            msg_id!("mymsg_5"),
-            msg_id!("mymsg_4"),
-            msg_id!("mymsg_3"),
-            msg_id!("mymsg_2"),
-            msg_id!("mymsg_1"),
-            msg_id!("mymsg_0"),
-        ]
+    // Search scroller does not refresh on new message in database
+    assert!(possible_update.is_none());
+    assert_eq!(test_scroller.items().len(), 1);
+    // Request refresh to ensure we won't get any updates
+    let actual = test_scroller.refresh_and_wait().await.unwrap();
+    assert!(actual.is_empty());
+
+    // Additional fetch_more should result in no new data
+    let next_page = test_scroller.fetch_more_and_wait().await.unwrap();
+    assert!(next_page.is_empty());
+}
+
+#[tokio::test]
+async fn test_search_mail_scroller_does_refresh_on_modified_message_in_database() {
+    let ctx = MailTestContext::new().await;
+    let params = TestParams::default_basic();
+    let conversation = params.conversations.first().cloned().unwrap();
+    let address = params.addresses.first().cloned().unwrap();
+    let message = api_message_meta!(
+        id: MessageId::from("mymsg"),
+        conversation_id: conversation.id,
+        address_id: address.id,
+        label_ids: vec![SystemLabel::AllMail.remote_id()]
     );
+    let mut new_message = message.clone();
+    new_message.unread = true;
+    ctx.mock_get_messages_total_expect(vec![message], 1, 2)
+        .await;
+    ctx.mock_ping_success().await;
+    ctx.setup_user(params.clone()).await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
+    let new_message = Message::from_api_metadata(new_message, &tether)
+        .await
+        .unwrap();
+
+    let page_size = 5;
+    let mut test_scroller = TestScroller::search(&user_ctx, SearchOptions::default(), page_size)
+        .await
+        .unwrap();
+
+    test_scroller.fetch_more_and_wait().await.unwrap();
+    let actual = test_scroller.items();
+    assert_eq!(actual.len(), 1);
+    assert_eq!(test_scroller.items().len(), 1);
+    assert_eq!(actual[0].remote_id.clone(), msg_id!("mymsg"));
+    assert!(!test_scroller.has_more().await.unwrap());
+
+    // Add a new message to the database
+    let label = SystemLabel::AllMail.load(&tether).await.unwrap().unwrap();
+    tether
+        .tx::<_, _, StashError>(async |bond| {
+            save_single_message(&[label], &mut new_message.clone(), bond).await;
+            Ok(())
+        })
+        .await
+        .unwrap();
+    let possible_update = test_scroller
+        .try_wait_for_update(Duration::from_secs(1))
+        .await
+        .unwrap();
+
+    // Search scroller will refresh on modified message in database which is included in the search
+    assert!(possible_update.is_some());
+    assert_eq!(test_scroller.items().len(), 1);
+    assert!(test_scroller.items()[0].unread);
 }
 
 async fn setup_api_message_pages(

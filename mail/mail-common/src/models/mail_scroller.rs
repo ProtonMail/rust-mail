@@ -3,6 +3,7 @@ use crate::AppError;
 use crate::datatypes::LocalMessageId;
 use crate::datatypes::labels::LabelScrollOrder;
 use crate::datatypes::{ContextualConversation, ReadFilter};
+use crate::mail_scroller::ScrollerEq;
 use crate::models::{Conversation, ConversationLabel, Message, MessageLabel};
 use anyhow::anyhow;
 use indoc::formatdoc;
@@ -13,6 +14,7 @@ use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, StashError, Tether};
+use std::fmt::Debug;
 use std::future::Future;
 use std::ops::Deref;
 use typed_builder::TypedBuilder;
@@ -24,7 +26,7 @@ pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
     /// Model of the Data
     type Model: ModelExtension;
     /// Item type returned by the Data
-    type Item: Send;
+    type Item: Send + Sync + ScrollerEq + Clone + Debug;
 
     /// Find the first record with matching:
     /// * label_id,

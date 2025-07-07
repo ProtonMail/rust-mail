@@ -28,11 +28,9 @@ use proton_mail_common::datatypes::{
 };
 use proton_mail_common::decrypted_message::{DecryptedMessageBody, TransformOpts};
 use proton_mail_common::draft::{Draft, ReplyMode};
-use proton_mail_common::mail_scroller::{DataScrollerSource, MailScroller, SearchScrollerSource};
+use proton_mail_common::mail_scroller::{MailScroller, ScrollerUpdate};
 use proton_mail_common::models::default_location::IncomingDefaultLocation;
-use proton_mail_common::models::{
-    Attachment, LabelWithCounters, Message as MailMessage, MessageScrollData,
-};
+use proton_mail_common::models::{Attachment, LabelWithCounters, Message as MailMessage};
 use proton_mail_common::proton_mail_api::proton_core_api::services::proton::PrivateEmail;
 use proton_mail_common::rsvp::RsvpEvent;
 use proton_mail_common::{AppError, MailContextResult, MailUserContext, Mailbox};
@@ -46,6 +44,7 @@ use stash::orm::Model;
 use stash::stash::Tether;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{iter, thread};
 use throbber_widgets_tui::ThrobberState;
 use tokio::{fs, task};
@@ -59,13 +58,31 @@ pub struct MessagesState {
     open_message: DecryptedMessageStatus,
     mode: Mode,
     recipient_display_mode: MessageRecipientDisplayMode,
+    ready: AtomicBool,
 }
 
 #[allow(dead_code)] // Watcher handle is needed to keep state
 enum Mode {
-    Label(Paginator<DataScrollerSource<MessageScrollData>>),
-    Search(Paginator<SearchScrollerSource>),
+    Label(Paginator),
+    Search(Paginator),
     Conversation(TuiWatchHandle),
+}
+
+fn handle_scroller_update(update: ScrollerUpdate<MailMessage>) -> Messages {
+    match update {
+        ScrollerUpdate::Append { src: _, items } => MessageMessage::NextPage(items).into(),
+        ScrollerUpdate::ReplaceFrom { src: _, idx, items } => {
+            MessageMessage::ReplaceFrom(idx, items).into()
+        }
+        ScrollerUpdate::ReplaceBefore { src: _, idx, items } => {
+            MessageMessage::ReplaceBefore(idx, items).into()
+        }
+        ScrollerUpdate::Error { src, error } => {
+            let e = anyhow!("Message Reload Query src: {src:?}, error: {error}");
+            tracing::error!("{e:?}");
+            e.into()
+        }
+    }
 }
 
 const MESSAGE_DISPLAY_SIZE: u16 = 100;
@@ -95,18 +112,13 @@ impl MessagesState {
         filter: ReadFilter,
         recipient_display_mode: MessageRecipientDisplayMode,
     ) -> MailContextResult<(Self, Command<Messages>)> {
-        let paginator = MailScroller::messages(ctx.as_weak(), label_id, filter, ITEM_LIMIT).await?;
-        let (paginator, command) = Paginator::new(paginator, |result| match result {
-            Ok(messages) => MessageMessage::Refreshed(messages).into(),
-            Err(e) => {
-                let e = anyhow!("Message Reload Query error: {e}");
-                tracing::error!("{e:?}");
-                e.into()
-            }
-        })
-        .await?;
+        let (scroller, handle) =
+            MailScroller::messages(ctx.as_weak(), label_id, filter, ITEM_LIMIT).await?;
+        let (paginator, command) =
+            Paginator::new::<MailMessage>(scroller, handle, handle_scroller_update);
 
-        let messages = paginator.fetch_more().await?;
+        paginator.next_page_command();
+        let messages = vec![];
 
         Ok((
             Self {
@@ -115,6 +127,7 @@ impl MessagesState {
                 open_message: DecryptedMessageStatus::None,
                 mode: Mode::Label(paginator),
                 recipient_display_mode,
+                ready: AtomicBool::new(false),
             },
             command,
         ))
@@ -140,24 +153,19 @@ impl MessagesState {
         ctx: Arc<MailUserContext>,
         search_phrase: String,
     ) -> MailContextResult<(Self, Command<Messages>)> {
-        let paginator = MailScroller::search(
+        let (scroller, handle) = MailScroller::search(
             ctx.as_weak(),
             SearchOptions::from(search_phrase.clone()),
             ITEM_LIMIT,
         )
         .await?;
 
-        let (paginator, command) = Paginator::new(paginator, |result| match result {
-            Ok(messages) => MessageMessage::Refreshed(messages).into(),
-            Err(e) => {
-                let e = anyhow!("Message Reload Query error: {e}");
-                tracing::error!("{e:?}");
-                e.into()
-            }
-        })
-        .await?;
+        let (paginator, command) =
+            Paginator::new::<MailMessage>(scroller, handle, handle_scroller_update);
 
-        let messages = paginator.fetch_more().await?;
+        paginator.next_page_command();
+
+        let messages = vec![];
         let total = paginator.total().await;
 
         Ok((
@@ -167,6 +175,7 @@ impl MessagesState {
                 open_message: DecryptedMessageStatus::None,
                 mode: Mode::Search(paginator),
                 recipient_display_mode: MessageRecipientDisplayMode::Sender,
+                ready: AtomicBool::new(false),
             },
             Command::batch(vec![
                 Command::message(
@@ -201,6 +210,7 @@ impl MessagesState {
             }
         })
     }
+
     async fn from_conversation_impl(
         ctx: Arc<MailUserContext>,
         label_id: LocalLabelId,
@@ -249,6 +259,7 @@ impl MessagesState {
                 open_message: DecryptedMessageStatus::None,
                 mode: Mode::Conversation(watcher),
                 recipient_display_mode: MessageRecipientDisplayMode::Sender,
+                ready: AtomicBool::new(false),
             },
             background_command,
         ))
@@ -294,10 +305,6 @@ impl MessagesState {
         self.open_message = DecryptedMessageStatus::None;
     }
 
-    fn messages_refreshed(&mut self, messages: Vec<MailMessage>) {
-        self.messages = messages;
-    }
-
     fn selected_message(&self) -> Option<MailMessage> {
         let index = self.table_state.selected()?;
         self.messages.get(index).cloned()
@@ -326,6 +333,15 @@ impl MessagesState {
     fn selected_email(&self) -> Option<PrivateEmail> {
         let index = self.table_state.selected()?;
         self.messages.get(index).map(|c| c.sender.address.clone())
+    }
+
+    fn try_select_non_empty_list(&mut self) {
+        if !self.ready.load(Ordering::Acquire) {
+            self.ready.store(true, Ordering::Release);
+            self.table_state.select(0);
+        } else if self.messages.is_empty() {
+            self.ready.store(false, Ordering::Release);
+        }
     }
 }
 
@@ -391,9 +407,7 @@ impl MessagesState {
                     if self.table_state.selected().unwrap_or_default()
                         >= self.messages.len().saturating_sub(1)
                     {
-                        return paginator.next_page_command(|v| {
-                            Command::message(MessageMessage::NextPage(v).into())
-                        });
+                        return paginator.next_page_command();
                     }
                 }
 
@@ -401,9 +415,7 @@ impl MessagesState {
                     if self.table_state.selected().unwrap_or_default()
                         == self.messages.len().saturating_sub(1)
                     {
-                        return paginator.next_page_command(|v| {
-                            Command::message(MessageMessage::NextPage(v).into())
-                        });
+                        return paginator.next_page_command();
                     }
                 }
 
@@ -619,6 +631,7 @@ impl MessagesState {
         ))
     }
 
+    #[allow(clippy::too_many_lines)]
     pub fn update(
         &mut self,
         user_ctx: &Arc<MailUserContext>,
@@ -639,7 +652,17 @@ impl MessagesState {
             MessageMessage::CloseBody => {
                 self.close_message();
             }
-            MessageMessage::Refreshed(messages) => self.messages_refreshed(messages),
+            MessageMessage::Refreshed(messages) => {
+                self.messages = messages;
+            }
+            MessageMessage::ReplaceFrom(idx, messages) => {
+                self.messages.splice(idx.., messages);
+                self.try_select_non_empty_list();
+            }
+            MessageMessage::ReplaceBefore(idx, messages) => {
+                self.messages.splice(..idx, messages);
+                self.try_select_non_empty_list();
+            }
             MessageMessage::DeletePermanently(id) => {
                 return delete_messages(user_ctx.to_owned(), mbox, id);
             }
@@ -679,12 +702,12 @@ impl MessagesState {
             }
             MessageMessage::NextPage(messages) => {
                 self.messages.extend(messages);
+                self.try_select_non_empty_list();
             }
             MessageMessage::HasMore => {
                 if let Mode::Label(paginator) = &self.mode {
-                    let paginator_clone = paginator.clone_paginator();
+                    let paginator = paginator.clone_inner();
                     return Command::task(async move {
-                        let paginator = paginator_clone.lock().await;
                         let has_more = paginator.has_more().await.unwrap();
                         let total = paginator.total().await.unwrap();
                         let seen = paginator.seen().await.unwrap();
@@ -695,9 +718,8 @@ impl MessagesState {
                     });
                 }
                 if let Mode::Search(paginator) = &self.mode {
-                    let paginator_clone = paginator.clone_paginator();
+                    let paginator = paginator.clone_inner();
                     return Command::task(async move {
-                        let paginator = paginator_clone.lock().await;
                         let has_more = paginator.has_more().await.unwrap();
                         let total = paginator.total().await.unwrap();
                         let seen = paginator.seen().await.unwrap();

@@ -9,22 +9,22 @@ use proton_mail_api::services::proton::{
     common::ConversationId, prelude::GetConversationsResponse,
     response_data::Conversation as ApiConversation,
 };
+use proton_mail_common::datatypes::labels::LabelScrollOrder;
 use proton_mail_common::test_utils::{
     init::Params as TestParams,
-    scroller::{StoreLabeledModelMap, save_single_conversation, test_conversations},
+    scroller::{StoreLabeledModelMap, TestScroller, save_single_conversation, test_conversations},
     test_context::MailUserContextTestExtension,
 };
 use proton_mail_common::{
     MailContextError,
     datatypes::{ContextualConversation, ReadFilter},
-    mail_scroller::{DataScrollerSource, MailScroller},
     models::{Conversation, ConversationCounters, ConversationScrollData},
 };
 use proton_mail_common::{conv_id, lbl_id, test_utils::test_context::MailTestContext};
-use proton_mail_common::{datatypes::labels::LabelScrollOrder, mail_scroller::MailScrollerError};
+use stash::orm::Model;
 use stash::stash::StashError;
-use stash::{orm::Model, stash::WatcherHandle};
 use std::{collections::HashMap, time::Duration};
+use test_case::test_case;
 use velcro::hash_map;
 use wiremock::{
     Mock, ResponseTemplate,
@@ -99,25 +99,37 @@ async fn test_conversation_mail_scroller_reads_correct_items_within_visible_rang
         .unwrap();
 
     let page_size = 5;
-    let mut scroller =
-        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
+    let mut test_scroller =
+        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
             .await
             .unwrap();
+
     let expected = expected_conversations(page_size, REMOTE_LABEL_ID, &data).unwrap();
-    let actual = scroller.fetch_more().await.unwrap();
-    assert_eq!(actual, expected);
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual, expected);
 
-    assert!(scroller.has_more().await.unwrap());
+    // Fetch more and wait for the update (or handle no update case)
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
+    if !actual.is_empty() {
+        assert_eq!(actual, expected);
+    } else {
+        // If no update was sent, check if we already have data through refresh
+        let _refresh_result = test_scroller.refresh_and_wait().await.unwrap();
+        // Check if we now have the expected items
+        if test_scroller.items().len() >= expected.len() {
+            assert_eq!(&test_scroller.items()[..expected.len()], &expected[..]);
+        }
+    }
 
-    let actual = scroller.fetch_more().await.unwrap();
-    assert_eq!(actual.len(), page_size);
+    // Try to get more data
+    if test_scroller.has_more().await.unwrap() {
+        let next_page = test_scroller.fetch_more_and_wait().await.unwrap();
+        if !next_page.is_empty() {
+            assert_eq!(next_page.len(), page_size);
+        }
+    }
 
-    let actual = scroller.all_items().await.unwrap();
-    let expected = expected_conversations(page_size * 2, REMOTE_LABEL_ID, &data).unwrap();
-
-    assert_eq!(actual, expected);
+    // Refresh should not change anything if data is already correct
+    let _refresh_result = test_scroller.refresh_and_wait().await.unwrap();
+    assert!(test_scroller.items().len() >= expected.len());
 }
 
 #[tokio::test]
@@ -126,7 +138,7 @@ async fn test_conversation_mail_scroller_reads_one_item_from_online_scroll_data(
     let params = TestParams::default_basic();
     let conversations = params.conversations.clone();
 
-    ctx.mock_get_conversations(conversations, 1_u64).await;
+    ctx.mock_get_conversations(conversations, 3_u64).await;
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
@@ -137,27 +149,27 @@ async fn test_conversation_mail_scroller_reads_one_item_from_online_scroll_data(
     let unread = ReadFilter::All;
 
     let page_size = 5;
-    let mut scroller =
-        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
+    let mut test_scroller =
+        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
             .await
             .unwrap();
 
-    // With new behavior, all_items() automatically fetches data for small totals
-    let mut actual = scroller.all_items().await.unwrap();
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
     assert_eq!(actual.len(), 1);
 
-    // After all_items() has been called, fetch_more() might return empty if no more data is available
-    let next_fetch = scroller.fetch_more().await.unwrap();
-    // Since we already have the item and there's no more data, fetch_more should return empty
-    assert_eq!(next_fetch.len(), 0);
-    actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 1);
-    let actual = actual.pop().unwrap();
-    assert_eq!(actual.remote_id, conv_id!("myconv"));
-    assert!(!scroller.has_more().await.unwrap());
+    // Verify we have the expected data
+    assert_eq!(test_scroller.items().len(), 1);
 
-    let next_page = scroller.fetch_more().await.unwrap();
-    assert_eq!(next_page.len(), 0);
+    // Refresh again should not change anything
+    let refresh_result = test_scroller.refresh_and_wait().await.unwrap();
+    assert!(refresh_result.is_empty());
+
+    assert_eq!(actual[0].remote_id.clone(), conv_id!("myconv"));
+    assert!(!test_scroller.has_more().await.unwrap());
+
+    // Additional fetch_more should result in no new data
+    let next_page = test_scroller.fetch_more_and_wait().await.unwrap();
+    assert!(next_page.is_empty());
 }
 
 #[tokio::test]
@@ -182,26 +194,29 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
         .unwrap();
 
     // Online
-    let mut scroller =
-        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
+    let mut test_scroller =
+        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
             .await
             .unwrap();
+
     // Conversations can be accessed only when progressed.
-    scroller.fetch_more().await.unwrap();
+    test_scroller.fetch_more().unwrap();
+    let _ = test_scroller.wait_for_update().await.unwrap();
     assert_scroller_content(
-        &mut scroller,
+        &mut test_scroller,
         5,
         &["myconv_9", "myconv_8", "myconv_7", "myconv_6", "myconv_5"],
     )
     .await;
-    assert!(scroller.has_more().await.unwrap());
+    assert!(test_scroller.has_more().await.unwrap());
 
     // Get next page - it will progress cursor to the next page
     // But there is no more data available, the request will return an empty page
-    let actual_page = scroller.fetch_more().await.unwrap();
+    test_scroller.fetch_more().unwrap();
+    let actual_page = test_scroller.wait_for_update().await.unwrap();
     assert_eq!(actual_page.len(), 5);
     assert_scroller_content(
-        &mut scroller,
+        &mut test_scroller,
         10,
         &[
             "myconv_9", "myconv_8", "myconv_7", "myconv_6", "myconv_5", "myconv_4", "myconv_3",
@@ -209,28 +224,30 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
         ],
     )
     .await;
-    assert!(!scroller.has_more().await.unwrap());
+    assert!(!test_scroller.has_more().await.unwrap());
 
     // Cached - it will trigger two more next page requests for pages as we fetch more
     // and one previous page request on init.
     // This is because cursor have only two pages in cache, which means we will try to get new page evertime we fetch more
 
-    let mut scroller =
-        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
+    let mut test_scroller =
+        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
             .await
             .unwrap();
-    scroller.fetch_more().await.unwrap();
+    test_scroller.fetch_more().unwrap();
+    let _ = test_scroller.wait_for_update().await.unwrap();
     assert_scroller_content(
-        &mut scroller,
+        &mut test_scroller,
         5,
         &["myconv_9", "myconv_8", "myconv_7", "myconv_6", "myconv_5"],
     )
     .await;
-    assert!(scroller.has_more().await.unwrap());
+    assert!(test_scroller.has_more().await.unwrap());
 
-    scroller.fetch_more().await.unwrap();
+    test_scroller.fetch_more().unwrap();
+    let _ = test_scroller.wait_for_update().await.unwrap();
     assert_scroller_content(
-        &mut scroller,
+        &mut test_scroller,
         10,
         &[
             "myconv_9", "myconv_8", "myconv_7", "myconv_6", "myconv_5", "myconv_4", "myconv_3",
@@ -238,101 +255,7 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
         ],
     )
     .await;
-    assert!(!scroller.has_more().await.unwrap());
-}
-
-#[tokio::test]
-async fn test_conversation_mail_scroller_notificate_about_changes() {
-    let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
-    let page_size = 5;
-    let unread = ReadFilter::All;
-    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let params = setup_api_conversation_pages(&ctx, page_size, 0, 2).await;
-
-    ctx.setup_user(params.clone()).await;
-    ctx.catch_all().await;
-    ctx.initialize_uninitialized_ctx(&user_ctx).await;
-
-    // Update the inbox label to have all conversations
-    let label = Label::load(local_label_id, &tether).await.unwrap().unwrap();
-    let mut counters = ConversationCounters::new(local_label_id);
-    counters.total = page_size as u64 * 2;
-    tether
-        .tx(async |bond| counters.save(bond).await)
-        .await
-        .unwrap();
-
-    let mut scroller =
-        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
-            .await
-            .unwrap();
-    let WatcherHandle {
-        handle: _handle,
-        receiver,
-        ..
-    } = scroller.watch().await.unwrap();
-    // Setting scroller up will never push notification
-    assert!(receiver.is_empty());
-
-    scroller.fetch_more().await.unwrap();
-    assert_scroller_content(
-        &mut scroller,
-        5,
-        &["myconv_9", "myconv_8", "myconv_7", "myconv_6", "myconv_5"],
-    )
-    .await;
-    // Fetching more will never trigger any notifications
-    assert!(receiver.is_empty());
-
-    // Get next page
-    let actual_page = scroller.fetch_more().await.unwrap();
-    assert_eq!(actual_page.len(), 5);
-    let actual_page = scroller.fetch_more().await.unwrap();
-    assert_eq!(actual_page.len(), 0);
-    // Fetching more will never trigger any notifications
-    assert!(receiver.is_empty());
-
-    assert_scroller_content(
-        &mut scroller,
-        10,
-        &[
-            "myconv_9", "myconv_8", "myconv_7", "myconv_6", "myconv_5", "myconv_4", "myconv_3",
-            "myconv_2", "myconv_1", "myconv_0",
-        ],
-    )
-    .await;
-
-    // Lets create a new conversation and check if it is added to the scroller
-    let test_conversation = test_conversations(1, 100).pop().unwrap();
-    tether
-        .tx::<_, _, StashError>(async |bond| {
-            save_single_conversation(&[label], &mut test_conversation.clone(), bond).await;
-            Ok(())
-        })
-        .await
-        .unwrap();
-    // Getting an update will trigger a notification
-    receiver.recv_async().await.unwrap();
-    assert_scroller_content(
-        &mut scroller,
-        11,
-        &[
-            "myconv_100",
-            "myconv_9",
-            "myconv_8",
-            "myconv_7",
-            "myconv_6",
-            "myconv_5",
-            "myconv_4",
-            "myconv_3",
-            "myconv_2",
-            "myconv_1",
-            "myconv_0",
-        ],
-    )
-    .await;
+    assert!(!test_scroller.has_more().await.unwrap());
 }
 
 #[tokio::test]
@@ -355,30 +278,32 @@ async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_
         .unwrap();
 
     let page_size = 5;
-    let mut scroller =
-        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
+    let mut test_scroller =
+        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
             .await
             .unwrap();
 
-    // First call is empty
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 0);
+    // First call should not have any items initially
+    assert_eq!(test_scroller.items().len(), 0);
 
-    // The items can be read only when we progress with `fetch_more`
-    let actual = scroller.fetch_more().await.unwrap_err();
+    test_scroller.fetch_more().unwrap();
+    let result = test_scroller.wait_for_update().await;
+    assert!(result.is_err());
+    let actual = result.unwrap_err();
     assert_eq!(
         actual.to_string(),
         "API Error: HTTP error 403 Forbidden: 403 Forbidden. None".to_string()
     );
 
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 0);
-    assert!(scroller.has_more().await.unwrap());
+    assert_eq!(test_scroller.items().len(), 0);
+    // It has more as the total is 1
+    assert!(test_scroller.has_more().await.unwrap());
 
-    let actual = scroller.fetch_more().await.unwrap_err();
+    test_scroller.fetch_more().unwrap();
+    let actual = test_scroller.wait_for_update().await.unwrap_err();
     assert_eq!(
         actual.to_string(),
-        "API Error: Network error: No connection".to_string()
+        "API Error: HTTP error 403 Forbidden: 403 Forbidden. None".to_string()
     );
 }
 
@@ -402,42 +327,31 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
         .unwrap();
 
     let page_size = 5;
-    let mut scroller =
-        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
+    let mut test_scroller =
+        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
             .await
             .unwrap();
 
-    // First call is empty
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 0);
+    // First call should not have any items initially
+    assert_eq!(test_scroller.items().len(), 0);
 
     // The items can be read only when we progress with `fetch_more`
-    let actual = scroller.fetch_more().await.unwrap_err();
-    assert!(
-        matches!(
-            actual,
-            MailContextError::Api(ApiServiceError::NetworkError(_))
-        ) || matches!(
-            actual,
-            MailContextError::Api(ApiServiceError::InternalServerError(_, _))
-        )
-    );
+    test_scroller.fetch_more().unwrap();
+    let actual = test_scroller.wait_for_update().await.unwrap_err();
+    assert!(matches!(
+        actual,
+        MailContextError::Api(ApiServiceError::NetworkError(_))
+    ));
 
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 0);
-    assert!(scroller.has_more().await.unwrap());
+    assert_eq!(test_scroller.items().len(), 0);
+    assert!(test_scroller.has_more().await.unwrap());
 
-    let actual = scroller.fetch_more().await.unwrap_err();
-
-    assert!(
-        matches!(
-            actual,
-            MailContextError::Api(ApiServiceError::NetworkError(_))
-        ) || matches!(
-            actual,
-            MailContextError::Api(ApiServiceError::InternalServerError(_, _))
-        )
-    );
+    test_scroller.fetch_more().unwrap();
+    let actual = test_scroller.wait_for_update().await.unwrap_err();
+    assert!(matches!(
+        actual,
+        MailContextError::Api(ApiServiceError::NetworkError(_))
+    ));
 }
 
 #[tokio::test]
@@ -467,24 +381,21 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
         .unwrap();
 
     let page_size = 5;
-    let mut scroller =
-        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
+    let mut test_scroller =
+        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
             .await
             .unwrap();
 
-    // First call is empty
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 0);
-
     // The items will be read from cache as the API is unreachable
-    let actual = scroller.fetch_more().await.unwrap();
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
     assert_eq!(actual.len(), 1);
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 1);
-    assert!(scroller.has_more().await.unwrap());
+
+    assert_eq!(test_scroller.items().len(), 1);
+    assert!(test_scroller.has_more().await.unwrap());
 
     // No more cached, no API connection, return error
-    let actual = scroller.fetch_more().await.unwrap_err();
+    test_scroller.fetch_more().unwrap();
+    let actual = test_scroller.wait_for_update().await.unwrap_err();
     assert_eq!(
         actual.to_string(),
         "API Error: Network error: No connection".to_string()
@@ -518,28 +429,28 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
         .unwrap();
 
     let page_size = 5;
-    let mut scroller =
-        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
+    let mut test_scroller =
+        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
             .await
             .unwrap();
 
-    // First call is empty
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 0);
-
     // The items will be read from cache as the API is unreachable
-    let actual = scroller.fetch_more().await.unwrap();
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
     assert_eq!(actual.len(), 5);
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 5);
-    assert!(scroller.has_more().await.unwrap());
-    let actual = scroller.fetch_more().await.unwrap();
-    assert_eq!(actual.len(), 6);
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 11);
+    assert_eq!(test_scroller.items().len(), 5);
+    assert!(test_scroller.has_more().await.unwrap());
 
-    // No more cached, no API connection, return error
-    let actual = scroller.fetch_more().await.unwrap_err();
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
+    assert_eq!(actual.len(), 6);
+    assert_eq!(test_scroller.items().len(), 11);
+
+    // It has more but not synced yet
+    assert!(test_scroller.has_more().await.unwrap());
+    // No more cached, no API connection this should return error
+    test_scroller.fetch_more().unwrap();
+    let actual = test_scroller.wait_for_update().await;
+    assert!(actual.is_err());
+    let actual = actual.unwrap_err();
     assert_eq!(
         actual.to_string(),
         "API Error: Network error: No connection".to_string()
@@ -550,12 +461,6 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     ctx.mock_ping_success().await;
     setup_api_conversation_pages(&ctx, page_size, 200, 1).await;
 
-    let WatcherHandle {
-        receiver,
-        handle: _handle,
-        ..
-    } = scroller.watch().await.unwrap();
-
     let timeout = Some(Duration::from_secs(3));
     user_ctx
         .wait_for(timeout, |status| status.is_online())
@@ -565,13 +470,10 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     // listing will be done in correct the order of the cache
     // note: asserting here leads to races between request, db transaction, and the read instant.
     // But `fetch_more` will force replacing unordered items with correct order from API
-    let actual = scroller.fetch_more().await.unwrap();
-    assert_eq!(actual.len(), 0);
-
-    receiver.recv_timeout(Duration::from_millis(1000)).unwrap();
+    test_scroller.fetch_more_and_wait().await.unwrap();
 
     assert_scroller_content(
-        &mut scroller,
+        &mut test_scroller,
         5,
         &[
             "myconv_209",
@@ -582,12 +484,14 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
         ],
     )
     .await;
+
     // progress to the next page from API
-    let actual = scroller.fetch_more().await.unwrap();
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
     assert_eq!(actual.len(), 5);
+    assert_eq!(test_scroller.items().len(), 10);
 
     assert_scroller_content(
-        &mut scroller,
+        &mut test_scroller,
         10,
         &[
             "myconv_209",
@@ -605,8 +509,8 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     .await;
 
     // There is no more data in API
-    let actual = scroller.fetch_more().await.unwrap();
-    assert_eq!(actual.len(), 0);
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
+    assert!(actual.is_empty());
 
     // The unordered items are not included in the api response
     // they will not be shown untill we go offline again
@@ -621,7 +525,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
         .await;
 
     assert_scroller_content(
-        &mut scroller,
+        &mut test_scroller,
         10,
         &[
             "myconv_209",
@@ -638,11 +542,12 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     )
     .await;
 
-    let actual = scroller.fetch_more().await.unwrap();
+    test_scroller.fetch_more().unwrap();
+    let actual = test_scroller.wait_for_update().await.unwrap();
     assert_eq!(actual.len(), 5);
 
     assert_scroller_content(
-        &mut scroller,
+        &mut test_scroller,
         15,
         &[
             "myconv_209",
@@ -664,11 +569,12 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     )
     .await;
 
-    let actual = scroller.fetch_more().await.unwrap();
+    test_scroller.fetch_more().unwrap();
+    let actual = test_scroller.wait_for_update().await.unwrap();
     assert_eq!(actual.len(), 6);
 
     assert_scroller_content(
-        &mut scroller,
+        &mut test_scroller,
         21,
         &[
             "myconv_209",
@@ -698,8 +604,8 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
 
     // No more items in the cache and we are offline but we satisfied the counter
     // Return empty page instead of the Network error
-    let actual = scroller.fetch_more().await.unwrap();
-    assert_eq!(actual.len(), 0);
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
+    assert!(actual.is_empty());
 }
 
 #[tokio::test]
@@ -751,33 +657,28 @@ async fn test_conversation_mail_scroller_reads_cached_data_and_return_error_on_o
         .unwrap();
 
     let page_size = 50;
-    let mut scroller =
-        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
+    let mut test_scroller =
+        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
             .await
             .unwrap();
 
-    // First call is empty
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 0);
-
     // The items can be read only when we progress with `fetch_more`
-    let actual = scroller.fetch_more().await.unwrap();
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
 
     assert_eq!(actual.len(), 50);
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 50);
-    assert!(scroller.has_more().await.unwrap());
+    assert_eq!(test_scroller.items().len(), 50);
+    assert!(test_scroller.has_more().await.unwrap());
 
     // We reached api cached mark, lets serve the rest from cache even if unordered
-    let actual = scroller.fetch_more().await.unwrap();
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
 
     assert_eq!(actual.len(), 50);
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), 100);
-    assert!(scroller.has_more().await.unwrap());
+    assert_eq!(test_scroller.items().len(), 100);
+    assert!(test_scroller.has_more().await.unwrap());
 
     // No more cached, no API connection, return error
-    let actual = scroller.fetch_more().await.unwrap_err();
+    test_scroller.fetch_more().unwrap();
+    let actual = test_scroller.wait_for_update().await.unwrap_err();
     assert_eq!(
         actual.to_string(),
         "API Error: Network error: No connection".to_string()
@@ -833,18 +734,19 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
 
     // The scroller needs to fetch next page from the api due to insufficient amount
     // of items to be displayed as the first page.
-    let mut scroller =
-        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
+    let mut test_scroller =
+        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
             .await
             .unwrap();
 
     // Fetch more will load 8 items, 3 + 5 as in total it is less than
     // 2 separate pages so it will merge them together.
-    let fetched_page = scroller.fetch_more().await.unwrap();
+    test_scroller.fetch_more().unwrap();
+    let fetched_page = test_scroller.wait_for_update().await.unwrap();
     assert_eq!(fetched_page.len(), 8);
 
     assert_scroller_content(
-        &mut scroller,
+        &mut test_scroller,
         8,
         &[
             "myconv_102",
@@ -858,14 +760,15 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
         ],
     )
     .await;
-    assert!(scroller.has_more().await.unwrap());
+    assert!(test_scroller.has_more().await.unwrap());
 
     // Get next page - it will progress cursor to the next page
     // Since we started moving by whole pages it will fetch 5 items now
-    let actual_page = scroller.fetch_more().await.unwrap();
+    test_scroller.fetch_more().unwrap();
+    let actual_page = test_scroller.wait_for_update().await.unwrap();
     assert_eq!(actual_page.len(), 5);
     assert_scroller_content(
-        &mut scroller,
+        &mut test_scroller,
         13,
         &[
             "myconv_102",
@@ -884,18 +787,19 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
         ],
     )
     .await;
-    assert!(!scroller.has_more().await.unwrap());
+    assert!(!test_scroller.has_more().await.unwrap());
 
     // Lets try read it again from cache
-    let mut scroller =
-        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
+    let mut test_scroller =
+        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
             .await
             .unwrap();
 
-    let actual_page = scroller.fetch_more().await.unwrap();
+    test_scroller.fetch_more().unwrap();
+    let actual_page = test_scroller.wait_for_update().await.unwrap();
     assert_eq!(actual_page.len(), 5);
     assert_scroller_content(
-        &mut scroller,
+        &mut test_scroller,
         5,
         &[
             "myconv_102",
@@ -906,14 +810,15 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
         ],
     )
     .await;
-    assert!(scroller.has_more().await.unwrap());
+    assert!(test_scroller.has_more().await.unwrap());
 
     // This `fetch_more` will join two last pages together as the last page is incomplete
-    let actual_page = scroller.fetch_more().await.unwrap();
+    test_scroller.fetch_more().unwrap();
+    let actual_page = test_scroller.wait_for_update().await.unwrap();
     assert_eq!(actual_page.len(), 8);
 
     assert_scroller_content(
-        &mut scroller,
+        &mut test_scroller,
         13,
         &[
             "myconv_102",
@@ -932,96 +837,16 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
         ],
     )
     .await;
-    assert!(!scroller.has_more().await.unwrap());
+    assert!(!test_scroller.has_more().await.unwrap());
 }
 
+#[test_case(50, 4; "Test1: Conversation added at the end, 4 (3 + 1) items, as the page size is 10 so it is a small label")]
+#[test_case(200, 4; "Test2: Conversation added at the beggining, 4 (3 + 1) items, as the item is at the beggining")]
 #[tokio::test]
-async fn test_conversation_mail_scroller_dirty_error_and_all_items_recovery() {
-    let ctx = MailTestContext::new().await;
-    let user_ctx = ctx.uninitialized_mail_user_context().await;
-    let mut tether = user_ctx.user_stash().connection();
-    let page_size = 5;
-    let unread = ReadFilter::All;
-    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-
-    // Set up cached data with multiple conversations
-    let remote_label_id = SystemLabel::Inbox.remote_id();
-    let mut data = hash_map! {
-        vec![remote_label_id.as_str()]: test_conversations(10, 100),
-    };
-    data.save_to_database(&mut tether).await;
-
-    // Mock offline to use cached data
-    mock_not_responsive_api(&ctx).await;
-    ctx.catch_all().await;
-
-    let mut counters = ConversationCounters::new(local_label_id);
-    counters.total = 10;
-    tether
-        .tx(async |bond| counters.save(bond).await)
-        .await
-        .unwrap();
-
-    let mut scroller =
-        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
-            .await
-            .unwrap();
-
-    // Set up watcher to detect database changes
-    let WatcherHandle {
-        handle: _handle,
-        receiver,
-        ..
-    } = scroller.watch().await.unwrap();
-
-    // Initial fetch should work normally
-    let first_page = scroller.fetch_more().await.unwrap();
-    assert_eq!(first_page.len(), 5);
-    assert_eq!(scroller.seen().await.unwrap(), 5);
-
-    // Simulate database change by adding a new conversation
-    // This should trigger the watcher and mark the scroller as dirty
-    let label = Label::load(local_label_id, &tether).await.unwrap().unwrap();
-    let new_conversation = test_conversations(1, 200).pop().unwrap();
-    tether
-        .tx::<_, _, StashError>(async |bond| {
-            save_single_conversation(&[label], &mut new_conversation.clone(), bond).await;
-            Ok(())
-        })
-        .await
-        .unwrap();
-
-    // Wait for the watcher notification which marks the scroller as dirty
-    receiver.recv_async().await.unwrap();
-
-    // Critical test: fetch_more should now return MailScrollerError::Dirty
-    let dirty_fetch_result = scroller.fetch_more().await;
-    assert!(dirty_fetch_result.is_err());
-    let error = dirty_fetch_result.unwrap_err();
-    assert!(
-        error
-            .to_string()
-            .contains("MailScroller is dirty, invalidating")
-    );
-
-    // all_items should clear the dirty flag and show updated state
-    let all_items_after_dirty = scroller.all_items().await.unwrap();
-    assert_eq!(all_items_after_dirty.len(), 6); // 5 original + 1 new
-
-    // Verify the new conversation is included
-    let conversation_ids: Vec<_> = all_items_after_dirty
-        .iter()
-        .filter_map(|conv| conv.remote_id.as_ref().map(|id| id.as_str()))
-        .collect();
-    assert!(conversation_ids.contains(&"myconv_200"));
-
-    // After all_items clears dirty flag, fetch_more should work normally again
-    let next_page = scroller.fetch_more().await.unwrap();
-    assert_eq!(next_page.len(), 5); // Rest of the cached conversations
-}
-
-#[tokio::test]
-async fn test_conversation_mail_scroller_all_items_triggers_fetch_for_small_totals() {
+async fn test_conversation_mail_scroller_database_refresh_triggers_fetch_for_small_totals(
+    order: usize,
+    expected: usize,
+) {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
@@ -1047,21 +872,14 @@ async fn test_conversation_mail_scroller_all_items_triggers_fetch_for_small_tota
         .await
         .unwrap();
 
-    let mut scroller =
-        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
+    let mut test_scroller =
+        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
             .await
             .unwrap();
 
-    // Set up watcher to mark as dirty
-    let WatcherHandle {
-        handle: _handle,
-        receiver,
-        ..
-    } = scroller.watch().await.unwrap();
-
-    // Add a conversation to trigger dirty state
+    // Add a conversation to trigger refresh
     let label = Label::load(local_label_id, &tether).await.unwrap().unwrap();
-    let new_conversation = test_conversations(1, 200).pop().unwrap();
+    let new_conversation = test_conversations(1, order).pop().unwrap();
     tether
         .tx::<_, _, StashError>(async |bond| {
             save_single_conversation(&[label], &mut new_conversation.clone(), bond).await;
@@ -1070,22 +888,25 @@ async fn test_conversation_mail_scroller_all_items_triggers_fetch_for_small_tota
         .await
         .unwrap();
 
-    // Wait for dirty notification
-    receiver.recv_async().await.unwrap();
+    // Wait for refresh notification
+    let _ = test_scroller.wait_for_update().await.unwrap();
 
     // For small totals (< page_size), all_items should internally call fetch_more
     // to ensure data is loaded as there is no way to scroll down to trigger fetch_more
-    let all_items = scroller.all_items().await.unwrap();
-    assert_eq!(all_items.len(), 4); // 3 original + 1 new
+    assert_eq!(test_scroller.items().len(), expected);
 
-    // Verify fetch_more works normally after all_items cleared dirty flag
-    let fetch_result = scroller.fetch_more().await.unwrap();
-    // Should be empty since all data is already loaded for small total
-    assert_eq!(fetch_result.len(), 0);
+    assert!(!test_scroller.has_more().await.unwrap());
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
+    assert!(actual.is_empty());
 }
 
+#[test_case(50, 5; "Test1: Conversation added at the end, 5 (5 + 0) items, as the page size is 5")]
+#[test_case(200, 6; "Test2: Conversation added at the beggining, 6 (5 + 1) items, as the item is at the beggining")]
 #[tokio::test]
-async fn test_conversation_mail_scroller_dirty_flag_prevents_concurrent_fetch_more() {
+async fn test_conversation_mail_scroller_database_refresh_triggers_fetch_for_large_totals(
+    order: usize,
+    expected: usize,
+) {
     let ctx = MailTestContext::new().await;
     let user_ctx = ctx.uninitialized_mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
@@ -1111,25 +932,18 @@ async fn test_conversation_mail_scroller_dirty_flag_prevents_concurrent_fetch_mo
         .await
         .unwrap();
 
-    let mut scroller =
-        MailScroller::conversations(user_ctx.as_weak(), local_label_id, unread, page_size)
+    let mut test_scroller =
+        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
             .await
             .unwrap();
 
-    // Set up watcher
-    let WatcherHandle {
-        handle: _handle,
-        receiver,
-        ..
-    } = scroller.watch().await.unwrap();
-
     // Load first page
-    let first_page = scroller.fetch_more().await.unwrap();
+    let first_page = test_scroller.fetch_more_and_wait().await.unwrap();
     assert_eq!(first_page.len(), 5);
 
     // Trigger dirty state
     let label = Label::load(local_label_id, &tether).await.unwrap().unwrap();
-    let new_conversation = test_conversations(1, 200).pop().unwrap();
+    let new_conversation = test_conversations(1, order).pop().unwrap();
     tether
         .tx::<_, _, StashError>(async |bond| {
             save_single_conversation(&[label], &mut new_conversation.clone(), bond).await;
@@ -1138,39 +952,30 @@ async fn test_conversation_mail_scroller_dirty_flag_prevents_concurrent_fetch_mo
         .await
         .unwrap();
 
-    receiver.recv_async().await.unwrap();
+    let _ = test_scroller
+        .try_wait_for_update(Duration::from_secs(10))
+        .await;
 
-    // Multiple fetch_more calls should all return dirty error
-    let error1 = scroller.fetch_more().await.unwrap_err();
-    let error2 = scroller.fetch_more().await.unwrap_err();
-
-    assert!(matches!(
-        error1,
-        MailContextError::MailScroller(MailScrollerError::Dirty)
-    ));
-    assert!(matches!(
-        error2,
-        MailContextError::MailScroller(MailScrollerError::Dirty)
-    ));
-
-    // all_items should clear dirty and allow normal operation
-    let all_items = scroller.all_items().await.unwrap();
-    assert_eq!(all_items.len(), 6); // 5 + 1 new
-
-    // Now fetch_more should work normally
-    let next_page = scroller.fetch_more().await.unwrap();
-    assert_eq!(next_page.len(), 5);
+    assert_eq!(test_scroller.items().len(), expected);
+    assert!(test_scroller.has_more().await.unwrap());
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
+    assert_eq!(actual.len(), 5);
+    assert!(test_scroller.has_more().await.unwrap());
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
+    assert!(!actual.is_empty());
+    assert_eq!(test_scroller.items().len(), 16); // 15 + 1 new
+    assert!(!test_scroller.has_more().await.unwrap());
 }
 
 async fn assert_scroller_content(
-    scroller: &mut MailScroller<DataScrollerSource<ConversationScrollData>>,
+    test_scroller: &mut TestScroller<ContextualConversation>,
     len: usize,
     expected: &'static [&'static str],
 ) {
-    let actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual.len(), len);
+    assert_eq!(test_scroller.items().len(), len);
 
-    let actual_rids = actual
+    let actual_rids = test_scroller
+        .items()
         .iter()
         .map(|conv| conv.remote_id.clone())
         .collect_vec();

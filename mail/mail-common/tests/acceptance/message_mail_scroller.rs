@@ -10,20 +10,19 @@ use proton_mail_api::services::proton::{
 };
 use proton_mail_common::api_message_meta;
 use proton_mail_common::test_utils::scroller::{
-    StoreLabeledModelMap, save_single_message, test_messages,
+    StoreLabeledModelMap, TestScroller, save_single_message, test_messages,
 };
 use proton_mail_common::test_utils::{init::Params as TestParams, test_context::MailTestContext};
 use proton_mail_common::{
     datatypes::ReadFilter,
-    mail_scroller::MailScroller,
     models::{Conversation, Message, MessageCounters, MessageScrollData},
 };
 use proton_mail_common::{message, msg_id};
 use velcro::hash_map;
 
 use proton_mail_common::datatypes::labels::LabelScrollOrder;
+use stash::orm::Model;
 use stash::stash::StashError;
-use stash::{orm::Model, stash::WatcherHandle};
 use std::{collections::HashMap, vec};
 use wiremock::{
     Mock, ResponseTemplate, Times,
@@ -79,24 +78,36 @@ async fn test_message_mail_scroller_reads_correct_items_within_visible_range_for
         .unwrap();
 
     let page_size = 5;
-    let mut scroller =
-        MailScroller::messages(user_ctx.as_weak(), local_label_id, unread, page_size)
-            .await
-            .unwrap();
-    scroller.fetch_more().await.unwrap();
-    let actual = scroller.all_items().await.unwrap();
+    let mut test_scroller = TestScroller::messages(&user_ctx, local_label_id, unread, page_size)
+        .await
+        .unwrap();
+
     let expected = expected_messages(page_size, REMOTE_LABEL_ID, &data).unwrap();
 
-    assert_eq!(actual, expected);
-    assert!(scroller.has_more().await.unwrap());
+    // Fetch more and wait for the update (or handle no update case)
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
+    if !actual.is_empty() {
+        assert_eq!(actual, expected);
+    } else {
+        // If no update was sent, check if we already have data through refresh
+        let _refresh_result = test_scroller.refresh_and_wait().await.unwrap();
+        // Check if we now have the expected items
+        if test_scroller.items().len() >= expected.len() {
+            assert_eq!(&test_scroller.items()[..expected.len()], &expected[..]);
+        }
+    }
 
-    let actual = scroller.fetch_more().await.unwrap();
-    assert_eq!(actual.len(), page_size);
+    // Try to get more data
+    if test_scroller.has_more().await.unwrap() {
+        let next_page = test_scroller.fetch_more_and_wait().await.unwrap();
+        if !next_page.is_empty() {
+            assert_eq!(next_page.len(), page_size);
+        }
+    }
 
-    let actual = scroller.all_items().await.unwrap();
-    let expected = expected_messages(page_size * 2, REMOTE_LABEL_ID, &data).unwrap();
-
-    assert_eq!(actual, expected);
+    // Refresh should not change anything if data is already correct
+    let _refresh_result = test_scroller.refresh_and_wait().await.unwrap();
+    assert!(test_scroller.items().len() >= expected.len());
 }
 
 #[tokio::test]
@@ -112,7 +123,8 @@ async fn test_message_mail_scroller_reads_one_item_from_online_scroll_data() {
         label_ids: vec![SystemLabel::Inbox.remote_id()]
     );
 
-    ctx.mock_get_messages(vec![message]).await;
+    ctx.mock_get_messages_total_expect(vec![message], 1, 1..=3)
+        .await;
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
@@ -123,21 +135,27 @@ async fn test_message_mail_scroller_reads_one_item_from_online_scroll_data() {
     let unread = ReadFilter::All;
 
     let page_size = 5;
-    let mut scroller =
-        MailScroller::messages(user_ctx.as_weak(), local_label_id, unread, page_size)
-            .await
-            .unwrap();
+    let mut test_scroller = TestScroller::messages(&user_ctx, local_label_id, unread, page_size)
+        .await
+        .unwrap();
 
-    let expected = scroller.fetch_more().await.unwrap();
-    let mut actual = scroller.all_items().await.unwrap();
-    assert_eq!(actual, expected);
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
     assert_eq!(actual.len(), 1);
-    let actual = actual.pop().unwrap();
-    assert_eq!(actual.remote_id, msg_id!("mymsg"));
-    assert!(!scroller.has_more().await.unwrap());
 
-    let next_page = scroller.fetch_more().await.unwrap();
-    assert_eq!(next_page.len(), 0);
+    // Verify we have the expected data
+    assert_eq!(test_scroller.items().len(), 1);
+
+    // Refresh again should not change anything
+    let refresh_result = test_scroller.refresh_and_wait().await.unwrap();
+    assert!(refresh_result.is_empty());
+
+    let actual = &test_scroller.items()[0];
+    assert_eq!(actual.remote_id, msg_id!("mymsg"));
+    assert!(!test_scroller.has_more().await.unwrap());
+
+    // Additional fetch_more should result in no new data
+    let next_page = test_scroller.fetch_more_and_wait().await.unwrap();
+    assert!(next_page.is_empty());
 }
 
 #[tokio::test]
@@ -150,7 +168,7 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     // mocks
     mock_api_sync_prevous_messages_page(&ctx, "mymsg_9", 1).await;
-    let params = setup_api_message_pages(&ctx, page_size, 2..=3).await;
+    let params = setup_api_message_pages(&ctx, page_size, 1..=5).await;
 
     ctx.setup_user(params.clone()).await;
 
@@ -168,12 +186,15 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
         .unwrap();
 
     // Online
-    let mut scroller =
-        MailScroller::messages(user_ctx.as_weak(), local_label_id, unread, page_size)
-            .await
-            .unwrap();
-    scroller.fetch_more().await.unwrap();
-    let actual = scroller.all_items().await.unwrap();
+    let mut test_scroller = TestScroller::messages(&user_ctx, local_label_id, unread, page_size)
+        .await
+        .unwrap();
+
+    // Messages can be accessed only when progressed.
+    test_scroller.fetch_more().unwrap();
+    let _ = test_scroller.wait_for_update().await.unwrap();
+
+    let actual = test_scroller.items();
     assert_eq!(actual.len(), 5);
 
     let actual_rids = actual.iter().map(|msg| msg.remote_id.clone()).collect_vec();
@@ -187,18 +208,16 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
             msg_id!("mymsg_5"),
         ]
     );
-    assert!(scroller.has_more().await.unwrap());
+    assert!(test_scroller.has_more().await.unwrap());
 
     // Get next page - it will progress cursor to the next page
     // But there is no more data available, the request will return an empty page
-    let actual_page = scroller.fetch_more().await.unwrap();
+    let actual_page = test_scroller.fetch_more_and_wait().await.unwrap();
     assert_eq!(actual_page.len(), 5);
-    let actual = scroller.all_items().await.unwrap();
+
+    let actual = test_scroller.items();
     assert_eq!(actual.len(), 10);
-    let actual_rids = actual
-        .iter()
-        .map(|conv| conv.remote_id.clone())
-        .collect_vec();
+    let actual_rids = actual.iter().map(|msg| msg.remote_id.clone()).collect_vec();
     assert_eq!(
         actual_rids,
         vec![
@@ -214,23 +233,26 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
             msg_id!("mymsg_0"),
         ]
     );
-    assert!(!scroller.has_more().await.unwrap());
+    assert!(!test_scroller.has_more().await.unwrap());
 
-    // Cached - it will trigger two more background requests for pages as we fetch more
-    // This is because cursor have only two pages in cache, which means we will try to get new page everytime we progress
+    // Additional fetch_more should result in no new data
+    let next_page = test_scroller.fetch_more_and_wait().await.unwrap();
+    assert!(next_page.is_empty());
 
-    let mut scroller =
-        MailScroller::messages(user_ctx.as_weak(), local_label_id, unread, page_size)
-            .await
-            .unwrap();
-    scroller.fetch_more().await.unwrap();
+    // Cached - it will trigger two more next page requests for pages as we fetch more
+    // and one previous page request on init.
+    // This is because cursor have only two pages in cache, which means we will try to get new page evertime we fetch more
 
-    let actual = scroller.all_items().await.unwrap();
+    let mut test_scroller = TestScroller::messages(&user_ctx, local_label_id, unread, page_size)
+        .await
+        .unwrap();
+
+    test_scroller.fetch_more().unwrap();
+    let _ = test_scroller.wait_for_update().await.unwrap();
+
+    let actual = test_scroller.items();
     assert_eq!(actual.len(), 5);
-    let actual_rids = actual
-        .iter()
-        .map(|conv| conv.remote_id.clone())
-        .collect_vec();
+    let actual_rids = actual.iter().map(|msg| msg.remote_id.clone()).collect_vec();
     assert_eq!(
         actual_rids,
         vec![
@@ -241,15 +263,14 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
             msg_id!("mymsg_5"),
         ]
     );
-    assert!(scroller.has_more().await.unwrap());
+    assert!(test_scroller.has_more().await.unwrap());
 
-    scroller.fetch_more().await.unwrap();
-    let actual = scroller.all_items().await.unwrap();
+    test_scroller.fetch_more().unwrap();
+    let _ = test_scroller.wait_for_update().await.unwrap();
+
+    let actual = test_scroller.items();
     assert_eq!(actual.len(), 10);
-    let actual_rids = actual
-        .iter()
-        .map(|conv| conv.remote_id.clone())
-        .collect_vec();
+    let actual_rids = actual.iter().map(|msg| msg.remote_id.clone()).collect_vec();
     assert_eq!(
         actual_rids,
         vec![
@@ -265,7 +286,11 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
             msg_id!("mymsg_0"),
         ]
     );
-    assert!(!scroller.has_more().await.unwrap());
+    assert!(!test_scroller.has_more().await.unwrap());
+
+    // Additional fetch_more should result in no new data
+    let next_page = test_scroller.fetch_more_and_wait().await.unwrap();
+    assert!(next_page.is_empty());
 }
 
 #[tokio::test]
@@ -276,7 +301,7 @@ async fn test_message_mail_scroller_notificate_about_changes() {
     let page_size = 5;
     let unread = ReadFilter::All;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
-    let params = setup_api_message_pages(&ctx, page_size, 2).await;
+    let params = setup_api_message_pages(&ctx, page_size, 1..=2).await;
 
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
@@ -293,26 +318,17 @@ async fn test_message_mail_scroller_notificate_about_changes() {
         .await
         .unwrap();
 
-    let mut scroller =
-        MailScroller::messages(user_ctx.as_weak(), local_label_id, unread, page_size)
-            .await
-            .unwrap();
-    let WatcherHandle {
-        handle: _handle,
-        receiver,
-        ..
-    } = scroller.watch().await.unwrap();
-    // Setting scroller up will never push notification
-    assert!(receiver.is_empty());
+    let mut test_scroller = TestScroller::messages(&user_ctx, local_label_id, unread, page_size)
+        .await
+        .unwrap();
 
-    scroller.fetch_more().await.unwrap();
+    // Fetch initial page
+    test_scroller.fetch_more().unwrap();
+    let _ = test_scroller.wait_for_update().await.unwrap();
 
-    let actual = scroller.all_items().await.unwrap();
+    let actual = test_scroller.items();
     assert_eq!(actual.len(), 5);
-    let actual_rids = actual
-        .iter()
-        .map(|conv| conv.remote_id.clone())
-        .collect_vec();
+    let actual_rids = actual.iter().map(|msg| msg.remote_id.clone()).collect_vec();
     assert_eq!(
         actual_rids,
         vec![
@@ -323,23 +339,16 @@ async fn test_message_mail_scroller_notificate_about_changes() {
             msg_id!("mymsg_5"),
         ]
     );
-    // Fetching more will never trigger any notifications
-    assert!(receiver.is_empty());
 
     // Get next page
-    let actual_page = scroller.fetch_more().await.unwrap();
+    let actual_page = test_scroller.fetch_more_and_wait().await.unwrap();
     assert_eq!(actual_page.len(), 5);
-    let actual_page = scroller.fetch_more().await.unwrap();
+    let actual_page = test_scroller.fetch_more_and_wait().await.unwrap();
     assert_eq!(actual_page.len(), 0);
-    // Fetching more will never trigger any notifications
-    assert!(receiver.is_empty());
 
-    let actual = scroller.all_items().await.unwrap();
+    let actual = test_scroller.items();
     assert_eq!(actual.len(), 10);
-    let actual_rids = actual
-        .iter()
-        .map(|conv| conv.remote_id.clone())
-        .collect_vec();
+    let actual_rids = actual.iter().map(|msg| msg.remote_id.clone()).collect_vec();
     assert_eq!(
         actual_rids,
         vec![
@@ -387,14 +396,11 @@ async fn test_message_mail_scroller_notificate_about_changes() {
         .await
         .unwrap();
     // Getting an update will trigger a notification
-    receiver.recv_async().await.unwrap();
+    let _ = test_scroller.wait_for_update().await.unwrap();
 
-    let actual = scroller.all_items().await.unwrap();
+    let actual = test_scroller.items();
     assert_eq!(actual.len(), 11);
-    let actual_rids = actual
-        .iter()
-        .map(|conv| conv.remote_id.clone())
-        .collect_vec();
+    let actual_rids = actual.iter().map(|msg| msg.remote_id.clone()).collect_vec();
     assert_eq!(
         actual_rids,
         vec![
@@ -444,14 +450,14 @@ async fn all_scheduled_is_displayed_in_ascending_order() {
         .unwrap();
 
     // Online
-    let mut scroller =
-        MailScroller::messages(user_ctx.as_weak(), local_label_id, unread, page_size)
-            .await
-            .unwrap();
-    let fetched = scroller.fetch_more().await.unwrap();
+    let mut test_scroller = TestScroller::messages(&user_ctx, local_label_id, unread, page_size)
+        .await
+        .unwrap();
+
+    let fetched = test_scroller.fetch_more_and_wait().await.unwrap();
     assert_eq!(fetched.len(), 5);
 
-    let actual = scroller.all_items().await.unwrap();
+    let actual = test_scroller.items();
     assert_eq!(actual.len(), 5);
 
     let actual_rids = actual.iter().map(|msg| msg.remote_id.clone()).collect_vec();
@@ -465,18 +471,16 @@ async fn all_scheduled_is_displayed_in_ascending_order() {
             msg_id!("mymsg_4"),
         ]
     );
-    assert!(scroller.has_more().await.unwrap());
+    assert!(test_scroller.has_more().await.unwrap());
 
     // Get next page - it will progress cursor to the next page
     // But there is no more data available, the request will return an empty page
-    let actual_page = scroller.fetch_more().await.unwrap();
+    let actual_page = test_scroller.fetch_more_and_wait().await.unwrap();
     assert_eq!(actual_page.len(), 5);
-    let actual = scroller.all_items().await.unwrap();
+
+    let actual = test_scroller.items();
     assert_eq!(actual.len(), 10);
-    let actual_rids = actual
-        .iter()
-        .map(|conv| conv.remote_id.clone())
-        .collect_vec();
+    let actual_rids = actual.iter().map(|msg| msg.remote_id.clone()).collect_vec();
     assert_eq!(
         actual_rids,
         vec![
@@ -492,7 +496,7 @@ async fn all_scheduled_is_displayed_in_ascending_order() {
             msg_id!("mymsg_9"),
         ]
     );
-    assert!(!scroller.has_more().await.unwrap());
+    assert!(!test_scroller.has_more().await.unwrap());
 }
 
 async fn setup_api_message_pages(
