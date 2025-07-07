@@ -896,7 +896,7 @@ impl Context {
             builder = builder.with_info_provider(Arc::new(MuonInfoProvider {
                 app_version: self.api_config.app_version.clone(),
                 device_info_provider: provider.clone(),
-            }))
+            }));
         }
 
         Ok(builder.build().await?)
@@ -1194,7 +1194,7 @@ async fn on_session_notification(mut observer: CoreSessionObserver, ctx: Weak<Co
     tracing::debug!("Stopping task");
 }
 
-/// Implements the InfoProvider protocol from Muon. Used to pass the fingerprint to the Muon Client.
+/// Implements the `InfoProvider` protocol from Muon. Used to pass the fingerprint to the Muon Client.
 pub struct MuonInfoProvider {
     app_version: String,
     device_info_provider: DynDeviceInfoProvider,
@@ -1204,7 +1204,7 @@ pub struct MuonInfoProvider {
 impl InfoProvider for MuonInfoProvider {
     async fn fingerprint(&self) -> Option<Fingerprint> {
         let mut map = serde_json::Map::new();
-        let key = format!("{}-challenge", self.app_version.replace("@", "-"));
+        let key = format!("{}-challenge", self.app_version.replace('@', "-"));
         let value = json!(self.device_info_provider.get_device_info().await);
         map.insert(key, value);
 
