@@ -1,6 +1,6 @@
 use super::{
     DraftAttachmentUploadErrorReason, DraftCancelScheduleSendErrorReason, DraftDiscardErrorReason,
-    DraftOpenErrorReason, DraftSaveErrorReason, DraftSendErrorReason,
+    DraftOpenErrorReason, DraftPasswordErrorReason, DraftSaveErrorReason, DraftSendErrorReason,
     DraftSenderAddressChangeErrorReason, DraftUndoSendErrorReason, ProtonError,
 };
 use crate::UniffiEnum;
@@ -198,6 +198,30 @@ impl From<RealProtonMailError> for DraftSenderAddressChangeError {
     fn from(error: RealProtonMailError) -> Self {
         match error {
             RealProtonMailError::Reason(reason) => reason.into(),
+            other_reason => Self::Other(ProtonError::from(other_reason)),
+        }
+    }
+}
+
+#[derive(Debug, From, UniffiEnum)]
+pub enum DraftPasswordError {
+    Reason(DraftPasswordErrorReason),
+    Other(ProtonError),
+}
+
+impl From<RealProtonMailError> for DraftPasswordError {
+    fn from(error: RealProtonMailError) -> Self {
+        match error {
+            RealProtonMailError::Reason(reason) => reason.into(),
+            mail_error => Self::Other(ProtonError::from(mail_error)),
+        }
+    }
+}
+
+impl From<RealMailErrorReason> for DraftPasswordError {
+    fn from(reason: RealMailErrorReason) -> Self {
+        match reason {
+            RealMailErrorReason::DraftPasswordReason(reason) => Self::Reason(reason.into()),
             other_reason => Self::Other(ProtonError::from(other_reason)),
         }
     }

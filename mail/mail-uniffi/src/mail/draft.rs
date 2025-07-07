@@ -5,10 +5,10 @@ mod recipients;
 use crate::core::datatypes::{Id, UnixTimestamp};
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{
-    DraftCancelScheduleSendError, DraftDiscardError, DraftOpenError, DraftSaveError,
-    DraftSendError, DraftSenderAddressChangeError, DraftUndoSendError,
-    EmbeddedAttachmentInfoResult, ProtonError, VoidDraftDiscardResult, VoidDraftSaveResult,
-    VoidDraftSendResult, VoidDraftUndoSendResult,
+    DraftCancelScheduleSendError, DraftDiscardError, DraftOpenError, DraftPasswordError,
+    DraftSaveError, DraftSendError, DraftSenderAddressChangeError, DraftUndoSendError,
+    EmbeddedAttachmentInfoResult, ProtonError, VoidDraftDiscardResult, VoidDraftPasswordResult,
+    VoidDraftSaveResult, VoidDraftSendResult, VoidDraftUndoSendResult,
 };
 use crate::mail::MailUserSession;
 use crate::mail::datatypes::MimeType;
@@ -595,6 +595,66 @@ impl Draft {
         })
         .await
         .map_err(DraftDiscardError::from)
+        .into()
+    }
+
+    pub fn is_password_protected(&self) -> Result<bool, ProtonError> {
+        let Some(ctx) = self.ctx.upgrade() else {
+            return Err(ProtonError::Unexpected(UnexpectedError::Internal));
+        };
+        Ok(async_runtime().block_on(async move {
+            let instance = self.instance.read().await;
+            instance
+                .is_password_protected(&ctx.user_stash().connection())
+                .await
+                .map_err(RealProtonMailError::from)
+        })?)
+    }
+
+    #[returns(VoidDraftPasswordResult)]
+    pub async fn set_password(
+        self: Arc<Self>,
+        password: String,
+        hint: Option<String>,
+    ) -> Result<(), DraftPasswordError> {
+        let Some(ctx) = self.ctx.upgrade() else {
+            return Err(DraftPasswordError::Other(ProtonError::Unexpected(
+                UnexpectedError::Internal,
+            )));
+        };
+        uniffi_async(async move {
+            let instance = self.instance.read().await;
+            instance
+                .set_password(&ctx, &password, hint)
+                .await
+                .map_err(RealProtonMailError::from)?;
+
+            Result::<_, RealProtonMailError>::Ok(())
+        })
+        .await
+        .map_err(DraftPasswordError::from)
+        .into()
+    }
+
+    #[returns(VoidDraftPasswordResult)]
+    pub async fn remove_password(self: Arc<Self>) -> Result<(), DraftPasswordError> {
+        let Some(ctx) = self.ctx.upgrade() else {
+            return Err(DraftPasswordError::Other(ProtonError::Unexpected(
+                UnexpectedError::Internal,
+            )));
+        };
+        uniffi_async(async move {
+            let instance = self.instance.read().await;
+            let mut tether = ctx.user_stash().connection();
+            instance
+                .remove_password(&mut tether)
+                .await
+                .map_err(RealProtonMailError::from)?;
+
+            Result::<_, RealProtonMailError>::Ok(())
+        })
+        .await
+        .map_err(DraftPasswordError::from)
         .into()
     }
 }
