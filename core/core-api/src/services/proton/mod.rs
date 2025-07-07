@@ -58,9 +58,9 @@ use crate::store::Store;
 use crate::verification::ChallengeNotifierLayer;
 use crate::verification::DynChallengeNotifier;
 use cookie::CookieJar;
-use muon::client::InfoProvider;
 use muon::App;
 use muon::client::Builder;
+use muon::client::InfoProvider;
 use muon::client::middleware::{DisplayLogger, Tagger};
 use muon::common::ConstProxy;
 use muon::common::IntoDyn;
@@ -113,7 +113,7 @@ pub async fn build<S: Store>(
     store: &Arc<RwLock<S>>,
     status: &StatusWatcher,
     notifier: DynChallengeNotifier,
-    info_provider: Option<Arc<dyn InfoProvider>>
+    info_provider: Option<Arc<dyn InfoProvider>>,
 ) -> Result<Proton, BuildError> {
     let app = if let Some(agent) = &config.user_agent {
         App::new(&config.app_version)?.with_user_agent(agent)
@@ -138,7 +138,7 @@ fn build_with(
     status: &StatusWatcher,
     notifier: DynChallengeNotifier,
     proxy: Option<ConstProxy>,
-    info_provider: Option<Arc<dyn InfoProvider>>
+    info_provider: Option<Arc<dyn InfoProvider>>,
 ) -> Result<Proton, BuildError> {
     if let Some(proxy) = proxy {
         builder = builder.proxy(proxy);

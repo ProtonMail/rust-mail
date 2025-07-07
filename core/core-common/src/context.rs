@@ -45,8 +45,8 @@ use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use proton_task_service::{BackgroundAwareTaskService, TaskService};
 use proton_vcard::VcardValidationError;
 use secrecy::SecretVec;
-use stash::orm::Model as _;
 use serde_json::json;
+use stash::orm::Model as _;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
 use std::collections::HashMap;
 use std::future::Future;
@@ -893,7 +893,10 @@ impl Context {
         }
 
         if let Some(provider) = &self.device_info_provider {
-            builder = builder.with_info_provider(Arc::new(MuonInfoProvider { app_version: self.api_config.app_version.clone(), device_info_provider: provider.clone() }))
+            builder = builder.with_info_provider(Arc::new(MuonInfoProvider {
+                app_version: self.api_config.app_version.clone(),
+                device_info_provider: provider.clone(),
+            }))
         }
 
         Ok(builder.build().await?)
@@ -1194,8 +1197,8 @@ async fn on_session_notification(mut observer: CoreSessionObserver, ctx: Weak<Co
 /// Implements the InfoProvider protocol from Muon. Used to pass the fingerprint to the Muon Client.
 pub struct MuonInfoProvider {
     app_version: String,
-    device_info_provider: DynDeviceInfoProvider
-} 
+    device_info_provider: DynDeviceInfoProvider,
+}
 
 #[async_trait]
 impl InfoProvider for MuonInfoProvider {

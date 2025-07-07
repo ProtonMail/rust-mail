@@ -1,6 +1,6 @@
 use derive_more::{Debug, Deref};
-use muon::client::flow::ForkFlowResult;
 use muon::client::InfoProvider;
+use muon::client::flow::ForkFlowResult;
 use muon::common::ParseEndpointErr;
 use muon::env::DynEnv;
 use std::borrow::Borrow;
@@ -175,7 +175,7 @@ pub struct Builder {
     store: Option<BoxStore>,
     status: Option<StatusWatcher>,
     notifier: Option<DynChallengeNotifier>,
-    info_provider: Option<Arc<dyn InfoProvider>>
+    info_provider: Option<Arc<dyn InfoProvider>>,
 }
 
 impl Builder {
