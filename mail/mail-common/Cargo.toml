@@ -83,7 +83,6 @@ tao = { version = "0.33", optional = true }
 
 [dev-dependencies]
 clap = { workspace = true }
-ctor = { workspace = true }
 color-backtrace = { workspace = true }
 insta = { workspace = true }
 pretty_assertions = { workspace = true }

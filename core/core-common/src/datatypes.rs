@@ -56,7 +56,6 @@ pub use self::timestamp::*;
 
 use derive_more::derive::TryFrom;
 use itertools::Itertools;
-use num_enum::IntoPrimitive;
 use proton_core_api::services::proton::{
     AddressId, ContactEmailId, ContactId, DeviceEnvironment as ApiDeviceEnvironment, LabelId,
     LabelType as ApiLabelType, LightOrDarkMode as ApiLightOrDarkMode,
@@ -1393,7 +1392,7 @@ sql_using_serde!(AuthScopes);
 
 /// A compat type for the [`ApiPasswordMode`] enum, enabling it to be used
 /// within the database.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, IntoPrimitive, TryFrom)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, TryFrom)]
 #[try_from(repr)]
 #[repr(u8)]
 pub enum PasswordMode {
@@ -1438,7 +1437,7 @@ impl From<PasswordMode> for ApiPasswordMode {
 
 impl ToSql for PasswordMode {
     fn to_sql(&self) -> Result<ToSqlOutput, SqlError> {
-        Ok(u8::from(self.to_owned()).into())
+        Ok((*self as u8).into())
     }
 }
 
