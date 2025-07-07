@@ -1,8 +1,8 @@
 use super::mail_error_reason::*;
 use crate::actions::MailActionError;
 use crate::draft::{
-    AttachmentRemoveError, AttachmentUploadError, CancelScheduleSendError, PackageError,
-    SenderAddressChangeError,
+    AttachmentRemoveError, AttachmentUploadError, CancelScheduleSendError, Error, PackageError,
+    PasswordError, SenderAddressChangeError,
 };
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
@@ -10,8 +10,8 @@ use crate::mail_scroller::MailScrollerError;
 use crate::{
     AppError, MailContextError, SidebarError, draft::DiscardError as DraftDiscardError,
     draft::Error as DraftError, draft::OpenError as DraftOpenError,
-    draft::SaveError as DraftSaveError, draft::SendError as DraftSendError,
-    draft::UndoError as DraftUndoError,
+    draft::PasswordError as DraftPasswordError, draft::SaveError as DraftSaveError,
+    draft::SendError as DraftSendError, draft::UndoError as DraftUndoError,
 };
 use proton_action_queue::action::Action;
 use proton_action_queue::queue::ActionError as InternalActionError;
@@ -288,6 +288,7 @@ impl From<DraftError> for ProtonMailError {
             },
             DraftError::CancelScheduleSend(v) => v.into(),
             DraftError::SenderAddressChange(v) => v.into(),
+            Error::Password(v) => v.into(),
         }
     }
 }
@@ -342,6 +343,9 @@ impl From<DraftSendError> for ProtonMailError {
                     DraftSendErrorReason::ScheduleSendMessageLimitExceeded,
                 ))
             }
+            DraftSendError::EOPasswordDecrypt => Self::Reason(MailErrorReason::DraftSendReason(
+                DraftSendErrorReason::EOPasswordDecrypt,
+            )),
         }
     }
 }
@@ -544,6 +548,19 @@ impl From<SenderAddressChangeError> for ProtonMailError {
                     DraftSenderAddressChangeErrorReason::AddressWithEmailNotFound(v),
                 ))
             }
+        }
+    }
+}
+
+impl From<DraftPasswordError> for ProtonMailError {
+    fn from(value: DraftPasswordError) -> Self {
+        let _guard = log_error(&value);
+        match value {
+            PasswordError::MetadataNotFound(_) => Self::Unexpected(Unexpected::Internal),
+            PasswordError::PasswordTooShort => Self::reason(MailErrorReason::DraftPasswordReason(
+                DraftPasswordErrorReason::PasswordTooShort,
+            )),
+            PasswordError::Encryption => Self::Unexpected(Unexpected::Crypto),
         }
     }
 }

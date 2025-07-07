@@ -331,10 +331,7 @@ impl DraftMetadata {
             String::from_utf8(
                 session_encryption_key
                     .decrypt(password.as_ref())
-                    .map_err(|_| {
-                        error!("Failed to decrypt draft password");
-                        MailContextError::Crypto
-                    })?,
+                    .map_err(|_| SendError::EOPasswordDecrypt)?,
             )
             .map_err(|_| MailContextError::Other(anyhow!("Draft password is not valid utf8")))?,
         );

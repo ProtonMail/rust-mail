@@ -15,6 +15,7 @@ pub enum MailErrorReason {
     DraftAttachmentUploadReason(DraftAttachmentUploadErrorReason),
     DraftCancelScheduleSendReason(DraftCancelScheduleSendErrorReason),
     DraftSenderAddressChangeReason(DraftSenderAddressChangeErrorReason),
+    DraftPasswordReason(DraftPasswordErrorReason),
     EventReason(EventErrorReason),
     PinSetReason(PinSetErrorReason),
     PinAuthReason(PinAuthErrorReason),
@@ -161,6 +162,8 @@ pub enum DraftSendErrorReason {
     ScheduleSendExpired,
     /// The maximum number of scheduled send messages has been reached.
     ScheduleSendMessageLimitExceeded,
+    /// Failed to decrypt external encryption password
+    EOPasswordDecrypt,
 }
 
 /// Specific Reason when attempting to cancel sending of an already sent draft.
@@ -224,6 +227,11 @@ pub enum DraftSenderAddressChangeErrorReason {
     AddressNotSendEnabled,
     AddressDisabled,
     AddressWithEmailNotFound(String),
+}
+
+#[derive(Debug)]
+pub enum DraftPasswordErrorReason {
+    PasswordTooShort,
 }
 
 /// Specific Reason for error occurrence within Event Loop.
