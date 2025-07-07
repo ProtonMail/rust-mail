@@ -9,7 +9,9 @@ use stash::{
 };
 
 use crate::{
-    conv_id, conversation, label, lbl_id, message,
+    conv_id, conversation, label, lbl_id,
+    mail_scroller::ScrollerEq,
+    message,
     models::{Conversation, ConversationCounters, Message, MessageCounters},
     msg_id,
 };
@@ -282,13 +284,13 @@ const TIMEOUT: Duration = Duration::from_secs(5);
 /// This provides a unified interface for testing any type of MailScroller
 /// (conversations, messages, search) with automatic update handling and
 /// convenient test methods.
-pub struct TestScroller<T: Send + Sync + Clone + PartialEq + std::fmt::Debug + 'static> {
+pub struct TestScroller<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> {
     scroller: MailScroller,
     handle: MailScrollerHandle<T>,
     collected_items: Vec<T>,
 }
 
-impl<T: Send + Sync + Clone + PartialEq + std::fmt::Debug + 'static> TestScroller<T> {
+impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroller<T> {
     /// Create a new TestScroller from a MailScroller and handle
     pub async fn new(
         scroller: MailScroller,

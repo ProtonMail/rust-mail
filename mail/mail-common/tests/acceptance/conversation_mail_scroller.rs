@@ -484,6 +484,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
         ],
     )
     .await;
+
     // progress to the next page from API
     let actual = test_scroller.fetch_more_and_wait().await.unwrap();
     assert_eq!(actual.len(), 5);
