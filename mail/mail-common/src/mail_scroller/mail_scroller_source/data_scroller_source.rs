@@ -435,6 +435,18 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         Ok((items, task))
     }
 
+    async fn change_filter(
+        &mut self,
+        ctx: &MailUserContext,
+        filter: ReadFilter,
+    ) -> Result<(), MailContextError> {
+        self.unread = filter;
+        self.state = MailScrollerState::None;
+        self.initialize(ctx).await?;
+
+        Ok(())
+    }
+
     fn watched_tables(&self) -> Vec<String> {
         T::watched_tables()
     }

@@ -239,6 +239,17 @@ impl ConversationScroller {
         Arc::clone(&self.handle)
     }
 
+    /// Forces a refresh of the scroller. The callback will receive the full
+    /// list of items.
+    ///
+    /// The call is non-blocking and returns immediately.
+    pub fn force_refresh(self: Arc<Self>) -> Result<(), MailScrollerError> {
+        self.scroller
+            .force_refresh()
+            .map_err(RealProtonMailError::from)
+            .map_err(Into::into)
+    }
+
     /// Refreshes the scroller, providing a smallest possible update
     /// to the client via the callback.
     ///
@@ -256,6 +267,16 @@ impl ConversationScroller {
     pub fn fetch_more(self: Arc<Self>) -> Result<(), MailScrollerError> {
         self.scroller
             .fetch_more()
+            .map_err(RealProtonMailError::from)
+            .map_err(Into::into)
+    }
+
+    /// Changes the filter of the scroller.
+    ///
+    /// The call is non-blocking and returns immediately.
+    pub fn change_filter(self: Arc<Self>, filter: ReadFilter) -> Result<(), MailScrollerError> {
+        self.scroller
+            .change_filter(filter.into())
             .map_err(RealProtonMailError::from)
             .map_err(Into::into)
     }
@@ -307,6 +328,17 @@ impl MessageScroller {
         Arc::clone(&self.handle)
     }
 
+    /// Forces a refresh of the scroller. The callback will receive the full
+    /// list of items.
+    ///
+    /// The call is non-blocking and returns immediately.
+    pub fn force_refresh(self: Arc<Self>) -> Result<(), MailScrollerError> {
+        self.scroller
+            .force_refresh()
+            .map_err(RealProtonMailError::from)
+            .map_err(Into::into)
+    }
+
     /// Refreshes the scroller, providing a smallest possible update
     /// to the client via the callback.
     ///
@@ -324,6 +356,16 @@ impl MessageScroller {
     pub fn fetch_more(self: Arc<Self>) -> Result<(), MailScrollerError> {
         self.scroller
             .fetch_more()
+            .map_err(RealProtonMailError::from)
+            .map_err(Into::into)
+    }
+
+    /// Changes the filter of the scroller.
+    ///
+    /// The call is non-blocking and returns immediately.
+    pub fn change_filter(self: Arc<Self>, filter: ReadFilter) -> Result<(), MailScrollerError> {
+        self.scroller
+            .change_filter(filter.into())
             .map_err(RealProtonMailError::from)
             .map_err(Into::into)
     }
@@ -373,6 +415,17 @@ impl SearchScroller {
     #[must_use]
     pub fn handle(&self) -> Arc<WatchHandle> {
         Arc::clone(&self.handle)
+    }
+
+    /// Forces a refresh of the scroller. The callback will receive the full
+    /// list of items.
+    ///
+    /// The call is non-blocking and returns immediately.
+    pub fn force_refresh(self: Arc<Self>) -> Result<(), MailScrollerError> {
+        self.scroller
+            .force_refresh()
+            .map_err(RealProtonMailError::from)
+            .map_err(Into::into)
     }
 
     /// Refreshes the scroller, providing a smallest possible update

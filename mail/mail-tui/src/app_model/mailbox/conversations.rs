@@ -53,6 +53,10 @@ impl ConversationsState {
         })
     }
 
+    pub fn paginator(&self) -> &Paginator {
+        &self.paginator
+    }
+
     async fn new_impl(
         ctx: Arc<MailUserContext>,
         label_id: LocalLabelId,

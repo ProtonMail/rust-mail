@@ -2,7 +2,7 @@ use std::{cmp, sync::Arc};
 
 use crate::{
     MailContextError, MailUserContext,
-    datatypes::SearchOptions,
+    datatypes::{ReadFilter, SearchOptions},
     mail_scroller::MailScrollerSource,
     models::{Message, MessageCounters, MessageLabel, SearchScrollData},
 };
@@ -382,5 +382,14 @@ impl MailScrollerSource for SearchScrollerSource {
             MessageLabel::table_name().to_owned(),
             MessageCounters::table_name().to_owned(),
         ]
+    }
+
+    async fn change_filter(
+        &mut self,
+        _ctx: &MailUserContext,
+        _filter: ReadFilter,
+    ) -> Result<(), MailContextError> {
+        // Noop for search scroller
+        Ok(())
     }
 }

@@ -57,11 +57,25 @@ pub enum ScrollerUpdate<T: Send + Sync + Clone + ScrollerEq + 'static> {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Display)]
+#[derive(Clone, Debug, Display)]
 pub enum ScrollerSource {
     ScrollEvent(Uuid), // UUID of the scroll event
     Database,
     Invalidation,
+}
+
+/// We need to implement PartialEq to deduplicate commands in the ordered command queue.
+/// This also means we cannot/should not use `Eq` for the enum.
+/// If its needed then deduplication should be done in other way. This is because
+/// we want to deduplicate commands that are not related to each other.
+///
+/// For example, if we have a command to fetch more data, we want to deduplicate it with
+/// another command to fetch more data. But we do not want to deduplicate it with a command
+/// to change the filter.
+impl PartialEq for ScrollerSource {
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
 }
 
 pub trait ScrollerEq: PartialEq {
@@ -225,6 +239,21 @@ impl MailScroller {
             ))
             .map_err(|_| {
                 MailContextError::Other(anyhow!("Failed to send force refresh command"))
+            })?;
+
+        Ok(())
+    }
+
+    pub fn change_filter(&self, filter: ReadFilter) -> Result<(), MailContextError> {
+        let uuid = Uuid::new_v4();
+        tracing::trace!("Sending `ChangeFilter` command with uuid: {uuid}");
+        self.ordered_command
+            .send(ScrollerOrderedCommand::ChangeFilter {
+                src: ScrollerSource::ScrollEvent(uuid),
+                filter,
+            })
+            .map_err(|_| {
+                MailContextError::Other(anyhow!("Failed to send change filter command"))
             })?;
 
         Ok(())
@@ -427,6 +456,18 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                         .map_err(|e| anyhow!("Failed to send force refresh update: {e:?}"))?;
                 }
             }
+            ScrollerOrderedCommand::ChangeFilter { src, filter } => {
+                let result = self
+                    .change_filter(src.clone(), filter)
+                    .await
+                    .unwrap_or_else(|e| Some(ScrollerUpdate::Error { src, error: e }));
+
+                if let Some(result) = result {
+                    self.update
+                        .send(result)
+                        .map_err(|e| anyhow!("Failed to send change filter update: {e:?}"))?;
+                }
+            }
         }
 
         Ok(())
@@ -535,6 +576,8 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         );
 
         let update = if force {
+            self.items = visible_items.clone();
+
             Some(ScrollerUpdate::ReplaceFrom {
                 src,
                 idx: 0,
@@ -552,6 +595,26 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         };
 
         Ok(update)
+    }
+
+    #[tracing::instrument(skip_all, fields(src=%src))]
+    async fn change_filter(
+        &mut self,
+        src: ScrollerSource,
+        filter: ReadFilter,
+    ) -> Result<Option<ScrollerUpdate<T::Item>>, MailContextError> {
+        let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
+        tracing::debug!("Changing filter to {filter:?}");
+
+        self.source
+            .write()
+            .await
+            .change_filter(&ctx, filter)
+            .await?;
+        self.items.clear();
+        self.task = None;
+        self.fetch_more(src.clone()).await?;
+        self.refresh(true, src).await
     }
 
     /// Return the total number of elements available.
@@ -690,32 +753,15 @@ enum ScrollerCommand {
     HasMore(oneshot::Sender<Result<bool, MailContextError>>),
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 enum ScrollerOrderedCommand {
     FetchMore(ScrollerSource),
     Refresh(ScrollerSource),
     ForceRefresh(ScrollerSource),
-}
-
-/// We need to implement PartialEq to deduplicate commands in the ordered command queue.
-/// This also means we cannot/should not use `Eq` for the enum.
-/// If its needed then deduplication should be done in other way.
-impl PartialEq for ScrollerOrderedCommand {
-    fn eq(&self, other: &Self) -> bool {
-        matches!(
-            (self, other),
-            (
-                ScrollerOrderedCommand::FetchMore(_),
-                ScrollerOrderedCommand::FetchMore(_)
-            ) | (
-                ScrollerOrderedCommand::Refresh(_),
-                ScrollerOrderedCommand::Refresh(_)
-            ) | (
-                ScrollerOrderedCommand::ForceRefresh(_),
-                ScrollerOrderedCommand::ForceRefresh(_)
-            )
-        )
-    }
+    ChangeFilter {
+        src: ScrollerSource,
+        filter: ReadFilter,
+    },
 }
 
 fn calculate_scroller_update<T: ScrollerEq + Clone + Send + Sync + 'static>(
