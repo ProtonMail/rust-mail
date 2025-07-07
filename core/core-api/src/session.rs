@@ -1,5 +1,6 @@
 use derive_more::{Debug, Deref};
 use muon::client::flow::ForkFlowResult;
+use muon::client::InfoProvider;
 use muon::common::ParseEndpointErr;
 use muon::env::DynEnv;
 use std::borrow::Borrow;
@@ -174,6 +175,7 @@ pub struct Builder {
     store: Option<BoxStore>,
     status: Option<StatusWatcher>,
     notifier: Option<DynChallengeNotifier>,
+    info_provider: Option<Arc<dyn InfoProvider>>
 }
 
 impl Builder {
@@ -242,6 +244,12 @@ impl Builder {
         self
     }
 
+    /// Set the info provider. Used by muon to request the fingerprint.
+    pub fn with_info_provider(mut self, info_provider: Arc<dyn InfoProvider>) -> Self {
+        self.info_provider = Some(info_provider);
+        self
+    }
+
     /// Build the session from the builder.
     pub async fn build(self) -> Result<Session, BuildError> {
         init_server_crypto_clock();
@@ -252,7 +260,7 @@ impl Builder {
 
         let config = Arc::new(self.config);
         let store = Arc::new(RwLock::new(store));
-        let client = proton::build(&config, &store, &status, notifier).await?;
+        let client = proton::build(&config, &store, &status, notifier, self.info_provider).await?;
 
         status.initialize(client.clone());
 

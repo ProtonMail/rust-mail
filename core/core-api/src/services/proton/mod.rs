@@ -58,6 +58,7 @@ use crate::store::Store;
 use crate::verification::ChallengeNotifierLayer;
 use crate::verification::DynChallengeNotifier;
 use cookie::CookieJar;
+use muon::client::InfoProvider;
 use muon::App;
 use muon::client::Builder;
 use muon::client::middleware::{DisplayLogger, Tagger};
@@ -112,6 +113,7 @@ pub async fn build<S: Store>(
     store: &Arc<RwLock<S>>,
     status: &StatusWatcher,
     notifier: DynChallengeNotifier,
+    info_provider: Option<Arc<dyn InfoProvider>>
 ) -> Result<Proton, BuildError> {
     let app = if let Some(agent) = &config.user_agent {
         App::new(&config.app_version)?.with_user_agent(agent)
@@ -128,7 +130,7 @@ pub async fn build<S: Store>(
     let store = MuonStoreImpl::new(&config.env_id, store);
     let builder = Proton::builder_async(app, store).await;
 
-    build_with(builder, status, notifier, proxy)
+    build_with(builder, status, notifier, proxy, info_provider)
 }
 
 fn build_with(
@@ -136,12 +138,13 @@ fn build_with(
     status: &StatusWatcher,
     notifier: DynChallengeNotifier,
     proxy: Option<ConstProxy>,
+    info_provider: Option<Arc<dyn InfoProvider>>
 ) -> Result<Proton, BuildError> {
     if let Some(proxy) = proxy {
         builder = builder.proxy(proxy);
     }
 
-    let client = builder
+    let mut client = builder
         .doh([Quad9Doh.into_dyn(), GoogleDoh.into_dyn()])
         .layer_front(Tagger::default())
         .layer_back(SetCryptoClockLayer)
@@ -152,6 +155,10 @@ fn build_with(
         .layer_back(CookieJarLayer::new(CookieJar::new()))
         .layer_back(DisplayLogger::debug())
         .build()?;
+
+    if let Some(info_provider) = info_provider {
+        client = client.with_info_provider(info_provider);
+    }
 
     Ok(client)
 }
