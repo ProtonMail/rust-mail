@@ -351,20 +351,8 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         let response_sender = self.response.clone();
         let (invalidation_sender, invalidation_receiver) = flume::unbounded();
 
-        // Unordered operations, these can be run non blocking in comparison to ordered operations.
-        // However we cannot cancel them, so we cannot `select` them in the database update loop.
-        let handle = ctx.spawn(async move {
-            while let Ok(command) = command_receiver.recv_async().await {
-                if let Err(e) =
-                    Self::handle_command(command, &source_clone, &weak_ctx, &response_sender).await
-                {
-                    tracing::error!("Failed to handle command: {e:?}");
-                }
-            }
-        });
-        aborts.push(handle.abort_handle());
-
-        // Ordered operations, these needs to be streamlined
+        // Ordered operations, these needs to be streamlined and not blocking other operations
+        // thats why we are going to dedicate a separate task for them.
         let handle = ctx.spawn(async move {
             self.source.write().await.set_notify(invalidation_sender);
             while let Ok(command) = self.ordered_command.recv_async().await {
@@ -380,7 +368,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         });
         aborts.push(handle.abort_handle());
 
-        // Database updates and data source invalidations
+        // Unordered operations, database updates and data source invalidations
         let handle = ctx.spawn(async move {
             loop {
                 select! {
@@ -401,6 +389,15 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                         let _ = ordered_command_sender
                             .send(ScrollerOrderedCommand::Refresh(ScrollerSource::Database))
                             .inspect_err(|e| tracing::error!("Failed to send refresh command: {e:?}"));
+                    }
+                    r = command_receiver.recv_async() => {
+                        if let Err(e) = r {
+                            tracing::error!("Failed to receive command: {e:?}");
+                            return;
+                        }
+                        if let Err(e) = Self::handle_command(r.unwrap(), &source_clone, &weak_ctx, &response_sender).await {
+                            tracing::error!("Failed to handle command: {e:?}");
+                        }
                     }
                 }
             }
