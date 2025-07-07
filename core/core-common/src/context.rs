@@ -1,6 +1,7 @@
 //! Core context contains all the necessary information to retrieve or create new accounts and sessions.
 
 use crate::action_queue::CoreActionError;
+use crate::app_events::{UserSessionCreatedEvent, UserSessionDeletedEvent};
 use crate::auth_store::{AuthStore, DecryptExt};
 use crate::core_clock::CoreClock;
 use crate::datatypes::{
@@ -35,6 +36,7 @@ use proton_core_api::verification::DynChallengeNotifier;
 use proton_crypto_account::keys::PGPDeviceKey;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_event_loop::EventLoopError;
+use proton_event_service::EventService;
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
 use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
@@ -48,7 +50,7 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
 use thiserror::Error;
-use tokio::sync::{Mutex, broadcast};
+use tokio::sync::Mutex;
 use tokio::task::{JoinError, JoinHandle};
 use tokio_util::sync::CancellationToken;
 use tracing::{error, info, warn};
@@ -258,7 +260,7 @@ pub struct Context {
     device_info_provider: Option<DynDeviceInfoProvider>,
     cancellation_token: CancellationToken,
     task_service: BackgroundAwareTaskService,
-    on_session_deleted_broadcast: broadcast::Sender<(SessionId, UserId)>,
+    event_service: EventService,
     pub event_poll_mode: EventPollMode,
     clock: CoreClock,
     log_service: LogService,
@@ -315,17 +317,7 @@ impl Context {
 
         let task_service = TaskService::new()?;
 
-        let (broadcast_sender, _) = broadcast::channel(SESSION_OBSERVER_BROADCAST_CAPACITY);
-
-        let session_observer = CoreSessionObserver::new(account_stash.clone())
-            .await
-            .inspect_err(|e| tracing::error!("Failed to create session observer: {e:?}"))?;
-
-        let sender = broadcast_sender.clone();
-
-        task_service.spawn(async move {
-            on_session_deletion(session_observer, sender).await;
-        });
+        let event_service = EventService::new();
 
         let ctx = Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
@@ -342,10 +334,12 @@ impl Context {
             device_info_provider,
             cancellation_token: CancellationToken::new(),
             task_service: BackgroundAwareTaskService::new(task_service),
-            on_session_deleted_broadcast: broadcast_sender,
             event_poll_mode,
             clock: CoreClock::default(),
+            event_service,
         });
+
+        ctx.start_session_observer().await?;
 
         let ctx_weak = ctx.this.clone();
         ctx.on_session_deleted(move |_, user_id| {
@@ -1026,21 +1020,18 @@ impl Context {
     /// or memory footprints.
     ///
     pub fn on_session_deleted(&self, hook: impl OnSessionDeleted) {
-        let mut receiver = self.on_session_deleted_broadcast.subscribe();
+        let Some(mut receiver) = self.event_service.subscribe::<UserSessionDeletedEvent>() else {
+            error!("User session deleted event not registered");
+            return;
+        };
         self.task_service.spawn(async move {
-            loop {
-                match receiver.recv().await {
-                    Ok((session_id, user_id)) => {
-                        if hook.on_session_deleted(session_id, user_id).await
-                            == OnSessionDeletedResponse::Terminate
-                        {
-                            return;
-                        }
-                    }
-                    Err(broadcast::error::RecvError::Lagged(_)) => (),
-                    Err(_) => {
-                        return;
-                    }
+            while let Ok(event) = receiver.next().await {
+                if hook
+                    .on_session_deleted(event.session_id, event.user_id)
+                    .await
+                    == OnSessionDeletedResponse::Terminate
+                {
+                    return;
                 }
             }
         });
@@ -1084,6 +1075,22 @@ impl Context {
             .remote_id
             .clone();
         Ok(session_id)
+    }
+
+    async fn start_session_observer(&self) -> Result<(), CoreContextError> {
+        let session_observer = CoreSessionObserver::new(self.account_stash.clone())
+            .await
+            .inspect_err(|e| tracing::error!("Failed to create session observer: {e:?}"))?;
+        self.event_service
+            .register_with_capacity::<UserSessionDeletedEvent>(SESSION_OBSERVER_BROADCAST_CAPACITY);
+        self.event_service
+            .register_with_capacity::<UserSessionCreatedEvent>(SESSION_OBSERVER_BROADCAST_CAPACITY);
+
+        let ctx_weak = self.this.clone();
+        self.task_service.spawn(async move {
+            on_session_notification(session_observer, ctx_weak).await;
+        });
+        Ok(())
     }
 }
 
@@ -1148,17 +1155,29 @@ where
     }
 }
 #[tracing::instrument(skip_all)]
-async fn on_session_deletion(
-    mut observer: CoreSessionObserver,
-    hook_sender: broadcast::Sender<(SessionId, UserId)>,
-) {
+async fn on_session_notification(mut observer: CoreSessionObserver, ctx: Weak<Context>) {
     tracing::debug!("Starting task");
     while let Ok(notifications) = observer.next().await {
+        let Some(ctx) = ctx.upgrade() else {
+            tracing::debug!("Context no longer alive, terminating");
+            return;
+        };
         tracing::debug!("Task received: {:?}", notifications);
         for notification in notifications {
-            if let CoreSessionObserverNotification::Deleted(session_id, user_id) = notification {
-                tracing::info!("User {user_id}'s session {session_id} has been deleted");
-                _ = hook_sender.send((session_id, user_id));
+            match notification {
+                CoreSessionObserverNotification::Created(session_id, user_id) => {
+                    ctx.event_service.publish(UserSessionCreatedEvent {
+                        session_id,
+                        user_id,
+                    });
+                }
+                CoreSessionObserverNotification::Deleted(session_id, user_id) => {
+                    tracing::info!("User {user_id}'s session {session_id} has been deleted");
+                    ctx.event_service.publish(UserSessionDeletedEvent {
+                        session_id,
+                        user_id,
+                    });
+                }
             }
         }
     }

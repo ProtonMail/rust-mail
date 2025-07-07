@@ -39,7 +39,7 @@ impl<T: Send + Sync + Clone + 'static> Event for T {}
 
 #[derive(Default)]
 pub struct EventService {
-    event_listeners: RwLock<HashMap<TypeId, Box<dyn Any>>>,
+    event_listeners: RwLock<HashMap<TypeId, Box<dyn Any + Send + Sync + 'static>>>,
 }
 
 impl EventService {
@@ -54,19 +54,19 @@ impl EventService {
     /// given time.
     ///
     /// Use [`register_with_capacity`] if you need more than one event in the stream.
-    pub fn register<T: Event>(&mut self) {
+    pub fn register<T: Event>(&self) {
         self.register_with_capacity::<T>(1);
     }
 
     /// This method will create an event stream where up to `capacity` events can remain in the
     /// stream at any given time.
-    pub fn register_with_capacity<T: Event>(&mut self, capacity: usize) {
+    pub fn register_with_capacity<T: Event>(&self, capacity: usize) {
         let mut listeners = self.event_listeners.write();
         listeners
             .entry(TypeId::of::<T>())
             .or_insert_with(|| Box::new(EventListener::<T>::new(capacity)));
     }
-    pub fn unregister<T: Event>(&mut self) {
+    pub fn unregister<T: Event>(&self) {
         let mut listeners = self.event_listeners.write();
         listeners.remove(&TypeId::of::<T>());
     }
@@ -147,7 +147,7 @@ mod tests {
 
     #[tokio::test]
     async fn basic() {
-        let mut event_service = EventService::new();
+        let event_service = EventService::new();
         event_service.register::<FooEvent>();
         let mut stream = event_service.subscribe::<FooEvent>().unwrap();
 
