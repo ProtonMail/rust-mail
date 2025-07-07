@@ -5665,6 +5665,7 @@ dependencies = [
  "proton-crypto-notifications",
  "proton-crypto-pin-hash",
  "proton-event-loop",
+ "proton-event-service",
  "proton-log-service",
  "proton-sqlite3",
  "proton-task-service",
