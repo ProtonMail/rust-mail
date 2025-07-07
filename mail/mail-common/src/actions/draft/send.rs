@@ -302,13 +302,9 @@ impl Send {
         action: &mut Self,
         guard: &mut WriterGuard<'_>,
     ) -> Result<<Self as Action>::RemoteOutput, <Self as Action>::Error> {
-        // TODO(Leander): This needs to be loaded.
-        // If the user selects encrypt with password, the password should appear here.
-        // The send preference logic will decide for each email if password encryption should be applied.
-        // It will only use the password if the recipient is external and has no encryption.
-        let eo_data: Option<EoData> = None;
-
         let local_message_id = action.local_message_id.expect("Should be set");
+
+        let session_encryption_key = context.core_context().get_encryption_key()?;
 
         if let Some(delivery_time) = action.delivery_time {
             let current_time_stamp: UnixTimestamp =
@@ -380,6 +376,11 @@ impl Send {
         else {
             return Err(SendError::MessageBodyMissing(message_metadata.id()).into());
         };
+
+        // If the user selects encrypt with password, the password should appear here.
+        // The send preference logic will decide for each email if password encryption should be applied.
+        // It will only use the password if the recipient is external and has no encryption.
+        let eo_data: Option<EoData> = draft_metadata.to_eo_data(&session_encryption_key)?;
 
         let pgp = new_pgp_provider();
 

@@ -31,6 +31,8 @@ struct Args {
     recipient: String,
     #[clap(short, long)]
     body: String,
+    #[clap(long)]
+    email_password: Option<String>,
 }
 #[tokio::main]
 async fn main() {
@@ -53,6 +55,7 @@ async fn main() {
         subject,
         recipient,
         mut body,
+        email_password,
     } = Args::parse();
     let tmp_dir = TempDir::new("cli").unwrap();
     let tmp_file = tmp_dir.path().join("hello_world.txt");
@@ -67,6 +70,10 @@ async fn main() {
         .name("log".into())
         .directory(tmp_dir.path().into())
         .build();
+    let api_config = Config {
+        app_version: "ios-mail@7.1.0".to_owned(),
+        ..Default::default()
+    };
 
     let ctx = MailContext::new(
         tmp_dir.path().join("session"),
@@ -76,7 +83,7 @@ async fn main() {
         50 * 1204 * 1024,
         None,
         Arc::new(keychain),
-        Config::default(),
+        api_config,
         None,
         None,
         LogService::new(config),
@@ -94,6 +101,12 @@ async fn main() {
     let user_ctx = ctx.user_context_from_login_flow(&mut flow).await.unwrap();
 
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    if let Some(email_password) = email_password {
+        draft
+            .set_password(&user_ctx, &email_password, None)
+            .await
+            .unwrap();
+    }
 
     draft.subject = subject;
     body.push_str(draft.body());

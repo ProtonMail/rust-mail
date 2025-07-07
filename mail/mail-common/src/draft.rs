@@ -27,6 +27,7 @@ use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{AddressId, PrivateEmail};
 use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::datatypes::LocalAddressId;
+use proton_core_common::db::account::EncryptedPassword;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::attachment::{AttachmentDecryptionError, AttachmentEncryptionError};
 use proton_crypto_inbox::eo::EoError;
@@ -490,6 +491,9 @@ impl Draft {
                 reply_mode: None,
                 send_action_id: None,
                 save_action_id: None,
+                expiration_time: None,
+                password: None,
+                password_hint: None,
             };
             tether
                 .tx::<_, _, MailContextError>(async |tx| {
@@ -1620,6 +1624,36 @@ impl Draft {
         {
             self.finalize_sender_address_change_request(output)
         }
+        Ok(())
+    }
+
+    pub async fn is_password_protected(&self, tether: &Tether) -> Result<bool, MailContextError> {
+        Ok(DraftMetadata::find_by_id(self.metadata_id, tether)
+            .await?
+            .map(|v| v.password.is_some())
+            .unwrap_or(false))
+    }
+
+    pub async fn set_password(
+        &self,
+        ctx: &MailUserContext,
+        password: &str,
+        hint: Option<String>,
+    ) -> Result<(), MailContextError> {
+        let mut tether = ctx.user_stash().connection();
+        let mut metadata = DraftMetadata::find_by_id(self.metadata_id, &tether)
+            .await?
+            .ok_or(SaveError::MetadataNotFound(self.metadata_id))?;
+
+        let session_encryption_key = ctx.core_context().get_encryption_key()?;
+        let encrypted_password = EncryptedPassword::new(password, &session_encryption_key)
+            .map_err(|_| {
+                error!("Failed to encrypt password");
+                MailContextError::Crypto
+            })?;
+        metadata.password = Some(encrypted_password);
+        metadata.password_hint = hint;
+        tether.tx(async |tx| metadata.save(tx).await).await?;
         Ok(())
     }
 }

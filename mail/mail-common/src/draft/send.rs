@@ -9,6 +9,7 @@ use crate::models::{Attachment, AttachmentType, DraftMetadata, Message};
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use anyhow::anyhow;
 use chrono::{DateTime, Datelike, Days, Local, LocalResult, NaiveTime};
+use proton_account_api::AccountApi;
 use proton_action_queue::observers::ActionAwaiter;
 use proton_action_queue::queue::{BroadcastMessage, Queue, QueuedError};
 use proton_core_api::consts::Mail;
@@ -36,6 +37,7 @@ use proton_mail_api::services::proton::request_data::{
     AddressSubPackage, Package, PackageSignaturesMode,
 };
 use secrecy::{ExposeSecret, SecretString};
+use stash::orm::Model;
 use stash::stash::{RunTransaction, Tether};
 use std::collections::{HashMap, HashSet};
 use std::ops::Deref;
@@ -51,7 +53,7 @@ pub enum MailType {
 /// Encrypt e-mail with password composer input (EO)
 pub struct EoData {
     pub password: SecretString,
-    pub password_hint: String,
+    pub password_hint: Option<String>,
 }
 
 #[instrument(skip_all)]
@@ -198,7 +200,9 @@ where
             &encrypted_package,
             attachments,
             eo_data.as_ref(),
-        )?;
+            context.session(),
+        )
+        .await?;
 
         packages.push(package);
     }
@@ -341,7 +345,8 @@ where
 }
 
 #[instrument(skip_all)]
-fn build_top_package<P>(
+#[allow(clippy::too_many_arguments)]
+async fn build_top_package<P>(
     ty: MailType,
     pgp: &P,
     sender_keys: &[UnlockedAddressKey<P>],
@@ -349,6 +354,7 @@ fn build_top_package<P>(
     encrypted_body: &EncryptedPackageBody,
     attachments: &[Attachment],
     eo_data: Option<&EoData>,
+    session: &Session,
 ) -> Result<Package, PackageError>
 where
     P: PGPProviderSync,
@@ -373,7 +379,9 @@ where
             sender_keys,
             recipient_preferences,
             eo_data,
-        )?;
+            session,
+        )
+        .await?;
     }
 
     package.package_type = package.addresses.iter().fold(0, |acc, (_, address)| {
@@ -385,7 +393,7 @@ where
 
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
-fn build_address_sub_package<P>(
+async fn build_address_sub_package<P>(
     ty: MailType,
     pgp: &P,
     recipient_mail: &str,
@@ -395,6 +403,7 @@ fn build_address_sub_package<P>(
     sender_keys: &[impl AsRef<P::PrivateKey>],
     recipient_send_preferences: &SendPreferences<P::PublicKey>,
     eo_data: Option<&EoData>,
+    session: &Session,
 ) -> Result<(), PackageError>
 where
     P: PGPProviderSync,
@@ -462,15 +471,14 @@ where
                 return Err(PackageError::PackageEoPasswordMissing);
             };
 
-            // TODO(Leander): Call API to Load SRP modulus and id
-            // [BE docs](https://protonmail.gitlab-pages.protontech.ch/Slim-API/account/#tag/Auth/operation/get_core-{_version}-auth-modulus)
+            let response = session.api().get_auth_modulus().await.unwrap();
 
             // Re-encrypt packets with the password.
             build_address_package_for_eo(
                 pgp,
                 eo_info,
-                "srp_modulus_id", // TODO
-                "srp_modulus",    // TODO
+                &response.modulus_id,
+                &response.modulus,
                 body_session_key,
                 &mut address_package,
             )?;
@@ -517,7 +525,7 @@ where
     // Auth data.
     let challenge = Challenge::generate(pgp, &srp, eo_data.password.expose_secret(), srp_modulus)?;
 
-    address_package.password_hint = Some(eo_data.password_hint.clone());
+    address_package.password_hint = Some(eo_data.password_hint.clone().unwrap_or_default());
     address_package.enc_token = Some(challenge.enc_token);
     address_package.token = Some(challenge.token.deref().to_string());
     address_package.auth = Some(AuthInput {
