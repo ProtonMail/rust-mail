@@ -10,10 +10,8 @@ use proton_task_service::AsyncTaskResult;
 use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use stash::stash::WatcherHandle;
 use std::sync::{Arc, Weak};
-use std::time::Duration;
 use tokio::sync::{RwLock, oneshot};
 use tokio::task::AbortHandle;
-use tokio::time::timeout;
 use uuid::Uuid;
 
 mod mail_scroller_source;
@@ -22,11 +20,6 @@ mod mail_scroller_watcher;
 use crate::datatypes::labels::LabelScrollOrder;
 pub use mail_scroller_source::*;
 pub use mail_scroller_watcher::*;
-
-/// Timeout for waiting for a response from the scroller.
-/// Otherwise, the scroller in case of a bug may hang forever.
-/// This timeout is resonably safe as it is used for reading counters only.
-const TIMEOUT: Duration = Duration::from_secs(5);
 
 #[cfg(test)]
 #[path = "tests/mail_scroller/message_scroller.rs"]
@@ -194,9 +187,8 @@ impl MailScroller {
             .send(ScrollerCommand::HasMore(sender))
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send has more command")))?;
 
-        timeout(TIMEOUT, receiver)
+        receiver
             .await
-            .map_err(|_| MailContextError::Other(anyhow!("Timeout waiting for has more response")))?
             .map_err(|_| MailContextError::Other(anyhow!("Failed to receive has more response")))?
     }
 
@@ -244,9 +236,8 @@ impl MailScroller {
             .send(ScrollerCommand::GetTotal(sender))
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send get total command")))?;
 
-        timeout(TIMEOUT, receiver)
+        receiver
             .await
-            .map_err(|_| MailContextError::Other(anyhow!("Timeout waiting for total response")))?
             .map_err(|_| MailContextError::Other(anyhow!("Failed to receive total response")))?
     }
 
@@ -256,9 +247,8 @@ impl MailScroller {
             .send(ScrollerCommand::GetSeen(sender))
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send get seen command")))?;
 
-        timeout(TIMEOUT, receiver)
+        receiver
             .await
-            .map_err(|_| MailContextError::Other(anyhow!("Timeout waiting for seen response")))?
             .map_err(|_| MailContextError::Other(anyhow!("Failed to receive seen response")))?
     }
 }

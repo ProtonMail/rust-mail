@@ -336,9 +336,11 @@ impl MessagesState {
     }
 
     fn try_select_non_empty_list(&mut self) {
-        if !self.ready.load(Ordering::Acquire) && !self.messages.is_empty() {
+        if !self.ready.load(Ordering::Acquire) {
             self.ready.store(true, Ordering::Release);
             self.table_state.select(0);
+        } else if self.messages.is_empty() {
+            self.ready.store(false, Ordering::Release);
         }
     }
 }
@@ -654,16 +656,12 @@ impl MessagesState {
                 self.messages = messages;
             }
             MessageMessage::ReplaceFrom(idx, messages) => {
-                self.try_select_non_empty_list();
                 self.messages.splice(idx.., messages);
-                if self.messages.is_empty() {
-                    // The list wipe can only happen with ReplaceFrom,
-                    self.ready.store(false, Ordering::Release);
-                }
+                self.try_select_non_empty_list();
             }
             MessageMessage::ReplaceBefore(idx, messages) => {
-                self.try_select_non_empty_list();
                 self.messages.splice(..idx, messages);
+                self.try_select_non_empty_list();
             }
             MessageMessage::DeletePermanently(id) => {
                 return delete_messages(user_ctx.to_owned(), mbox, id);
@@ -703,8 +701,8 @@ impl MessagesState {
                 return Command::message(Messages::raise_popup(popup));
             }
             MessageMessage::NextPage(messages) => {
-                self.try_select_non_empty_list();
                 self.messages.extend(messages);
+                self.try_select_non_empty_list();
             }
             MessageMessage::HasMore => {
                 if let Mode::Label(paginator) = &self.mode {

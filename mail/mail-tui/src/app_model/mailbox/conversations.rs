@@ -135,11 +135,15 @@ impl ConversationsState {
             .take_selected_items(&|idx| self.conversations[idx].local_id)
     }
 
-    fn try_select_non_empty_list(&mut self) {
-        if !self.ready.load(Ordering::Acquire) && !self.conversations.is_empty() {
+    fn try_select_non_empty_list(&mut self) -> Command<Messages> {
+        if !self.ready.load(Ordering::Acquire) {
             self.ready.store(true, Ordering::Release);
             self.table_state.select(0);
+        } else if self.conversations.is_empty() {
+            self.ready.store(false, Ordering::Release);
         }
+
+        Command::None
     }
 }
 
@@ -246,22 +250,16 @@ impl ConversationsState {
                     ConversationMessage::Star(id) => star_conversation(user_ctx.to_owned(), id),
                     ConversationMessage::Unstar(id) => unstar_conversation(user_ctx.to_owned(), id),
                     ConversationMessage::NextPage(conversations) => {
-                        self.try_select_non_empty_list();
                         self.conversations.extend(conversations);
-                        if self.conversations.is_empty() {
-                            self.ready.store(false, Ordering::Release);
-                        }
-                        Command::None
+                        self.try_select_non_empty_list()
                     }
                     ConversationMessage::ReplaceFrom(idx, conversations) => {
-                        self.try_select_non_empty_list();
                         self.conversations.splice(idx.., conversations);
-                        Command::None
+                        self.try_select_non_empty_list()
                     }
                     ConversationMessage::ReplaceBefore(idx, conversations) => {
-                        self.try_select_non_empty_list();
                         self.conversations.splice(..idx, conversations);
-                        Command::None
+                        self.try_select_non_empty_list()
                     }
                     ConversationMessage::HasMore => {
                         let paginator = self.paginator.clone_inner();
