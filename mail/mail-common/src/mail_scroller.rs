@@ -11,7 +11,7 @@ use sqlite_watcher::watcher::DropRemoveTableObserverHandle;
 use stash::stash::WatcherHandle;
 use std::sync::{Arc, Weak};
 use std::time::Duration;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, oneshot};
 use tokio::task::AbortHandle;
 use tokio::time::timeout;
 use uuid::Uuid;
@@ -95,7 +95,6 @@ impl<T: ScrollerEq> ScrollerEq for Vec<T> {
 pub struct MailScroller {
     command: flume::Sender<ScrollerCommand>,
     ordered_command: flume::Sender<ScrollerOrderedCommand>,
-    response: flume::Receiver<ScrollerResponse>,
     aborts: Vec<AbortHandle>,
 }
 
@@ -174,7 +173,6 @@ impl MailScroller {
         let ScrollerWorkerHandle {
             command,
             ordered_command,
-            response,
             updates,
             handle,
             aborts,
@@ -184,7 +182,6 @@ impl MailScroller {
             Self {
                 command,
                 ordered_command,
-                response,
                 aborts,
             },
             MailScrollerHandle { updates, handle },
@@ -192,20 +189,15 @@ impl MailScroller {
     }
 
     pub async fn has_more(&self) -> Result<bool, MailContextError> {
+        let (sender, receiver) = oneshot::channel();
         self.command
-            .send(ScrollerCommand::HasMore)
+            .send(ScrollerCommand::HasMore(sender))
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send has more command")))?;
 
-        let response = timeout(TIMEOUT, self.response.recv_async())
+        timeout(TIMEOUT, receiver)
             .await
             .map_err(|_| MailContextError::Other(anyhow!("Timeout waiting for has more response")))?
-            .map_err(|_| MailContextError::Other(anyhow!("Failed to receive has more response")))?;
-
-        match response {
-            ScrollerResponse::HasMore(has_more) => Ok(has_more),
-            ScrollerResponse::Error(e) => Err(e),
-            _ => Err(MailContextError::Other(anyhow!("Unexpected response"))),
-        }
+            .map_err(|_| MailContextError::Other(anyhow!("Failed to receive has more response")))?
     }
 
     pub fn fetch_more(&self) -> Result<(), MailContextError> {
@@ -247,37 +239,27 @@ impl MailScroller {
     }
 
     pub async fn total(&self) -> Result<u64, MailContextError> {
+        let (sender, receiver) = oneshot::channel();
         self.command
-            .send(ScrollerCommand::GetTotal)
+            .send(ScrollerCommand::GetTotal(sender))
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send get total command")))?;
 
-        let response = timeout(TIMEOUT, self.response.recv_async())
+        timeout(TIMEOUT, receiver)
             .await
             .map_err(|_| MailContextError::Other(anyhow!("Timeout waiting for total response")))?
-            .map_err(|_| MailContextError::Other(anyhow!("Failed to receive total response")))?;
-
-        match response {
-            ScrollerResponse::Total(total) => Ok(total),
-            ScrollerResponse::Error(e) => Err(e),
-            _ => Err(MailContextError::Other(anyhow!("Unexpected response"))),
-        }
+            .map_err(|_| MailContextError::Other(anyhow!("Failed to receive total response")))?
     }
 
     pub async fn seen(&self) -> Result<u64, MailContextError> {
+        let (sender, receiver) = oneshot::channel();
         self.command
-            .send(ScrollerCommand::GetSeen)
+            .send(ScrollerCommand::GetSeen(sender))
             .map_err(|_| MailContextError::Other(anyhow!("Failed to send get seen command")))?;
 
-        let response = timeout(TIMEOUT, self.response.recv_async())
+        timeout(TIMEOUT, receiver)
             .await
             .map_err(|_| MailContextError::Other(anyhow!("Timeout waiting for seen response")))?
-            .map_err(|_| MailContextError::Other(anyhow!("Failed to receive seen response")))?;
-
-        match response {
-            ScrollerResponse::Seen(seen) => Ok(seen),
-            ScrollerResponse::Error(e) => Err(e),
-            _ => Err(MailContextError::Other(anyhow!("Unexpected response"))),
-        }
+            .map_err(|_| MailContextError::Other(anyhow!("Failed to receive seen response")))?
     }
 }
 
@@ -289,7 +271,6 @@ pub struct ScrollerWorker<T: MailScrollerSource + 'static> {
     page_size: usize,
     update: flume::Sender<ScrollerUpdate<T::Item>>,
     ordered_command: flume::Receiver<ScrollerOrderedCommand>,
-    response: flume::Sender<ScrollerResponse>,
 }
 
 impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
@@ -301,7 +282,6 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         let (update_sender, update_receiver) = flume::unbounded();
         let (command_sender, command_receiver) = flume::unbounded();
         let (ordered_command_sender, ordered_command_receiver) = flume::unbounded();
-        let (response_seneder, response_receiver) = flume::unbounded();
         let arc_ctx = ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let task = source.initialize(&arc_ctx).await?;
         let tables = source.watched_tables();
@@ -323,7 +303,6 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
             items: vec![],
             update: update_sender,
             ordered_command: ordered_command_receiver,
-            response: response_seneder,
         };
 
         let aborts = this.spawn(command_receiver, ordered_command_sender.clone(), db_update)?;
@@ -331,7 +310,6 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         Ok(ScrollerWorkerHandle {
             command: command_sender,
             ordered_command: ordered_command_sender,
-            response: response_receiver,
             updates: update_receiver,
             handle,
             aborts,
@@ -348,7 +326,6 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         let mut aborts = vec![];
         let source_clone = self.source.clone();
         let weak_ctx = self.ctx.clone();
-        let response_sender = self.response.clone();
         let (invalidation_sender, invalidation_receiver) = flume::unbounded();
 
         // Ordered operations, these needs to be streamlined and not blocking other operations
@@ -395,7 +372,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                             tracing::error!("Failed to receive command: {e:?}");
                             return;
                         }
-                        if let Err(e) = Self::handle_command(r.unwrap(), &source_clone, &weak_ctx, &response_sender).await {
+                        if let Err(e) = Self::handle_command(r.unwrap(), &source_clone, &weak_ctx).await {
                             tracing::error!("Failed to handle command: {e:?}");
                         }
                     }
@@ -469,28 +446,23 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         command: ScrollerCommand,
         source: &RwLock<T>,
         ctx: &Weak<MailUserContext>,
-        response_sender: &flume::Sender<ScrollerResponse>,
     ) -> Result<(), MailContextError> {
-        use ScrollerResponse::*;
-
         match command {
-            ScrollerCommand::GetTotal => {
+            ScrollerCommand::GetTotal(sender) => {
                 let total = Self::total(source, ctx).await;
 
-                let response = total.map(Total).unwrap_or_else(Error);
-                response_sender
-                    .send(response)
+                sender
+                    .send(total)
                     .map_err(|e| anyhow!("Failed to send total: {e:?}"))?;
             }
-            ScrollerCommand::GetSeen => {
+            ScrollerCommand::GetSeen(sender) => {
                 let seen = Self::seen(source, ctx).await;
 
-                let response = seen.map(Seen).unwrap_or_else(Error);
-                response_sender
-                    .send(response)
+                sender
+                    .send(seen)
                     .map_err(|e| anyhow!("Failed to send seen: {e:?}"))?;
             }
-            ScrollerCommand::HasMore => {
+            ScrollerCommand::HasMore(sender) => {
                 let (total, seen) = (
                     Self::total(source, ctx).await,
                     Self::seen(source, ctx).await,
@@ -501,9 +473,8 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                     (Err(e), _) | (_, Err(e)) => Err(e),
                 };
 
-                let response = has_more.map(HasMore).unwrap_or_else(Error);
-                response_sender
-                    .send(response)
+                sender
+                    .send(has_more)
                     .map_err(|e| anyhow!("Failed to send has more: {e:?}"))?;
             }
         }
@@ -718,16 +689,15 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
 struct ScrollerWorkerHandle<T: MailScrollerSource> {
     command: flume::Sender<ScrollerCommand>,
     ordered_command: flume::Sender<ScrollerOrderedCommand>,
-    response: flume::Receiver<ScrollerResponse>,
     updates: flume::Receiver<ScrollerUpdate<T::Item>>,
     handle: DropRemoveTableObserverHandle,
     aborts: Vec<AbortHandle>,
 }
 
 enum ScrollerCommand {
-    GetTotal,
-    GetSeen,
-    HasMore,
+    GetTotal(oneshot::Sender<Result<u64, MailContextError>>),
+    GetSeen(oneshot::Sender<Result<u64, MailContextError>>),
+    HasMore(oneshot::Sender<Result<bool, MailContextError>>),
 }
 
 #[derive(Debug, Clone)]
@@ -756,13 +726,6 @@ impl PartialEq for ScrollerOrderedCommand {
             )
         )
     }
-}
-
-enum ScrollerResponse {
-    Total(u64),
-    Seen(u64),
-    HasMore(bool),
-    Error(MailContextError),
 }
 
 fn calculate_scroller_update<T: ScrollerEq + Clone + Send + Sync + 'static>(
