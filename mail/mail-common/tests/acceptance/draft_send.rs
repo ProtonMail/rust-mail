@@ -12,6 +12,7 @@ use proton_core_api::services::proton::{
 use proton_core_api::services::proton::{AddressId, LabelId, UserId};
 use proton_core_common::models::ModelExtension;
 use proton_crypto_account::keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature};
+use proton_crypto_inbox::keys::PackageCryptoType;
 use proton_crypto_inbox::message::EncryptedDraft;
 use proton_crypto_inbox::proton_crypto_account::keys::{
     AddressKeys as ApiAddressKeys, KeyFlag, KeyId, LockedKey,
@@ -35,13 +36,16 @@ use proton_mail_common::models::{
 };
 use proton_mail_common::test_utils::init::Params as TestParams;
 use proton_mail_common::test_utils::message_body::*;
-use proton_mail_common::test_utils::messages::TestDraftSendRequest;
+use proton_mail_common::test_utils::messages::{
+    TestDraftAuthInput, TestDraftSendAddressSubPackage, TestDraftSendPackage, TestDraftSendRequest,
+};
 use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserContextTestExtension};
 use proton_mail_common::{MailContextError, MailUserContext, draft};
 use stash::orm::Model;
 use stash::stash::Bond;
 use std::sync::Arc;
 use std::time::Duration;
+use velcro::hash_map;
 
 #[tokio::test]
 async fn basic_send_check() {
@@ -1342,6 +1346,120 @@ async fn already_sent_from_even_update() {
     user_ctx.execute_all_send_actions().await.unwrap();
 }
 
+#[tokio::test]
+async fn send_external_with_password() {
+    let modulus = "-----BEGIN PGP SIGNED MESSAGE-----\nHash: SHA256\n\nK1PSamH/akNYFuWcErjkcbASp3Cot0Y6HfefGGbuHNKNlBTcv+SaLxZOSj8cV0A2N/NsNit7DUBiBGcKVNvk/0zSDWWFWKYcE9EPs4vSTbf/dqW5GYyIo1l8wBzIItivnTD5xQC4smJSYBIFJpVGuvtbDrDZI0xb0P+FVB5iFDTyPRE1J+ugZK+4QZczLJcv2/UG50gu9pi7R+rhYE/Q/4xCNpBZLp8mpFHpIVgj95auS2mILKkQS6xN7DyNLDuJjZF6++Qg1hxi38/d6NiFbMFgKlVHhKAFj5TPfKtVnqmlJmzeVgOCPc52cRfLRTDjEnDsoaa4MmsKC5gT9kNanQ==\n-----BEGIN PGP SIGNATURE-----\nVersion: ProtonMail\nComment: https://protonmail.com\n\nwl4EARYIABAFAlwB1j4JEDUFhcTpUY8mAACghgEAotYZ/7iVaLKe52tP4CGF\nmdAAq2Dc6a7YLOnr4QLxC/8A/1UdoQQ/8PCueC41KEsrVktWSp1rB4lF4IvT\ntPvUc50G\n=+Zbf\n-----END PGP SIGNATURE-----\n";
+    let modulus_id =
+        "3ZJQXMBeonVrGHGEnuWG5zs0NHn8UNH8UH0TNswNWQYZJ10Fwp8vQVBGMHnmpWKmHKF6VlyMXCiMagSh8CGhkg==";
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.to_list.push(MessageRecipient {
+        address: "foo@bar.com".into(),
+        is_proton: false,
+        name: "".into(),
+        group: None,
+    });
+    let mut sent_message = message.clone();
+    message.metadata.label_ids.push(LabelId::drafts());
+    sent_message.metadata.label_ids.push(LabelId::sent());
+    sent_message.metadata.flags.set(MessageFlags::SENT, true);
+    sent_message.body.header = "Fancy new header".to_owned();
+
+    let mut send_params = default_mock_send_params();
+    send_params.packages.push(TestDraftSendPackage {
+        addresses: hash_map! {"foo@bar.com".to_string(): TestDraftSendAddressSubPackage{
+                address_type: PackageCryptoType::EncryptedOutside,
+                auth: Some(TestDraftAuthInput{modulus_id: modulus_id.to_string()}),
+        }},
+    });
+
+    let sent_conversation = ApiConversation {
+        id: message.metadata.conversation_id.clone(),
+        attachment_info: Default::default(),
+        attachments_metadata: vec![],
+        display_snooze_reminder: false,
+        expiration_time: 0,
+        labels: vec![ConversationLabel {
+            id: LabelId::sent(),
+            context_expiration_time: 0,
+            context_num_attachments: 0,
+            context_num_messages: 1,
+            context_num_unread: 0,
+            context_size: 0,
+            context_snooze_time: 0,
+            context_time: 0,
+        }],
+        num_attachments: 0,
+        num_messages: 1,
+        subject: sent_message.metadata.subject.clone(),
+        ..Default::default()
+    };
+
+    let expected_draft_params = expected_create_draft_params();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_create_draft(
+        expected_draft_params.clone(),
+        None,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+    ctx.mock_send_draft(
+        message.metadata.id.clone(),
+        send_params,
+        sent_message.clone(),
+        sent_conversation,
+        (Utc::now().timestamp() + SEND_DELAY_SECONDS as i64).unsigned_abs(),
+    )
+    .await;
+    ctx.core_test_context()
+        .mock_get_auth(modulus_id.to_owned(), modulus.to_owned())
+        .await;
+    ctx.core_test_context()
+        .mock_get_keys_all(
+            "foo@bar.com",
+            GetKeysAllResponse {
+                address_keys: Default::default(),
+                catch_all_keys: None,
+                is_proton: false,
+                proton_mx: false,
+                unverified_keys: None,
+                warnings: vec![],
+            },
+        )
+        .await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+
+    // Create draft.
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    draft
+        .to_list
+        .add_single(RecipientEntry {
+            email: "foo@bar.com".into(),
+            display_name: None,
+        })
+        .unwrap();
+    draft
+        .set_password(&user_ctx, "password", None)
+        .await
+        .unwrap();
+
+    draft
+        .send(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
+    user_ctx.execute_all_send_actions().await.unwrap();
+}
+
 async fn send_fails_if_recipient_is_not_valid_impl(
     api_error_code: u32,
 ) -> (Arc<anyhow::Error>, LocalMessageId, Arc<MailUserContext>) {
@@ -1513,6 +1631,7 @@ fn default_mock_send_params() -> TestDraftSendRequest {
         auto_save_contacts: Some(true),
         delay_seconds: Some(SEND_DELAY_SECONDS.into()),
         delivery_time: None,
+        packages: vec![],
     }
 }
 
@@ -1523,5 +1642,6 @@ fn default_mock_schedule_send_params(delivery_time: u64) -> TestDraftSendRequest
         auto_save_contacts: Some(true),
         delay_seconds: Some(SEND_DELAY_SECONDS.into()),
         delivery_time: Some(delivery_time),
+        packages: vec![],
     }
 }

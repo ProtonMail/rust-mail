@@ -2,10 +2,13 @@ use crate::test_utils::test_context::MailTestContext;
 use itertools::Itertools;
 use proton_core_api::services::proton::LabelId;
 use proton_core_api::services::proton::common::ApiErrorInfo;
+use proton_core_common::utils::MapVec;
+use proton_crypto_inbox::keys::PackageCryptoType;
 use proton_mail_api::services::proton::common::MessageId;
 use proton_mail_api::services::proton::prelude::{
-    IncomingDefault, PostCancelSendResponse, PostIncomingDefaultResponse,
-    PostSendDirectMessageResponse, PostSendRequest, PutMessageHamResponse,
+    AddressSubPackage, AuthInput, IncomingDefault, Package, PostCancelSendResponse,
+    PostIncomingDefaultResponse, PostSendDirectMessageResponse, PostSendRequest,
+    PutMessageHamResponse,
 };
 use proton_mail_api::services::proton::request_data::{
     DraftAction, DraftAttachmentKeyPackets, DraftParams, DraftRecipient, DraftSender,
@@ -27,7 +30,7 @@ use proton_mail_api::services::proton::responses::{
 use serde::Serialize;
 use serde_json::{Value as JsonValue, json};
 use serde_with::{BoolFromInt, serde_as};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use wiremock::matchers::{body_json, body_partial_json, method, path};
 use wiremock::{Mock, ResponseTemplate, Times};
 
@@ -762,6 +765,8 @@ pub struct TestDraftSendRequest {
     pub delay_seconds: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub delivery_time: Option<u64>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub packages: Vec<TestDraftSendPackage>,
 }
 
 impl From<PostSendRequest> for TestDraftSendRequest {
@@ -772,6 +777,58 @@ impl From<PostSendRequest> for TestDraftSendRequest {
             auto_save_contacts: value.auto_save_contacts,
             delay_seconds: value.delay_seconds,
             delivery_time: value.delivery_time,
+            packages: value.packages.into_iter().map_vec(),
+        }
+    }
+}
+
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct TestDraftSendPackage {
+    pub addresses: HashMap<String, TestDraftSendAddressSubPackage>,
+}
+
+impl From<Package> for TestDraftSendPackage {
+    fn from(value: Package) -> Self {
+        Self {
+            addresses: value
+                .addresses
+                .into_iter()
+                .map(|(key, v)| (key, v.into()))
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct TestDraftSendAddressSubPackage {
+    #[serde(rename = "Type")]
+    pub address_type: PackageCryptoType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth: Option<TestDraftAuthInput>,
+}
+
+#[derive(Debug, Default, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct TestDraftAuthInput {
+    #[serde(rename = "ModulusID")]
+    pub modulus_id: String,
+}
+
+impl From<AuthInput> for TestDraftAuthInput {
+    fn from(value: AuthInput) -> Self {
+        Self {
+            modulus_id: value.modulus_id,
+        }
+    }
+}
+
+impl From<AddressSubPackage> for TestDraftSendAddressSubPackage {
+    fn from(value: AddressSubPackage) -> Self {
+        Self {
+            address_type: value.address_type,
+            auth: value.auth.map(Into::into),
         }
     }
 }
