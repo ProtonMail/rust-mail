@@ -374,7 +374,7 @@ pub enum ByDay {
     Every(Weekday),
 
     /// E.g. `1TU`, `-2WE`
-    Specific(NonZeroI8, Weekday),
+    Fixed(NonZeroI8, Weekday),
 }
 
 impl IcsRead<Value> for ByDay {
@@ -402,7 +402,7 @@ impl IcsRead<Value> for ByDay {
                     }
                 };
 
-                Some(ByDay::Specific(nth, r.value()?))
+                Some(ByDay::Fixed(nth, r.value()?))
             }
 
             _ => Some(ByDay::Every(r.value()?)),
@@ -417,7 +417,7 @@ impl IcsWrite<Value> for ByDay {
                 w.value(day);
             }
 
-            ByDay::Specific(nth, day) => {
+            ByDay::Fixed(nth, day) => {
                 w.value(nth.get());
                 w.value(day);
             }
@@ -461,7 +461,7 @@ mod php {
     impl From<PhpByDay> for ByDay {
         fn from(value: PhpByDay) -> Self {
             if let Some(nth) = value.nth.and_then(NonZeroI8::new) {
-                ByDay::Specific(nth, value.day)
+                ByDay::Fixed(nth, value.day)
             } else {
                 ByDay::Every(value.day)
             }
@@ -473,7 +473,7 @@ mod php {
             match value {
                 ByDay::Every(day) => PhpByDay { nth: None, day },
 
-                ByDay::Specific(nth, day) => PhpByDay {
+                ByDay::Fixed(nth, day) => PhpByDay {
                     nth: Some(nth.get()),
                     day,
                 },
@@ -604,8 +604,8 @@ mod tests {
     fn with_by_day() {
         let target = Recur::new(Freq::Minutely).with_by_day([
             ByDay::Every(Weekday::Monday),
-            ByDay::Specific(NonZeroI8::new(1).unwrap(), Weekday::Tuesday),
-            ByDay::Specific(NonZeroI8::new(-2).unwrap(), Weekday::Wednesday),
+            ByDay::Fixed(NonZeroI8::new(1).unwrap(), Weekday::Tuesday),
+            ByDay::Fixed(NonZeroI8::new(-2).unwrap(), Weekday::Wednesday),
         ]);
 
         let expected = ics! {"

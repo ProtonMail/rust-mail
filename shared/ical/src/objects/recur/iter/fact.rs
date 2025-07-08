@@ -65,7 +65,7 @@ impl Fact {
             match day {
                 ByDay::Every(day) => Some(Fact::weekday_eq(day.as_jiff())),
 
-                ByDay::Specific(nth, day) => {
+                ByDay::Fixed(nth, day) => {
                     match recur.freq {
                         Freq::Monthly => {
                             Some(Fact::nth_weekday_of_month_eq(nth.get(), day.as_jiff()))
