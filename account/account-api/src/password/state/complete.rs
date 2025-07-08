@@ -1,18 +1,15 @@
-use std::borrow::Borrow;
-
 use muon::Client;
 use proton_core_api::session::{Session, SessionParts};
 
 /// Represents the completed password change flow state.
+#[derive(Clone)]
 pub struct Complete {
     client: Client,
     parts: SessionParts,
 }
 
 impl Complete {
-    pub(crate) fn new(session: impl Borrow<Session>) -> Self {
-        let (client, parts) = session.borrow().to_parts();
-
+    pub(crate) fn new(client: Client, parts: SessionParts) -> Self {
         Self { client, parts }
     }
 

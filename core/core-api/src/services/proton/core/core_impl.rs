@@ -278,28 +278,4 @@ impl ProtonCore for Proton {
 
         Ok(())
     }
-
-    async fn put_keys_private(
-        &self,
-        body: PutKeysPrivateRequest,
-    ) -> ApiServiceResult<PutKeysPrivateResponse> {
-        Ok(PUT!("{CORE_V4}/keys/private")
-            .body_json(body)?
-            .send_with(self)
-            .await?
-            .ok()?
-            .into_body_json()?)
-    }
-
-    async fn put_users_password(
-        &self,
-        body: PutUsersPasswordRequest,
-    ) -> ApiServiceResult<PutUsersPasswordResponse> {
-        Ok(PUT!("{CORE_V4}/users/password")
-            .body_json(body)?
-            .send_with(self)
-            .await?
-            .ok()?
-            .into_body_json()?)
-    }
 }

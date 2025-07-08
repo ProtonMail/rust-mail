@@ -1,13 +1,14 @@
 use proton_account_api::password::PasswordError as RealPasswordError;
 use proton_account_api::password::PasswordFlow as RealPasswordFlow;
-use proton_core_api::consts::CoreBundle;
-use proton_core_api::service::ApiServiceError;
+use proton_account_api::password::state::StateKind;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::Mutex;
 use tokio::task::JoinError;
 use uniffi_runtime::async_runtime;
 use uniffi_runtime::uniffi_async;
+
+use crate::password_validator::PasswordValidatorService;
 
 /// Errors that can occur during the password change flow, exposed via `UniFFI`.
 #[derive(Debug, Error, uniffi::Error)]
@@ -40,16 +41,8 @@ impl From<RealPasswordError> for PasswordError {
             RealPasswordError::InvalidState => Self::InvalidState,
 
             // Auth error caused by invalid 2FA input/token
-            RealPasswordError::FlowAuth(ApiServiceError::UnprocessableEntity(_, Some(info)))
-                if info.code == CoreBundle::Auth2faInputInvalid as u32
-                    || info.code == CoreBundle::Auth2faTokenInvalid as u32 =>
-            {
-                Self::Invalid2FACode
-            }
-
-            // Auth error caused by incorrect password
-            RealPasswordError::FlowAuth(ApiServiceError::UnprocessableEntity(..))
-            | RealPasswordError::KeySecretSaltFetch(ApiServiceError::UnprocessableEntity(..))
+            RealPasswordError::FlowAuth(_)
+            | RealPasswordError::KeySecretSaltFetch(_)
             | RealPasswordError::ServerProof => Self::InvalidCredentials,
 
             // Key unlock error
@@ -59,9 +52,7 @@ impl From<RealPasswordError> for PasswordError {
             | RealPasswordError::KeyEncoding(_) => Self::KeyUnlock,
 
             // Api service error
-            RealPasswordError::ApiService(e)
-            | RealPasswordError::KeySecretSaltFetch(e)
-            | RealPasswordError::FlowAuth(e) => e
+            RealPasswordError::ApiService(e) => e
                 .to_proton_error()
                 .and_then(|e| e.error)
                 .map_or_else(|| Self::Api(e.to_string()), Self::Api),
@@ -86,6 +77,27 @@ impl From<JoinError> for PasswordError {
     }
 }
 
+#[derive(uniffi::Enum, Debug)]
+pub enum SimplePasswordState {
+    WantOldPass,
+    WantTfa,
+    WantNewPass,
+    Complete,
+    Invalid,
+}
+
+impl From<StateKind> for SimplePasswordState {
+    fn from(kind: StateKind) -> Self {
+        match kind {
+            StateKind::WantPass => Self::WantOldPass,
+            StateKind::WantTfa => Self::WantTfa,
+            StateKind::WantChange => Self::WantNewPass,
+            StateKind::Complete => Self::Complete,
+            StateKind::Invalid => Self::Invalid,
+        }
+    }
+}
+
 /// Manages the password change process for a user.
 #[derive(uniffi::Object)]
 pub struct PasswordFlow {
@@ -103,114 +115,93 @@ impl PasswordFlow {
 
 #[uniffi_export]
 impl PasswordFlow {
-    /// Submit the current password to start the password change.
-    ///
-    /// # Arguments
-    /// * `password` - The current password to submit
+    /// Step the flow back to the previous state.
     ///
     /// # Errors
-    pub async fn submit_password(&self, password: String) -> Result<(), PasswordError> {
+    ///
+    /// Returns an error if there is no state to step back to.
+    pub async fn step_back(&self) -> Result<SimplePasswordState, PasswordError> {
+        let flow = self.flow.clone();
+
+        uniffi_async(async move { flow.lock().await.back().map_err(PasswordError::from) }).await?;
+
+        Ok(self.get_state())
+    }
+
+    pub async fn submit_pass(&self, pass: String) -> Result<SimplePasswordState, PasswordError> {
         let flow = self.flow.clone();
 
         uniffi_async::<_, PasswordError, _>(async move {
-            flow.lock()
-                .await
-                .submit_password(password)
-                .await
-                .map_err(PasswordError::from)
+            Ok(flow.lock().await.submit_pass(pass).await?)
         })
         .await?;
 
-        Ok(())
+        Ok(self.get_state())
     }
 
-    /// Submit TOTP code for 2FA authentication.
-    ///
-    /// # Arguments
-    /// * `code` - The TOTP code from the authenticator app
-    ///
-    /// # Errors
-    /// Returns an error if the TOTP code is invalid.
-    pub async fn submit_totp(&self, code: String) -> Result<(), PasswordError> {
+    pub async fn submit_totp(&self, code: String) -> Result<SimplePasswordState, PasswordError> {
         let flow = self.flow.clone();
 
         uniffi_async::<_, PasswordError, _>(async move {
-            flow.lock()
-                .await
-                .submit_totp(code)
-                .await
-                .map_err(PasswordError::from)
+            Ok(flow.lock().await.submit_totp(code).await?)
         })
         .await?;
 
-        Ok(())
+        Ok(self.get_state())
     }
 
-    /// Submit FIDO2 response for 2FA authentication.
-    ///
-    /// # Arguments
-    /// * `response` - The FIDO2 response from the security key
-    ///
-    /// # Errors
-    /// Returns an error if the FIDO2 response is invalid.
-    pub async fn submit_fido2(&self, response: String) -> Result<(), PasswordError> {
+    pub async fn change_pass(
+        &self,
+        new_pass: String,
+    ) -> Result<SimplePasswordState, PasswordError> {
         let flow = self.flow.clone();
 
         uniffi_async::<_, PasswordError, _>(async move {
-            flow.lock()
-                .await
-                .submit_fido2(response)
-                .await
-                .map_err(PasswordError::from)
+            Ok(flow.lock().await.change_pass(new_pass).await?)
         })
         .await?;
 
-        Ok(())
+        Ok(self.get_state())
     }
 
-    /// Submit the new password to complete the password change.
-    ///
-    /// # Arguments
-    /// * `password` - The new password to set
-    ///
-    /// # Errors
-    /// Returns an error if the password change fails.
-    pub async fn submit_new_password(&self, password: String) -> Result<(), PasswordError> {
+    pub async fn change_mbox_pass(
+        &self,
+        new_mbox_pass: String,
+    ) -> Result<SimplePasswordState, PasswordError> {
         let flow = self.flow.clone();
 
         uniffi_async::<_, PasswordError, _>(async move {
-            flow.lock()
-                .await
-                .submit_new_password(password)
-                .await
-                .map_err(PasswordError::from)
+            Ok(flow.lock().await.change_mbox_pass(new_mbox_pass).await?)
         })
         .await?;
 
-        Ok(())
+        Ok(self.get_state())
     }
 
-    /// Check if the flow is awaiting password.
+    /// Returns a password validator service.
     #[must_use]
-    pub fn is_awaiting_password(&self) -> bool {
-        async_runtime().block_on(async { self.flow.lock().await.is_awaiting_password() })
+    pub async fn password_validator(&self) -> Option<Arc<PasswordValidatorService>> {
+        let flow = self.flow.clone();
+
+        uniffi_async::<_, PasswordError, _>(async move {
+            Ok(Arc::new(PasswordValidatorService::setup(
+                flow.lock().await.api()?,
+            )))
+        })
+        .await
+        .ok()
     }
 
-    /// Check if the flow is awaiting 2FA authentication.
-    #[must_use]
-    pub fn is_awaiting_2fa(&self) -> bool {
-        async_runtime().block_on(async { self.flow.lock().await.is_awaiting_2fa() })
+    /// Returns whether the account has MBP enabled.
+    pub fn has_mbp(&self) -> Result<bool, PasswordError> {
+        let mode = async_runtime().block_on(async { self.flow.lock().await.mbp_mode() });
+
+        Ok(mode?.want_mbp())
     }
 
-    /// Check if the flow is awaiting the new password.
+    /// Get the current state of the PasswordFlow
     #[must_use]
-    pub fn is_awaiting_new_password(&self) -> bool {
-        async_runtime().block_on(async { self.flow.lock().await.is_awaiting_new_password() })
-    }
-
-    /// Check if the flow is complete.
-    #[must_use]
-    pub fn is_complete(&self) -> bool {
-        async_runtime().block_on(async { self.flow.lock().await.is_complete() })
+    pub fn get_state(&self) -> SimplePasswordState {
+        async_runtime().block_on(async { self.flow.lock().await.kind().unwrap().into() })
     }
 }

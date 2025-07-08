@@ -54,6 +54,7 @@ pub use self::push_notifications::*;
 pub use self::system_label::*;
 pub use self::timestamp::*;
 
+use derive_more::Into;
 use derive_more::derive::TryFrom;
 use itertools::Itertools;
 use jiff::civil::Weekday;
@@ -1403,10 +1404,11 @@ sql_using_serde!(AuthScopes);
 
 /// A compat type for the [`ApiPasswordMode`] enum, enabling it to be used
 /// within the database.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, TryFrom)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, TryFrom)]
 #[try_from(repr)]
 #[repr(u8)]
 pub enum PasswordMode {
+    #[default]
     One = 1,
     Two = 2,
 }
@@ -1471,7 +1473,7 @@ impl FromSql for PasswordMode {
 }
 
 /// Wrapper type around [`RealUserKeys`] to implement [`FromSql`] and [`ToSql`].
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Into)]
 pub struct UserKeys(pub RealUserKeys);
 
 impl Default for UserKeys {

@@ -24,24 +24,30 @@ impl Cmd {
     ) -> Result<(LoginFlow, Arc<MailUserContext>)> {
         let mut flow = ctx.new_login_flow(Some(username)).await?;
 
-        if flow.is_logged_out() {
-            flow.login_with_credentials(username.to_owned(), read("password")?, None)
-                .await?;
+        loop {
+            if flow.is_logged_out() {
+                let _ = flow
+                    .login_with_credentials(username.to_owned(), read("password")?, None)
+                    .inspect_err(|e| warn!("{e}"))
+                    .await;
+            } else if flow.is_awaiting_2fa() {
+                let _ = flow
+                    .submit_totp(read("2nd factor")?)
+                    .inspect_err(|e| warn!("{e}"))
+                    .await;
+            } else if flow.is_awaiting_mailbox_password() {
+                let _ = flow
+                    .submit_mailbox_password(read("2nd password")?)
+                    .inspect_err(|e| warn!("{e}"))
+                    .await;
+            } else if flow.is_logged_in() {
+                let user_ctx = ctx
+                    .user_context_from_login_flow(&mut flow)
+                    .inspect_err(|err| error!("failed to create user context: {err:?}"))
+                    .await?;
+
+                return Ok((flow, user_ctx));
+            }
         }
-
-        if flow.is_awaiting_2fa() {
-            flow.submit_totp(read("2nd factor")?).await?;
-        }
-
-        if flow.is_awaiting_mailbox_password() {
-            flow.submit_mailbox_password(read("2nd password")?).await?;
-        }
-
-        let user_ctx = ctx
-            .user_context_from_login_flow(&mut flow)
-            .inspect_err(|err| error!("failed to create user context: {err:?}"))
-            .await?;
-
-        Ok((flow, user_ctx))
     }
 }

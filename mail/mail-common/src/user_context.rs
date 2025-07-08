@@ -24,7 +24,9 @@ use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::datatypes::{AccountDetails, LocalAddressId};
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::{Address, User, UserSettings};
-use proton_core_common::{ContactError, Context as CoreContext, CoreContextError, UserContext};
+use proton_core_common::{
+    ContactError, Context as CoreContext, CoreContextError, KeyHandlingError, UserContext,
+};
 use proton_crypto_inbox::keys::{ComposerPreference, CryptoMailSettings, SendPreferences};
 use proton_crypto_inbox::proton_crypto::CryptoClockProvider;
 use proton_crypto_inbox::proton_crypto::crypto::PGPProviderSync;
@@ -444,11 +446,25 @@ impl MailUserContext {
 
     /// Create a new password change flow.
     pub async fn new_password_flow(&self) -> MailContextResult<PasswordFlow> {
+        let user = self.user().await?;
         let session = self.session().to_owned();
         let account = self.user_context.core_account().await?;
         let tfa_mode = account.second_factor_mode.unwrap_or_default();
+        let mbp_mode = account.password_mode.unwrap_or_default();
 
-        Ok(PasswordFlow::new(session, tfa_mode))
+        let key_secret = (session.expose_key_secret().await)
+            .map(|s| s.expose_secret().to_owned())
+            .ok_or(KeyHandlingError::NoUserSecret)
+            .map_err(CoreContextError::PGPKeyAccess)?;
+
+        Ok(PasswordFlow::new(
+            session,
+            user.email,
+            user.keys.into(),
+            key_secret,
+            tfa_mode,
+            mbp_mode,
+        ))
     }
 
     /// Logs this user out.

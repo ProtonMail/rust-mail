@@ -1,15 +1,15 @@
 use crate::ApiError;
-use crate::password::state::State;
+use crate::password::state::{State, StateKind};
+use proton_core_api::auth::KeySecret;
 use proton_core_api::service::{ApiServiceError, ServiceError};
 use proton_core_api::services::proton::prelude::*;
 use proton_core_api::session::Session;
 use proton_core_api::store::StoreError;
-use proton_core_common::datatypes::TfaStatus;
-use proton_crypto_account::keys::{LockedKey, UserKeys};
+use proton_core_common::datatypes::{PasswordMode, TfaStatus};
+use proton_crypto_account::keys::UserKeys;
 use proton_crypto_account::proton_crypto::CryptoError;
 use std::borrow::Borrow;
 use std::fmt::Debug;
-use std::future::Future;
 use std::string::FromUtf8Error;
 use thiserror::Error;
 
@@ -22,14 +22,14 @@ pub mod state;
 /// Errors that can occur during the password change flow.
 #[derive(Debug, Error)]
 pub enum PasswordError {
-    #[error("API error: {0}")]
+    #[error("API error: {0} ({})", _0.err_info().map(|i| i.to_string()).unwrap_or_default())]
     Api(#[source] ApiError),
 
     #[error("API service error: {0}")]
     ApiService(#[source] ApiServiceError),
 
-    #[error("Failed to authenticate: {0}")]
-    FlowAuth(#[source] ApiServiceError),
+    #[error("Auth error: {0} ({})", _0.err_info().map(|i| i.to_string()).unwrap_or_default())]
+    FlowAuth(#[source] ApiError),
 
     #[error("Failed to verify server proof")]
     ServerProof,
@@ -67,7 +67,7 @@ impl ServiceError for PasswordError {}
 /// ensuring that all necessary steps are completed in the correct order.
 #[derive(Debug)]
 pub struct PasswordFlow {
-    state: State,
+    state: Vec<State>,
 }
 
 impl PasswordFlow {
@@ -75,14 +75,25 @@ impl PasswordFlow {
     ///
     /// # Arguments
     /// * `session` - The authenticated session
-    /// * `tfa_status` - The user's 2FA requirements
+    /// * `tfa_mode` - The 2FA mode
+    /// * `mbp_mode` - The mailbox password mode
+    /// * `key_secret` - The key secret
     #[must_use]
-    pub fn new(session: impl Borrow<Session>, tfa_status: TfaStatus) -> Self {
+    pub fn new(
+        session: impl Borrow<Session>,
+        username: String,
+        user_keys: UserKeys,
+        key_secret: KeySecret,
+        tfa_mode: TfaStatus,
+        mbp_mode: PasswordMode,
+    ) -> Self {
         let (client, parts) = session.borrow().to_parts();
 
-        let state = State::new(client, parts, tfa_status);
+        let state = State::new(
+            client, parts, username, user_keys, key_secret, tfa_mode, mbp_mode,
+        );
 
-        Self { state }
+        Self { state: vec![state] }
     }
 
     /// Submit current password.
@@ -90,9 +101,12 @@ impl PasswordFlow {
     /// # Errors
     ///
     /// Returns error if the password submission fails.
-    pub async fn submit_password(&mut self, password: String) -> Result<(), PasswordError> {
-        self.transition(|s: State| s.submit_password(password))
-            .await
+    pub async fn submit_pass(&mut self, pass: String) -> Result<(), PasswordError> {
+        let next = self.state()?.submit_pass(pass).await?;
+
+        self.state.push(next);
+
+        Ok(())
     }
 
     /// Submit TOTP code for 2FA authentication.
@@ -100,122 +114,70 @@ impl PasswordFlow {
     /// # Errors
     ///
     /// Returns error if the TOTP code submission fails.
-    pub async fn submit_totp(&mut self, code: String) -> Result<(), PasswordError> {
-        self.transition(|s: State| s.submit_totp(code)).await
+    pub async fn submit_totp(&mut self, totp: String) -> Result<(), PasswordError> {
+        let next = self.state()?.submit_totp(totp).await?;
+
+        self.state.push(next);
+
+        Ok(())
     }
 
-    /// Submit FIDO2 response for 2FA authentication.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the FIDO2 response submission fails.
-    pub async fn submit_fido2(&mut self, response: String) -> Result<(), PasswordError> {
-        self.transition(|s: State| s.submit_fido(response)).await
-    }
-
-    /// Submit new password.
+    /// Change the account password.
     ///
     /// # Errors
     ///
     /// Returns error if the password change request or crypto operations failed.
-    pub async fn submit_new_password(&mut self, new_pass: String) -> Result<(), PasswordError> {
-        self.transition(|s: State| s.submit_new_password(new_pass))
-            .await
+    pub async fn change_pass(&mut self, new_pass: String) -> Result<(), PasswordError> {
+        let next = self.state()?.change_pass(new_pass).await?;
+
+        self.state.push(next);
+
+        Ok(())
     }
 
-    /// Take the completed session from the flow.
+    /// Change the mailbox password.
     ///
     /// # Errors
     ///
-    /// Returns error if the flow is not complete.
-    pub fn take_session(&mut self) -> Result<Session, PasswordError> {
-        let state = std::mem::take(&mut self.state);
-        state.into_session()
+    /// Returns error if the mailbox password change request or crypto operations failed.
+    pub async fn change_mbox_pass(&mut self, new_mbox_pass: String) -> Result<(), PasswordError> {
+        let next = self.state()?.change_mbox_pass(new_mbox_pass).await?;
+
+        self.state.push(next);
+
+        Ok(())
     }
 
-    /// Check if the flow is awaiting password.
-    #[must_use]
-    pub fn is_awaiting_password(&self) -> bool {
-        matches!(self.state, State::WantPassword(_))
+    /// Get the kind of the current state.
+    pub fn kind(&self) -> Result<StateKind, PasswordError> {
+        Ok(self.state()?.kind())
     }
 
-    /// Check if the flow is awaiting 2FA.
-    #[must_use]
-    pub fn is_awaiting_2fa(&self) -> bool {
-        matches!(self.state, State::WantTfa(_))
-    }
-
-    /// Check if the flow is awaiting new password.
-    #[must_use]
-    pub fn is_awaiting_new_password(&self) -> bool {
-        matches!(self.state, State::WantNewPassword(_))
-    }
-
-    /// Check if the flow is complete.
-    #[must_use]
-    pub fn is_complete(&self) -> bool {
-        matches!(self.state, State::Complete(_))
+    /// Get the mailbox password mode.
+    pub fn mbp_mode(&self) -> Result<PasswordMode, PasswordError> {
+        self.state()?.mbp_mode()
     }
 
     /// Get the API client for external operations.
-    #[must_use]
-    pub fn api(&self) -> &muon::Client {
-        self.state.api()
+    pub fn api(&self) -> Result<muon::Client, PasswordError> {
+        Ok(self.state()?.api()?.to_owned())
     }
 
-    async fn transition<F, Fut>(&mut self, f: F) -> Result<(), PasswordError>
-    where
-        F: FnOnce(State) -> Fut,
-        Fut: Future<Output = Result<State, PasswordError>>,
-    {
-        let state = std::mem::take(&mut self.state);
-
-        match f(state).await {
-            Ok(new_state) => {
-                self.state = new_state;
-                Ok(())
-            }
-            Err(err) => {
-                self.state = State::Invalid;
-                Err(err)
-            }
+    /// Return to the previous state.
+    pub fn back(&mut self) -> Result<(), PasswordError> {
+        if self.state.len() < 2 {
+            return Err(PasswordError::InvalidState);
         }
+
+        self.state.pop();
+
+        Ok(())
     }
-}
 
-// Extension trait for UserKeys to find primary key
-trait UserKeysExt {
-    fn primary(&self) -> Option<&LockedKey>;
-}
-
-impl UserKeysExt for UserKeys {
-    fn primary(&self) -> Option<&LockedKey> {
-        self.as_ref().iter().find(|&key| key.primary)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use proton_core_common::datatypes::TfaStatus;
-
-    #[test]
-    fn test_tfa_status_want_tfa() {
-        // Test TFA status want_tfa method
-
-        // Test with no 2FA
-        let tfa_none = TfaStatus::None;
-        assert!(!tfa_none.want_tfa());
-
-        // Test with TOTP 2FA
-        let tfa_totp = TfaStatus::Totp;
-        assert!(tfa_totp.want_tfa());
-
-        // Test with FIDO2 2FA
-        let tfa_fido = TfaStatus::Fido2;
-        assert!(tfa_fido.want_tfa());
-
-        // Test with both TOTP and FIDO2 2FA
-        let tfa_both = TfaStatus::TotpOrFido2;
-        assert!(tfa_both.want_tfa());
+    fn state(&self) -> Result<State, PasswordError> {
+        self.state
+            .last()
+            .cloned()
+            .ok_or(PasswordError::InvalidState)
     }
 }

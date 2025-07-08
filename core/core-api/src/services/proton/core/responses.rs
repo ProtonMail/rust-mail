@@ -280,27 +280,6 @@ pub struct UserKey {
     pub flags: u32,
 }
 
-/// Response for password change endpoint.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-#[serde(rename_all = "PascalCase")]
-pub struct PutKeysPrivateResponse {
-    /// Standard response code (1000 for success).
-    pub code: u32,
-}
-
-/// Response for password change authentication endpoint.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
-#[serde(rename_all = "PascalCase")]
-pub struct PutUsersPasswordResponse {
-    /// Standard response code (1000 for success).
-    pub code: u32,
-
-    /// Base64-encoded server proof.
-    pub server_proof: String,
-}
-
 //  TRAITS
 //==============================================================================
 

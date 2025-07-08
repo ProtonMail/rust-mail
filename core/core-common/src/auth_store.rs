@@ -313,6 +313,29 @@ impl Store for AuthStore {
             .await
     }
 
+    async fn set_key_secret(&mut self, secret: UserKeySecret) -> Result<(), StoreError> {
+        info!("setting key secret in store");
+
+        // Get the encryption key and its secret.
+        let key = self.encryption_key()?;
+
+        // We write twice, so do it in a transaction.
+        let mut tether = self.stash.connection();
+        tether
+            .tx(async |tx| {
+                let Some(user_id) = self.user_id.clone() else {
+                    bail!("failed to set user data: no user ID");
+                };
+
+                for session in CoreSession::find_by_user_id(user_id, tx).await? {
+                    session.with_key_secret(&secret, &key)?.save(tx).await?;
+                }
+
+                Ok(())
+            })
+            .await
+    }
+
     async fn expose_key_secret(&self) -> Option<UserKeySecret> {
         info!("exposing key secret from store");
 

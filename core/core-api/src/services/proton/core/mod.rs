@@ -257,34 +257,4 @@ pub trait ProtonCore {
     /// This method will return an error if the request fails.
     ///
     async fn post_report_bug(&self, body: PostReportBug) -> ApiServiceResult<()>;
-
-    /// Update user keys for password changes.
-    ///
-    /// This endpoint is used to update private keys only and is designed for
-    /// mailbox password or single password updates. The endpoint serves as a
-    /// key management function during password change operations.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
-    async fn put_keys_private(
-        &self,
-        body: PutKeysPrivateRequest,
-    ) -> ApiServiceResult<PutKeysPrivateResponse>;
-
-    /// Authenticate for password change operations.
-    ///
-    /// This endpoint is used to obtain the necessary password change auth scope
-    /// before calling `put_keys_private`. It performs SRP authentication and
-    /// returns a server proof for verification.
-    ///
-    /// # Errors
-    ///
-    /// This method will return an error if the request fails.
-    ///
-    async fn put_users_password(
-        &self,
-        body: PutUsersPasswordRequest,
-    ) -> ApiServiceResult<PutUsersPasswordResponse>;
 }

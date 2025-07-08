@@ -260,12 +260,12 @@ impl SignupFlow {
         Ok(())
     }
 
-    fn state(&self) -> Result<State, SignupError> {
-        self.state.last().cloned().ok_or(SignupError::InvalidState)
-    }
-
     #[must_use]
     pub fn api(&self) -> &muon::Client {
         &self.client
+    }
+
+    fn state(&self) -> Result<State, SignupError> {
+        self.state.last().cloned().ok_or(SignupError::InvalidState)
     }
 }

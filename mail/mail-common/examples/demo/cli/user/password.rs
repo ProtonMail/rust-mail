@@ -2,37 +2,72 @@ use crate::Result;
 use crate::cli::ctx::MailContextExt;
 use crate::cli::read;
 use clap::Args;
-use proton_mail_common::MailContext;
+use futures::TryFutureExt;
+use proton_account_api::password::state::StateKind;
+use proton_mail_common::{MailContext, MailUserContext};
 use std::sync::Arc;
 
 /// Change user password.
 #[derive(Debug, Args)]
 pub struct Cmd {
     username: String,
+
+    #[clap(long)]
+    mbp: bool,
 }
 
 impl Cmd {
     pub async fn run(self, ctx: Arc<MailContext>) -> Result<()> {
-        let mut flow = ctx
-            .get_user_ctx(&self.username)
-            .await?
-            .new_password_flow()
-            .await?;
+        let user_ctx = ctx.get_user_ctx(&self.username).await?;
 
-        if flow.is_awaiting_password() {
-            flow.submit_password(read("current password")?).await?;
-        }
+        self.run_flow(Arc::clone(&user_ctx)).await?;
 
-        if flow.is_awaiting_2fa() {
-            flow.submit_totp(read("2nd factor")?).await?;
-        }
+        user_ctx.force_event_loop_poll().await?;
 
-        if flow.is_awaiting_new_password() {
-            flow.submit_new_password(read("new password")?).await?;
-        }
+        Ok(())
+    }
 
-        if !flow.is_complete() {
-            bail!("expected completed flow");
+    async fn run_flow(&self, user_ctx: Arc<MailUserContext>) -> Result<()> {
+        let mut flow = user_ctx.new_password_flow().await?;
+
+        loop {
+            match flow.kind()? {
+                StateKind::Invalid => {
+                    bail!("password flow is in invalid state");
+                }
+
+                StateKind::WantPass => {
+                    let _ = flow
+                        .submit_pass(read("current password")?)
+                        .inspect_err(|e| warn!("{e}"))
+                        .await;
+                }
+
+                StateKind::WantTfa => {
+                    let _ = flow
+                        .submit_totp(read("2nd factor")?)
+                        .inspect_err(|e| warn!("{e}"))
+                        .await;
+                }
+
+                StateKind::WantChange => {
+                    if self.mbp {
+                        let _ = flow
+                            .change_mbox_pass(read("new mailbox password")?)
+                            .inspect_err(|e| warn!("{e}"))
+                            .await;
+                    } else {
+                        let _ = flow
+                            .change_pass(read("new password")?)
+                            .inspect_err(|e| warn!("{e}"))
+                            .await;
+                    }
+                }
+
+                StateKind::Complete => {
+                    break;
+                }
+            }
         }
 
         Ok(())
