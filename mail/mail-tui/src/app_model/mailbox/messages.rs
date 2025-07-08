@@ -1083,11 +1083,26 @@ impl DecryptedMessage {
                     RsvpProgress::Ongoing | RsvpProgress::Ended | RsvpProgress::Cancelled => 2,
                 };
 
-                let header = 4;
+                let summary = 1;
+
+                let summary_spacer =
+                    usize::from(rsvp.location.is_some() || rsvp.recurrence.is_some());
+
+                let occurrence = 1;
+                let location = usize::from(rsvp.location.is_some());
+                let recurrence = usize::from(rsvp.recurrence.is_some());
                 let organizer = 1;
                 let attendees = rsvp.attendees.len();
 
-                progress + header + organizer + attendees
+                1 + progress
+                    + summary
+                    + summary_spacer
+                    + occurrence
+                    + location
+                    + recurrence
+                    + 1
+                    + organizer
+                    + attendees
             }
 
             Rsvp::Error(msg) => 1 + msg.lines().count(),
@@ -1145,31 +1160,34 @@ impl DecryptedMessage {
             RsvpProgress::Ended | RsvpProgress::Cancelled => Color::DarkGray,
         };
 
-        let rsvp_summary = rsvp.summary.as_deref().unwrap_or("(no title)");
+        let rsvp_summary = Text::from(rsvp.summary.as_deref().unwrap_or("(no title)")).fg(fg);
 
-        let rsvp_occur = {
-            let when = match rsvp.occurrence {
-                RsvpOccurrence::Date { starts_at, ends_at } if ends_at == starts_at => {
-                    format!("{starts_at}")
-                }
-                RsvpOccurrence::Date { starts_at, ends_at } => {
-                    format!("{starts_at} - {ends_at}")
-                }
-                RsvpOccurrence::DateTime { starts_at, ends_at } => {
-                    format!("{starts_at} - {ends_at}")
-                }
-            };
-
-            if let Some(loc) = &rsvp.location {
-                format!("{when} @ {loc}")
-            } else {
-                when
+        let rsvp_occurrence = Text::from(match rsvp.occurrence {
+            RsvpOccurrence::Date { starts_at, ends_at } if ends_at == starts_at => {
+                format!("{starts_at}")
             }
-        };
+            RsvpOccurrence::Date { starts_at, ends_at } => {
+                format!("{starts_at} - {ends_at}")
+            }
+            RsvpOccurrence::DateTime { starts_at, ends_at } => {
+                format!("{starts_at} - {ends_at}")
+            }
+        })
+        .fg(fg);
 
-        let rsvp_org = format!("- <{}> (organizer)", rsvp.organizer.email);
+        let rsvp_location = rsvp
+            .location
+            .as_ref()
+            .map(|loc| Text::from(format!("@ {loc}")).fg(fg));
 
-        let rsvp_atts = rsvp.attendees.iter().map(|att| {
+        let rsvp_recurrence = rsvp
+            .recurrence
+            .as_ref()
+            .map(|recur| Text::from(format!("% {recur}")).fg(fg));
+
+        let rsvp_organizer = Text::from(format!("- <{}> (organizer)", rsvp.organizer.email)).fg(fg);
+
+        let rsvp_attendees = rsvp.attendees.iter().map(|att| {
             let status = match att.status {
                 CalendarAttendeeStatus::Unanswered => "unanswered",
                 CalendarAttendeeStatus::Maybe => "maybe",
@@ -1177,21 +1195,50 @@ impl DecryptedMessage {
                 CalendarAttendeeStatus::Yes => "yes",
             };
 
-            format!("- <{}> ({status})", att.email)
+            Text::from(format!("- <{}> ({status})", att.email)).fg(fg)
         });
 
-        let rsvp_summary = Text::from(rsvp_summary).fg(fg);
-        let rsvp_occur = Text::from(rsvp_occur).fg(fg);
-        let rsvp_org = Text::from(rsvp_org).fg(fg);
-        let rsvp_atts = rsvp_atts.map(|att| Text::from(att).fg(fg));
+        // ---
+
+        // Usually we keep event's summary next to its occurrence:
+        //
+        // ```
+        // Some Event
+        // 2018-01-01 12:00:00 UTC
+        //
+        // - bob@localhost
+        // - joe@localhost
+        // ```
+        //
+        // ... but if there's more metadata available, we split the layout into
+        // three blocks:
+        //
+        // ```
+        // Some Event
+        //
+        // 2018-01-01 12:00:00 UTC
+        // @ The Library
+        // % Every Monday
+        //
+        // - bob@localhost
+        // - joe@localhost
+        // ```
+        let rsvp_summary_spacer = if rsvp_location.is_some() || rsvp_recurrence.is_some() {
+            Some(Text::raw(""))
+        } else {
+            None
+        };
 
         let rows = rsvp_progress
             .into_iter()
             .chain(iter::once(rsvp_summary))
-            .chain(iter::once(rsvp_occur))
+            .chain(rsvp_summary_spacer)
+            .chain(iter::once(rsvp_occurrence))
+            .chain(rsvp_location)
+            .chain(rsvp_recurrence)
             .chain(iter::once(Text::raw("")))
-            .chain(iter::once(rsvp_org))
-            .chain(rsvp_atts);
+            .chain(iter::once(rsvp_organizer))
+            .chain(rsvp_attendees);
 
         frame.render_widget(List::new(rows), area);
     }
