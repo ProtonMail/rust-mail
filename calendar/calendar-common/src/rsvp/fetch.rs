@@ -484,9 +484,6 @@ fn extract_recurrence_monthly(
         //
         // // Every second Monday and last Friday of the month
         // BYDAY=+2MO,-1FR
-        //
-        // // Every Monday and last Friday of the month
-        // BYDAY=MO,-1FR
         // ```
         //
         // Following this example, `MO,FR` would land into `every_days` and
