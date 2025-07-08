@@ -42,7 +42,7 @@ pub enum LoginError {
 
     /// Returned if the user has no proton address.
     #[error("User has no proton address")]
-    NoProtonAddress,
+    NoAddress,
 
     /// Returned if we fail to fetch the user info after login.
     #[error("Failed to fetch user info: {0}")]
@@ -60,13 +60,17 @@ pub enum LoginError {
     #[error("Failed to setup user key: {0}")]
     UserKeySetup(String),
 
-    /// Returned if we fail to setup the user key because the user is non-private.
-    #[error("Cannot setup user key for non-private user")]
-    UserKeySetupNonPrivate,
+    /// Returned if we decide not to setup the user key.
+    #[error("User key setup aborted")]
+    UserKeySetupAborted,
 
     /// Returned if we fail to set up a new address key.
     #[error("Failed to set up new address key: {0}")]
     AddressKeySetup(String),
+
+    /// Returned if we decide not to setup the address keys.
+    #[error("Address key setup aborted")]
+    AddressKeySetupAborted,
 
     /// Returned if the user keyring is invalid.
     #[error("Failed to find primary key in user keyring")]

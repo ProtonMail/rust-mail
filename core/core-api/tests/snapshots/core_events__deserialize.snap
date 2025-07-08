@@ -1,7 +1,6 @@
 ---
 source: core/core-api/tests/core_events.rs
 expression: mail_event
-snapshot_kind: text
 ---
 CoreEvent {
     event_id: EventId(
@@ -156,6 +155,7 @@ CoreEvent {
             email: "jason@proton.me",
             flags: Flags {
                 has_temporary_password: true,
+                has_a_byoe_address: true,
                 no_login: true,
                 no_proton_address: true,
                 onboard_checklist_storage_granted: true,

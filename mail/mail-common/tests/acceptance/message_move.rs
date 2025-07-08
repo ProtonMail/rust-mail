@@ -652,6 +652,7 @@ fn test_user_info() -> ApiUser {
             recovery_attempt: false,
             sso: false,
             no_proton_address: false,
+            has_a_byoe_address: false,
         },
     }
 }

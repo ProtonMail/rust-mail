@@ -292,7 +292,7 @@ pub enum LoginError {
     NoLogin,
 
     /// Returned if the user has no proton address.
-    NoProtonAddress,
+    NoAddress,
 
     /// Returned if the initial auth request fails.
     FlowLogin(UserApiServiceError),
@@ -309,8 +309,8 @@ pub enum LoginError {
     /// Returned if we fail to setup the user key.
     UserKeySetup(String),
 
-    /// Returned if we fail to setup the user key because the user is non-private.
-    UserKeySetupNonPrivate,
+    /// Returned if we decide not to setup the user key.
+    UserKeySetupAborted,
 
     /// Returned if we fail to fetch the user's addresses after login.
     AddressFetch(UserApiServiceError),
@@ -320,6 +320,9 @@ pub enum LoginError {
 
     /// Returned if we fail to set up a new address key.
     AddressKeySetup(String),
+
+    /// Returned if we decide not to setup the address keys.
+    AddressKeySetupAborted,
 
     /// TODO: Document this variant.
     KeySecretSaltFetch(UserApiServiceError),
@@ -344,31 +347,39 @@ impl From<login_api::LoginError> for LoginError {
         match value {
             login_api::LoginError::InvalidState => LoginError::InvalidState,
             login_api::LoginError::NoLogin => Self::NoLogin,
-            login_api::LoginError::NoProtonAddress => Self::NoProtonAddress,
+            login_api::LoginError::NoAddress => Self::NoAddress,
+
             login_api::LoginError::FlowLogin(ApiServiceError::UnprocessableEntity(..))
             | login_api::LoginError::KeySecretSaltFetch(ApiServiceError::UnprocessableEntity(..))
             | login_api::LoginError::ServerProof(..)
             | login_api::LoginError::SrpProof(..) => LoginError::InvalidCredentials,
+
             login_api::LoginError::FlowTotp(ApiServiceError::UnprocessableEntity(
                 _,
                 Some(info),
             )) if info.code == CoreBundle::PasswordWrong as u32 => LoginError::Incorrect2FACode,
+
             login_api::LoginError::FlowLogin(e) => LoginError::FlowLogin(e.into()),
             login_api::LoginError::FlowTotp(e) => LoginError::FlowTotp(e.into()),
             login_api::LoginError::FlowFido(e) => LoginError::FlowFido(e.into()),
-            login_api::LoginError::AddressKeySetup(e) | login_api::LoginError::AddressSetup(e) => {
-                LoginError::AddressSetup(e.to_string())
-            }
-            login_api::LoginError::AddressFetch(e) => LoginError::AddressSetup(e.to_string()),
+
             login_api::LoginError::UserFetch(e) => LoginError::UserFetch(e.into()),
             login_api::LoginError::UserKeySetup(e) => LoginError::UserKeySetup(e),
-            login_api::LoginError::UserKeySetupNonPrivate => LoginError::UserKeySetupNonPrivate,
+            login_api::LoginError::UserKeySetupAborted => LoginError::UserKeySetupAborted,
+
+            login_api::LoginError::AddressFetch(e) => LoginError::AddressFetch(e.into()),
+            login_api::LoginError::AddressSetup(e) => LoginError::AddressSetup(e.to_string()),
+            login_api::LoginError::AddressKeySetup(e) => LoginError::AddressKeySetup(e.to_string()),
+            login_api::LoginError::AddressKeySetupAborted => LoginError::AddressKeySetupAborted,
+
             login_api::LoginError::MissingPrimaryKey
             | login_api::LoginError::KeySecretDecryption
             | login_api::LoginError::KeySecretDerivation(_) => LoginError::CantUnlockUserKey,
+
             login_api::LoginError::KeySecretSaltFetch(e) => {
                 LoginError::KeySecretSaltFetch(e.into())
             }
+
             login_api::LoginError::AuthStore(error) => LoginError::AuthStore(error.to_string()),
             login_api::LoginError::ApiError(e) => LoginError::ApiError(e.to_string()),
             login_api::LoginError::WithCodePollFlowFailed(e) => {

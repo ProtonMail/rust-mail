@@ -324,9 +324,9 @@ impl State {
         }
 
         // Does the user have a proton address?
-        if user.flags.no_proton_address {
+        if user.flags.no_proton_address && !user.flags.has_a_byoe_address {
             data.parts.store.write().await.clear_account().await?;
-            return Err(LoginError::NoProtonAddress);
+            return Err(LoginError::NoAddress);
         }
 
         // Fetch user addresses.
@@ -337,10 +337,10 @@ impl State {
 
         // Does the user have a key?
         if user.keys.as_ref().is_empty() {
-            if user.private && !user.flags.has_temporary_password {
+            if want_key_setup(&user) {
                 (user, addr) = Self::setup_keys(&srp, &pgp, &client, &addr, &pass).await?;
             } else {
-                return Err(LoginError::UserKeySetupNonPrivate);
+                return Err(LoginError::UserKeySetupAborted);
             }
         }
 
@@ -377,7 +377,11 @@ impl State {
 
         // Do all the user's addresses have keys?
         if addr.iter().any(|addr| addr.keys.as_ref().is_empty()) {
-            Self::setup_address_keys(&pgp, &client, user_key, &addr).await?;
+            if want_key_setup(&user) {
+                Self::setup_address_keys(&pgp, &client, user_key, &addr).await?;
+            } else {
+                return Err(LoginError::AddressKeySetupAborted);
+            }
         }
 
         // Save user data to store
@@ -580,4 +584,23 @@ impl UserKeysExt for UserKeys {
     fn primary(&self) -> Option<&LockedKey> {
         self.as_ref().iter().find(|&key| key.primary)
     }
+}
+
+fn want_key_setup(user: &User) -> bool {
+    // Non-private users should have keys created by the org -- no key setup needed.
+    if !user.private {
+        return false;
+    }
+
+    // Users with BYOE addresses should already have keys which were created when the address was created.
+    if user.flags.has_a_byoe_address {
+        return false;
+    }
+
+    // TODO(ET-3627): Generate keys for users with temporary passwords.
+    if user.flags.has_temporary_password {
+        return false;
+    }
+
+    true
 }
