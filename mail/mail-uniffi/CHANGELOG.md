@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `newinboxmailbox` is now sync
+- [ET-3550] (breaking) reimplement scroller from pull to push model, new api
+- New_inbox_mailbox and new_all_mail_mailbox are now sync
+
+### Features
+
+- Et-1970 update muon reference
+- Et-1970 pass in the info provider to muon. adapt the device info provider to get the data.
+- Et-1970 format code
+
+### Fixes
+
+- Breaking change: fix rust handling of keychain errors
+
+
+## [mail-uniffi-v0.99.0] - 2025-07-03
+
 ### Features
 
 - [ET-3592] Add incorrect2facode error variant to loginerror
