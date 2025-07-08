@@ -15,6 +15,7 @@ use crate::signup::state::complete::Complete;
 use derive_more::Display;
 use futures::TryFutureExt;
 use muon::Client;
+#[allow(deprecated)]
 use muon::client::flow::LoginExtraInfo;
 use muon::client::flow::LoginFlow;
 use proton_core_api::auth::UserKeySecret;
@@ -59,6 +60,7 @@ impl WantCreate {
         }
     }
 
+    #[allow(deprecated)]
     pub async fn create(self, store: DynStore) -> StateResult {
         let srp = new_srp_provider();
         let pgp = new_pgp_provider();

@@ -5,7 +5,7 @@ use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
 use futures::TryFutureExt;
 use muon::client::PasswordMode::{One, Two};
-use muon::client::flow::{AuthFlow, LoginExtraInfo, LoginFlow, LoginFlowData, WithCodeFlow};
+use muon::client::flow::{AuthFlow, LoginFlow, LoginFlowData, WithCodeFlow};
 use muon::client::{Auth, Tokens};
 use proton_core_api::auth::KeySecret;
 use proton_core_api::service::ApiServiceError;
@@ -22,6 +22,9 @@ use serde_json::to_value;
 use tracing::info;
 
 use super::want_qr_confirmation::WantQrConfirmation;
+
+#[allow(deprecated)]
+use muon::client::flow::LoginExtraInfo;
 
 /// Represents the initial state of the login flow;
 /// the user must call `login` to proceed.
@@ -50,6 +53,7 @@ impl WantLogin {
         }
     }
 
+    #[allow(deprecated)]
     pub async fn login_with_credentials(
         mut self,
         user: String,
@@ -160,6 +164,7 @@ impl WantLogin {
         State::finalize_migration(client, data, user).await
     }
 
+    #[allow(deprecated)]
     async fn try_login(
         self,
         user: String,
