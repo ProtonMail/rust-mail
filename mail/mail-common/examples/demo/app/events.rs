@@ -25,7 +25,7 @@ pub struct EndChallengeEvent {
 }
 
 pub trait Proxy: Clone + Send + Sync {
-    fn send_event(&self, event: UserEvent) -> Result<()> {
-        panic!("{event:?}");
+    fn send_event(&self, _: UserEvent) -> Result<()> {
+        Ok(())
     }
 }
