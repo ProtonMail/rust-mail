@@ -2,6 +2,7 @@ mod iter;
 
 pub use self::iter::*;
 use super::*;
+use std::num::NonZeroU32;
 
 /// Recurrence rule.
 ///
@@ -134,6 +135,16 @@ impl Recur {
     pub fn with_wkst(mut self, wkst: Weekday) -> Self {
         self.wkst = Some(wkst);
         self
+    }
+
+    #[must_use]
+    pub fn interval(&self) -> NonZeroU32 {
+        // `self.interval` should be `Option<NonZeroU32>`, but we can't do that
+        // due to ext-php-rs, hence this extra function
+
+        self.interval
+            .and_then(NonZeroU32::new)
+            .unwrap_or_else(|| NonZeroU32::new(1).unwrap())
     }
 
     pub(crate) fn validate(&self) -> Vec<RecurViolation> {

@@ -56,6 +56,7 @@ pub use self::timestamp::*;
 
 use derive_more::derive::TryFrom;
 use itertools::Itertools;
+use jiff::civil::Weekday;
 use proton_core_api::services::proton::{
     AddressId, ContactEmailId, ContactId, DeviceEnvironment as ApiDeviceEnvironment, LabelId,
     LabelType as ApiLabelType, LightOrDarkMode as ApiLightOrDarkMode,
@@ -688,6 +689,16 @@ impl FromSql for WeekStart {
 impl ToSql for WeekStart {
     fn to_sql(&self) -> Result<ToSqlOutput<'_>, SqliteError> {
         Ok(ToSqlOutput::Owned(Value::Integer(*self as i64)))
+    }
+}
+
+impl From<WeekStart> for Weekday {
+    fn from(value: WeekStart) -> Self {
+        match value {
+            WeekStart::Default | WeekStart::Monday => Weekday::Monday,
+            WeekStart::Saturday => Weekday::Saturday,
+            WeekStart::Sunday => Weekday::Sunday,
+        }
     }
 }
 

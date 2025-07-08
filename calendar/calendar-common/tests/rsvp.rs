@@ -253,6 +253,7 @@ fn expected_event(raw: CalendarEvent) -> RsvpEvent {
         summary: Some("some title".into()),
         location: Some("some location".into()),
         description: Some("some description".into()),
+        recurrence: None,
         occurrence: RsvpOccurrence::DateTime {
             starts_at: DateTime::from_timestamp(1_514_808_000, 0).unwrap(),
             ends_at: DateTime::from_timestamp(1_514_813_400, 0).unwrap(),

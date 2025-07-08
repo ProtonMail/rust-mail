@@ -1,6 +1,6 @@
 use crate::{ATTENDEES_EVENT, SHARED_EVENT, expected_event, world};
 use indoc::indoc;
-use jiff::Zoned;
+use jiff::{Zoned, civil::Weekday};
 use pretty_assertions as pa;
 use proton_calendar_api::ProtonCalendarMock;
 use proton_calendar_common::{RsvpError, RsvpEventId, RsvpIntent, RsvpProgress};
@@ -35,6 +35,7 @@ async fn using_address_key() {
             &world.address_keys,
             &world.cache,
             &world.now,
+            Weekday::Monday,
         )
         .await
         .unwrap();
@@ -70,6 +71,7 @@ async fn using_shared_key() {
             &world.address_keys,
             &world.cache,
             &world.now,
+            Weekday::Monday,
         )
         .await
         .unwrap();
@@ -108,6 +110,7 @@ async fn recurring() {
             &world.address_keys,
             &world.cache,
             &world.now,
+            Weekday::Monday,
         )
         .await
         .unwrap();
@@ -140,6 +143,7 @@ async fn direct() {
             &world.address_keys,
             &world.cache,
             &world.now,
+            Weekday::Monday,
         )
         .await
         .unwrap();
@@ -171,6 +175,7 @@ async fn reminder() {
             &world.address_keys,
             &world.cache,
             &world.now,
+            Weekday::Monday,
         )
         .await
         .unwrap()
@@ -212,6 +217,7 @@ async fn progress(now: &str, expected_progress: RsvpProgress) {
             &world.address_keys,
             &world.cache,
             &world.now,
+            Weekday::Monday,
         )
         .await
         .unwrap()
@@ -264,6 +270,7 @@ async fn cancelled() {
             &world.address_keys,
             &world.cache,
             &world.now,
+            Weekday::Monday,
         )
         .await
         .unwrap()
@@ -294,6 +301,7 @@ async fn unknown() {
             &world.address_keys,
             &world.cache,
             &world.now,
+            Weekday::Monday,
         )
         .await
         .unwrap();
@@ -337,6 +345,7 @@ async fn err_unknown_attendee() {
             &world.address_keys,
             &world.cache,
             &world.now,
+            Weekday::Monday,
         )
         .await
         .unwrap_err();
@@ -382,6 +391,7 @@ async fn err_missing_x_pm_token() {
             &world.address_keys,
             &world.cache,
             &world.now,
+            Weekday::Monday,
         )
         .await
         .unwrap_err();
@@ -428,6 +438,7 @@ async fn err_many_events_in_ics() {
             &world.address_keys,
             &world.cache,
             &world.now,
+            Weekday::Monday,
         )
         .await
         .unwrap_err();

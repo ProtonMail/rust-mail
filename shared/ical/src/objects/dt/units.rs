@@ -329,7 +329,7 @@ pub enum Weekday {
 
 impl Weekday {
     #[must_use]
-    pub(crate) fn as_jiff(self) -> JiffWeekday {
+    pub fn as_jiff(self) -> JiffWeekday {
         match self {
             Weekday::Monday => JiffWeekday::Monday,
             Weekday::Tuesday => JiffWeekday::Tuesday,
