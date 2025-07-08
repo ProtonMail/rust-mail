@@ -166,7 +166,7 @@ impl LoginFlow {
         let flow = self.flow.clone();
 
         uniffi_async::<_, JoinError, _>(async move {
-            Ok(Arc::new(PasswordValidatorService::new(
+            Ok(Arc::new(PasswordValidatorService::setup(
                 flow.lock().await.api().to_owned(),
             )))
         })

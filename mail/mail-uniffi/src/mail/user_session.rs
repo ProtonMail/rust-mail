@@ -183,7 +183,7 @@ impl MailUserSession {
             .ctx()
             .inspect_err(|err| error!("Failed to get Context: {err:?}"))
             .ok()?;
-        Some(Arc::new(PasswordValidatorService::new(
+        Some(Arc::new(PasswordValidatorService::setup(
             ctx.api().to_owned(),
         )))
     }

@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use proton_account_common::password_validator::FetchValidatorsError as RealFetchValidatorsError;
 use proton_account_common::password_validator::PasswordValidatorResult;
 use proton_account_common::password_validator::PasswordValidatorService as RealPasswordValidatorService;
 use secrecy::ExposeSecret;
@@ -9,52 +8,39 @@ use thiserror::Error;
 use tokio::sync::Mutex;
 use tokio::task::AbortHandle;
 use tokio::task::JoinError;
+use tracing::error;
 use uniffi_runtime::async_runtime;
-use uniffi_runtime::uniffi_async;
 
 #[derive(uniffi::Object)]
 pub struct PasswordValidatorService {
     service: Arc<Mutex<RealPasswordValidatorService>>,
 }
 
-#[derive(Debug, Error, uniffi::Error)]
-pub enum FetchValidatorsError {
-    #[error("API error: {0}")]
-    Api(String),
-
-    #[error("Regex error: {0}")]
-    Regex(String),
-
-    #[error("{0}")]
-    Other(String),
-}
-
 impl PasswordValidatorService {
+    /// Creates a new service, while spawning an async task to fetch password policies from the API.
+    /// This method returns immediately, without waiting for the spawned task.
     #[must_use]
-    pub fn new(client: muon::Client) -> PasswordValidatorService {
+    pub fn setup(client: muon::Client) -> PasswordValidatorService {
+        let real_service = Arc::new(Mutex::new(RealPasswordValidatorService {
+            client,
+            policies: Vec::new(),
+        }));
+        let real_service_clone = real_service.clone();
+        async_runtime().spawn(async move {
+            let mut guard = real_service_clone.lock().await;
+            match guard.fetch_validators().await {
+                Ok(()) => (),
+                Err(err) => error!("Cannot fetch password validators: {err}"),
+            }
+        });
         PasswordValidatorService {
-            service: Arc::new(Mutex::new(RealPasswordValidatorService {
-                client,
-                policies: Vec::new(),
-            })),
+            service: real_service,
         }
     }
 }
 
 #[uniffi::export]
 impl PasswordValidatorService {
-    pub async fn fetch_validators(&self) -> Result<(), FetchValidatorsError> {
-        let service = self.service.clone();
-        uniffi_async::<_, FetchValidatorsError, _>(async move {
-            let mut guard = service.lock().await;
-            guard
-                .fetch_validators()
-                .await
-                .map_err(FetchValidatorsError::from)
-        })
-        .await
-    }
-
     #[must_use]
     pub fn validate(
         &self,
@@ -143,21 +129,6 @@ fn to_service_result(result: PasswordValidatorResult) -> PasswordValidatorServic
         is_optional: result.is_optional,
         is_valid: result.is_valid,
         requirement_message: result.requirement_message,
-    }
-}
-
-impl From<RealFetchValidatorsError> for FetchValidatorsError {
-    fn from(value: RealFetchValidatorsError) -> Self {
-        match value {
-            RealFetchValidatorsError::Api(e) => FetchValidatorsError::Api(e.to_string()),
-            RealFetchValidatorsError::Regex(e) => FetchValidatorsError::Regex(e),
-        }
-    }
-}
-
-impl From<JoinError> for FetchValidatorsError {
-    fn from(value: JoinError) -> Self {
-        Self::Other(value.to_string())
     }
 }
 
