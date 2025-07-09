@@ -451,6 +451,7 @@
             "protected": true,
             "onboard-checklist-storage-granted": true,
             "has-temporary-password": true,
+            "has-a-byoe-address": true,
             "test-account": true,
             "no-login": true,
             "recovery-attempt": true,

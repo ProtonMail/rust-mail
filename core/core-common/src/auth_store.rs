@@ -120,8 +120,7 @@ impl Store for AuthStore {
     async fn set_auth(&mut self, auth: Auth) -> Result<(), StoreError> {
         match auth {
             Auth::None => {
-                info!("clearing auth from store");
-                return self.clear().await;
+                return self.clear_session().await;
             }
 
             Auth::External { .. } => {
@@ -209,9 +208,8 @@ impl Store for AuthStore {
         let mbp_mode = info.mbp_mode.into();
 
         // We write twice, so do it in a transaction.
-        let mut tether = self.stash.connection();
-
-        tether
+        self.stash
+            .connection()
             .tx(async |tx| {
                 // Load or create the account.
                 if let Some(account) = CoreAccount::find_by_id(user_id.clone(), tx).await? {
@@ -260,8 +258,8 @@ impl Store for AuthStore {
         info!("setting temp pass in store");
 
         let key = self.encryption_key()?;
-        let mut tether = self.stash.connection();
-        tether
+        self.stash
+            .connection()
             .tx(async |tx| {
                 let Some(user_id) = self.user_id.clone() else {
                     bail!("failed to set temp pass: no user ID");
@@ -286,8 +284,8 @@ impl Store for AuthStore {
         let sec = data.key_secret;
 
         // We write twice, so do it in a transaction.
-        let mut tether = self.stash.connection();
-        tether
+        self.stash
+            .connection()
             .tx(async |tx| {
                 let Some(user_id) = self.user_id.clone() else {
                     bail!("failed to set user data: no user ID");
@@ -328,8 +326,8 @@ impl Store for AuthStore {
     async fn clear_temp_pass(&mut self) -> Result<(), StoreError> {
         info!("clearing temp pass in store");
 
-        let mut tether = self.stash.connection();
-        tether
+        self.stash
+            .connection()
             .tx(async |tx| {
                 let Some(user_id) = self.user_id.clone() else {
                     bail!("failed to set temp pass: no user ID");
@@ -346,20 +344,39 @@ impl Store for AuthStore {
             .await
     }
 
-    async fn clear(&mut self) -> Result<(), StoreError> {
-        info!("clearing auth from store");
+    async fn clear_session(&mut self) -> Result<(), StoreError> {
+        info!("clearing session from store");
 
         // Clear the session if it exists.
         if let Some(id) = &self.session_id {
-            let mut tether = self.stash.connection();
-            tether
-                .tx(async |tx| CoreSession::delete_by_id(id.clone(), tx).await)
+            self.stash
+                .connection()
+                .tx(async |tx| CoreSession::delete_by_id(id.to_owned(), tx).await)
                 .await?;
         }
 
         // Clear the user and session IDs.
-        self.user_id = None;
         self.session_id = None;
+
+        Ok(())
+    }
+
+    async fn clear_account(&mut self) -> Result<(), StoreError> {
+        info!("clearing account from store");
+
+        // First, clear the session.
+        self.clear_session().await?;
+
+        // Clear the account if it exists.
+        if let Some(id) = &self.user_id {
+            self.stash
+                .connection()
+                .tx(async |tx| CoreAccount::delete_by_id(id.to_owned(), tx).await)
+                .await?;
+        }
+
+        // Clear the user ID.
+        self.user_id = None;
 
         Ok(())
     }

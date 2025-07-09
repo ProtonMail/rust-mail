@@ -621,6 +621,10 @@ pub struct Flags {
     #[serde(rename = "has-temporary-password")]
     pub has_temporary_password: bool,
 
+    /// Whether the user has a BYOE address.
+    #[serde(rename = "has-a-byoe-address")]
+    pub has_a_byoe_address: bool,
+
     /// TODO: Document this field.
     #[serde(rename = "no-login")]
     pub no_login: bool,

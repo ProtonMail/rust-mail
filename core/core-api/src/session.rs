@@ -355,7 +355,7 @@ impl Session {
     ///
     pub async fn logout(&self) -> ApiServiceResult<()> {
         self.client.logout().await;
-        self.store.write().await.clear().await?;
+        self.store.write().await.clear_session().await?;
 
         Ok(())
     }
