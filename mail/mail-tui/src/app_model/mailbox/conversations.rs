@@ -77,6 +77,7 @@ impl ConversationsState {
                 tracing::error!("{e:?}");
                 e.into()
             }
+            ScrollerUpdate::None(_) => Messages::None,
         });
 
         let autodelete_banner = ContextualConversation::auto_delete_banner(label_id, &ctx).await?;
