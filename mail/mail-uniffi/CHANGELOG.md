@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- [ET-3550] Add `change_filter` & `force_refresh` methods to the respective scrollers
+
+### Features
+
+- Delete accounts that cannot login
+- Add has_a_byoe_address and check during login
+
+### Fixes
+
+- Do not generate keys for users with temporary password
+
+
+## [mail-uniffi-v0.100.0] - 2025-07-08
+
+### Changed
+
 - `newinboxmailbox` is now sync
 - [ET-3550] (breaking) reimplement scroller from pull to push model, new api
 - New_inbox_mailbox and new_all_mail_mailbox are now sync

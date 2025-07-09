@@ -608,7 +608,7 @@ fn generate_fn_from_row_impl(
         });
 
     quote! {
-        fn from_row(row: &stash::exports::Row, columns: &[String]) -> Result<Self, stash::orm::ConversionError> {
+        fn from_row(row: &stash::exports::Row) -> Result<Self, stash::orm::ConversionError> {
             Ok(Self {
                 #(
                     #db_fields: #from_row_values_impl,
@@ -664,24 +664,19 @@ fn generate_from_row_values_impl(
     db_fields: &[Ident],
     via_attrs: &[Option<ViaIntermediary>],
 ) -> Vec<TokenStream2> {
-    db_fields.iter().zip(via_attrs.iter()).map(|(field_ident, via_attr)| {
-        if let Some(via_type) = via_attr {
-            quote! {
-                <#via_type as Into<_>>::into(row.get(
-                    columns.iter().position(|c| c == stringify!(#field_ident))
-                        .ok_or_else(|| stash::orm::ConversionError::MissingColumn(stringify!(#field_ident).to_owned()))?
-                )?)
+    db_fields
+        .iter()
+        .zip(via_attrs.iter())
+        .map(|(field_ident, via_attr)| {
+            if let Some(via_type) = via_attr {
+                quote! {
+                    <#via_type as Into<_>>::into(row.get(stringify!(#field_ident)))?,
+                }
+            } else {
+                quote! {
+                    row.get(stringify!(#field_ident))?
+                }
             }
-        } else {
-            quote! {
-                row.get(
-                    columns.iter().position(|c| c == stringify!(#field_ident))
-                        .ok_or_else(|| stash::orm::ConversionError::MissingColumn(stringify!(#field_ident).to_owned()))?
-                ).map_err(|error| {
-                    stash::orm::ConversionError::FromSqlConversionError(stringify!(#field_ident).to_owned(), error)
-                })?
-            }
-        }
-    })
-    .collect()
+        })
+        .collect()
 }
