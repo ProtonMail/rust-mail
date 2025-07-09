@@ -145,7 +145,7 @@ where
     /// This function will return a [`ConversionError`] if there is a problem
     /// converting the row.
     ///
-    fn from_row(row: &Row<'_>, columns: &[String]) -> Result<Self, ConversionError>;
+    fn from_row(row: &Row<'_>) -> Result<Self, ConversionError>;
 }
 
 /// A trait for fully-modelled database records.
@@ -586,22 +586,9 @@ pub trait ModelHooks {
 /// converting the row.
 ///
 pub fn from_rows<T: DbRecord>(mut rows: Rows<'_>) -> Result<Vec<T>, ConversionError> {
-    let columns = rows
-        .as_ref()
-        .map(|statement| {
-            (0..statement.column_count())
-                .map(|i| {
-                    statement
-                        .column_name(i)
-                        .map(ToOwned::to_owned)
-                        .map_err(|err| ConversionError::ColumnNameNotAvailable(i, err))
-                })
-                .collect::<Result<Vec<_>, ConversionError>>()
-        })
-        .ok_or(ConversionError::ColumnNamesNotAvailable)??;
     let mut results = vec![];
     while let Some(row) = rows.next()? {
-        results.push(T::from_row(row, &columns)?);
+        results.push(T::from_row(row)?);
     }
     Ok(results)
 }
