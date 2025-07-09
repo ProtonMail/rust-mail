@@ -3,6 +3,10 @@ set -eu
 
 # usage arg0 target config_path out_dir
 
+# https://android.googlesource.com/platform/external/sqlite/+/refs/heads/main/dist/Android.bp
+export LIBSQLITE3_FLAGS="-DNDEBUG=1 -DSQLITE_POWERSAFE_OVERWRITE=1 -DSQLITE_THREADSAFE=2\
+ -DSQLITE_DEFAULT_FILE_PERMISSIONS=0600 -DSQLITE_SECURE_DELETE -DSQLITE_ENABLE_BATCH_ATOMIC_WRITE"
+
 
 TARGET=$1
 CONFIG_PATH=$2

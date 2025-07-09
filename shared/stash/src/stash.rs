@@ -270,7 +270,7 @@ impl Instruction {
     /// Prepares and executes a query, and returns the number of affected rows.
     fn run(&self, connection: &Connection) -> Result<usize, StashError> {
         let mut statement = connection
-            .prepare(&self.query)
+            .prepare_cached(&self.query)
             .map_err(StashError::PreparationError)?;
         let affected = statement
             .execute(&*prepare_params(&self.params))
@@ -376,7 +376,7 @@ impl Query {
     /// Prepares and executes a query, and returns any rows of data emitted.
     fn run(&self, connection: &Connection) -> Result<DbRecords, StashError> {
         let mut statement = connection
-            .prepare(&self.query)
+            .prepare_cached(&self.query)
             .map_err(StashError::PreparationError)?;
         let rows: Result<DbRecords, ConversionError> = (self.converter)(
             statement
@@ -504,6 +504,8 @@ impl Stash {
                         PRAGMA foreign_keys = ON;          -- Enforce foreign key constraints
                         PRAGMA temp_store = MEMORY;        -- Allows temporary storage for watcher
                         PRAGMA recursive_triggers='ON';    -- Allows recursive triggers for watcher
+                        PRAGMA page_size = 8192;
+                        PRAGMA cache_size = 10000;
                     ", BUSY_TIMEOUT.as_millis()))?;
             // Ensure on iOS wall checkpointing is disabled on close. We could have set this
             // up as a configuration option, but we may forget to set this correctly in the
