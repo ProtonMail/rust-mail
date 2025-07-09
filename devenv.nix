@@ -69,6 +69,7 @@ in
     rust = {
       enable = true;
       channel = "stable";
+      version = "1.88.0";
 
       targets =
         [
@@ -79,6 +80,10 @@ in
           "aarch64-apple-ios"
           "aarch64-apple-ios-sim"
         ];
+
+      toolchain = {
+        clippy = null;
+      };
     };
 
     go = {
