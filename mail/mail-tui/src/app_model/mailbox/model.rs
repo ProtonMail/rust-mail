@@ -295,6 +295,17 @@ impl MailboxModel {
             })
         })
     }
+
+    fn change_filter(&mut self, filter: ReadFilter) {
+        self.filter = filter;
+        if let State::Conversations(state) = &mut self.state {
+            let _ = state.paginator().clone_inner().change_filter(filter);
+        } else if let State::Messages(state) = &mut self.state {
+            state
+                .label_paginator()
+                .map(|paginator| paginator.clone_inner().change_filter(filter));
+        }
+    }
 }
 
 impl AppStateHandler for MailboxModel {
@@ -329,16 +340,16 @@ impl AppStateHandler for MailboxModel {
                     return Command::message(Message::OpenContacts.into());
                 }
                 KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    self.filter = ReadFilter::Unread;
-                    return Command::message(Message::Sync(self.mailbox.clone()).into());
+                    self.change_filter(ReadFilter::Unread);
+                    return Command::None;
                 }
                 KeyCode::Char('r') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    self.filter = ReadFilter::Read;
-                    return Command::message(Message::Sync(self.mailbox.clone()).into());
+                    self.change_filter(ReadFilter::Read);
+                    return Command::None;
                 }
                 KeyCode::Char('a') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                    self.filter = ReadFilter::All;
-                    return Command::message(Message::Sync(self.mailbox.clone()).into());
+                    self.change_filter(ReadFilter::All);
+                    return Command::None;
                 }
                 KeyCode::F(8) => {
                     return Command::Message(Messages::SwitchAppState(AppState::Background(

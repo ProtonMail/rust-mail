@@ -3,6 +3,7 @@ use std::{fmt::Debug, future::Future};
 use proton_task_service::AsyncTaskResult;
 use tokio::task::JoinHandle;
 
+use crate::datatypes::ReadFilter;
 use crate::mail_scroller::ScrollerEq;
 use crate::{MailContextError, MailUserContext};
 
@@ -92,6 +93,12 @@ pub trait MailScrollerSource: Send + Sync {
         &mut self,
         ctx: &MailUserContext,
     ) -> impl Future<Output = Result<(Vec<Self::Item>, MailPaginatorJoinHandle), MailContextError>> + Send;
+
+    fn change_filter(
+        &mut self,
+        ctx: &MailUserContext,
+        filter: ReadFilter,
+    ) -> impl Future<Output = Result<(), MailContextError>> + Send;
 
     fn watched_tables(&self) -> Vec<String>;
 

@@ -149,6 +149,14 @@ impl MessagesState {
         })
     }
 
+    pub fn label_paginator(&self) -> Option<&Paginator> {
+        if let Mode::Label(paginator) = &self.mode {
+            Some(paginator)
+        } else {
+            None
+        }
+    }
+
     async fn from_search_impl(
         ctx: Arc<MailUserContext>,
         search_phrase: String,
