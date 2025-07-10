@@ -18,7 +18,7 @@ use futures::FutureExt;
 use futures::future::try_join_all;
 use itertools::Itertools as _;
 use proton_calendar_api::CalendarAttendeeStatus;
-use proton_calendar_common::{RsvpAnswerStatus, RsvpOccurrence, RsvpStatus};
+use proton_calendar_common::{RsvpAnswerStatus, RsvpOccurrence, RsvpProgress};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::os::safe_write;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
@@ -1077,16 +1077,16 @@ impl DecryptedMessage {
             Rsvp::Loading(_) => 2,
 
             Rsvp::Success(rsvp) => {
-                let status = match rsvp.status {
-                    RsvpStatus::Active => 0,
-                    RsvpStatus::Cancelled => 2,
+                let progress = match rsvp.progress {
+                    RsvpProgress::Pending => 0,
+                    RsvpProgress::Ongoing | RsvpProgress::Ended | RsvpProgress::Cancelled => 2,
                 };
 
                 let header = 4;
                 let organizer = 1;
                 let attendees = rsvp.attendees.len();
 
-                status + header + organizer + attendees
+                progress + header + organizer + attendees
             }
 
             Rsvp::Error(msg) => 1 + msg.lines().count(),
@@ -1126,17 +1126,22 @@ impl DecryptedMessage {
     }
 
     fn draw_rsvp_success(frame: &mut Frame, area: Rect, rsvp: &RsvpEvent) {
-        let rsvp_status = match rsvp.status {
-            RsvpStatus::Active => vec![],
-            RsvpStatus::Cancelled => vec![
-                Text::raw("! Event was cancelled").fg(Color::Yellow),
-                Text::raw(""),
-            ],
+        let rsvp_progress = match rsvp.progress {
+            RsvpProgress::Pending => None,
+            RsvpProgress::Ongoing => Some(Text::raw("~ Event is in progress").fg(Color::Yellow)),
+            RsvpProgress::Ended => Some(Text::raw("~ Event has already ended").fg(Color::Yellow)),
+            RsvpProgress::Cancelled => {
+                Some(Text::raw("! Event has been cancelled").fg(Color::Yellow))
+            }
         };
 
-        let fg = match rsvp.status {
-            RsvpStatus::Active => Color::White,
-            RsvpStatus::Cancelled => Color::DarkGray,
+        let rsvp_progress = rsvp_progress
+            .map(|txt| vec![txt, Text::raw("")])
+            .unwrap_or_default();
+
+        let fg = match rsvp.progress {
+            RsvpProgress::Pending | RsvpProgress::Ongoing => Color::White,
+            RsvpProgress::Ended | RsvpProgress::Cancelled => Color::DarkGray,
         };
 
         let rsvp_summary = rsvp.summary.as_deref().unwrap_or("(no title)");
@@ -1179,7 +1184,7 @@ impl DecryptedMessage {
         let rsvp_org = Text::from(rsvp_org).fg(fg);
         let rsvp_atts = rsvp_atts.map(|att| Text::from(att).fg(fg));
 
-        let rows = rsvp_status
+        let rows = rsvp_progress
             .into_iter()
             .chain(iter::once(rsvp_summary))
             .chain(iter::once(rsvp_occur))

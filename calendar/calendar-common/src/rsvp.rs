@@ -150,11 +150,12 @@ impl RsvpEventId {
         pgp: &P,
         keys: &UnlockedAddressKeys<P>,
         cache: &impl RsvpCache,
+        now: &Zoned,
     ) -> RsvpResult<Option<RsvpEvent>>
     where
         P: PGPProviderSync,
     {
-        fetch::exec(api, pgp, keys, cache, self).await
+        fetch::exec(api, pgp, keys, cache, now, self).await
     }
 }
 
@@ -167,7 +168,7 @@ pub struct RsvpEvent {
     pub attendees: Vec<RsvpAttendee>,
     pub organizer: RsvpOrganizer,
     pub calendar: RsvpCalendar,
-    pub status: RsvpStatus,
+    pub progress: RsvpProgress,
     pub intent: RsvpIntent,
     pub raw: Box<CalendarEvent>,
 }
@@ -245,8 +246,17 @@ pub struct RsvpCalendar {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum RsvpStatus {
-    Active,
+pub enum RsvpProgress {
+    /// Event has not started yet.
+    Pending,
+
+    /// Event is happening right now.
+    Ongoing,
+
+    /// Event has ended.
+    Ended,
+
+    /// Event has been cancelled.
     Cancelled,
 }
 

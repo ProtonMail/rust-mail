@@ -3,8 +3,9 @@ use indoc::indoc;
 use jiff::Zoned;
 use pretty_assertions as pa;
 use proton_calendar_api::ProtonCalendarMock;
-use proton_calendar_common::{RsvpError, RsvpEventId, RsvpIntent, RsvpStatus};
+use proton_calendar_common::{RsvpError, RsvpEventId, RsvpIntent, RsvpProgress};
 use std::str::FromStr;
+use test_case::test_case;
 
 /// Make sure we can understand RSVPs that have been auto-imported into the
 /// calendar, but haven't been replied to yet.
@@ -28,7 +29,13 @@ async fn using_address_key() {
         .await;
 
     let actual = RsvpEventId::indirect("8maQ3qBa", None)
-        .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            &world.now,
+        )
         .await
         .unwrap();
 
@@ -57,7 +64,13 @@ async fn using_shared_key() {
         .await;
 
     let actual = RsvpEventId::indirect("8maQ3qBa", None)
-        .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            &world.now,
+        )
         .await
         .unwrap();
 
@@ -89,7 +102,13 @@ async fn recurring() {
         .await;
 
     let actual = RsvpEventId::indirect("8maQ3qBa", Some(rid))
-        .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            &world.now,
+        )
         .await
         .unwrap();
 
@@ -115,7 +134,13 @@ async fn direct() {
         .await;
 
     let actual = RsvpEventId::direct("8maQ3qBa", "pFmwNlJp", RsvpIntent::Invite)
-        .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            &world.now,
+        )
         .await
         .unwrap();
 
@@ -140,12 +165,59 @@ async fn reminder() {
         .await;
 
     let actual = RsvpEventId::direct("8maQ3qBa", "pFmwNlJp", RsvpIntent::Reminder)
-        .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            &world.now,
+        )
         .await
         .unwrap()
         .unwrap();
 
     assert_eq!(RsvpIntent::Reminder, actual.intent);
+}
+
+#[test_case("20180101T100000[UTC]", RsvpProgress::Pending)]
+#[test_case("20180101T115959[UTC]", RsvpProgress::Pending)]
+#[test_case("20180101T120000[UTC]", RsvpProgress::Ongoing)]
+#[test_case("20180101T130000[UTC]", RsvpProgress::Ongoing)]
+#[test_case("20180101T125959[UTC]", RsvpProgress::Ongoing)]
+#[test_case("20180101T133000[UTC]", RsvpProgress::Ended)]
+#[test_case("20180101T140000[UTC]", RsvpProgress::Ended)]
+#[tokio::test]
+async fn progress(now: &str, expected_progress: RsvpProgress) {
+    let mut world = world().await;
+    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
+
+    world.now = now.parse().unwrap();
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_bootstrap("HzNtbT1J", world.bootstrap())
+        .await;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_event("8maQ3qBa", "pFmwNlJp", event.clone())
+        .await;
+
+    let actual = RsvpEventId::direct("8maQ3qBa", "pFmwNlJp", RsvpIntent::Reminder)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            &world.now,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(actual.progress, expected_progress);
 }
 
 /// Make sure we can fetch cancelled events *and* mark them as such; this
@@ -157,7 +229,7 @@ async fn cancelled() {
         VERSION:2.0
         BEGIN:VEVENT
         UID:1Gax95xN@proton.me
-        DTSTAMP:20250423T082009Z
+        DTSTAMP:20180101T080000Z
         STATUS:CANCELLED
         TRANSP:OPAQUE
         END:VEVENT
@@ -186,12 +258,18 @@ async fn cancelled() {
         .await;
 
     let actual = RsvpEventId::indirect("8maQ3qBa", None)
-        .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            &world.now,
+        )
         .await
         .unwrap()
         .unwrap();
 
-    assert_eq!(RsvpStatus::Cancelled, actual.status);
+    assert_eq!(RsvpProgress::Cancelled, actual.progress);
 }
 
 /// Make sure that asking for a non-imported event doesn't end up as error.
@@ -210,7 +288,13 @@ async fn unknown() {
         .await;
 
     let actual = RsvpEventId::indirect("8maQ3qBa", None)
-        .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            &world.now,
+        )
         .await
         .unwrap();
 
@@ -247,7 +331,13 @@ async fn err_unknown_attendee() {
         .await;
 
     let actual = RsvpEventId::indirect("8maQ3qBa", None)
-        .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            &world.now,
+        )
         .await
         .unwrap_err();
 
@@ -286,7 +376,13 @@ async fn err_missing_x_pm_token() {
         .await;
 
     let actual = RsvpEventId::indirect("8maQ3qBa", None)
-        .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            &world.now,
+        )
         .await
         .unwrap_err();
 
@@ -326,7 +422,13 @@ async fn err_many_events_in_ics() {
         .await;
 
     let actual = RsvpEventId::indirect("8maQ3qBa", None)
-        .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            &world.now,
+        )
         .await
         .unwrap_err();
 

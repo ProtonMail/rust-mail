@@ -63,7 +63,13 @@ async fn answer(case: fn() -> TestCase) {
         .await;
 
     let mut event = RsvpEventId::indirect("8maQ3qBa", None)
-        .fetch(&world.sess, &world.pgp, &world.address_keys, &world.cache)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            &world.now,
+        )
         .await
         .unwrap()
         .unwrap();

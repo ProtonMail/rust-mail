@@ -42,9 +42,11 @@ impl RsvpEventId {
                 err
             })?;
 
+        let now = ctx.mail_context().core_context().clock().now();
+
         match self
             .id
-            .fetch(ctx.api(), &pgp, &keys, ctx.rsvp_cache())
+            .fetch(ctx.api(), &pgp, &keys, ctx.rsvp_cache(), &now)
             .await
         {
             Ok(event) => {

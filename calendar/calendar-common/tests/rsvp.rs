@@ -5,6 +5,7 @@ mod rsvp {
 
 use chrono::DateTime;
 use indoc::indoc;
+use jiff::Zoned;
 use proton_calendar_api::{
     CalendarAttendee, CalendarAttendeeStatus, CalendarBootstrap, CalendarEvent,
     CalendarEventPayload, CalendarEventPayloadType, CalendarId, CalendarKey, CalendarKeyFlags,
@@ -12,7 +13,7 @@ use proton_calendar_api::{
 };
 use proton_calendar_common::{
     RsvpAttendee, RsvpCache, RsvpCalendar, RsvpEvent, RsvpIntent, RsvpOccurrence, RsvpOrganizer,
-    RsvpStatus,
+    RsvpProgress,
 };
 use proton_core_api::session::{Config, Session};
 use proton_core_common::test_utils::test_context::{MockApiEnv, TestContext};
@@ -30,7 +31,7 @@ const SHARED_EVENT: &str = indoc! {"
     VERSION:2.0
     BEGIN:VEVENT
     UID:IAni7dazrh7RFc_rbQ1c1m4K3JEQ@proton.me
-    DTSTAMP:20250423T082009Z
+    DTSTAMP:20180101T080000Z
     DESCRIPTION:some description
     SUMMARY:some title
     LOCATION:some location
@@ -59,6 +60,7 @@ where
     address_keys: UnlockedAddressKeys<P>,
     calendar_key: UnlockedCalendarKey<P>,
     cache: DummyRsvpCache,
+    now: Zoned,
 }
 
 async fn world() -> World<impl PGPProviderSync> {
@@ -108,6 +110,7 @@ async fn world() -> World<impl PGPProviderSync> {
         address_keys,
         calendar_key,
         cache: DummyRsvpCache,
+        now: "20180101T100000[UTC]".parse().unwrap(),
     }
 }
 
@@ -184,6 +187,9 @@ where
             })
             .collect();
 
+        let start_time: Zoned = "20180101T120000[UTC]".parse().unwrap();
+        let end_time: Zoned = "20180101T133000[UTC]".parse().unwrap();
+
         CalendarEvent {
             shared_events: vec![CalendarEventPayload {
                 ty: CalendarEventPayloadType::Encrypted,
@@ -194,8 +200,8 @@ where
             calendar_events,
             id: "pFmwNlJp".into(),
             calendar_id: "HzNtbT1J".into(),
-            start_time: 1_744_790_400,
-            end_time: 1_744_795_800,
+            start_time: start_time.timestamp().as_second(),
+            end_time: end_time.timestamp().as_second(),
             full_day: false,
             recurrence_id: None,
             address_key_packet,
@@ -248,8 +254,8 @@ fn expected_event(raw: CalendarEvent) -> RsvpEvent {
         location: Some("some location".into()),
         description: Some("some description".into()),
         occurrence: RsvpOccurrence::DateTime {
-            starts_at: DateTime::from_timestamp(1_744_790_400, 0).unwrap(),
-            ends_at: DateTime::from_timestamp(1_744_795_800, 0).unwrap(),
+            starts_at: DateTime::from_timestamp(1_514_808_000, 0).unwrap(),
+            ends_at: DateTime::from_timestamp(1_514_813_400, 0).unwrap(),
         },
         attendees: vec![RsvpAttendee {
             id: "gWfsHvDg".into(),
@@ -265,7 +271,7 @@ fn expected_event(raw: CalendarEvent) -> RsvpEvent {
             name: "My calendar".into(),
             color: "#273EB2".into(),
         },
-        status: RsvpStatus::Active,
+        progress: RsvpProgress::Pending,
         raw: Box::new(raw),
     }
 }
