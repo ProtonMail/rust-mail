@@ -25,7 +25,7 @@ stash = { workspace = true, optional = true }
 [dev-dependencies]
 bytes = "1.9.0"
 proton-core-api = { workspace = true }
-reqwest = { version = "0.12.12", features = ["stream"] }
+reqwest = { workspace = true, features = ["stream"] }
 test-case = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
