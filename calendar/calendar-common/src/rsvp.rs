@@ -2,7 +2,8 @@ mod answer;
 mod fetch;
 
 use chrono::{DateTime, NaiveDate, Utc};
-use jiff::Zoned;
+use itertools::Itertools;
+use jiff::{Zoned, civil::Weekday};
 use proton_calendar_api::{
     CalendarAttendeeId, CalendarAttendeeStatus, CalendarAttendeeToken, CalendarBootstrap,
     CalendarColor, CalendarEvent, CalendarEventId, CalendarEventRecurrenceId, CalendarEventUid,
@@ -14,7 +15,7 @@ use proton_crypto_account::keys::UnlockedAddressKeys;
 use proton_crypto_calendar::Error as CryptoError;
 use proton_ical::{self as ical};
 use serde_json::Value as JsonValue;
-use std::{collections::HashMap, error::Error};
+use std::{collections::HashMap, error::Error, fmt, num::NonZeroU32};
 use thiserror::Error;
 use tracing::instrument;
 
@@ -151,11 +152,12 @@ impl RsvpEventId {
         keys: &UnlockedAddressKeys<P>,
         cache: &impl RsvpCache,
         now: &Zoned,
+        week_start: Weekday,
     ) -> RsvpResult<Option<RsvpEvent>>
     where
         P: PGPProviderSync,
     {
-        fetch::exec(api, pgp, keys, cache, now, self).await
+        fetch::exec(api, pgp, keys, cache, now, week_start, self).await
     }
 }
 
@@ -164,6 +166,7 @@ pub struct RsvpEvent {
     pub summary: Option<String>,
     pub location: Option<String>,
     pub description: Option<String>,
+    pub recurrence: Option<RsvpRecurrence>,
     pub occurrence: RsvpOccurrence,
     pub attendees: Vec<RsvpAttendee>,
     pub organizer: RsvpOrganizer,
@@ -205,6 +208,211 @@ impl RsvpEvent {
             .notifications
             .as_ref()
             .is_some_and(|n| !n.is_empty())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum RsvpRecurrence {
+    /// "Every day", "Every second day" etc.
+    EveryDay { interval: NonZeroU32 },
+
+    /// "Every Monday", "Every Tuesday or Friday of every other week" etc.
+    EveryWeekday {
+        interval: NonZeroU32,
+        days: Vec<Weekday>,
+    },
+
+    /// "Every 14th day of the month", "Every 14th day of every other month"
+    /// etc.
+    EveryDayOfMonth {
+        interval: NonZeroU32,
+        days: Vec<NonZeroU32>,
+    },
+
+    /// "Every Monday", "Every Friday of every other month" etc.
+    EveryWeekdayOfMonth {
+        interval: NonZeroU32,
+        days: Vec<Weekday>,
+    },
+
+    /// "Every first Monday of the month", "Every second Friday of every other
+    /// month" etc.
+    EveryFixedWeekdayOfMonth {
+        interval: NonZeroU32,
+        days: Vec<(NonZeroU32, Weekday)>,
+    },
+
+    /// "Every last Monday of the month", "Every last Friday of every other
+    /// month" etc.
+    EveryLastWeekdayOfMonth {
+        interval: NonZeroU32,
+        days: Vec<Weekday>,
+    },
+
+    /// "Every year", "Every other year" etc.
+    EveryYear { interval: NonZeroU32 },
+
+    /// Unrecognized.
+    Custom(ical::Freq),
+}
+
+/// TODO (NGC-134) ideally most of this formatting would be shoved into the
+///      translation layer, but we don't have it at the moment
+impl fmt::Display for RsvpRecurrence {
+    #[allow(clippy::too_many_lines)]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        /// Joins all items except the last one with comma, as in:
+        ///
+        /// ```text
+        /// Monday, Tuesday and Wednesday
+        /// ```
+        fn join<T>(mut items: impl ExactSizeIterator<Item = T>) -> String
+        where
+            T: fmt::Display,
+        {
+            let len = items.len();
+            let lhs = items.by_ref().take(len - 1).join(", ");
+            let rhs = items.next().unwrap();
+
+            if lhs.is_empty() {
+                rhs.to_string()
+            } else {
+                // Excuse the lack of oxford, comma.
+                format!("{lhs} and {rhs}")
+            }
+        }
+
+        fn fmt_weekday(day: Weekday) -> &'static str {
+            match day {
+                Weekday::Monday => "Monday",
+                Weekday::Tuesday => "Tuesday",
+                Weekday::Wednesday => "Wednesday",
+                Weekday::Thursday => "Thursday",
+                Weekday::Friday => "Friday",
+                Weekday::Saturday => "Saturday",
+                Weekday::Sunday => "Sunday",
+            }
+        }
+
+        fn fmt_weekdays(days: &[Weekday]) -> String {
+            join(days.iter().map(|day| fmt_weekday(*day)))
+        }
+
+        fn fmt_ordinal(nth: NonZeroU32) -> String {
+            let indicator = if (11..=13).contains(&nth.get()) {
+                "th"
+            } else {
+                match nth.get() {
+                    1 => "st",
+                    2 => "nd",
+                    3 => "rd",
+                    _ => "th",
+                }
+            };
+
+            format!("{nth}{indicator}")
+        }
+
+        fn fmt_ordinals(nths: &[NonZeroU32]) -> String {
+            join(nths.iter().map(|nth| fmt_ordinal(*nth)))
+        }
+
+        fn fmt_fixed_day(nth: NonZeroU32, day: Weekday) -> String {
+            let day = fmt_weekday(day);
+
+            match nth.get() {
+                1 => format!("first {day}"),
+                2 => format!("second {day}"),
+                3 => format!("third {day}"),
+                4 => format!("fourth {day}"),
+                5 => format!("fifth {day}"),
+
+                // Soft-unreachable, but we can't afford to throw an error here
+                _ => format!("{} {day}", fmt_ordinal(nth)),
+            }
+        }
+
+        fn fmt_fixed_days(days: &[(NonZeroU32, Weekday)]) -> String {
+            join(days.iter().map(|(nth, day)| fmt_fixed_day(*nth, *day)))
+        }
+
+        // ---
+
+        match self {
+            RsvpRecurrence::EveryDay { interval } => {
+                if interval.get() == 1 {
+                    write!(f, "Every day")
+                } else {
+                    write!(f, "Every {interval} days")
+                }
+            }
+
+            RsvpRecurrence::EveryWeekday { interval, days } => {
+                if interval.get() == 1 {
+                    write!(f, "Every {}", fmt_weekdays(days))
+                } else {
+                    write!(f, "Every {} every {interval} weeks", fmt_weekdays(days))
+                }
+            }
+
+            RsvpRecurrence::EveryDayOfMonth { interval, days } => {
+                if interval.get() == 1 {
+                    write!(f, "Every {} day of the month", fmt_ordinals(days))
+                } else {
+                    write!(
+                        f,
+                        "Every {} day every {interval} months",
+                        fmt_ordinals(days)
+                    )
+                }
+            }
+
+            RsvpRecurrence::EveryWeekdayOfMonth { interval, days } => {
+                if interval.get() == 1 {
+                    write!(f, "Every {} of the month", fmt_weekdays(days))
+                } else {
+                    write!(f, "Every {} every {interval} months", fmt_weekdays(days))
+                }
+            }
+
+            RsvpRecurrence::EveryFixedWeekdayOfMonth { interval, days } => {
+                if interval.get() == 1 {
+                    write!(f, "Every {} of the month", fmt_fixed_days(days))
+                } else {
+                    write!(f, "Every {} every {interval} months", fmt_fixed_days(days))
+                }
+            }
+
+            RsvpRecurrence::EveryLastWeekdayOfMonth { interval, days } => {
+                if interval.get() == 1 {
+                    write!(f, "Every last {} of the month", fmt_weekdays(days))
+                } else {
+                    write!(
+                        f,
+                        "Every last {} every {interval} months",
+                        fmt_weekdays(days)
+                    )
+                }
+            }
+
+            RsvpRecurrence::EveryYear { interval } => {
+                if interval.get() == 1 {
+                    write!(f, "Every year")
+                } else {
+                    write!(f, "Every {interval} years")
+                }
+            }
+
+            RsvpRecurrence::Custom(freq) => match freq {
+                ical::Freq::Secondly => write!(f, "Custom (secondly)"),
+                ical::Freq::Minutely => write!(f, "Custom (minutely)"),
+                ical::Freq::Hourly => write!(f, "Custom (hourly)"),
+                ical::Freq::Daily => write!(f, "Custom (daily)"),
+                ical::Freq::Weekly => write!(f, "Custom (weekly)"),
+                ical::Freq::Monthly => write!(f, "Custom (monthly)"),
+                ical::Freq::Yearly => write!(f, "Custom (yearly)"),
+            },
+        }
     }
 }
 
@@ -628,5 +836,144 @@ mod tests {
         ));
 
         assert_eq!(expected, actual);
+    }
+
+    mod recurrence {
+        use super::*;
+        use test_case::test_case;
+
+        fn num(nth: u32) -> NonZeroU32 {
+            NonZeroU32::new(nth).unwrap()
+        }
+
+        struct TestCase {
+            given: fn() -> RsvpRecurrence,
+            expected: &'static str,
+        }
+
+        const TEST_EVERY_DAY_1: TestCase = TestCase {
+            given: || RsvpRecurrence::EveryDay { interval: num(1) },
+            expected: "Every day",
+        };
+
+        const TEST_EVERY_DAY_2: TestCase = TestCase {
+            given: || RsvpRecurrence::EveryDay { interval: num(2) },
+            expected: "Every 2 days",
+        };
+
+        const TEST_EVERY_WEEKDAY_1: TestCase = TestCase {
+            given: || RsvpRecurrence::EveryWeekday {
+                interval: num(1),
+                days: vec![Weekday::Monday, Weekday::Tuesday],
+            },
+            expected: "Every Monday and Tuesday",
+        };
+
+        const TEST_EVERY_WEEKDAY_2: TestCase = TestCase {
+            given: || RsvpRecurrence::EveryWeekday {
+                interval: num(2),
+                days: vec![Weekday::Monday, Weekday::Tuesday],
+            },
+            expected: "Every Monday and Tuesday every 2 weeks",
+        };
+
+        const TEST_EVERY_DAY_OF_MONTH_1: TestCase = TestCase {
+            given: || RsvpRecurrence::EveryDayOfMonth {
+                interval: num(1),
+                days: vec![num(10), num(20), num(30)],
+            },
+            expected: "Every 10th, 20th and 30th day of the month",
+        };
+
+        const TEST_EVERY_DAY_OF_MONTH_2: TestCase = TestCase {
+            given: || RsvpRecurrence::EveryDayOfMonth {
+                interval: num(2),
+                days: vec![num(10), num(20), num(30)],
+            },
+            expected: "Every 10th, 20th and 30th day every 2 months",
+        };
+
+        const TEST_EVERY_WEEKDAY_OF_MONTH_1: TestCase = TestCase {
+            given: || RsvpRecurrence::EveryWeekdayOfMonth {
+                interval: num(1),
+                days: vec![Weekday::Friday, Weekday::Saturday, Weekday::Sunday],
+            },
+            expected: "Every Friday, Saturday and Sunday of the month",
+        };
+
+        const TEST_EVERY_WEEKDAY_OF_MONTH_2: TestCase = TestCase {
+            given: || RsvpRecurrence::EveryWeekdayOfMonth {
+                interval: num(2),
+                days: vec![Weekday::Friday, Weekday::Saturday, Weekday::Sunday],
+            },
+            expected: "Every Friday, Saturday and Sunday every 2 months",
+        };
+
+        const TEST_EVERY_FIXED_WEEKDAY_OF_MONTH_1: TestCase = TestCase {
+            given: || RsvpRecurrence::EveryFixedWeekdayOfMonth {
+                interval: num(1),
+                days: vec![(num(1), Weekday::Friday), (num(2), Weekday::Saturday)],
+            },
+            expected: "Every first Friday and second Saturday of the month",
+        };
+
+        const TEST_EVERY_FIXED_WEEKDAY_OF_MONTH_2: TestCase = TestCase {
+            given: || RsvpRecurrence::EveryFixedWeekdayOfMonth {
+                interval: num(2),
+                days: vec![(num(1), Weekday::Friday), (num(2), Weekday::Saturday)],
+            },
+            expected: "Every first Friday and second Saturday every 2 months",
+        };
+
+        const TEST_EVERY_LAST_WEEKDAY_OF_MONTH_1: TestCase = TestCase {
+            given: || RsvpRecurrence::EveryLastWeekdayOfMonth {
+                interval: num(1),
+                days: vec![Weekday::Friday],
+            },
+            expected: "Every last Friday of the month",
+        };
+
+        const TEST_EVERY_LAST_WEEKDAY_OF_MONTH_2: TestCase = TestCase {
+            given: || RsvpRecurrence::EveryLastWeekdayOfMonth {
+                interval: num(2),
+                days: vec![Weekday::Friday],
+            },
+            expected: "Every last Friday every 2 months",
+        };
+
+        const TEST_EVERY_YEAR_1: TestCase = TestCase {
+            given: || RsvpRecurrence::EveryYear { interval: num(1) },
+            expected: "Every year",
+        };
+
+        const TEST_EVERY_YEAR_2: TestCase = TestCase {
+            given: || RsvpRecurrence::EveryYear { interval: num(2) },
+            expected: "Every 2 years",
+        };
+
+        const TEST_CUSTOM: TestCase = TestCase {
+            given: || RsvpRecurrence::Custom(ical::Freq::Secondly),
+            expected: "Custom (secondly)",
+        };
+
+        #[test_case(TEST_EVERY_DAY_1)]
+        #[test_case(TEST_EVERY_DAY_2)]
+        #[test_case(TEST_EVERY_WEEKDAY_1)]
+        #[test_case(TEST_EVERY_WEEKDAY_2)]
+        #[test_case(TEST_EVERY_DAY_OF_MONTH_1)]
+        #[test_case(TEST_EVERY_DAY_OF_MONTH_2)]
+        #[test_case(TEST_EVERY_WEEKDAY_OF_MONTH_1)]
+        #[test_case(TEST_EVERY_WEEKDAY_OF_MONTH_2)]
+        #[test_case(TEST_EVERY_FIXED_WEEKDAY_OF_MONTH_1)]
+        #[test_case(TEST_EVERY_FIXED_WEEKDAY_OF_MONTH_2)]
+        #[test_case(TEST_EVERY_LAST_WEEKDAY_OF_MONTH_1)]
+        #[test_case(TEST_EVERY_LAST_WEEKDAY_OF_MONTH_2)]
+        #[test_case(TEST_EVERY_YEAR_1)]
+        #[test_case(TEST_EVERY_YEAR_2)]
+        #[test_case(TEST_CUSTOM)]
+        #[allow(clippy::needless_pass_by_value)]
+        fn test(case: TestCase) {
+            assert_eq!(case.expected, (case.given)().to_string());
+        }
     }
 }

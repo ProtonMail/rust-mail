@@ -1,8 +1,7 @@
-use super::{
-    RsvpAnswer, RsvpAnswerResult, RsvpAnswerStatus, RsvpCache, RsvpError, RsvpEvent,
-    RsvpMailSender, RsvpResult,
+use crate::{
+    CalendarBootstrapExt, CalendarEventPayloadExt, RsvpAnswer, RsvpAnswerError, RsvpAnswerResult,
+    RsvpAnswerStatus, RsvpCache, RsvpError, RsvpEvent, RsvpMailSender, RsvpResult,
 };
-use crate::{CalendarBootstrapExt, CalendarEventPayloadExt, RsvpAnswerError};
 use itertools::Itertools;
 use proton_calendar_api::{
     CalendarAttendeeStatus, CalendarBootstrap, CalendarNotificationsUpdate, ProtonCalendar,

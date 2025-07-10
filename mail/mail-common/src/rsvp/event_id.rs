@@ -43,10 +43,11 @@ impl RsvpEventId {
             })?;
 
         let now = ctx.mail_context().core_context().clock().now();
+        let week_start = ctx.user_settings().await?.week_start.into();
 
         match self
             .id
-            .fetch(ctx.api(), &pgp, &keys, ctx.rsvp_cache(), &now)
+            .fetch(ctx.api(), &pgp, &keys, ctx.rsvp_cache(), &now, week_start)
             .await
         {
             Ok(event) => {

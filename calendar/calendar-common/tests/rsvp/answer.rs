@@ -1,5 +1,6 @@
 use crate::{ATTENDEES_EVENT, SHARED_EVENT, world};
 use itertools::Itertools;
+use jiff::civil::Weekday;
 use pretty_assertions as pa;
 use proton_calendar_api::{
     CalendarAttendeeStatus, CalendarNotificationsUpdate, ProtonCalendarMock,
@@ -69,6 +70,7 @@ async fn answer(case: fn() -> TestCase) {
             &world.address_keys,
             &world.cache,
             &world.now,
+            Weekday::Monday,
         )
         .await
         .unwrap()

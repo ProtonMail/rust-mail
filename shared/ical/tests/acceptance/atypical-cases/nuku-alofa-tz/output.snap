@@ -1,5 +1,5 @@
 ---
-source: core/ical/tests/acceptance.rs
+source: shared/ical/tests/acceptance.rs
 ---
 ```
 VCalendar {
@@ -296,7 +296,7 @@ VCalendar {
                         by_minute: [],
                         by_hour: [],
                         by_day: [
-                            Specific(
+                            Fixed(
                                 2,
                                 Tuesday,
                             ),
