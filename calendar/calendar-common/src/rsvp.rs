@@ -21,42 +21,17 @@ use tracing::instrument;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum RsvpEventId {
-    /// Event with up-front known Proton id.
-    ///
-    /// This is the ideal case, because we can ask the backend about this event
-    /// directly, without having to do (somewhat expensive) look-ups.
-    ///
-    /// In practice we get this only/mostly for email reminders - most RSVPs get
-    /// resolved through the (uid,rid) tuple below.
-    ///
-    /// See: [`Self::from_headers()`].
-    Direct(CalendarId, CalendarEventId, RsvpIntent),
-
-    /// Event for which we know only the uid and possibly recurrence id.
-    ///
-    /// This is a less ideal case, because we have to remap this (uid,rid) tuple
-    /// into a Proton event id when we're fetching the event.
-    ///
-    /// See: [`Self::from_invite()`].
-    Indirect(CalendarEventUid, Option<CalendarEventRecurrenceId>),
+    Invite {
+        uid: CalendarEventUid,
+        rid: Option<CalendarEventRecurrenceId>,
+    },
+    Reminder {
+        cal_id: CalendarId,
+        event_id: CalendarEventId,
+    },
 }
 
 impl RsvpEventId {
-    #[doc(hidden)]
-    #[must_use]
-    pub fn direct(cid: &str, eid: &str, intent: RsvpIntent) -> Self {
-        RsvpEventId::Direct(cid.into(), eid.into(), intent)
-    }
-
-    #[doc(hidden)]
-    #[must_use]
-    pub fn indirect(uid: &str, rid: Option<i64>) -> Self {
-        let uid = uid.into();
-        let rid = rid.map(CalendarEventRecurrenceId::new);
-
-        RsvpEventId::Indirect(uid, rid)
-    }
-
     /// Extracts event identifier from `invite.ics` attachment.
     ///
     /// See: [`Self::from_headers()`], [`Self::fetch()`].
@@ -92,16 +67,16 @@ impl RsvpEventId {
             })
             .transpose()?;
 
-        Ok(RsvpEventId::Indirect(uid, rid))
+        Ok(RsvpEventId::Invite { uid, rid })
     }
 
     /// Extracts event identifier from email headers.
     ///
-    /// This comes handy mostly for Proton email remainders which don't generate
-    /// the `invite.ics` file, but just provide the event id and recurrence id
-    /// via headers.
+    /// This is required for Proton email remainders which don't generate the
+    /// `invite.ics` file, but rather provide the event id via headers.
     ///
     /// See: [`Self::from_invite()`], [`Self::fetch()`].
+    #[must_use]
     pub fn from_headers(headers: &HashMap<String, JsonValue>) -> Option<Self> {
         let cid = headers
             .get("X-Pm-Calendar-Calendarid")
@@ -113,31 +88,16 @@ impl RsvpEventId {
 
         let intent = headers
             .get("X-Pm-Calendar-Intent")
-            .and_then(|intent| intent.as_str())
-            .map_or(RsvpIntent::Invite, |intent| {
-                if intent == "reminder" {
-                    RsvpIntent::Reminder
-                } else {
-                    RsvpIntent::Invite
-                }
-            });
+            .and_then(|intent| intent.as_str());
 
-        if let (Some(cid), Some(eid)) = (cid, eid) {
-            return Some(RsvpEventId::Direct(cid.into(), eid.into(), intent));
+        if let (Some(cid), Some(eid), Some("reminder")) = (cid, eid, intent) {
+            Some(RsvpEventId::Reminder {
+                cal_id: cid.into(),
+                event_id: eid.into(),
+            })
+        } else {
+            None
         }
-
-        let uid = headers
-            .get("X-Pm-Calendar-Eventuid")?
-            .as_str()
-            .map(CalendarEventUid::from)?;
-
-        let rid = headers
-            .get("X-Pm-Calendar-Occurrence")
-            .and_then(|rid| rid.as_str())
-            .and_then(|rid| rid.parse().ok())
-            .map(CalendarEventRecurrenceId::new);
-
-        Some(RsvpEventId::Indirect(uid, rid))
     }
 
     /// Fetches event from the API, decrypts it, and returns its contents.
@@ -635,7 +595,7 @@ mod tests {
                 CALSCALE:GREGORIAN
                 BEGIN:VEVENT
                 UID:1234-1234-1234-1234
-                DTSTAMP:20180101T120000
+                DTSTAMP:20180101T120000Z
                 END:VEVENT
                 END:VCALENDAR
             "}
@@ -643,7 +603,10 @@ mod tests {
         )
         .unwrap();
 
-        let expected = RsvpEventId::Indirect("1234-1234-1234-1234".into(), None);
+        let expected = RsvpEventId::Invite {
+            uid: "1234-1234-1234-1234".into(),
+            rid: None,
+        };
 
         assert_eq!(expected, actual);
     }
@@ -659,7 +622,7 @@ mod tests {
                 CALSCALE:GREGORIAN
                 BEGIN:VEVENT
                 UID:1234-1234-1234-1234
-                DTSTAMP:20180101T120000
+                DTSTAMP:20180101T120000Z
                 END:VEVENT
                 END:VCALENDAR
             "}
@@ -667,7 +630,10 @@ mod tests {
         )
         .unwrap();
 
-        let expected = RsvpEventId::Indirect("1234-1234-1234-1234".into(), None);
+        let expected = RsvpEventId::Invite {
+            uid: "1234-1234-1234-1234".into(),
+            rid: None,
+        };
 
         assert_eq!(expected, actual);
     }
@@ -683,7 +649,7 @@ mod tests {
                 CALSCALE:GREGORIAN
                 BEGIN:VEVENT
                 UID:1234-1234-1234-1234
-                DTSTAMP:20180101T120000
+                DTSTAMP:20180101T120000Z
                 RECURRENCE-ID:20180101T120000Z
                 END:VEVENT
                 END:VCALENDAR
@@ -698,10 +664,10 @@ mod tests {
                 .timestamp()
                 .as_second();
 
-            RsvpEventId::Indirect(
-                "1234-1234-1234-1234".into(),
-                Some(CalendarEventRecurrenceId::new(rid)),
-            )
+            RsvpEventId::Invite {
+                uid: "1234-1234-1234-1234".into(),
+                rid: Some(CalendarEventRecurrenceId::new(rid)),
+            }
         };
 
         assert_eq!(expected, actual);
@@ -718,11 +684,11 @@ mod tests {
                 CALSCALE:GREGORIAN
                 BEGIN:VEVENT
                 UID:1234-1234-1234-1234
-                DTSTAMP:20180101T120000
+                DTSTAMP:20180101T120000Z
                 END:VEVENT
                 BEGIN:VEVENT
                 UID:4321-4321-4321-4321
-                DTSTAMP:20180101T120000
+                DTSTAMP:20180101T130000Z
                 END:VEVENT
                 END:VCALENDAR
             "}
@@ -730,7 +696,10 @@ mod tests {
         )
         .unwrap();
 
-        let expected = RsvpEventId::Indirect("1234-1234-1234-1234".into(), None);
+        let expected = RsvpEventId::Invite {
+            uid: "1234-1234-1234-1234".into(),
+            rid: None,
+        };
 
         assert_eq!(expected, actual);
     }
@@ -745,11 +714,7 @@ mod tests {
                 CALSCALE:GREGORIAN
                 BEGIN:VEVENT
                 UID:1234-1234-1234-1234
-                DTSTAMP:20180101T120000
-                END:VEVENT
-                BEGIN:VEVENT
-                UID:4321-4321-4321-4321
-                DTSTAMP:20180101T120000
+                DTSTAMP:20180101T120000Z
                 END:VEVENT
                 END:VCALENDAR
             "}
@@ -772,25 +737,7 @@ mod tests {
     }
 
     #[test]
-    fn from_headers_direct() {
-        let actual = RsvpEventId::from_headers(&headers([
-            ("Method", "GET"),
-            ("X-Pm-Calendar-Calendarid", "1234-1234-1234-1234"),
-            ("FOO", "BAR"),
-            ("X-Pm-Calendar-Eventid", "4321-4321-4321-4321"),
-        ]));
-
-        let expected = Some(RsvpEventId::Direct(
-            "1234-1234-1234-1234".into(),
-            "4321-4321-4321-4321".into(),
-            RsvpIntent::Invite,
-        ));
-
-        assert_eq!(expected, actual);
-    }
-
-    #[test]
-    fn from_headers_direct_reminder() {
+    fn from_headers() {
         let actual = RsvpEventId::from_headers(&headers([
             ("Method", "GET"),
             ("X-Pm-Calendar-Calendarid", "1234-1234-1234-1234"),
@@ -799,43 +746,27 @@ mod tests {
             ("X-Pm-Calendar-Intent", "reminder"),
         ]));
 
-        let expected = Some(RsvpEventId::Direct(
-            "1234-1234-1234-1234".into(),
-            "4321-4321-4321-4321".into(),
-            RsvpIntent::Reminder,
-        ));
+        let expected = Some(RsvpEventId::Reminder {
+            cal_id: "1234-1234-1234-1234".into(),
+            event_id: "4321-4321-4321-4321".into(),
+        });
 
         assert_eq!(expected, actual);
     }
 
     #[test]
-    fn from_headers_indirect() {
+    fn from_headers_invite() {
         let actual = RsvpEventId::from_headers(&headers([
             ("Method", "GET"),
-            ("X-Pm-Calendar-Eventuid", "1234-1234-1234-1234"),
+            ("X-Pm-Calendar-Calendarid", "1234-1234-1234-1234"),
             ("FOO", "BAR"),
+            ("X-Pm-Calendar-Eventid", "4321-4321-4321-4321"),
+            ("X-Pm-Calendar-Intent", "invite"),
         ]));
 
-        let expected = Some(RsvpEventId::Indirect("1234-1234-1234-1234".into(), None));
-
-        assert_eq!(expected, actual);
-    }
-
-    #[test]
-    fn from_headers_indirect_recurring() {
-        let actual = RsvpEventId::from_headers(&headers([
-            ("Method", "GET"),
-            ("X-Pm-Calendar-Eventuid", "1234-1234-1234-1234"),
-            ("FOO", "BAR"),
-            ("X-Pm-Calendar-Occurrence", "1514804400"),
-        ]));
-
-        let expected = Some(RsvpEventId::Indirect(
-            "1234-1234-1234-1234".into(),
-            Some(CalendarEventRecurrenceId::new(1_514_804_400)),
-        ));
-
-        assert_eq!(expected, actual);
+        // We don't parse invites from headers, because we need to see the
+        // `invite.ics` to make sure the email's invite is not out of date.
+        assert_eq!(None, actual);
     }
 
     mod recurrence {

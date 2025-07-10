@@ -48,9 +48,7 @@ async fn fetch(
     info!("Fetching event data");
 
     let event = match id {
-        RsvpEventId::Direct(cid, eid, _) => Some(api.get_calendar_event(cid, eid).await?),
-
-        RsvpEventId::Indirect(uid, rid) => {
+        RsvpEventId::Invite { uid, rid, .. } => {
             let events = api.find_calendar_events(uid, *rid).await?;
 
             // If this is a repeating event, but we're asking the API without
@@ -62,6 +60,10 @@ async fn fetch(
             // ignore the single edits and pick the first event from the list
             // (which is guaranteed to be this original we're looking for).
             events.into_iter().next()
+        }
+
+        RsvpEventId::Reminder { cal_id, event_id } => {
+            Some(api.get_calendar_event(cal_id, event_id).await?)
         }
     };
 
@@ -100,16 +102,11 @@ fn extract<P>(
 where
     P: PGPProviderSync,
 {
-    let meta = extract_metadata(pgp, now, week_start, &event, decryptor)?;
+    let meta = extract_metadata(pgp, now, week_start, id, &event, decryptor)?;
     let occurrence = extract_occurrence(&event)?;
     let organizer = extract_organizer(&event)?;
     let attendees = extract_attendees(pgp, &event, decryptor, &organizer)?;
     let calendar = extract_calendar(calendar, &event);
-
-    let intent = match id {
-        RsvpEventId::Direct(_, _, ty) => *ty,
-        RsvpEventId::Indirect(_, _) => RsvpIntent::Invite,
-    };
 
     Ok(RsvpEvent {
         summary: meta.summary,
@@ -121,7 +118,7 @@ where
         organizer,
         calendar,
         progress: meta.progress,
-        intent,
+        intent: meta.intent,
         raw: Box::new(event),
     })
 }
@@ -130,6 +127,7 @@ fn extract_metadata<P>(
     pgp: &P,
     now: &Zoned,
     week_start: Weekday,
+    id: &RsvpEventId,
     event: &CalendarEvent,
     decryptor: &CalendarEventDecryptor<P>,
 ) -> RsvpResult<Metadata>
@@ -184,12 +182,18 @@ where
         .zip(dtstart)
         .map(|(rrule, dtstart)| extract_recurrence(&rrule.value, dtstart.value, week_start));
 
+    let intent = match id {
+        RsvpEventId::Invite { .. } => RsvpIntent::Invite,
+        RsvpEventId::Reminder { .. } => RsvpIntent::Reminder,
+    };
+
     Ok(Metadata {
         summary,
         location,
         description,
         recurrence,
         progress,
+        intent,
     })
 }
 
@@ -772,6 +776,7 @@ struct Metadata {
     description: Option<String>,
     recurrence: Option<RsvpRecurrence>,
     progress: RsvpProgress,
+    intent: RsvpIntent,
 }
 
 #[cfg(test)]

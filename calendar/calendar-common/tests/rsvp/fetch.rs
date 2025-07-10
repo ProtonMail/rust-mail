@@ -1,4 +1,4 @@
-use crate::{ATTENDEES_EVENT, SHARED_EVENT, expected_event, world};
+use crate::{ATTENDEES_EVENT, RsvpEventIdExt, SHARED_EVENT, expected_event, world};
 use indoc::indoc;
 use jiff::{Zoned, civil::Weekday};
 use pretty_assertions as pa;
@@ -28,7 +28,7 @@ async fn using_address_key() {
         .mock_find_calendar_events("8maQ3qBa", None, Some(event.clone()))
         .await;
 
-    let actual = RsvpEventId::indirect("8maQ3qBa", None)
+    let actual = RsvpEventId::invite("8maQ3qBa", None)
         .fetch(
             &world.sess,
             &world.pgp,
@@ -40,7 +40,7 @@ async fn using_address_key() {
         .await
         .unwrap();
 
-    pa::assert_eq!(Some(expected_event(event)), actual);
+    pa::assert_eq!(Some(expected_event(RsvpIntent::Invite, event)), actual);
 }
 
 /// Make sure we can understand RSVPs that have been accepted/rejected/maybied.
@@ -64,7 +64,7 @@ async fn using_shared_key() {
         .mock_find_calendar_events("8maQ3qBa", None, Some(event.clone()))
         .await;
 
-    let actual = RsvpEventId::indirect("8maQ3qBa", None)
+    let actual = RsvpEventId::invite("8maQ3qBa", None)
         .fetch(
             &world.sess,
             &world.pgp,
@@ -76,7 +76,7 @@ async fn using_shared_key() {
         .await
         .unwrap();
 
-    pa::assert_eq!(Some(expected_event(event)), actual);
+    pa::assert_eq!(Some(expected_event(RsvpIntent::Invite, event)), actual);
 }
 
 /// Make sure we can fetch recurring events - those are identified by an extra
@@ -103,7 +103,7 @@ async fn recurring() {
         .mock_find_calendar_events("8maQ3qBa", Some(rid), Some(event.clone()))
         .await;
 
-    let actual = RsvpEventId::indirect("8maQ3qBa", Some(rid))
+    let actual = RsvpEventId::invite("8maQ3qBa", Some(rid))
         .fetch(
             &world.sess,
             &world.pgp,
@@ -115,7 +115,7 @@ async fn recurring() {
         .await
         .unwrap();
 
-    pa::assert_eq!(Some(expected_event(event)), actual);
+    pa::assert_eq!(Some(expected_event(RsvpIntent::Invite, event)), actual);
 }
 
 /// Make sure we can fetch events with direct id - see [`RsvpEventId::Direct`].
@@ -136,7 +136,7 @@ async fn direct() {
         .mock_get_calendar_event("8maQ3qBa", "pFmwNlJp", event.clone())
         .await;
 
-    let actual = RsvpEventId::direct("8maQ3qBa", "pFmwNlJp", RsvpIntent::Invite)
+    let actual = RsvpEventId::reminder("8maQ3qBa", "pFmwNlJp")
         .fetch(
             &world.sess,
             &world.pgp,
@@ -148,7 +148,7 @@ async fn direct() {
         .await
         .unwrap();
 
-    pa::assert_eq!(Some(expected_event(event)), actual);
+    pa::assert_eq!(Some(expected_event(RsvpIntent::Reminder, event)), actual);
 }
 
 #[tokio::test]
@@ -168,7 +168,7 @@ async fn reminder() {
         .mock_get_calendar_event("8maQ3qBa", "pFmwNlJp", event.clone())
         .await;
 
-    let actual = RsvpEventId::direct("8maQ3qBa", "pFmwNlJp", RsvpIntent::Reminder)
+    let actual = RsvpEventId::reminder("8maQ3qBa", "pFmwNlJp")
         .fetch(
             &world.sess,
             &world.pgp,
@@ -207,10 +207,10 @@ async fn progress(now: &str, expected_progress: RsvpProgress) {
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_event("8maQ3qBa", "pFmwNlJp", event.clone())
+        .mock_find_calendar_events("8maQ3qBa", None, Some(event.clone()))
         .await;
 
-    let actual = RsvpEventId::direct("8maQ3qBa", "pFmwNlJp", RsvpIntent::Reminder)
+    let actual = RsvpEventId::invite("8maQ3qBa", None)
         .fetch(
             &world.sess,
             &world.pgp,
@@ -263,7 +263,7 @@ async fn cancelled() {
         .mock_find_calendar_events("8maQ3qBa", None, Some(event.clone()))
         .await;
 
-    let actual = RsvpEventId::indirect("8maQ3qBa", None)
+    let actual = RsvpEventId::invite("8maQ3qBa", None)
         .fetch(
             &world.sess,
             &world.pgp,
@@ -294,7 +294,7 @@ async fn unknown() {
         .mock_find_calendar_events("8maQ3qBa", None, None)
         .await;
 
-    let actual = RsvpEventId::indirect("8maQ3qBa", None)
+    let actual = RsvpEventId::invite("8maQ3qBa", None)
         .fetch(
             &world.sess,
             &world.pgp,
@@ -338,7 +338,7 @@ async fn err_unknown_attendee() {
         .mock_find_calendar_events("8maQ3qBa", None, Some(event))
         .await;
 
-    let actual = RsvpEventId::indirect("8maQ3qBa", None)
+    let actual = RsvpEventId::invite("8maQ3qBa", None)
         .fetch(
             &world.sess,
             &world.pgp,
@@ -384,7 +384,7 @@ async fn err_missing_x_pm_token() {
         .mock_find_calendar_events("8maQ3qBa", None, Some(event))
         .await;
 
-    let actual = RsvpEventId::indirect("8maQ3qBa", None)
+    let actual = RsvpEventId::invite("8maQ3qBa", None)
         .fetch(
             &world.sess,
             &world.pgp,
@@ -431,7 +431,7 @@ async fn err_many_events_in_ics() {
         .mock_find_calendar_events("8maQ3qBa", None, Some(event))
         .await;
 
-    let actual = RsvpEventId::indirect("8maQ3qBa", None)
+    let actual = RsvpEventId::invite("8maQ3qBa", None)
         .fetch(
             &world.sess,
             &world.pgp,

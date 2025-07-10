@@ -8,12 +8,12 @@ use indoc::indoc;
 use jiff::Zoned;
 use proton_calendar_api::{
     CalendarAttendee, CalendarAttendeeStatus, CalendarBootstrap, CalendarEvent,
-    CalendarEventPayload, CalendarEventPayloadType, CalendarId, CalendarKey, CalendarKeyFlags,
-    CalendarMember, CalendarMemberPassphrase, CalendarPassphrase,
+    CalendarEventPayload, CalendarEventPayloadType, CalendarEventRecurrenceId, CalendarId,
+    CalendarKey, CalendarKeyFlags, CalendarMember, CalendarMemberPassphrase, CalendarPassphrase,
 };
 use proton_calendar_common::{
-    RsvpAttendee, RsvpCache, RsvpCalendar, RsvpEvent, RsvpIntent, RsvpOccurrence, RsvpOrganizer,
-    RsvpProgress,
+    RsvpAttendee, RsvpCache, RsvpCalendar, RsvpEvent, RsvpEventId, RsvpIntent, RsvpOccurrence,
+    RsvpOrganizer, RsvpProgress,
 };
 use proton_core_api::session::{Config, Session};
 use proton_core_common::test_utils::test_context::{MockApiEnv, TestContext};
@@ -247,9 +247,9 @@ impl RsvpCache for DummyRsvpCache {
     }
 }
 
-fn expected_event(raw: CalendarEvent) -> RsvpEvent {
+fn expected_event(intent: RsvpIntent, raw: CalendarEvent) -> RsvpEvent {
     RsvpEvent {
-        intent: RsvpIntent::Invite,
+        intent,
         summary: Some("some title".into()),
         location: Some("some location".into()),
         description: Some("some description".into()),
@@ -274,5 +274,32 @@ fn expected_event(raw: CalendarEvent) -> RsvpEvent {
         },
         progress: RsvpProgress::Pending,
         raw: Box::new(raw),
+    }
+}
+
+trait RsvpEventIdExt
+where
+    Self: Sized,
+{
+    /// Creates an [`RsvpEventId`] that fakes an `invite.ics`.
+    fn invite(uid: &str, rid: Option<i64>) -> Self;
+
+    /// Creates an [`RsvpEventId`] that fakes a reminder.
+    fn reminder(cal_id: &str, event_id: &str) -> Self;
+}
+
+impl RsvpEventIdExt for RsvpEventId {
+    fn invite(uid: &str, rid: Option<i64>) -> Self {
+        let uid = uid.into();
+        let rid = rid.map(CalendarEventRecurrenceId::new);
+
+        RsvpEventId::Invite { uid, rid }
+    }
+
+    fn reminder(cal_id: &str, event_id: &str) -> Self {
+        RsvpEventId::Reminder {
+            cal_id: cal_id.into(),
+            event_id: event_id.into(),
+        }
     }
 }

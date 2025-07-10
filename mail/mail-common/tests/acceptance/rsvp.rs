@@ -5,7 +5,7 @@ use proton_calendar_common::{RsvpAnswerStatus, RsvpEventId};
 use proton_core_api::services::proton::{GetKeysAllResponse, PrivateString, UserId};
 use proton_core_common::models::ModelExtension;
 use proton_crypto_calendar::{CalendarEventEncryptor, KeyPacket, UnlockedCalendarKey};
-use proton_crypto_inbox::attachment::KeyPackets;
+use proton_crypto_inbox::attachment::{EncryptableAttachment, KeyPackets};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
 use proton_mail_api::services::proton::prelude as mail;
 use proton_mail_common::models::Message;
@@ -25,12 +25,27 @@ const EVENT_ID: &str = "PBBbBExE";
 const EVENT_UID: &str = "TqUvdTrE@proton.me";
 
 const SPONGEBOB_MAIL: &str = "spongebob@pm.me";
-const SPONGEBOB_ATT_ID: &str = "kdLoSTNf";
-const SPONGEBOB_ATT_TOKEN: &str = "JsgBUhNM";
+const SPONGEBOB_ATTENDEE_ID: &str = "kdLoSTNf";
+const SPONGEBOB_ATTENDEE_TOKEN: &str = "JsgBUhNM";
 
 const TEST_MAIL: &str = "rust_test@proton.ch";
-const TEST_ATT_ID: &str = "Rh4V1hbc";
-const TEST_ATT_TOKEN: &str = "yAFY4dMB";
+const TEST_ATTENDEE_ID: &str = "Rh4V1hbc";
+const TEST_ATTENDEE_TOKEN: &str = "yAFY4dMB";
+const TEST_ATTACHMENT_ID: &str = "EZAYcqch";
+
+static INVITE_ICS: fn() -> String = || {
+    formatdoc! {"
+        BEGIN:VCALENDAR
+        METHOD:REQUEST
+        BEGIN:VEVENT
+        SUMMARY:face-to-face with rust-test
+        DTSTAMP:20180101T120000Z
+        UID:{EVENT_UID}
+        DTSTAMP:20180101T120000Z
+        END:VEVENT
+        END:VCALENDAR
+    "}
+};
 
 static SHARED_EVENT: fn() -> String = || {
     formatdoc! {"
@@ -52,12 +67,26 @@ static ATTENDEES_EVENT: fn() -> String = || {
         VERSION:2.0
         BEGIN:VEVENT
         UID:{EVENT_UID}
-        ATTENDEE;CN={SPONGEBOB_MAIL};ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN={SPONGEBOB_ATT_TOKEN}:mailto:{SPONGEBOB_MAIL}
-        ATTENDEE;CN={TEST_MAIL};ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN={TEST_ATT_TOKEN}:mailto:{TEST_MAIL}
+        ATTENDEE;CN={SPONGEBOB_MAIL};ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN={SPONGEBOB_ATTENDEE_TOKEN}:mailto:{SPONGEBOB_MAIL}
+        ATTENDEE;CN={TEST_MAIL};ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN={TEST_ATTENDEE_TOKEN}:mailto:{TEST_MAIL}
         END:VEVENT
         END:VCALENDAR
     "}
 };
+
+struct InviteIcs(String);
+
+impl InviteIcs {
+    fn new() -> Self {
+        Self(INVITE_ICS())
+    }
+}
+
+impl EncryptableAttachment for InviteIcs {
+    fn attachment_data(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+}
 
 #[tokio::test]
 async fn fetch_and_answer() {
@@ -93,6 +122,14 @@ async fn fetch_and_answer() {
     // ---
     // Step 1: Fetch the message.
 
+    let ics_fixture = {
+        let key = address_keys.primary_for_mail().unwrap();
+
+        InviteIcs::new()
+            .attachment_encrypt_and_sign(&pgp, &key)
+            .unwrap()
+    };
+
     let msg_fixture = {
         let mut msg = message_body_test_message_simple();
 
@@ -105,6 +142,32 @@ async fn fetch_and_answer() {
             group: None,
         }];
 
+        msg.metadata.attachments_metadata = vec![mail::AttachmentMetadata {
+            id: mail::AttachmentId::from(TEST_ATTACHMENT_ID),
+            size: 0,
+            name: "attachment.txt".into(),
+            mime_type: "text/calendar".into(),
+            disposition: mail::Disposition::Attachment,
+        }];
+
+        msg.body.attachments = vec![mail::MessageAttachment {
+            id: mail::AttachmentId::from(TEST_ATTACHMENT_ID),
+            disposition: mail::Disposition::Attachment,
+            enc_signature: None,
+            headers: mail::MessageAttachmentHeaders {
+                content_disposition: "attachment".into(),
+                content_id: None,
+                content_transfer_encoding: None,
+                image_height: None,
+                image_width: None,
+            },
+            key_packets: KeyPackets::new_from_bytes(&ics_fixture.metadata.key_packets),
+            mime_type: "text/calendar".into(),
+            name: "invite.ics".into(),
+            signature: None,
+            size: 0,
+        }];
+
         msg.body
             .parsed_headers
             .insert("X-Pm-Calendar-Eventuid".into(), EVENT_UID.into());
@@ -113,6 +176,9 @@ async fn fetch_and_answer() {
     };
 
     ctx.mock_get_message(&msg_fixture.metadata.id, msg_fixture.clone())
+        .await;
+
+    ctx.mock_get_attachment_data(TEST_ATTACHMENT_ID.into(), ics_fixture.data, 1)
         .await;
 
     // ---
@@ -127,14 +193,16 @@ async fn fetch_and_answer() {
 
     // ---
     // Step 2: Find RSVP.
-    //
-    // In this case we're identifying it via headers (X-Pm-Calendar-Eventuid),
-    // but we could've generated an `invite.ics` attachment instead as well
-    // (it's just more difficult and the outcome is the same, so why bother).
 
     let rsvp = msg_body.identify_rsvp(&user_ctx).await.unwrap().unwrap();
 
-    assert_eq!(RsvpEventId::indirect(EVENT_UID, None), *rsvp);
+    assert_eq!(
+        RsvpEventId::Invite {
+            uid: "TqUvdTrE@proton.me".into(),
+            rid: None,
+        },
+        *rsvp
+    );
 
     // ---
     // Step 3: Load RSVP details from the calendar.
@@ -209,13 +277,13 @@ async fn fetch_and_answer() {
             }],
             attendees: vec![
                 cal::CalendarAttendee {
-                    id: SPONGEBOB_ATT_ID.into(),
-                    token: SPONGEBOB_ATT_TOKEN.into(),
+                    id: SPONGEBOB_ATTENDEE_ID.into(),
+                    token: SPONGEBOB_ATTENDEE_TOKEN.into(),
                     status: cal::CalendarAttendeeStatus::Yes,
                 },
                 cal::CalendarAttendee {
-                    id: TEST_ATT_ID.into(),
-                    token: TEST_ATT_TOKEN.into(),
+                    id: TEST_ATTENDEE_ID.into(),
+                    token: TEST_ATTENDEE_TOKEN.into(),
                     status: cal::CalendarAttendeeStatus::Unanswered,
                 },
             ],
@@ -256,7 +324,7 @@ async fn fetch_and_answer() {
         .mock_update_calendar_event_attendee_status(
             CALENDAR_ID,
             EVENT_ID,
-            TEST_ATT_ID,
+            TEST_ATTENDEE_ID,
             cal::CalendarAttendeeStatus::Yes,
             &now,
         )
