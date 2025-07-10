@@ -6,15 +6,15 @@ use crate::actions::messages::delete::Delete;
 use crate::actions::messages::delete_all::DeleteAllMessagesInLabel;
 use crate::actions::messages::ham::Ham;
 use crate::actions::messages::label::Label as ActionLabel;
-use crate::actions::messages::label_as::LabelAs;
+use crate::actions::messages::label_as::{LabelAs, UndoLabelAsMessages};
 use crate::actions::messages::r#move::Move;
 use crate::actions::messages::phishing::ReportPhishing;
 use crate::actions::messages::read::Read;
 use crate::actions::messages::unlabel::Unlabel;
 use crate::actions::messages::unread::Unread;
 use crate::actions::{
-    AllBottomBarMessageActions, BottomBarActions, GeneralActions, MailActionError,
-    MovableSystemFolderAction, filter_responses,
+    AllBottomBarMessageActions, BottomBarActions, GeneralActions, LabelAsData, LabelAsOutput,
+    LabelPair, MailActionError, MovableSystemFolderAction, UndoLabelAs,
 };
 use crate::mail_scroller::ScrollerEq;
 use crate::models::*;
@@ -27,7 +27,6 @@ use proton_core_common::utils::MapVec as _;
 use proton_mail_api::services::proton::prelude::DirectAttachment;
 use sqlite_watcher::watcher::TableObserver;
 use stash::utils::{MapToSql, placeholders};
-use std::collections::HashSet;
 
 use crate::MailContextResult;
 use crate::actions::{
@@ -48,7 +47,6 @@ use itertools::Itertools;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{AddressId, LabelId};
 use proton_core_api::services::proton::{PrivateEmail, PrivateString, Proton};
-use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::datatypes::{
     LabelType, LocalAddressId, LocalLabelId, SystemLabel, UnixTimestamp,
 };
@@ -531,99 +529,68 @@ impl Message {
     /// Returns an error if the action can not be applied.
     ///
     pub async fn action_label_as(
+        tether: &Tether,
         queue: &Queue,
         source_label_id: LocalLabelId,
         message_ids: Vec<LocalMessageId>,
         selected_label_ids: Vec<LocalLabelId>,
         partially_selected_label_ids: Vec<LocalLabelId>,
         must_archive: bool,
-    ) -> Result<bool, AppError> {
-        let action = LabelAs::new(
-            source_label_id,
-            message_ids,
-            selected_label_ids,
-            partially_selected_label_ids,
-            must_archive,
-        );
-        let output = queue
-            .queue_action(action)
-            .await
-            .map_err(|e| AppError::Other(anyhow!(e)))?;
-        Ok(output.local)
-    }
-
-    /// Remotely apply LabelAs action for conversations
-    pub(crate) async fn remote_relabel(
-        session: &Session,
-        added_label_ids: &HashMap<LocalMessageId, HashSet<LocalLabelId>>,
-        removed_label_ids: &HashMap<LocalMessageId, HashSet<LocalLabelId>>,
-        tether: &Tether,
-    ) -> Result<Vec<MessageId>, AppError> {
-        /// Gets a hashmap of the remote label id and the local ids.
-        async fn group_ids_by_label(
-            label_ids: &HashMap<LocalMessageId, HashSet<LocalLabelId>>,
-            tether: &Tether,
-        ) -> Result<HashMap<LabelId, HashSet<LocalMessageId>>, AppError> {
-            let mut map = HashMap::new();
-            for (msg_id, local_label_ids) in label_ids {
-                let remote_label_ids = Label::local_ids_counterpart(
-                    Vec::from_iter(local_label_ids.iter().cloned()),
-                    tether,
-                )
+    ) -> Result<LabelAsOutput, AppError> {
+        let all_labels = Label::local_ids_by_kind(LabelType::Label, tether).await?;
+        let cartesian =
+            MessageLabel::find_by_conversations_and_labels(&message_ids, &all_labels, tether)
                 .await?;
-                for remote_label_id in remote_label_ids {
-                    map.entry(remote_label_id)
-                        .or_insert_with(HashSet::new)
-                        .insert(*msg_id);
-                }
-            }
-            Ok(map)
-        }
 
-        let api = session.api();
+        let action = LabelAs(LabelAsData::new(
+            cartesian
+                .into_iter()
+                .map(|x| LabelPair {
+                    label: x.local_label_id,
+                    id: x.local_message_id,
+                })
+                .collect(),
+            source_label_id,
+            message_ids.clone(),
+            &selected_label_ids,
+            &partially_selected_label_ids,
+            &all_labels,
+        ));
 
-        let added_by_label = group_ids_by_label(added_label_ids, tether).await?;
-        let removed_by_label = group_ids_by_label(removed_label_ids, tether).await?;
+        let output = if must_archive {
+            // We have to undo the archiving
+            let archive = Label::resolve_local_label_id(LabelId::archive(), tether).await?;
+            let move_action = Move::new(source_label_id, archive, message_ids);
+            let queued_move = queue
+                .queue_action(action.clone())
+                .await
+                .context("Error queuing move to archive")?;
 
-        let mut failed_ids: Vec<MessageId> = vec![];
-        for (label_id, message_ids) in added_by_label {
-            let message_ids =
-                Message::local_ids_counterpart(Vec::from_iter(message_ids.clone()), tether).await?;
-            let response = api
-                .put_messages_label(
-                    message_ids.iter().cloned().map_into().collect(),
-                    label_id.clone(),
-                    None,
-                )
-                .await;
+            let meta = MetadataBuilder::new()
+                .with_dependency(queued_move.id)
+                .build();
 
-            match response {
-                Ok(res) => failed_ids.extend(filter_responses(res.responses)),
-                Err(e) => {
-                    error!("Failed to add message to added label: {e:?}");
-                    failed_ids.extend(message_ids);
-                }
-            }
-        }
-        for (label_id, message_ids) in removed_by_label {
-            let message_ids =
-                Message::local_ids_counterpart(Vec::from_iter(message_ids.clone()), tether).await?;
-            let response = api
-                .put_messages_unlabel(
-                    message_ids.iter().cloned().map_into().collect(),
-                    label_id.clone(),
-                )
-                .await;
+            queue
+                .queue_action_with_metadata(move_action, meta)
+                .await
+                .context("Error queuing with move to archive dependency")?;
+            queued_move
+        } else {
+            queue
+                .queue_action(action.clone())
+                .await
+                .context("Error queuing action")?
+        };
+        let undo = UndoLabelAs::Messages(UndoLabelAsMessages {
+            action,
+            id: output.id,
+            must_archive,
+        });
 
-            match response {
-                Ok(res) => failed_ids.extend(filter_responses(res.responses)),
-                Err(e) => {
-                    error!("Failed to add message to added label: {e:?}");
-                    failed_ids.extend(message_ids);
-                }
-            }
-        }
-        Ok(failed_ids)
+        Ok(LabelAsOutput {
+            input_label_is_empty: output.local,
+            undo,
+        })
     }
 
     /// Find a group of Messages by their IDs.
@@ -2721,6 +2688,27 @@ pub struct MessageLabel {
 
     #[DbField]
     pub local_message_id: LocalMessageId,
+}
+
+impl MessageLabel {
+    async fn find_by_conversations_and_labels(
+        messages: &[LocalMessageId],
+        labels: &[LocalLabelId],
+        tether: &Tether,
+    ) -> Result<Vec<Self>, StashError> {
+        MessageLabel::load_inner(
+            formatdoc! { "
+                SELECT * FROM message_labels
+                WHERE local_message_id IN ({})
+                AND local_label_id IN ({})",
+                placeholders(messages),
+                placeholders(labels)
+            },
+            messages.to_sql_extend(labels),
+            tether,
+        )
+        .await
+    }
 }
 
 #[cfg(feature = "test-utils")]

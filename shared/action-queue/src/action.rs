@@ -1,5 +1,7 @@
 use crate::db::{ActionDependency, ExecutionGuard, StoredAction};
-use crate::queue::{QueuedAction, QueuedMetadata, TypeErasedAction};
+use crate::queue::{
+    ActionError, QueuedAction, QueuedActionOutput, QueuedMetadata, TypeErasedAction,
+};
 use anyhow::Context;
 use derive_more::derive::TryFrom;
 use serde::de::DeserializeOwned;
@@ -318,6 +320,9 @@ pub trait Action: Serialize + DeserializeOwned + 'static + Send {
         ActionDependencyKeys::default()
     }
 }
+
+#[allow(type_alias_bounds, reason = "This is only used for convenience")]
+pub type LocalOutput<T: Action> = Result<QueuedActionOutput<T>, ActionError<T>>;
 
 /// This type exists to make sure that when we attempt to modify local state in the queue executor
 /// we only do so if we have the permission to do so.
@@ -887,6 +892,6 @@ pub(crate) fn serialize<T: Action>(action: &T) -> Result<Vec<u8>, rmp_serde::enc
 /// # Errors
 ///
 /// Returns error if the deserialization failed.
-pub fn deserialize<T: Action>(data: &[u8]) -> Result<T, rmp_serde::decode::Error> {
+pub fn deserialize<T: DeserializeOwned>(data: &[u8]) -> Result<T, rmp_serde::decode::Error> {
     rmp_serde::from_slice(data)
 }

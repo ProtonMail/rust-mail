@@ -13,7 +13,7 @@ use crate::core::datatypes::Id;
 use crate::errors::{ActionError, VoidActionResult};
 use crate::mail::datatypes::{
     AllBottomBarMessageActions, AutoDeleteBanner, Conversation, ConversationAvailableActions,
-    ConversationSearchOptions, LabelAsAction, Message, MoveAction,
+    ConversationSearchOptions, LabelAsAction, LabelAsOutput, Message, MoveAction,
 };
 use crate::mail::mail_scroller::{
     ConversationScroller, ConversationScrollerLiveQueryCallback, ReadFilter,
@@ -713,24 +713,23 @@ pub async fn label_conversations_as(
     selected_label_ids: Vec<Id>,
     partially_selected_label_ids: Vec<Id>,
     must_archive: bool,
-) -> Result<bool, ActionError> {
-    let user_context = mailbox.ctx()?;
+) -> Result<Arc<LabelAsOutput>, ActionError> {
+    let ctx = mailbox.ctx()?;
     let source_label_id = mailbox.label_id();
     uniffi_async(async move {
-        Result::<_, RealProtonMailError>::Ok(
+        Result::<_, RealProtonMailError>::Ok(Arc::new(
             RealConversation::action_label_as(
-                user_context.action_queue(),
+                &ctx.user_stash().connection(),
+                ctx.action_queue(),
                 source_label_id.into(),
-                conversation_ids.into_iter().map_into().collect(),
-                selected_label_ids.into_iter().map_into().collect(),
-                partially_selected_label_ids
-                    .into_iter()
-                    .map_into()
-                    .collect(),
+                conversation_ids.map_vec(),
+                selected_label_ids.map_vec(),
+                partially_selected_label_ids.map_vec(),
                 must_archive,
             )
-            .await?,
-        )
+            .await?
+            .into(),
+        ))
     })
     .await
     .map_err(ActionError::from)

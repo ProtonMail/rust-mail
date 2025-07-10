@@ -4,7 +4,7 @@ mod tests;
 
 use crate::action::{
     Action, ActionGroup, ActionId, Error as ActionErrorTrait, Factory, FactoryError, FactoryResult,
-    Handler, Metadata, Priority, Resources, Type, WriterGuard, WriterGuardError,
+    Handler, LocalOutput, Metadata, Priority, Resources, Type, WriterGuard, WriterGuardError,
 };
 use crate::db::{
     self, ActionDependency, DEFAULT_LOCK_TIMEOUT, DependencyType, ExecutionGuard, StoredAction,
@@ -377,10 +377,7 @@ impl Queue {
     /// # Errors
     ///
     /// Returns error if action could not be executed locally.
-    pub async fn queue_action<T: Action>(
-        &self,
-        action: T,
-    ) -> Result<QueuedActionOutput<T>, ActionError<T>> {
+    pub async fn queue_action<T: Action>(&self, action: T) -> LocalOutput<T> {
         self.queue_action_with_metadata::<T>(action, Metadata::default())
             .await
     }
@@ -394,7 +391,7 @@ impl Queue {
         &self,
         mut action: T,
         metadata: Metadata,
-    ) -> Result<QueuedActionOutput<T>, ActionError<T>> {
+    ) -> LocalOutput<T> {
         let span = tracing::debug_span!("queue::queue", type=T::TYPE.0);
         async {
             debug!("Dependencies: {:?}", metadata.dependencies);
@@ -443,7 +440,7 @@ impl Queue {
         &self,
         existing_id: ActionId,
         action: T,
-    ) -> Result<QueuedActionOutput<T>, ActionError<T>> {
+    ) -> LocalOutput<T> {
         self.replace_or_queue_action_with_metadata::<T>(existing_id, action, Metadata::default())
             .await
     }
@@ -460,7 +457,7 @@ impl Queue {
         existing_id: ActionId,
         mut action: T,
         metadata: Metadata,
-    ) -> Result<QueuedActionOutput<T>, ActionError<T>> {
+    ) -> LocalOutput<T> {
         let span = tracing::trace_span!("queue::replace", type=T::TYPE.0);
         async {
             info!("Replacing {existing_id:?}");

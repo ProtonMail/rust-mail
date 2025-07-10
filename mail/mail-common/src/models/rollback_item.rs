@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::MailContextError;
 use crate::datatypes::RollbackItemType;
 use crate::models::{Conversation, Message};
@@ -39,6 +41,17 @@ impl RollbackItem {
             remote_id,
             item_type,
         }
+    }
+
+    pub async fn save_many(
+        tx: &Bond<'_>,
+        items: impl IntoIterator<Item = impl Display>,
+        item_type: RollbackItemType,
+    ) -> Result<(), StashError> {
+        for item in items {
+            Self::new(item.to_string(), item_type).save(tx).await?;
+        }
+        Ok(())
     }
 
     /// Save or update a RollbackItem.

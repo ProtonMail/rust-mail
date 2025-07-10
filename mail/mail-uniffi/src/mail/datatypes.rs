@@ -56,11 +56,14 @@ mod system_folder;
 mod system_label;
 
 use crate::core::datatypes::{AvatarInformation, Id, UnixTimestamp};
+use crate::errors::ActionError;
+use crate::mail::MailUserSession;
 pub use crate::{UniffiEnum, UniffiRecord};
 pub use attachment::*;
 pub use available_action::*;
 use core::fmt;
 pub use folder_banner::*;
+use parking_lot::Mutex;
 use proton_core_common::datatypes::{
     AvatarInformation as RealAvatarInformation, LabelColor as RealLabelColor,
     LabelType as RealLabelType, LocalAddressId, LocalLabelId,
@@ -71,6 +74,7 @@ use proton_mail_api::MAX_PAGE_ELEMENT_COUNT_U64;
 use proton_mail_api::services::proton::request_data::MessageMetadataSortMode as RealMessageMetadataSortMode;
 use proton_mail_api::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use proton_mail_common::AppError;
+use proton_mail_common::actions::LabelAsOutput as RealLabelAsOutput;
 use proton_mail_common::datatypes::{
     AlmostAllMail as RealAlmostAllMail, AttachmentMetadata as RealAttachmentMetadata,
     ComposerDirection as RealComposerDirection, ComposerMode as RealComposerMode,
@@ -90,6 +94,7 @@ use proton_mail_common::datatypes::{
     ContextualConversation, ExclusiveLocation as RealExclusiveLocation,
 };
 use proton_mail_common::draft::recipients::MaybeEmptyString;
+use proton_mail_common::errors::ProtonMailError;
 use proton_mail_common::models::{
     Conversation as RealConversation, MailSettings as RealMailSettings, Message as RealMessage,
     MessageReplyTo as RealMessageReplyTo,
@@ -98,7 +103,10 @@ use smart_default::SmartDefault;
 use stash::orm::Model;
 use stash::stash::{StashError, Tether};
 use std::fmt::{Display, Formatter};
+use std::sync::Arc;
 pub use system_label::*;
+use tracing::warn;
+use uniffi_runtime::uniffi_async;
 //  ENUMS
 //==============================================================================
 
@@ -1895,5 +1903,42 @@ impl From<RealMobileSettings> for MobileSettings {
             list_toolbar: value.list_toolbar.into(),
             message_toolbar: value.message_toolbar.into(),
         }
+    }
+}
+
+#[derive(uniffi::Object)]
+pub struct LabelAsOutput(Mutex<Option<RealLabelAsOutput>>);
+
+impl From<RealLabelAsOutput> for LabelAsOutput {
+    fn from(value: RealLabelAsOutput) -> Self {
+        Self(Mutex::new(Some(value)))
+    }
+}
+
+#[uniffi_export]
+impl LabelAsOutput {
+    fn input_label_is_empty(&self) -> bool {
+        self.0
+            .lock()
+            .as_ref()
+            .is_some_and(|x| x.input_label_is_empty)
+    }
+
+    async fn undo(&self, ctx: Arc<MailUserSession>) -> Result<(), ActionError> {
+        let Some(output) = self.0.lock().take() else {
+            warn!("already undone");
+            return Ok(());
+        };
+
+        let ctx = ctx.ctx()?;
+        uniffi_async(async move {
+            output
+                .undo
+                .undo(ctx.action_queue(), &ctx.user_stash().connection())
+                .await?;
+            Ok::<_, ProtonMailError>(())
+        })
+        .await
+        .map_err(ActionError::from)
     }
 }

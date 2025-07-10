@@ -1376,9 +1376,11 @@ fn label_message(
         must_archive,
     }: LabelAs<LocalMessageId>,
 ) -> Command<Messages> {
-    Command::from_future(async move {
+    let ctx2 = ctx.clone();
+    let f = async move {
         MailMessage::action_label_as(
-            ctx.action_queue(),
+            &ctx2.user_stash().connection(),
+            ctx2.action_queue(),
             source_label_id,
             conversation_ids,
             selected_label_ids,
@@ -1387,7 +1389,40 @@ fn label_message(
         )
         .await
         .context("Failed to apply label to message")
-        .map(|_| ())
+    };
+    Command::task(async move {
+        match f.await {
+            Ok(output) => {
+                let ctx = ctx.clone();
+                let popup = YesNoPopup::new(
+                    "Undo Labeling?",
+                    "Labelled successfully, would you like to undo this operation?",
+                )
+                .on_accept(Command::batch([
+                    Command::message(Messages::DisplayBackgroundProgress(
+                        "Cancelling Send".to_owned(),
+                    )),
+                    Command::task(async move {
+                        if let Err(e) = output
+                            .undo
+                            .undo(ctx.action_queue(), &ctx.user_stash().connection())
+                            .await
+                            .context("Error undoing message labelling")
+                        {
+                            Command::message(e.into())
+                        } else {
+                            Command::None
+                        }
+                    }),
+                    Command::message(Messages::DismissBackgroundProgress),
+                ]));
+                Messages::raise_popup(popup).into()
+            }
+            Err(e) => {
+                tracing::error!("{e:?}");
+                Command::message(e.into())
+            }
+        }
     })
 }
 
