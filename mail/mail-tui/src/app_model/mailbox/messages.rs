@@ -82,6 +82,7 @@ fn handle_scroller_update(update: ScrollerUpdate<MailMessage>) -> Messages {
             tracing::error!("{e:?}");
             e.into()
         }
+        ScrollerUpdate::None(_) => Messages::None,
     }
 }
 

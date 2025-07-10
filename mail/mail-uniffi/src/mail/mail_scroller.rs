@@ -32,6 +32,9 @@ pub trait ConversationScrollerLiveQueryCallback: Send + Sync {
     /// ```ignore
     /// fn handle_updates(collected_items: &mut Vec<Conversation>, update: ConversationScrollerUpdate) {
     ///     match update {
+    ///         ConversationScrollerUpdate::None => {
+    ///             tracing::info!("No update has occurred.");
+    ///         }
     ///         ConversationScrollerUpdate::Append(items) => {
     ///             collected_items.extend(items);
     ///         }
@@ -52,15 +55,30 @@ pub trait ConversationScrollerLiveQueryCallback: Send + Sync {
 
 #[derive(Debug, uniffi::Enum)]
 pub enum ConversationScrollerUpdate {
+    /// No update has occurred. It will be returned only for client-side requests.
+    None,
+
     /// A new page of conversations needs to be appended to the end of the list.
     Append(Vec<Conversation>),
 
-    /// A page of conversations needs to be replaced at the given index.
+    /// A page of conversations needs to be replaced at the given index
+    /// replacing everything forwards with the new items.
     /// Note: This replace includes the index while replacing
+    ///
+    /// # Examples
+    /// [0, 1, 2, 3] -> ReplaceFrom { idx: 2, items: [5, 6, 7] } -> [0, 1, 5, 6, 7]
+    /// [0, 1, 2, 3, 4, 8, 9] -> ReplaceFrom { idx: 2, items: [5, 6, 7] } -> [0, 1, 5, 6, 7]
+    /// [0, 1, 2, 3] -> ReplaceFrom { idx: 0, items: [5, 6, 7] } -> [5, 6, 7]
     ReplaceFrom { idx: u64, items: Vec<Conversation> },
 
-    /// A page of conversations needs to be replaced before the given index.
+    /// A page of conversations needs to be replaced before the given index
+    /// replacing everything before the index with the new items.
     /// Note: This replace excludes the index while replacing
+    ///
+    /// # Examples
+    /// [0, 1, 2, 3] -> ReplaceBefore { idx: 2, items: [5, 6, 7] } -> [5, 6, 7, 3]
+    /// [0, 1, 2, 3, 4, 8, 9] -> ReplaceBefore { idx: 2, items: [5, 6, 7] } -> [5, 6, 7, 3, 4, 8, 9]
+    /// [0, 1, 2, 3] -> ReplaceBefore { idx: 0, items: [5, 6, 7] } -> [5, 6, 7, 0, 1, 2, 3]
     ReplaceBefore { idx: u64, items: Vec<Conversation> },
 
     /// An error has occurred.
@@ -70,6 +88,7 @@ pub enum ConversationScrollerUpdate {
 impl From<ScrollerUpdate<ContextualConversation>> for ConversationScrollerUpdate {
     fn from(update: ScrollerUpdate<ContextualConversation>) -> Self {
         match update {
+            ScrollerUpdate::None(_) => ConversationScrollerUpdate::None,
             ScrollerUpdate::Append { src: _, items } => ConversationScrollerUpdate::Append(
                 items.into_iter().map(Conversation::from).collect(),
             ),
@@ -116,7 +135,7 @@ pub(crate) fn spawn_conversation_scroller_watcher(
 /// This interface is used to notify the client when observed data has been
 /// updated.
 ///
-/// See [`ConversationScrollerLiveQueryCallback`] for an example of handling updates.
+/// See [`ConversationScrollerLiveQueryCallback`] for additional examples.
 #[uniffi::export(callback_interface)]
 pub trait MessageScrollerLiveQueryCallback: Send + Sync {
     /// Notify the client that the observed data has been updated.
@@ -129,6 +148,9 @@ pub trait MessageScrollerLiveQueryCallback: Send + Sync {
 
 #[derive(Debug, uniffi::Enum)]
 pub enum MessageScrollerUpdate {
+    /// No update has occurred. It will be returned only for client-side requests.
+    None,
+
     /// A new page of messages needs to be appended to the end of the list.
     Append(Vec<Message>),
 
@@ -147,6 +169,7 @@ pub enum MessageScrollerUpdate {
 impl From<ScrollerUpdate<RealMessage>> for MessageScrollerUpdate {
     fn from(update: ScrollerUpdate<RealMessage>) -> Self {
         match update {
+            ScrollerUpdate::None(_) => MessageScrollerUpdate::None,
             ScrollerUpdate::Append { src: _, items } => {
                 MessageScrollerUpdate::Append(items.into_iter().map(Message::from).collect())
             }

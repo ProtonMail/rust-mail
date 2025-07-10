@@ -37,6 +37,7 @@ pub enum MailScrollerError {
 
 #[derive(Debug)]
 pub enum ScrollerUpdate<T: Send + Sync + Clone + ScrollerEq + 'static> {
+    None(ScrollerSource),
     Append {
         src: ScrollerSource,
         items: Vec<T>,
@@ -55,6 +56,30 @@ pub enum ScrollerUpdate<T: Send + Sync + Clone + ScrollerEq + 'static> {
         src: ScrollerSource,
         error: MailContextError,
     },
+}
+
+impl<T: Send + Sync + Clone + ScrollerEq + 'static> ScrollerUpdate<T> {
+    pub fn is_none(&self) -> bool {
+        matches!(self, ScrollerUpdate::None(_))
+    }
+
+    pub fn is_some(&self) -> bool {
+        !self.is_none()
+    }
+
+    pub fn src(&self) -> &ScrollerSource {
+        match self {
+            ScrollerUpdate::None(src) => src,
+            ScrollerUpdate::Append { src, .. } => src,
+            ScrollerUpdate::ReplaceFrom { src, .. } => src,
+            ScrollerUpdate::ReplaceBefore { src, .. } => src,
+            ScrollerUpdate::Error { src, .. } => src,
+        }
+    }
+
+    pub fn is_scroll_event(&self) -> bool {
+        matches!(self.src(), ScrollerSource::ScrollEvent(_))
+    }
 }
 
 #[derive(Clone, Debug, Display)]
@@ -410,13 +435,13 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         match command {
             ScrollerOrderedCommand::FetchMore(source) => {
                 let result = self.fetch_more(source.clone()).await.unwrap_or_else(|e| {
-                    Some(ScrollerUpdate::Error {
+                    ScrollerUpdate::Error {
                         src: source,
                         error: e,
-                    })
+                    }
                 });
 
-                if let Some(result) = result {
+                if result.is_some() || result.is_scroll_event() {
                     self.update
                         .send(result)
                         .map_err(|e| anyhow!("Failed to send fetch more update: {e:?}"))?;
@@ -426,14 +451,12 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                 let result = self
                     .refresh(false, source.clone())
                     .await
-                    .unwrap_or_else(|e| {
-                        Some(ScrollerUpdate::Error {
-                            src: source,
-                            error: e,
-                        })
+                    .unwrap_or_else(|e| ScrollerUpdate::Error {
+                        src: source,
+                        error: e,
                     });
 
-                if let Some(result) = result {
+                if result.is_some() || result.is_scroll_event() {
                     self.update
                         .send(result)
                         .map_err(|e| anyhow!("Failed to send refresh update: {e:?}"))?;
@@ -443,14 +466,12 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                 let result = self
                     .refresh(true, source.clone())
                     .await
-                    .unwrap_or_else(|e| {
-                        Some(ScrollerUpdate::Error {
-                            src: source,
-                            error: e,
-                        })
+                    .unwrap_or_else(|e| ScrollerUpdate::Error {
+                        src: source,
+                        error: e,
                     });
 
-                if let Some(result) = result {
+                if result.is_some() || result.is_scroll_event() {
                     self.update
                         .send(result)
                         .map_err(|e| anyhow!("Failed to send force refresh update: {e:?}"))?;
@@ -460,9 +481,9 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                 let result = self
                     .change_filter(src.clone(), filter)
                     .await
-                    .unwrap_or_else(|e| Some(ScrollerUpdate::Error { src, error: e }));
+                    .unwrap_or_else(|e| ScrollerUpdate::Error { src, error: e });
 
-                if let Some(result) = result {
+                if result.is_some() || result.is_scroll_event() {
                     self.update
                         .send(result)
                         .map_err(|e| anyhow!("Failed to send change filter update: {e:?}"))?;
@@ -517,7 +538,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
     async fn fetch_more(
         &mut self,
         src: ScrollerSource,
-    ) -> Result<Option<ScrollerUpdate<T::Item>>, MailContextError> {
+    ) -> Result<ScrollerUpdate<T::Item>, MailContextError> {
         let mut items = self.sync_next().await?;
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         let (seen, total) = {
@@ -546,11 +567,11 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
 
         if items.is_empty() {
             tracing::debug!("No new items fetched");
-            Ok(None)
+            Ok(ScrollerUpdate::None(src))
         } else {
             tracing::debug!("New items fetched: {}", items.len());
             self.items.extend(items.clone());
-            Ok(Some(ScrollerUpdate::Append { src, items }))
+            Ok(ScrollerUpdate::Append { src, items })
         }
     }
 
@@ -559,7 +580,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         &mut self,
         force: bool,
         src: ScrollerSource,
-    ) -> Result<Option<ScrollerUpdate<T::Item>>, MailContextError> {
+    ) -> Result<ScrollerUpdate<T::Item>, MailContextError> {
         // Ensure small labels are refreshed before running diffs
         self.try_refresh_small_label(src.clone()).await?;
 
@@ -578,20 +599,20 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         let update = if force {
             self.items = visible_items.clone();
 
-            Some(ScrollerUpdate::ReplaceFrom {
+            ScrollerUpdate::ReplaceFrom {
                 src,
                 idx: 0,
                 items: visible_items,
-            })
+            }
         } else if ScrollerEq::s_eq(&self.items, &visible_items) {
             tracing::debug!("No update required");
-            None
+            ScrollerUpdate::None(src)
         } else {
             tracing::debug!("Update is required, calculating diff...");
             let update = calculate_scroller_update(&self.items, &visible_items, src);
             self.items = visible_items;
 
-            Some(update)
+            update
         };
 
         Ok(update)
@@ -602,7 +623,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         &mut self,
         src: ScrollerSource,
         filter: ReadFilter,
-    ) -> Result<Option<ScrollerUpdate<T::Item>>, MailContextError> {
+    ) -> Result<ScrollerUpdate<T::Item>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         tracing::debug!("Changing filter to {filter:?}");
 
@@ -672,7 +693,9 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                 tracing::info!(
                     "Fetch more for small ({is_small_label}) or no longer empty ({no_longer_empty}) label"
                 );
-                if let Ok(Some(result)) = self.fetch_more(src).await {
+                if let Ok(result) = self.fetch_more(src).await
+                    && result.is_some()
+                {
                     let _ = self
                         .update
                         .send(result)

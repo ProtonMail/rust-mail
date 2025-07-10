@@ -342,7 +342,7 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
     }
 
     /// Wait for and process the next update, returning the items that were added/changed
-    pub async fn wait_for_update(&mut self) -> Result<Vec<T>, MailContextError> {
+    pub async fn wait_for_update(&mut self) -> Result<Option<Vec<T>>, MailContextError> {
         let update = self.handle.updates.recv_async().await.map_err(|_| {
             MailContextError::Other(anyhow::anyhow!("Failed to receive scroller update"))
         })?;
@@ -355,8 +355,8 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
         &mut self,
         timeout: Duration,
     ) -> Result<Option<Vec<T>>, MailContextError> {
-        match tokio::time::timeout(timeout, self.handle.updates.recv_async()).await {
-            Ok(Ok(update)) => self.handle_scroller_update(update).map(Some),
+        match tokio::time::timeout(timeout, self.wait_for_update()).await {
+            Ok(update) => update,
             _ => Ok(None),
         }
     }
@@ -397,19 +397,20 @@ impl<T: Send + Sync + Clone + ScrollerEq + std::fmt::Debug + 'static> TestScroll
     fn handle_scroller_update(
         &mut self,
         update: ScrollerUpdate<T>,
-    ) -> Result<Vec<T>, MailContextError> {
+    ) -> Result<Option<Vec<T>>, MailContextError> {
         match update {
+            ScrollerUpdate::None(_) => Ok(None),
             ScrollerUpdate::Append { src: _, items } => {
                 self.collected_items.extend(items.clone());
-                Ok(items)
+                Ok(Some(items))
             }
             ScrollerUpdate::ReplaceFrom { src: _, idx, items } => {
                 self.collected_items.splice(idx.., items.clone());
-                Ok(items)
+                Ok(Some(items))
             }
             ScrollerUpdate::ReplaceBefore { src: _, idx, items } => {
                 self.collected_items.splice(..idx, items.clone());
-                Ok(items)
+                Ok(Some(items))
             }
             ScrollerUpdate::Error { src: _, error } => Err(error),
         }

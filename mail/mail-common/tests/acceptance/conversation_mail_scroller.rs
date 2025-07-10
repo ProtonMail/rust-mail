@@ -213,7 +213,7 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
     // Get next page - it will progress cursor to the next page
     // But there is no more data available, the request will return an empty page
     test_scroller.fetch_more().unwrap();
-    let actual_page = test_scroller.wait_for_update().await.unwrap();
+    let actual_page = test_scroller.wait_for_update().await.unwrap().unwrap();
     assert_eq!(actual_page.len(), 5);
     assert_scroller_content(
         &mut test_scroller,
@@ -472,6 +472,11 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     // But `fetch_more` will force replacing unordered items with correct order from API
     test_scroller.fetch_more_and_wait().await.unwrap();
 
+    // Wait for the second update containing the actual data replacement
+    // In the new push-based model, fetch_more_and_wait() only waits for immediate feedback,
+    // but the actual data replacement from the refresh comes in a second update
+    test_scroller.wait_for_update().await.unwrap();
+
     assert_scroller_content(
         &mut test_scroller,
         5,
@@ -543,7 +548,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     .await;
 
     test_scroller.fetch_more().unwrap();
-    let actual = test_scroller.wait_for_update().await.unwrap();
+    let actual = test_scroller.wait_for_update().await.unwrap().unwrap();
     assert_eq!(actual.len(), 5);
 
     assert_scroller_content(
@@ -570,7 +575,7 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     .await;
 
     test_scroller.fetch_more().unwrap();
-    let actual = test_scroller.wait_for_update().await.unwrap();
+    let actual = test_scroller.wait_for_update().await.unwrap().unwrap();
     assert_eq!(actual.len(), 6);
 
     assert_scroller_content(
@@ -742,7 +747,7 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
     // Fetch more will load 8 items, 3 + 5 as in total it is less than
     // 2 separate pages so it will merge them together.
     test_scroller.fetch_more().unwrap();
-    let fetched_page = test_scroller.wait_for_update().await.unwrap();
+    let fetched_page = test_scroller.wait_for_update().await.unwrap().unwrap();
     assert_eq!(fetched_page.len(), 8);
 
     assert_scroller_content(
@@ -765,7 +770,7 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
     // Get next page - it will progress cursor to the next page
     // Since we started moving by whole pages it will fetch 5 items now
     test_scroller.fetch_more().unwrap();
-    let actual_page = test_scroller.wait_for_update().await.unwrap();
+    let actual_page = test_scroller.wait_for_update().await.unwrap().unwrap();
     assert_eq!(actual_page.len(), 5);
     assert_scroller_content(
         &mut test_scroller,
@@ -796,7 +801,7 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
             .unwrap();
 
     test_scroller.fetch_more().unwrap();
-    let actual_page = test_scroller.wait_for_update().await.unwrap();
+    let actual_page = test_scroller.wait_for_update().await.unwrap().unwrap();
     assert_eq!(actual_page.len(), 5);
     assert_scroller_content(
         &mut test_scroller,
@@ -814,7 +819,7 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
 
     // This `fetch_more` will join two last pages together as the last page is incomplete
     test_scroller.fetch_more().unwrap();
-    let actual_page = test_scroller.wait_for_update().await.unwrap();
+    let actual_page = test_scroller.wait_for_update().await.unwrap().unwrap();
     assert_eq!(actual_page.len(), 8);
 
     assert_scroller_content(
