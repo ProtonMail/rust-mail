@@ -2,6 +2,7 @@
   pkgs,
   lib,
   config,
+  inputs,
   ...
 }:
 
@@ -47,6 +48,8 @@ in
     EOF
   '';
 
+  # A workaround until cargo clippy resolves to 1.88
+  overlays = [ inputs.rust-overlay.overlays.default ];
   packages =
     with pkgs;
     [
@@ -55,6 +58,20 @@ in
       php # For iCal
       php.unwrapped.dev # For iCal
       sql-formatter
+
+      # A workaround until cargo clippy resolves to 1.88
+      (rust-bin.stable.latest.default.override {
+        extensions = [
+          "rust-src"
+          "rust-analyzer"
+          "rustfmt"
+          "clippy"
+        ];
+        targets = ["wasm32-unknown-unknown"] ++ lib.optionals pkgs.stdenv.isDarwin [
+          "aarch64-apple-ios"
+          "aarch64-apple-ios-sim"
+        ];
+      })
     ]
     ++ lib.optionals pkgs.stdenv.isDarwin (
       with pkgs;
@@ -66,25 +83,22 @@ in
     );
 
   languages = {
-    rust = {
-      enable = true;
-      channel = "stable";
-      version = "1.88.0";
+    # Until cargo clippy resolves to 1.88
+    # rust = {
+    #   enable = true;
+    #   channel = "stable";
+    #   version = "1.88.0";
 
-      targets =
-        [
-          "wasm32-unknown-unknown"
-        ]
-        ++ lib.optionals pkgs.stdenv.isDarwin [
-          # iOS cross compilation
-          "aarch64-apple-ios"
-          "aarch64-apple-ios-sim"
-        ];
-
-      toolchain = {
-        clippy = null;
-      };
-    };
+    #   targets =
+    #     [
+    #       "wasm32-unknown-unknown"
+    #     ]
+    #     ++ lib.optionals pkgs.stdenv.isDarwin [
+    #       # iOS cross compilation
+    #       "aarch64-apple-ios"
+    #       "aarch64-apple-ios-sim"
+    #     ];
+    # };
 
     go = {
       enable = true; # For PGP
@@ -121,7 +135,7 @@ in
 
       exec = ''
         pushd "$DEVENV_ROOT"
-        
+
         xcrun simctl spawn "$DEVICE_ID" log stream \
               --predicate 'subsystem == "ch.protonmail.protonmail" AND category == "[Proton] Rust"' \
               --style syslog
@@ -138,7 +152,7 @@ in
         pushd "$DEVENV_ROOT"
 
         ./mail/mail-uniffi/ios/run-local.sh
-        
+
         popd
       '';
     };
@@ -150,7 +164,7 @@ in
         pushd "$DEVENV_ROOT"
 
         ${filterPkg "libiconv"} ./mail/mail-uniffi/ios/build-local.sh
-        
+
         popd
       '';
     };
