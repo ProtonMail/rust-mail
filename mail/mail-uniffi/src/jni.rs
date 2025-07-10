@@ -29,7 +29,7 @@ struct Runtime {
 }
 
 impl Runtime {
-    fn new(env: JNIEnv<'_>, cls: JClass<'_>) -> Result<Box<Self>, Error> {
+    fn new(mut env: JNIEnv<'_>, cls: JClass<'_>) -> Result<Box<Self>, Error> {
         let loader: JObject = env
             .call_method(cls, "getClassLoader", "()Ljava/lang/ClassLoader;", &[])?
             .try_into()?;
