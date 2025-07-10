@@ -1,11 +1,34 @@
 #![allow(clippy::needless_pass_by_value)]
 #![allow(unused_must_use)]
 
+use itertools::Itertools;
+
 use crate::datatypes::{
-    ContactEmailItem, ContactGroupItem, ContactItem, ContactItemType, ContactSuggestion,
-    ContactSuggestionKind, GroupedContacts,
+    AvatarInformation, ContactEmailItem, ContactGroupItem, ContactItem, ContactItemType,
+    ContactSuggestion, ContactSuggestionKind, GroupedContacts,
 };
 use std::fmt::Write as _;
+
+fn display_avatar_information(
+    AvatarInformation { text, color }: AvatarInformation,
+    out: &mut String,
+) {
+    write!(out, "{text} ({color})");
+}
+
+fn display_contact_item(
+    ContactItem {
+        local_id,
+        name,
+        avatar_information,
+        emails,
+    }: ContactItem,
+    out: &mut String,
+) {
+    display_avatar_information(avatar_information, out);
+    let emails = emails.iter().map(|email| &email.email).join(", ");
+    writeln!(out, ": {name} <{emails}>, local_id: {local_id}");
+}
 
 fn display_email_item(
     ContactEmailItem {
@@ -18,11 +41,7 @@ fn display_email_item(
     }: ContactEmailItem,
     out: &mut String,
 ) {
-    write!(
-        out,
-        "{} ({})",
-        avatar_information.text, avatar_information.color
-    );
+    display_avatar_information(avatar_information, out);
     write!(out, ": {name} <{email}>,  local_id: {local_id}");
     if is_proton {
         write!(out, ", Proton address");
@@ -57,7 +76,7 @@ fn display_suggestions(sug: Vec<ContactSuggestion>) -> String {
             }
             ContactSuggestionKind::ContactGroup(items) => {
                 for item in items {
-                    display_email_item(item, &mut out);
+                    display_contact_item(item, &mut out);
                 }
             }
         }
@@ -376,78 +395,75 @@ mod contact_suggestions {
 
     #[derive(Default)]
     struct TestCase {
+        name: &'static str,
         contacts: Vec<Contact>,
         contact_groups: Vec<Label>,
         device_contacts: Vec<DeviceContact>,
     }
 
-    #[test_case(TestCase::default()
-    ,0; "TEST 0 - Empty")]
-    #[test_case(TestCase {
+    #[test_case(TestCase { name: "TEST 0 - Empty",..TestCase::default() }; "TEST 0 - Empty")]
+    #[test_case(TestCase { name: "TEST 1 - Single contact",
         contacts: vec![
-            contact!(name: "Barbara Lox".to_string(), 
-                    contact_emails: vec![contact_email!(local_id: lid!(123), is_proton: false, email: "barbara@lox.com".into(), last_used_time: 1.into())
-                ])],
+            contact!(name: "Barbara Lox".to_string(), local_id: lid!(123), contact_emails: vec![
+                contact_email!(local_id: lid!(123), is_proton: false, email: "barbara@lox.com".into(), last_used_time: 1.into())
+            ])
+        ],
         ..Default::default()
-     }
-    ,1; "TEST 1 - Single contact")]
-    #[test_case(TestCase {
+     }; "TEST 1 - Single contact")]
+    #[test_case(TestCase { name: "TEST 2 - Proton mails go first",
         contacts: vec![
-            contact!(name: "Barbara Lox".to_string(), contact_emails: vec![
+            contact!(name: "Barbara Lox".to_string(), local_id: lid!(123), contact_emails: vec![
                 contact_email!(local_id: lid!(123), is_proton: false, email: "barbara@lox.com".into(), last_used_time: 1.into())
             ]),
-            contact!(name: "Michael Scott".to_string(), contact_emails: vec![
+            contact!(name: "Michael Scott".to_string(), local_id: lid!(234), contact_emails: vec![
                 contact_email!(local_id: lid!(234), is_proton: true, email: "m.scott@pm.me".into(), last_used_time: 1.into())
             ])
         ],
         ..Default::default()
-     }
-    ,2; "TEST 2 - Proton mails go first")]
-    #[test_case(TestCase {
+     }; "TEST 2 - Proton mails go first")]
+    #[test_case(TestCase { name: "TEST 3 - Frequently used mails go first",
         contacts: vec![
-            contact!(name: "Barbara Lox".to_string(), contact_emails: vec![
+            contact!(name: "Barbara Lox".to_string(), local_id: lid!(123), contact_emails: vec![
                 contact_email!(local_id: lid!(123), is_proton: true, email: "barbara@pm.me".into(), last_used_time: 1.into())
             ]),
-            contact!(name: "Michael Scott".to_string(), contact_emails: vec![
+            contact!(name: "Michael Scott".to_string(), local_id: lid!(234), contact_emails: vec![
                 contact_email!(local_id: lid!(234), is_proton: true, email: "m.scott@pm.me".into(), last_used_time: 2.into())
             ]),
-            contact!(name: "Jake Peralta".to_string(), contact_emails: vec![
+            contact!(name: "Jake Peralta".to_string(), local_id: lid!(456), contact_emails: vec![
                 contact_email!(local_id: lid!(456), is_proton: false, email: "jake.peralta@99.com".into(), last_used_time: 3.into())
             ])
         ],
         ..Default::default()
-     }
-    ,3; "TEST 3 - Frequently used mails go first")]
-    #[test_case(TestCase {
+     }; "TEST 3 - Frequently used mails go first")]
+    #[test_case(TestCase { name: "TEST 4 - In the end lexicographic order is used",
         contacts: vec![
-            contact!(name: "Barbara Lox".to_string(), contact_emails: vec![
+            contact!(name: "Barbara Lox".to_string(), local_id: lid!(123), contact_emails: vec![
                 contact_email!(local_id: lid!(123), is_proton: true, email: "barbara@pm.me".into(), last_used_time: 1.into())
             ]),
-            contact!(name: "Michael Scott".to_string(), contact_emails: vec![
+            contact!(name: "Michael Scott".to_string(), local_id: lid!(234), contact_emails: vec![
                 contact_email!(local_id: lid!(234), is_proton: true, email: "m.scott@pm.me".into(), last_used_time: 2.into())
             ]),
-            contact!(name: "Jason Mendoza".to_string(), contact_emails: vec![
+            contact!(name: "Jason Mendoza".to_string(), local_id: lid!(678), contact_emails: vec![
                 contact_email!(local_id: lid!(678), is_proton: true, email: "jianyu.li@pm.me".into(), last_used_time: 2.into())
             ]),
-            contact!(name: "Jake Peralta".to_string(), contact_emails: vec![
+            contact!(name: "Jake Peralta".to_string(), local_id: lid!(456), contact_emails: vec![
                 contact_email!(local_id: lid!(456), is_proton: false, email: "jake.peralta@99.com".into(), last_used_time: 3.into())
             ]),
         ],
         ..Default::default()
-     }
-    ,4; "TEST 4 - In the end lexicographic order is used")]
-    #[test_case(TestCase {
+     }; "TEST 4 - In the end lexicographic order is used")]
+    #[test_case(TestCase { name: "TEST 5 - Contact groups",
         contacts: vec![
-            contact!(name: "Barbara Lox".to_string(), contact_emails: vec![
+            contact!(name: "Barbara Lox".to_string(), local_id: lid!(123), contact_emails: vec![
                 contact_email!(local_id: lid!(123), is_proton: true, email: "barbara@pm.me".into(), last_used_time: 1.into())
             ]),
-            contact!(name: "Michael Scott".to_string(), contact_emails: vec![
+            contact!(name: "Michael Scott".to_string(), local_id: lid!(234), contact_emails: vec![
                 contact_email!(local_id: lid!(234), is_proton: true, email: "m.scott@pm.me".into(), last_used_time: 2.into(), label_ids: labels!("m.schur.productions"))
             ]),
-            contact!(name: "Jason Mendoza".to_string(), contact_emails: vec![
+            contact!(name: "Jason Mendoza".to_string(), local_id: lid!(678), contact_emails: vec![
                 contact_email!(local_id: lid!(678), is_proton: true, email: "jianyu.li@pm.me".into(), last_used_time: 2.into(), label_ids: labels!("m.schur.productions"))
             ]),
-            contact!(name: "Jake Peralta".to_string(), contact_emails: vec![
+            contact!(name: "Jake Peralta".to_string(), local_id: lid!(456), contact_emails: vec![
                 contact_email!(local_id: lid!(456), is_proton: false, email: "jake.peralta@99.com".into(), last_used_time: 3.into(), label_ids: labels!("m.schur.productions")),
                 // Only first email was added to the group
                 contact_email!(local_id: lid!(112), is_proton: false, email: "harvey@jp.com".into(), last_used_time: 1.into())
@@ -457,20 +473,19 @@ mod contact_suggestions {
             label!(local_id: lid!(910), remote_id: Some(label_id!("m.schur.productions")), name: "M. Schur Productions".into(), label_type: LabelType::ContactGroup),
         ],
         ..Default::default()
-     }
-    ,5; "TEST 5 - Contact groups")]
-    #[test_case(TestCase {
+     }; "TEST 5 - Contact groups")]
+    #[test_case(TestCase { name: "TEST 6 - Contact groups and device contacts are in the end, sorted by name",
         contacts: vec![
-            contact!(name: "Barbara Lox".to_string(), contact_emails: vec![
+            contact!(name: "Barbara Lox".to_string(), local_id: lid!(123), contact_emails: vec![
                 contact_email!(local_id: lid!(123), is_proton: true, email: "barbara@pm.me".into(), last_used_time: 1.into())
             ]),
-            contact!(name: "Michael Scott".to_string(), contact_emails: vec![
+            contact!(name: "Michael Scott".to_string(), local_id: lid!(234), contact_emails: vec![
                 contact_email!(local_id: lid!(234), is_proton: true, email: "m.scott@pm.me".into(), last_used_time: 2.into(), label_ids: labels!("m.schur.productions"))
             ]),
-            contact!(name: "Jason Mendoza".to_string(), contact_emails: vec![
+            contact!(name: "Jason Mendoza".to_string(), local_id: lid!(678), contact_emails: vec![
                 contact_email!(local_id: lid!(678), is_proton: true, email: "jianyu.li@pm.me".into(), last_used_time: 2.into(), label_ids: labels!("m.schur.productions"))
             ]),
-            contact!(name: "Jake Peralta".to_string(), contact_emails: vec![
+            contact!(name: "Jake Peralta".to_string(), local_id: lid!(456), contact_emails: vec![
                 contact_email!(local_id: lid!(456), is_proton: false, email: "jake.peralta@99.com".into(), last_used_time: 3.into(), label_ids: labels!("m.schur.productions")),
                 // Only first email was added to the group
                 contact_email!(local_id: lid!(112), is_proton: false, email: "harvey@jp.com".into(), last_used_time: 1.into())
@@ -485,20 +500,19 @@ mod contact_suggestions {
                 "badass@aunt.com".into(),
             ])
         ]
-     }
-    ,6; "TEST 6 - Contact groups and device contacts are in the end, sorted by name")]
-    #[test_case(TestCase {
+     }; "TEST 6 - Contact groups and device contacts are in the end, sorted by name")]
+    #[test_case(TestCase { name: "TEST 7 - Device Contacts are sorted by name and ids",
         contacts: vec![
-            contact!(name: "Barbara Lox".into(), contact_emails: vec![
+            contact!(name: "Barbara Lox".into(), local_id: lid!(1), contact_emails: vec![
                 contact_email!(local_id: lid!(123), is_proton: true, email: "barbara@pm.me".into(), last_used_time: 1.into())
             ]),
-            contact!(name: "Michael Scott".to_string(), contact_emails: vec![
+            contact!(name: "Michael Scott".to_string(), local_id: lid!(2), contact_emails: vec![
                 contact_email!(local_id: lid!(234), is_proton: true, email: "m.scott@pm.me".into(), last_used_time: 2.into(), label_ids: labels!("m.schur.productions"))
             ]),
-            contact!(name: "Jason Mendoza".to_string(), contact_emails: vec![
+            contact!(name: "Jason Mendoza".to_string(), local_id: lid!(3), contact_emails: vec![
                 contact_email!(local_id: lid!(678), is_proton: true, email: "jianyu.li@pm.me".into(), last_used_time: 2.into(), label_ids: labels!("m.schur.productions"))
             ]),
-            contact!(name: "Jake Peralta".to_string(), contact_emails: vec![
+            contact!(name: "Jake Peralta".to_string(), local_id: lid!(4), contact_emails: vec![
                 contact_email!(local_id: lid!(456), is_proton: false, email: "jake.peralta@99.com".into(), last_used_time: 3.into(), label_ids: labels!("m.schur.productions")),
                 // Only first email was added to the group
                 contact_email!(local_id: lid!(112), is_proton: false, email: "harvey@jp.com".into(), last_used_time: 1.into())
@@ -515,24 +529,23 @@ mod contact_suggestions {
                 "badass@aunt.com".into(),
             ])
         ]
-     }
-    ,7; "TEST 7 - Device Contacts are sorted by name and ids")]
-    #[test_case(TestCase {
+     }; "TEST 7 - Device Contacts are sorted by name and ids")]
+    #[test_case(TestCase { name: "TEST 8 - contacts are deduplicated",
         contacts: vec![
-            contact!(name: "Barbara Lox".to_string(), contact_emails: vec![
+            contact!(name: "Barbara Lox".to_string(), local_id: lid!(1),  contact_emails: vec![
                 contact_email!(local_id: lid!(123), is_proton: true, email: "barbara@pm.me".into(), last_used_time: 1.into())
             ]),
-            contact!(name: "Michael Scott".to_string(), contact_emails: vec![
+            contact!(name: "Michael Scott".to_string(), local_id: lid!(2),  contact_emails: vec![
                 contact_email!(local_id: lid!(234), is_proton: true, email: "m.scott@pm.me".into(), last_used_time: 2.into(), label_ids: labels!("m.schur.productions"))
             ]),
-            contact!(name: "Jason Mendoza".to_string(), contact_emails: vec![
+            contact!(name: "Jason Mendoza".to_string(), local_id: lid!(3), contact_emails: vec![
                 contact_email!(local_id: lid!(678), is_proton: true, email: "jianyu.li@pm.me".into(), last_used_time: 2.into(), label_ids: labels!("m.schur.productions"))
             ]),
-            contact!(name: "Jake Peralta".to_string(), contact_emails: vec![
+            contact!(name: "Jake Peralta".to_string(), local_id: lid!(4), contact_emails: vec![
                 contact_email!(local_id: lid!(456), is_proton: false, email: "jake.peralta@99.com".into(), last_used_time: 3.into(), label_ids: labels!("m.schur.productions")),
                 contact_email!(local_id: lid!(112), is_proton: false, email: "harvey@jp.com".into(), last_used_time: 1.into())
             ]),
-            contact!(name: "Detective Peralta".to_string(), contact_emails: vec![
+            contact!(name: "Detective Peralta".to_string(), local_id: lid!(5), contact_emails: vec![
                 // User has two contacts pointing to the same email
                 contact_email!(local_id: lid!(999), is_proton: false, email: "jake.peralta@99.com".into(), last_used_time: 3.into())
             ])
@@ -555,9 +568,8 @@ mod contact_suggestions {
                 "badass@aunt.com".into(),
             ]),
         ]
-     }
-    ,8; "TEST 8 - contacts are deduplicated")]
-    fn test_contact_suggestions(test_case: TestCase, test_number: u32) {
+     }; "TEST 8 - contacts are deduplicated")]
+    fn test_contact_suggestions(test_case: TestCase) {
         let res = ContactSuggestions::from_contacts_and_device_contacts(
             test_case.contacts,
             test_case.contact_groups,
@@ -566,7 +578,7 @@ mod contact_suggestions {
         .all()
         .to_vec();
         insta::assert_snapshot!(
-            format!("test_contact_suggestions_{}", test_number),
+            format!("test_contact_suggestions_{}", test_case.name),
             display_suggestions(res)
         );
     }
@@ -785,6 +797,7 @@ mod contact_suggestions {
 
     fn filtering_test_case() -> TestCase {
         TestCase {
+            name: "filtering_test_case",
             contacts: vec![
                 contact!(name: "Barbara Lox".to_string(), remote_id: cid!("lox"), contact_emails: vec![
                     contact_email!(remote_id: ceid!("123"), is_proton: true, email: "barbara@pm.me".into(), last_used_time: 1.into())

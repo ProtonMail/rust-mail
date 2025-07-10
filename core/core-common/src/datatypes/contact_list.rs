@@ -134,7 +134,7 @@ impl From<ContactGroupItem> for ContactItemType {
 }
 
 /// This is the main data structure that is used to represent the contact.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContactItem {
     pub local_id: LocalContactId,
     pub name: String,
@@ -281,7 +281,7 @@ impl ContactSuggestions {
                     ContactGroup {
                         key: format!("group/{local_id}"),
                         name: group.name.clone(),
-                        emails: vec![],
+                        contacts: vec![],
                     },
                 )
             })
@@ -290,6 +290,7 @@ impl ContactSuggestions {
         let proton_suggestions: Vec<_> = contacts
             .into_iter()
             .filter(|contact| !contact.deleted)
+            .map(|contact| Self::aggregate_emails_to_groups(&mut contact_groups, contact))
             .flat_map(|contact| {
                 contact
                     .contact_emails
@@ -308,15 +309,13 @@ impl ContactSuggestions {
                     contact.name.clone(),
                 )
             })
-            .map(|(contact, email)| {
-                Self::aggregate_emails_to_groups(&mut contact_groups, contact, email)
-            })
+            .map(|(contact, email)| (contact, ContactEmailItem::from(email)))
             .map(|(contact, email)| ContactSuggestion::new_contact(contact, email))
             .collect();
 
         let rest = contact_groups
             .into_values()
-            .filter(|group| !group.emails.is_empty())
+            .filter(|group| !group.contacts.is_empty())
             .map(ContactSuggestion::new_group)
             .chain(
                 device_contacts
@@ -390,16 +389,29 @@ impl ContactSuggestions {
     fn aggregate_emails_to_groups(
         contact_groups: &mut HashMap<LabelId, ContactGroup>,
         contact: Contact,
-        mut email: ContactEmail,
-    ) -> (Contact, ContactEmailItem) {
-        let label_ids = mem::take(&mut email.label_ids);
-        let email = ContactEmailItem::from(email);
-        for label_id in label_ids.iter() {
-            if let Some(group) = contact_groups.get_mut(label_id) {
-                group.emails.push(email.clone());
+    ) -> Contact {
+        let label_ids: HashSet<LabelId> = contact
+            .label_ids
+            .iter()
+            .cloned()
+            .chain(
+                contact
+                    .contact_emails
+                    .iter()
+                    .flat_map(|email| email.label_ids.iter().cloned()),
+            )
+            .collect();
+
+        let contact_item = ContactItem::from(contact.clone());
+        for label_id in label_ids {
+            if let Some(group) = contact_groups.get_mut(&label_id) {
+                if group.contacts.contains(&contact_item) {
+                    continue;
+                }
+                group.contacts.push(contact_item.clone());
             }
         }
-        (contact, email)
+        contact
     }
 }
 
@@ -442,7 +454,7 @@ impl ContactSuggestion {
             key: group.key,
             avatar_information: AvatarInformation::from(&group.name),
             name: group.name,
-            kind: ContactSuggestionKind::ContactGroup(group.emails),
+            kind: ContactSuggestionKind::ContactGroup(group.contacts),
         })
     }
 
@@ -477,7 +489,7 @@ impl ContactSuggestion {
 struct ContactGroup {
     key: String,
     name: String,
-    emails: Vec<ContactEmailItem>,
+    contacts: Vec<ContactItem>,
 }
 
 /// A suggestion that is not based on the proton contact
@@ -542,7 +554,7 @@ pub enum ContactSuggestionKind {
     /// A device, native contact, stored only locally on the current device.
     DeviceContact(DeviceContactSuggestion),
     /// Proton contact group, that consists only other proton contacts, and never device contact.
-    ContactGroup(Vec<ContactEmailItem>),
+    ContactGroup(Vec<ContactItem>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Ord, Hash)]
