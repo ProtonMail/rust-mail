@@ -284,6 +284,18 @@ impl MailScroller {
         Ok(())
     }
 
+    pub fn clear_cache(&self) -> Result<(), MailContextError> {
+        let uuid = Uuid::new_v4();
+        tracing::trace!("Sending `ClearCache` command with uuid: {uuid}");
+        self.ordered_command
+            .send(ScrollerOrderedCommand::ClearCache(
+                ScrollerSource::ScrollEvent(uuid),
+            ))
+            .map_err(|_| MailContextError::Other(anyhow!("Failed to send clear cache command")))?;
+
+        Ok(())
+    }
+
     pub async fn total(&self) -> Result<u64, MailContextError> {
         let (sender, receiver) = oneshot::channel();
         self.command
@@ -500,6 +512,16 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                         .map_err(|e| anyhow!("Failed to send change filter update: {e:?}"))?;
                 }
             }
+            ScrollerOrderedCommand::ClearCache(src) => {
+                let result = self
+                    .clear_cache(src.clone())
+                    .await
+                    .unwrap_or_else(|e| ScrollerUpdate::Error { src, error: e });
+
+                self.update
+                    .send(result)
+                    .map_err(|e| anyhow!("Failed to send clear cache update: {e:?}"))?;
+            }
         }
 
         Ok(())
@@ -552,31 +574,36 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         Ok(())
     }
 
-    #[tracing::instrument(skip_all, fields(src=%src))]
+    #[tracing::instrument(skip_all, fields(src=%call_src))]
     async fn fetch_more(
         &mut self,
-        src: ScrollerSource,
+        call_src: ScrollerSource,
     ) -> Result<ScrollerUpdate<T::Item>, MailContextError> {
         let mut items = self.sync_next().await?;
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
-        let (seen, synced, total) = {
+        let (seen, synced, total, has_more_in_source) = {
             let source = self.source.read().await;
             let seen = source.seen_total(&ctx).await?;
             let synced = source.synced_total(&ctx).await?;
             let total = source.all_total(&ctx).await?;
-            (seen, synced, total)
+            let has_more = source.has_more(&ctx).await?;
+            (seen, synced, total, has_more)
         };
-        let is_small_label = total < self.page_size as u64;
+        let page_size = self.page_size as u64;
+        let is_small_label = total > 0 && total < page_size;
+        let has_more_in_label = seen < total;
 
-        tracing::info!("Fetch stats - seen/synced/total: {seen}/{synced}/{total}");
+        tracing::info!(
+            "Fetch stats - seen/synced/total: {seen}/{synced}/{total}. Has more - source/label: {has_more_in_source}/{has_more_in_label}"
+        );
 
-        if items.is_empty() && seen < total {
+        if items.is_empty() && has_more_in_label {
             if self.task.is_none() {
                 // We will not progress any further without task,
                 // and task will be spawned only when we are online,
                 // lets wait for another call.
                 return Err(MailContextError::no_connection());
-            } else if is_small_label && seen < total {
+            } else if is_small_label {
                 // If we are on a small label, we can wait for the task
                 // to complete and get requested data.
                 // For other cases we would jump double pages.
@@ -586,11 +613,14 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
 
         if items.is_empty() {
             tracing::debug!("No new items fetched");
-            Ok(ScrollerUpdate::None(src))
+            Ok(ScrollerUpdate::None(call_src))
         } else {
             tracing::debug!("New items fetched: {}", items.len());
             self.items.extend(items.clone());
-            Ok(ScrollerUpdate::Append { src, items })
+            Ok(ScrollerUpdate::Append {
+                src: call_src,
+                items,
+            })
         }
     }
 
@@ -651,6 +681,23 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
             .await
             .change_filter(&ctx, filter)
             .await?;
+        self.items.clear();
+        self.task = None;
+        self.fetch_more(src.clone()).await?;
+        self.refresh(true, src).await
+    }
+
+    #[tracing::instrument(skip_all, fields(src=%src))]
+    async fn clear_cache(
+        &mut self,
+        src: ScrollerSource,
+    ) -> Result<ScrollerUpdate<T::Item>, MailContextError> {
+        tracing::error!(
+            "Scroller is missing some data, this is most likely a bug, please report it"
+        );
+        tracing::info!("Try to recover by clearing cache for current label",);
+        let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
+        self.source.write().await.clear_cache(&ctx).await?;
         self.items.clear();
         self.task = None;
         self.fetch_more(src.clone()).await?;
@@ -805,6 +852,7 @@ enum ScrollerOrderedCommand {
         src: ScrollerSource,
         filter: ReadFilter,
     },
+    ClearCache(ScrollerSource),
 }
 
 fn calculate_scroller_update<T: ScrollerEq + Clone + Send + Sync + 'static>(

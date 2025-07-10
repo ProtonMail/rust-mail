@@ -339,6 +339,16 @@ impl MailScrollerSource for SearchScrollerSource {
         Ok(self.total(&tether).await?)
     }
 
+    async fn has_more(&self, ctx: &MailUserContext) -> Result<bool, MailContextError> {
+        let tether = ctx.user_stash().connection();
+        let has_more = match &self.last {
+            Some(last) => last.has_more(&tether).await?,
+            None => false,
+        };
+
+        Ok(has_more)
+    }
+
     #[tracing::instrument(skip(ctx))]
     async fn sync_next(
         &mut self,
@@ -374,6 +384,11 @@ impl MailScrollerSource for SearchScrollerSource {
         } else {
             Ok((vec![], None))
         }
+    }
+
+    async fn clear_cache(&mut self, ctx: &MailUserContext) -> Result<(), MailContextError> {
+        self.initialize(ctx).await?;
+        Ok(())
     }
 
     fn watched_tables(&self) -> Vec<String> {

@@ -329,6 +329,13 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         Ok(total)
     }
 
+    async fn has_more(&self, ctx: &MailUserContext) -> Result<bool, MailContextError> {
+        let tether = ctx.user_stash().connection();
+        let has_more = self.state.has_more_in_order(&tether).await?;
+
+        Ok(has_more)
+    }
+
     #[tracing::instrument(skip_all, fields(label_id=self.local_label_id.as_u64(), unread=?self.unread) )]
     async fn sync_next(
         &mut self,
@@ -441,6 +448,19 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         filter: ReadFilter,
     ) -> Result<(), MailContextError> {
         self.unread = filter;
+        self.state = MailScrollerState::None;
+        self.initialize(ctx).await?;
+
+        Ok(())
+    }
+
+    async fn clear_cache(&mut self, ctx: &MailUserContext) -> Result<(), MailContextError> {
+        if let Some(scroller) = self.state.online() {
+            tracing::info!("Clearing cache for label {}", self.local_label_id);
+            let mut tether = ctx.user_stash().connection();
+            let cursor = scroller.scroll_data_end(&tether).await?;
+            tether.tx(async |tx| cursor.delete(tx).await).await?;
+        }
         self.state = MailScrollerState::None;
         self.initialize(ctx).await?;
 

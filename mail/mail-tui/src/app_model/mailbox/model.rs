@@ -306,6 +306,16 @@ impl MailboxModel {
                 .map(|paginator| paginator.clone_inner().change_filter(filter));
         }
     }
+
+    fn clear_cache(&mut self) {
+        if let State::Conversations(state) = &mut self.state {
+            let _ = state.paginator().clone_inner().clear_cache();
+        } else if let State::Messages(state) = &mut self.state {
+            state
+                .label_paginator()
+                .map(|paginator| paginator.clone_inner().clear_cache());
+        }
+    }
 }
 
 impl AppStateHandler for MailboxModel {
@@ -375,6 +385,10 @@ impl AppStateHandler for MailboxModel {
                             }),
                         ),
                     )));
+                }
+                KeyCode::F(4) => {
+                    self.clear_cache();
+                    return Command::None;
                 }
                 KeyCode::F(5) if key.modifiers.contains(KeyModifiers::SHIFT) => {
                     return refresh(self.ctx.as_arc());
@@ -506,6 +520,7 @@ impl AppStateHandler for MailboxModel {
             ("/", "Open the search bar"),
             ("C", "Show the contact list"),
             ("f/F", "Star/Unstar the selected item"),
+            ("F4", "Clear cache"),
             ("Shift+F5", "Reload all data from server"),
             ("F5", "Refresh (Force event loop poll)"),
             ("F8", "[DEBUG]: Put app in background"),
