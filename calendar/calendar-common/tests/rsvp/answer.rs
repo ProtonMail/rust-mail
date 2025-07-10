@@ -1,4 +1,4 @@
-use crate::{ATTENDEES_EVENT, SHARED_EVENT, world};
+use crate::{ATTENDEES_EVENT, RsvpEventIdExt, SHARED_EVENT, world};
 use itertools::Itertools;
 use jiff::civil::Weekday;
 use pretty_assertions as pa;
@@ -63,7 +63,7 @@ async fn answer(case: fn() -> TestCase) {
         .mock_find_calendar_events("8maQ3qBa", None, Some(event.clone()))
         .await;
 
-    let mut event = RsvpEventId::indirect("8maQ3qBa", None)
+    let mut event = RsvpEventId::invite("8maQ3qBa", None)
         .fetch(
             &world.sess,
             &world.pgp,
