@@ -718,11 +718,12 @@ impl MessagesState {
                     let paginator = paginator.clone_inner();
                     return Command::task(async move {
                         let has_more = paginator.has_more().await.unwrap();
-                        let total = paginator.total().await.unwrap();
                         let seen = paginator.seen().await.unwrap();
+                        let synced = paginator.synced().await.unwrap();
+                        let total = paginator.total().await.unwrap();
                         Command::message(Messages::DisplayInfo(
                             Some("Has more".to_owned()),
-                            format!("Loaded: {seen}/{total}, Has more: {has_more}"),
+                            format!("Loaded: {seen}/{synced}/{total}, Has more: {has_more}"),
                         ))
                     });
                 }

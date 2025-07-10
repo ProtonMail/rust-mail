@@ -6,6 +6,7 @@ use crate::messages::Messages;
 use crate::widgets::{TextInput, TextInputState};
 use anyhow::anyhow;
 use copypasta::{ClipboardContext, ClipboardProvider as _};
+use crossterm::event::KeyModifiers;
 use proton_account_api::login::{LoginError, LoginFlow};
 use proton_mail_common::MailContext;
 use qrcode::QrCode;
@@ -141,7 +142,9 @@ impl AppStateHandler for LoginModel {
             }
             KeyCode::Enter => Command::message(Message::Submit.into()),
             KeyCode::Tab => Command::message(Message::ToggleInput.into()),
-            KeyCode::Char('q') => Command::message(Message::QRLogin.into()),
+            KeyCode::Char('q') if k.modifiers.contains(KeyModifiers::CONTROL) => {
+                Command::message(Message::QRLogin.into())
+            }
             _ => {
                 self.active_text_input_state_mut().handle_event(&event);
                 Command::none()
@@ -289,7 +292,7 @@ impl AppStateHandler for LoginModel {
         vec![
             ("enter", "Submit"),
             ("tab", "Switch Input"),
-            ("q", "QR Login"),
+            ("q + ctrl", "QR Login"),
         ]
     }
 }
