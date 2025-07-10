@@ -305,6 +305,17 @@ impl MailScroller {
             .await
             .map_err(|_| MailContextError::Other(anyhow!("Failed to receive seen response")))?
     }
+
+    pub async fn synced(&self) -> Result<u64, MailContextError> {
+        let (sender, receiver) = oneshot::channel();
+        self.command
+            .send(ScrollerCommand::GetSynced(sender))
+            .map_err(|_| MailContextError::Other(anyhow!("Failed to send get synced command")))?;
+
+        receiver
+            .await
+            .map_err(|_| MailContextError::Other(anyhow!("Failed to receive synced response")))?
+    }
 }
 
 pub struct ScrollerWorker<T: MailScrollerSource + 'static> {
@@ -514,6 +525,13 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                     .send(seen)
                     .map_err(|e| anyhow!("Failed to send seen: {e:?}"))?;
             }
+            ScrollerCommand::GetSynced(sender) => {
+                let synced = Self::synced(source, ctx).await;
+
+                sender
+                    .send(synced)
+                    .map_err(|e| anyhow!("Failed to send synced: {e:?}"))?;
+            }
             ScrollerCommand::HasMore(sender) => {
                 let (total, seen) = (
                     Self::total(source, ctx).await,
@@ -541,15 +559,16 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
     ) -> Result<ScrollerUpdate<T::Item>, MailContextError> {
         let mut items = self.sync_next().await?;
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
-        let (seen, total) = {
+        let (seen, synced, total) = {
             let source = self.source.read().await;
             let seen = source.seen_total(&ctx).await?;
+            let synced = source.synced_total(&ctx).await?;
             let total = source.all_total(&ctx).await?;
-            (seen, total)
+            (seen, synced, total)
         };
         let is_small_label = total < self.page_size as u64;
 
-        tracing::info!("Fetch stats - seen/total: {seen}/{total}");
+        tracing::info!("Fetch stats - seen/synced/total: {seen}/{synced}/{total}");
 
         if items.is_empty() && seen < total {
             if self.task.is_none() {
@@ -773,6 +792,7 @@ struct ScrollerWorkerHandle<T: MailScrollerSource> {
 enum ScrollerCommand {
     GetTotal(oneshot::Sender<Result<u64, MailContextError>>),
     GetSeen(oneshot::Sender<Result<u64, MailContextError>>),
+    GetSynced(oneshot::Sender<Result<u64, MailContextError>>),
     HasMore(oneshot::Sender<Result<bool, MailContextError>>),
 }
 

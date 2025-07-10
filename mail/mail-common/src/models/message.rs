@@ -782,7 +782,7 @@ impl Message {
             if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
                 *self = existing;
 
-                tracing::debug!(
+                tracing::trace!(
                     remote_id = ?self.remote_id,
                     "Skipping saving message, we already have it in the local DB"
                 );

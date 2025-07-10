@@ -390,7 +390,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
                 };
 
                 let has_more_than_a_page = scroller.has_more_than_a_page(&tether).await?;
-                let is_small_label = total < self.page_size as u64 && has_more_than_a_page;
+                let is_small_label = total > 0 && total < self.page_size as u64;
 
                 let should_load_more_from_remote =
                     (!has_more_than_a_page || is_small_label) && is_online;
