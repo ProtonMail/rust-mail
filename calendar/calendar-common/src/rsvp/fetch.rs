@@ -1,9 +1,10 @@
-use super::{RsvpCache, RsvpIntent, RsvpStatus};
+use super::{RsvpCache, RsvpIntent, RsvpProgress};
 use crate::{
     CalendarBootstrapExt, CalendarEventPayloadExt, RsvpAttendee, RsvpCalendar, RsvpError,
     RsvpEvent, RsvpEventId, RsvpOccurrence, RsvpOrganizer, RsvpResult,
 };
 use chrono::DateTime;
+use jiff::Zoned;
 use proton_calendar_api::{
     CalendarAttendeeId, CalendarAttendeeStatus, CalendarBootstrap, CalendarEvent, ProtonCalendar,
 };
@@ -20,6 +21,7 @@ pub(super) async fn exec<P>(
     pgp: &P,
     keys: &UnlockedAddressKeys<P>,
     cache: &impl RsvpCache,
+    now: &Zoned,
     id: &RsvpEventId,
 ) -> RsvpResult<Option<RsvpEvent>>
 where
@@ -30,7 +32,7 @@ where
     };
 
     let decryptor = calendar.create_decryptor(pgp, keys, &event)?;
-    let event = extract(pgp, id, calendar, event, &decryptor)?;
+    let event = extract(pgp, now, id, calendar, event, &decryptor)?;
 
     Ok(Some(event))
 }
@@ -86,6 +88,7 @@ async fn fetch(
 
 fn extract<P>(
     pgp: &P,
+    now: &Zoned,
     id: &RsvpEventId,
     calendar: CalendarBootstrap,
     event: CalendarEvent,
@@ -94,7 +97,7 @@ fn extract<P>(
 where
     P: PGPProviderSync,
 {
-    let meta = extract_metadata(pgp, &event, decryptor)?;
+    let meta = extract_metadata(pgp, now, &event, decryptor)?;
     let occurrence = extract_occurrence(&event)?;
     let organizer = extract_organizer(&event)?;
     let attendees = extract_attendees(pgp, &event, decryptor, &organizer)?;
@@ -113,7 +116,7 @@ where
         attendees,
         organizer,
         calendar,
-        status: meta.status,
+        progress: meta.progress,
         intent,
         raw: Box::new(event),
     })
@@ -121,6 +124,7 @@ where
 
 fn extract_metadata<P>(
     pgp: &P,
+    now: &Zoned,
     event: &CalendarEvent,
     decryptor: &CalendarEventDecryptor<P>,
 ) -> RsvpResult<Metadata>
@@ -132,7 +136,18 @@ where
     let mut summary = None;
     let mut location = None;
     let mut description = None;
-    let mut status = RsvpStatus::Active;
+
+    let mut progress = {
+        let now = now.timestamp().as_second();
+
+        if now < event.start_time {
+            RsvpProgress::Pending
+        } else if now < event.end_time {
+            RsvpProgress::Ongoing
+        } else {
+            RsvpProgress::Ended
+        }
+    };
 
     // Event data is split between shared events (which contain summary,
     // location and description) and calendar event (which contains the status)
@@ -151,7 +166,7 @@ where
             description.or_else(|| event.description.map(|desc| desc.value.into_string()));
 
         if event.status == Some(ical::Status::Cancelled) {
-            status = RsvpStatus::Cancelled;
+            progress = RsvpProgress::Cancelled;
         }
     }
 
@@ -159,7 +174,7 @@ where
         summary,
         location,
         description,
-        status,
+        progress,
     })
 }
 
@@ -288,7 +303,7 @@ struct Metadata {
     summary: Option<String>,
     location: Option<String>,
     description: Option<String>,
-    status: RsvpStatus,
+    progress: RsvpProgress,
 }
 
 #[cfg(test)]
