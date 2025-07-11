@@ -58,6 +58,8 @@ in
       php # For iCal
       php.unwrapped.dev # For iCal
       sql-formatter
+      cargo-nextest
+      cargo-insta
 
       # A workaround until cargo clippy resolves to 1.88
       (rust-bin.stable.latest.default.override {

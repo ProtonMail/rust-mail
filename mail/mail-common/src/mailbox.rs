@@ -2,19 +2,15 @@ pub mod attachments;
 pub mod decrypted_message;
 
 use crate::datatypes::{MessageRecipientDisplayMode, ViewMode};
-use crate::models::{
-    Conversation, ConversationCounters, MailLabel, MailboxLabels, Message, MessageCounters,
-};
-use crate::{AppError, MailContextError, MailContextResult};
+use crate::models::{ConversationCounters, MailLabel, MessageCounters};
+use crate::{AppError, MailContextResult};
 pub use attachments::DecryptedAttachment;
-use futures::TryFutureExt;
 use proton_core_api::services::proton::LabelId;
-use proton_core_api::services::proton::Proton;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelExtension as _, ModelIdExtension as _};
 use stash::orm::Model;
 use stash::stash::{Stash, Tether, WatcherHandle};
-use tracing::{debug, error};
+use tracing::debug;
 
 /// Represents an open label through which one can access the messages or conversations.
 ///
@@ -67,71 +63,6 @@ impl Mailbox {
         self.label_id
     }
 
-    /// Sync the label's messages or conversations.
-    ///
-    /// Depending on the user's mail settings, this function will either sync the conversations
-    /// or the messages of the label.
-    ///
-    /// # Errors
-    /// Returns error if API request or database changes failed.
-    #[tracing::instrument(skip_all)]
-    #[cfg(feature = "test-utils")]
-    pub async fn sync(
-        &self,
-        tether: &mut Tether,
-        api: &Proton,
-        count: usize,
-    ) -> MailContextResult<()> {
-        let Some(label) = Label::load(self.label_id, tether).await? else {
-            return Err(AppError::LabelNotFound(self.label_id).into());
-        };
-
-        let Some(remote_id) = label.remote_id.clone() else {
-            return Err(AppError::LabelDoesNotHaveRemoteId(self.label_id).into());
-        };
-
-        debug!("Syncing {}({})", self.label_id, &remote_id);
-
-        let mut mailbox_label = MailboxLabels::find_by_id(self.label_id, tether)
-            .await?
-            .unwrap_or_else(|| MailboxLabels::new(self.label_id));
-        if mailbox_label.initialized {
-            debug!("Label {} already initialized, skipping", self.label_id);
-            return Ok(());
-        }
-        debug!(
-            "Label {} not initialized, fetching (mode={:?})",
-            self.label_id, self.view_mode
-        );
-
-        match self.view_mode {
-            ViewMode::Conversations => {
-                Conversation::sync_first_conversation_page(remote_id, count, api, tether)
-                    .inspect_err(|e| error!("Failed to sync conversations for label: {e:?}"))
-                    .await
-            }
-
-            ViewMode::Messages => {
-                Message::sync_first_message_page(remote_id, count, api, tether)
-                    .inspect_err(|e| error!("Failed to sync messages for label: {e:?}"))
-                    .await
-            }
-        }?;
-
-        mailbox_label.initialized = true;
-        tether
-            .tx(async |tx| {
-                mailbox_label.save(tx).await.map_err(|e| {
-                    error!("Failed to mark label as initialized: {e:?}");
-                    MailContextError::Stash(e)
-                })
-            })
-            .await?;
-
-        debug!("Syncing finished");
-        Ok(())
-    }
-
     /// The mailbox's current view mode.
     pub fn view_mode(&self) -> ViewMode {
         self.view_mode
@@ -173,5 +104,81 @@ impl Mailbox {
         };
 
         Ok(watcher)
+    }
+}
+
+#[cfg(feature = "test-utils")]
+mod test_utils {
+    use super::*;
+    use crate::MailContextError;
+    use crate::models::{Conversation, MailboxLabels, Message};
+    use futures::TryFutureExt;
+    use proton_core_api::services::proton::Proton;
+    use tracing::error;
+
+    impl Mailbox {
+        /// Sync the label's messages or conversations.
+        ///
+        /// Depending on the user's mail settings, this function will either sync the conversations
+        /// or the messages of the label.
+        ///
+        /// # Errors
+        /// Returns error if API request or database changes failed.
+        #[tracing::instrument(skip_all)]
+        pub async fn sync(
+            &self,
+            tether: &mut Tether,
+            api: &Proton,
+            count: usize,
+        ) -> MailContextResult<()> {
+            let Some(label) = Label::load(self.label_id, tether).await? else {
+                return Err(AppError::LabelNotFound(self.label_id).into());
+            };
+
+            let Some(remote_id) = label.remote_id.clone() else {
+                return Err(AppError::LabelDoesNotHaveRemoteId(self.label_id).into());
+            };
+
+            debug!("Syncing {}({})", self.label_id, &remote_id);
+
+            let mut mailbox_label = MailboxLabels::find_by_id(self.label_id, tether)
+                .await?
+                .unwrap_or_else(|| MailboxLabels::new(self.label_id));
+            if mailbox_label.initialized {
+                debug!("Label {} already initialized, skipping", self.label_id);
+                return Ok(());
+            }
+            debug!(
+                "Label {} not initialized, fetching (mode={:?})",
+                self.label_id, self.view_mode
+            );
+
+            match self.view_mode {
+                ViewMode::Conversations => {
+                    Conversation::sync_first_conversation_page(remote_id, count, api, tether)
+                        .inspect_err(|e| error!("Failed to sync conversations for label: {e:?}"))
+                        .await
+                }
+
+                ViewMode::Messages => {
+                    Message::sync_first_message_page(remote_id, count, api, tether)
+                        .inspect_err(|e| error!("Failed to sync messages for label: {e:?}"))
+                        .await
+                }
+            }?;
+
+            mailbox_label.initialized = true;
+            tether
+                .tx(async |tx| {
+                    mailbox_label.save(tx).await.map_err(|e| {
+                        error!("Failed to mark label as initialized: {e:?}");
+                        MailContextError::Stash(e)
+                    })
+                })
+                .await?;
+
+            debug!("Syncing finished");
+            Ok(())
+        }
     }
 }
