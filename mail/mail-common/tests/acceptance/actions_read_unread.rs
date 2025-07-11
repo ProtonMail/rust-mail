@@ -253,6 +253,6 @@ fn test_conversation(conversation: &TestItem) -> ApiConversation {
             context_snooze_time: 0,
             context_time: 0,
         }],
-        ..Default::default()
+        ..ApiConversation::test_default()
     }
 }

@@ -45,7 +45,6 @@ use proton_mail_api::services::proton::response_data::{
     Conversation as ApiConversation, ConversationLabel as ApiConversationLabel,
     MessageMetadata as ApiMessageMetadata, OperationResult,
 };
-use smart_default::SmartDefault;
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
 use stash::exports::ToSql;
@@ -62,7 +61,7 @@ use std::ops::AddAssign;
 use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
-#[derive(Clone, Debug, Eq, Model, PartialEq, SmartDefault)]
+#[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("conversations")]
 #[ModelHooks]
 pub struct Conversation {
@@ -93,7 +92,6 @@ pub struct Conversation {
     pub exclusive_location: Option<ExclusiveLocation>,
 
     #[DbField]
-    #[default(_code = "UnixTimestamp::new(0)")]
     pub expiration_time: UnixTimestamp,
 
     pub labels: Vec<ConversationLabel>,
@@ -139,6 +137,34 @@ pub struct Conversation {
     /// Whether the conversation has synced its messages.
     #[DbField]
     pub has_messages: bool,
+}
+
+#[cfg(feature = "test-utils")]
+impl Conversation {
+    pub fn test_default() -> Self {
+        Self {
+            local_id: None,
+            remote_id: None,
+            attachment_info: Default::default(),
+            attachments_metadata: vec![],
+            deleted: false,
+            display_snooze_reminder: false,
+            exclusive_location: None,
+            expiration_time: UnixTimestamp::new(0),
+            labels: vec![],
+            num_attachments: 0,
+            num_messages: 0,
+            num_unread: 0,
+            display_order: 0,
+            recipients: Default::default(),
+            senders: Default::default(),
+            size: 0,
+            subject: "".to_string(),
+            is_known: false,
+            custom_labels: vec![],
+            has_messages: false,
+        }
+    }
 }
 
 impl ModelIdExtension for Conversation {
@@ -2837,7 +2863,7 @@ impl TableObserver for ConversationActionWatcher {
 /// [`ConversationLabel`] information is superimposed over the [`Conversation`]
 /// for that context.
 ///
-#[derive(Clone, Debug, Eq, Model, PartialEq, SmartDefault)]
+#[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("conversation_labels")]
 pub struct ConversationLabel {
     // NOTE: This id is essentially useless. Stash does not support composite primary keys
@@ -2856,7 +2882,6 @@ pub struct ConversationLabel {
     pub remote_label_id: Option<LabelId>,
 
     #[DbField]
-    #[default(_code = "UnixTimestamp::new(0)")]
     pub context_expiration_time: UnixTimestamp,
 
     #[DbField]
@@ -2872,15 +2897,33 @@ pub struct ConversationLabel {
     pub context_size: u64,
 
     #[DbField]
-    #[default(_code = "UnixTimestamp::new(0)")]
     pub context_snooze_time: UnixTimestamp,
 
     #[DbField]
-    #[default(_code = "UnixTimestamp::new(0)")]
     pub context_time: UnixTimestamp,
 
     #[DbField]
     pub deleted: bool,
+}
+
+#[cfg(feature = "test-utils")]
+impl ConversationLabel {
+    pub fn test_default() -> Self {
+        Self {
+            local_id: None,
+            local_conversation_id: None,
+            local_label_id: None,
+            remote_label_id: None,
+            context_expiration_time: UnixTimestamp::new(0),
+            context_num_attachments: 0,
+            context_num_messages: 0,
+            context_num_unread: 0,
+            context_size: 0,
+            context_snooze_time: UnixTimestamp::new(0),
+            context_time: UnixTimestamp::new(0),
+            deleted: false,
+        }
+    }
 }
 
 impl ConversationLabel {
@@ -3092,6 +3135,10 @@ impl AddAssign<ConversationMessageLabelStats> for ConversationLabel {
 impl From<ConversationMessageLabelStats> for ConversationLabel {
     fn from(value: ConversationMessageLabelStats) -> Self {
         Self {
+            local_id: None,
+            local_conversation_id: None,
+            local_label_id: None,
+            remote_label_id: None,
             context_expiration_time: value.expiration_time,
             context_num_attachments: value.num_attachments as u64,
             context_num_messages: value.count,
@@ -3099,7 +3146,7 @@ impl From<ConversationMessageLabelStats> for ConversationLabel {
             context_size: value.size,
             context_snooze_time: value.snooze_time,
             context_time: value.time,
-            ..Default::default()
+            deleted: false,
         }
     }
 }

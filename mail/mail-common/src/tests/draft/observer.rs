@@ -422,7 +422,7 @@ async fn create_test_messages(count: usize, bond: &Bond<'_>) {
     address.save(bond).await.unwrap();
     let mut conversation = Conversation {
         remote_id: Some(ConversationId::from("conv-id".to_owned())),
-        ..Default::default()
+        ..Conversation::test_default()
     };
     conversation.save(bond).await.unwrap();
     for i in 0..count {
@@ -431,7 +431,7 @@ async fn create_test_messages(count: usize, bond: &Bond<'_>) {
             local_conversation_id: conversation.local_id,
             remote_conversation_id: conversation.remote_id.clone(),
             local_address_id: address.id(),
-            ..Default::default()
+            ..Message::test_default()
         };
         message.save(bond).await.unwrap();
     }

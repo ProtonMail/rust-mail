@@ -460,8 +460,9 @@ pub struct Conversation {
 }
 
 #[cfg(feature = "mocks")]
-impl Default for Conversation {
-    fn default() -> Self {
+impl Conversation {
+    #[must_use]
+    pub fn test_default() -> Self {
         Self {
             id: ConversationId::from(""),
             attachment_info: BTreeMap::default(),
@@ -750,7 +751,7 @@ pub struct MailSettings {
 /// Represents a message with its metadata and its body.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(feature = "mocks", derive(Serialize, Default))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct Message {
     #[serde(flatten)]
@@ -760,10 +761,21 @@ pub struct Message {
     pub body: MessageBody,
 }
 
+#[cfg(feature = "mocks")]
+impl Message {
+    #[must_use]
+    pub fn test_default() -> Self {
+        Self {
+            metadata: MessageMetadata::test_default(),
+            body: MessageBody::test_default(),
+        }
+    }
+}
+
 /// Contains metadata associated with the message body.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(feature = "mocks", derive(Serialize, Default))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct MessageBody {
     /// Attachment metadata associated with the message.
@@ -788,6 +800,23 @@ pub struct MessageBody {
     // Unfortunately, some values returned in this struct are either
     // arrays or strings.
     pub parsed_headers: HashMap<String, serde_json::Value>,
+}
+
+#[cfg(feature = "mocks")]
+impl MessageBody {
+    #[allow(clippy::default_trait_access)]
+    #[must_use]
+    pub fn test_default() -> Self {
+        Self {
+            attachments: vec![],
+            body: String::new(),
+            reply_to: Default::default(),
+            reply_tos: vec![],
+            header: String::new(),
+            mime_type: Default::default(),
+            parsed_headers: Default::default(),
+        }
+    }
 }
 
 /// TODO: Document this struct.
@@ -1111,8 +1140,9 @@ pub struct MessageMetadata {
 }
 
 #[cfg(feature = "mocks")]
-impl Default for MessageMetadata {
-    fn default() -> Self {
+impl MessageMetadata {
+    #[must_use]
+    pub fn test_default() -> Self {
         Self {
             id: MessageId::from(""),
             conversation_id: ConversationId::from(""),

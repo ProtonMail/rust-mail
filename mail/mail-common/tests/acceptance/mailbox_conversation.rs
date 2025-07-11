@@ -22,7 +22,7 @@ async fn test_new_mailbox_sync_conversations() {
             id: LabelId::from("testlabel"),
             name: "testlabel".to_owned(),
             label_type: ApiLabelType::Label,
-            ..Default::default()
+            ..ApiLabel::test_default()
         });
 
     let message_id1 = MessageId::from("m1");
@@ -35,7 +35,7 @@ async fn test_new_mailbox_sync_conversations() {
             order: 0,
             address_id: params.addresses[0].id.clone(),
             label_ids: vec![LabelId::inbox()],
-            ..Default::default()
+            ..ApiMessageMetadata::test_default()
         },
         ApiMessageMetadata {
             id: message_id2.clone(),
@@ -43,7 +43,7 @@ async fn test_new_mailbox_sync_conversations() {
             order: 1,
             address_id: params.addresses[0].id.clone(),
             label_ids: vec![LabelId::inbox()],
-            ..Default::default()
+            ..ApiMessageMetadata::test_default()
         },
     ];
 

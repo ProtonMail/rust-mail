@@ -746,7 +746,7 @@ mod test {
                 ..Default::default()
             };
 
-            let mut message = Message::default();
+            let mut message = Message::test_default();
 
             if self.starred {
                 message.label_ids.push(LabelId::starred());

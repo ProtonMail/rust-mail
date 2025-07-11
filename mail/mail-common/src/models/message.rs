@@ -2723,8 +2723,10 @@ pub struct MessageLabel {
     pub local_message_id: LocalMessageId,
 }
 
-impl Default for Message {
-    fn default() -> Self {
+#[cfg(feature = "test-utils")]
+impl Message {
+    #[must_use]
+    pub fn test_default() -> Self {
         Self {
             local_address_id: 0.into(),
             remote_address_id: AddressId::new(Default::default()),

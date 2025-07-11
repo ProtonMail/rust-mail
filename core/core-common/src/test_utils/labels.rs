@@ -44,7 +44,7 @@ impl TestContext {
             label: ApiLabel {
                 expanded: expand,
                 id: label_id.clone(),
-                ..Default::default()
+                ..ApiLabel::test_default()
             },
         };
         Mock::given(method("PATCH"))

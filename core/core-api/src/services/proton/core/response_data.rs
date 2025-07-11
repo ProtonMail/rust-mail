@@ -1024,8 +1024,9 @@ pub struct Label {
 }
 
 #[cfg(feature = "mocks")]
-impl Default for Label {
-    fn default() -> Self {
+impl Label {
+    #[must_use]
+    pub fn test_default() -> Self {
         Self {
             id: LabelId::from(""),
             parent_id: None,

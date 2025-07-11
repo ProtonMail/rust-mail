@@ -243,7 +243,7 @@ fn test_message(params: &Params) -> impl FnMut(&TestItem) -> ApiMessageMetadata 
             conversation_id: conversation_id.clone(),
             address_id: address_id.clone(),
             unread: *unread,
-            ..Default::default()
+            ..ApiMessageMetadata::test_default()
         }
     }
 }
