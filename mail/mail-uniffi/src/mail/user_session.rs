@@ -150,6 +150,32 @@ impl MailUserSession {
         .map_err(UserContextError::from)
     }
 
+    /// Fork the current session for a child with the given app version.
+    ///
+    /// This call has to be made from a parent session, and forks the current
+    /// logged-in user session in order to provide a new session for the same
+    /// user.
+    ///
+    /// If successful, this will return the "Selector" string for the new
+    /// session.
+    ///
+    /// # Errors
+    ///
+    /// Any of the [`MailSessionError::Http`] possibilities could be returned if
+    /// there is a problem with the HTTP request.
+    ///
+    pub async fn fork_with_version(&self, app_version: String) -> Result<String, UserContextError> {
+        let ctx = self.ctx()?;
+        uniffi_async(async move {
+            ctx.session()
+                .fork_with_version(app_version)
+                .await
+                .map_err(RealProtonMailError::from)
+        })
+        .await
+        .map_err(UserContextError::from)
+    }
+
     /// Processes a QR code from a Target Device to initiate a secure session fork.
     ///
     /// This function parses the provided QR code, retrieves the current device's session passphrase,
