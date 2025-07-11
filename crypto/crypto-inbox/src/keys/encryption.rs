@@ -103,7 +103,15 @@ impl PackageCryptoType {
     }
 
     #[must_use]
-    pub fn from_scheme(scheme: PGPScheme, encrypt: bool, sign: bool) -> PackageCryptoType {
+    pub fn from_scheme(
+        scheme: PGPScheme,
+        encrypt: bool,
+        sign: bool,
+        eo: bool,
+    ) -> PackageCryptoType {
+        if eo {
+            return PackageCryptoType::EncryptedOutside;
+        }
         match scheme {
             PGPScheme::PGPMime => {
                 if !encrypt && sign {
@@ -467,6 +475,8 @@ impl<Pub: PublicKey> SendPreferences<Pub> {
                     encryption_preferences.pgp_scheme,
                     encrypt,
                     sign,
+                    // Only use EO if it is external without encryption
+                    !encryption_preferences.encrypt && composer_preferences.encrypt_to_outside,
                 );
                 // Force PGP mime as inline pgp is not supported currently
                 if scheme == PackageCryptoType::PgpInline {

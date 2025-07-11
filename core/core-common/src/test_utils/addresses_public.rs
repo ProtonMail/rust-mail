@@ -5,6 +5,7 @@ use proton_crypto_account::keys::{
     APIPublicAddressKeyGroup, APIPublicKey, APIPublicKeySource, KeyFlag, SKLDataJson, SKLSignature,
     SignedKeyList,
 };
+use serde::Serialize;
 use wiremock::{
     Mock, ResponseTemplate,
     matchers::{method, path, query_param},
@@ -95,6 +96,32 @@ impl TestContext {
             mock = mock.and(query_param("InternalOnly", u8::from(value).to_string()));
         }
         mock.respond_with(ResponseTemplate::new(422).set_body_json(response))
+            .named(function_name!())
+            .mount(self.mock_server())
+            .await;
+    }
+
+    #[function_name::named]
+    pub async fn mock_get_auth(&self, modulus_id: String, modulus: String) {
+        // until the circular reference problem from proton-account is resolved,
+        // we can't import it in proton-core-common so we have to redeclare it
+        #[derive(Clone, Debug, Serialize)]
+        #[serde(rename_all = "PascalCase")]
+        pub struct GetAuthModulusResponse {
+            pub modulus: String,
+
+            #[serde(rename = "ModulusID")]
+            pub modulus_id: String,
+        }
+
+        Mock::given(method("GET"))
+            .and(path("/api/auth/v4/modulus"))
+            .respond_with(
+                ResponseTemplate::new(200).set_body_json(GetAuthModulusResponse {
+                    modulus,
+                    modulus_id,
+                }),
+            )
             .named(function_name!())
             .mount(self.mock_server())
             .await;

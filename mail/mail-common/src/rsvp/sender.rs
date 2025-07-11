@@ -212,6 +212,7 @@ where
             self.tether,
             slice::from_ref(&to),
             crypto,
+            false,
         )
         .await?;
 
@@ -224,6 +225,7 @@ where
             MimeType::TextPlain,
             body,
             slice::from_ref(&ics),
+            None,
             self.tether,
         )
         .await

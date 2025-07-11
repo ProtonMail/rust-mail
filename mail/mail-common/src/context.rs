@@ -143,10 +143,12 @@ impl MailContextError {
 
 impl proton_action_queue::action::Error for MailContextError {
     fn is_network_failure(&self) -> bool {
-        if let Self::Api(e) = self {
-            e.is_network_failure()
-        } else {
-            false
+        match self {
+            Self::Api(e) => e.is_network_failure(),
+            Self::Draft(draft::Error::Send(draft::SendError::SendMessage(
+                draft::PackageError::ModulusRequest(e),
+            ))) => e.is_network_failure(),
+            _ => false,
         }
     }
 

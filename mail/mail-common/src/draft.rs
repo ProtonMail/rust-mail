@@ -20,6 +20,7 @@ use chrono::{DateTime, Local};
 use compose::maybe_sanitize;
 use derive_more::derive::TryFrom;
 use futures::future::join3;
+use proton_account_api::ApiError;
 use proton_action_queue::action::{ActionId, MetadataBuilder};
 use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput, QueuedError};
 use proton_core_api::consts::Mail;
@@ -27,8 +28,10 @@ use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{AddressId, PrivateEmail};
 use proton_core_api::session::{CoreSession, Session};
 use proton_core_common::datatypes::LocalAddressId;
+use proton_core_common::db::account::EncryptedPassword;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::attachment::{AttachmentDecryptionError, AttachmentEncryptionError};
+use proton_crypto_inbox::eo::EoError;
 use proton_crypto_inbox::keys::{PackageCryptoType, SessionKeyError};
 use proton_crypto_inbox::message::MessageError;
 use proton_mail_api::services::proton::ProtonMail;
@@ -61,6 +64,8 @@ use crate::draft::compose::{
 };
 pub use send::ScheduleSendOptions;
 
+pub const MIN_PASSWORD_LEN: usize = 8;
+
 /// Potential draft specific errors.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -82,6 +87,8 @@ pub enum Error {
     CancelScheduleSend(#[from] CancelScheduleSendError),
     #[error(transparent)]
     SenderAddressChange(#[from] SenderAddressChangeError),
+    #[error(transparent)]
+    Password(PasswordError),
 }
 
 /// Errors that occur during draft creation or opening an existing draft.
@@ -128,6 +135,8 @@ pub enum SendError {
     ScheduleSendExpired,
     #[error("The maximum amount of scheduled messages has been reached")]
     ScheduleSendMessageLimitExceeded,
+    #[error("Failed to decrypt external encryption password")]
+    EOPasswordDecrypt,
 }
 
 impl From<SendError> for MailContextError {
@@ -304,6 +313,10 @@ pub enum PackageError {
     PackageBodyInfoReEncrypt(SessionKeyError),
     #[error("Failed to extract attachment info for address: {0}")]
     PackageAttachmentInfo(#[from] AttachmentDecryptionError),
+    #[error("Failed to build package for encrypt-to-outside (EO): {0}")]
+    PackageEo(#[from] EoError),
+    #[error("EO selected but no password found")]
+    PackageEoPasswordMissing,
     #[error("Failed to encrypt attachment info to recipient: {0}")]
     PackageAttachmentInfoReEncrypt(SessionKeyError),
     #[error("Failed to encrypt attachment signature to recipient: {0}")]
@@ -318,11 +331,13 @@ pub enum PackageError {
     RecipientEmailInvalid(PrivateEmail),
     #[error("Proton Email {0} does not exist")]
     ProtonRecipientDoesNotExist(PrivateEmail),
+    #[error("Modulus: {0}")]
+    ModulusRequest(ApiError),
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum SenderAddressChangeError {
-    #[error("Draft metadata not found")]
+    #[error("Draft metadata {0} not found")]
     MetadataNotFound(MetadataId),
     #[error("Address with email '{0}' not found")]
     AddressEmailNotFound(String),
@@ -339,6 +354,22 @@ pub enum SenderAddressChangeError {
 impl From<SenderAddressChangeError> for MailContextError {
     fn from(value: SenderAddressChangeError) -> Self {
         MailContextError::Draft(Error::SenderAddressChange(value))
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum PasswordError {
+    #[error("Draft metadata {0} not found")]
+    MetadataNotFound(MetadataId),
+    #[error("Password should be at least 8 chars")]
+    PasswordTooShort,
+    #[error("Failed to encrypt password")]
+    Encryption,
+}
+
+impl From<PasswordError> for MailContextError {
+    fn from(err: PasswordError) -> Self {
+        MailContextError::Draft(Error::Password(err))
     }
 }
 
@@ -485,6 +516,9 @@ impl Draft {
                 reply_mode: None,
                 send_action_id: None,
                 save_action_id: None,
+                expiration_time: None,
+                password: None,
+                password_hint: None,
             };
             tether
                 .tx::<_, _, MailContextError>(async |tx| {
@@ -1614,6 +1648,67 @@ impl Draft {
             .await?
         {
             self.finalize_sender_address_change_request(output)
+        }
+        Ok(())
+    }
+
+    pub async fn is_password_protected(&self, tether: &Tether) -> Result<bool, MailContextError> {
+        Ok(DraftMetadata::find_by_id(self.metadata_id, tether)
+            .await?
+            .map(|v| v.password.is_some())
+            .unwrap_or(false))
+    }
+
+    pub async fn set_password(
+        &self,
+        ctx: &MailUserContext,
+        password: &str,
+        hint: Option<String>,
+    ) -> Result<(), MailContextError> {
+        Self::set_password_by_id(ctx, self.metadata_id, password, hint).await
+    }
+
+    pub async fn set_password_by_id(
+        ctx: &MailUserContext,
+        metadata_id: MetadataId,
+        password: &str,
+        hint: Option<String>,
+    ) -> Result<(), MailContextError> {
+        if password.chars().count() < MIN_PASSWORD_LEN {
+            return Err(PasswordError::PasswordTooShort.into());
+        }
+        let mut tether = ctx.user_stash().connection();
+        let mut metadata = DraftMetadata::find_by_id(metadata_id, &tether)
+            .await?
+            .ok_or(PasswordError::MetadataNotFound(metadata_id))?;
+
+        let session_encryption_key = ctx.core_context().get_encryption_key()?;
+        let encrypted_password = EncryptedPassword::new(password, &session_encryption_key)
+            .map_err(|_| PasswordError::Encryption)?;
+        metadata.password = Some(encrypted_password);
+        metadata.password_hint = hint;
+        tether.tx(async |tx| metadata.save(tx).await).await?;
+        info!("Password protection applied to draft {metadata_id}");
+        Ok(())
+    }
+
+    pub async fn remove_password(&self, tether: &mut Tether) -> Result<(), MailContextError> {
+        Self::remove_password_by_id(tether, self.metadata_id).await
+    }
+
+    pub async fn remove_password_by_id(
+        tether: &mut Tether,
+        metadata_id: MetadataId,
+    ) -> Result<(), MailContextError> {
+        let mut metadata = DraftMetadata::find_by_id(metadata_id, tether)
+            .await?
+            .ok_or(PasswordError::MetadataNotFound(metadata_id))?;
+
+        if metadata.password.is_some() {
+            metadata.password = None;
+            metadata.password_hint = None;
+            tether.tx(async |tx| metadata.save(tx).await).await?;
+            info!("Password protection removed from draft {metadata_id}");
         }
         Ok(())
     }

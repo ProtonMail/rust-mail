@@ -5,6 +5,7 @@ use proton_mail_common::errors::{
     DraftCancelScheduleSendErrorReason as RealDraftCancelScheduleSendErrorReason,
     DraftDiscardErrorReason as RealDraftDiscardErrorReason,
     DraftOpenErrorReason as RealDraftOpenErrorReason,
+    DraftPasswordErrorReason as RealDraftPasswordErrorReason,
     DraftSaveErrorReason as RealDraftSaveErrorReason,
     DraftSendErrorReason as RealDraftSendErrorReason,
     DraftSenderAddressChangeErrorReason as RealDraftSenderAddressChangeErrorReason,
@@ -136,6 +137,8 @@ pub enum DraftSendErrorReason {
     ScheduleSendExpired,
     /// The maximum number of scheduled send messages has been reached.
     ScheduleSendMessageLimitExceeded,
+    /// Failed to decrypt external encryption password
+    EOPasswordDecrypt,
 }
 
 impl From<RealDraftSaveErrorReason> for DraftSaveErrorReason {
@@ -176,6 +179,7 @@ impl From<RealDraftSendErrorReason> for DraftSendErrorReason {
             RealDraftSendErrorReason::ScheduleSendMessageLimitExceeded => {
                 Self::ScheduleSendMessageLimitExceeded
             }
+            RealDraftSendErrorReason::EOPasswordDecrypt => Self::EOPasswordDecrypt,
         }
     }
 }
@@ -302,6 +306,19 @@ impl From<RealDraftSenderAddressChangeErrorReason> for DraftSenderAddressChangeE
             RealDraftSenderAddressChangeErrorReason::AddressWithEmailNotFound(v) => {
                 Self::AddressEmailNotFound(v)
             }
+        }
+    }
+}
+
+#[derive(Debug, UniffiEnum)]
+pub enum DraftPasswordErrorReason {
+    PasswordTooShort,
+}
+
+impl From<RealDraftPasswordErrorReason> for DraftPasswordErrorReason {
+    fn from(value: RealDraftPasswordErrorReason) -> Self {
+        match value {
+            RealDraftPasswordErrorReason::PasswordTooShort => Self::PasswordTooShort,
         }
     }
 }

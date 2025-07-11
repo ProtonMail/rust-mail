@@ -4,7 +4,7 @@ use crate::actions::draft::{
 };
 use crate::datatypes::{LocalMessageId, MessageFlags, MimeType, RollbackItemType};
 use crate::draft::compose::create_timestamp;
-use crate::draft::send::{MailType, build_packages, load_prefs};
+use crate::draft::send::{EoData, MailType, build_packages, load_prefs};
 use crate::draft::{Draft, ReplyMode, SendError, draft_attachment_staging_path};
 use crate::models::{
     Conversation, DraftAttachmentMetadata, DraftMetadata, DraftSendFailure, DraftSendResult,
@@ -304,6 +304,8 @@ impl Send {
     ) -> Result<<Self as Action>::RemoteOutput, <Self as Action>::Error> {
         let local_message_id = action.local_message_id.expect("Should be set");
 
+        let session_encryption_key = context.core_context().get_encryption_key()?;
+
         if let Some(delivery_time) = action.delivery_time {
             let current_time_stamp: UnixTimestamp =
                 (UnixTimestamp::now().as_u64() + SEND_DELIVERY_DELTA_INTERVAL.as_secs()).into();
@@ -375,6 +377,11 @@ impl Send {
             return Err(SendError::MessageBodyMissing(message_metadata.id()).into());
         };
 
+        // If the user selects encrypt with password, the password should appear here.
+        // The send preference logic will decide for each email if password encryption should be applied.
+        // It will only use the password if the recipient is external and has no encryption.
+        let eo_data: Option<EoData> = draft_metadata.to_eo_data(&session_encryption_key)?;
+
         let pgp = new_pgp_provider();
 
         // Load send preferences for each recipient of the message.
@@ -384,6 +391,7 @@ impl Send {
             guard,
             &action.recipients,
             mail_settings.crypto_mail_settings(),
+            eo_data.is_some(),
         )
         .await
         .inspect_err(|err| error!("Failed to load send preferences for recipients: {err:?}"))?;
@@ -408,6 +416,7 @@ impl Send {
             action.mime_type,
             &stored_message_body,
             &attachments,
+            eo_data,
             guard,
         )
         .await

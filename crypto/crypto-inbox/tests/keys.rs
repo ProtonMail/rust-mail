@@ -275,6 +275,22 @@ fn test_sending_preferences_external() {
     );
     assert_eq!(sending_preferences.pgp_scheme, PackageCryptoType::Cleartext);
     assert_eq!(sending_preferences.mime_type, mail_setting.mime_type.into());
+
+    let sending_preferences = SendPreferences::new(
+        api_keys.clone(),
+        None,
+        UnixTimestamp::new(1_723_459_962),
+        &mail_setting,
+        ComposerPreference {
+            encrypt_to_outside: true,
+        },
+    )
+    .expect("should be able to extract sending preferences");
+    assert_eq!(
+        sending_preferences.pgp_scheme,
+        PackageCryptoType::EncryptedOutside
+    );
+    assert_eq!(sending_preferences.mime_type, mail_setting.mime_type.into());
 }
 
 #[test]

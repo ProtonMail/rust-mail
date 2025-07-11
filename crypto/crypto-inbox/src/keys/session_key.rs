@@ -206,6 +206,32 @@ impl InboxSessionKey {
             .map_err(SessionKeyError::KeyPacketEncryption)
     }
 
+    /// Creates a key packet for the provided password.
+    ///
+    /// Encrypts the internal symmetric session key with the password
+    /// using `OpenPGP`. The output is an `OpenPGP` SKESK packet (referred to as a key packet in the Proton context).
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`SessionKeyError::KeyPacketEncryption`] error if the encryption fails or
+    /// a [`SessionKeyError::InvalidSessionKey`] error if there is an issue with the internal session key.
+    pub fn encrypt_to_password<P>(
+        &self,
+        pgp: &P,
+        passphrase: &str,
+    ) -> Result<KeyPacket, SessionKeyError>
+    where
+        P: PGPProviderSync,
+    {
+        let session_key = self.export_to_pgp_provider(pgp)?;
+
+        pgp.new_encryptor()
+            .with_passphrase(passphrase)
+            .encrypt_session_key(&session_key)
+            .map(|key_packet| KeyPacket::new_from_bytes(key_packet.as_ref()))
+            .map_err(SessionKeyError::KeyPacketEncryption)
+    }
+
     /// Creates a key packet for each provided recipient public key.
     ///
     /// Encrypts the internal symmetric session key with the provided public keys

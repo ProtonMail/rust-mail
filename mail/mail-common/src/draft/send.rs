@@ -9,6 +9,7 @@ use crate::models::{Attachment, AttachmentType, DraftMetadata, Message};
 use crate::{AppError, MailContextError, MailContextResult, MailUserContext};
 use anyhow::anyhow;
 use chrono::{DateTime, Datelike, Days, Local, LocalResult, NaiveTime};
+use proton_account_api::AccountApi;
 use proton_action_queue::observers::ActionAwaiter;
 use proton_action_queue::queue::{BroadcastMessage, Queue, QueuedError};
 use proton_core_api::consts::Mail;
@@ -21,20 +22,25 @@ use proton_crypto_account::keys::{
 };
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_inbox::attachment::DecryptableAttachment;
+use proton_crypto_inbox::eo::Challenge;
 use proton_crypto_inbox::keys::{
     ComposerPreference, CryptoMailSettings, InboxSessionKey, PackageCryptoType, SendPreferences,
 };
 use proton_crypto_inbox::message::packages::{
     EncryptedPackageBody, PackageMimeType, package_body_encrypt,
 };
+use proton_crypto_inbox::proton_crypto::new_srp_provider;
 use proton_crypto_inbox::proton_crypto_inbox_mime::write::InboxMimeBuilder;
 use proton_mail_api::services::proton::ProtonMail;
+use proton_mail_api::services::proton::prelude::AuthInput;
 use proton_mail_api::services::proton::request_data::{
     AddressSubPackage, Package, PackageSignaturesMode,
 };
+use secrecy::{ExposeSecret, SecretString};
 use stash::orm::Model;
 use stash::stash::{RunTransaction, Tether};
 use std::collections::{HashMap, HashSet};
+use std::ops::Deref;
 use std::time::Duration;
 use tracing::{Instrument, debug, debug_span, error, info, instrument};
 
@@ -44,6 +50,12 @@ pub enum MailType {
     Direct,
 }
 
+/// Encrypt e-mail with password composer input (EO)
+pub struct EoData {
+    pub password: SecretString,
+    pub password_hint: Option<String>,
+}
+
 #[instrument(skip_all)]
 pub async fn load_prefs<P>(
     context: &MailUserContext,
@@ -51,6 +63,7 @@ pub async fn load_prefs<P>(
     tx: &mut impl RunTransaction,
     recipient_emails: &[PrivateEmail],
     crypto_mail_settings: CryptoMailSettings,
+    eo_selected: bool,
 ) -> MailContextResult<HashMap<PrivateEmail, SendPreferences<P::PublicKey>>>
 where
     P: PGPProviderSync,
@@ -64,7 +77,9 @@ where
                 tx,
                 PrivateEmailRef::new(recipient.as_clear_text_str()),
                 crypto_mail_settings,
-                ComposerPreference::default(),
+                ComposerPreference {
+                    encrypt_to_outside: eo_selected,
+                },
             )
             .await
             .map_err(|err| {
@@ -118,6 +133,7 @@ pub async fn build_packages<P>(
     mime_type: MimeType,
     stored_message_body: &str,
     attachments: &[Attachment],
+    eo_data: Option<EoData>,
     tx: &mut impl RunTransaction,
 ) -> Result<Vec<Package>, PackageError>
 where
@@ -183,7 +199,10 @@ where
             &preferences,
             &encrypted_package,
             attachments,
-        )?;
+            eo_data.as_ref(),
+            context.session(),
+        )
+        .await?;
 
         packages.push(package);
     }
@@ -326,13 +345,16 @@ where
 }
 
 #[instrument(skip_all)]
-fn build_top_package<P>(
+#[allow(clippy::too_many_arguments)]
+async fn build_top_package<P>(
     ty: MailType,
     pgp: &P,
     sender_keys: &[UnlockedAddressKey<P>],
     recipient_preferences: &[(&PrivateEmail, &SendPreferences<P::PublicKey>)],
     encrypted_body: &EncryptedPackageBody,
     attachments: &[Attachment],
+    eo_data: Option<&EoData>,
+    session: &Session,
 ) -> Result<Package, PackageError>
 where
     P: PGPProviderSync,
@@ -356,7 +378,10 @@ where
             attachments,
             sender_keys,
             recipient_preferences,
-        )?;
+            eo_data,
+            session,
+        )
+        .await?;
     }
 
     package.package_type = package.addresses.iter().fold(0, |acc, (_, address)| {
@@ -368,7 +393,7 @@ where
 
 #[allow(clippy::too_many_arguments)]
 #[instrument(skip_all)]
-fn build_address_sub_package<P>(
+async fn build_address_sub_package<P>(
     ty: MailType,
     pgp: &P,
     recipient_mail: &str,
@@ -377,6 +402,8 @@ fn build_address_sub_package<P>(
     attachments: &[Attachment],
     sender_keys: &[impl AsRef<P::PrivateKey>],
     recipient_send_preferences: &SendPreferences<P::PublicKey>,
+    eo_data: Option<&EoData>,
+    session: &Session,
 ) -> Result<(), PackageError>
 where
     P: PGPProviderSync,
@@ -417,7 +444,7 @@ where
                     pgp,
                     attachments,
                     sender_keys,
-                    recipient_key,
+                    EncryptionTool::PublicKey(recipient_key),
                     recipient_send_preferences.sign,
                     &mut address_package,
                 )?;
@@ -439,7 +466,39 @@ where
                 Some(PackageSignaturesMode::from(recipient_send_preferences.sign));
         }
 
-        PackageCryptoType::PgpInline | PackageCryptoType::EncryptedOutside => {
+        PackageCryptoType::EncryptedOutside => {
+            let Some(eo_info) = eo_data else {
+                return Err(PackageError::PackageEoPasswordMissing);
+            };
+
+            let response = session
+                .api()
+                .get_auth_modulus()
+                .await
+                .map_err(PackageError::ModulusRequest)?;
+
+            // Re-encrypt packets with the password.
+            build_address_package_for_eo(
+                pgp,
+                eo_info,
+                &response.modulus_id,
+                &response.modulus,
+                body_session_key,
+                &mut address_package,
+            )?;
+
+            process_attachments(
+                ty,
+                pgp,
+                attachments,
+                sender_keys,
+                EncryptionTool::Password(eo_info.password.expose_secret()),
+                recipient_send_preferences.sign,
+                &mut address_package,
+            )?;
+        }
+
+        PackageCryptoType::PgpInline => {
             return Err(PackageError::NotSupported(
                 recipient_send_preferences.pgp_scheme,
             ));
@@ -450,6 +509,42 @@ where
         .addresses
         .insert(recipient_mail.to_owned(), address_package);
 
+    Ok(())
+}
+
+#[instrument(skip_all)]
+fn build_address_package_for_eo<P>(
+    pgp: &P,
+    eo_data: &EoData,
+    srp_modulus_id: &str,
+    srp_modulus: &str,
+    body_session_key: &InboxSessionKey,
+    address_package: &mut AddressSubPackage,
+) -> Result<(), PackageError>
+where
+    P: PGPProviderSync,
+{
+    let srp = new_srp_provider();
+
+    // Auth data.
+    let challenge = Challenge::generate(pgp, &srp, eo_data.password.expose_secret(), srp_modulus)?;
+
+    address_package.password_hint = Some(eo_data.password_hint.clone().unwrap_or_default());
+    address_package.enc_token = Some(challenge.enc_token);
+    address_package.token = Some(challenge.token.deref().to_string());
+    address_package.auth = Some(AuthInput {
+        version: challenge.verifier.version,
+        modulus_id: srp_modulus_id.to_string(),
+        salt: challenge.verifier.salt,
+        verifier: challenge.verifier.verifier,
+    });
+
+    // Body key packet.
+    address_package.body_key_packet = Some(
+        body_session_key
+            .encrypt_to_password(pgp, eo_data.password.expose_secret())
+            .map_err(PackageError::PackageBodyInfoReEncrypt)?,
+    );
     Ok(())
 }
 
@@ -491,6 +586,11 @@ where
     Ok(())
 }
 
+enum EncryptionTool<'a, P: PGPProviderSync> {
+    Password(&'a str),
+    PublicKey(&'a P::PublicKey),
+}
+
 /// Encrypts the attachment info (session key, signatures) to the given recipient
 /// and adds them to to to the `address_package`.
 #[instrument(skip_all)]
@@ -499,7 +599,7 @@ fn process_attachments<P>(
     pgp: &P,
     attachments: &[Attachment],
     sender_keys: &[impl AsRef<P::PrivateKey>],
-    recipient_key: &P::PublicKey,
+    encryption_tool: EncryptionTool<P, '_>,
     mut sign: bool,
     address_package: &mut AddressSubPackage,
 ) -> Result<(), PackageError>
@@ -521,18 +621,29 @@ where
         // Decrypt attachment information using sender's keys
         let attachment_info = attachment.decrypt_attachment_info(pgp, sender_keys)?;
 
-        // Encrypt the attachment session key to the recipient
-        let recipient_attachment_kp = attachment_info
-            .encrypt_session_key_to_recipient(pgp, recipient_key)
-            .map_err(PackageError::PackageAttachmentInfoReEncrypt)?;
+        let recipient_attachment_kp = match encryption_tool {
+            EncryptionTool::Password(password) => {
+                // Encrypt the attachment session key to the password
+                attachment_info
+                    .encrypt_session_key_to_password(pgp, password)
+                    .map_err(PackageError::PackageAttachmentInfoReEncrypt)?
+            }
+            EncryptionTool::PublicKey(recipient_key) => {
+                // Encrypt the attachment session key to the recipient
+                let recipient_attachment_kp = attachment_info
+                    .encrypt_session_key_to_recipient(pgp, recipient_key)
+                    .map_err(PackageError::PackageAttachmentInfoReEncrypt)?;
 
-        // Optionally encrypt the signature to the recipient
-        if let Some(enc_signature) = attachment_info
-            .encrypt_signature_to_recipient(pgp, recipient_key)
-            .map_err(PackageError::PackageAttachmentInfoReEncryptSignature)?
-        {
-            attachment_enc_signatures.insert(attachment, enc_signature.encode_base64())?;
-        }
+                // Optionally encrypt the signature to the recipient
+                if let Some(enc_signature) = attachment_info
+                    .encrypt_signature_to_recipient(pgp, recipient_key)
+                    .map_err(PackageError::PackageAttachmentInfoReEncryptSignature)?
+                {
+                    attachment_enc_signatures.insert(attachment, enc_signature.encode_base64())?;
+                }
+                recipient_attachment_kp
+            }
+        };
 
         attachment_key_packets.insert(attachment, recipient_attachment_kp)?;
     }

@@ -409,6 +409,26 @@ impl ExtractedAttachmentInfo {
         self.session_key.encrypt_to_recipient(pgp, recipient_key)
     }
 
+    /// Creates a key packet for the provided passphrase.
+    ///
+    /// Encrypts the internal symmetric session key with the provided passphrase
+    /// using `OpenPGP`. The output is an `OpenPGP` SKESK packet (referred to as a key packet in the Proton context).
+    ///
+    /// # Errors
+    ///
+    /// Returns a [`SessionKeyError::KeyPacketEncryption`] error if the encryption fails or
+    /// a [`SessionKeyError::InvalidSessionKey`] error if there is an issue with the internal session key.
+    pub fn encrypt_session_key_to_password<P>(
+        &self,
+        pgp: &P,
+        passphrase: &str,
+    ) -> Result<KeyPacket, SessionKeyError>
+    where
+        P: PGPProviderSync,
+    {
+        self.session_key.encrypt_to_password(pgp, passphrase)
+    }
+
     /// Encrypts the internal signature towards a new recipient if present.
     ///
     /// # Errors

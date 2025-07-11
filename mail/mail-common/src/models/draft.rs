@@ -6,6 +6,7 @@ use crate::MailContextError;
 use crate::datatypes::LocalMessageId;
 use crate::datatypes::attachment::ContentId;
 use crate::datatypes::{LocalAttachmentId, LocalConversationId};
+use crate::draft::send::EoData;
 use crate::draft::{AttachmentUploadError, Error, PackageError, ReplyMode, SaveError, SendError};
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
@@ -14,6 +15,7 @@ use crate::errors::{
     ProtonMailError,
 };
 use crate::models::{Attachment, Message, MessageBodyMetadata};
+use anyhow::anyhow;
 use chrono::Utc;
 use derive_more::derive::TryFrom;
 use indoc::formatdoc;
@@ -21,8 +23,10 @@ use proton_action_queue::action::ActionId;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{AddressId, PrivateEmail};
 use proton_core_common::datatypes::UnixTimestamp;
+use proton_core_common::db::account::{EncryptedPassword, SessionEncryptionKey};
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::common::MessageId;
+use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 use sqlite_watcher::watcher::TableObserver;
 use stash::exports::SqliteError;
@@ -94,6 +98,18 @@ pub struct DraftMetadata {
     #[builder(default, setter(strip_option))]
     #[DbField]
     pub send_action_id: Option<ActionId>,
+
+    #[builder(default, setter(strip_option))]
+    #[DbField]
+    pub expiration_time: Option<UnixTimestamp>,
+
+    #[builder(default, setter(strip_option))]
+    #[DbField]
+    pub password: Option<EncryptedPassword>,
+
+    #[builder(default, setter(strip_option))]
+    #[DbField]
+    pub password_hint: Option<String>,
 }
 
 impl DraftMetadata {
@@ -111,6 +127,9 @@ impl DraftMetadata {
             reply_mode: None,
             save_action_id: None,
             send_action_id: None,
+            expiration_time: None,
+            password: None,
+            password_hint: None,
         };
 
         metadata.save(bond).await?;
@@ -137,6 +156,9 @@ impl DraftMetadata {
             reply_mode: Some(reply_mode),
             send_action_id: None,
             save_action_id: None,
+            expiration_time: None,
+            password: None,
+            password_hint: None,
         };
 
         metadata.save(bond).await?;
@@ -295,6 +317,28 @@ impl DraftMetadata {
         .collect();
 
         Ok(msg_ids)
+    }
+
+    #[allow(clippy::result_large_err)]
+    pub fn to_eo_data(
+        &self,
+        session_encryption_key: &SessionEncryptionKey,
+    ) -> Result<Option<EoData>, MailContextError> {
+        let Some(password) = self.password.as_ref() else {
+            return Ok(None);
+        };
+        let password = SecretString::from(
+            String::from_utf8(
+                session_encryption_key
+                    .decrypt(password.as_ref())
+                    .map_err(|_| SendError::EOPasswordDecrypt)?,
+            )
+            .map_err(|_| MailContextError::Other(anyhow!("Draft password is not valid utf8")))?,
+        );
+        Ok(Some(EoData {
+            password,
+            password_hint: self.password_hint.clone(),
+        }))
     }
 }
 

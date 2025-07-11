@@ -29,6 +29,7 @@ use proton_mail_common::proton_mail_api::proton_core_api::services::proton::{
 use proton_mail_common::rsvp::RsvpEvent;
 use proton_mail_common::{MailUserContext, Mailbox};
 use search::{Search, SearchStatusBar};
+use secrecy::SecretString;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -141,6 +142,7 @@ pub enum ComposerMessage {
     ScheduleSend(DateTime<Local>),
     StartChangeAddress(AddressId),
     FinishChangeAddress(DraftAddressChangeOutput),
+    SetPasswordProtection(SecretString, Option<String>),
 }
 
 impl From<ComposerMessage> for Messages {
