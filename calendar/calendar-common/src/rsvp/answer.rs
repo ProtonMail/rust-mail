@@ -30,8 +30,8 @@ where
 {
     info!(?answer, "Answering");
 
-    if event.intent.is_reminder() {
-        return Err(RsvpError::EventIsReminder.into());
+    if !event.can_be_answered() {
+        return Err(RsvpError::NonAnswerable.into());
     }
 
     let calendar = cache

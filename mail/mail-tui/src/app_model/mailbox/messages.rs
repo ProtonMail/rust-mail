@@ -18,7 +18,7 @@ use futures::FutureExt;
 use futures::future::try_join_all;
 use itertools::Itertools as _;
 use proton_calendar_api::CalendarAttendeeStatus;
-use proton_calendar_common::{RsvpAnswerStatus, RsvpOccurrence, RsvpProgress};
+use proton_calendar_common::{RsvpAnswerStatus, RsvpOccurrence, RsvpProgress, RsvpRecency};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::os::safe_write;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
@@ -568,9 +568,11 @@ impl MessagesState {
             return Command::None;
         };
 
-        if rsvp.intent.is_reminder() {
-            // Reminders can't be answered
-            return Command::None;
+        if !rsvp.can_be_answered() {
+            return Command::Message(Messages::DisplayError(
+                None,
+                anyhow!("This invitation can't be answered anymore."),
+            ));
         }
 
         let ctx = ctx.clone();
@@ -1084,6 +1086,11 @@ impl DecryptedMessage {
                     RsvpProgress::Ongoing | RsvpProgress::Ended | RsvpProgress::Cancelled => 2,
                 };
 
+                let recency = match rsvp.recency {
+                    RsvpRecency::Fresh => 0,
+                    RsvpRecency::Outdated => 2,
+                };
+
                 let summary = 1;
 
                 let summary_spacer =
@@ -1096,6 +1103,7 @@ impl DecryptedMessage {
                 let attendees = rsvp.attendees.len();
 
                 1 + progress
+                    + recency
                     + summary
                     + summary_spacer
                     + occurrence
@@ -1156,12 +1164,23 @@ impl DecryptedMessage {
             .map(|txt| vec![txt, Text::raw("")])
             .unwrap_or_default();
 
-        let fg = match rsvp.progress {
-            RsvpProgress::Pending | RsvpProgress::Ongoing => Color::White,
-            RsvpProgress::Ended | RsvpProgress::Cancelled => Color::DarkGray,
+        let rsvp_recency = match rsvp.recency {
+            RsvpRecency::Fresh => vec![],
+            RsvpRecency::Outdated => vec![
+                Text::raw("! Invitation is outdated, the event has been updated").fg(Color::Yellow),
+                Text::raw("").fg(Color::Yellow),
+            ],
         };
 
-        let rsvp_summary = Text::from(rsvp.summary.as_deref().unwrap_or("(no title)")).fg(fg);
+        #[allow(clippy::match_same_arms, reason = "more readable as-is")]
+        let fg = match (rsvp.progress, rsvp.recency) {
+            (RsvpProgress::Pending | RsvpProgress::Ongoing, RsvpRecency::Fresh) => Color::White,
+            (RsvpProgress::Ended | RsvpProgress::Cancelled, RsvpRecency::Fresh) => Color::DarkGray,
+            (_, RsvpRecency::Outdated) => Color::DarkGray,
+        };
+
+        let rsvp_summary = rsvp.summary.as_deref().unwrap_or("(no title)");
+        let rsvp_summary = Text::from(rsvp_summary).fg(fg).bold();
 
         let rsvp_occurrence = Text::from(match rsvp.occurrence {
             RsvpOccurrence::Date { starts_at, ends_at } if ends_at == starts_at => {
@@ -1232,6 +1251,7 @@ impl DecryptedMessage {
 
         let rows = rsvp_progress
             .into_iter()
+            .chain(rsvp_recency)
             .chain(iter::once(rsvp_summary))
             .chain(rsvp_summary_spacer)
             .chain(iter::once(rsvp_occurrence))

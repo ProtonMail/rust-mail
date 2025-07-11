@@ -24,6 +24,8 @@ pub enum RsvpEventId {
     Invite {
         uid: CalendarEventUid,
         rid: Option<CalendarEventRecurrenceId>,
+        dtstamp: Option<ical::DtStamp>,
+        sequence: Option<ical::Sequence>,
     },
     Reminder {
         cal_id: CalendarId,
@@ -67,7 +69,12 @@ impl RsvpEventId {
             })
             .transpose()?;
 
-        Ok(RsvpEventId::Invite { uid, rid })
+        Ok(RsvpEventId::Invite {
+            uid,
+            rid,
+            dtstamp: event.dtstamp,
+            sequence: event.sequence,
+        })
     }
 
     /// Extracts event identifier from email headers.
@@ -132,6 +139,7 @@ pub struct RsvpEvent {
     pub organizer: RsvpOrganizer,
     pub calendar: RsvpCalendar,
     pub progress: RsvpProgress,
+    pub recency: RsvpRecency,
     pub intent: RsvpIntent,
     pub raw: Box<CalendarEvent>,
 }
@@ -160,6 +168,11 @@ impl RsvpEvent {
         M: RsvpMailSender,
     {
         answer::exec(api, pgp, keys, cache, sender, self, answer).await
+    }
+
+    #[must_use]
+    pub fn can_be_answered(&self) -> bool {
+        self.intent == RsvpIntent::Invite && self.recency == RsvpRecency::Fresh
     }
 
     #[must_use]
@@ -216,8 +229,8 @@ pub enum RsvpRecurrence {
     Custom(ical::Freq),
 }
 
-/// TODO (NGC-134) ideally most of this formatting would be shoved into the
-///      translation layer, but we don't have it at the moment
+// TODO (NGC-134) ideally most of this formatting would be shoved into the
+//      translation layer, but we don't have it at the moment
 impl fmt::Display for RsvpRecurrence {
     #[allow(clippy::too_many_lines)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -429,6 +442,15 @@ pub enum RsvpProgress {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub enum RsvpRecency {
+    Fresh,
+
+    /// Invite's event has been updated in the meantime and user it looking at
+    /// the older invite at the moment.
+    Outdated,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum RsvpIntent {
     Invite,
     Reminder,
@@ -551,8 +573,8 @@ pub enum RsvpError {
     #[error("Organizer is not known")]
     OrganizerIsNotKnown,
 
-    #[error("Event is a reminder, not an invite")]
-    EventIsReminder,
+    #[error("Invite can't be answered anymore")]
+    NonAnswerable,
 
     #[error("{0}")]
     Api(#[from] ApiServiceError),
@@ -596,6 +618,7 @@ mod tests {
                 BEGIN:VEVENT
                 UID:1234-1234-1234-1234
                 DTSTAMP:20180101T120000Z
+                SEQUENCE:1
                 END:VEVENT
                 END:VCALENDAR
             "}
@@ -606,6 +629,10 @@ mod tests {
         let expected = RsvpEventId::Invite {
             uid: "1234-1234-1234-1234".into(),
             rid: None,
+            dtstamp: Some(ical::DtStamp {
+                value: ical::utils::dt("20180101T120000Z"),
+            }),
+            sequence: Some(ical::Sequence { value: 1 }),
         };
 
         assert_eq!(expected, actual);
@@ -623,6 +650,7 @@ mod tests {
                 BEGIN:VEVENT
                 UID:1234-1234-1234-1234
                 DTSTAMP:20180101T120000Z
+                SEQUENCE:1
                 END:VEVENT
                 END:VCALENDAR
             "}
@@ -633,6 +661,10 @@ mod tests {
         let expected = RsvpEventId::Invite {
             uid: "1234-1234-1234-1234".into(),
             rid: None,
+            dtstamp: Some(ical::DtStamp {
+                value: ical::utils::dt("20180101T120000Z"),
+            }),
+            sequence: Some(ical::Sequence { value: 1 }),
         };
 
         assert_eq!(expected, actual);
@@ -651,6 +683,7 @@ mod tests {
                 UID:1234-1234-1234-1234
                 DTSTAMP:20180101T120000Z
                 RECURRENCE-ID:20180101T120000Z
+                SEQUENCE:1
                 END:VEVENT
                 END:VCALENDAR
             "}
@@ -667,6 +700,10 @@ mod tests {
             RsvpEventId::Invite {
                 uid: "1234-1234-1234-1234".into(),
                 rid: Some(CalendarEventRecurrenceId::new(rid)),
+                dtstamp: Some(ical::DtStamp {
+                    value: ical::utils::dt("20180101T120000Z"),
+                }),
+                sequence: Some(ical::Sequence { value: 1 }),
             }
         };
 
@@ -699,6 +736,10 @@ mod tests {
         let expected = RsvpEventId::Invite {
             uid: "1234-1234-1234-1234".into(),
             rid: None,
+            dtstamp: Some(ical::DtStamp {
+                value: ical::utils::dt("20180101T120000Z"),
+            }),
+            sequence: None,
         };
 
         assert_eq!(expected, actual);

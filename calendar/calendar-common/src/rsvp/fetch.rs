@@ -1,7 +1,7 @@
 use crate::{
     CalendarBootstrapExt, CalendarEventPayloadExt, RsvpAttendee, RsvpCache, RsvpCalendar,
     RsvpError, RsvpEvent, RsvpEventId, RsvpIntent, RsvpOccurrence, RsvpOrganizer, RsvpProgress,
-    RsvpRecurrence, RsvpResult,
+    RsvpRecency, RsvpRecurrence, RsvpResult,
 };
 use chrono::DateTime;
 use itertools::{Either, Itertools};
@@ -118,6 +118,7 @@ where
         organizer,
         calendar,
         progress: meta.progress,
+        recency: meta.recency,
         intent: meta.intent,
         raw: Box::new(event),
     })
@@ -136,6 +137,8 @@ where
 {
     debug!("Extracting event's metadata");
 
+    let mut dtstamp = None;
+    let mut sequence = None;
     let mut summary = None;
     let mut location = None;
     let mut description = None;
@@ -154,8 +157,9 @@ where
         }
     };
 
-    // Event data is split between shared events (which contain summary,
-    // location and description) and calendar event (which contains the status)
+    // Event data is split between shared events (which contain rrule, summary,
+    // location etc.) and the calendar event (which contains just the status) -
+    // but for convenience it's just easier to chain all events together
     let events = event
         .shared_events
         .iter()
@@ -164,6 +168,8 @@ where
     for event in events {
         let event = event.decrypt_and_parse(pgp, decryptor)?;
 
+        dtstamp = dtstamp.or(event.dtstamp);
+        sequence = sequence.or(event.sequence);
         summary = summary.or_else(|| event.summary.map(|sum| sum.value.into_string()));
         location = location.or_else(|| event.location.map(|loc| loc.value.into_string()));
 
@@ -182,6 +188,8 @@ where
         .zip(dtstart)
         .map(|(rrule, dtstart)| extract_recurrence(&rrule.value, dtstart.value, week_start));
 
+    let recency = extract_recency(id, dtstamp, sequence);
+
     let intent = match id {
         RsvpEventId::Invite { .. } => RsvpIntent::Invite,
         RsvpEventId::Reminder { .. } => RsvpIntent::Reminder,
@@ -193,6 +201,7 @@ where
         description,
         recurrence,
         progress,
+        recency,
         intent,
     })
 }
@@ -649,6 +658,46 @@ fn extract_recurrence_yearly(recur: &ical::Recur) -> RsvpRecurrence {
     }
 }
 
+/// Compares `DTSTAMP` and `SEQUENCE` extracted from `invite.ics` to the event
+/// data returned from the API - if there's a mismatch between those, it means
+/// that user is looking at an outdated invite and should be warned about this.
+fn extract_recency(
+    invite: &RsvpEventId,
+    event_dtstamp: Option<ical::DtStamp>,
+    event_sequence: Option<ical::Sequence>,
+) -> RsvpRecency {
+    let RsvpEventId::Invite {
+        dtstamp: invite_dtstamp,
+        sequence: invite_sequence,
+        ..
+    } = invite
+    else {
+        // Reminders can't be outdated
+        return RsvpRecency::Fresh;
+    };
+
+    let invite_dtstamp = invite_dtstamp
+        .clone()
+        .and_then(|dtstamp| Zoned::try_from(dtstamp.value).ok());
+
+    let event_dtstamp = event_dtstamp.and_then(|dtstamp| Zoned::try_from(dtstamp.value).ok());
+
+    let (Some(invite_dtstamp), Some(event_dtstamp)) = (invite_dtstamp, event_dtstamp) else {
+        warn!("Invite and/or event doesn't contain DTSTAMP");
+
+        return RsvpRecency::Fresh;
+    };
+
+    let invite_sequence = invite_sequence.map_or(0, |seq| seq.value);
+    let event_sequence = event_sequence.map_or(0, |seq| seq.value);
+
+    if invite_dtstamp < event_dtstamp || invite_sequence < event_sequence {
+        RsvpRecency::Outdated
+    } else {
+        RsvpRecency::Fresh
+    }
+}
+
 fn extract_occurrence(event: &CalendarEvent) -> RsvpResult<RsvpOccurrence> {
     debug!("Extracting event's occurrence");
 
@@ -776,6 +825,7 @@ struct Metadata {
     description: Option<String>,
     recurrence: Option<RsvpRecurrence>,
     progress: RsvpProgress,
+    recency: RsvpRecency,
     intent: RsvpIntent,
 }
 
@@ -1194,6 +1244,161 @@ mod tests {
             let actual = extract_recurrence(&recur, dtstart, Weekday::Monday);
 
             assert_eq!((case.expected)(), actual);
+        }
+    }
+
+    mod extract_recency {
+        use super::*;
+        use test_case::test_case;
+
+        fn dtstamp(s: &str) -> ical::DtStamp {
+            ical::DtStamp {
+                value: ical::utils::dt(s),
+            }
+        }
+
+        fn sequence(n: u32) -> ical::Sequence {
+            ical::Sequence { value: n }
+        }
+
+        struct TestCase {
+            given_invite: fn() -> RsvpEventId,
+            given_event_dtstamp: Option<&'static str>,
+            given_event_sequence: Option<u32>,
+            expected: RsvpRecency,
+        }
+
+        const TEST_REMINDER: TestCase = TestCase {
+            given_invite: || RsvpEventId::Reminder {
+                cal_id: "1234".into(),
+                event_id: "1234".into(),
+            },
+            given_event_dtstamp: None,
+            given_event_sequence: None,
+            expected: RsvpRecency::Fresh,
+        };
+
+        const TEST_INVITE_WITH_MATCHING_DTSTAMP_AND_SEQUENCE: TestCase = TestCase {
+            given_invite: || RsvpEventId::Invite {
+                uid: "1234".into(),
+                rid: None,
+                dtstamp: Some(dtstamp("20180101T120000Z")),
+                sequence: Some(sequence(3)),
+            },
+            given_event_dtstamp: Some("20180101T120000Z"),
+            given_event_sequence: Some(3),
+            expected: RsvpRecency::Fresh,
+        };
+
+        const TEST_INVITE_WITH_PAST_DTSTAMP: TestCase = TestCase {
+            given_invite: || RsvpEventId::Invite {
+                uid: "1234".into(),
+                rid: None,
+                dtstamp: Some(dtstamp("20180101T100000Z")),
+                sequence: Some(sequence(3)),
+            },
+            given_event_dtstamp: Some("20180101T120000Z"),
+            given_event_sequence: Some(3),
+            expected: RsvpRecency::Outdated,
+        };
+
+        const TEST_INVITE_WITH_PAST_SEQUENCE: TestCase = TestCase {
+            given_invite: || RsvpEventId::Invite {
+                uid: "1234".into(),
+                rid: None,
+                dtstamp: Some(dtstamp("20180101T120000Z")),
+                sequence: Some(sequence(1)),
+            },
+            given_event_dtstamp: Some("20180101T120000Z"),
+            given_event_sequence: Some(3),
+            expected: RsvpRecency::Outdated,
+        };
+
+        /// From an organizer's point of view, creating an event consists of two
+        /// distinct steps: creating an event in the backend and sending out
+        /// invites to attendees.
+        ///
+        /// This requires for the organizer to generate a couple of different
+        /// *.ics payloads - once for the purposes of the calendar backend and
+        /// then separately for each attendee (for `invite.ics`).
+        ///
+        /// And unfortunately as of a.d. 2025, each time Proton Calendar has to
+        /// generate an *.ics, it puts the client's *current* time into DTSTAMP.
+        ///
+        /// So when you create an event and invite somebody, what happens is:
+        ///
+        /// - 12:00:00
+        ///   Proton Calendar generates an *.ics payload that describes this new
+        ///   event of yours and sends it to the calendar API.
+        ///
+        /// - 12:00:05 (i.e. a couple of seconds later)
+        ///   For each attendee, Proton Calendar generates a new *.ics payload
+        ///   that contains the event-invite and dispatches the e-mail with it.
+        ///
+        /// Since there's two different *.ics paylods involved and they are both
+        /// generated using the current-as-of-then time, when you later compare
+        /// the `VEVENT` as returned from the API vs `VEVENT` as present inside
+        /// `invite.ics`, they will disagree on the `DTSTAMP`.
+        ///
+        /// API's event will say `DTSTAMP:...120000Z`, while the invite will
+        /// contain `DTSTAMP:...120005Z` - i.e. the invite will seem to have
+        /// happened in the future!
+        ///
+        /// This is expected and this test exists to make sure that we check for
+        /// outdated invites via `invite_dtstamp < api_dtstamp` instead of, say,
+        /// `invite_dtstamp != api_dtstamp`.
+        const TEST_INVITE_WITH_FUTURE_DTSTAMP: TestCase = TestCase {
+            given_invite: || RsvpEventId::Invite {
+                uid: "1234".into(),
+                rid: None,
+                dtstamp: Some(dtstamp("20180101T120005Z")),
+                sequence: Some(sequence(3)),
+            },
+            given_event_dtstamp: Some("20180101T120000Z"),
+            given_event_sequence: Some(3),
+            expected: RsvpRecency::Fresh,
+        };
+
+        const TEST_INVITE_WITH_MISSING_DTSTAMP_1: TestCase = TestCase {
+            given_invite: || RsvpEventId::Invite {
+                uid: "1234".into(),
+                rid: None,
+                dtstamp: Some(dtstamp("20180101T120000Z")),
+                sequence: None,
+            },
+            given_event_dtstamp: None,
+            given_event_sequence: None,
+            expected: RsvpRecency::Fresh,
+        };
+
+        const TEST_INVITE_WITH_MISSING_DTSTAMP_2: TestCase = TestCase {
+            given_invite: || RsvpEventId::Invite {
+                uid: "1234".into(),
+                rid: None,
+                dtstamp: None,
+                sequence: None,
+            },
+            given_event_dtstamp: Some("20180101T120000Z"),
+            given_event_sequence: None,
+            expected: RsvpRecency::Fresh,
+        };
+
+        #[test_case(TEST_REMINDER)]
+        #[test_case(TEST_INVITE_WITH_MATCHING_DTSTAMP_AND_SEQUENCE)]
+        #[test_case(TEST_INVITE_WITH_PAST_DTSTAMP)]
+        #[test_case(TEST_INVITE_WITH_PAST_SEQUENCE)]
+        #[test_case(TEST_INVITE_WITH_FUTURE_DTSTAMP)]
+        #[test_case(TEST_INVITE_WITH_MISSING_DTSTAMP_1)]
+        #[test_case(TEST_INVITE_WITH_MISSING_DTSTAMP_2)]
+        #[allow(clippy::needless_pass_by_value)]
+        fn test(case: TestCase) {
+            let actual = extract_recency(
+                &(case.given_invite)(),
+                (case.given_event_dtstamp).map(dtstamp),
+                (case.given_event_sequence).map(sequence),
+            );
+
+            assert_eq!(case.expected, actual);
         }
     }
 }

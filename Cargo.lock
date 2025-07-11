@@ -5930,6 +5930,7 @@ dependencies = [
  "proton-crypto-calendar",
  "proton-crypto-inbox",
  "proton-event-loop",
+ "proton-ical",
  "proton-log-service",
  "proton-mail-api",
  "proton-mail-common",

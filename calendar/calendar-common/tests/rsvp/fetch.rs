@@ -3,7 +3,7 @@ use indoc::indoc;
 use jiff::{Zoned, civil::Weekday};
 use pretty_assertions as pa;
 use proton_calendar_api::ProtonCalendarMock;
-use proton_calendar_common::{RsvpError, RsvpEventId, RsvpIntent, RsvpProgress};
+use proton_calendar_common::{RsvpError, RsvpEventId, RsvpIntent, RsvpProgress, RsvpRecency};
 use std::str::FromStr;
 use test_case::test_case;
 
@@ -118,39 +118,6 @@ async fn recurring() {
     pa::assert_eq!(Some(expected_event(RsvpIntent::Invite, event)), actual);
 }
 
-/// Make sure we can fetch events with direct id - see [`RsvpEventId::Direct`].
-#[tokio::test]
-async fn direct() {
-    let world = world().await;
-    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
-
-    world
-        .ctx
-        .mock_web_server
-        .mock_get_calendar_bootstrap("HzNtbT1J", world.bootstrap())
-        .await;
-
-    world
-        .ctx
-        .mock_web_server
-        .mock_get_calendar_event("8maQ3qBa", "pFmwNlJp", event.clone())
-        .await;
-
-    let actual = RsvpEventId::reminder("8maQ3qBa", "pFmwNlJp")
-        .fetch(
-            &world.sess,
-            &world.pgp,
-            &world.address_keys,
-            &world.cache,
-            &world.now,
-            Weekday::Monday,
-        )
-        .await
-        .unwrap();
-
-    pa::assert_eq!(Some(expected_event(RsvpIntent::Reminder, event)), actual);
-}
-
 #[tokio::test]
 async fn reminder() {
     let world = world().await;
@@ -182,6 +149,39 @@ async fn reminder() {
         .unwrap();
 
     assert_eq!(RsvpIntent::Reminder, actual.intent);
+}
+
+#[tokio::test]
+async fn outdated() {
+    let world = world().await;
+    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_bootstrap("HzNtbT1J", world.bootstrap())
+        .await;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_find_calendar_events("8maQ3qBa", None, Some(event.clone()))
+        .await;
+
+    let actual = RsvpEventId::invite_ex("8maQ3qBa", None, Some("20180101T060000Z"), None)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            &world.now,
+            Weekday::Monday,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(RsvpRecency::Outdated, actual.recency);
 }
 
 #[test_case("20180101T100000[UTC]", RsvpProgress::Pending)]
