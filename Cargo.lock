@@ -5529,6 +5529,7 @@ dependencies = [
  "indoc",
  "parking_lot",
  "pretty_assertions",
+ "proton-action-queue",
  "proton-sqlite3",
  "rmp-serde",
  "serde",
