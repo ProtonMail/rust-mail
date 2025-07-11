@@ -499,7 +499,7 @@ impl Draft {
             return Err(OpenError::MessageNotADraft(message_id).into());
         }
 
-        let metadata = if let Some(metadata) =
+        let mut metadata = if let Some(metadata) =
             DraftMetadata::find_by_message_id(message.local_id.unwrap(), tether)
                 .await
                 .inspect_err(|e| error!("Failed to load draft metadata: {e:?}"))?
@@ -559,7 +559,12 @@ impl Draft {
                                 &decrypted.metadata,
                                 tx,
                             )
-                            .await
+                            .await?;
+                            // Reset expiration and password metadata;
+                            metadata.expiration_time = None;
+                            metadata.password = None;
+                            metadata.password_hint = None;
+                            metadata.save(tx).await
                         })
                         .await?;
 

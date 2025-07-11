@@ -1206,6 +1206,69 @@ async fn attach_public_key_reply_draft_does_not_duplicate_if_already_there() {
     .await;
 }
 
+#[tokio::test]
+async fn open_draft_resets_password() {
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+
+    let mut message = draft_message();
+
+    let expected_draft_params = expected_create_draft_params();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_create_draft(
+        expected_draft_params,
+        None,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+    // Add some other label ids to this message to make sure they are skipped.
+    message.metadata.label_ids.push(LabelId::starred());
+
+    // Draft open always loads message from remote.
+    ctx.mock_get_message(&message.metadata.id, message.clone())
+        .await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+
+    // Create draft.
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    draft
+        .set_password(&user_ctx, "foo_bar_and_some", Some("foo".to_string()))
+        .await
+        .unwrap();
+    draft
+        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
+
+    // Load the draft.
+    let tether = user_ctx.user_stash().connection();
+    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+    // Execute action.
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    // Opening this draft should work;
+    let (draft, status) = Draft::open(&user_ctx, draft_message_id).await.unwrap();
+    assert_eq!(status, DraftSyncStatus::Synced);
+    assert!(!draft.is_password_protected(&tether).await.unwrap());
+
+    let metadata = DraftMetadata::find_by_id(draft.metadata_id, &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(metadata.password_hint.is_none());
+    assert!(metadata.password.is_none());
+    assert!(metadata.expiration_time.is_none());
+}
+
 async fn prepare_draft_reply_attach_public_key(
     pre_attach_public_key: bool,
     reply_mode: ReplyMode,
