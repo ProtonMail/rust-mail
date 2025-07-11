@@ -7,6 +7,7 @@ use proton_core_common::models::ModelExtension;
 use proton_crypto_calendar::{CalendarEventEncryptor, KeyPacket, UnlockedCalendarKey};
 use proton_crypto_inbox::attachment::{EncryptableAttachment, KeyPackets};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
+use proton_ical as ical;
 use proton_mail_api::services::proton::prelude as mail;
 use proton_mail_common::models::Message;
 use proton_mail_common::test_utils::message_body::{
@@ -200,6 +201,10 @@ async fn fetch_and_answer() {
         RsvpEventId::Invite {
             uid: "TqUvdTrE@proton.me".into(),
             rid: None,
+            dtstamp: Some(ical::DtStamp {
+                value: ical::utils::dt("20180101T120000Z"),
+            }),
+            sequence: None,
         },
         *rsvp
     );

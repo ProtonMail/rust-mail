@@ -89,6 +89,7 @@ pretty_assertions = { workspace = true }
 proton-calendar-api = { workspace = true, features = ["test-utils"] }
 proton-core-api = { workspace = true }
 proton-crypto-calendar = { workspace = true }
+proton-ical = { workspace = true }
 proton-mail-api = { workspace = true }
 secrecy = { workspace = true }
 serde_with = { workspace = true }

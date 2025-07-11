@@ -13,7 +13,7 @@ use proton_calendar_api::{
 };
 use proton_calendar_common::{
     RsvpAttendee, RsvpCache, RsvpCalendar, RsvpEvent, RsvpEventId, RsvpIntent, RsvpOccurrence,
-    RsvpOrganizer, RsvpProgress,
+    RsvpOrganizer, RsvpProgress, RsvpRecency,
 };
 use proton_core_api::session::{Config, Session};
 use proton_core_common::test_utils::test_context::{MockApiEnv, TestContext};
@@ -24,6 +24,7 @@ use proton_crypto_account::keys::{
 };
 use proton_crypto_account::salts::KeySalt;
 use proton_crypto_calendar::{CalendarEventEncryptor, KeyPacket, UnlockedCalendarKey};
+use proton_ical as ical;
 use std::sync::Arc;
 
 const SHARED_EVENT: &str = indoc! {"
@@ -273,6 +274,7 @@ fn expected_event(intent: RsvpIntent, raw: CalendarEvent) -> RsvpEvent {
             color: "#273EB2".into(),
         },
         progress: RsvpProgress::Pending,
+        recency: RsvpRecency::Fresh,
         raw: Box::new(raw),
     }
 }
@@ -282,18 +284,40 @@ where
     Self: Sized,
 {
     /// Creates an [`RsvpEventId`] that fakes an `invite.ics`.
-    fn invite(uid: &str, rid: Option<i64>) -> Self;
+    fn invite(uid: &str, rid: Option<i64>) -> Self {
+        Self::invite_ex(uid, rid, Some("20180101T080000Z"), None)
+    }
+
+    /// Creates an [`RsvpEventId`] that fakes an `invite.ics`.
+    fn invite_ex(uid: &str, rid: Option<i64>, dtstamp: Option<&str>, sequence: Option<u32>)
+    -> Self;
 
     /// Creates an [`RsvpEventId`] that fakes a reminder.
     fn reminder(cal_id: &str, event_id: &str) -> Self;
 }
 
 impl RsvpEventIdExt for RsvpEventId {
-    fn invite(uid: &str, rid: Option<i64>) -> Self {
+    fn invite_ex(
+        uid: &str,
+        rid: Option<i64>,
+        dtstamp: Option<&str>,
+        sequence: Option<u32>,
+    ) -> Self {
         let uid = uid.into();
         let rid = rid.map(CalendarEventRecurrenceId::new);
 
-        RsvpEventId::Invite { uid, rid }
+        let dtstamp = dtstamp.map(|value| ical::DtStamp {
+            value: ical::utils::dt(value),
+        });
+
+        let sequence = sequence.map(|value| ical::Sequence { value });
+
+        RsvpEventId::Invite {
+            uid,
+            rid,
+            dtstamp,
+            sequence,
+        }
     }
 
     fn reminder(cal_id: &str, event_id: &str) -> Self {
