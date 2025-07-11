@@ -1,3 +1,4 @@
+#![allow(clippy::missing_panics_doc)]
 pub mod attachment;
 pub mod conversations;
 pub mod db;
