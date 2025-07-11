@@ -380,30 +380,30 @@ async fn contact_group_resolution_from_message_recipients() {
         remote_id: Some(contact_group_id.clone()),
         name: contact_group_name.clone(),
         label_type: LabelType::ContactGroup,
-        ..Default::default()
+        ..Label::test_default()
     };
 
     let mut contact1 = Contact {
         remote_id: Some(ContactId::from("123")),
         name: "Barbara Fox".to_string(),
-        ..Default::default()
+        ..Contact::test_default()
     };
     let mut contact2 = Contact {
         remote_id: Some(ContactId::from("456")),
         name: "Stevie Wonder".to_string(),
-        ..Default::default()
+        ..Contact::test_default()
     };
     let mut contact1_email = ContactEmail {
         remote_id: Some(ContactEmailId::from("ceid1")),
         label_ids: Labels::new(vec![contact_group_id.clone()]),
         remote_contact_id: contact1.remote_id.clone(),
-        ..Default::default()
+        ..ContactEmail::test_default()
     };
     let mut contact2_email = ContactEmail {
         remote_id: Some(ContactEmailId::from("ceid2")),
         label_ids: Labels::new(vec![contact_group_id.clone()]),
         remote_contact_id: contact1.remote_id.clone(),
-        ..Default::default()
+        ..ContactEmail::test_default()
     };
     tether
         .tx::<_, _, StashError>(async |tx| {

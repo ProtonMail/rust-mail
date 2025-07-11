@@ -59,7 +59,7 @@ macro_rules! label {
 
         Label {
             $($field)*,
-            ..Default::default()
+            ..Label::test_default()
         }}
     };
 }

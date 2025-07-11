@@ -179,7 +179,7 @@ pub fn new_test_delete_db_state() -> TestDBState {
     let all_mail = Label {
         remote_id: Some(LabelId::all_mail().clone()),
         name: "All Mail".to_owned(),
-        ..Default::default()
+        ..Label::test_default()
     };
     let all_mail_conv_label = ConversationLabel {
         remote_label_id: Some(all_mail.remote_id.clone().unwrap()),
@@ -248,7 +248,7 @@ pub fn new_test_delete_all_messages_in_conv_label_db_state() -> TestDBState {
     let all_mail = Label {
         remote_id: Some(LabelId::all_mail().clone()),
         name: "All Mail".to_owned(),
-        ..Default::default()
+        ..Label::test_default()
     };
     let all_mail_conv_label = ConversationLabel {
         remote_label_id: Some(all_mail.remote_id.clone().unwrap()),

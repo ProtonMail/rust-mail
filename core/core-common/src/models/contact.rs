@@ -595,10 +595,11 @@ impl From<ApiContactBasic> for Contact {
     }
 }
 
-#[cfg(any(test, debug_assertions))]
-impl Default for Contact {
+impl Contact {
+    #[cfg(feature = "test-utils")]
     #[allow(clippy::default_trait_access)]
-    fn default() -> Self {
+    #[must_use]
+    pub fn test_default() -> Self {
         Self {
             local_id: Default::default(),
             remote_id: Default::default(),

@@ -446,8 +446,10 @@ impl From<ApiLabel> for Label {
     }
 }
 
-impl Default for Label {
-    fn default() -> Self {
+impl Label {
+    #[cfg(feature = "test-utils")]
+    #[must_use]
+    pub fn test_default() -> Self {
         Self {
             label_type: LabelType::Label,
             local_id: Option::default(),
