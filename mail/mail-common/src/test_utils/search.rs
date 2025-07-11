@@ -59,7 +59,7 @@ macro_rules! label {
 
         Label {
             $($field)*,
-            ..Default::default()
+            ..Label::test_default()
         }}
     };
 }
@@ -71,7 +71,7 @@ macro_rules! api_label {
 
         ApiLabel {
             $($field)*,
-            ..Default::default()
+            ..ApiLabel::test_default()
         }
     }};
 }
@@ -83,7 +83,7 @@ macro_rules! message {
 
         Message {
             $($field)*,
-            ..Default::default()
+            ..Message::test_default()
         }
     }};
 }
@@ -107,7 +107,7 @@ macro_rules! api_message_meta {
 
         ApiMessageMetadata {
             $($field)*,
-            ..Default::default()
+            ..ApiMessageMetadata::test_default()
         }
     }};
 }
@@ -119,7 +119,7 @@ macro_rules! conversation {
 
         Conversation {
             $($field)*,
-            ..Default::default()
+            ..Conversation::test_default()
         }
     }};
 }
@@ -131,7 +131,7 @@ macro_rules! conv_label {
 
         ConversationLabel {
             $($field)*,
-            ..Default::default()
+            ..ConversationLabel::test_default()
         }
     }};
 }
@@ -143,7 +143,7 @@ macro_rules! api_conversation {
 
         ApiConversation {
             $($field)*,
-            ..Default::default()
+            ..ApiConversation::test_default()
         }
     }};
 }
@@ -154,17 +154,17 @@ impl MailTestContext {
         let label1 = ApiLabel {
             id: "Label1".into(),
             name: "Label1".into(),
-            ..Default::default()
+            ..ApiLabel::test_default()
         };
         let label2 = ApiLabel {
             id: "Label2".into(),
             name: "Label2".into(),
-            ..Default::default()
+            ..ApiLabel::test_default()
         };
         let label3 = ApiLabel {
             id: "Label3".into(),
             name: "Label3".into(),
-            ..Default::default()
+            ..ApiLabel::test_default()
         };
 
         vec![label1, label2, label3]
@@ -238,7 +238,7 @@ impl MailTestContext {
                     ..self.default_conv_label()
                 },
             ],
-            ..Default::default()
+            ..ApiConversation::test_default()
         }]
     }
 
@@ -248,13 +248,13 @@ impl MailTestContext {
             id: "Message1".into(),
             address_id: AddressId::from("Addr1"),
             label_ids: vec![LabelId::from("Label1"), LabelId::from("Label2")],
-            ..Default::default()
+            ..MessageMetadata::test_default()
         };
         let m2 = MessageMetadata {
             id: "Message2".into(),
             address_id: AddressId::from("Addr2"),
             label_ids: vec![LabelId::from("Label2"), LabelId::from("Label3")],
-            ..Default::default()
+            ..MessageMetadata::test_default()
         };
         vec![m1, m2]
     }

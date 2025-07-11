@@ -85,10 +85,11 @@ impl From<ApiContactEmail> for ContactEmail {
     }
 }
 
-#[cfg(any(test, debug_assertions))]
-impl Default for ContactEmail {
+impl ContactEmail {
+    #[cfg(feature = "test-utils")]
     #[allow(clippy::default_trait_access)]
-    fn default() -> Self {
+    #[must_use]
+    pub fn test_default() -> Self {
         Self {
             local_id: Default::default(),
             remote_id: Default::default(),

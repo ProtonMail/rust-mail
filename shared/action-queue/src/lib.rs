@@ -130,7 +130,7 @@ pub mod db;
 pub mod observers;
 pub mod queue;
 
-#[cfg(any(test, debug_assertions))]
+#[cfg(any(test, debug_assertions, feature = "test-utils"))]
 pub mod tests {
     #[path = "../tests/common.rs"]
     pub mod common;

@@ -104,11 +104,11 @@ mod message {
         items: vec![
             Message {
                 unread: true,
-                ..Default::default()
+                ..Message::test_default()
             },
             Message {
                 unread: true,
-                ..Default::default()
+                ..Message::test_default()
             },
         ],
         expected_visible: vec![
@@ -129,11 +129,11 @@ mod message {
         items: vec![
             Message {
                 unread: false,
-                ..Default::default()
+                ..Message::test_default()
             },
             Message {
                 unread: false,
-                ..Default::default()
+                ..Message::test_default()
             },
         ],
         expected_visible: vec![
@@ -154,11 +154,11 @@ mod message {
         items: vec![
             Message {
                 unread: false,
-                ..Default::default()
+                ..Message::test_default()
             },
             Message {
                 unread: true,
-                ..Default::default()
+                ..Message::test_default()
             },
         ],
         expected_visible: vec![
@@ -180,11 +180,11 @@ mod message {
         items: vec![
             Message {
                 label_ids: vec![LabelId::starred()],
-                ..Default::default()
+                ..Message::test_default()
             },
             Message {
                 label_ids: vec![LabelId::starred()],
-                ..Default::default()
+                ..Message::test_default()
             },
         ],
         toolbar_actions: vec!["toggle_star".to_owned()],
@@ -201,7 +201,7 @@ mod message {
         ..Default::default()
     });
     static NONE_STARRED_CASE: LazyLock<TestCase<Message>> = LazyLock::new(|| TestCase {
-        items: vec![Message::default(), Message::default()],
+        items: vec![Message::test_default(), Message::test_default()],
         toolbar_actions: vec!["toggle_star".to_owned()],
         is_custom: true,
         expected_visible: vec![TestActions::Star, TestActions::More],
@@ -219,9 +219,9 @@ mod message {
         items: vec![
             Message {
                 label_ids: vec![LabelId::starred()],
-                ..Default::default()
+                ..Message::test_default()
             },
-            Message::default(),
+            Message::test_default(),
         ],
         toolbar_actions: vec!["toggle_star".to_owned()],
         is_custom: true,
@@ -241,9 +241,9 @@ mod message {
         items: vec![
             Message {
                 label_ids: vec![LabelId::starred()],
-                ..Default::default()
+                ..Message::test_default()
             },
-            Message::default(),
+            Message::test_default(),
         ],
         expected_visible: vec![
             TestActions::MarkUnread,
@@ -389,7 +389,7 @@ mod message {
             .tx::<_, _, StashError>(async |tx| {
                 settings.save(tx).await.unwrap();
 
-                let mut conversation = Conversation::default();
+                let mut conversation = Conversation::test_default();
                 conversation.save(tx).await.unwrap();
 
                 let mut messages = test_case.items.clone();
@@ -436,23 +436,23 @@ mod conversation {
         remote_label_id: Some(LabelId::inbox()),
         context_num_unread: 0,
         context_num_messages: 1,
-        ..Default::default()
+        ..ConversationLabel::test_default()
     });
     static INBOX_LABEL_UNREAD: LazyLock<ConversationLabel> = LazyLock::new(|| ConversationLabel {
         remote_label_id: Some(LabelId::inbox()),
         context_num_unread: 1,
         context_num_messages: 1,
-        ..Default::default()
+        ..ConversationLabel::test_default()
     });
     static TRASH_LABEL_UNREAD: LazyLock<ConversationLabel> = LazyLock::new(|| ConversationLabel {
         remote_label_id: Some(LabelId::trash()),
         context_num_unread: 1,
         context_num_messages: 1,
-        ..Default::default()
+        ..ConversationLabel::test_default()
     });
     static STARRED_LABEL: LazyLock<ConversationLabel> = LazyLock::new(|| ConversationLabel {
         remote_label_id: Some(LabelId::starred()),
-        ..Default::default()
+        ..ConversationLabel::test_default()
     });
 
     static DEFAULT_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
@@ -475,13 +475,13 @@ mod conversation {
                 num_unread: 1,
                 num_messages: 1,
                 labels: vec![INBOX_LABEL_UNREAD.clone()],
-                ..Default::default()
+                ..Conversation::test_default()
             },
             Conversation {
                 num_unread: 1,
                 num_messages: 1,
                 labels: vec![INBOX_LABEL_UNREAD.clone()],
-                ..Default::default()
+                ..Conversation::test_default()
             },
         ],
         expected_visible: vec![
@@ -504,13 +504,13 @@ mod conversation {
                 num_unread: 0,
                 num_messages: 1,
                 labels: vec![INBOX_LABEL_READ.clone()],
-                ..Default::default()
+                ..Conversation::test_default()
             },
             Conversation {
                 num_unread: 0,
                 num_messages: 1,
                 labels: vec![INBOX_LABEL_READ.clone()],
-                ..Default::default()
+                ..Conversation::test_default()
             },
         ],
         expected_visible: vec![
@@ -533,13 +533,13 @@ mod conversation {
                 num_unread: 0,
                 num_messages: 1,
                 labels: vec![INBOX_LABEL_READ.clone()],
-                ..Default::default()
+                ..Conversation::test_default()
             },
             Conversation {
                 num_unread: 1,
                 num_messages: 1,
                 labels: vec![INBOX_LABEL_UNREAD.clone()],
-                ..Default::default()
+                ..Conversation::test_default()
             },
         ],
         expected_visible: vec![
@@ -561,11 +561,11 @@ mod conversation {
         items: vec![
             Conversation {
                 labels: vec![STARRED_LABEL.clone()],
-                ..Default::default()
+                ..Conversation::test_default()
             },
             Conversation {
                 labels: vec![STARRED_LABEL.clone()],
-                ..Default::default()
+                ..Conversation::test_default()
             },
         ],
         toolbar_actions: vec!["toggle_star".to_owned()],
@@ -584,11 +584,11 @@ mod conversation {
         items: vec![
             Conversation {
                 labels: vec![INBOX_LABEL_READ.clone()],
-                ..Default::default()
+                ..Conversation::test_default()
             },
             Conversation {
                 labels: vec![INBOX_LABEL_READ.clone()],
-                ..Default::default()
+                ..Conversation::test_default()
             },
         ],
         toolbar_actions: vec!["toggle_star".to_owned()],
@@ -608,11 +608,11 @@ mod conversation {
         items: vec![
             Conversation {
                 labels: vec![INBOX_LABEL_READ.clone(), STARRED_LABEL.clone()],
-                ..Default::default()
+                ..Conversation::test_default()
             },
             Conversation {
                 labels: vec![INBOX_LABEL_READ.clone()],
-                ..Default::default()
+                ..Conversation::test_default()
             },
         ],
         toolbar_actions: vec!["toggle_star".to_owned()],
@@ -633,11 +633,11 @@ mod conversation {
         items: vec![
             Conversation {
                 labels: vec![INBOX_LABEL_READ.clone(), STARRED_LABEL.clone()],
-                ..Default::default()
+                ..Conversation::test_default()
             },
             Conversation {
                 labels: vec![INBOX_LABEL_READ.clone()],
-                ..Default::default()
+                ..Conversation::test_default()
             },
         ],
         expected_visible: vec![
@@ -660,12 +660,12 @@ mod conversation {
             Conversation {
                 labels: vec![INBOX_LABEL_READ.clone()],
                 num_unread: 0,
-                ..Default::default()
+                ..Conversation::test_default()
             },
             Conversation {
                 labels: vec![TRASH_LABEL_UNREAD.clone()],
                 num_unread: 1,
-                ..Default::default()
+                ..Conversation::test_default()
             },
         ],
         expected_visible: vec![

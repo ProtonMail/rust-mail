@@ -399,6 +399,6 @@ fn test_label(label_id: &LabelId, name: &str) -> ApiLabel {
         id: label_id.clone(),
         label_type: ApiLabelType::Label,
         name: name.to_owned(),
-        ..Default::default()
+        ..ApiLabel::test_default()
     }
 }

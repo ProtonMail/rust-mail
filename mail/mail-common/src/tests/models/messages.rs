@@ -2908,7 +2908,7 @@ async fn message_exclusive_location_on_save(
     let mut address = test_address();
     let mut tether = stash.connection();
 
-    let mut conversation = Conversation::default();
+    let mut conversation = Conversation::test_default();
     let message = tether
         .tx::<_, _, StashError>(async |tx| {
             address.save(tx).await.unwrap();
@@ -2926,7 +2926,7 @@ async fn message_exclusive_location_on_save(
                     .iter()
                     .map(|l| l.remote_id.clone().unwrap())
                     .collect_vec(),
-                ..Default::default()
+                ..Message::test_default()
             };
 
             // Action

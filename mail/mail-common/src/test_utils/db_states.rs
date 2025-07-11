@@ -34,7 +34,7 @@ static BASE_CONV1_MESSAGE: LazyLock<Message> = LazyLock::new(|| Message {
     remote_conversation_id: Some(DELETE_DB_CONV1.clone()),
     remote_address_id: MY_ADDRESS_ID.clone(),
     local_address_id: 1.into(),
-    ..Default::default()
+    ..Message::test_default()
 });
 
 static CONV1_MSG1: LazyLock<Message> = LazyLock::new(|| Message {
@@ -134,12 +134,12 @@ static CONV2_MSG2: LazyLock<Message> = LazyLock::new(|| Message {
 
 static CONV_LABEL1: LazyLock<ConversationLabel> = LazyLock::new(|| ConversationLabel {
     remote_label_id: Some(MY_LABEL_ID1.clone()),
-    ..Default::default()
+    ..ConversationLabel::test_default()
 });
 
 static CONV_LABEL2: LazyLock<ConversationLabel> = LazyLock::new(|| ConversationLabel {
     remote_label_id: Some(MY_LABEL_ID2.clone()),
-    ..Default::default()
+    ..ConversationLabel::test_default()
 });
 
 // ------- init fns -------
@@ -152,7 +152,7 @@ pub fn new_test_label_db_state() -> TestDBState {
             remote_id: Some(DELETE_DB_CONV1.clone()),
             labels: vec![],
             expiration_time: UnixTimestamp::new(0),
-            ..Default::default()
+            ..Conversation::test_default()
         }],
         messages: vec![
             Message {
@@ -179,11 +179,11 @@ pub fn new_test_delete_db_state() -> TestDBState {
     let all_mail = Label {
         remote_id: Some(LabelId::all_mail().clone()),
         name: "All Mail".to_owned(),
-        ..Default::default()
+        ..Label::test_default()
     };
     let all_mail_conv_label = ConversationLabel {
         remote_label_id: Some(all_mail.remote_id.clone().unwrap()),
-        ..Default::default()
+        ..ConversationLabel::test_default()
     };
     TestDBState {
         addresses: vec![test_address()],
@@ -197,13 +197,13 @@ pub fn new_test_delete_db_state() -> TestDBState {
                     all_mail_conv_label.clone(),
                 ],
                 is_known: true,
-                ..Default::default()
+                ..Conversation::test_default()
             },
             Conversation {
                 remote_id: Some(conv_id2.clone()),
                 labels: vec![CONV_LABEL2.to_owned(), all_mail_conv_label.clone()],
                 is_known: true,
-                ..Default::default()
+                ..Conversation::test_default()
             },
         ],
         messages: vec![
@@ -248,11 +248,11 @@ pub fn new_test_delete_all_messages_in_conv_label_db_state() -> TestDBState {
     let all_mail = Label {
         remote_id: Some(LabelId::all_mail().clone()),
         name: "All Mail".to_owned(),
-        ..Default::default()
+        ..Label::test_default()
     };
     let all_mail_conv_label = ConversationLabel {
         remote_label_id: Some(all_mail.remote_id.clone().unwrap()),
-        ..Default::default()
+        ..ConversationLabel::test_default()
     };
     TestDBState {
         addresses: vec![test_address()],
@@ -265,7 +265,7 @@ pub fn new_test_delete_all_messages_in_conv_label_db_state() -> TestDBState {
                 all_mail_conv_label.clone(),
             ],
             is_known: true,
-            ..Default::default()
+            ..Conversation::test_default()
         }],
         messages: vec![
             Message {
@@ -303,14 +303,14 @@ pub fn new_test_unread_db_state() -> TestDBState {
             labels: vec![
                 ConversationLabel {
                     remote_label_id: Some(MY_LABEL_ID1.clone()),
-                    ..Default::default()
+                    ..ConversationLabel::test_default()
                 },
                 ConversationLabel {
                     remote_label_id: Some(MY_LABEL_ID2.clone()),
-                    ..Default::default()
+                    ..ConversationLabel::test_default()
                 },
             ],
-            ..Default::default()
+            ..Conversation::test_default()
         }],
         messages: vec![
             Message {
@@ -351,14 +351,14 @@ pub fn new_test_unread_db_state_unread_label_in_folder() -> TestDBState {
             labels: vec![
                 ConversationLabel {
                     remote_label_id: Some(MY_LABEL_ID1.clone()),
-                    ..Default::default()
+                    ..ConversationLabel::test_default()
                 },
                 ConversationLabel {
                     remote_label_id: Some(MY_LABEL_ID2.clone()),
-                    ..Default::default()
+                    ..ConversationLabel::test_default()
                 },
             ],
-            ..Default::default()
+            ..Conversation::test_default()
         }],
         messages: vec![
             Message {
@@ -389,9 +389,9 @@ pub fn new_test_label_db_state_label_with_existing_labels() -> TestDBState {
             remote_id: Some(conv_id1.clone()),
             labels: vec![ConversationLabel {
                 remote_label_id: Some(MY_LABEL_ID2.clone()),
-                ..Default::default()
+                ..ConversationLabel::test_default()
             }],
-            ..Default::default()
+            ..Conversation::test_default()
         }],
         messages: vec![CONV1_MSG1.to_owned()],
     }

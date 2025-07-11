@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 /// A decrypted attachment returned by [`Mailbox::get_attachment`].
 #[derive(Debug)]
-#[cfg_attr(any(test, debug_assertions), derive(Eq, PartialEq))]
+#[cfg_attr(feature = "test-utils", derive(Eq, PartialEq))]
 pub struct DecryptedAttachment {
     /// Metadata of the decrypted attachment.
     pub attachment_metadata: AttachmentMetadata,

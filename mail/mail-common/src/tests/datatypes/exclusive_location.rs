@@ -109,7 +109,7 @@ fn labels_from_ids(labels: &[(&LabelId, LabelType)]) -> Vec<Label> {
             local_id: Some((idx as u64).into()),
             name: rid.as_str().to_owned(),
             label_type: *label_type,
-            ..Default::default()
+            ..Label::test_default()
         })
         .collect()
 }

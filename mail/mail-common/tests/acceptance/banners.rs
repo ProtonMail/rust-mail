@@ -95,7 +95,7 @@ async fn banners() {
             address: "normal@email".into(),
             ..Default::default()
         },
-        ..Default::default()
+        ..Message::test_default()
     };
 
     let mut msg_phishing = Message {
@@ -136,7 +136,7 @@ async fn banners() {
     let msg_schedule_send = Message {
         label_ids: vec![LabelId::all_scheduled()],
         time: scheduled_time,
-        ..Default::default()
+        ..Message::test_default()
     };
 
     assert_eq!(
@@ -301,7 +301,7 @@ async fn spam_banners(label: LabelId, flags: MessageFlags, res: Option<MessageBa
     let message = Message {
         label_ids: vec![label],
         flags,
-        ..Default::default()
+        ..Message::test_default()
     };
 
     let banners = message.get_banners(&tether).await;
@@ -333,7 +333,7 @@ async fn autodelete_and_expiry() {
     let mut message = Message {
         label_ids: vec![LabelId::trash()],
         expiration_time: 2000000000.into(),
-        ..Default::default()
+        ..Message::test_default()
     };
     update_setting(Some(30), &mut tether).await;
 

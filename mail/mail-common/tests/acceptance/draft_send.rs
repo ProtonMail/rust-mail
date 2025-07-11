@@ -93,7 +93,7 @@ async fn basic_send_check() {
         num_attachments: 0,
         num_messages: 1,
         subject: sent_message.metadata.subject.clone(),
-        ..Default::default()
+        ..ApiConversation::test_default()
     };
 
     let expected_draft_params = expected_create_draft_params();
@@ -268,7 +268,7 @@ async fn basic_schedule_send_check() {
         num_attachments: 0,
         num_messages: 1,
         subject: sent_message.metadata.subject.clone(),
-        ..Default::default()
+        ..ApiConversation::test_default()
     };
 
     let expected_draft_params = expected_create_draft_params();
@@ -1398,7 +1398,7 @@ async fn send_external_with_password() {
         num_attachments: 0,
         num_messages: 1,
         subject: sent_message.metadata.subject.clone(),
-        ..Default::default()
+        ..ApiConversation::test_default()
     };
 
     let expected_draft_params = expected_create_draft_params();

@@ -243,14 +243,14 @@ mod contact_list {
             remote_id: Some(empty_group_id.clone()),
             name: "contact_group_empty".to_owned(),
             label_type: LabelType::ContactGroup,
-            ..Default::default()
+            ..Label::test_default()
         };
 
         let mut contact_group_not_empty = Label {
             remote_id: Some(not_empty_group_id.clone()),
             name: "contact_group_not_empty".to_owned(),
             label_type: LabelType::ContactGroup,
-            ..Default::default()
+            ..Label::test_default()
         };
 
         let mut contact1 = contact!(remote_id: cid!("123"), name: "Barbara Fox".to_string());

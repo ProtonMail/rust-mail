@@ -230,7 +230,7 @@ impl ApiConversationTestUtils for ApiConversation {
             id: id.into(),
             num_messages: 1,
             labels,
-            ..Default::default()
+            ..ApiConversation::test_default()
         }
     }
 }

@@ -52,7 +52,7 @@ impl UsedVariables {
             ..Default::default()
         };
 
-        let mut message = Message::default();
+        let mut message = Message::test_default();
 
         if self.starred {
             message.label_ids.push(LabelId::starred());
@@ -283,7 +283,7 @@ async fn integration() -> anyhow::Result<()> {
 
     let mut conv = Conversation {
         remote_id: Some("1".into()),
-        ..Default::default()
+        ..Conversation::test_default()
     };
     let addr = create_address(tether).await;
     tether.tx(async |tx| conv.save(tx).await).await?;

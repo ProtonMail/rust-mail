@@ -367,7 +367,7 @@ fn test_label(label_id: &LabelId, name: &str) -> ApiLabel {
         id: label_id.clone(),
         label_type: ApiLabelType::Label,
         name: name.to_owned(),
-        ..Default::default()
+        ..ApiLabel::test_default()
     }
 }
 
@@ -380,13 +380,13 @@ fn test_message(id: &str, label_ids: Vec<LabelId>) -> ApiMessage {
         size: 333,
         subject: "A simple message".to_owned(),
         time: 1715863508,
-        ..Default::default()
+        ..ApiMessageMetadata::test_default()
     };
 
     ApiMessage {
         body:ApiMessageBody{
             body: "-----BEGIN PGP MESSAGE-----\nVersion: ProtonMail\n\nwV4DGS71hsmM2EQSAQdAYdJSo4eHIE7InFrOSN3+7nIRKfkcsCAb7aPI86nI\ny2owI0FLuN3IlbCoKsFFXfSbnTff3IePkr7xmhQmUYrVk0h50kwkEVyHnyPI\nm2nyqZXA0sCKAbKKQlcvjlJbsyUpJvsIwHuggwrQ+7htDauT4/SB9hScyAPj\nICxCGfzOaXjcf1fqevOMDqIWaSEQpOcMw2ocGP4I8OKgylBfuy9DT0/RhJSe\nrDo2uhlYqs0xmUdlHWPvGKEy4TKlUk2JSAr9U4+5l4J5iIK9O/TVrU+Tf7Ot\nRdEFfN+ERJQmVqXcfSkoImVm7oi0QfNP3ExZ94vlFyBFch/Ox5Oco5wbetr3\nL7KPGWiEmLYDI/xeFNC4AO4FD+MVUHjIYqzS/GABxwJQ7pCC8WJXUHKS6ZNR\nNf8RGKGL1O2cbKWSuULb7HwWRGljWezyr5rPLKK7DaHX3wj2qmdQRcSzsKEu\nOLjlB6jppMjP2r/CZSqC+XbefwczOZxkLJQiw6ujB4etdiDFiM+QifJfrp6f\nhtf7JGwpxPa/IbiL5OlKy7NYYs6JXNYU\n=AVU2\n-----END PGP MESSAGE-----\n".to_owned(),
-            ..Default::default()
+                ..ApiMessageBody::test_default()
         },
         metadata,
     }

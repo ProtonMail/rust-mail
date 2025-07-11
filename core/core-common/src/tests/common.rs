@@ -30,7 +30,7 @@ macro_rules! contact {
         use $crate::models::Contact;
         Contact {
             $($field)*,
-            ..Default::default()
+            ..Contact::test_default()
         }
     }};
 }
@@ -41,7 +41,7 @@ macro_rules! contact_email {
         use $crate::models::ContactEmail;
         ContactEmail {
             $($field)*,
-            ..Default::default()
+            ..ContactEmail::test_default()
         }
     }};
 }
@@ -51,7 +51,7 @@ macro_rules! label {
     ($($field:tt)*) => {{
         $crate::models::Label {
             $($field)*,
-            ..Default::default()
+            ..Label::test_default()
         }
     }};
 }

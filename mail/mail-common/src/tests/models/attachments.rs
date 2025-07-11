@@ -142,7 +142,7 @@ async fn create_attachment_dependencies(
                         .into_iter()
                         .map(AttachmentMetadata::from)
                         .collect(),
-                    ..Default::default()
+                    ..Conversation::test_default()
                 }],
                 tx,
             )

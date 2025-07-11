@@ -406,7 +406,7 @@ pub(crate) mod test {
         let vcard = VCard::from_ical_contact(c).unwrap();
         let contact = Contact {
             local_id: Some(LocalContactId(42)),
-            ..Default::default()
+            ..Contact::test_default()
         };
         Snapshot {
             vcard: raw_vcard,

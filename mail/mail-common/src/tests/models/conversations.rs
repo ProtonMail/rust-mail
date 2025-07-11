@@ -306,7 +306,7 @@ mod first_unread_message {
             },
             flags,
             label_ids,
-            ..Default::default()
+            ..Message::test_default()
         }
     }
 
@@ -3018,7 +3018,7 @@ async fn conversation_exclusive_location_on_save(
     let mut tether = stash.connection();
 
     let mut conversation = Conversation {
-        ..Default::default()
+        ..Conversation::test_default()
     };
     let mut conversation_labels = Vec::with_capacity(labels.len());
     tether
@@ -3028,7 +3028,7 @@ async fn conversation_exclusive_location_on_save(
                 label.save(tx).await.unwrap();
                 conversation_labels.push(ConversationLabel {
                     remote_label_id: label.remote_id,
-                    ..Default::default()
+                    ..ConversationLabel::test_default()
                 });
             }
             conversation.labels = conversation_labels;

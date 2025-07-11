@@ -776,11 +776,24 @@ impl Save {
                 .all(|v| v.disposition == Disposition::Attachment)
         );
         Message {
+            local_id: None,
+            remote_id: None,
+            local_conversation_id: None,
+            remote_conversation_id: None,
             local_address_id: address.id(),
             remote_address_id: address.remote_id.clone().unwrap(),
             attachments_metadata: attachments,
             cc_list: self.cc_list.to_message_recipients().into(),
             bcc_list: self.bcc_list.to_message_recipients().into(),
+            deleted: false,
+            exclusive_location: None,
+            expiration_time: Default::default(),
+            external_id: None,
+            flags: Default::default(),
+            is_forwarded: false,
+            is_replied: false,
+            is_replied_all: false,
+            label_ids: vec![],
             num_attachments: total_attachment_count.try_into().unwrap_or_default(),
             display_order,
             sender: MessageSender {
@@ -789,10 +802,12 @@ impl Save {
                 ..Default::default()
             },
             size: body_len,
+            snooze_time: Default::default(),
             subject: self.subject.clone(),
             time,
             to_list: self.to_list.to_message_recipients().into(),
-            ..Default::default()
+            unread: false,
+            custom_labels: vec![],
         }
     }
 
