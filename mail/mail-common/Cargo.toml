@@ -8,18 +8,18 @@ rust-version.workspace = true
 [features]
 default = ["sql"]
 test-utils = [
-  "dep:wiremock",
-  "dep:function_name",
-  "dep:tempfile",
-  "dep:tempdir",
-  "dep:tracing-subscriber",
-  "dep:velcro",
-  "dep:wiremock-multipart",
-  "proton-core-common/test-utils",
+    "dep:wiremock",
+    "dep:function_name",
+    "dep:tempfile",
+    "dep:tempdir",
+    "dep:tracing-subscriber",
+    "dep:velcro",
+    "dep:wiremock-multipart",
+    "proton-core-common/test-utils",
 ]
 
 gtk = ["dep:tao", "dep:wry"]
-sql = ["proton-core-api/sql", "proton-mail-api/sql"]
+sql = ["proton-core-api/sql", "proton-mail-api/sql", "proton-core-api/mocks", "proton-mail-api/mocks"]
 proton_mail_error_log = []
 
 [dependencies]

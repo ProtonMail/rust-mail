@@ -5877,6 +5877,7 @@ dependencies = [
  "proton-core-api",
  "proton-core-common",
  "proton-crypto-inbox",
+ "proton-mail-api",
  "reqwest",
  "serde",
  "serde_json",

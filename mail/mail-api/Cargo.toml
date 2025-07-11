@@ -32,6 +32,8 @@ tracing-subscriber = { workspace = true }
 wiremock = { workspace = true }
 insta = { workspace = true }
 proton-core-common = { workspace = true, features = ["test-utils"] }
+proton-mail-api = { path = ".", features = ["mocks"] }
+
 
 [lints]
 workspace = true
@@ -39,3 +41,4 @@ workspace = true
 [features]
 default = []
 sql = ["dep:stash", "proton-core-api/sql"]
+mocks = []

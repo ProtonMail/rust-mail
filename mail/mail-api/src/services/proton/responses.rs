@@ -34,13 +34,13 @@ use crate::services::proton::response_data::{
     MessageMetadata, OperationResult, UndoToken,
 };
 use serde::Deserialize;
-#[cfg(any(test, debug_assertions))]
+#[cfg(feature = "mocks")]
 use serde::Serialize;
 use serde_with::{BoolFromInt, DefaultOnNull, serde_as};
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetAttachmentMetadataResponse {
     /// TODO: Document this field.
@@ -49,7 +49,7 @@ pub struct GetAttachmentMetadataResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetConversationResponse {
     /// TODO: Document this field.
@@ -62,7 +62,7 @@ pub struct GetConversationResponse {
 /// TODO: Document this struct.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetConversationsResponse {
     /// TODO: Document this field.
@@ -78,7 +78,7 @@ pub struct GetConversationsResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetConversationsCountResponse {
     /// TODO: Document this field.
@@ -87,7 +87,7 @@ pub struct GetConversationsCountResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetMessageResponse {
     /// TODO: Document this field.
@@ -97,7 +97,7 @@ pub struct GetMessageResponse {
 /// TODO: Document this struct.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetMessagesResponse {
     /// TODO: Document this field.
@@ -113,7 +113,7 @@ pub struct GetMessagesResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetMessagesCountResponse {
     /// TODO: Document this field.
@@ -122,7 +122,7 @@ pub struct GetMessagesCountResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetMailSettingsResponse {
     /// TODO: Document this field.
@@ -131,7 +131,7 @@ pub struct GetMailSettingsResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutConversationsDeleteResponse {
     /// TODO: Document this field.
@@ -141,7 +141,7 @@ pub struct PutConversationsDeleteResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutConversationsLabelResponse {
     /// TODO: Document this field.
@@ -154,7 +154,7 @@ pub struct PutConversationsLabelResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutConversationsReadResponse {
     /// TODO: Document this field.
@@ -164,7 +164,7 @@ pub struct PutConversationsReadResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutConversationsUnlabelResponse {
     /// TODO: Document this field.
@@ -177,7 +177,7 @@ pub struct PutConversationsUnlabelResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutConversationsUnreadResponse {
     /// TODO: Document this field.
@@ -187,7 +187,7 @@ pub struct PutConversationsUnreadResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutMessagesDeleteResponse {
     /// TODO: Document this field.
@@ -197,7 +197,7 @@ pub struct PutMessagesDeleteResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutMessagesLabelResponse {
     /// TODO: Document this field.
@@ -210,7 +210,7 @@ pub struct PutMessagesLabelResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutMessagesReadResponse {
     /// TODO: Document this field.
@@ -220,7 +220,7 @@ pub struct PutMessagesReadResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutMessagesUnlabelResponse {
     /// TODO: Document this field.
@@ -233,7 +233,7 @@ pub struct PutMessagesUnlabelResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutMessagesUnreadResponse {
     /// TODO: Document this field.
@@ -242,7 +242,7 @@ pub struct PutMessagesUnreadResponse {
 
 #[allow(clippy::struct_excessive_bools)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize, Default))]
+#[cfg_attr(feature = "mocks", derive(Serialize, Default))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutMessageHamResponse {
     code: i64,
@@ -253,28 +253,28 @@ pub struct PutMessageHamResponse {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PostMessagesRelabelResponse {
     pub message: MessageMetadata,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PostCreateDraftResponse {
     pub message: Message,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutUpdateDraftResponse {
     pub message: Message,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PostSendMessageResponse {
     pub delivery_time: u64, // unix timestamp
@@ -283,28 +283,28 @@ pub struct PostSendMessageResponse {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PostSendDirectMessageResponse {
     pub sent: Message,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PostCancelSendResponse {
     pub message: MessageMetadata,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PostAttachmentResponse {
     pub attachment: NewAttachmentResponse,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetIncomingDefaultResponse {
     pub incoming_defaults: Vec<IncomingDefault>,
@@ -313,7 +313,7 @@ pub struct GetIncomingDefaultResponse {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PostIncomingDefaultResponse {
     pub incoming_default: IncomingDefault,
