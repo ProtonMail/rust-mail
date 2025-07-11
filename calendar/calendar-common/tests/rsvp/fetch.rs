@@ -118,39 +118,6 @@ async fn recurring() {
     pa::assert_eq!(Some(expected_event(RsvpIntent::Invite, event)), actual);
 }
 
-/// Make sure we can fetch events with direct id - see [`RsvpEventId::Direct`].
-#[tokio::test]
-async fn direct() {
-    let world = world().await;
-    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
-
-    world
-        .ctx
-        .mock_web_server
-        .mock_get_calendar_bootstrap("HzNtbT1J", world.bootstrap())
-        .await;
-
-    world
-        .ctx
-        .mock_web_server
-        .mock_get_calendar_event("8maQ3qBa", "pFmwNlJp", event.clone())
-        .await;
-
-    let actual = RsvpEventId::reminder("8maQ3qBa", "pFmwNlJp")
-        .fetch(
-            &world.sess,
-            &world.pgp,
-            &world.address_keys,
-            &world.cache,
-            &world.now,
-            Weekday::Monday,
-        )
-        .await
-        .unwrap();
-
-    pa::assert_eq!(Some(expected_event(RsvpIntent::Reminder, event)), actual);
-}
-
 #[tokio::test]
 async fn reminder() {
     let world = world().await;
