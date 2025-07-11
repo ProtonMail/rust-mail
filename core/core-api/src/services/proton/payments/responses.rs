@@ -29,12 +29,12 @@
 use crate::services::proton::prelude::*;
 use serde::Deserialize;
 
-#[cfg(any(test, debug_assertions))]
+#[cfg(feature = "mocks")]
 use serde::Serialize;
 
 /// The response containing plans available to the user.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetPaymentsPlansResponse {
     /// The list of plans available to the user.
@@ -46,7 +46,7 @@ pub struct GetPaymentsPlansResponse {
 
 /// The response containing the current subscription of the user.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetPaymentsSubscriptionResponse {
     pub subscriptions: Vec<Subscription>,
@@ -55,7 +55,7 @@ pub struct GetPaymentsSubscriptionResponse {
 
 /// The response containing the created payment token.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PostPaymentsTokensResponse {
     pub token: String,

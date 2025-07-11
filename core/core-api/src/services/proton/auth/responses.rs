@@ -28,12 +28,12 @@
 
 use serde::Deserialize;
 
-#[cfg(any(test, debug_assertions))]
+#[cfg(feature = "mocks")]
 use serde::Serialize;
 
 /// The response containing the user's session UUID.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 pub struct GetSessionsUuidResponse {
     #[serde(rename = "UUID")]
     pub uuid: String,

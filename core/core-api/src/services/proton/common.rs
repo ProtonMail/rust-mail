@@ -37,7 +37,7 @@ impl Timeouts {
 /// This struct provides a way to access that information.
 ///
 #[derive(Clone, Debug, Display, Default, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(serde::Serialize))]
+#[cfg_attr(feature = "mocks", derive(serde::Serialize))]
 #[display("{code}: {error:?} ({details:?})")]
 #[serde(rename_all = "PascalCase")]
 pub struct ApiErrorInfo {

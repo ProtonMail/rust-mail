@@ -95,7 +95,7 @@ impl StatusObserverConfig {
     }
 
     /// Create a new `StatusObserverConfig` with default test values.
-    #[cfg(any(test, debug_assertions))]
+    #[cfg(feature = "mocks")]
     fn test() -> Self {
         let never = RetryPolicy::default().never();
         let fg_timeout = Timeouts::ONE_SECOND;
@@ -152,7 +152,7 @@ impl StatusObserver {
     /// The status is initialized to `Online`.
     /// The last check is initialized to `Instant::now() - UP_TO_DATE_SECONDS` to make it stale.
     ///
-    #[cfg(any(test, debug_assertions))]
+    #[cfg(feature = "mocks")]
     pub fn test() -> Self {
         let (status_tx, _) = watch::channel(ConnectionStatus::Online);
         let config = StatusObserverConfig::test();
@@ -174,7 +174,7 @@ impl StatusObserver {
     /// The status is initialized to `Online`.
     /// The last check is initialized to `Instant::now() - UP_TO_DATE_SECONDS` to make it stale.
     ///
-    #[cfg(any(test, debug_assertions))]
+    #[cfg(feature = "mocks")]
     pub fn set_up_to_date(&mut self, up_to_date: Duration) {
         let stale_instant = Instant::now()
             .checked_sub(Duration::from_secs(up_to_date.as_secs() + 1))
