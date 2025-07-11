@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Features
+
+- Expose fork_with_version
+
+### Fixes
+
+- [ET-3598] Do not allow bypass pin lock without verification on startup
+
+
+## [mail-uniffi-v0.99.1] - 2025-07-09
+
 ### Changed
 
 - Sqlite performance tweaks
