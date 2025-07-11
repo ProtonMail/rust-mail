@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Features
+
+- [ET-3609] Add encrypt-to-outside (eo) crypto logic
+- [ET-3630] Send password protected messages
+- [ET-2588] Extend contact suggestions to expose contacts in groups
+
+
 ## [mail-uniffi-v0.102.0] - 2025-07-10
 
 ### Changed

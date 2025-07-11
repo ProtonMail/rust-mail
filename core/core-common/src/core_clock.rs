@@ -94,7 +94,7 @@ impl Default for ActivityClock {
     fn default() -> Self {
         Self {
             last_activity: Mutex::new(Instant::now()),
-            accessed: AtomicBool::new(true),
+            accessed: AtomicBool::new(false),
             just_created: AtomicBool::new(true),
         }
     }
