@@ -74,4 +74,10 @@ workspace = true
 [features]
 default = ["sql"]
 sql = ["proton-core-api/sql"]
-test-utils = ["dep:wiremock", "dep:function_name", "dep:tempdir", "dep:rand"]
+test-utils = [
+  "dep:wiremock",
+  "dep:function_name",
+  "dep:tempdir",
+  "dep:rand",
+  "proton-core-api/mocks",
+]

@@ -6,9 +6,9 @@
 //! The structs in this module should NOT have any business logic or other
 //! functionality.
 //!
-#[cfg(any(test, debug_assertions))]
+#[cfg(feature = "mocks")]
 use serde::Serialize;
-#[cfg(any(test, debug_assertions))]
+#[cfg(feature = "mocks")]
 use serde_repr::Serialize_repr;
 
 use serde::Deserialize;
@@ -27,7 +27,7 @@ use crate::declare_proton_id;
 /// Represents a single payment plan from the Proton API.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct Plan {
     #[serde(rename = "ID")]
@@ -51,7 +51,7 @@ pub type PlanState = u8;
 
 /// A plan type.
 #[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[cfg_attr(feature = "mocks", derive(Serialize_repr))]
 #[repr(u8)]
 pub enum PlanType {
     /// A sub-plan (add-on).
@@ -70,7 +70,7 @@ pub type PlanServices = u8;
 /// Represents a plan instance.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PlanInstance {
     pub cycle: u8,
@@ -83,7 +83,7 @@ pub struct PlanInstance {
 /// Represents a plan price (object, with currency, current and default price).
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PlanPrice {
     #[serde(rename = "ID")]
@@ -94,7 +94,7 @@ pub struct PlanPrice {
 
 /// Represents a plan vendor's name.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 pub enum PlanVendorName {
     Google,
     Apple,
@@ -103,7 +103,7 @@ pub enum PlanVendorName {
 /// Represents data for a plan vendor.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PlanVendor {
     #[serde(rename = "ProductID")]
@@ -115,7 +115,7 @@ pub struct PlanVendor {
 
 /// Represents a plan entitlement.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(tag = "Type")]
 pub enum PlanEntitlement {
     #[serde(rename_all = "PascalCase", rename = "description")]
@@ -138,7 +138,7 @@ pub enum PlanEntitlement {
 
 /// Represents a plan decoration.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(tag = "Type")]
 pub enum PlanDecoration {
     #[serde(rename_all = "PascalCase", rename = "starred")]
@@ -157,7 +157,7 @@ pub enum PlanDecoration {
 /// Represents an active subscription.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct Subscription {
     #[serde(rename = "ID")]

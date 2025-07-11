@@ -34,7 +34,7 @@ use proton_crypto_account::keys::{
 use serde::{Deserialize, Deserializer};
 use serde_with::{BoolFromInt, serde_as};
 
-#[cfg(any(test, debug_assertions))]
+#[cfg(feature = "mocks")]
 use serde::Serialize;
 
 use crate::services::proton::common::ApiErrorInfo;
@@ -47,7 +47,7 @@ pub struct ResponseCode(i32);
 
 /// The response containing addresses.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetAddressesResponse {
     /// The list of addresses.
@@ -56,7 +56,7 @@ pub struct GetAddressesResponse {
 
 /// The response containing an address.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetAddressResponse {
     /// The list of addresses.
@@ -65,7 +65,7 @@ pub struct GetAddressResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetContactResponse {
     /// TODO: Document this field.
@@ -74,7 +74,7 @@ pub struct GetContactResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetContactsEmailsResponse {
     /// TODO: Document this field.
@@ -86,7 +86,7 @@ pub struct GetContactsEmailsResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetContactsResponse {
     /// TODO: Document this field.
@@ -98,7 +98,7 @@ pub struct GetContactsResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetEventsLatestResponse {
     /// TODO: Document this field.
@@ -109,7 +109,7 @@ pub struct GetEventsLatestResponse {
 /// Available public keys.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetKeysAllResponse {
     /// Information about the internal address itself, if it exists. Since the
@@ -142,7 +142,7 @@ pub struct GetKeysAllResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetKeysSaltsResponse {
     /// TODO: Document this field.
@@ -151,7 +151,7 @@ pub struct GetKeysSaltsResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetSettingsResponse {
     /// TODO: Document this field.
@@ -160,7 +160,7 @@ pub struct GetSettingsResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetUsersResponse {
     /// TODO: Document this field.
@@ -169,7 +169,7 @@ pub struct GetUsersResponse {
 
 /// The response containing information about deletion of the contacts
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutDeleteContactsResponse {
     /// List of responses.
@@ -177,7 +177,7 @@ pub struct PutDeleteContactsResponse {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutDeleteContactResponse {
     /// Remote ID of the contact.
@@ -188,7 +188,7 @@ pub struct PutDeleteContactResponse {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct GetLabelsResponse {
     #[serde(deserialize_with = "deserialize_labels")]
@@ -221,7 +221,7 @@ where
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PostLabelsResponse {
     /// TODO: Document this field.
@@ -230,7 +230,7 @@ pub struct PostLabelsResponse {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PutLabelResponse {
     /// TODO: Document this field.
@@ -238,7 +238,7 @@ pub struct PutLabelResponse {
 }
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct PatchLabelResponse {
     /// TODO: Document this struct.

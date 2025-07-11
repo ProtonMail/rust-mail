@@ -42,7 +42,7 @@ use std::collections::{BTreeMap, HashMap};
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[cfg_attr(feature = "mocks", derive(Serialize_repr))]
 #[repr(u8)]
 pub enum AlmostAllMail {
     /// TODO: Document this variant.
@@ -55,7 +55,7 @@ pub enum AlmostAllMail {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[cfg_attr(feature = "mocks", derive(Serialize_repr))]
 #[repr(u8)]
 pub enum ComposerDirection {
     /// TODO: Document this variant.
@@ -68,7 +68,7 @@ pub enum ComposerDirection {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[cfg_attr(feature = "mocks", derive(Serialize_repr))]
 #[repr(u8)]
 pub enum ComposerMode {
     /// TODO: Document this variant.
@@ -90,7 +90,7 @@ pub enum Disposition {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[cfg_attr(feature = "mocks", derive(Serialize_repr))]
 #[repr(u8)]
 pub enum MessageButtons {
     /// TODO: Document this variant.
@@ -136,7 +136,7 @@ pub enum MimeType {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[cfg_attr(feature = "mocks", derive(Serialize_repr))]
 #[repr(u8)]
 pub enum NextMessageOnMove {
     /// TODO: Document this variant.
@@ -152,7 +152,7 @@ pub enum NextMessageOnMove {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[cfg_attr(feature = "mocks", derive(Serialize_repr))]
 #[repr(u8)]
 pub enum PgpScheme {
     /// TODO: Document this variant.
@@ -164,7 +164,7 @@ pub enum PgpScheme {
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(transparent)]
 #[repr(transparent)]
 pub struct PmSignature(u8);
@@ -182,7 +182,7 @@ bitflags::bitflags! {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[cfg_attr(feature = "mocks", derive(Serialize_repr))]
 #[repr(u8)]
 pub enum ShowImages {
     /// TODO: Document this variant.
@@ -201,7 +201,7 @@ pub enum ShowImages {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[cfg_attr(feature = "mocks", derive(Serialize_repr))]
 #[repr(u8)]
 pub enum ShowMoved {
     /// TODO: Document this variant.
@@ -220,7 +220,7 @@ pub enum ShowMoved {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[cfg_attr(feature = "mocks", derive(Serialize_repr))]
 #[repr(u8)]
 pub enum SpamAction {
     /// TODO: Document this variant.
@@ -232,7 +232,7 @@ pub enum SpamAction {
 
 /// Where to move or what to do with the item when the user swipes it.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[cfg_attr(feature = "mocks", derive(Serialize_repr))]
 #[repr(i8)]
 pub enum SwipeAction {
     NoAction = -1,
@@ -255,7 +255,7 @@ pub enum SwipeAction {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[cfg_attr(feature = "mocks", derive(Serialize_repr))]
 #[repr(u8)]
 pub enum ViewLayout {
     /// TODO: Document this variant.
@@ -268,7 +268,7 @@ pub enum ViewLayout {
 
 /// TODO: Document this enum.
 #[derive(Clone, Copy, Debug, Default, Deserialize_repr, Eq, Hash, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize_repr))]
+#[cfg_attr(feature = "mocks", derive(Serialize_repr))]
 #[repr(u8)]
 pub enum ViewMode {
     /// TODO: Document this variant.
@@ -284,7 +284,7 @@ pub enum ViewMode {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct Attachment {
     /// The remote id of this attachment.
@@ -336,7 +336,7 @@ pub struct Attachment {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct AttachmentMetadata {
     /// TODO: Document this field.
@@ -362,7 +362,7 @@ pub struct AttachmentMetadata {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct AutoResponder {
     /// TODO: Document this field.
@@ -394,7 +394,7 @@ pub struct AutoResponder {
 /// TODO: Document this struct.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct Conversation {
     /// TODO: Document this field.
@@ -459,7 +459,7 @@ pub struct Conversation {
     pub context_time: Option<u64>,
 }
 
-#[cfg(any(test, debug_assertions))]
+#[cfg(feature = "mocks")]
 impl Default for Conversation {
     fn default() -> Self {
         Self {
@@ -484,7 +484,7 @@ impl Default for Conversation {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct ConversationCount {
     /// TODO: Document this field.
@@ -501,7 +501,7 @@ pub struct ConversationCount {
 /// Data for an event related to a [`ConversationEvent`] record.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct ConversationEvent {
     /// TODO: Document this field.
@@ -517,7 +517,7 @@ pub struct ConversationEvent {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct ConversationLabel {
     /// TODO: Document this field.
@@ -549,7 +549,7 @@ pub struct ConversationLabel {
 /// Data for an event related to a [`MailEvent`] record.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct MailEvent {
     #[serde(rename = "EventID")]
@@ -581,7 +581,7 @@ pub struct MailEvent {
 /// TODO: Document this struct.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, SmartDefault)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 #[allow(clippy::struct_excessive_bools)]
 pub struct MailSettings {
@@ -750,7 +750,7 @@ pub struct MailSettings {
 /// Represents a message with its metadata and its body.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize, Default))]
+#[cfg_attr(feature = "mocks", derive(Serialize, Default))]
 #[serde(rename_all = "PascalCase")]
 pub struct Message {
     #[serde(flatten)]
@@ -763,7 +763,7 @@ pub struct Message {
 /// Contains metadata associated with the message body.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize, Default))]
+#[cfg_attr(feature = "mocks", derive(Serialize, Default))]
 #[serde(rename_all = "PascalCase")]
 pub struct MessageBody {
     /// Attachment metadata associated with the message.
@@ -792,7 +792,7 @@ pub struct MessageBody {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct MessageAttachment {
     /// TODO: Document this field.
@@ -829,7 +829,7 @@ pub struct MessageAttachment {
 
 /// TODO: Document this struct.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct MessageAttachmentInfo {
     /// TODO: Document this field.
@@ -842,7 +842,7 @@ pub struct MessageAttachmentInfo {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct MessageAttachmentHeaders {
     /// TODO: Document this field.
@@ -864,7 +864,7 @@ pub struct MessageAttachmentHeaders {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct MessageCount {
     /// TODO: Document this field.
@@ -881,7 +881,7 @@ pub struct MessageCount {
 /// Data for an event related to a [`MessageEvent`] record.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct MessageEvent {
     /// TODO: Document this field.
@@ -897,7 +897,7 @@ pub struct MessageEvent {
 
 /// TODO: Document this struct.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(transparent)]
 #[repr(transparent)]
 pub struct MessageFlags(u64);
@@ -1024,7 +1024,7 @@ bitflags::bitflags! {
 /// TODO: Document this struct.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 #[allow(clippy::struct_excessive_bools)]
 pub struct MessageMetadata {
@@ -1110,7 +1110,7 @@ pub struct MessageMetadata {
     pub unread: bool,
 }
 
-#[cfg(any(test, debug_assertions))]
+#[cfg(feature = "mocks")]
 impl Default for MessageMetadata {
     fn default() -> Self {
         Self {
@@ -1143,7 +1143,7 @@ impl Default for MessageMetadata {
 /// TODO: Document this struct.
 #[serde_as]
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct MessageSender {
     /// TODO: Document this field.
@@ -1175,7 +1175,7 @@ pub struct MessageSender {
 /// Recipient of a message.
 #[serde_as]
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct MessageRecipient {
     /// Email of the recipient
@@ -1200,7 +1200,7 @@ pub type MessageReplyTo = MessageSender;
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct MobileSetting {
     /// TODO: Document this field.
@@ -1213,7 +1213,7 @@ pub struct MobileSetting {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct MobileSettings {
     /// TODO: Document this field.
@@ -1228,7 +1228,7 @@ pub struct MobileSettings {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 // can't put T:ProtonIdMarker here due to https://github.com/rust-lang/rust/issues/34979
 pub struct OperationResult<T> {
@@ -1243,7 +1243,7 @@ pub struct OperationResult<T> {
 
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct UndoToken {
     /// TODO: Document this field.
@@ -1255,7 +1255,7 @@ pub struct UndoToken {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize))]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
 pub struct NewAttachmentResponse {
     /// Attachment id.
@@ -1282,7 +1282,7 @@ pub struct NewAttachmentResponse {
 /// The response from an incoming default, can come either in the event loop or by calling
 /// `incomingdefaults`
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
-#[cfg_attr(any(test, debug_assertions), derive(Serialize, Default))]
+#[cfg_attr(feature = "mocks", derive(Serialize, Default))]
 #[serde(rename_all = "PascalCase")]
 pub struct IncomingDefault {
     /// Which label messages from this address go to

@@ -19,7 +19,12 @@ test-utils = [
 ]
 
 gtk = ["dep:tao", "dep:wry"]
-sql = ["proton-core-api/sql", "proton-mail-api/sql"]
+sql = [
+  "proton-core-api/sql",
+  "proton-mail-api/sql",
+  "proton-core-api/mocks",
+  "proton-mail-api/mocks",
+]
 proton_mail_error_log = []
 
 [dependencies]

@@ -1,13 +1,12 @@
 use crate as proton_mail_common;
 use crate::models::DraftMetadata;
-use proton_action_queue::action::{Action, ActionDependencyKeys, DefaultVersionConverter, Type};
+use proton_action_queue::action::ActionDependencyKeys;
 use proton_action_queue::db::StoredAction;
-use proton_action_queue::tests::common::{DefaultError, NoopActionHandler};
+use proton_core_common::actions::event_poll::EventPoll;
 use proton_core_common::models::ModelExtension;
 use proton_mail_common::test_utils::db::new_test_connection;
 use proton_mail_common::test_utils::utils::create_address;
 use proton_mail_common::{conv_id, conversation, message, msg_id};
-use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::StashError;
 
@@ -41,14 +40,14 @@ async fn test_messages_with_pending_send() {
             .with_save(bond)
             .await
             .unwrap();
-            let action_1 = StoredAction::without_state::<SuccessAction>(
+            let action_1 = StoredAction::without_state::<EventPoll>(
                 ActionDependencyKeys::default(),
                 Default::default(),
             )
             .with_save(bond)
             .await
             .unwrap();
-            let action_2 = StoredAction::without_state::<SuccessAction>(
+            let action_2 = StoredAction::without_state::<EventPoll>(
                 ActionDependencyKeys::default(),
                 Default::default(),
             )
@@ -96,18 +95,4 @@ async fn test_messages_with_pending_send() {
         })
         .await
         .unwrap();
-}
-
-#[derive(Serialize, Deserialize)]
-struct SuccessAction {}
-
-impl Action for SuccessAction {
-    const TYPE: Type = Type("success");
-    const VERSION: u32 = 1;
-    type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = NoopActionHandler<SuccessAction>;
-    type RemoteOutput = ();
-    type LocalOutput = ();
-    type Error = DefaultError;
-    type Context = ();
 }
