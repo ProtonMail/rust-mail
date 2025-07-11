@@ -45,6 +45,11 @@ impl ApiError {
             None
         }
     }
+
+    #[must_use]
+    pub fn is_network_failure(&self) -> bool {
+        matches!(self, ApiError::Muon(_))
+    }
 }
 
 /// A result containing an error that defaults to `ApiServiceError`.

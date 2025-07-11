@@ -471,7 +471,11 @@ where
                 return Err(PackageError::PackageEoPasswordMissing);
             };
 
-            let response = session.api().get_auth_modulus().await.unwrap();
+            let response = session
+                .api()
+                .get_auth_modulus()
+                .await
+                .map_err(PackageError::ModulusRequest)?;
 
             // Re-encrypt packets with the password.
             build_address_package_for_eo(

@@ -20,6 +20,7 @@ use chrono::{DateTime, Local};
 use compose::maybe_sanitize;
 use derive_more::derive::TryFrom;
 use futures::future::join3;
+use proton_account_api::ApiError;
 use proton_action_queue::action::{ActionId, MetadataBuilder};
 use proton_action_queue::queue::{ActionError, Queue, QueuedActionOutput, QueuedError};
 use proton_core_api::consts::Mail;
@@ -330,6 +331,8 @@ pub enum PackageError {
     RecipientEmailInvalid(PrivateEmail),
     #[error("Proton Email {0} does not exist")]
     ProtonRecipientDoesNotExist(PrivateEmail),
+    #[error("Modulus: {0}")]
+    ModulusRequest(ApiError),
 }
 
 #[derive(Debug, thiserror::Error)]
