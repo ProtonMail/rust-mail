@@ -369,7 +369,6 @@ pub struct StashConfiguration<'a> {
     pub idle_count: Option<u32>,
 }
 
-#[cfg(any(test, debug_assertions))]
 impl<'a> StashConfiguration<'a> {
     pub fn test() -> Self {
         Self {
