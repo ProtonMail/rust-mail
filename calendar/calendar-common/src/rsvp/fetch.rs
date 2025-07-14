@@ -3,9 +3,11 @@ use crate::{
     RsvpError, RsvpEvent, RsvpEventId, RsvpIntent, RsvpOccurrence, RsvpOrganizer, RsvpProgress,
     RsvpRecency, RsvpRecurrence, RsvpResult,
 };
-use chrono::DateTime;
 use itertools::{Either, Itertools};
-use jiff::{Zoned, civil::Weekday};
+use jiff::{
+    Zoned,
+    civil::{Date, Weekday},
+};
 use proton_calendar_api::{
     CalendarAttendeeId, CalendarAttendeeStatus, CalendarBootstrap, CalendarEvent, ProtonCalendar,
 };
@@ -17,7 +19,7 @@ use proton_ical as ical;
 use std::{collections::HashMap, num::NonZeroU32};
 use tracing::{debug, info, instrument, warn};
 
-pub(super) async fn exec<P>(
+pub(super) async fn run<P>(
     api: &Proton,
     pgp: &P,
     keys: &UnlockedAddressKeys<P>,
@@ -29,14 +31,49 @@ pub(super) async fn exec<P>(
 where
     P: PGPProviderSync,
 {
-    let Some((calendar, event)) = fetch(api, cache, id).await? else {
+    let (calendar, event, decryptor) = match fetch(api, cache, id).await {
+        Ok(Some((calendar, event))) => {
+            let decryptor = calendar.create_decryptor(pgp, keys, &event)?;
+
+            (Some(calendar), Some(Box::new(event)), Some(decryptor))
+        }
+
+        Ok(None) => (None, None, None),
+
+        Err(err) if err.is_network_failure() => {
+            warn!(?err, "Got a network failure, trying to continue anyway");
+            (None, None, None)
+        }
+
+        Err(err) => {
+            return Err(err);
+        }
+    };
+
+    let Some(source) = inflate(pgp, id, event, decryptor.as_ref())? else {
+        // This is the case for reminders - there we only know the corresponding
+        // Proton event id, so without a network connection there's nothing more
+        // we can do (we can't figure out the timestamps, attendees etc. out of
+        // thin air).
+
+        debug!(
+            "Network seems to be down and there's no way to continue with just \
+             the data at hand - giving up",
+        );
+
         return Ok(None);
     };
 
-    let decryptor = calendar.create_decryptor(pgp, keys, &event)?;
-    let event = extract(pgp, now, week_start, id, calendar, event, &decryptor)?;
-
-    Ok(Some(event))
+    extract(
+        pgp,
+        now,
+        week_start,
+        id,
+        calendar,
+        source,
+        decryptor.as_ref(),
+    )
+    .map(Some)
 }
 
 #[instrument(skip_all)]
@@ -52,13 +89,15 @@ async fn fetch(
             let events = api.find_calendar_events(uid, *rid).await?;
 
             // If this is a repeating event, but we're asking the API without
-            // providing the recurrence id - you can imagine we're asking about
-            // the "original" event, so to say - the API will return us both the
+            // providing any recurrence id[1], the API will return us both the
             // original event and all of its single edits.
             //
             // Since we're interested only in the original event, we can just
             // ignore the single edits and pick the first event from the list
             // (which is guaranteed to be this original we're looking for).
+            //
+            // [1] you can imagine we're asking about the "original" or "parent"
+            //     event, so to say
             events.into_iter().next()
         }
 
@@ -90,127 +129,144 @@ async fn fetch(
     }
 }
 
+#[instrument(skip_all)]
+fn inflate<'a, P>(
+    pgp: &P,
+    id: &'a RsvpEventId,
+    event: Option<Box<CalendarEvent>>,
+    decryptor: Option<&CalendarEventDecryptor<P>>,
+) -> RsvpResult<Option<Source<'a>>>
+where
+    P: PGPProviderSync,
+{
+    let (Some(raw), Some(decryptor)) = (event, decryptor) else {
+        return match id {
+            RsvpEventId::Invite { invite, .. } => Ok(Some(Source::Invite {
+                raw: None,
+                event: None,
+                invite,
+            })),
+
+            RsvpEventId::Reminder { .. } => Ok(None),
+        };
+    };
+
+    debug!("Inflating");
+
+    // When we fetch an event from Proton Calendar, we get a couple of disjoint
+    // *.ics payloads - e.g. event summary is kept within a "shared event", but
+    // event's status is kept within a "calendar event" (crypto purposes).
+    //
+    // To make it easier to operate on the event, let's now merge those partial
+    // events into one object.
+    let event = raw
+        .shared_events
+        .iter()
+        .chain(raw.calendar_events.iter())
+        .try_fold(Box::new(ical::VEvent::default()), |mut lhs, rhs| {
+            let rhs = rhs.decrypt_and_parse(pgp, decryptor)?;
+
+            lhs.description = lhs.description.or(rhs.description);
+            lhs.dtend = lhs.dtend.or(rhs.dtend);
+            lhs.dtstamp = lhs.dtstamp.or(rhs.dtstamp);
+            lhs.dtstart = lhs.dtstart.or(rhs.dtstart);
+            lhs.location = lhs.location.or(rhs.location);
+            lhs.rrule = lhs.rrule.or(rhs.rrule);
+            lhs.sequence = lhs.sequence.or(rhs.sequence);
+            lhs.status = lhs.status.or(rhs.status);
+            lhs.summary = lhs.summary.or(rhs.summary);
+
+            Ok(lhs)
+        })
+        .map_err(|err: RsvpError| err)?;
+
+    Ok(Some(match id {
+        RsvpEventId::Invite { invite, .. } => Source::Invite {
+            raw: Some(raw),
+            event: Some(event),
+            invite,
+        },
+
+        RsvpEventId::Reminder { .. } => Source::Reminder { raw, event },
+    }))
+}
+
 fn extract<P>(
     pgp: &P,
     now: &Zoned,
     week_start: Weekday,
     id: &RsvpEventId,
-    calendar: CalendarBootstrap,
-    event: CalendarEvent,
-    decryptor: &CalendarEventDecryptor<P>,
+    calendar: Option<CalendarBootstrap>,
+    source: Source,
+    decryptor: Option<&CalendarEventDecryptor<P>>,
 ) -> RsvpResult<RsvpEvent>
 where
     P: PGPProviderSync,
 {
-    let meta = extract_metadata(pgp, now, week_start, id, &event, decryptor)?;
-    let occurrence = extract_occurrence(&event)?;
-    let organizer = extract_organizer(&event)?;
-    let attendees = extract_attendees(pgp, &event, decryptor, &organizer)?;
-    let calendar = extract_calendar(calendar, &event);
-
-    Ok(RsvpEvent {
-        summary: meta.summary,
-        location: meta.location,
-        description: meta.description,
-        recurrence: meta.recurrence,
-        occurrence,
-        attendees,
-        organizer,
-        calendar,
-        progress: meta.progress,
-        recency: meta.recency,
-        intent: meta.intent,
-        raw: Box::new(event),
-    })
-}
-
-fn extract_metadata<P>(
-    pgp: &P,
-    now: &Zoned,
-    week_start: Weekday,
-    id: &RsvpEventId,
-    event: &CalendarEvent,
-    decryptor: &CalendarEventDecryptor<P>,
-) -> RsvpResult<Metadata>
-where
-    P: PGPProviderSync,
-{
-    debug!("Extracting event's metadata");
-
-    let mut dtstamp = None;
-    let mut sequence = None;
-    let mut summary = None;
-    let mut location = None;
-    let mut description = None;
-    let mut rrule = None;
-    let mut dtstart = None;
-
-    let mut progress = {
-        let now = now.timestamp().as_second();
-
-        if now < event.start_time {
-            RsvpProgress::Pending
-        } else if now < event.end_time {
-            RsvpProgress::Ongoing
-        } else {
-            RsvpProgress::Ended
-        }
-    };
-
-    // Event data is split between shared events (which contain rrule, summary,
-    // location etc.) and the calendar event (which contains just the status) -
-    // but for convenience it's just easier to chain all events together
-    let events = event
-        .shared_events
-        .iter()
-        .chain(event.calendar_events.iter());
-
-    for event in events {
-        let event = event.decrypt_and_parse(pgp, decryptor)?;
-
-        dtstamp = dtstamp.or(event.dtstamp);
-        sequence = sequence.or(event.sequence);
-        summary = summary.or_else(|| event.summary.map(|sum| sum.value.into_string()));
-        location = location.or_else(|| event.location.map(|loc| loc.value.into_string()));
-
-        description =
-            description.or_else(|| event.description.map(|desc| desc.value.into_string()));
-
-        rrule = rrule.or(event.rrule);
-        dtstart = dtstart.or(event.dtstart);
-
-        if event.status == Some(ical::Status::Cancelled) {
-            progress = RsvpProgress::Cancelled;
-        }
-    }
-
-    let recurrence = rrule
-        .zip(dtstart)
-        .map(|(rrule, dtstart)| extract_recurrence(&rrule.value, dtstart.value, week_start));
-
-    let recency = extract_recency(id, dtstamp, sequence);
+    let metadata = extract_metadata(source.invite_or_event());
+    let recurrence = extract_recurrence(source.invite_or_event(), week_start);
+    let occurrence = extract_occurrence(source.invite_or_event())?;
+    let organizer = extract_organizer(&source)?;
+    let attendees = extract_attendees(pgp, &source, decryptor, &organizer)?;
+    let calendar = extract_calendar(calendar, &source);
+    let progress = extract_progress(now, &source, &occurrence);
+    let recency = extract_recency(source.invite(), source.event());
 
     let intent = match id {
         RsvpEventId::Invite { .. } => RsvpIntent::Invite,
         RsvpEventId::Reminder { .. } => RsvpIntent::Reminder,
     };
 
-    Ok(Metadata {
-        summary,
-        location,
-        description,
+    Ok(RsvpEvent {
+        summary: metadata.summary,
+        location: metadata.location,
+        description: metadata.description,
         recurrence,
+        occurrence,
+        organizer,
+        attendees,
+        calendar,
         progress,
         recency,
         intent,
+        raw: source.into_raw_event(),
     })
 }
 
-fn extract_recurrence(
-    recur: &ical::Recur,
-    dtstart: ical::DateOrDt,
-    week_start: Weekday,
-) -> RsvpRecurrence {
+fn extract_metadata(event: &ical::VEvent) -> Metadata {
+    let summary = event
+        .summary
+        .as_ref()
+        .map(|sum| sum.value.as_str().to_owned())
+        .filter(|desc| !desc.is_empty());
+
+    let location = event
+        .location
+        .as_ref()
+        .map(|loc| loc.value.as_str().to_owned())
+        .filter(|desc| !desc.is_empty());
+
+    let description = event
+        .description
+        .as_ref()
+        .map(|desc| desc.value.as_str().to_owned())
+        .filter(|desc| !desc.is_empty());
+
+    Metadata {
+        summary,
+        location,
+        description,
+    }
+}
+
+fn extract_recurrence(event: &ical::VEvent, week_start: Weekday) -> Option<RsvpRecurrence> {
+    let (Some(rrule), Some(dtstart)) = (&event.rrule, &event.dtstart) else {
+        return None;
+    };
+
+    let recur = &rrule.value;
+    let dtstart = dtstart.value.clone();
+
     debug!("Extracting event's recurrence");
 
     // Sometimes a recurrence rule might be underconstrained - e.g.:
@@ -251,7 +307,7 @@ fn extract_recurrence(
         }
     };
 
-    match recur.freq {
+    Some(match recur.freq {
         ical::Freq::Daily => extract_recurrence_daily(recur),
         ical::Freq::Weekly => extract_recurrence_weekly(recur, dtstart, week_start),
         ical::Freq::Monthly => extract_recurrence_monthly(recur, dtstart, week_start),
@@ -263,7 +319,7 @@ fn extract_recurrence(
             // bother with supporting them here
             RsvpRecurrence::Custom(freq)
         }
-    }
+    })
 }
 
 fn extract_recurrence_daily(recur: &ical::Recur) -> RsvpRecurrence {
@@ -658,83 +714,83 @@ fn extract_recurrence_yearly(recur: &ical::Recur) -> RsvpRecurrence {
     }
 }
 
-/// Compares `DTSTAMP` and `SEQUENCE` extracted from `invite.ics` to the event
-/// data returned from the API - if there's a mismatch between those, it means
-/// that user is looking at an outdated invite and should be warned about this.
-fn extract_recency(
-    invite: &RsvpEventId,
-    event_dtstamp: Option<ical::DtStamp>,
-    event_sequence: Option<ical::Sequence>,
-) -> RsvpRecency {
-    let RsvpEventId::Invite {
-        dtstamp: invite_dtstamp,
-        sequence: invite_sequence,
-        ..
-    } = invite
-    else {
-        // Reminders can't be outdated
-        return RsvpRecency::Fresh;
-    };
+fn extract_occurrence(event: &ical::VEvent) -> RsvpResult<RsvpOccurrence> {
+    let dtstart = event.dtstart.as_ref().ok_or(RsvpError::MissingDtStart)?;
+    let dtend = event.dtend.as_ref().ok_or(RsvpError::MissingDtEnd)?;
 
-    let invite_dtstamp = invite_dtstamp
-        .clone()
-        .and_then(|dtstamp| Zoned::try_from(dtstamp.value).ok());
+    let dtstart = &dtstart.value;
+    let dtend = &dtend.value;
 
-    let event_dtstamp = event_dtstamp.and_then(|dtstamp| Zoned::try_from(dtstamp.value).ok());
+    match (dtstart, dtend) {
+        (ical::DateOrDt::Date(dtstart), ical::DateOrDt::Date(dtend)) => Ok(RsvpOccurrence::Date {
+            starts_at: Date::from(*dtstart),
+            ends_at: Date::from(*dtend),
+        }),
 
-    let (Some(invite_dtstamp), Some(event_dtstamp)) = (invite_dtstamp, event_dtstamp) else {
-        warn!("Invite and/or event doesn't contain DTSTAMP");
+        (ical::DateOrDt::DateTime(dtstart), ical::DateOrDt::DateTime(dtend)) => {
+            Ok(RsvpOccurrence::DateTime {
+                starts_at: Zoned::try_from(dtstart.clone())?,
+                ends_at: Zoned::try_from(dtend.clone())?,
+            })
+        }
 
-        return RsvpRecency::Fresh;
-    };
-
-    let invite_sequence = invite_sequence.map_or(0, |seq| seq.value);
-    let event_sequence = event_sequence.map_or(0, |seq| seq.value);
-
-    if invite_dtstamp < event_dtstamp || invite_sequence < event_sequence {
-        RsvpRecency::Outdated
-    } else {
-        RsvpRecency::Fresh
+        _ => Err(RsvpError::MixedDtStartAndDtEnd),
     }
 }
 
-fn extract_occurrence(event: &CalendarEvent) -> RsvpResult<RsvpOccurrence> {
-    debug!("Extracting event's occurrence");
-
-    let starts_at = DateTime::from_timestamp(event.start_time, 0)
-        .ok_or(RsvpError::EventStartTimeIsOutOfRange)?;
-
-    let ends_at =
-        DateTime::from_timestamp(event.end_time, 0).ok_or(RsvpError::EventEndTimeIsOutOfRange)?;
-
-    if event.full_day {
-        Ok(RsvpOccurrence::Date {
-            starts_at: starts_at.date_naive(),
-            ends_at: ends_at.date_naive().pred_opt().unwrap(),
-        })
-    } else {
-        Ok(RsvpOccurrence::DateTime { starts_at, ends_at })
-    }
-}
-
-fn extract_organizer(event: &CalendarEvent) -> RsvpResult<RsvpOrganizer> {
-    // All shared events come from the same author (the event organizer), so
-    // let's just pick any and call it a day.
+fn extract_organizer(source: &Source) -> RsvpResult<RsvpOrganizer> {
+    // If we have access to the raw calendar event, pull organizer from there -
+    // it's validated by the backend thus guaranteed to be a correct e-mail
+    // address.
     //
-    // Alternatively we could actually go through all of the *.ics payloads and
-    // look for `ORGANIZER:...`, but no need to go this crazy for the same piece
-    // of information.
-    let email = event
-        .shared_events
-        .first()
-        .ok_or(RsvpError::OrganizerIsNotKnown)?
-        .author
-        .clone();
+    // If we're offline, pull organizer from `invite.ics` - it might be a bit
+    // off (cf. CALWEB-3201), but it's better than displaying nothing.
 
-    Ok(RsvpOrganizer { email })
+    if let Some(event) = source.raw_event() {
+        let email = event
+            .shared_events
+            .first()
+            .ok_or(RsvpError::UnknownOrganizer)?
+            .author
+            .clone();
+
+        Ok(RsvpOrganizer { email })
+    } else {
+        let organizer = source
+            .invite_or_event()
+            .organizer
+            .as_ref()
+            .ok_or(RsvpError::UnknownOrganizer)?;
+
+        if let ical::CalAddress::Email(email) = &organizer.address {
+            Ok(RsvpOrganizer {
+                email: email.value().as_str().into(),
+            })
+        } else {
+            Err(RsvpError::UnknownOrganizer)
+        }
+    }
 }
 
 fn extract_attendees<P>(
+    pgp: &P,
+    source: &Source,
+    decryptor: Option<&CalendarEventDecryptor<P>>,
+    organizer: &RsvpOrganizer,
+) -> RsvpResult<Vec<RsvpAttendee>>
+where
+    P: PGPProviderSync,
+{
+    debug!("Extracting event's attendees");
+
+    if let (Some(event), Some(decryptor)) = (source.raw_event(), decryptor) {
+        extract_attendees_from_event(pgp, event, decryptor, organizer)
+    } else {
+        Ok(extract_attendees_from_invite(source.invite_or_event()))
+    }
+}
+
+fn extract_attendees_from_event<P>(
     pgp: &P,
     event: &CalendarEvent,
     decryptor: &CalendarEventDecryptor<P>,
@@ -743,8 +799,6 @@ fn extract_attendees<P>(
 where
     P: PGPProviderSync,
 {
-    debug!("Extracting event's attendees");
-
     // Attendees are split between `event.attendees` (which contains statuses
     // and ids used by the API) and `event.attendees_event` (which contains
     // just the e-mail addresses and tokens)
@@ -763,12 +817,12 @@ where
         .filter_map(|(idx, attendee)| {
             debug!(?idx, "Processing attendee");
 
-            extract_attendee(organizer, &attendees, attendee).transpose()
+            extract_attendee_from_event(organizer, &attendees, attendee).transpose()
         })
         .collect()
 }
 
-fn extract_attendee(
+fn extract_attendee_from_event(
     organizer: &RsvpOrganizer,
     attendees: &HashMap<&str, (&CalendarAttendeeId, CalendarAttendeeStatus)>,
     attendee: ical::Attendee,
@@ -796,25 +850,195 @@ fn extract_attendee(
 
     let (id, status) = attendees
         .get(&token.as_str())
-        .ok_or(RsvpError::AttendeeIsNotKnown)?;
+        .ok_or(RsvpError::UnknownAttendee)?;
 
     Ok(Some(RsvpAttendee {
-        id: (*id).clone(),
+        id: Some((*id).clone()),
         email,
-        status: *status,
-        token: token.into(),
+        status: Some(*status),
+        token: Some(token.into()),
     }))
 }
 
-fn extract_calendar(calendar: CalendarBootstrap, event: &CalendarEvent) -> RsvpCalendar {
+fn extract_attendees_from_invite(invite: &ical::VEvent) -> Vec<RsvpAttendee> {
+    invite
+        .attendees
+        .iter()
+        .filter_map(|attendee| {
+            if let ical::CalAddress::Email(email) = &attendee.address {
+                Some(email.value().as_str().into())
+            } else {
+                None
+            }
+        })
+        .map(|email| RsvpAttendee {
+            id: None,
+            token: None,
+            email,
+            status: None,
+        })
+        .collect()
+}
+
+fn extract_calendar(calendar: Option<CalendarBootstrap>, source: &Source) -> Option<RsvpCalendar> {
+    let calendar = calendar?;
+    let event = source.raw_event()?;
+
     let CalendarBootstrap {
         members: [member], ..
     } = calendar;
 
-    RsvpCalendar {
+    Some(RsvpCalendar {
         id: event.calendar_id.clone(),
         name: member.name,
         color: member.color,
+    })
+}
+
+fn extract_progress(now: &Zoned, source: &Source, occurrence: &RsvpOccurrence) -> RsvpProgress {
+    if let Some(event) = source.event() {
+        if event.status == Some(ical::Status::Cancelled) {
+            return RsvpProgress::Cancelled;
+        }
+    } else {
+        // If the event is not available, it means we're offline - in that case
+        // we can't know whether the event was cancelled or not, so let's assume
+        // it wasn't.
+    }
+
+    match occurrence {
+        RsvpOccurrence::Date { starts_at, ends_at } => {
+            if now.date() < *starts_at {
+                RsvpProgress::Pending
+            } else if now.date() <= *ends_at {
+                RsvpProgress::Ongoing
+            } else {
+                RsvpProgress::Ended
+            }
+        }
+
+        RsvpOccurrence::DateTime { starts_at, ends_at } => {
+            if now < starts_at {
+                RsvpProgress::Pending
+            } else if now < ends_at {
+                RsvpProgress::Ongoing
+            } else {
+                RsvpProgress::Ended
+            }
+        }
+    }
+}
+
+/// Compares `DTSTAMP` and `SEQUENCE` extracted from `invite.ics` to the event
+/// data returned from the API - if there's a mismatch between those, it means
+/// that user is looking at an outdated invite and should be warned about this.
+fn extract_recency(invite: Option<&ical::VEvent>, event: Option<&ical::VEvent>) -> RsvpRecency {
+    let Some(invite) = invite else {
+        // If there's no invite available, we must be looking at a reminder -
+        // those cannot be outdated as we always fetch them fresh from the API.
+        return RsvpRecency::Fresh;
+    };
+
+    let Some(event) = event else {
+        // If there's no event available, the network connection must be down -
+        // in that case we cannot know whether the RSVP is fresh or outdated.
+        return RsvpRecency::Unknown;
+    };
+
+    let invite_dtstamp = invite
+        .dtstamp
+        .clone()
+        .and_then(|dtstamp| Zoned::try_from(dtstamp.value).ok());
+
+    let event_dtstamp = event
+        .dtstamp
+        .clone()
+        .and_then(|dtstamp| Zoned::try_from(dtstamp.value).ok());
+
+    let (Some(invite_dtstamp), Some(event_dtstamp)) = (invite_dtstamp, event_dtstamp) else {
+        warn!("Invite and/or event are missing DTSTAMP");
+
+        return RsvpRecency::Fresh;
+    };
+
+    let invite_sequence = invite.sequence.map_or(0, |seq| seq.value);
+    let event_sequence = event.sequence.map_or(0, |seq| seq.value);
+
+    if invite_dtstamp < event_dtstamp || invite_sequence < event_sequence {
+        RsvpRecency::Outdated
+    } else {
+        RsvpRecency::Fresh
+    }
+}
+
+#[derive(Debug)]
+enum Source<'a> {
+    Invite {
+        /// Event data as fetched from Proton Calendar, with raw *.ics payloads,
+        /// crypto packets etc.
+        ///
+        /// This field will be `None` if there's no internet connection.
+        raw: Option<Box<CalendarEvent>>,
+
+        /// Event data as fetched from Proton Calendar, materialized from raw
+        /// event data above.
+        ///
+        /// This field will be `None` if there's no internet connection.
+        event: Option<Box<ical::VEvent>>,
+
+        /// Event data as parsed from `invite.ics`.
+        invite: &'a ical::VEvent,
+    },
+
+    Reminder {
+        /// Event data as fetched from Proton Calendar, with raw *.ics payloads,
+        /// crypto packets etc.
+        ///
+        /// As compared to [`Source::Invite`], this field is not nullable here -
+        /// if there's no internet connection, we bail out early because without
+        /// network connection there's nowhere to pull the reminder data out of.
+        raw: Box<CalendarEvent>,
+
+        /// Event data as fetched from Proton Calendar, materialized from raw
+        /// event data above.
+        event: Box<ical::VEvent>,
+    },
+}
+
+impl Source<'_> {
+    fn raw_event(&self) -> Option<&CalendarEvent> {
+        match self {
+            Source::Invite { raw, .. } => raw.as_deref(),
+            Source::Reminder { raw, .. } => Some(raw),
+        }
+    }
+
+    fn into_raw_event(self) -> Option<Box<CalendarEvent>> {
+        match self {
+            Source::Invite { raw, .. } => raw,
+            Source::Reminder { raw, .. } => Some(raw),
+        }
+    }
+
+    fn invite(&self) -> Option<&ical::VEvent> {
+        match self {
+            Source::Invite { invite, .. } => Some(invite),
+            Source::Reminder { .. } => None,
+        }
+    }
+
+    fn event(&self) -> Option<&ical::VEvent> {
+        match self {
+            Source::Invite { event, .. } => event.as_deref(),
+            Source::Reminder { event, .. } => Some(event),
+        }
+    }
+
+    fn invite_or_event(&self) -> &ical::VEvent {
+        match self {
+            Source::Invite { invite, .. } => invite,
+            Source::Reminder { event, .. } => event,
+        }
     }
 }
 
@@ -823,78 +1047,11 @@ struct Metadata {
     summary: Option<String>,
     location: Option<String>,
     description: Option<String>,
-    recurrence: Option<RsvpRecurrence>,
-    progress: RsvpProgress,
-    recency: RsvpRecency,
-    intent: RsvpIntent,
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::NaiveDate;
-    use proton_calendar_api::{CalendarEventPayload, CalendarEventPayloadType};
-
-    fn event() -> CalendarEvent {
-        CalendarEvent {
-            shared_events: Vec::default(),
-            calendar_events: Vec::default(),
-            id: "xxx".into(),
-            calendar_id: "xxx".into(),
-            start_time: 0,
-            end_time: 0,
-            full_day: false,
-            recurrence_id: None,
-            address_key_packet: None,
-            shared_key_packet: None,
-            attendees_events: [CalendarEventPayload {
-                ty: CalendarEventPayloadType::ClearText,
-                data: String::default(),
-                signature: None,
-                author: "spongebob@squarepants.com".into(),
-            }],
-            attendees: Vec::default(),
-            notifications: None,
-            color: None,
-            is_proton_proton_invite: true,
-        }
-    }
-
-    #[test]
-    fn extract_occurrence_date() {
-        let actual = extract_occurrence(&CalendarEvent {
-            start_time: 1_745_366_400,
-            end_time: 1_745_452_800,
-            full_day: true,
-            ..event()
-        })
-        .unwrap();
-
-        let expected = RsvpOccurrence::Date {
-            starts_at: NaiveDate::from_ymd_opt(2025, 4, 23).unwrap(),
-            ends_at: NaiveDate::from_ymd_opt(2025, 4, 23).unwrap(),
-        };
-
-        assert_eq!(expected, actual);
-    }
-
-    #[test]
-    fn extract_occurrence_datetime() {
-        let actual = extract_occurrence(&CalendarEvent {
-            start_time: 1_528_972_200,
-            end_time: 1_528_976_700,
-            full_day: false,
-            ..event()
-        })
-        .unwrap();
-
-        let expected = RsvpOccurrence::DateTime {
-            starts_at: "2018-06-14T10:30:00Z".parse().unwrap(),
-            ends_at: "2018-06-14T11:45:00Z".parse().unwrap(),
-        };
-
-        assert_eq!(expected, actual);
-    }
 
     mod extract_recurrence {
         use super::*;
@@ -1235,15 +1392,23 @@ mod tests {
         #[test_case(TEST_YEARLY_WITH_INTERVAL)]
         #[allow(clippy::needless_pass_by_value)]
         fn test(case: TestCase) {
-            let recur = ical::Recur::from_str(case.given_recur, ical::Value).unwrap();
+            let event = {
+                let rrule = ical::RRule {
+                    value: ical::Recur::from_str(case.given_recur, ical::Value).unwrap(),
+                };
 
-            let dtstart = ical::DtStart::from_str(case.given_dtstart, ical::Property)
-                .unwrap()
-                .value;
+                let dtstart = ical::DtStart::from_str(case.given_dtstart, ical::Property).unwrap();
 
-            let actual = extract_recurrence(&recur, dtstart, Weekday::Monday);
+                ical::VEvent {
+                    rrule: Some(rrule),
+                    dtstart: Some(dtstart),
+                    ..ical::VEvent::default()
+                }
+            };
 
-            assert_eq!((case.expected)(), actual);
+            let actual = extract_recurrence(&event, Weekday::Monday);
+
+            assert_eq!(Some((case.expected)()), actual);
         }
     }
 
@@ -1251,66 +1416,75 @@ mod tests {
         use super::*;
         use test_case::test_case;
 
-        fn dtstamp(s: &str) -> ical::DtStamp {
-            ical::DtStamp {
-                value: ical::utils::dt(s),
+        struct Event {
+            dtstamp: Option<&'static str>,
+            sequence: Option<u32>,
+        }
+
+        impl Event {
+            fn build(self) -> ical::VEvent {
+                let dtstamp = self.dtstamp.map(|value| ical::DtStamp {
+                    value: ical::utils::dt(value),
+                });
+
+                let sequence = self.sequence.map(|value| ical::Sequence { value });
+
+                ical::VEvent {
+                    dtstamp,
+                    sequence,
+                    ..ical::VEvent::default()
+                }
             }
         }
 
-        fn sequence(n: u32) -> ical::Sequence {
-            ical::Sequence { value: n }
-        }
-
         struct TestCase {
-            given_invite: fn() -> RsvpEventId,
-            given_event_dtstamp: Option<&'static str>,
-            given_event_sequence: Option<u32>,
+            given_invite: Option<Event>,
+            given_event: Option<Event>,
             expected: RsvpRecency,
         }
 
         const TEST_REMINDER: TestCase = TestCase {
-            given_invite: || RsvpEventId::Reminder {
-                cal_id: "1234".into(),
-                event_id: "1234".into(),
-            },
-            given_event_dtstamp: None,
-            given_event_sequence: None,
+            given_invite: None,
+            given_event: Some(Event {
+                dtstamp: Some("20180101T120000Z"),
+                sequence: Some(3),
+            }),
             expected: RsvpRecency::Fresh,
         };
 
         const TEST_INVITE_WITH_MATCHING_DTSTAMP_AND_SEQUENCE: TestCase = TestCase {
-            given_invite: || RsvpEventId::Invite {
-                uid: "1234".into(),
-                rid: None,
-                dtstamp: Some(dtstamp("20180101T120000Z")),
-                sequence: Some(sequence(3)),
-            },
-            given_event_dtstamp: Some("20180101T120000Z"),
-            given_event_sequence: Some(3),
+            given_invite: Some(Event {
+                dtstamp: Some("20180101T120000Z"),
+                sequence: Some(3),
+            }),
+            given_event: Some(Event {
+                dtstamp: Some("20180101T120000Z"),
+                sequence: Some(3),
+            }),
             expected: RsvpRecency::Fresh,
         };
 
         const TEST_INVITE_WITH_PAST_DTSTAMP: TestCase = TestCase {
-            given_invite: || RsvpEventId::Invite {
-                uid: "1234".into(),
-                rid: None,
-                dtstamp: Some(dtstamp("20180101T100000Z")),
-                sequence: Some(sequence(3)),
-            },
-            given_event_dtstamp: Some("20180101T120000Z"),
-            given_event_sequence: Some(3),
+            given_invite: Some(Event {
+                dtstamp: Some("20180101T100000Z"),
+                sequence: Some(3),
+            }),
+            given_event: Some(Event {
+                dtstamp: Some("20180101T120000Z"),
+                sequence: Some(3),
+            }),
             expected: RsvpRecency::Outdated,
         };
 
         const TEST_INVITE_WITH_PAST_SEQUENCE: TestCase = TestCase {
-            given_invite: || RsvpEventId::Invite {
-                uid: "1234".into(),
-                rid: None,
-                dtstamp: Some(dtstamp("20180101T120000Z")),
-                sequence: Some(sequence(1)),
-            },
-            given_event_dtstamp: Some("20180101T120000Z"),
-            given_event_sequence: Some(3),
+            given_invite: Some(Event {
+                dtstamp: Some("20180101T120000Z"),
+                sequence: Some(1),
+            }),
+            given_event: Some(Event {
+                dtstamp: Some("20180101T120000Z"),
+                sequence: Some(3),
+            }),
             expected: RsvpRecency::Outdated,
         };
 
@@ -1348,39 +1522,48 @@ mod tests {
         /// outdated invites via `invite_dtstamp < api_dtstamp` instead of, say,
         /// `invite_dtstamp != api_dtstamp`.
         const TEST_INVITE_WITH_FUTURE_DTSTAMP: TestCase = TestCase {
-            given_invite: || RsvpEventId::Invite {
-                uid: "1234".into(),
-                rid: None,
-                dtstamp: Some(dtstamp("20180101T120005Z")),
-                sequence: Some(sequence(3)),
-            },
-            given_event_dtstamp: Some("20180101T120000Z"),
-            given_event_sequence: Some(3),
+            given_invite: Some(Event {
+                dtstamp: Some("20180101T120005Z"),
+                sequence: Some(3),
+            }),
+            given_event: Some(Event {
+                dtstamp: Some("20180101T120000Z"),
+                sequence: Some(3),
+            }),
             expected: RsvpRecency::Fresh,
         };
 
         const TEST_INVITE_WITH_MISSING_DTSTAMP_1: TestCase = TestCase {
-            given_invite: || RsvpEventId::Invite {
-                uid: "1234".into(),
-                rid: None,
-                dtstamp: Some(dtstamp("20180101T120000Z")),
+            given_invite: Some(Event {
+                dtstamp: None,
                 sequence: None,
-            },
-            given_event_dtstamp: None,
-            given_event_sequence: None,
+            }),
+            given_event: Some(Event {
+                dtstamp: Some("20180101T120000Z"),
+                sequence: Some(3),
+            }),
             expected: RsvpRecency::Fresh,
         };
 
         const TEST_INVITE_WITH_MISSING_DTSTAMP_2: TestCase = TestCase {
-            given_invite: || RsvpEventId::Invite {
-                uid: "1234".into(),
-                rid: None,
-                dtstamp: None,
+            given_invite: Some(Event {
+                dtstamp: Some("20180101T120000Z"),
                 sequence: None,
-            },
-            given_event_dtstamp: Some("20180101T120000Z"),
-            given_event_sequence: None,
+            }),
+            given_event: Some(Event {
+                dtstamp: None,
+                sequence: Some(3),
+            }),
             expected: RsvpRecency::Fresh,
+        };
+
+        const TEST_OFFLINE_INVITE: TestCase = TestCase {
+            given_invite: Some(Event {
+                dtstamp: Some("20180101T120000Z"),
+                sequence: None,
+            }),
+            given_event: None,
+            expected: RsvpRecency::Unknown,
         };
 
         #[test_case(TEST_REMINDER)]
@@ -1390,13 +1573,11 @@ mod tests {
         #[test_case(TEST_INVITE_WITH_FUTURE_DTSTAMP)]
         #[test_case(TEST_INVITE_WITH_MISSING_DTSTAMP_1)]
         #[test_case(TEST_INVITE_WITH_MISSING_DTSTAMP_2)]
-        #[allow(clippy::needless_pass_by_value)]
+        #[test_case(TEST_OFFLINE_INVITE)]
         fn test(case: TestCase) {
-            let actual = extract_recency(
-                &(case.given_invite)(),
-                (case.given_event_dtstamp).map(dtstamp),
-                (case.given_event_sequence).map(sequence),
-            );
+            let invite = case.given_invite.map(Event::build);
+            let event = case.given_event.map(Event::build);
+            let actual = extract_recency(invite.as_ref(), event.as_ref());
 
             assert_eq!(case.expected, actual);
         }

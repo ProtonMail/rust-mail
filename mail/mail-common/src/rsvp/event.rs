@@ -24,7 +24,7 @@ impl RsvpEvent {
     // TODO (NGC-57) implement support for offline-mode
     #[instrument(
         skip_all,
-        fields(id = self.event.raw.id.as_str()),
+        fields(id = self.event.raw.as_ref().map(|raw| raw.id.as_str())),
     )]
     pub async fn answer(
         &mut self,

@@ -7,7 +7,6 @@ use proton_core_common::models::ModelExtension;
 use proton_crypto_calendar::{CalendarEventEncryptor, KeyPacket, UnlockedCalendarKey};
 use proton_crypto_inbox::attachment::{EncryptableAttachment, KeyPackets};
 use proton_crypto_inbox::proton_crypto::new_pgp_provider;
-use proton_ical as ical;
 use proton_mail_api::services::proton::prelude as mail;
 use proton_mail_common::models::Message;
 use proton_mail_common::test_utils::message_body::{
@@ -34,15 +33,17 @@ const TEST_ATTENDEE_ID: &str = "Rh4V1hbc";
 const TEST_ATTENDEE_TOKEN: &str = "yAFY4dMB";
 const TEST_ATTACHMENT_ID: &str = "EZAYcqch";
 
-static INVITE_ICS: fn() -> String = || {
+static INVITE: fn() -> String = || {
     formatdoc! {"
         BEGIN:VCALENDAR
         METHOD:REQUEST
         BEGIN:VEVENT
-        SUMMARY:face-to-face with rust-test
-        DTSTAMP:20180101T120000Z
         UID:{EVENT_UID}
-        DTSTAMP:20180101T120000Z
+        DTSTAMP:20180101T080000Z
+        DTSTART:20180101T120000Z
+        DTEND:20180101T130000Z
+        SUMMARY:face-to-face with rust-test
+        LOCATION:bikini bottom
         END:VEVENT
         END:VCALENDAR
     "}
@@ -54,7 +55,9 @@ static SHARED_EVENT: fn() -> String = || {
         VERSION:2.0
         BEGIN:VEVENT
         UID:{EVENT_UID}
-        DTSTAMP:20180101T120000Z
+        DTSTAMP:20180101T080000Z
+        DTSTART:20180101T120000Z
+        DTEND:20180101T130000Z
         SUMMARY:face-to-face with rust-test
         LOCATION:bikini bottom
         END:VEVENT
@@ -79,7 +82,7 @@ struct InviteIcs(String);
 
 impl InviteIcs {
     fn new() -> Self {
-        Self(INVITE_ICS())
+        Self(INVITE())
     }
 }
 
@@ -197,17 +200,12 @@ async fn fetch_and_answer() {
 
     let rsvp = msg_body.identify_rsvp(&user_ctx).await.unwrap().unwrap();
 
-    assert_eq!(
-        RsvpEventId::Invite {
-            uid: "TqUvdTrE@proton.me".into(),
-            rid: None,
-            dtstamp: Some(ical::DtStamp {
-                value: ical::utils::dt("20180101T120000Z"),
-            }),
-            sequence: None,
-        },
-        *rsvp
-    );
+    let RsvpEventId::Invite { uid, rid, .. } = &*rsvp else {
+        panic!("expected an invite");
+    };
+
+    assert_eq!("TqUvdTrE@proton.me", uid.as_str());
+    assert!(rid.is_none());
 
     // ---
     // Step 3: Load RSVP details from the calendar.
@@ -268,10 +266,6 @@ async fn fetch_and_answer() {
             calendar_events: vec![],
             id: EVENT_ID.into(),
             calendar_id: CALENDAR_ID.into(),
-            start_time: 1_514_804_400,
-            end_time: 1_514_806_200,
-            full_day: false,
-            recurrence_id: None,
             address_key_packet,
             shared_key_packet,
             attendees_events: [cal::CalendarEventPayload {
@@ -404,7 +398,7 @@ async fn fetch_and_answer() {
         !rsvp
             .attendees
             .iter()
-            .all(|att| att.status == cal::CalendarAttendeeStatus::Yes)
+            .all(|att| att.status == Some(cal::CalendarAttendeeStatus::Yes))
     );
 
     rsvp.answer(&user_ctx, &mut db, RsvpAnswerStatus::Yes)
@@ -414,7 +408,7 @@ async fn fetch_and_answer() {
     assert!(
         rsvp.attendees
             .iter()
-            .all(|att| att.status == cal::CalendarAttendeeStatus::Yes)
+            .all(|att| att.status == Some(cal::CalendarAttendeeStatus::Yes))
     );
 
     msg.reload(&db).await.unwrap();

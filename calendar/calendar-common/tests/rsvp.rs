@@ -3,13 +3,13 @@ mod rsvp {
     mod fetch;
 }
 
-use chrono::DateTime;
 use indoc::indoc;
-use jiff::Zoned;
+use jiff::tz::TimeZone;
+use jiff::{Timestamp, Zoned};
 use proton_calendar_api::{
     CalendarAttendee, CalendarAttendeeStatus, CalendarBootstrap, CalendarEvent,
-    CalendarEventPayload, CalendarEventPayloadType, CalendarEventRecurrenceId, CalendarId,
-    CalendarKey, CalendarKeyFlags, CalendarMember, CalendarMemberPassphrase, CalendarPassphrase,
+    CalendarEventPayload, CalendarEventPayloadType, CalendarId, CalendarKey, CalendarKeyFlags,
+    CalendarMember, CalendarMemberPassphrase, CalendarPassphrase,
 };
 use proton_calendar_common::{
     RsvpAttendee, RsvpCache, RsvpCalendar, RsvpEvent, RsvpEventId, RsvpIntent, RsvpOccurrence,
@@ -24,15 +24,34 @@ use proton_crypto_account::keys::{
 };
 use proton_crypto_account::salts::KeySalt;
 use proton_crypto_calendar::{CalendarEventEncryptor, KeyPacket, UnlockedCalendarKey};
-use proton_ical as ical;
 use std::sync::Arc;
+
+const INVITE: &str = indoc! {"
+    BEGIN:VCALENDAR
+    METHOD:REQUEST
+    VERSION:2.0
+    BEGIN:VEVENT
+    UID:8maQ3qBa
+    DTSTAMP:20180101T080000Z
+    DTSTART:20180101T120000Z
+    DTEND:20180101T133000Z
+    DESCRIPTION:some description
+    SUMMARY:some title
+    LOCATION:some location
+    ORGANIZER:mailto:foo@localhost
+    ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION:mailto:bar@localhost
+    END:VEVENT
+    END:VCALENDAR
+"};
 
 const SHARED_EVENT: &str = indoc! {"
     BEGIN:VCALENDAR
     VERSION:2.0
     BEGIN:VEVENT
-    UID:IAni7dazrh7RFc_rbQ1c1m4K3JEQ@proton.me
+    UID:8maQ3qBa
     DTSTAMP:20180101T080000Z
+    DTSTART:20180101T120000Z
+    DTEND:20180101T133000Z
     DESCRIPTION:some description
     SUMMARY:some title
     LOCATION:some location
@@ -188,9 +207,6 @@ where
             })
             .collect();
 
-        let start_time: Zoned = "20180101T120000[UTC]".parse().unwrap();
-        let end_time: Zoned = "20180101T133000[UTC]".parse().unwrap();
-
         CalendarEvent {
             shared_events: vec![CalendarEventPayload {
                 ty: CalendarEventPayloadType::Encrypted,
@@ -201,10 +217,6 @@ where
             calendar_events,
             id: "pFmwNlJp".into(),
             calendar_id: "HzNtbT1J".into(),
-            start_time: start_time.timestamp().as_second(),
-            end_time: end_time.timestamp().as_second(),
-            full_day: false,
-            recurrence_id: None,
             address_key_packet,
             shared_key_packet,
             attendees_events: [CalendarEventPayload {
@@ -256,26 +268,65 @@ fn expected_event(intent: RsvpIntent, raw: CalendarEvent) -> RsvpEvent {
         description: Some("some description".into()),
         recurrence: None,
         occurrence: RsvpOccurrence::DateTime {
-            starts_at: DateTime::from_timestamp(1_514_808_000, 0).unwrap(),
-            ends_at: DateTime::from_timestamp(1_514_813_400, 0).unwrap(),
+            starts_at: Zoned::new(
+                Timestamp::from_second(1_514_808_000).unwrap(),
+                TimeZone::UTC,
+            ),
+            ends_at: Zoned::new(
+                Timestamp::from_second(1_514_813_400).unwrap(),
+                TimeZone::UTC,
+            ),
         },
-        attendees: vec![RsvpAttendee {
-            id: "gWfsHvDg".into(),
-            token: "d15cf90c".into(),
-            email: "bar@localhost".into(),
-            status: CalendarAttendeeStatus::Unanswered,
-        }],
         organizer: RsvpOrganizer {
             email: "foo@localhost".into(),
         },
-        calendar: RsvpCalendar {
+        attendees: vec![RsvpAttendee {
+            id: Some("gWfsHvDg".into()),
+            token: Some("d15cf90c".into()),
+            email: "bar@localhost".into(),
+            status: Some(CalendarAttendeeStatus::Unanswered),
+        }],
+        calendar: Some(RsvpCalendar {
             id: "HzNtbT1J".into(),
             name: "My calendar".into(),
             color: "#273EB2".into(),
-        },
+        }),
         progress: RsvpProgress::Pending,
         recency: RsvpRecency::Fresh,
-        raw: Box::new(raw),
+        raw: Some(Box::new(raw)),
+    }
+}
+
+fn expected_offline_event() -> RsvpEvent {
+    RsvpEvent {
+        intent: RsvpIntent::Invite,
+        summary: Some("some title".into()),
+        location: Some("some location".into()),
+        description: Some("some description".into()),
+        recurrence: None,
+        occurrence: RsvpOccurrence::DateTime {
+            starts_at: Zoned::new(
+                Timestamp::from_second(1_514_808_000).unwrap(),
+                TimeZone::UTC,
+            ),
+            ends_at: Zoned::new(
+                Timestamp::from_second(1_514_813_400).unwrap(),
+                TimeZone::UTC,
+            ),
+        },
+        organizer: RsvpOrganizer {
+            email: "foo@localhost".into(),
+        },
+        attendees: vec![RsvpAttendee {
+            id: None,
+            token: None,
+            email: "bar@localhost".into(),
+            status: None,
+        }],
+        calendar: None,
+        progress: RsvpProgress::Pending,
+        recency: RsvpRecency::Unknown,
+        raw: None,
     }
 }
 
@@ -284,40 +335,15 @@ where
     Self: Sized,
 {
     /// Creates an [`RsvpEventId`] that fakes an `invite.ics`.
-    fn invite(uid: &str, rid: Option<i64>) -> Self {
-        Self::invite_ex(uid, rid, Some("20180101T080000Z"), None)
-    }
-
-    /// Creates an [`RsvpEventId`] that fakes an `invite.ics`.
-    fn invite_ex(uid: &str, rid: Option<i64>, dtstamp: Option<&str>, sequence: Option<u32>)
-    -> Self;
+    fn invite(ics: &str) -> Self;
 
     /// Creates an [`RsvpEventId`] that fakes a reminder.
     fn reminder(cal_id: &str, event_id: &str) -> Self;
 }
 
 impl RsvpEventIdExt for RsvpEventId {
-    fn invite_ex(
-        uid: &str,
-        rid: Option<i64>,
-        dtstamp: Option<&str>,
-        sequence: Option<u32>,
-    ) -> Self {
-        let uid = uid.into();
-        let rid = rid.map(CalendarEventRecurrenceId::new);
-
-        let dtstamp = dtstamp.map(|value| ical::DtStamp {
-            value: ical::utils::dt(value),
-        });
-
-        let sequence = sequence.map(|value| ical::Sequence { value });
-
-        RsvpEventId::Invite {
-            uid,
-            rid,
-            dtstamp,
-            sequence,
-        }
+    fn invite(ics: &str) -> Self {
+        RsvpEventId::from_invite(ics.as_bytes()).unwrap()
     }
 
     fn reminder(cal_id: &str, event_id: &str) -> Self {

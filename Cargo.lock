@@ -5566,7 +5566,6 @@ dependencies = [
 name = "proton-calendar-common"
 version = "0.1.0"
 dependencies = [
- "chrono",
  "indoc",
  "itertools 0.13.0",
  "jiff",

@@ -571,7 +571,7 @@ impl MessagesState {
         if !rsvp.can_be_answered() {
             return Command::Message(Messages::DisplayError(
                 None,
-                anyhow!("This invitation can't be answered anymore."),
+                anyhow!("This invitation can't be answered."),
             ));
         }
 
@@ -1087,7 +1087,7 @@ impl DecryptedMessage {
                 };
 
                 let recency = match rsvp.recency {
-                    RsvpRecency::Fresh => 0,
+                    RsvpRecency::Fresh | RsvpRecency::Unknown => 0,
                     RsvpRecency::Outdated => 2,
                 };
 
@@ -1165,24 +1165,25 @@ impl DecryptedMessage {
             .unwrap_or_default();
 
         let rsvp_recency = match rsvp.recency {
-            RsvpRecency::Fresh => vec![],
+            RsvpRecency::Fresh | RsvpRecency::Unknown => vec![],
             RsvpRecency::Outdated => vec![
                 Text::raw("! Invitation is outdated, the event has been updated").fg(Color::Yellow),
                 Text::raw("").fg(Color::Yellow),
             ],
         };
 
-        #[allow(clippy::match_same_arms, reason = "more readable as-is")]
-        let fg = match (rsvp.progress, rsvp.recency) {
-            (RsvpProgress::Pending | RsvpProgress::Ongoing, RsvpRecency::Fresh) => Color::White,
-            (RsvpProgress::Ended | RsvpProgress::Cancelled, RsvpRecency::Fresh) => Color::DarkGray,
-            (_, RsvpRecency::Outdated) => Color::DarkGray,
+        let fg = match rsvp.recency {
+            RsvpRecency::Fresh | RsvpRecency::Unknown => match rsvp.progress {
+                RsvpProgress::Pending | RsvpProgress::Ongoing => Color::White,
+                RsvpProgress::Ended | RsvpProgress::Cancelled => Color::DarkGray,
+            },
+            RsvpRecency::Outdated => Color::DarkGray,
         };
 
         let rsvp_summary = rsvp.summary.as_deref().unwrap_or("(no title)");
         let rsvp_summary = Text::from(rsvp_summary).fg(fg).bold();
 
-        let rsvp_occurrence = Text::from(match rsvp.occurrence {
+        let rsvp_occurrence = Text::from(match &rsvp.occurrence {
             RsvpOccurrence::Date { starts_at, ends_at } if ends_at == starts_at => {
                 format!("{starts_at}")
             }
@@ -1208,14 +1209,19 @@ impl DecryptedMessage {
         let rsvp_organizer = Text::from(format!("- <{}> (organizer)", rsvp.organizer.email)).fg(fg);
 
         let rsvp_attendees = rsvp.attendees.iter().map(|att| {
-            let status = match att.status {
+            let status = att.status.map(|status| match status {
                 CalendarAttendeeStatus::Unanswered => "unanswered",
                 CalendarAttendeeStatus::Maybe => "maybe",
                 CalendarAttendeeStatus::No => "no",
                 CalendarAttendeeStatus::Yes => "yes",
-            };
+            });
 
-            Text::from(format!("- <{}> ({status})", att.email)).fg(fg)
+            if let Some(status) = status {
+                Text::from(format!("- <{}> ({status})", att.email))
+            } else {
+                Text::from(format!("- <{}>", att.email))
+            }
+            .fg(fg)
         });
 
         // ---
