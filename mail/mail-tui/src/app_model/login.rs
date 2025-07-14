@@ -277,7 +277,7 @@ impl AppStateHandler for LoginModel {
                 Span::raw("Submit"),
                 Span::styled(" Tab: ", Style::new().bold()),
                 Span::raw("Switch Input"),
-                Span::styled(" Q: ", Style::new().bold()),
+                Span::styled(" C-q: ", Style::new().bold()),
                 Span::raw("QR Login"),
             ]),
             area,
@@ -292,7 +292,7 @@ impl AppStateHandler for LoginModel {
         vec![
             ("enter", "Submit"),
             ("tab", "Switch Input"),
-            ("q + ctrl", "QR Login"),
+            ("C-q", "QR Login"),
         ]
     }
 }
