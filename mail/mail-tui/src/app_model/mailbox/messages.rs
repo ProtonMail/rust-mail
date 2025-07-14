@@ -1081,14 +1081,20 @@ impl DecryptedMessage {
             Rsvp::Loading(_) => 2,
 
             Rsvp::Success(rsvp) => {
-                let progress = match rsvp.progress {
-                    RsvpProgress::Pending => 0,
-                    RsvpProgress::Ongoing | RsvpProgress::Ended | RsvpProgress::Cancelled => 2,
-                };
+                let header = {
+                    let recency = match rsvp.recency {
+                        RsvpRecency::Fresh | RsvpRecency::Unknown => 0,
+                        RsvpRecency::Outdated => 1,
+                    };
 
-                let recency = match rsvp.recency {
-                    RsvpRecency::Fresh | RsvpRecency::Unknown => 0,
-                    RsvpRecency::Outdated => 2,
+                    let progress = match rsvp.progress {
+                        RsvpProgress::Pending => 0,
+                        RsvpProgress::Ongoing | RsvpProgress::Ended | RsvpProgress::Cancelled => 1,
+                    };
+
+                    let height = recency + progress;
+
+                    if height == 0 { 0 } else { height + 1 }
                 };
 
                 let summary = 1;
@@ -1102,8 +1108,7 @@ impl DecryptedMessage {
                 let organizer = 1;
                 let attendees = rsvp.attendees.len();
 
-                1 + progress
-                    + recency
+                1 + header
                     + summary
                     + summary_spacer
                     + occurrence
@@ -1151,25 +1156,38 @@ impl DecryptedMessage {
     }
 
     fn draw_rsvp_success(frame: &mut Frame, area: Rect, rsvp: &RsvpEvent) {
-        let rsvp_progress = match rsvp.progress {
-            RsvpProgress::Pending => None,
-            RsvpProgress::Ongoing => Some(Text::raw("~ Event is in progress").fg(Color::Yellow)),
-            RsvpProgress::Ended => Some(Text::raw("~ Event has already ended").fg(Color::Yellow)),
-            RsvpProgress::Cancelled => {
-                Some(Text::raw("! Event has been cancelled").fg(Color::Yellow))
+        let rsvp_header = {
+            let recency = match rsvp.recency {
+                RsvpRecency::Outdated => match rsvp.progress {
+                    RsvpProgress::Pending | RsvpProgress::Ongoing | RsvpProgress::Ended => {
+                        Some("! Invitation is outdated, event has been updated")
+                    }
+                    RsvpProgress::Cancelled => Some("! Invitation is outdated"),
+                },
+
+                RsvpRecency::Fresh | RsvpRecency::Unknown => None,
+            };
+
+            let progress = match rsvp.progress {
+                RsvpProgress::Pending => None,
+                RsvpProgress::Ongoing => Some("~ Event is in progress"),
+                RsvpProgress::Ended => Some("~ Event has already ended"),
+                RsvpProgress::Cancelled => Some("! Event has been cancelled"),
+            };
+
+            let recency = recency.map(|msg| Text::raw(msg).fg(Color::Yellow));
+            let progress = progress.map(|msg| Text::raw(msg).fg(Color::Yellow));
+
+            if recency.is_some() || progress.is_some() {
+                recency
+                    .into_iter()
+                    .chain(progress)
+                    .chain(iter::once(Text::raw("")))
+                    .collect()
+            } else {
+                vec![]
             }
-        };
-
-        let rsvp_progress = rsvp_progress
-            .map(|txt| vec![txt, Text::raw("")])
-            .unwrap_or_default();
-
-        let rsvp_recency = match rsvp.recency {
-            RsvpRecency::Fresh | RsvpRecency::Unknown => vec![],
-            RsvpRecency::Outdated => vec![
-                Text::raw("! Invitation is outdated, the event has been updated").fg(Color::Yellow),
-                Text::raw("").fg(Color::Yellow),
-            ],
+            .into_iter()
         };
 
         let fg = match rsvp.recency {
@@ -1255,9 +1273,7 @@ impl DecryptedMessage {
             None
         };
 
-        let rows = rsvp_progress
-            .into_iter()
-            .chain(rsvp_recency)
+        let rows = rsvp_header
             .chain(iter::once(rsvp_summary))
             .chain(rsvp_summary_spacer)
             .chain(iter::once(rsvp_occurrence))
