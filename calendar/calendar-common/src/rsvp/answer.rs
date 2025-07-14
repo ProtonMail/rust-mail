@@ -1,10 +1,11 @@
 use crate::{
     CalendarBootstrapExt, CalendarEventPayloadExt, RsvpAnswer, RsvpAnswerError, RsvpAnswerResult,
-    RsvpAnswerStatus, RsvpCache, RsvpError, RsvpEvent, RsvpMailSender, RsvpResult,
+    RsvpAnswerStatus, RsvpCache, RsvpCalendar, RsvpError, RsvpEvent, RsvpMailSender, RsvpResult,
 };
 use itertools::Itertools;
 use proton_calendar_api::{
-    CalendarAttendeeStatus, CalendarBootstrap, CalendarNotificationsUpdate, ProtonCalendar,
+    CalendarAttendeeStatus, CalendarBootstrap, CalendarEvent, CalendarNotificationsUpdate,
+    ProtonCalendar,
 };
 use proton_core_api::services::proton::Proton;
 use proton_crypto::crypto::PGPProviderSync;
@@ -13,9 +14,10 @@ use proton_crypto_calendar::{
     CalendarEventDecryptor, CalendarKeyPacketUpgrader, KeyPacketRef, LockedCalendarKey,
 };
 use proton_ical as ical;
+use std::ops;
 use tracing::{debug, info, instrument, warn};
 
-pub(super) async fn exec<P, M>(
+pub(super) async fn run<P, M>(
     api: &Proton,
     pgp: &P,
     keys: &UnlockedAddressKeys<P>,
@@ -30,23 +32,21 @@ where
 {
     info!(?answer, "Answering");
 
-    if !event.can_be_answered() {
-        return Err(RsvpError::NonAnswerable.into());
-    }
+    let mut event = AnswerableRsvpEvent::new(event).ok_or(RsvpError::NonAnswerable)?;
 
     let calendar = cache
-        .get_calendar_bootstrap(&event.raw.calendar_id, || {
+        .get_calendar_bootstrap(&event.raw().calendar_id, || {
             // We need for the returned future to be static, otherwise rustc has
             // hard time proving sendness
             let api = api.clone();
-            let id = event.raw.calendar_id.clone();
+            let id = event.raw().calendar_id.clone();
 
             async move { api.get_calendar_bootstrap(&id).await }
         })
         .await
         .map_err(RsvpError::from)?;
 
-    let decryptor = calendar.create_decryptor(pgp, keys, &event.raw)?;
+    let decryptor = calendar.create_decryptor(pgp, keys, event.raw())?;
 
     // For Proton-to-Proton invites the most important action is updating the
     // calendar event - sending email is sorta optional in the sense that we do
@@ -56,12 +56,12 @@ where
     // This situation is reversed for external invites where sending the reply
     // is the most important bit - if it fails, we don't want to update user's
     // calendar.
-    if event.raw.is_proton_proton_invite {
-        update(api, pgp, keys, event, &answer, &calendar).await?;
-        notify(api, pgp, sender, event, &answer, &decryptor).await?;
+    if event.raw().is_proton_proton_invite {
+        update(api, pgp, keys, &mut event, &answer, &calendar).await?;
+        notify(api, pgp, sender, &event, &answer, &decryptor).await?;
     } else {
-        notify(api, pgp, sender, event, &answer, &decryptor).await?;
-        update(api, pgp, keys, event, &answer, &calendar).await?;
+        notify(api, pgp, sender, &event, &answer, &decryptor).await?;
+        update(api, pgp, keys, &mut event, &answer, &calendar).await?;
     }
 
     Ok(())
@@ -73,7 +73,7 @@ async fn update<P>(
     api: &Proton,
     pgp: &P,
     keys: &UnlockedAddressKeys<P>,
-    event: &mut RsvpEvent,
+    event: &mut AnswerableRsvpEvent<'_>,
     answer: &RsvpAnswer<'_>,
     calendar: &CalendarBootstrap,
 ) -> RsvpResult<()>
@@ -84,17 +84,17 @@ where
 
     let (att_id, old_status) = event
         .attendees
-        .iter_mut()
+        .iter()
         .find(|att| att.email == answer.email)
-        .map(|att| (&att.id, &mut att.status))
-        .ok_or(RsvpError::AttendeeIsNotKnown)?;
+        .and_then(|att| Some((att.id.clone()?, att.status?)))
+        .ok_or(RsvpError::UnknownAttendee)?;
 
     let new_status = answer.status.into();
-    let notifs = prepare_notifs(*old_status, new_status, has_notifs);
+    let notifs = prepare_notifs(old_status, new_status, has_notifs);
 
     // We passthrough the color the event already has - this a no-op update, but
     // backend requires we pass *something*
-    let color = event.raw.color.clone();
+    let color = event.raw().color.clone();
 
     // An event is encrypted using random key known as session key which itself
     // is encrypted with either the address key or the calendar key, like:
@@ -123,7 +123,7 @@ where
     // Note that we don't literally re-encrypt all of the fields, we just switch
     // the session key so that *it* is encrypted using calendar key - the data
     // remains the same, we just change how the key is represented.
-    if let Some(key_packet) = &event.raw.address_key_packet {
+    if let Some(key_packet) = &event.raw().address_key_packet {
         debug!("Upgrading event to be encrypted with calendar key");
 
         let key_packet = {
@@ -134,16 +134,16 @@ where
         };
 
         api.upgrade_calendar_event_invite(
-            &event.calendar.id,
-            &event.raw.id,
+            &event.calendar().id,
+            &event.raw().id,
             key_packet.as_base64(),
         )
         .await?;
 
-        // Modify the object as well, in case user re-replies without refreshing
-        // the view
-        event.raw.address_key_packet = None;
-        event.raw.shared_key_packet = Some(key_packet.into_base64());
+        // Modify the invitation object as well, in case user changes the reply
+        // without refreshing the view
+        event.raw_mut().address_key_packet = None;
+        event.raw_mut().shared_key_packet = Some(key_packet.into_base64());
     }
 
     debug!(
@@ -154,27 +154,31 @@ where
     );
 
     api.update_calendar_event_attendee_status(
-        &event.calendar.id,
-        &event.raw.id,
-        att_id,
+        &event.calendar().id,
+        &event.raw().id,
+        &att_id,
         new_status,
         &answer.now,
     )
     .await?;
 
     debug!(
-        cal_id=?event.calendar.id,
-        event_id=?event.raw.id,
+        cal_id=?event.calendar().id,
+        event_id=?event.raw().id,
         ?notifs,
         "Updating personal part",
     );
 
-    api.update_calendar_event_personal_part(&event.calendar.id, &event.raw.id, color, notifs)
+    api.update_calendar_event_personal_part(&event.calendar().id, &event.raw().id, color, notifs)
         .await?;
 
-    // Modify the object as well, in case user re-replies without refreshing the
-    // view
-    *old_status = new_status;
+    // Modify the invitation object as well, in case user changes the reply
+    // without refreshing the view
+    for att in &mut event.attendees {
+        if att.id.as_ref() == Some(&att_id) {
+            att.status = Some(new_status);
+        }
+    }
 
     Ok(())
 }
@@ -222,7 +226,7 @@ async fn notify<P, M>(
     api: &Proton,
     pgp: &P,
     sender: M,
-    event: &RsvpEvent,
+    event: &AnswerableRsvpEvent<'_>,
     answer: &RsvpAnswer<'_>,
     decryptor: &CalendarEventDecryptor<'_, P>,
 ) -> RsvpAnswerResult<(), M>
@@ -262,7 +266,7 @@ where
 async fn build_ics<P>(
     api: &Proton,
     pgp: &P,
-    event: &RsvpEvent,
+    event: &AnswerableRsvpEvent<'_>,
     answer: &RsvpAnswer<'_>,
     decryptor: &CalendarEventDecryptor<'_, P>,
 ) -> RsvpResult<String>
@@ -300,7 +304,7 @@ where
 
 fn build_ics_event<P>(
     pgp: &P,
-    event: &RsvpEvent,
+    event: &AnswerableRsvpEvent<'_>,
     answer: &RsvpAnswer,
     decryptor: &CalendarEventDecryptor<P>,
 ) -> RsvpResult<ical::VEvent>
@@ -315,7 +319,7 @@ where
     //
     // Note that we don't merge all of the fields, e.g. we don't care about the
     // alarms.
-    for rhs in &event.raw.shared_events {
+    for rhs in &event.raw().shared_events {
         let rhs = rhs.decrypt_and_parse(pgp, decryptor)?;
 
         lhs.uid = lhs.uid.or(rhs.uid);
@@ -408,6 +412,61 @@ async fn build_ics_timezones(
         .collect();
 
     Ok(timezones)
+}
+
+struct AnswerableRsvpEvent<'a> {
+    event: &'a mut RsvpEvent,
+}
+
+impl<'a> AnswerableRsvpEvent<'a> {
+    fn new(event: &'a mut RsvpEvent) -> Option<Self> {
+        if event.can_be_answered() {
+            assert!(event.calendar.is_some() && event.raw.is_some());
+
+            Some(Self { event })
+        } else {
+            None
+        }
+    }
+
+    fn calendar(&self) -> &RsvpCalendar {
+        // Unwrap-safety: Guarded by constructor
+        self.calendar.as_ref().unwrap()
+    }
+
+    #[must_use]
+    fn raw(&self) -> &CalendarEvent {
+        // Unwrap-safety: Guarded by constructor
+        self.raw.as_ref().unwrap()
+    }
+
+    #[must_use]
+    fn raw_mut(&mut self) -> &mut CalendarEvent {
+        // Unwrap-safety: Guarded by constructor
+        self.raw.as_mut().unwrap()
+    }
+
+    #[must_use]
+    fn has_notifications(&self) -> bool {
+        self.raw()
+            .notifications
+            .as_ref()
+            .is_some_and(|n| !n.is_empty())
+    }
+}
+
+impl ops::Deref for AnswerableRsvpEvent<'_> {
+    type Target = RsvpEvent;
+
+    fn deref(&self) -> &Self::Target {
+        self.event
+    }
+}
+
+impl ops::DerefMut for AnswerableRsvpEvent<'_> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.event
+    }
 }
 
 #[cfg(test)]

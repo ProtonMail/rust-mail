@@ -1,4 +1,4 @@
-use crate::{ATTENDEES_EVENT, RsvpEventIdExt, SHARED_EVENT, world};
+use crate::{ATTENDEES_EVENT, INVITE, RsvpEventIdExt, SHARED_EVENT, world};
 use itertools::Itertools;
 use jiff::civil::Weekday;
 use pretty_assertions as pa;
@@ -63,7 +63,7 @@ async fn answer(case: fn() -> TestCase) {
         .mock_find_calendar_events("8maQ3qBa", None, Some(event.clone()))
         .await;
 
-    let mut event = RsvpEventId::invite("8maQ3qBa", None)
+    let mut event = RsvpEventId::invite(INVITE)
         .fetch(
             &world.sess,
             &world.pgp,
@@ -139,8 +139,10 @@ async fn answer(case: fn() -> TestCase) {
                 VERSION:2.0
                 CALSCALE:GREGORIAN
                 BEGIN:VEVENT
-                UID:IAni7dazrh7RFc_rbQ1c1m4K3JEQ@proton.me
+                UID:8maQ3qBa
                 DTSTAMP:20180101T120000Z
+                DTSTART:20180101T120000Z
+                DTEND:20180101T133000Z
                 SUMMARY:some title
                 LOCATION:some location
                 ATTENDEE;PARTSTAT=%partstat%:mailto:bar@localhost

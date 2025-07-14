@@ -1,6 +1,6 @@
 use crate::{
-    CalendarAttendeeId, CalendarAttendeeToken, CalendarColor, CalendarEventId,
-    CalendarEventRecurrenceId, CalendarId, CalendarKeyId, CalendarMemberId, CalendarNotification,
+    CalendarAttendeeId, CalendarAttendeeToken, CalendarColor, CalendarEventId, CalendarId,
+    CalendarKeyId, CalendarMemberId, CalendarNotification,
 };
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
@@ -106,13 +106,6 @@ pub struct CalendarEvent {
     pub calendar_events: Vec<CalendarEventPayload>,
     #[serde(rename = "CalendarID")]
     pub calendar_id: CalendarId,
-    pub start_time: i64,
-    pub end_time: i64,
-    #[serde(rename = "FullDay")]
-    #[serde_as(as = "BoolFromInt")]
-    pub full_day: bool,
-    #[serde(rename = "RecurrenceID")]
-    pub recurrence_id: Option<CalendarEventRecurrenceId>,
     pub address_key_packet: Option<String>,
     pub shared_key_packet: Option<String>,
     // Same story as with calendar members - there's always one item here

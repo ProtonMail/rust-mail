@@ -1,9 +1,11 @@
 mod answer;
 mod fetch;
 
-use chrono::{DateTime, NaiveDate, Utc};
 use itertools::Itertools;
-use jiff::{Zoned, civil::Weekday};
+use jiff::{
+    Zoned,
+    civil::{Date, Weekday},
+};
 use proton_calendar_api::{
     CalendarAttendeeId, CalendarAttendeeStatus, CalendarAttendeeToken, CalendarBootstrap,
     CalendarColor, CalendarEvent, CalendarEventId, CalendarEventRecurrenceId, CalendarEventUid,
@@ -24,8 +26,7 @@ pub enum RsvpEventId {
     Invite {
         uid: CalendarEventUid,
         rid: Option<CalendarEventRecurrenceId>,
-        dtstamp: Option<ical::DtStamp>,
-        sequence: Option<ical::Sequence>,
+        invite: Box<ical::VEvent>,
     },
     Reminder {
         cal_id: CalendarId,
@@ -72,15 +73,14 @@ impl RsvpEventId {
         Ok(RsvpEventId::Invite {
             uid,
             rid,
-            dtstamp: event.dtstamp,
-            sequence: event.sequence,
+            invite: Box::new(event),
         })
     }
 
     /// Extracts event identifier from email headers.
     ///
     /// This is required for Proton email remainders which don't generate the
-    /// `invite.ics` file, but rather provide the event id via headers.
+    /// `invite.ics` file.
     ///
     /// See: [`Self::from_invite()`], [`Self::fetch()`].
     #[must_use]
@@ -124,7 +124,7 @@ impl RsvpEventId {
     where
         P: PGPProviderSync,
     {
-        fetch::exec(api, pgp, keys, cache, now, week_start, self).await
+        fetch::run(api, pgp, keys, cache, now, week_start, self).await
     }
 }
 
@@ -135,13 +135,13 @@ pub struct RsvpEvent {
     pub description: Option<String>,
     pub recurrence: Option<RsvpRecurrence>,
     pub occurrence: RsvpOccurrence,
-    pub attendees: Vec<RsvpAttendee>,
     pub organizer: RsvpOrganizer,
-    pub calendar: RsvpCalendar,
+    pub attendees: Vec<RsvpAttendee>,
+    pub calendar: Option<RsvpCalendar>,
     pub progress: RsvpProgress,
     pub recency: RsvpRecency,
     pub intent: RsvpIntent,
-    pub raw: Box<CalendarEvent>,
+    pub raw: Option<Box<CalendarEvent>>,
 }
 
 impl RsvpEvent {
@@ -167,20 +167,23 @@ impl RsvpEvent {
         P: PGPProviderSync,
         M: RsvpMailSender,
     {
-        answer::exec(api, pgp, keys, cache, sender, self, answer).await
+        answer::run(api, pgp, keys, cache, sender, self, answer).await
     }
 
     #[must_use]
     pub fn can_be_answered(&self) -> bool {
-        self.intent == RsvpIntent::Invite && self.recency == RsvpRecency::Fresh
-    }
+        self.intent == RsvpIntent::Invite
+            && self.recency == RsvpRecency::Fresh
+            && self.calendar.is_some() // [1]
+            && self.raw.is_some() // [1]
 
-    #[must_use]
-    pub(crate) fn has_notifications(&self) -> bool {
-        self.raw
-            .notifications
-            .as_ref()
-            .is_some_and(|n| !n.is_empty())
+        // [1] `calendar` and `raw` can be missing only if there's no internet
+        //     connection - but if there was no internet connection, we wouldn't
+        //     be able to confirm that the invite is fresh
+        //
+        //     this makes those checks overzealous, but it's still nice to have
+        //     them as a safeguard as the rsvp answering code requires for both
+        //     of those properties to be present (`.unwrap()`)
     }
 }
 
@@ -389,29 +392,19 @@ impl fmt::Display for RsvpRecurrence {
     }
 }
 
+// Note that `ends_at` is inclusive
 #[derive(Clone, Debug, PartialEq)]
 pub enum RsvpOccurrence {
-    /// A full-day event.
-    ///
-    /// `starts_at` has implied time of 00:00:00, while `ends_at` has 23:59:59,
-    /// so a one-day event day will simply say `ends_at == starts_at` etc.
-    Date {
-        starts_at: NaiveDate,
-        ends_at: NaiveDate,
-    },
-
-    DateTime {
-        starts_at: DateTime<Utc>,
-        ends_at: DateTime<Utc>,
-    },
+    Date { starts_at: Date, ends_at: Date },
+    DateTime { starts_at: Zoned, ends_at: Zoned },
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RsvpAttendee {
-    pub id: CalendarAttendeeId,
-    pub token: CalendarAttendeeToken,
+    pub id: Option<CalendarAttendeeId>,
+    pub token: Option<CalendarAttendeeToken>,
     pub email: String,
-    pub status: CalendarAttendeeStatus,
+    pub status: Option<CalendarAttendeeStatus>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -448,6 +441,9 @@ pub enum RsvpRecency {
     /// Invite's event has been updated in the meantime and user it looking at
     /// the older invite at the moment.
     Outdated,
+
+    /// Internet connection is down, invite's recency cannot be confirmed.
+    Unknown,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -552,14 +548,14 @@ pub enum RsvpError {
     #[error("*.ics contains an event without uid")]
     IcsEventHasNoUid,
 
-    #[error("Missing X-PM-UID header")]
-    MissingXPmUidHeader,
+    #[error("*.ics contains an event without dtstart")]
+    MissingDtStart,
 
-    #[error("Event's start time is out of range")]
-    EventStartTimeIsOutOfRange,
+    #[error("*.ics contains an event without dtend")]
+    MissingDtEnd,
 
-    #[error("Event's end time is out of range")]
-    EventEndTimeIsOutOfRange,
+    #[error("*.ics contains an event with mixed-type dtstart and dtend")]
+    MixedDtStartAndDtEnd,
 
     #[error("Attendee has a non-email address")]
     AttendeeHasNonEmailAddress,
@@ -568,12 +564,12 @@ pub enum RsvpError {
     AttendeeHasNoXPmToken,
 
     #[error("Attendee is not known")]
-    AttendeeIsNotKnown,
+    UnknownAttendee,
 
     #[error("Organizer is not known")]
-    OrganizerIsNotKnown,
+    UnknownOrganizer,
 
-    #[error("Invite can't be answered anymore")]
+    #[error("Invitation can't be answered")]
     NonAnswerable,
 
     #[error("{0}")]
@@ -592,6 +588,16 @@ pub enum RsvpError {
     Jiff(#[from] jiff::Error),
 }
 
+impl RsvpError {
+    fn is_network_failure(&self) -> bool {
+        if let RsvpError::Api(this) = self {
+            this.is_network_failure()
+        } else {
+            false
+        }
+    }
+}
+
 pub type RsvpAnswerResult<T, M> = RsvpResult<T, RsvpAnswerError<<M as RsvpMailSender>::Error>>;
 
 #[derive(Debug, Error)]
@@ -604,6 +610,7 @@ pub enum RsvpAnswerError<E> {
 mod tests {
     use super::*;
     use indoc::indoc;
+    use pretty_assertions as pa;
     use std::str::FromStr;
 
     #[test]
@@ -629,13 +636,16 @@ mod tests {
         let expected = RsvpEventId::Invite {
             uid: "1234-1234-1234-1234".into(),
             rid: None,
-            dtstamp: Some(ical::DtStamp {
-                value: ical::utils::dt("20180101T120000Z"),
+            invite: Box::new(ical::VEvent {
+                dtstamp: Some(ical::DtStamp {
+                    value: ical::utils::dt("20180101T120000Z"),
+                }),
+                sequence: Some(ical::Sequence { value: 1 }),
+                ..ical::VEvent::default()
             }),
-            sequence: Some(ical::Sequence { value: 1 }),
         };
 
-        assert_eq!(expected, actual);
+        pa::assert_eq!(expected, actual);
     }
 
     #[test]
@@ -661,13 +671,16 @@ mod tests {
         let expected = RsvpEventId::Invite {
             uid: "1234-1234-1234-1234".into(),
             rid: None,
-            dtstamp: Some(ical::DtStamp {
-                value: ical::utils::dt("20180101T120000Z"),
+            invite: Box::new(ical::VEvent {
+                dtstamp: Some(ical::DtStamp {
+                    value: ical::utils::dt("20180101T120000Z"),
+                }),
+                sequence: Some(ical::Sequence { value: 1 }),
+                ..ical::VEvent::default()
             }),
-            sequence: Some(ical::Sequence { value: 1 }),
         };
 
-        assert_eq!(expected, actual);
+        pa::assert_eq!(expected, actual);
     }
 
     #[test]
@@ -700,14 +713,17 @@ mod tests {
             RsvpEventId::Invite {
                 uid: "1234-1234-1234-1234".into(),
                 rid: Some(CalendarEventRecurrenceId::new(rid)),
-                dtstamp: Some(ical::DtStamp {
-                    value: ical::utils::dt("20180101T120000Z"),
+                invite: Box::new(ical::VEvent {
+                    dtstamp: Some(ical::DtStamp {
+                        value: ical::utils::dt("20180101T120000Z"),
+                    }),
+                    sequence: Some(ical::Sequence { value: 1 }),
+                    ..ical::VEvent::default()
                 }),
-                sequence: Some(ical::Sequence { value: 1 }),
             }
         };
 
-        assert_eq!(expected, actual);
+        pa::assert_eq!(expected, actual);
     }
 
     #[test]
@@ -736,13 +752,16 @@ mod tests {
         let expected = RsvpEventId::Invite {
             uid: "1234-1234-1234-1234".into(),
             rid: None,
-            dtstamp: Some(ical::DtStamp {
-                value: ical::utils::dt("20180101T120000Z"),
+            invite: Box::new(ical::VEvent {
+                dtstamp: Some(ical::DtStamp {
+                    value: ical::utils::dt("20180101T120000Z"),
+                }),
+                sequence: None,
+                ..ical::VEvent::default()
             }),
-            sequence: None,
         };
 
-        assert_eq!(expected, actual);
+        pa::assert_eq!(expected, actual);
     }
 
     #[test]
@@ -792,7 +811,7 @@ mod tests {
             event_id: "4321-4321-4321-4321".into(),
         });
 
-        assert_eq!(expected, actual);
+        pa::assert_eq!(expected, actual);
     }
 
     #[test]
@@ -807,7 +826,7 @@ mod tests {
 
         // We don't parse invites from headers, because we need to see the
         // `invite.ics` to make sure the email's invite is not out of date.
-        assert_eq!(None, actual);
+        pa::assert_eq!(None, actual);
     }
 
     mod recurrence {

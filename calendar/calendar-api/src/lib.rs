@@ -350,10 +350,6 @@ mod tests {
                     author: "spongebob@squarepants.com".into(),
                 }],
                 calendar_id: "HzNtbT1J...".into(),
-                start_time: 1_744_790_400,
-                end_time: 1_744_792_200,
-                full_day: false,
-                recurrence_id: Some(CalendarEventRecurrenceId::new(1_744_792_300)),
                 address_key_packet: Some("wV4DkxOc...".into()),
                 shared_key_packet: None,
                 attendees_events: [CalendarEventPayload {

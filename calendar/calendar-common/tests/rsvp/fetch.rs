@@ -1,9 +1,14 @@
-use crate::{ATTENDEES_EVENT, RsvpEventIdExt, SHARED_EVENT, expected_event, world};
+use crate::{
+    ATTENDEES_EVENT, INVITE, RsvpEventIdExt, SHARED_EVENT, expected_event, expected_offline_event,
+    world,
+};
 use indoc::indoc;
 use jiff::{Zoned, civil::Weekday};
 use pretty_assertions as pa;
 use proton_calendar_api::ProtonCalendarMock;
 use proton_calendar_common::{RsvpError, RsvpEventId, RsvpIntent, RsvpProgress, RsvpRecency};
+use proton_core_api::session::{Config, Session};
+use proton_core_common::test_utils::test_context::MockApiEnv;
 use std::str::FromStr;
 use test_case::test_case;
 
@@ -28,7 +33,7 @@ async fn using_address_key() {
         .mock_find_calendar_events("8maQ3qBa", None, Some(event.clone()))
         .await;
 
-    let actual = RsvpEventId::invite("8maQ3qBa", None)
+    let actual = RsvpEventId::invite(INVITE)
         .fetch(
             &world.sess,
             &world.pgp,
@@ -64,7 +69,7 @@ async fn using_shared_key() {
         .mock_find_calendar_events("8maQ3qBa", None, Some(event.clone()))
         .await;
 
-    let actual = RsvpEventId::invite("8maQ3qBa", None)
+    let actual = RsvpEventId::invite(INVITE)
         .fetch(
             &world.sess,
             &world.pgp,
@@ -83,10 +88,27 @@ async fn using_shared_key() {
 /// header and require passing an extra query parameter for the backend.
 #[tokio::test]
 async fn recurring() {
+    const INVITE: &str = indoc! {"
+        BEGIN:VCALENDAR
+        METHOD:REQUEST
+        VERSION:2.0
+        BEGIN:VEVENT
+        UID:8maQ3qBa
+        DTSTAMP:20180101T080000Z
+        DTSTART:20180101T120000Z
+        DTEND:20180101T133000Z
+        RECURRENCE-ID:20180101T123000Z
+        DESCRIPTION:some description
+        SUMMARY:some title
+        LOCATION:some location
+        END:VEVENT
+        END:VCALENDAR
+    "};
+
     let world = world().await;
     let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
 
-    let rid = Zoned::from_str("20250423T082000[UTC]")
+    let rid = Zoned::from_str("20180101T123000[UTC]")
         .unwrap()
         .timestamp()
         .as_second();
@@ -103,7 +125,7 @@ async fn recurring() {
         .mock_find_calendar_events("8maQ3qBa", Some(rid), Some(event.clone()))
         .await;
 
-    let actual = RsvpEventId::invite("8maQ3qBa", Some(rid))
+    let actual = RsvpEventId::invite(INVITE)
         .fetch(
             &world.sess,
             &world.pgp,
@@ -153,6 +175,22 @@ async fn reminder() {
 
 #[tokio::test]
 async fn outdated() {
+    const INVITE: &str = indoc! {"
+        BEGIN:VCALENDAR
+        METHOD:REQUEST
+        VERSION:2.0
+        BEGIN:VEVENT
+        UID:8maQ3qBa
+        DTSTAMP:20180101T060000Z
+        DTSTART:20180101T120000Z
+        DTEND:20180101T133000Z
+        DESCRIPTION:some old description
+        SUMMARY:some old title
+        LOCATION:some old location
+        END:VEVENT
+        END:VCALENDAR
+    "};
+
     let world = world().await;
     let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
 
@@ -168,7 +206,7 @@ async fn outdated() {
         .mock_find_calendar_events("8maQ3qBa", None, Some(event.clone()))
         .await;
 
-    let actual = RsvpEventId::invite_ex("8maQ3qBa", None, Some("20180101T060000Z"), None)
+    let actual = RsvpEventId::invite(INVITE)
         .fetch(
             &world.sess,
             &world.pgp,
@@ -189,7 +227,8 @@ async fn outdated() {
 #[test_case("20180101T120000[UTC]", RsvpProgress::Ongoing)]
 #[test_case("20180101T130000[UTC]", RsvpProgress::Ongoing)]
 #[test_case("20180101T125959[UTC]", RsvpProgress::Ongoing)]
-#[test_case("20180101T133000[UTC]", RsvpProgress::Ended)]
+#[test_case("20180101T133000[UTC]", RsvpProgress::Ongoing)]
+#[test_case("20180101T133001[UTC]", RsvpProgress::Ended)]
 #[test_case("20180101T140000[UTC]", RsvpProgress::Ended)]
 #[tokio::test]
 async fn progress(now: &str, expected_progress: RsvpProgress) {
@@ -210,7 +249,7 @@ async fn progress(now: &str, expected_progress: RsvpProgress) {
         .mock_find_calendar_events("8maQ3qBa", None, Some(event.clone()))
         .await;
 
-    let actual = RsvpEventId::invite("8maQ3qBa", None)
+    let actual = RsvpEventId::invite(INVITE)
         .fetch(
             &world.sess,
             &world.pgp,
@@ -263,7 +302,7 @@ async fn cancelled() {
         .mock_find_calendar_events("8maQ3qBa", None, Some(event.clone()))
         .await;
 
-    let actual = RsvpEventId::invite("8maQ3qBa", None)
+    let actual = RsvpEventId::invite(INVITE)
         .fetch(
             &world.sess,
             &world.pgp,
@@ -279,11 +318,12 @@ async fn cancelled() {
     assert_eq!(RsvpProgress::Cancelled, actual.progress);
 }
 
-/// Make sure that asking for a non-imported event doesn't end up as error.
+/// Make sure that asking for a non-auto-imported-imported event reads data from
+/// `invite.ics`.
 ///
 /// Users can disable auto-importing RSVPs, in which case asking the calendar
 /// about that particular event will return "whoopsie, what's that?" - this test
-/// makes sure we can handle this scenario (probably like 0.1% of users).
+/// makes sure we can handle this scenario (probably like 0.1% of users though).
 #[tokio::test]
 async fn unknown() {
     let world = world().await;
@@ -294,7 +334,7 @@ async fn unknown() {
         .mock_find_calendar_events("8maQ3qBa", None, None)
         .await;
 
-    let actual = RsvpEventId::invite("8maQ3qBa", None)
+    let actual = RsvpEventId::invite(INVITE)
         .fetch(
             &world.sess,
             &world.pgp,
@@ -304,9 +344,45 @@ async fn unknown() {
             Weekday::Monday,
         )
         .await
+        .unwrap()
         .unwrap();
 
-    assert!(actual.is_none());
+    pa::assert_eq!(expected_offline_event(), actual);
+
+    // We don't support creating events in the calendar, so non-auto-imported
+    // can't be answered yet
+    assert!(!actual.can_be_answered());
+}
+
+/// Make sure that we fail gracefully if there's no internet connection.
+#[tokio::test]
+async fn offline() {
+    let mut world = world().await;
+
+    world.sess = {
+        let env = MockApiEnv::new("http://localhost:1");
+        let cfg = Config::for_env(env);
+
+        Session::builder().with_config(&cfg).build().await.unwrap()
+    };
+
+    let actual = RsvpEventId::invite(INVITE)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            &world.now,
+            Weekday::Monday,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+    pa::assert_eq!(expected_offline_event(), actual);
+
+    assert!(!actual.can_be_answered());
+    assert_eq!(RsvpRecency::Unknown, actual.recency);
 }
 
 #[tokio::test]
@@ -338,7 +414,7 @@ async fn err_unknown_attendee() {
         .mock_find_calendar_events("8maQ3qBa", None, Some(event))
         .await;
 
-    let actual = RsvpEventId::invite("8maQ3qBa", None)
+    let actual = RsvpEventId::invite(INVITE)
         .fetch(
             &world.sess,
             &world.pgp,
@@ -351,10 +427,7 @@ async fn err_unknown_attendee() {
         .unwrap_err();
 
     // Attendee `zar@localhost` is not present in the `CalendarEvent`
-    assert_eq!(
-        RsvpError::AttendeeIsNotKnown.to_string(),
-        actual.to_string()
-    );
+    assert_eq!(RsvpError::UnknownAttendee.to_string(), actual.to_string());
 }
 
 #[tokio::test]
@@ -384,7 +457,7 @@ async fn err_missing_x_pm_token() {
         .mock_find_calendar_events("8maQ3qBa", None, Some(event))
         .await;
 
-    let actual = RsvpEventId::invite("8maQ3qBa", None)
+    let actual = RsvpEventId::invite(INVITE)
         .fetch(
             &world.sess,
             &world.pgp,
@@ -431,7 +504,7 @@ async fn err_many_events_in_ics() {
         .mock_find_calendar_events("8maQ3qBa", None, Some(event))
         .await;
 
-    let actual = RsvpEventId::invite("8maQ3qBa", None)
+    let actual = RsvpEventId::invite(INVITE)
         .fetch(
             &world.sess,
             &world.pgp,
