@@ -176,9 +176,8 @@ where
             lhs.status = lhs.status.or(rhs.status);
             lhs.summary = lhs.summary.or(rhs.summary);
 
-            Ok(lhs)
-        })
-        .map_err(|err: RsvpError| err)?;
+            Ok::<_, RsvpError>(lhs)
+        })?;
 
     Ok(Some(match id {
         RsvpEventId::Invite { invite, .. } => Source::Invite {
