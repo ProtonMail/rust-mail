@@ -227,7 +227,8 @@ async fn outdated() {
 #[test_case("20180101T120000[UTC]", RsvpProgress::Ongoing)]
 #[test_case("20180101T130000[UTC]", RsvpProgress::Ongoing)]
 #[test_case("20180101T125959[UTC]", RsvpProgress::Ongoing)]
-#[test_case("20180101T133000[UTC]", RsvpProgress::Ended)]
+#[test_case("20180101T133000[UTC]", RsvpProgress::Ongoing)]
+#[test_case("20180101T133001[UTC]", RsvpProgress::Ended)]
 #[test_case("20180101T140000[UTC]", RsvpProgress::Ended)]
 #[tokio::test]
 async fn progress(now: &str, expected_progress: RsvpProgress) {

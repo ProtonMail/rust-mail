@@ -722,10 +722,23 @@ fn extract_occurrence(event: &ical::VEvent) -> RsvpResult<RsvpOccurrence> {
     let dtend = &dtend.value;
 
     match (dtstart, dtend) {
-        (ical::DateOrDt::Date(dtstart), ical::DateOrDt::Date(dtend)) => Ok(RsvpOccurrence::Date {
-            starts_at: Date::from(*dtstart),
-            ends_at: Date::from(*dtend),
-        }),
+        (ical::DateOrDt::Date(dtstart), ical::DateOrDt::Date(dtend)) => {
+            let starts_at = Date::from(*dtstart);
+
+            // `DTEND` is exclusive, so e.g. for a single-day event we get:
+            //
+            // ```
+            // DTSTART;VALUE=DATE:20180101
+            // DTEND;VALUE=DATE:20180102
+            // ```
+            //
+            // Since working on closed sets is less awkward - in particular it
+            // allows you to simply `if DTSTART == DTEND ...` - let's convert
+            // this `[DTSTART, DTEND)` into `[DTSTART, DTEND]`:
+            let ends_at = Date::from(*dtend).yesterday()?;
+
+            Ok(RsvpOccurrence::Date { starts_at, ends_at })
+        }
 
         (ical::DateOrDt::DateTime(dtstart), ical::DateOrDt::DateTime(dtend)) => {
             Ok(RsvpOccurrence::DateTime {
@@ -920,7 +933,7 @@ fn extract_progress(now: &Zoned, source: &Source, occurrence: &RsvpOccurrence) -
         RsvpOccurrence::DateTime { starts_at, ends_at } => {
             if now < starts_at {
                 RsvpProgress::Pending
-            } else if now < ends_at {
+            } else if now <= ends_at {
                 RsvpProgress::Ongoing
             } else {
                 RsvpProgress::Ended
