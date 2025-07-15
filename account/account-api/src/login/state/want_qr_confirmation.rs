@@ -112,17 +112,29 @@ impl WantQrConfirmation {
         };
         let key = AesGcmKey::from_bytes(encryption_key.as_bytes())
             .map_err(|err| format!("Invalid key: {err}"))?;
-        let cipthertext = AesGcmCiphertext::decode(&payload)
-            .map_err(|err| format!("Failed to decode payload: {err}"))?;
 
-        // cipthertext -> bytes
-        let decrypted_payload_bytes = if cipthertext.is_legacy() {
+        // At this point, it's unknown whether the payload was encrypted in legacy or non-legacy mode, so unfortunately, we have to try both.
+        // Try legacy decryption first
+        info!("Try legacy decryption");
+        let decrypted_payload_bytes = {
+            let cipthertext = AesGcmCiphertext::decode_legacy(&payload)
+                .map_err(|err| format!("Failed to decode legacy payload: {err}"))?;
+
+            // cipthertext -> bytes
             key.decrypt_legacy(cipthertext, None)
-                .map_err(|err| format!("Failed to decrypt payload: {err}"))?
-        } else {
-            key.decrypt(cipthertext, None)
-                .map_err(|err| format!("Failed to decrypt payload: {err}"))?
+                .map_err(|err| format!("Failed to decrypt legacy payload: {err}"))
         };
+        // Then non-legacy
+        let decrypted_payload_bytes = decrypted_payload_bytes.or_else(|_err| {
+            info!("Legacy decryption failed, let's try non-legacy one");
+
+            let cipthertext = AesGcmCiphertext::decode(&payload)
+                .map_err(|err| format!("Failed to decode payload: {err}"))?;
+
+            // cipthertext -> bytes
+            key.decrypt(cipthertext, None)
+                .map_err(|err| format!("Failed to decrypt payload: {err}"))
+        })?;
         // bytes -> UTF8 String
         let decrypted_payload = String::from_utf8(decrypted_payload_bytes)
             .map_err(|err| format!("Failed to parse decrypted payload to valid UTF8: {err}"))?;
