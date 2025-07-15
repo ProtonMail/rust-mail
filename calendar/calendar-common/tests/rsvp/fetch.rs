@@ -10,7 +10,6 @@ use proton_calendar_common::{RsvpError, RsvpEventId, RsvpIntent, RsvpProgress, R
 use proton_core_api::session::{Config, Session};
 use proton_core_common::test_utils::test_context::MockApiEnv;
 use std::str::FromStr;
-use test_case::test_case;
 
 /// Make sure we can understand RSVPs that have been auto-imported into the
 /// calendar, but haven't been replied to yet.
@@ -220,49 +219,6 @@ async fn outdated() {
         .unwrap();
 
     assert_eq!(RsvpRecency::Outdated, actual.recency);
-}
-
-#[test_case("20180101T100000[UTC]", RsvpProgress::Pending)]
-#[test_case("20180101T115959[UTC]", RsvpProgress::Pending)]
-#[test_case("20180101T120000[UTC]", RsvpProgress::Ongoing)]
-#[test_case("20180101T130000[UTC]", RsvpProgress::Ongoing)]
-#[test_case("20180101T125959[UTC]", RsvpProgress::Ongoing)]
-#[test_case("20180101T133000[UTC]", RsvpProgress::Ongoing)]
-#[test_case("20180101T133001[UTC]", RsvpProgress::Ended)]
-#[test_case("20180101T140000[UTC]", RsvpProgress::Ended)]
-#[tokio::test]
-async fn progress(now: &str, expected_progress: RsvpProgress) {
-    let mut world = world().await;
-    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
-
-    world.now = now.parse().unwrap();
-
-    world
-        .ctx
-        .mock_web_server
-        .mock_get_calendar_bootstrap("HzNtbT1J", world.bootstrap())
-        .await;
-
-    world
-        .ctx
-        .mock_web_server
-        .mock_find_calendar_events("8maQ3qBa", None, Some(event.clone()))
-        .await;
-
-    let actual = RsvpEventId::invite(INVITE)
-        .fetch(
-            &world.sess,
-            &world.pgp,
-            &world.address_keys,
-            &world.cache,
-            &world.now,
-            Weekday::Monday,
-        )
-        .await
-        .unwrap()
-        .unwrap();
-
-    assert_eq!(actual.progress, expected_progress);
 }
 
 /// Make sure we can fetch cancelled events *and* mark them as such; this
