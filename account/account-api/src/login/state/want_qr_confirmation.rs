@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use base64::{Engine as _, engine::general_purpose};
 use futures::TryFutureExt as _;
-use muon::client::flow::{WithCodeFlow, WithCodePollFlow};
+use muon::client::flow::{ForkFlowResult, WithCodeFlow, WithCodePollFlow};
 use proton_core_api::{
     auth::{KeySecret, UserKeySecret},
     services::{
@@ -214,12 +214,17 @@ pub async fn process_target_device_qr_code(
         } else {
             client.clone().fork(context.get_client_id())
         };
-    fork_confirmation
+    match fork_confirmation
         .independent()
         .code(&qr_data.user_code)
         .send()
-        .await;
-    Ok(())
+        .await
+    {
+        ForkFlowResult::Success(_client, _selector) => Ok(()),
+        ForkFlowResult::Failure { reason, .. } => Err(ProcessTargetDeviceQrError::Api(
+            ApiError::Muon(reason.into()),
+        )),
+    }
 }
 
 /// Parses the sign in QR code string of the target device and extracts its components with validation.
