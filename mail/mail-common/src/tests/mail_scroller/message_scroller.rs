@@ -521,6 +521,9 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .display_order(0)
         .scroll_order(LabelScrollOrder::Descending)
         .build();
+    let count = MessageScrollData::all_count(&tether).await.unwrap();
+
+    assert_eq!(count, 0);
 
     tether
         .tx::<_, _, StashError>(async |bond| {
@@ -532,6 +535,19 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .await
         .unwrap();
 
+    let count = MessageScrollData::all_count(&tether).await.unwrap();
+
+    assert_eq!(count, 3);
+    assert_eq!(scroller_all.id, Some(1));
+    assert_eq!(scroller_read.id, Some(2));
+    assert_eq!(scroller_unread.id, Some(3));
+
+    let all = MessageScrollData::all(&tether).await.unwrap();
+    assert_eq!(all.len(), 3);
+    assert!(all.contains(&scroller_all));
+    assert!(all.contains(&scroller_read));
+    assert!(all.contains(&scroller_unread));
+
     tether
         .tx::<_, _, StashError>(async |bond| {
             scroller_all.save(bond).await.unwrap();
@@ -541,6 +557,13 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         })
         .await
         .unwrap();
+
+    let count = MessageScrollData::all_count(&tether).await.unwrap();
+
+    assert_eq!(count, 3);
+    assert_eq!(scroller_all.id, Some(1));
+    assert_eq!(scroller_read.id, Some(2));
+    assert_eq!(scroller_unread.id, Some(3));
 
     let mut scroller_all = MessageScrollData::builder()
         .local_label_id(local_label_id)
@@ -579,6 +602,13 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         .await
         .unwrap();
 
+    let count = MessageScrollData::all_count(&tether).await.unwrap();
+
+    assert_eq!(count, 3);
+    assert_eq!(scroller_all.id, Some(1));
+    assert_eq!(scroller_read.id, Some(2));
+    assert_eq!(scroller_unread.id, Some(3));
+
     let mut scroller_all = MessageScrollData::builder()
         .local_label_id(local_label_id)
         .unread(ReadFilter::All)
@@ -615,6 +645,13 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
         })
         .await
         .unwrap();
+
+    let count = MessageScrollData::all_count(&tether).await.unwrap();
+
+    assert_eq!(count, 3);
+    assert_eq!(scroller_all.id, Some(1));
+    assert_eq!(scroller_read.id, Some(2));
+    assert_eq!(scroller_unread.id, Some(3));
 
     scroller_all.reload(&tether).await.unwrap();
     scroller_read.reload(&tether).await.unwrap();
@@ -626,4 +663,53 @@ async fn allow_different_filter_types_to_be_stored_in_database() {
     assert_eq!(scroller_read.display_order, 2);
     assert_eq!(scroller_unread.message_time, 1.into());
     assert_eq!(scroller_unread.display_order, 2);
+
+    let diff_local_label_id = SystemLabel::AllMail
+        .local_id(&tether)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut scroller_all = MessageScrollData::builder()
+        .local_label_id(diff_local_label_id)
+        .unread(ReadFilter::All)
+        .remote_message_id(MessageId::from("150"))
+        .message_time(0.into())
+        .display_order(0)
+        .scroll_order(LabelScrollOrder::Descending)
+        .build();
+
+    let mut scroller_read = MessageScrollData::builder()
+        .local_label_id(diff_local_label_id)
+        .unread(ReadFilter::Read)
+        .remote_message_id(MessageId::from("150"))
+        .message_time(0.into())
+        .display_order(0)
+        .scroll_order(LabelScrollOrder::Descending)
+        .build();
+
+    let mut scroller_unread = MessageScrollData::builder()
+        .local_label_id(diff_local_label_id)
+        .unread(ReadFilter::Unread)
+        .remote_message_id(MessageId::from("150"))
+        .message_time(0.into())
+        .display_order(0)
+        .scroll_order(LabelScrollOrder::Descending)
+        .build();
+
+    tether
+        .tx::<_, _, StashError>(async |bond| {
+            scroller_all.save(bond).await.unwrap();
+            scroller_read.save(bond).await.unwrap();
+            scroller_unread.save(bond).await.unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    let count = MessageScrollData::all_count(&tether).await.unwrap();
+
+    assert_eq!(count, 6);
+    assert_eq!(scroller_all.id, Some(4));
+    assert_eq!(scroller_read.id, Some(5));
+    assert_eq!(scroller_unread.id, Some(6));
 }

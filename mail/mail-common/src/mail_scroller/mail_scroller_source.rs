@@ -80,6 +80,16 @@ pub trait MailScrollerSource: Send + Sync {
         ctx: &MailUserContext,
     ) -> impl Future<Output = Result<u64, MailContextError>> + Send;
 
+    /// Return if there is more data available in the source.
+    ///
+    /// # Errors
+    ///
+    /// Return error if the query failed.
+    fn has_more(
+        &self,
+        ctx: &MailUserContext,
+    ) -> impl Future<Output = Result<bool, MailContextError>> + Send;
+
     /// Sync the next section of data from the remote source which should return up to
     /// `element_count` results.
     ///
@@ -98,6 +108,11 @@ pub trait MailScrollerSource: Send + Sync {
         &mut self,
         ctx: &MailUserContext,
         filter: ReadFilter,
+    ) -> impl Future<Output = Result<(), MailContextError>> + Send;
+
+    fn clear_cursor(
+        &mut self,
+        ctx: &MailUserContext,
     ) -> impl Future<Output = Result<(), MailContextError>> + Send;
 
     fn watched_tables(&self) -> Vec<String>;

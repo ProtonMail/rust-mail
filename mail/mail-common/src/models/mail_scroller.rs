@@ -99,7 +99,11 @@ pub trait ScrollData: Model + Into<ScrollCursor<Self>> {
 #[derive(Debug, Model, Eq, PartialEq, Clone, TypedBuilder)]
 #[TableName("mail_message_scroll_data")]
 pub struct MessageScrollData {
-    #[IdField]
+    #[IdField(optional)]
+    #[builder(default)]
+    pub id: Option<u64>,
+
+    #[DbField]
     pub local_label_id: LocalLabelId,
 
     #[DbField]
@@ -120,20 +124,17 @@ pub struct MessageScrollData {
 
 impl MessageScrollData {
     pub async fn save(&mut self, tx: &Bond<'_>) -> Result<(), StashError> {
-        // NOTE: save should always update existing records.
-        // But as long as we have no support for multiple records as a key
-        // we have to first delete the record and then save it.
-        // TODO: let chains
         if let Some(existing) =
             Self::find_with_key(self.local_label_id, self.unread, self.scroll_order, tx).await?
         {
-            if self != &existing {
-                existing.delete(tx).await?;
-                <Self as Model>::save(self, tx).await?;
-            }
+            self.id = existing.id;
         } else {
-            <Self as Model>::save(self, tx).await?;
+            // Trigger approach is problematic to implement for optional id field
+            // in sql, so we use a workaround to get the next id manually.
+            self.id = Some(Self::next_id(tx).await?);
         }
+
+        <Self as Model>::save(self, tx).await?;
 
         Ok(())
     }
@@ -285,7 +286,11 @@ impl ScrollData for MessageScrollData {
 #[derive(Debug, Model, Eq, PartialEq, Clone, TypedBuilder)]
 #[TableName("mail_conversation_scroll_data")]
 pub struct ConversationScrollData {
-    #[IdField]
+    #[IdField(optional)]
+    #[builder(default)]
+    pub id: Option<u64>,
+
+    #[DbField]
     pub local_label_id: LocalLabelId,
 
     #[DbField]
@@ -309,20 +314,19 @@ pub struct ConversationScrollData {
 
 impl ConversationScrollData {
     pub async fn save(&mut self, tx: &Bond<'_>) -> Result<(), StashError> {
-        // NOTE: save should always update existing records.
-        // But as long as we have no support for multiple records as a key
-        // we have to first delete the record and then save it.
-        // TODO: let chains
         if let Some(existing) =
             Self::find_with_key(self.local_label_id, self.unread, self.scroll_order, tx).await?
         {
-            if self != &existing {
-                existing.delete(tx).await?;
-                <Self as Model>::save(self, tx).await?;
-            }
+            self.id = existing.id;
         } else {
-            <Self as Model>::save(self, tx).await?;
+            // Trigger approach is problematic to implement for optional id field
+            // in sql, so we use a workaround to get the next id manually.
+            self.id = Some(Self::next_id(tx).await?);
         }
+
+        <Self as Model>::save(self, tx).await?;
+
+        self.reload(tx).await?;
 
         Ok(())
     }

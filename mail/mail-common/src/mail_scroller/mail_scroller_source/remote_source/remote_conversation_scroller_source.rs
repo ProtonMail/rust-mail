@@ -462,6 +462,9 @@ impl RemoteConversationScrollerSource {
         scroll_order: LabelScrollOrder,
         bond: &Bond<'_>,
     ) -> Result<ConversationScrollData, MailContextError> {
+        tracing::debug!(
+            "Updating scroller data, new cursor at {context_time}, order={display_order}"
+        );
         let mut conv_paginator = ConversationScrollData::builder()
             .local_label_id(local_label_id)
             .unread(unread)
