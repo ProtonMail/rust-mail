@@ -5,13 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [mail-uniffi-v0.103.0] - 2025-07-15
 
 ### Features
 
 - [ET-3609] Add encrypt-to-outside (eo) crypto logic
 - [ET-3630] Send password protected messages
 - [ET-2588] Extend contact suggestions to expose contacts in groups
+
+### Fixes
+
+- [ET-3630] Reset password and expiration time on draft open
+- [ET-3550] Fix cursor storage, and underlying races, while switching filters in mailscroller
+- [ET-3757] Handle muon fork confirmation result
+- [ET-3758] Qr login should use legacy decryption first then fallback to non-legacy
+
+
+## [mail-uniffi-v0.99.2] - 2025-07-11
+
+### Features
+
+- Expose fork_with_version
+
+### Fixes
+
+- [ET-3598] Do not allow bypass pin lock without verification on startup
 
 
 ## [mail-uniffi-v0.102.0] - 2025-07-10
@@ -23,6 +41,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - Filename issue: v in front of v008 messing up the db migration
+
+
+## [mail-uniffi-v0.99.1] - 2025-07-09
+
+### Changed
+
+- Sqlite performance tweaks
 
 
 ## [mail-uniffi-v0.101.0] - 2025-07-09
@@ -39,13 +64,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - Do not generate keys for users with temporary password
-
-
-## [mail-uniffi-v0.99.1] - 2025-07-09
-
-### Changed
-
-- Sqlite performance tweaks
 
 
 ## [mail-uniffi-v0.100.0] - 2025-07-08
