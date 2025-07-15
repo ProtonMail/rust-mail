@@ -34,7 +34,6 @@ pub enum Messages {
     /// Background worker messages
     BackgroundWorker(crate::app_model::background::Message),
     SessionExpired(UserId),
-    None,
 }
 
 impl Messages {

@@ -404,11 +404,16 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                 // This prevents abusing the scroller by sending multiple commands
                 // in a row. We do not want and need to handle all of them one by one.
                 let commands = self.ordered_command.drain().collect_vec();
+                tracing::trace!("Handling ordered commands: {:?}", commands);
+                let mut processed = 0;
                 for command in Some(command).into_iter().chain(commands).dedup() {
+                    tracing::trace!("Processing ordered command: {:?}", command);
                     if let Err(e) = self.handle_ordered_command(command).await {
                         tracing::error!("Failed to handle ordered command: {e:?}");
                     }
+                    processed += 1;
                 }
+                tracing::trace!("Processed {} ordered commands", processed);
             }
         });
         aborts.push(handle.abort_handle());
@@ -685,6 +690,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
             .change_filter(&ctx, filter)
             .await?;
         self.items.clear();
+        self.fetch_more(src.clone()).await?;
         self.refresh(true, src).await
     }
 
@@ -700,6 +706,7 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
         Self::await_task(&mut self.task).await?;
         self.source.write().await.clear_cursor(&ctx).await?;
         self.items.clear();
+        self.fetch_more(src.clone()).await?;
         self.refresh(true, src).await
     }
 

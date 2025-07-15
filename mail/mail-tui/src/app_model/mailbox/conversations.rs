@@ -31,7 +31,7 @@ pub struct ConversationsState {
     messages: MessagesStatus,
     opened_label: LocalLabelId,
     autodelete_banner: Option<AutoDeleteBanner>,
-    ready: AtomicBool,
+    fetching: AtomicBool,
 }
 
 impl ConversationsState {
@@ -77,7 +77,7 @@ impl ConversationsState {
                 tracing::error!("{e:?}");
                 e.into()
             }
-            ScrollerUpdate::None(_) => Messages::None,
+            ScrollerUpdate::None(_) => ConversationMessage::NextPage(vec![]).into(),
         });
 
         let autodelete_banner = ContextualConversation::auto_delete_banner(label_id, &ctx).await?;
@@ -91,7 +91,7 @@ impl ConversationsState {
                 conversations,
                 opened_label: label_id,
                 autodelete_banner,
-                ready: AtomicBool::new(false),
+                fetching: AtomicBool::new(false),
             },
             command,
         ))
@@ -141,11 +141,8 @@ impl ConversationsState {
     }
 
     fn try_select_non_empty_list(&mut self) -> Command<Messages> {
-        if !self.ready.load(Ordering::Acquire) {
-            self.ready.store(true, Ordering::Release);
+        if self.table_state.selected().is_none() {
             self.table_state.select(0);
-        } else if self.conversations.is_empty() {
-            self.ready.store(false, Ordering::Release);
         }
 
         Command::None
@@ -185,7 +182,9 @@ impl ConversationsState {
                 self.table_state.next();
                 if self.table_state.selected().unwrap_or_default()
                     >= self.conversations.len().saturating_sub(1)
+                    && !self.fetching.load(Ordering::Acquire)
                 {
+                    self.fetching.store(true, Ordering::Release);
                     return self.paginator.next_page_command();
                 }
                 Command::None
@@ -255,6 +254,7 @@ impl ConversationsState {
                     ConversationMessage::Star(id) => star_conversation(user_ctx.to_owned(), id),
                     ConversationMessage::Unstar(id) => unstar_conversation(user_ctx.to_owned(), id),
                     ConversationMessage::NextPage(conversations) => {
+                        self.fetching.store(false, Ordering::Release);
                         self.conversations.extend(conversations);
                         self.try_select_non_empty_list()
                     }

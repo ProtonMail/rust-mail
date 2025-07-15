@@ -58,7 +58,7 @@ pub struct MessagesState {
     open_message: DecryptedMessageStatus,
     mode: Mode,
     recipient_display_mode: MessageRecipientDisplayMode,
-    ready: AtomicBool,
+    fetching: AtomicBool,
 }
 
 #[allow(dead_code)] // Watcher handle is needed to keep state
@@ -82,7 +82,7 @@ fn handle_scroller_update(update: ScrollerUpdate<MailMessage>) -> Messages {
             tracing::error!("{e:?}");
             e.into()
         }
-        ScrollerUpdate::None(_) => Messages::None,
+        ScrollerUpdate::None(_) => MessageMessage::NextPage(vec![]).into(),
     }
 }
 
@@ -128,7 +128,7 @@ impl MessagesState {
                 open_message: DecryptedMessageStatus::None,
                 mode: Mode::Label(paginator),
                 recipient_display_mode,
-                ready: AtomicBool::new(false),
+                fetching: AtomicBool::new(false),
             },
             command,
         ))
@@ -184,7 +184,7 @@ impl MessagesState {
                 open_message: DecryptedMessageStatus::None,
                 mode: Mode::Search(paginator),
                 recipient_display_mode: MessageRecipientDisplayMode::Sender,
-                ready: AtomicBool::new(false),
+                fetching: AtomicBool::new(false),
             },
             Command::batch(vec![
                 Command::message(
@@ -268,7 +268,7 @@ impl MessagesState {
                 open_message: DecryptedMessageStatus::None,
                 mode: Mode::Conversation(watcher),
                 recipient_display_mode: MessageRecipientDisplayMode::Sender,
-                ready: AtomicBool::new(false),
+                fetching: AtomicBool::new(false),
             },
             background_command,
         ))
@@ -345,11 +345,8 @@ impl MessagesState {
     }
 
     fn try_select_non_empty_list(&mut self) {
-        if !self.ready.load(Ordering::Acquire) {
-            self.ready.store(true, Ordering::Release);
+        if self.table_state.selected().is_none() {
             self.table_state.select(0);
-        } else if self.messages.is_empty() {
-            self.ready.store(false, Ordering::Release);
         }
     }
 }
@@ -415,7 +412,9 @@ impl MessagesState {
                 if let Mode::Label(paginator) = &self.mode {
                     if self.table_state.selected().unwrap_or_default()
                         >= self.messages.len().saturating_sub(1)
+                        && !self.fetching.load(Ordering::Acquire)
                     {
+                        self.fetching.store(true, Ordering::Release);
                         return paginator.next_page_command();
                     }
                 }
@@ -423,7 +422,9 @@ impl MessagesState {
                 if let Mode::Search(paginator) = &self.mode {
                     if self.table_state.selected().unwrap_or_default()
                         == self.messages.len().saturating_sub(1)
+                        && !self.fetching.load(Ordering::Acquire)
                     {
+                        self.fetching.store(true, Ordering::Release);
                         return paginator.next_page_command();
                     }
                 }
@@ -712,6 +713,7 @@ impl MessagesState {
                 return Command::message(Messages::raise_popup(popup));
             }
             MessageMessage::NextPage(messages) => {
+                self.fetching.store(false, Ordering::Release);
                 self.messages.extend(messages);
                 self.try_select_non_empty_list();
             }
