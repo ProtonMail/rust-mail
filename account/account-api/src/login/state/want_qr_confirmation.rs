@@ -218,7 +218,7 @@ pub async fn process_target_device_qr_code(
                 "type": "default",
                 "keyPassword": passphrase_str,
             });
-            let payload = key.encrypt(json.to_string(), None).unwrap();
+            let payload = key.encrypt_legacy(json.to_string(), None).unwrap();
             client
                 .clone()
                 .fork(context.get_client_id())
