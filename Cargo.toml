@@ -297,7 +297,7 @@ path = "crypto/crypto-calendar"
 registry = "proton"
 
 [workspace.dependencies.proton-mail-html-transformer]
-version = "0.2.0"
+version = "0.2"
 path = "mail/mail-html-transformer"
 registry = "proton"
 
