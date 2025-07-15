@@ -1,0 +1,2 @@
+ALTER TABLE mail_conversation_scroll_data ADD COLUMN id INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE mail_message_scroll_data ADD COLUMN id INTEGER NOT NULL DEFAULT 0;

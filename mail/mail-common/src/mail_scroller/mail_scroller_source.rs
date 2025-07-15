@@ -110,7 +110,7 @@ pub trait MailScrollerSource: Send + Sync {
         filter: ReadFilter,
     ) -> impl Future<Output = Result<(), MailContextError>> + Send;
 
-    fn clear_cache(
+    fn clear_cursor(
         &mut self,
         ctx: &MailUserContext,
     ) -> impl Future<Output = Result<(), MailContextError>> + Send;

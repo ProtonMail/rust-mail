@@ -386,7 +386,7 @@ impl MailScrollerSource for SearchScrollerSource {
         }
     }
 
-    async fn clear_cache(&mut self, ctx: &MailUserContext) -> Result<(), MailContextError> {
+    async fn clear_cursor(&mut self, ctx: &MailUserContext) -> Result<(), MailContextError> {
         self.initialize(ctx).await?;
         Ok(())
     }

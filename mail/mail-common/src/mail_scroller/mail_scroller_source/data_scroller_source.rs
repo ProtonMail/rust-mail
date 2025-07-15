@@ -447,14 +447,22 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
         ctx: &MailUserContext,
         filter: ReadFilter,
     ) -> Result<(), MailContextError> {
+        let tether = ctx.user_stash().connection();
         self.unread = filter;
-        self.state = MailScrollerState::None;
+        self.state =
+            MailScrollerState::new_online(self.local_label_id, filter, self.page_size, &tether)
+                .await?;
+        tracing::trace!(
+            "Changed filter, new state: {:?}, initiallize...",
+            self.state
+        );
+
         self.initialize(ctx).await?;
 
         Ok(())
     }
 
-    async fn clear_cache(&mut self, ctx: &MailUserContext) -> Result<(), MailContextError> {
+    async fn clear_cursor(&mut self, ctx: &MailUserContext) -> Result<(), MailContextError> {
         if let Some(scroller) = self.state.online() {
             tracing::info!("Clearing cache for label {}", self.local_label_id);
             let mut tether = ctx.user_stash().connection();

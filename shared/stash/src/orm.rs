@@ -375,7 +375,7 @@ where
         // row does or doesn't exist.
         let query = formatdoc! {"
                         SELECT {id_name} AS value
-                        FROM {table} 
+                        FROM {table}
                         WHERE {id_name} = ?
                         ",
             table = Self::table_name(),
@@ -470,6 +470,10 @@ where
     /// Gets the name of the table for the record type.
     fn table_name() -> &'static str;
 
+    fn all_count(tether: &Tether) -> impl Future<Output = Result<u64, StashError>> + Send {
+        async move { Self::count("", vec![], tether).await }
+    }
+
     /// Counts models in database.
     ///
     /// # Parameters
@@ -504,6 +508,25 @@ where
                     params,
                 )
                 .await
+        }
+    }
+
+    /// Gets the next id for the record type for manual id management.
+    ///
+    /// # Errors
+    ///
+    /// When querying the database fails.
+    ///
+    fn next_id(tether: &Tether) -> impl Future<Output = Result<Self::IdType, StashError>> + Send {
+        async move {
+            let query = formatdoc! {"
+                SELECT COALESCE(MAX({id}), 0) + 1 as value
+                FROM {table}
+                ",
+                table = Self::table_name(),
+                id = Self::id_field_name(),
+            };
+            tether.query_value::<_, Self::IdType>(query, vec![]).await
         }
     }
 

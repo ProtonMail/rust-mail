@@ -136,6 +136,7 @@ impl Drop for MailScroller {
             "Dropping MailScroller, aborting {} tasks",
             self.aborts.len()
         );
+
         for abort in self.aborts.drain(..) {
             abort.abort();
         }
@@ -284,14 +285,14 @@ impl MailScroller {
         Ok(())
     }
 
-    pub fn clear_cache(&self) -> Result<(), MailContextError> {
+    pub fn clear_cursor(&self) -> Result<(), MailContextError> {
         let uuid = Uuid::new_v4();
-        tracing::trace!("Sending `ClearCache` command with uuid: {uuid}");
+        tracing::trace!("Sending `ClearCursor` command with uuid: {uuid}");
         self.ordered_command
-            .send(ScrollerOrderedCommand::ClearCache(
+            .send(ScrollerOrderedCommand::ClearCursor(
                 ScrollerSource::ScrollEvent(uuid),
             ))
-            .map_err(|_| MailContextError::Other(anyhow!("Failed to send clear cache command")))?;
+            .map_err(|_| MailContextError::Other(anyhow!("Failed to send clear cursor command")))?;
 
         Ok(())
     }
@@ -512,15 +513,15 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
                         .map_err(|e| anyhow!("Failed to send change filter update: {e:?}"))?;
                 }
             }
-            ScrollerOrderedCommand::ClearCache(src) => {
+            ScrollerOrderedCommand::ClearCursor(src) => {
                 let result = self
-                    .clear_cache(src.clone())
+                    .clear_cursor(src.clone())
                     .await
                     .unwrap_or_else(|e| ScrollerUpdate::Error { src, error: e });
 
                 self.update
                     .send(result)
-                    .map_err(|e| anyhow!("Failed to send clear cache update: {e:?}"))?;
+                    .map_err(|e| anyhow!("Failed to send clear cursor update: {e:?}"))?;
             }
         }
 
@@ -675,32 +676,30 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
     ) -> Result<ScrollerUpdate<T::Item>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         tracing::debug!("Changing filter to {filter:?}");
-
+        // In order to avoid race conditions we need to
+        // await the current task before changing the filter.
+        Self::await_task(&mut self.task).await?;
         self.source
             .write()
             .await
             .change_filter(&ctx, filter)
             .await?;
         self.items.clear();
-        self.task = None;
-        self.fetch_more(src.clone()).await?;
         self.refresh(true, src).await
     }
 
     #[tracing::instrument(skip_all, fields(src=%src))]
-    async fn clear_cache(
+    async fn clear_cursor(
         &mut self,
         src: ScrollerSource,
     ) -> Result<ScrollerUpdate<T::Item>, MailContextError> {
-        tracing::error!(
-            "Scroller is missing some data, this is most likely a bug, please report it"
-        );
-        tracing::info!("Try to recover by clearing cache for current label",);
+        tracing::info!("Clearing cursor for current label");
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
-        self.source.write().await.clear_cache(&ctx).await?;
+        // In order to avoid race conditions we need to
+        // await the current task before clearing the cursor.
+        Self::await_task(&mut self.task).await?;
+        self.source.write().await.clear_cursor(&ctx).await?;
         self.items.clear();
-        self.task = None;
-        self.fetch_more(src.clone()).await?;
         self.refresh(true, src).await
     }
 
@@ -852,7 +851,7 @@ enum ScrollerOrderedCommand {
         src: ScrollerSource,
         filter: ReadFilter,
     },
-    ClearCache(ScrollerSource),
+    ClearCursor(ScrollerSource),
 }
 
 fn calculate_scroller_update<T: ScrollerEq + Clone + Send + Sync + 'static>(

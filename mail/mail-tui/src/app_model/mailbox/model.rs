@@ -307,13 +307,13 @@ impl MailboxModel {
         }
     }
 
-    fn clear_cache(&mut self) {
+    fn clear_cursor(&mut self) {
         if let State::Conversations(state) = &mut self.state {
-            let _ = state.paginator().clone_inner().clear_cache();
+            let _ = state.paginator().clone_inner().clear_cursor();
         } else if let State::Messages(state) = &mut self.state {
             state
                 .label_paginator()
-                .map(|paginator| paginator.clone_inner().clear_cache());
+                .map(|paginator| paginator.clone_inner().clear_cursor());
         }
     }
 }
@@ -387,7 +387,7 @@ impl AppStateHandler for MailboxModel {
                     )));
                 }
                 KeyCode::F(4) => {
-                    self.clear_cache();
+                    self.clear_cursor();
                     return Command::None;
                 }
                 KeyCode::F(5) if key.modifiers.contains(KeyModifiers::SHIFT) => {
