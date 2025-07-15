@@ -3,7 +3,7 @@
 use crate::db::account::{CoreAccount, CoreSession, EncryptedData, SessionEncryptionKey};
 use crate::models::ModelExtension;
 use crate::os::{KeyChain, KeyChainExt};
-use anyhow::{Context, bail};
+use anyhow::{Context, anyhow, bail};
 use async_trait::async_trait;
 use futures::TryFutureExt;
 use proton_core_api::auth::{Auth, Tokens, UserKeySecret};
@@ -206,6 +206,7 @@ impl Store for AuthStore {
         let session_id = info.session_id;
         let tfa_mode = info.tfa_mode.into();
         let mbp_mode = info.mbp_mode.into();
+        let fido_details = info.fido_details;
 
         // We write twice, so do it in a transaction.
         self.stash
@@ -233,6 +234,15 @@ impl Store for AuthStore {
                         .inspect_err(|e| error!("failed to save account: {e:?}"))
                         .await?;
                 }
+
+                // Save Fido2 AuthOptions into Session
+                let session = CoreSession::find_by_id(session_id.clone(), tx)
+                    .await?
+                    .ok_or(anyhow!("Missing session: {}", session_id))?;
+                session
+                    .with_fido_auth_options(fido_details)
+                    .save(tx)
+                    .await?;
 
                 // Set the user ID if it's not already set.
                 if let Some(cur_user_id) = &self.user_id {

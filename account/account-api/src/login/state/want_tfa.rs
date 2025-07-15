@@ -5,6 +5,7 @@ use derive_more::From;
 use futures::TryFutureExt;
 use muon::Client;
 use muon::client::flow::{AuthFlow, LoginTwoFactorFlow};
+use muon::rest::auth::v4::fido2;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::observability::metrics;
 use proton_core_api::services::proton::{SessionId, UserId};
@@ -17,10 +18,11 @@ pub struct WantTfa {
     data: StateData,
     pass: SecureString,
     mode: MbpMode,
+    fido_details: Option<fido2::Response>,
 }
 
 impl WantTfa {
-    pub(crate) fn new(flow: TfaFlow, data: StateData, pass: SecureString, mode: MbpMode) -> Self {
+    pub(crate) fn new(flow: TfaFlow, data: StateData, pass: SecureString, mode: MbpMode, fido_details: Option<fido2::Response>) -> Self {
         info!("Login flow wants 2FA");
 
         Self {
@@ -28,6 +30,7 @@ impl WantTfa {
             data,
             pass,
             mode,
+            fido_details,
         }
     }
 
@@ -37,6 +40,7 @@ impl WantTfa {
             data,
             pass,
             mode,
+            fido_details,
         } = self;
 
         let result = flow.totp(&code).await;
@@ -54,21 +58,25 @@ impl WantTfa {
             }
 
             Err(err) => Err((
-                State::TfaRetry(data.user_id, data.session_id, pass, mode),
+                State::TfaRetry(data.user_id, data.session_id, pass, mode, fido_details),
                 LoginError::FlowTotp(err),
             )),
         }
     }
 
-    pub async fn submit_fido(self, code: String) -> Result<State, (State, LoginError)> {
+    pub async fn submit_fido(
+        self,
+        fido_request: fido2::Request,
+    ) -> Result<State, (State, LoginError)> {
         let Self {
             flow,
             data,
             pass,
             mode,
+            fido_details,
         } = self;
 
-        let result = flow.fido(&code).await;
+        let result = flow.fido(fido_request).await;
 
         data.observability
             .record(metrics::SignInSubmitFidoTotal::new(
@@ -83,7 +91,7 @@ impl WantTfa {
             }
 
             Err(err) => Err((
-                State::TfaRetry(data.user_id, data.session_id, pass, mode),
+                State::TfaRetry(data.user_id, data.session_id, pass, mode, fido_details),
                 LoginError::FlowFido(err),
             )),
         }
@@ -98,6 +106,10 @@ impl WantTfa {
         data.parts.store.write().await.clear_temp_pass().await?;
 
         State::inspect_user(client, data, pass, mode).await
+    }
+
+    pub fn fido_details(&self) -> Option<&fido2::Response> {
+        self.fido_details.as_ref()
     }
 }
 
@@ -127,8 +139,10 @@ impl TfaFlow {
         }
     }
 
-    #[allow(clippy::unused_async)]
-    async fn fido(self, _: &str) -> Result<Client, ApiServiceError> {
-        unimplemented!()
+    async fn fido(self, fido_request: fido2::Request) -> Result<Client, ApiServiceError> {
+        match self {
+            Self::Auth(flow) => flow.from_fido(fido_request).err_into().await,
+            Self::Login(flow) => flow.fido(fido_request).err_into().await,
+        }
     }
 }

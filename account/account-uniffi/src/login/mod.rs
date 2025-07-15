@@ -1,5 +1,5 @@
 use crate::{password_validator::PasswordValidatorService, user_behavior::UserBehavior};
-use datatypes::MigrationData;
+use datatypes::{Fido2RequestFfi, Fido2ResponseFfi, MigrationData};
 use proton_account_api::login as login_api;
 use proton_account_api::login::state::want_qr_confirmation::ProcessTargetDeviceQrError as RealProcessTargetDeviceQrError;
 use proton_account_api::responses as responses_api;
@@ -10,7 +10,7 @@ use uniffi::Enum as UniffiEnum;
 use uniffi_common::errors::UserApiServiceError;
 use uniffi_runtime::{async_runtime, uniffi_async};
 
-mod datatypes;
+pub mod datatypes;
 
 /// Flow through the required steps to authenticate and login a user.
 ///
@@ -18,7 +18,8 @@ mod datatypes;
 /// If this stage succeeds, you can check if the user needs to submit a 2FA token with
 /// [`LoginFlow::is_awaiting_2fa`].
 ///
-/// If the flow is awaiting a 2FA token, call [`LoginFlow::submit_totp`] with respective code.
+/// If the flow is awaiting a 2FA token, call [`LoginFlow::submit_totp`] or
+/// [`LoginFlow::submit_fido`] with respective code depending on the user choice and ability.
 ///
 /// Finally, when the user is logged in, [`LoginFlow::is_logged_in`] will return true and
 /// the flow can be converted into a user session with [`LoginFlow::to_user_context`].
@@ -58,6 +59,31 @@ impl LoginFlow {
             let mut guard = flow.lock().await;
             guard
                 .login_with_credentials(username.as_str(), password, user_behavior.map(Into::into))
+                .await
+                .map_err(LoginError::from)
+        })
+        .await
+        .into()
+    }
+
+    #[must_use]
+    pub fn get_fido_details(&self) -> Option<Fido2ResponseFfi> {
+        async_runtime().block_on(async {
+            self.flow
+                .lock()
+                .await
+                .get_fido_details()
+                .map(Fido2ResponseFfi::from)
+        })
+    }
+
+    /// Submit 2FA fido2 code.
+    pub async fn submit_fido(&self, fido_data: Fido2RequestFfi) -> Result<(), LoginError> {
+        let flow = self.flow.clone();
+        uniffi_async::<_, LoginError, _>(async move {
+            let mut guard = flow.lock().await;
+            guard
+                .submit_fido(fido_data.into())
                 .await
                 .map_err(LoginError::from)
         })

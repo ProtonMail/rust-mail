@@ -7,6 +7,7 @@ use base64::prelude::BASE64_STANDARD;
 use futures::TryFutureExt;
 use muon::client::flow::{AuthFlow, LoginFlow, LoginFlowData, WithCodeFlow};
 use muon::client::{Auth, Tokens};
+use muon::rest::auth::v4::fido2;
 use proton_core_api::auth::KeySecret;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::observability::metrics::AuthV4RequestMetric;
@@ -153,7 +154,7 @@ impl WantLogin {
             .write()
             .await
             .set_name_or_addr(&user.username);
-        let info = get_auth_info(&data, false, false);
+        let info = get_auth_info(&data, false, None);
         self.parts
             .store
             .write()
@@ -187,7 +188,7 @@ impl WantLogin {
                     ApiServiceObservabilityResponse::Success,
                 ));
 
-                let info = get_auth_info(&flow_data, false, false);
+                let info = get_auth_info(&flow_data, false, None);
                 self.parts.store.write().await.set_auth_info(info).await?;
                 let data = get_state_data(&flow_data, self.parts);
 
@@ -205,15 +206,14 @@ impl WantLogin {
                 // Always cache the password temporarily - we'll determine later if we need it
                 self.parts.store.write().await.set_temp_pass(&pass).await?;
 
-                let has_totp = flow.has_totp();
-                let has_fido = flow.fido_details().is_some();
-                let info = get_auth_info(&flow_data, has_totp, has_fido);
+                let info = get_auth_info(&flow_data, flow.has_totp(), flow.fido_details());
                 let mode = flow_data.password_mode.into();
                 self.parts.store.write().await.set_auth_info(info).await?;
                 let data = get_state_data(&flow_data, self.parts);
+                let fido_details = flow.fido_details().cloned();
 
                 // Always pass the password to TFA state - password mode from auth is unreliable
-                Ok(State::want_tfa(flow.into(), data, pass, mode))
+                Ok(State::want_tfa(flow.into(), data, pass, mode, fido_details))
             }
 
             LoginFlow::Failed { reason, .. } => {
@@ -253,12 +253,17 @@ impl QrLoginInitiateFork {
     }
 }
 
-fn get_auth_info(data: &LoginFlowData, totp: bool, fido: bool) -> AuthInfo {
+fn get_auth_info(
+    data: &LoginFlowData,
+    totp: bool,
+    fido_details: Option<&fido2::Response>,
+) -> AuthInfo {
     AuthInfo {
         user_id: UserId::from(data.user_id.clone()),
         session_id: SessionId::from(data.session_id.clone()),
-        tfa_mode: TfaMode::new(totp, fido),
+        tfa_mode: TfaMode::new(totp, fido_details.is_some()),
         mbp_mode: MbpMode::from(data.password_mode),
+        fido_details: fido_details.cloned(),
     }
 }
 

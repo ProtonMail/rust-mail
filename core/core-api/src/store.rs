@@ -1,6 +1,7 @@
 use anyhow::bail;
 use async_trait::async_trait;
 use muon::client::PasswordMode;
+use muon::rest::auth::v4::fido2;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::sync::Arc;
@@ -32,6 +33,9 @@ pub struct AuthInfo {
 
     /// The mailbox password mode.
     pub mbp_mode: MbpMode,
+
+    /// TFA Fido details for a user.
+    pub fido_details: Option<fido2::Response>,
 }
 
 /// The data known about the user.
