@@ -453,7 +453,7 @@ impl<T: RemoteSource> MailScrollerSource for DataScrollerSource<T> {
             MailScrollerState::new_online(self.local_label_id, filter, self.page_size, &tether)
                 .await?;
         tracing::trace!(
-            "Changed filter, new state: {:?}, initiallize...",
+            "Changed filter, new state: {:?}, initializing...",
             self.state
         );
 
