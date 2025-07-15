@@ -253,6 +253,7 @@ blockquote blockquote blockquote blockquote blockquote blockquote {
     */
 
     --primary: #8a6eff;
+    padding: 1rem;
 }
 
 body {
