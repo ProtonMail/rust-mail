@@ -112,6 +112,7 @@ impl TfaFlow {
         }
     }
 
+    #[allow(clippy::unused_async)]
     async fn fido(self, _: &str) -> Result<Client, ApiServiceError> {
         unimplemented!()
     }

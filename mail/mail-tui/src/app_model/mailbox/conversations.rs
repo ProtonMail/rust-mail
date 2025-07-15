@@ -17,7 +17,6 @@ use ratatui::crossterm::event::{Event, KeyCode};
 use ratatui::layout::Rect;
 use ratatui::prelude::*;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use throbber_widgets_tui::ThrobberState;
 
 use super::LabelAs;
@@ -31,7 +30,7 @@ pub struct ConversationsState {
     messages: MessagesStatus,
     opened_label: LocalLabelId,
     autodelete_banner: Option<AutoDeleteBanner>,
-    fetching: AtomicBool,
+    fetching: bool,
 }
 
 impl ConversationsState {
@@ -91,7 +90,7 @@ impl ConversationsState {
                 conversations,
                 opened_label: label_id,
                 autodelete_banner,
-                fetching: AtomicBool::new(false),
+                fetching: false,
             },
             command,
         ))
@@ -182,9 +181,9 @@ impl ConversationsState {
                 self.table_state.next();
                 if self.table_state.selected().unwrap_or_default()
                     >= self.conversations.len().saturating_sub(1)
-                    && !self.fetching.load(Ordering::Acquire)
+                    && !self.fetching
                 {
-                    self.fetching.store(true, Ordering::Release);
+                    self.fetching = true;
                     return self.paginator.next_page_command();
                 }
                 Command::None
@@ -254,7 +253,7 @@ impl ConversationsState {
                     ConversationMessage::Star(id) => star_conversation(user_ctx.to_owned(), id),
                     ConversationMessage::Unstar(id) => unstar_conversation(user_ctx.to_owned(), id),
                     ConversationMessage::NextPage(conversations) => {
-                        self.fetching.store(false, Ordering::Release);
+                        self.fetching = false;
                         self.conversations.extend(conversations);
                         self.try_select_non_empty_list()
                     }
