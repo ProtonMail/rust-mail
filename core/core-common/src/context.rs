@@ -193,14 +193,14 @@ impl CoreAccountState {
 
         // Does the account have any sessions that are awaiting a mailbox password?
         if let Some(sessions) = sessions_by_state.remove(&CoreSessionState::NeedKey) {
-            if account.password_mode.is_some_and(PasswordMode::want_mbp) {
+            if account.password_mode.is_some_and(PasswordMode::has_mbp) {
                 return CoreAccountState::NeedMbp(sessions);
             }
         }
 
         // Does the account have any sessions that are awaiting a second factor?
         if let Some(sessions) = sessions_by_state.remove(&CoreSessionState::NeedTfa) {
-            if account.second_factor_mode.is_some_and(TfaStatus::want_tfa) {
+            if account.second_factor_mode.is_some_and(TfaStatus::has_tfa) {
                 return CoreAccountState::NeedTfa(sessions);
             }
         }

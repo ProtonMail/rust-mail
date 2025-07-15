@@ -3,14 +3,15 @@ use super::{State, StateData};
 use crate::password::PasswordError;
 use crate::password::state::acquire_password_scope;
 use crate::requests::Fido2AuthData;
-use muon::Client;
-use proton_core_common::datatypes::PasswordMode;
+use derive_more::Deref;
 use proton_crypto_account::proton_crypto::new_srp_provider;
 
 /// Represents the password change flow state where we're waiting for 2FA authentication.
-#[derive(Clone)]
+#[derive(Clone, Deref)]
 pub struct WantTfa {
+    #[deref]
     data: StateData,
+
     password: String,
 }
 
@@ -53,12 +54,12 @@ impl WantTfa {
     }
 
     #[must_use]
-    pub fn mbp_mode(&self) -> PasswordMode {
-        self.data.mbp_mode
+    pub fn has_totp(&self) -> bool {
+        self.tfa_mode.has_totp()
     }
 
     #[must_use]
-    pub fn api(&self) -> &Client {
-        &self.data.client
+    pub fn has_fido(&self) -> bool {
+        self.tfa_mode.has_fido()
     }
 }

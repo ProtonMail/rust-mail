@@ -111,23 +111,40 @@ impl State {
         StateKind::of(self)
     }
 
-    /// Get whether the account has MBP enabled.
-    pub fn mbp_mode(&self) -> Result<PasswordMode, PasswordError> {
-        match self {
-            Self::WantPass(state) => Ok(state.mbp_mode()),
-            Self::WantTfa(state) => Ok(state.mbp_mode()),
-            Self::WantChange(state) => Ok(state.mbp_mode()),
-            Self::Complete(_) | Self::Invalid => Err(PasswordError::InvalidState),
+    /// Get whether the account has TOTP enabled.
+    pub fn has_totp(&self) -> Result<bool, PasswordError> {
+        if let Self::WantTfa(state) = self {
+            Ok(state.has_totp())
+        } else {
+            Err(PasswordError::InvalidState)
+        }
+    }
+
+    /// Get whether the account has FIDO2 enabled.
+    pub fn has_fido(&self) -> Result<bool, PasswordError> {
+        if let Self::WantTfa(state) = self {
+            Ok(state.has_fido())
+        } else {
+            Err(PasswordError::InvalidState)
+        }
+    }
+
+    /// Get whether the account has a mailbox password.
+    pub fn has_mbp(&self) -> Result<bool, PasswordError> {
+        if let Self::WantChange(state) = self {
+            Ok(state.has_mbp())
+        } else {
+            Err(PasswordError::InvalidState)
         }
     }
 
     /// Get the API client for external operations.
     pub fn api(&self) -> Result<&Client, PasswordError> {
         match self {
-            Self::WantPass(state) => Ok(state.api()),
-            Self::WantTfa(state) => Ok(state.api()),
-            Self::WantChange(state) => Ok(state.api()),
-            Self::Complete(state) => Ok(state.api()),
+            Self::WantPass(state) => Ok(&state.client),
+            Self::WantTfa(state) => Ok(&state.client),
+            Self::WantChange(state) => Ok(&state.client),
+            Self::Complete(state) => Ok(state.client()),
             Self::Invalid => Err(PasswordError::InvalidState),
         }
     }

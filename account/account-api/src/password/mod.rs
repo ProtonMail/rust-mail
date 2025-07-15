@@ -156,9 +156,19 @@ impl PasswordFlow {
         Ok(self.state()?.kind())
     }
 
-    /// Get the mailbox password mode.
-    pub fn mbp_mode(&self) -> Result<PasswordMode, PasswordError> {
-        self.state()?.mbp_mode()
+    /// Get whether the account has TOTP enabled.
+    pub fn has_totp(&self) -> Result<bool, PasswordError> {
+        self.state()?.has_totp()
+    }
+
+    /// Get whether the account has FIDO2 enabled.
+    pub fn has_fido(&self) -> Result<bool, PasswordError> {
+        self.state()?.has_fido()
+    }
+
+    /// Get whether the account has a mailbox password.
+    pub fn has_mbp(&self) -> Result<bool, PasswordError> {
+        self.state()?.has_mbp()
     }
 
     /// Get the API client for external operations.

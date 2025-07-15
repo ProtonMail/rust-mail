@@ -77,7 +77,7 @@ impl From<JoinError> for PasswordError {
     }
 }
 
-/// Simplified password flow state for UniFFI bindings.
+/// Simplified password flow state for FFI bindings.
 ///
 /// This enum represents the different states of the password change flow
 /// in a simplified form suitable for foreign function interface bindings.
@@ -124,6 +124,12 @@ impl PasswordFlow {
 
 #[uniffi_export]
 impl PasswordFlow {
+    /// Get the current state of the PasswordFlow
+    #[must_use]
+    pub fn get_state(&self) -> SimplePasswordState {
+        async_runtime().block_on(async { self.flow.lock().await.kind().unwrap().into() })
+    }
+
     /// Submit the user's current password.
     pub async fn submit_pass(&self, pass: String) -> Result<SimplePasswordState, PasswordError> {
         let flow = self.flow.clone();
@@ -192,17 +198,19 @@ impl PasswordFlow {
         .ok()
     }
 
-    /// Returns whether the account has MBP enabled.
-    pub fn has_mbp(&self) -> Result<bool, PasswordError> {
-        let mode = async_runtime().block_on(async { self.flow.lock().await.mbp_mode() });
-
-        Ok(mode?.want_mbp())
+    /// Get whether the account has TOTP enabled.
+    pub fn has_totp(&self) -> Result<bool, PasswordError> {
+        async_runtime().block_on(async { Ok(self.flow.lock().await.has_totp()?) })
     }
 
-    /// Get the current state of the PasswordFlow
-    #[must_use]
-    pub fn get_state(&self) -> SimplePasswordState {
-        async_runtime().block_on(async { self.flow.lock().await.kind().unwrap().into() })
+    /// Get whether the account has FIDO2 enabled.
+    pub fn has_fido(&self) -> Result<bool, PasswordError> {
+        async_runtime().block_on(async { Ok(self.flow.lock().await.has_fido()?) })
+    }
+
+    /// Get whether the account has a mailbox password.
+    pub fn has_mbp(&self) -> Result<bool, PasswordError> {
+        async_runtime().block_on(async { Ok(self.flow.lock().await.has_mbp()?) })
     }
 
     /// Step the flow back to the previous state.

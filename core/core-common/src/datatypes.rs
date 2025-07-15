@@ -461,8 +461,20 @@ pub enum TfaStatus {
 impl TfaStatus {
     /// Returns true if any type of second factor auth method is active.
     #[must_use]
-    pub fn want_tfa(self) -> bool {
+    pub fn has_tfa(self) -> bool {
         !matches!(self, Self::None)
+    }
+
+    /// Returns true if TOTP is enabled.
+    #[must_use]
+    pub fn has_totp(self) -> bool {
+        matches!(self, Self::Totp | Self::TotpOrFido2)
+    }
+
+    /// Returns true if FIDO2 is enabled.
+    #[must_use]
+    pub fn has_fido(self) -> bool {
+        matches!(self, Self::Fido2 | Self::TotpOrFido2)
     }
 }
 
@@ -1416,7 +1428,7 @@ pub enum PasswordMode {
 impl PasswordMode {
     /// Returns true if any type of additional password is active.
     #[must_use]
-    pub fn want_mbp(self) -> bool {
+    pub fn has_mbp(self) -> bool {
         !matches!(self, Self::One)
     }
 }

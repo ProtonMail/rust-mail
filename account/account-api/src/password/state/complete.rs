@@ -14,12 +14,12 @@ impl Complete {
     }
 
     #[must_use]
-    pub fn into_session(self) -> Session {
-        Session::from_parts(self.client, self.parts)
+    pub fn client(&self) -> &Client {
+        &self.client
     }
 
     #[must_use]
-    pub fn api(&self) -> &Client {
-        &self.client
+    pub fn into_session(self) -> Session {
+        Session::from_parts(self.client, self.parts)
     }
 }
