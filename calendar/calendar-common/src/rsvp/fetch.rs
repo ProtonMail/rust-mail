@@ -1081,10 +1081,14 @@ mod tests {
 
         #[test_case("20180103T120000[UTC]", RsvpProgress::Pending)]
         #[test_case("20180104T120000[UTC]", RsvpProgress::Pending)]
+        #[test_case("20180104T235959[UTC]", RsvpProgress::Pending)]
+        #[test_case("20180105T000000[UTC]", RsvpProgress::Ongoing)]
         #[test_case("20180105T120000[UTC]", RsvpProgress::Ongoing)]
         #[test_case("20180106T120000[UTC]", RsvpProgress::Ongoing)]
         #[test_case("20180107T120000[UTC]", RsvpProgress::Ongoing)]
         #[test_case("20180108T120000[UTC]", RsvpProgress::Ongoing)]
+        #[test_case("20180108T235959[UTC]", RsvpProgress::Ongoing)]
+        #[test_case("20180109T000000[UTC]", RsvpProgress::Ended)]
         #[test_case("20180109T120000[UTC]", RsvpProgress::Ended)]
         #[test_case("20180110T120000[UTC]", RsvpProgress::Ended)]
         fn date(now: &str, expected: RsvpProgress) {
