@@ -77,21 +77,30 @@ impl From<JoinError> for PasswordError {
     }
 }
 
+/// Simplified password flow state for UniFFI bindings.
+///
+/// This enum represents the different states of the password change flow
+/// in a simplified form suitable for foreign function interface bindings.
 #[derive(uniffi::Enum, Debug)]
 pub enum SimplePasswordState {
-    WantOldPass,
+    /// Waiting for the user's current password.
+    WantPass,
+    /// Waiting for two-factor authentication code.
     WantTfa,
-    WantNewPass,
+    /// Waiting for the new password to be set.
+    WantChange,
+    /// Password change flow completed successfully.
     Complete,
+    /// Invalid or error state.
     Invalid,
 }
 
 impl From<StateKind> for SimplePasswordState {
     fn from(kind: StateKind) -> Self {
         match kind {
-            StateKind::WantPass => Self::WantOldPass,
+            StateKind::WantPass => Self::WantPass,
             StateKind::WantTfa => Self::WantTfa,
-            StateKind::WantChange => Self::WantNewPass,
+            StateKind::WantChange => Self::WantChange,
             StateKind::Complete => Self::Complete,
             StateKind::Invalid => Self::Invalid,
         }
@@ -115,19 +124,7 @@ impl PasswordFlow {
 
 #[uniffi_export]
 impl PasswordFlow {
-    /// Step the flow back to the previous state.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if there is no state to step back to.
-    pub async fn step_back(&self) -> Result<SimplePasswordState, PasswordError> {
-        let flow = self.flow.clone();
-
-        uniffi_async(async move { flow.lock().await.back().map_err(PasswordError::from) }).await?;
-
-        Ok(self.get_state())
-    }
-
+    /// Submit the user's current password.
     pub async fn submit_pass(&self, pass: String) -> Result<SimplePasswordState, PasswordError> {
         let flow = self.flow.clone();
 
@@ -139,6 +136,7 @@ impl PasswordFlow {
         Ok(self.get_state())
     }
 
+    /// Submit a two-factor authentication code.
     pub async fn submit_totp(&self, code: String) -> Result<SimplePasswordState, PasswordError> {
         let flow = self.flow.clone();
 
@@ -150,6 +148,7 @@ impl PasswordFlow {
         Ok(self.get_state())
     }
 
+    /// Change the account password; leaves the mailbox password (if any) unchanged.
     pub async fn change_pass(
         &self,
         new_pass: String,
@@ -164,6 +163,7 @@ impl PasswordFlow {
         Ok(self.get_state())
     }
 
+    /// Change the mailbox password; leaves the account password unchanged.
     pub async fn change_mbox_pass(
         &self,
         new_mbox_pass: String,
@@ -203,5 +203,14 @@ impl PasswordFlow {
     #[must_use]
     pub fn get_state(&self) -> SimplePasswordState {
         async_runtime().block_on(async { self.flow.lock().await.kind().unwrap().into() })
+    }
+
+    /// Step the flow back to the previous state.
+    pub async fn step_back(&self) -> Result<SimplePasswordState, PasswordError> {
+        let flow = self.flow.clone();
+
+        uniffi_async(async move { flow.lock().await.back().map_err(PasswordError::from) }).await?;
+
+        Ok(self.get_state())
     }
 }

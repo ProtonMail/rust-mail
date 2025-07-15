@@ -74,10 +74,13 @@ impl PasswordFlow {
     /// Create a new password change flow.
     ///
     /// # Arguments
-    /// * `session` - The authenticated session
+    ///
+    /// * `session` - The API session
+    /// * `username` - The username of the user
+    /// * `user_keys` - The user's keys
+    /// * `key_secret` - The key secret
     /// * `tfa_mode` - The 2FA mode
     /// * `mbp_mode` - The mailbox password mode
-    /// * `key_secret` - The key secret
     #[must_use]
     pub fn new(
         session: impl Borrow<Session>,

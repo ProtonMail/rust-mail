@@ -133,12 +133,18 @@ impl State {
     }
 }
 
+/// Represents the different kinds of states in the password change flow.
 #[derive(Debug, Display, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StateKind {
+    /// Waiting for password input.
     WantPass,
+    /// Waiting for two-factor authentication.
     WantTfa,
+    /// Ready to change password.
     WantChange,
+    /// Password change completed successfully.
     Complete,
+    /// Invalid state.
     Invalid,
 }
 
