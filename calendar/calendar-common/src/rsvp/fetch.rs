@@ -1135,9 +1135,15 @@ mod tests {
             assert_eq!(expected, extract_progress(&now, &source, &occurrence));
         }
 
-        #[test]
-        fn recurring() {
-            let now = "20180101T100000[UTC]".parse().unwrap();
+        #[test_case("20180106T120000[UTC]")]
+        #[test_case("20180107T060000[UTC]")]
+        #[test_case("20180107T080000[UTC]")]
+        #[test_case("20180107T100000[UTC]")]
+        #[test_case("20180107T120000[UTC]")]
+        #[test_case("20180107T140000[UTC]")]
+        #[test_case("20180108T120000[UTC]")]
+        fn recurring(now: &str) {
+            let now = now.parse().unwrap();
 
             let invite = ical::VEvent {
                 rrule: Some(ical::RRule {
@@ -1153,8 +1159,8 @@ mod tests {
             };
 
             let occurrence = RsvpOccurrence::DateTime {
-                starts_at: "20180101T080000[UTC]".parse().unwrap(),
-                ends_at: "20180101T120000[UTC]".parse().unwrap(),
+                starts_at: "20180107T080000[UTC]".parse().unwrap(),
+                ends_at: "20180107T120000[UTC]".parse().unwrap(),
             };
 
             assert_eq!(
