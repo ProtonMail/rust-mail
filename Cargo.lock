@@ -5968,7 +5968,7 @@ dependencies = [
 
 [[package]]
 name = "proton-mail-html-transformer"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "cpuprofiler",
  "criterion",
