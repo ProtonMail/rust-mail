@@ -200,7 +200,9 @@ impl WantLogin {
                     info!("Not caching password (user has separate mailbox password)");
                 }
 
-                let info = get_auth_info(&flow_data, flow.has_totp(), flow.has_fido());
+                let has_totp = flow.has_totp();
+                let has_fido = flow.fido_details().is_some();
+                let info = get_auth_info(&flow_data, has_totp, has_fido);
                 self.parts.store.write().await.set_auth_info(info).await?;
                 let data = get_state_data(&flow_data, self.parts);
 

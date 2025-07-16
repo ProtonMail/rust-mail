@@ -112,10 +112,7 @@ impl TfaFlow {
         }
     }
 
-    async fn fido(self, code: &str) -> Result<Client, ApiServiceError> {
-        match self {
-            Self::Auth(flow) => flow.from_fido(code).err_into().await,
-            Self::Login(flow) => flow.fido(code).err_into().await,
-        }
+    async fn fido(self, _: &str) -> Result<Client, ApiServiceError> {
+        unimplemented!()
     }
 }
