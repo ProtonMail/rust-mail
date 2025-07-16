@@ -53,14 +53,4 @@ impl WantTfa {
 
         Ok(WantChange::new(data).into())
     }
-
-    #[must_use]
-    pub fn has_totp(&self) -> bool {
-        self.tfa_mode.has_totp()
-    }
-
-    #[must_use]
-    pub fn has_fido(&self) -> bool {
-        self.tfa_mode.has_fido()
-    }
 }

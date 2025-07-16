@@ -117,28 +117,31 @@ impl State {
 
     /// Get whether the account has TOTP enabled.
     pub fn has_totp(&self) -> Result<bool, PasswordError> {
-        if let Self::WantTfa(state) = self {
-            Ok(state.has_totp())
-        } else {
-            Err(PasswordError::InvalidState)
+        match self {
+            Self::WantPass(state) => Ok(state.tfa_mode.has_totp()),
+            Self::WantTfa(state) => Ok(state.tfa_mode.has_totp()),
+            Self::WantChange(state) => Ok(state.tfa_mode.has_totp()),
+            _ => Err(PasswordError::InvalidState),
         }
     }
 
     /// Get whether the account has FIDO2 enabled.
     pub fn has_fido(&self) -> Result<bool, PasswordError> {
-        if let Self::WantTfa(state) = self {
-            Ok(state.has_fido())
-        } else {
-            Err(PasswordError::InvalidState)
+        match self {
+            Self::WantPass(state) => Ok(state.tfa_mode.has_fido()),
+            Self::WantTfa(state) => Ok(state.tfa_mode.has_fido()),
+            Self::WantChange(state) => Ok(state.tfa_mode.has_fido()),
+            _ => Err(PasswordError::InvalidState),
         }
     }
 
     /// Get whether the account has a mailbox password.
     pub fn has_mbp(&self) -> Result<bool, PasswordError> {
-        if let Self::WantChange(state) = self {
-            Ok(state.has_mbp())
-        } else {
-            Err(PasswordError::InvalidState)
+        match self {
+            Self::WantPass(state) => Ok(state.mbp_mode.has_mbp()),
+            Self::WantTfa(state) => Ok(state.mbp_mode.has_mbp()),
+            Self::WantChange(state) => Ok(state.mbp_mode.has_mbp()),
+            _ => Err(PasswordError::InvalidState),
         }
     }
 
