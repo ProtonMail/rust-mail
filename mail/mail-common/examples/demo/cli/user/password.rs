@@ -28,7 +28,7 @@ impl Cmd {
     }
 
     async fn run_flow(&self, user_ctx: Arc<MailUserContext>) -> Result<()> {
-        let mut flow = user_ctx.new_password_flow().await?;
+        let mut flow = user_ctx.new_password_change_flow().await?;
 
         loop {
             match flow.kind()? {

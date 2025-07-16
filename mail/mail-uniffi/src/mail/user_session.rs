@@ -178,11 +178,11 @@ impl MailUserSession {
     }
 
     /// Start new password change flow for an authenticated user session.
-    pub async fn new_password_flow(&self) -> Result<Arc<PasswordFlow>, UserContextError> {
+    pub async fn new_password_change_flow(&self) -> Result<Arc<PasswordFlow>, UserContextError> {
         let ctx = self.ctx()?;
 
         uniffi_async(async move {
-            ctx.new_password_flow()
+            ctx.new_password_change_flow()
                 .await
                 .map(|flow| PasswordFlow::new(flow))
                 .map_err(RealProtonMailError::from)

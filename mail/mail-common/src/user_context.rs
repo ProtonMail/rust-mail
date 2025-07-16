@@ -445,7 +445,7 @@ impl MailUserContext {
     }
 
     /// Create a new password change flow.
-    pub async fn new_password_flow(&self) -> MailContextResult<PasswordFlow> {
+    pub async fn new_password_change_flow(&self) -> MailContextResult<PasswordFlow> {
         let user = self.user().await?;
         let session = self.session().to_owned();
         let account = self.user_context.core_account().await?;
