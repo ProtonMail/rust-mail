@@ -39,6 +39,7 @@ async fn using_address_key() {
             &world.address_keys,
             &world.cache,
             &world.now,
+            "bar@localhost",
             Weekday::Monday,
         )
         .await
@@ -76,6 +77,7 @@ async fn using_calendar_key() {
             &world.address_keys,
             &world.cache,
             &world.now,
+            "bar@localhost",
             Weekday::Monday,
         )
         .await
@@ -134,6 +136,7 @@ async fn recurring() {
             &world.address_keys,
             &world.cache,
             &world.now,
+            "bar@localhost",
             Weekday::Monday,
         )
         .await
@@ -167,6 +170,7 @@ async fn reminder() {
             &world.address_keys,
             &world.cache,
             &world.now,
+            "bar@localhost",
             Weekday::Monday,
         )
         .await
@@ -217,6 +221,7 @@ async fn outdated() {
             &world.address_keys,
             &world.cache,
             &world.now,
+            "bar@localhost",
             Weekday::Monday,
         )
         .await
@@ -264,12 +269,14 @@ async fn cancelled() {
             &world.address_keys,
             &world.cache,
             &world.now,
+            "bar@localhost",
             Weekday::Monday,
         )
         .await
         .unwrap()
         .unwrap();
 
+    assert!(!actual.can_be_answered());
     assert_eq!(RsvpProgress::Cancelled, actual.progress);
 }
 
@@ -296,6 +303,7 @@ async fn unknown() {
             &world.address_keys,
             &world.cache,
             &world.now,
+            "bar@localhost",
             Weekday::Monday,
         )
         .await
@@ -328,6 +336,7 @@ async fn offline() {
             &world.address_keys,
             &world.cache,
             &world.now,
+            "bar@localhost",
             Weekday::Monday,
         )
         .await
@@ -338,6 +347,40 @@ async fn offline() {
 
     assert!(!actual.can_be_answered());
     assert_eq!(RsvpRecency::Unknown, actual.recency);
+}
+
+#[tokio::test]
+#[allow(clippy::redundant_closure_for_method_calls, reason = "false-positive")]
+async fn party_crasher() {
+    let world = world().await;
+    let event = world.event(|event| event.basic());
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_bootstrap(CALENDAR_ID, world.bootstrap())
+        .await;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_find_calendar_events(EVENT_UID, None, vec![event.clone()])
+        .await;
+
+    let actual = RsvpEventId::invite(INVITE)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            &world.now,
+            "zar@localhost",
+            Weekday::Monday,
+        )
+        .await
+        .unwrap_err();
+
+    assert!(matches!(actual, RsvpError::NotActuallyInvited));
 }
 
 #[tokio::test]
@@ -376,6 +419,7 @@ async fn err_unknown_attendee() {
             &world.address_keys,
             &world.cache,
             &world.now,
+            "bar@localhost",
             Weekday::Monday,
         )
         .await
@@ -419,6 +463,7 @@ async fn err_missing_x_pm_token() {
             &world.address_keys,
             &world.cache,
             &world.now,
+            "bar@localhost",
             Weekday::Monday,
         )
         .await
@@ -466,6 +511,7 @@ async fn err_many_events_in_ics() {
             &world.address_keys,
             &world.cache,
             &world.now,
+            "bar@localhost",
             Weekday::Monday,
         )
         .await

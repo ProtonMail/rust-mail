@@ -174,6 +174,11 @@ pub enum CalendarAttendeeStatus {
 }
 
 impl CalendarAttendeeStatus {
+    #[must_use]
+    pub fn is_unanswered(&self) -> bool {
+        matches!(self, Self::Unanswered)
+    }
+
     /// Returns whether this status warrants notifying the user (e.g. whether we
     /// should send a push notification).
     #[must_use]

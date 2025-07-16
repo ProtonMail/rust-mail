@@ -18,7 +18,7 @@ use futures::FutureExt;
 use futures::future::try_join_all;
 use itertools::Itertools as _;
 use proton_calendar_api::CalendarAttendeeStatus;
-use proton_calendar_common::{RsvpAnswerStatus, RsvpOccurrence, RsvpProgress, RsvpRecency};
+use proton_calendar_common::{RsvpAnswer, RsvpOccurrence, RsvpProgress, RsvpRecency};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::os::safe_write;
 use proton_mail_common::datatypes::message_banner::MessageBanner;
@@ -581,21 +581,13 @@ impl MessagesState {
 
         Command::message(Messages::raise_popup(
             ChoosePopup::default()
-                .with(
-                    KeyCode::Char('y'),
-                    "Answer: yes",
-                    Some(RsvpAnswerStatus::Yes),
-                )
-                .with(
-                    KeyCode::Char('m'),
-                    "Answer: maybe",
-                    Some(RsvpAnswerStatus::Maybe),
-                )
-                .with(KeyCode::Char('n'), "Answer: no", Some(RsvpAnswerStatus::No))
+                .with(KeyCode::Char('y'), "Answer: yes", Some(RsvpAnswer::Yes))
+                .with(KeyCode::Char('m'), "Answer: maybe", Some(RsvpAnswer::Maybe))
+                .with(KeyCode::Char('n'), "Answer: no", Some(RsvpAnswer::No))
                 .space()
                 .with(KeyCode::Esc, "Go back", None)
                 .on_reply(move |status| match status {
-                    Some(status) => Command::batch([
+                    Some(answer) => Command::batch([
                         Command::message(Messages::DismissPopup),
                         Command::message(Messages::DisplayBackgroundProgress(
                             "Answering invitation...".into(),
@@ -604,18 +596,16 @@ impl MessagesState {
                             let mut tether = ctx.user_stash().connection();
 
                             let result = rsvp
-                                .answer(&ctx, &mut tether, status)
+                                .answer(&ctx, &mut tether, answer)
                                 .await
                                 .context("Couldn't answer the invitation");
 
                             match result {
                                 Ok(()) => {
-                                    let status = match status {
-                                        RsvpAnswerStatus::Yes => "Invitation accepted",
-                                        RsvpAnswerStatus::Maybe => {
-                                            "Invitation tentatively accepted"
-                                        }
-                                        RsvpAnswerStatus::No => "Invitation declined",
+                                    let msg = match answer {
+                                        RsvpAnswer::Yes => "Invitation accepted",
+                                        RsvpAnswer::Maybe => "Invitation tentatively accepted",
+                                        RsvpAnswer::No => "Invitation declined",
                                     };
 
                                     Command::batch([
@@ -623,10 +613,7 @@ impl MessagesState {
                                             MessageMessage::UpdateRsvp(rsvp),
                                         ))),
                                         Command::message(Messages::DismissBackgroundProgress),
-                                        Command::message(Messages::DisplayInfo(
-                                            None,
-                                            status.into(),
-                                        )),
+                                        Command::message(Messages::DisplayInfo(None, msg.into())),
                                     ])
                                 }
 

@@ -3,7 +3,7 @@ use crate::rsvp::RsvpMailSender;
 use crate::{AppError, MailContextError, MailContextResult};
 use crate::{MailUserContext, models::Message};
 use anyhow::Context;
-use proton_calendar_common::{self as cal, RsvpAnswer, RsvpAnswerError, RsvpAnswerStatus};
+use proton_calendar_common::{self as cal, RsvpAnswer, RsvpAnswerError};
 use proton_crypto_inbox::proton_crypto;
 use stash::orm::Model;
 use stash::stash::Tether;
@@ -30,7 +30,7 @@ impl RsvpEvent {
         &mut self,
         ctx: &MailUserContext,
         tether: &mut Tether,
-        status: RsvpAnswerStatus,
+        answer: RsvpAnswer,
     ) -> MailContextResult<()> {
         info!("Answering RSVP");
 
@@ -75,14 +75,18 @@ impl RsvpEvent {
             }
         };
 
-        let answer = RsvpAnswer {
-            now: ctx.mail_context().core_context().clock().now(),
-            email: &sender.msg_recipient.address,
-            status,
-        };
+        let now = ctx.mail_context().core_context().clock().now();
 
         self.event
-            .answer(ctx.api(), &pgp, &keys, ctx.rsvp_cache(), sender, answer)
+            .answer(
+                ctx.api(),
+                &pgp,
+                &keys,
+                ctx.rsvp_cache(),
+                sender,
+                &now,
+                answer,
+            )
             .await
             .map_err(|err| match err {
                 RsvpAnswerError::Rsvp(err) => err.into(),
