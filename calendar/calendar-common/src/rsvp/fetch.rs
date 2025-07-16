@@ -918,6 +918,16 @@ fn extract_progress(now: &Zoned, source: &Source, occurrence: &RsvpOccurrence) -
         // it wasn't.
     }
 
+    // Figuring out whether a recurring event has an instance that happens to
+    // be ongoing is somewhat awkward and heavy (cf. RecurIterator), so let's
+    // simply report all recurring events as pending.
+    //
+    // This is slightly invalid - doesn't take into account the `UNTIL` rule, to
+    // name a thing - but it's good enough.
+    if source.invite_or_event().rrule.is_some() {
+        return RsvpProgress::Pending;
+    }
+
     match occurrence {
         RsvpOccurrence::Date { starts_at, ends_at } => {
             if now.date() < *starts_at {
@@ -1064,6 +1074,101 @@ struct Metadata {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    mod extract_progress {
+        use super::*;
+        use test_case::test_case;
+
+        #[test_case("20180103T120000[UTC]", RsvpProgress::Pending)]
+        #[test_case("20180104T120000[UTC]", RsvpProgress::Pending)]
+        #[test_case("20180104T235959[UTC]", RsvpProgress::Pending)]
+        #[test_case("20180105T000000[UTC]", RsvpProgress::Ongoing)]
+        #[test_case("20180105T120000[UTC]", RsvpProgress::Ongoing)]
+        #[test_case("20180106T120000[UTC]", RsvpProgress::Ongoing)]
+        #[test_case("20180107T120000[UTC]", RsvpProgress::Ongoing)]
+        #[test_case("20180108T120000[UTC]", RsvpProgress::Ongoing)]
+        #[test_case("20180108T235959[UTC]", RsvpProgress::Ongoing)]
+        #[test_case("20180109T000000[UTC]", RsvpProgress::Ended)]
+        #[test_case("20180109T120000[UTC]", RsvpProgress::Ended)]
+        #[test_case("20180110T120000[UTC]", RsvpProgress::Ended)]
+        fn date(now: &str, expected: RsvpProgress) {
+            let now = now.parse().unwrap();
+            let invite = ical::VEvent::default();
+
+            let source = Source::Invite {
+                raw: None,
+                event: None,
+                invite: &invite,
+            };
+
+            let occurrence = RsvpOccurrence::Date {
+                starts_at: "20180105".parse().unwrap(),
+                ends_at: "20180108".parse().unwrap(),
+            };
+
+            assert_eq!(expected, extract_progress(&now, &source, &occurrence));
+        }
+
+        #[test_case("20180101T100000[UTC]", RsvpProgress::Pending)]
+        #[test_case("20180101T115959[UTC]", RsvpProgress::Pending)]
+        #[test_case("20180101T120000[UTC]", RsvpProgress::Ongoing)]
+        #[test_case("20180101T130000[UTC]", RsvpProgress::Ongoing)]
+        #[test_case("20180101T125959[UTC]", RsvpProgress::Ongoing)]
+        #[test_case("20180101T133000[UTC]", RsvpProgress::Ongoing)]
+        #[test_case("20180101T133001[UTC]", RsvpProgress::Ended)]
+        #[test_case("20180101T140000[UTC]", RsvpProgress::Ended)]
+        fn datetime(now: &str, expected: RsvpProgress) {
+            let now = now.parse().unwrap();
+            let invite = ical::VEvent::default();
+
+            let source = Source::Invite {
+                raw: None,
+                event: None,
+                invite: &invite,
+            };
+
+            let occurrence = RsvpOccurrence::DateTime {
+                starts_at: "20180101T120000[UTC]".parse().unwrap(),
+                ends_at: "20180101T133000[UTC]".parse().unwrap(),
+            };
+
+            assert_eq!(expected, extract_progress(&now, &source, &occurrence));
+        }
+
+        #[test_case("20180106T120000[UTC]")]
+        #[test_case("20180107T060000[UTC]")]
+        #[test_case("20180107T080000[UTC]")]
+        #[test_case("20180107T100000[UTC]")]
+        #[test_case("20180107T120000[UTC]")]
+        #[test_case("20180107T140000[UTC]")]
+        #[test_case("20180108T120000[UTC]")]
+        fn recurring(now: &str) {
+            let now = now.parse().unwrap();
+
+            let invite = ical::VEvent {
+                rrule: Some(ical::RRule {
+                    value: ical::Recur::new(ical::Freq::Daily),
+                }),
+                ..ical::VEvent::default()
+            };
+
+            let source = Source::Invite {
+                raw: None,
+                event: None,
+                invite: &invite,
+            };
+
+            let occurrence = RsvpOccurrence::DateTime {
+                starts_at: "20180107T080000[UTC]".parse().unwrap(),
+                ends_at: "20180107T120000[UTC]".parse().unwrap(),
+            };
+
+            assert_eq!(
+                RsvpProgress::Pending,
+                extract_progress(&now, &source, &occurrence),
+            );
+        }
+    }
 
     mod extract_recurrence {
         use super::*;

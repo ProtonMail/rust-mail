@@ -21,7 +21,7 @@ use std::{collections::HashMap, error::Error, fmt, num::NonZeroU32};
 use thiserror::Error;
 use tracing::instrument;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum RsvpEventId {
     Invite {
         uid: CalendarEventUid,
@@ -125,6 +125,21 @@ impl RsvpEventId {
         P: PGPProviderSync,
     {
         fetch::run(api, pgp, keys, cache, now, week_start, self).await
+    }
+}
+
+impl fmt::Debug for RsvpEventId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            RsvpEventId::Invite { uid, rid, .. } => {
+                f.debug_tuple("Invite").field(uid).field(rid).finish()
+            }
+            RsvpEventId::Reminder { cal_id, event_id } => f
+                .debug_tuple("Reminder")
+                .field(cal_id)
+                .field(event_id)
+                .finish(),
+        }
     }
 }
 
