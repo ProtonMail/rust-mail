@@ -1,6 +1,6 @@
 use crate::ApiError;
 use crate::password::state::{State, StateKind};
-use derive_more::{Debug, Deref, Display, From};
+use crate::shared::SecureString;
 use proton_core_api::auth::KeySecret;
 use proton_core_api::service::{ApiServiceError, ServiceError};
 use proton_core_api::services::proton::prelude::*;
@@ -12,18 +12,9 @@ use proton_crypto_account::proton_crypto::CryptoError;
 use std::borrow::Borrow;
 use std::string::FromUtf8Error;
 use thiserror::Error;
-use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Alias the `SaltError` as our own.
 pub type SaltError = proton_crypto_account::salts::SaltError;
-
-/// A secure string wrapper that automatically zeros its contents when dropped.
-#[derive(Debug, Display, Deref, Clone, From, Zeroize, ZeroizeOnDrop)]
-pub struct SecureString(
-    #[debug(skip)]
-    #[display(skip)]
-    String,
-);
 
 /// Implements the possible states that the password change flow can be in.
 pub mod state;

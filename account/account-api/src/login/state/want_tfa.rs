@@ -1,5 +1,6 @@
 use crate::login::state::{HasSessionId, HasUserId, StateData};
 use crate::login::{LoginError, state::State};
+use crate::shared::SecureString;
 use derive_more::From;
 use futures::TryFutureExt;
 use muon::Client;
@@ -13,11 +14,11 @@ use tracing::info;
 pub struct WantTfa {
     flow: TfaFlow,
     data: StateData,
-    pass: Option<String>,
+    pass: Option<SecureString>,
 }
 
 impl WantTfa {
-    pub(crate) fn new(flow: TfaFlow, data: StateData, pass: Option<String>) -> Self {
+    pub(crate) fn new(flow: TfaFlow, data: StateData, pass: Option<SecureString>) -> Self {
         info!("Login flow wants 2FA");
 
         Self { flow, data, pass }
@@ -72,7 +73,7 @@ impl WantTfa {
     async fn advance(
         client: Client,
         data: StateData,
-        pass: Option<String>,
+        pass: Option<SecureString>,
     ) -> Result<State, LoginError> {
         data.parts.store.write().await.clear_temp_pass().await?;
 

@@ -1,6 +1,7 @@
 use super::{State, StateData};
+use crate::password::PasswordError;
 use crate::password::state::complete::Complete;
-use crate::password::{PasswordError, SecureString};
+use crate::shared::SecureString;
 use crate::{AccountApi, prelude::*};
 use derive_more::Deref;
 use futures::TryFutureExt;

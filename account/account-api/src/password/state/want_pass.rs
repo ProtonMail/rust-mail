@@ -1,8 +1,9 @@
 use super::{State, StateData};
+use crate::password::PasswordError;
 use crate::password::state::acquire_password_scope;
 use crate::password::state::want_change::WantChange;
 use crate::password::state::want_tfa::WantTfa;
-use crate::password::{PasswordError, SecureString};
+use crate::shared::SecureString;
 use derive_more::Deref;
 use proton_crypto_account::proton_crypto::new_srp_provider;
 

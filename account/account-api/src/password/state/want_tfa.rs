@@ -1,8 +1,9 @@
 use super::want_change::WantChange;
 use super::{State, StateData};
+use crate::password::PasswordError;
 use crate::password::state::acquire_password_scope;
-use crate::password::{PasswordError, SecureString};
 use crate::requests::Fido2AuthData;
+use crate::shared::SecureString;
 use derive_more::Deref;
 use proton_crypto_account::proton_crypto::new_srp_provider;
 

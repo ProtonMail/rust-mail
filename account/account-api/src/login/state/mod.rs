@@ -5,6 +5,7 @@ use crate::login::state::want_login::WantLogin;
 use crate::login::state::want_mbp::WantMbp;
 use crate::login::state::want_tfa::{TfaFlow, WantTfa};
 use crate::prelude::AuthInput;
+use crate::shared::SecureString;
 use crate::shared::challenge::{Behavior, ChallengeInfo};
 use crate::shared::crypto::{NewAddrKey, NewUserKey, SharedCryptoError};
 use derive_more::{Debug, From};
@@ -49,7 +50,7 @@ pub enum State {
 
     /// A recoverable error occurred during the `WantTfa` state.
     #[debug("TfaRetry")]
-    TfaRetry(UserId, SessionId, Option<String>),
+    TfaRetry(UserId, SessionId, Option<SecureString>),
 
     /// An error occurred during the `WantTfa` state.
     #[debug("TfaError")]
@@ -82,7 +83,7 @@ impl State {
     pub async fn login_with_credentials(
         self,
         user: String,
-        pass: String,
+        pass: SecureString,
         user_behavior: Option<Behavior>,
     ) -> Result<Self, (Self, LoginError)> {
         if let Self::WantLogin(state) = self {
@@ -169,7 +170,7 @@ impl State {
     }
 
     /// Attempt to submit a mailbox password.
-    pub async fn submit_mbp(self, pass: String) -> Result<Self, (Self, LoginError)> {
+    pub async fn submit_mbp(self, pass: SecureString) -> Result<Self, (Self, LoginError)> {
         if let Self::WantMbp(state) = self {
             Ok(state.submit_mbp(pass).await?)
         } else {
@@ -232,7 +233,7 @@ impl State {
         parts: SessionParts,
         user_id: UserId,
         session_id: SessionId,
-        pass: Option<String>,
+        pass: Option<SecureString>,
     ) -> Self {
         let data = StateData {
             parts,
@@ -275,7 +276,7 @@ impl State {
     }
 
     /// Create a `WantTfa` state.
-    fn want_tfa(flow: TfaFlow, data: StateData, pass: Option<String>) -> Self {
+    fn want_tfa(flow: TfaFlow, data: StateData, pass: Option<SecureString>) -> Self {
         WantTfa::new(flow, data, pass).into()
     }
 
@@ -304,7 +305,7 @@ impl State {
     async fn finalize(
         client: muon::Client,
         data: StateData,
-        pass: String,
+        pass: SecureString,
     ) -> Result<Self, LoginError> {
         // Initialize the crypto providers.
         let srp = proton_crypto::new_srp_provider();

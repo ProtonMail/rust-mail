@@ -1,5 +1,6 @@
 use crate::login::state::StateData;
 use crate::login::{LoginError, state::State};
+use crate::shared::SecureString;
 use crate::shared::challenge::{Behavior, ChallengeInfo, ChallengePayload};
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
@@ -57,7 +58,7 @@ impl WantLogin {
     pub async fn login_with_credentials(
         mut self,
         user: String,
-        pass: String,
+        pass: SecureString,
         user_behavior: Option<Behavior>,
     ) -> Result<State, (State, LoginError)> {
         self.parts.store.write().await.set_name_or_addr(&user);
@@ -168,10 +169,10 @@ impl WantLogin {
     async fn try_login(
         self,
         user: String,
-        pass: String,
+        pass: SecureString,
         info: LoginExtraInfo,
     ) -> Result<State, LoginError> {
-        match self.flow.login_with_extra(&user, &pass, info).await {
+        match self.flow.login_with_extra(&user, pass.as_str(), info).await {
             LoginFlow::Ok(client, flow_data) => {
                 info!("Login flow does not require 2FA");
                 self.observability.record(AuthV4RequestMetric::new(

@@ -1,8 +1,9 @@
+use crate::password::PasswordError;
 use crate::password::state::complete::Complete;
 use crate::password::state::want_change::WantChange;
 use crate::password::state::want_pass::WantPass;
 use crate::password::state::want_tfa::WantTfa;
-use crate::password::{PasswordError, SecureString};
+use crate::shared::SecureString;
 use crate::{AccountApi, prelude::*};
 use derive_more::{Debug, Display, From};
 use futures::TryFutureExt;
