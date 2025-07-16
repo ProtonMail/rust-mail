@@ -1,8 +1,8 @@
-use crate::password::PasswordError;
 use crate::password::state::complete::Complete;
 use crate::password::state::want_change::WantChange;
 use crate::password::state::want_pass::WantPass;
 use crate::password::state::want_tfa::WantTfa;
+use crate::password::{PasswordError, SecureString};
 use crate::{AccountApi, prelude::*};
 use derive_more::{Debug, Display, From};
 use futures::TryFutureExt;
@@ -71,7 +71,7 @@ impl State {
     }
 
     /// Submit current password.
-    pub async fn submit_pass(self, pass: String) -> Result<Self, PasswordError> {
+    pub async fn submit_pass(self, pass: SecureString) -> Result<Self, PasswordError> {
         if let Self::WantPass(state) = self {
             state.submit_pass(pass).await
         } else {
@@ -89,7 +89,7 @@ impl State {
     }
 
     /// Submit new password.
-    pub async fn change_pass(self, new_pass: String) -> Result<Self, PasswordError> {
+    pub async fn change_pass(self, new_pass: SecureString) -> Result<Self, PasswordError> {
         if let Self::WantChange(state) = self {
             state.change_pass(new_pass).await
         } else {
@@ -98,7 +98,10 @@ impl State {
     }
 
     /// Submit new mailbox password (if MBP is enabled).
-    pub async fn change_mbox_pass(self, new_mbox_pass: String) -> Result<Self, PasswordError> {
+    pub async fn change_mbox_pass(
+        self,
+        new_mbox_pass: SecureString,
+    ) -> Result<Self, PasswordError> {
         if let Self::WantChange(state) = self {
             state.change_mbox_pass(new_mbox_pass).await
         } else {
@@ -193,7 +196,7 @@ async fn acquire_password_scope(
     srp: &impl SRPProvider,
     client: &Client,
     username: &str,
-    password: &str,
+    password: &SecureString,
     totp: Option<String>,
     fido: Option<Fido2AuthData>,
 ) -> Result<PutUsersPasswordResponse, PasswordError> {

@@ -1,6 +1,6 @@
 use super::{State, StateData};
-use crate::password::PasswordError;
 use crate::password::state::complete::Complete;
+use crate::password::{PasswordError, SecureString};
 use crate::{AccountApi, prelude::*};
 use derive_more::Deref;
 use futures::TryFutureExt;
@@ -24,7 +24,7 @@ impl WantChange {
         Self { data }
     }
 
-    pub async fn change_pass(self, new_pass: String) -> Result<State, PasswordError> {
+    pub async fn change_pass(self, new_pass: SecureString) -> Result<State, PasswordError> {
         let Self { data } = self;
 
         let srp = proton_crypto::new_srp_provider();
@@ -44,7 +44,10 @@ impl WantChange {
         Ok(State::Complete(Complete::new(data.client, data.parts)))
     }
 
-    pub async fn change_mbox_pass(self, new_mbox_pass: String) -> Result<State, PasswordError> {
+    pub async fn change_mbox_pass(
+        self,
+        new_mbox_pass: SecureString,
+    ) -> Result<State, PasswordError> {
         let Self { data } = self;
 
         let srp = proton_crypto::new_srp_provider();
@@ -64,7 +67,7 @@ impl WantChange {
 async fn change_settings_password(
     srp: &impl SRPProvider,
     client: &Client,
-    pass: &str,
+    pass: &SecureString,
 ) -> Result<(), PasswordError> {
     let request = PutSettingsPasswordRequest {
         auth: get_auth_input(srp, client, pass).await?,
@@ -83,7 +86,7 @@ async fn change_private_key_password(
     srp: &impl SRPProvider,
     pgp: &impl PGPProviderSync,
     data: &StateData,
-    new_pass: &str,
+    new_pass: &SecureString,
     auth: Option<AuthInput>,
 ) -> Result<(), PasswordError> {
     // Unlock the user's key(s)
@@ -132,14 +135,14 @@ async fn change_private_key_password(
 async fn get_auth_input(
     srp: &impl SRPProvider,
     client: &Client,
-    pass: &str,
+    pass: &SecureString,
 ) -> Result<AuthInput, PasswordError> {
     let response = client
         .get_auth_modulus()
         .map_err(PasswordError::Api)
         .await?;
 
-    let verifier = srp.generate_client_verifier(pass, &response.modulus)?;
+    let verifier = srp.generate_client_verifier(pass.as_str(), &response.modulus)?;
 
     Ok(AuthInput {
         modulus_id: response.modulus_id,

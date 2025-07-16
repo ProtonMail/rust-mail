@@ -1,5 +1,6 @@
 use crate::ApiError;
 use crate::password::state::{State, StateKind};
+use derive_more::{Debug, Deref, Display, From};
 use proton_core_api::auth::KeySecret;
 use proton_core_api::service::{ApiServiceError, ServiceError};
 use proton_core_api::services::proton::prelude::*;
@@ -9,12 +10,20 @@ use proton_core_common::datatypes::{PasswordMode, TfaStatus};
 use proton_crypto_account::keys::UserKeys;
 use proton_crypto_account::proton_crypto::CryptoError;
 use std::borrow::Borrow;
-use std::fmt::Debug;
 use std::string::FromUtf8Error;
 use thiserror::Error;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 /// Alias the `SaltError` as our own.
 pub type SaltError = proton_crypto_account::salts::SaltError;
+
+/// A secure string wrapper that automatically zeros its contents when dropped.
+#[derive(Debug, Display, Deref, Clone, From, Zeroize, ZeroizeOnDrop)]
+pub struct SecureString(
+    #[debug(skip)]
+    #[display(skip)]
+    String,
+);
 
 /// Implements the possible states that the password change flow can be in.
 pub mod state;
@@ -104,8 +113,11 @@ impl PasswordFlow {
     /// # Errors
     ///
     /// Returns error if the password submission fails.
-    pub async fn submit_pass(&mut self, pass: String) -> Result<(), PasswordError> {
-        let next = self.state()?.submit_pass(pass).await?;
+    pub async fn submit_pass(
+        &mut self,
+        pass: impl Into<SecureString>,
+    ) -> Result<(), PasswordError> {
+        let next = self.state()?.submit_pass(pass.into()).await?;
 
         self.state.push(next);
 
@@ -130,8 +142,11 @@ impl PasswordFlow {
     /// # Errors
     ///
     /// Returns error if the password change request or crypto operations failed.
-    pub async fn change_pass(&mut self, new_pass: String) -> Result<(), PasswordError> {
-        let next = self.state()?.change_pass(new_pass).await?;
+    pub async fn change_pass(
+        &mut self,
+        new_pass: impl Into<SecureString>,
+    ) -> Result<(), PasswordError> {
+        let next = self.state()?.change_pass(new_pass.into()).await?;
 
         self.state.push(next);
 
@@ -143,8 +158,11 @@ impl PasswordFlow {
     /// # Errors
     ///
     /// Returns error if the mailbox password change request or crypto operations failed.
-    pub async fn change_mbox_pass(&mut self, new_mbox_pass: String) -> Result<(), PasswordError> {
-        let next = self.state()?.change_mbox_pass(new_mbox_pass).await?;
+    pub async fn change_mbox_pass(
+        &mut self,
+        new_mbox_pass: impl Into<SecureString>,
+    ) -> Result<(), PasswordError> {
+        let next = self.state()?.change_mbox_pass(new_mbox_pass.into()).await?;
 
         self.state.push(next);
 

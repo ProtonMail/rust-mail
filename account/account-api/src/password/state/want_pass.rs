@@ -1,8 +1,8 @@
 use super::{State, StateData};
-use crate::password::PasswordError;
 use crate::password::state::acquire_password_scope;
 use crate::password::state::want_change::WantChange;
 use crate::password::state::want_tfa::WantTfa;
+use crate::password::{PasswordError, SecureString};
 use derive_more::Deref;
 use proton_crypto_account::proton_crypto::new_srp_provider;
 
@@ -18,7 +18,7 @@ impl WantPass {
         Self { data }
     }
 
-    pub async fn submit_pass(self, password: String) -> Result<State, PasswordError> {
+    pub async fn submit_pass(self, password: SecureString) -> Result<State, PasswordError> {
         let Self { data } = self;
 
         if data.tfa_mode.has_tfa() {
