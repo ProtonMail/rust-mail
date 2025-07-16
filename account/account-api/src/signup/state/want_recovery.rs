@@ -1,6 +1,7 @@
 use crate::AccountApi;
 use crate::countries::{COUNTRIES, Country};
 use crate::prelude::{ValidateEmailRequest, ValidatePhoneRequest};
+use crate::shared::SecureString;
 use crate::shared::challenge::Behavior;
 use crate::signup::SignupError;
 use crate::signup::state::want_create::WantCreate;
@@ -15,7 +16,7 @@ use muon::Client;
 pub struct WantRecovery {
     client: Client,
     username: Username,
-    password: String,
+    password: SecureString,
     data: StateData,
 }
 
@@ -23,7 +24,7 @@ impl WantRecovery {
     pub fn new(
         client: Client,
         username: Username,
-        password: String,
+        password: SecureString,
         data: StateData,
     ) -> WantRecovery {
         info!("Signup flow wants recovery info");

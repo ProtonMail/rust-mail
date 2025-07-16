@@ -1,5 +1,6 @@
 use crate::countries::{COUNTRIES, Country};
 use crate::prelude::{Address, User};
+use crate::shared::SecureString;
 use crate::shared::challenge::{Behavior, ChallengeInfo};
 use crate::shared::crypto::SharedCryptoError;
 use crate::signup::state::{Recovery, StateKind, Username};
@@ -184,8 +185,11 @@ impl SignupFlow {
     }
 
     /// Submit password.
-    pub fn submit_password(&mut self, password: String) -> Result<(), SignupError> {
-        let next = self.state()?.submit_password(password)?;
+    pub fn submit_password(
+        &mut self,
+        password: impl Into<SecureString>,
+    ) -> Result<(), SignupError> {
+        let next = self.state()?.submit_password(password.into())?;
 
         self.state.push(next);
 

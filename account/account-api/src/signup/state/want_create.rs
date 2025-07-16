@@ -4,6 +4,7 @@
 use crate::AccountApi;
 use crate::requests::*;
 use crate::responses::*;
+use crate::shared::SecureString;
 use crate::shared::challenge::ChallengePayload;
 use crate::shared::crypto::NewUserKey;
 use crate::signup::SignupError;
@@ -36,7 +37,7 @@ use proton_crypto_account::salts::KeySecret;
 pub struct WantCreate {
     client: Client,
     username: Username,
-    password: String,
+    password: SecureString,
     recovery: Recovery,
     data: StateData,
 }
@@ -45,7 +46,7 @@ impl WantCreate {
     pub fn new(
         client: Client,
         username: Username,
-        password: String,
+        password: SecureString,
         recovery: Recovery,
         data: StateData,
     ) -> Self {
@@ -82,7 +83,11 @@ impl WantCreate {
         store.write().await.set_name_or_addr(&user.email);
 
         let flow = (self.client.clone().auth())
-            .login_with_extra(&user.email, &self.password, LoginExtraInfo::default())
+            .login_with_extra(
+                &user.email,
+                self.password.as_str(),
+                LoginExtraInfo::default(),
+            )
             .await;
 
         let client = match flow {
@@ -156,7 +161,7 @@ impl WantCreate {
             .await?;
 
         let ver = srp
-            .generate_client_verifier(&self.password, &res.modulus)
+            .generate_client_verifier(self.password.as_str(), &res.modulus)
             .inspect_err(|e| error!("generate client verifier: {e:?}"))?;
 
         Ok(AuthInput {
@@ -223,7 +228,7 @@ impl WantCreate {
         auth: &AuthInput,
         addr: &Address,
     ) -> Result<(User, KeySecret), SignupError> {
-        let user_key = NewUserKey::init(srp, pgp, &self.password)?;
+        let user_key = NewUserKey::init(srp, pgp, self.password.as_str())?;
         let addr_key = user_key.init_addr(pgp, &addr.email)?;
 
         let req = SetupKeysRequest {
