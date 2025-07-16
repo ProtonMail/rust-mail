@@ -58,11 +58,6 @@ impl WantChange {
 
         Ok(State::Complete(Complete::new(data.client, data.parts)))
     }
-
-    #[must_use]
-    pub fn has_mbp(&self) -> bool {
-        self.mbp_mode.has_mbp()
-    }
 }
 
 async fn change_settings_password(
