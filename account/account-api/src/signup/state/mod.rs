@@ -1,4 +1,5 @@
 use crate::prelude::Address;
+use crate::shared::SecureString;
 use crate::signup::state::want_create::WantCreate;
 use crate::signup::state::want_password::WantPassword;
 use crate::signup::state::want_recovery::WantRecovery;
@@ -78,7 +79,7 @@ impl State {
         s.submit_recovery(recovery, recovery_behavior).await
     }
 
-    pub fn submit_password(self, password: String) -> StateResult {
+    pub fn submit_password(self, password: SecureString) -> StateResult {
         let s: WantPassword = self.try_into().map_err(|_| SignupError::InvalidState)?;
 
         Ok(s.submit_password(password))

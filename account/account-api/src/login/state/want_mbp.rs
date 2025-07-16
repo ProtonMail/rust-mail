@@ -4,6 +4,7 @@ use tracing::info;
 
 use crate::login::state::{HasSessionId, HasUserId, StateData};
 use crate::login::{LoginError, state::State};
+use crate::shared::SecureString;
 
 /// Represents the login flow state where the user must provide their mailbox password.
 pub struct WantMbp {
@@ -18,7 +19,7 @@ impl WantMbp {
         Self { client, data }
     }
 
-    pub async fn submit_mbp(self, pass: String) -> Result<State, (State, LoginError)> {
+    pub async fn submit_mbp(self, pass: SecureString) -> Result<State, (State, LoginError)> {
         let user_id = self.data.user_id.clone();
         let session_id = self.data.session_id.clone();
 

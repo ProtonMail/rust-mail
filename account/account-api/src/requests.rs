@@ -355,6 +355,90 @@ pub struct CreateAddressKeyRequest {
     pub signed_key_list: SignedKeyList,
 }
 
+/// Represents `PUT /settings/password` request body for password changes.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PutSettingsPasswordRequest {
+    /// Authentication information object.
+    pub auth: AuthInput,
+}
+
+/// Represents a key to update in the password change request.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct UpdateKeyRequest {
+    /// The ID of the key to update.
+    #[serde(rename = "ID")]
+    pub id: String,
+    /// The new private key data.
+    pub private_key: String,
+}
+
+/// Represents `PUT /keys/private` request body for password changes.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PutKeysPrivateRequest {
+    /// Base64-encoded salt for key derivation (required).
+    pub key_salt: String,
+
+    /// Array of legacy keys to update (optional, for non-migrated users).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keys: Option<Vec<UpdateKeyRequest>>,
+
+    /// Array of user keys to update (optional, for migrated users).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user_keys: Option<Vec<UpdateKeyRequest>>,
+
+    /// Authentication information object.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth: Option<AuthInput>,
+}
+
+/// Represents FIDO2 authentication data for password change requests.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct Fido2AuthData {
+    /// Authentication options.
+    pub authentication_options: serde_json::Value,
+    /// Client data.
+    pub client_data: String,
+    /// Authenticator data.
+    pub authenticator_data: String,
+    /// Signature.
+    pub signature: String,
+    /// Credential ID.
+    #[serde(rename = "CredentialID")]
+    pub credential_id: Vec<Option<serde_json::Value>>,
+}
+
+/// Represents `PUT /core/v4/users/password` request body for password change authentication.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PutUsersPasswordRequest {
+    /// Base64-encoded client ephemeral value.
+    pub client_ephemeral: String,
+
+    /// Base64-encoded client proof.
+    pub client_proof: String,
+
+    /// Hex-encoded SRP session ID.
+    #[serde(rename = "SRPSession")]
+    pub srp_session: String,
+
+    /// Two-factor authentication code (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub two_factor_code: Option<String>,
+
+    /// FIDO2 authentication data (optional).
+    #[serde(rename = "FIDO2")]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fido2: Option<Fido2AuthData>,
+
+    /// SSO re-authentication token (optional).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sso_reauth_token: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use crate::shared::challenge::{Behavior, ChallengeInfo};

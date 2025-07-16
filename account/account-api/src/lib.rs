@@ -1,7 +1,10 @@
 #![allow(clippy::large_enum_variant)]
 
 use crate::prelude::*;
-use muon::{http::HttpReqExt, serde_to_query};
+use derive_more::Display;
+use muon::{Status, http::HttpReqExt, serde_to_query};
+use serde::Deserialize;
+use serde_json::Value;
 
 #[macro_use]
 extern crate tracing;
@@ -11,6 +14,7 @@ extern crate muon;
 
 pub mod countries;
 pub mod login;
+pub mod password;
 pub mod prelude;
 pub mod requests;
 pub mod responses;
@@ -36,7 +40,50 @@ pub enum ApiError {
     Internal(String),
 }
 
+/// Additional information about an API error.
+///
+/// If a response is received with an HTTP status code that indicates a protocol
+/// error, then it may be accompanied by additional information about the error.
+/// This struct provides a way to access that information.
+///
+#[derive(Clone, Debug, Display, Default, Deserialize, Eq, PartialEq)]
+#[display("{code}: {error:?} ({details:?})")]
+#[serde(rename_all = "PascalCase")]
+pub struct ApiErrorInfo {
+    /// Internal API code.
+    pub code: u32,
+
+    /// Optional error message that may be present.
+    pub error: Option<String>,
+
+    /// Optional JSON type with error details.
+    pub details: Option<Value>,
+}
+
 impl ApiError {
+    #[must_use]
+    pub fn err_status(&self) -> Option<Status> {
+        if let Self::Status(muon::StatusErr(code, _)) = self {
+            Some(code.to_owned())
+        } else {
+            None
+        }
+    }
+
+    #[must_use]
+    pub fn err_code(&self) -> Option<u32> {
+        Some(self.err_info()?.code)
+    }
+
+    #[must_use]
+    pub fn err_info(&self) -> Option<ApiErrorInfo> {
+        if let Self::Status(muon::StatusErr(_, res)) = self {
+            serde_json::from_str(res.body_str().ok()?).ok()
+        } else {
+            None
+        }
+    }
+
     #[must_use]
     pub fn body_str(&self) -> Option<&str> {
         if let Self::Status(muon::StatusErr(_, res)) = self {
@@ -236,6 +283,21 @@ pub trait AccountApi {
         &self,
         request: CreateAddressKeyRequest,
     ) -> ApiServiceResult<CreateAddressKeyResponse>;
+
+    async fn put_settings_password(
+        &self,
+        body: PutSettingsPasswordRequest,
+    ) -> ApiServiceResult<PutSettingsPasswordResponse>;
+
+    async fn put_keys_private(
+        &self,
+        body: PutKeysPrivateRequest,
+    ) -> ApiServiceResult<PutKeysPrivateResponse>;
+
+    async fn put_users_password(
+        &self,
+        body: PutUsersPasswordRequest,
+    ) -> ApiServiceResult<PutUsersPasswordResponse>;
 }
 
 impl AccountApi for muon::Client {
@@ -412,6 +474,42 @@ impl AccountApi for muon::Client {
     ) -> ApiServiceResult<CreateAddressKeyResponse> {
         Ok(POST!("{CORE_V4}/keys/address")
             .body_json(request)?
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn put_settings_password(
+        &self,
+        body: PutSettingsPasswordRequest,
+    ) -> ApiServiceResult<PutSettingsPasswordResponse> {
+        Ok(PUT!("{CORE_V4}/settings/password")
+            .body_json(body)?
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn put_keys_private(
+        &self,
+        body: PutKeysPrivateRequest,
+    ) -> ApiServiceResult<PutKeysPrivateResponse> {
+        Ok(PUT!("{CORE_V4}/keys/private")
+            .body_json(body)?
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn put_users_password(
+        &self,
+        body: PutUsersPasswordRequest,
+    ) -> ApiServiceResult<PutUsersPasswordResponse> {
+        Ok(PUT!("{CORE_V4}/users/password")
+            .body_json(body)?
             .send_with(self)
             .await?
             .ok()?

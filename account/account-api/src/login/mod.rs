@@ -1,6 +1,7 @@
 use crate::ApiError;
 use crate::DelinquentState;
 use crate::login::state::State;
+use crate::shared::SecureString;
 use crate::shared::challenge::{Behavior, ChallengeInfo};
 use muon::client::flow::LoginFlowData;
 use proton_core_api::service::{ApiServiceError, ServiceError};
@@ -139,10 +140,10 @@ impl LoginFlow {
         session: Session,
         user_id: UserId,
         session_id: SessionId,
-        pass: Option<String>,
+        pass: Option<impl Into<SecureString>>,
     ) -> Self {
         let (client, parts) = session.to_parts();
-        let state = State::new_from_tfa(client, parts, user_id, session_id, pass);
+        let state = State::new_from_tfa(client, parts, user_id, session_id, pass.map(Into::into));
 
         Self { session, state }
     }
@@ -183,10 +184,10 @@ impl LoginFlow {
     pub async fn login_with_credentials(
         &mut self,
         user: String,
-        pass: String,
+        pass: impl Into<SecureString>,
         user_behavior: Option<Behavior>,
     ) -> Result<(), LoginError> {
-        self.transition(|s: State| s.login_with_credentials(user, pass, user_behavior))
+        self.transition(|s: State| s.login_with_credentials(user, pass.into(), user_behavior))
             .await
             .inspect_err(|_| self.try_recover())
     }
@@ -254,8 +255,11 @@ impl LoginFlow {
     ///
     /// Returns [`LoginError::KeySecretDecryption`] if the password cannot unlock the user key,
     /// or another variant of [`LoginError`] if the request failed.
-    pub async fn submit_mailbox_password(&mut self, pass: String) -> Result<(), LoginError> {
-        self.transition(|s: State| s.submit_mbp(pass))
+    pub async fn submit_mailbox_password(
+        &mut self,
+        pass: impl Into<SecureString>,
+    ) -> Result<(), LoginError> {
+        self.transition(|s: State| s.submit_mbp(pass.into()))
             .await
             .inspect_err(|_| self.try_recover())
     }

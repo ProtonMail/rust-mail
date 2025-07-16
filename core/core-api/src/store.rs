@@ -115,6 +115,9 @@ pub trait Store: Send + Sync + 'static {
     /// Set the user data.
     async fn set_user_data(&mut self, data: UserData) -> Result<(), StoreError>;
 
+    /// Set the key secret.
+    async fn set_key_secret(&mut self, secret: UserKeySecret) -> Result<(), StoreError>;
+
     /// Get the user's key secret.
     async fn expose_key_secret(&self) -> Option<UserKeySecret>;
 
@@ -153,6 +156,10 @@ impl<S: ?Sized + Store> Store for Box<S> {
 
     async fn set_user_data(&mut self, data: UserData) -> Result<(), StoreError> {
         self.deref_mut().set_user_data(data).await
+    }
+
+    async fn set_key_secret(&mut self, secret: UserKeySecret) -> Result<(), StoreError> {
+        self.deref_mut().set_key_secret(secret).await
     }
 
     async fn expose_key_secret(&self) -> Option<UserKeySecret> {
@@ -215,6 +222,12 @@ impl Store for TempStore {
 
     async fn set_user_data(&mut self, data: UserData) -> Result<(), StoreError> {
         self.data = Some(data);
+
+        Ok(())
+    }
+
+    async fn set_key_secret(&mut self, secret: UserKeySecret) -> Result<(), StoreError> {
+        self.data.as_mut().unwrap().key_secret = secret;
 
         Ok(())
     }

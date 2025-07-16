@@ -36,7 +36,7 @@ pub struct Cli {
 
 impl Cli {
     pub async fn run(proxy: impl Proxy + 'static) -> Result<()> {
-        Self::parse().run_cmd(proxy.clone()).await.unwrap();
+        Self::parse().run_cmd(proxy.clone()).await?;
 
         proxy.send_event(UserEvent::Exit)?;
 

@@ -1,3 +1,4 @@
+use crate::shared::SecureString;
 use crate::signup::state::want_recovery::WantRecovery;
 use crate::signup::state::{State, StateData, Username};
 use derive_more::Display;
@@ -25,7 +26,7 @@ impl WantPassword {
     }
 
     /// Submits chosen password
-    pub fn submit_password(self, password: String) -> State {
+    pub fn submit_password(self, password: SecureString) -> State {
         info!("Submitting password");
 
         // Asking for recovery is a default and always after password

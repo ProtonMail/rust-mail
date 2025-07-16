@@ -1,6 +1,7 @@
 use crate::cli::APP_NAME;
 use anyhow::Result;
 use proton_account_api::login::LoginFlow;
+use proton_core_api::services::proton::muon::util::DurationExt;
 use proton_core_api::session::Config;
 use proton_core_api::verification::ChallengeNotifier;
 use proton_core_common::CoreAccountState;
@@ -41,7 +42,7 @@ where
         Some(hvn),
         None,
         LogService::new(config),
-        EventPollMode::Manual,
+        EventPollMode::Automatic(30.s()),
     )
     .await?)
 }

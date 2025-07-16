@@ -15,6 +15,7 @@ use crate::{AsyncLiveQueryCallback, watch_channel_async};
 use crate::{
     LiveQueryCallback, WatchHandle, async_runtime, async_runtime_slim, uniffi_async, watch_channel,
 };
+
 use chrono::Local;
 use futures::TryFutureExt;
 use proton_account_uniffi::login::LoginFlow;
@@ -709,7 +710,7 @@ impl MailSession {
             user_context.sign_out_all().await?;
             map.clear();
 
-            Result::<(), RealProtonMailError>::Ok(())
+            Result::<_, RealProtonMailError>::Ok(())
         })
         .await
         .map_err(UserContextError::from)
