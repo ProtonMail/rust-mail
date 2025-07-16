@@ -122,7 +122,6 @@ impl ScrollerEq for ContextualConversation {
             && self.recipients == other.recipients
             && self.senders == other.senders
             && self.snooze_time == other.snooze_time
-            && self.has_messages == other.has_messages
     }
 }
 
