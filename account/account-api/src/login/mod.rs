@@ -159,7 +159,15 @@ impl LoginFlow {
         fido_details: Option<fido2::Response>,
     ) -> Self {
         let (client, parts) = session.to_parts();
-        let state = State::new_from_tfa(client, parts, user_id, session_id, pass.into(), mode, fido_details);
+        let state = State::new_from_tfa(
+            client,
+            parts,
+            user_id,
+            session_id,
+            pass.into(),
+            mode,
+            fido_details,
+        );
 
         Self { session, state }
     }
@@ -404,7 +412,15 @@ impl LoginFlow {
             }
 
             State::TfaRetry(user_id, session_id, pass, mode, fido_details) => {
-                self.state = State::new_from_tfa(client, parts, user_id, session_id, pass, mode, fido_details);
+                self.state = State::new_from_tfa(
+                    client,
+                    parts,
+                    user_id,
+                    session_id,
+                    pass,
+                    mode,
+                    fido_details,
+                );
             }
 
             State::MbpRetry(user_id, session_id) => {

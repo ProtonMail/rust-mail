@@ -53,7 +53,13 @@ pub enum State {
 
     /// A recoverable error occurred during the `WantTfa` state.
     #[debug("TfaRetry")]
-    TfaRetry(UserId, SessionId, SecureString, MbpMode, Option<fido2::Response>),
+    TfaRetry(
+        UserId,
+        SessionId,
+        SecureString,
+        MbpMode,
+        Option<fido2::Response>,
+    ),
 
     /// An error occurred during the `WantTfa` state.
     #[debug("TfaError")]
@@ -299,7 +305,13 @@ impl State {
     }
 
     /// Create a `WantTfa` state.
-    fn want_tfa(flow: TfaFlow, data: StateData, pass: SecureString, mode: MbpMode, fido_details: Option<fido2::Response>) -> Self {
+    fn want_tfa(
+        flow: TfaFlow,
+        data: StateData,
+        pass: SecureString,
+        mode: MbpMode,
+        fido_details: Option<fido2::Response>,
+    ) -> Self {
         WantTfa::new(flow, data, pass, mode, fido_details).into()
     }
 

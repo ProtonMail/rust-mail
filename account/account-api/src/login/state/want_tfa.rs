@@ -22,7 +22,13 @@ pub struct WantTfa {
 }
 
 impl WantTfa {
-    pub(crate) fn new(flow: TfaFlow, data: StateData, pass: SecureString, mode: MbpMode, fido_details: Option<fido2::Response>) -> Self {
+    pub(crate) fn new(
+        flow: TfaFlow,
+        data: StateData,
+        pass: SecureString,
+        mode: MbpMode,
+        fido_details: Option<fido2::Response>,
+    ) -> Self {
         info!("Login flow wants 2FA");
 
         Self {
