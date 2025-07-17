@@ -2,6 +2,7 @@ use anyhow::Result;
 use proton_mail_common::MailContext;
 use std::sync::Arc;
 
+mod addresses;
 mod list;
 mod login;
 mod logout;
@@ -25,6 +26,7 @@ impl Cmd {
 
 #[derive(Debug, Subcommand)]
 enum UserSubCmd {
+    Addresses(addresses::Cmd),
     List(list::Cmd),
     Login(login::Cmd),
     Signup(signup::Cmd),
@@ -38,6 +40,7 @@ enum UserSubCmd {
 impl UserSubCmd {
     async fn run(self, ctx: Arc<MailContext>) -> Result<()> {
         match self {
+            Self::Addresses(cmd) => cmd.run(ctx).await,
             Self::List(cmd) => cmd.run(ctx).await,
             Self::Login(cmd) => cmd.run(ctx).await,
             Self::Signup(cmd) => cmd.run(ctx).await,
