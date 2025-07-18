@@ -291,6 +291,13 @@ impl Label {
         .await
     }
 
+    pub async fn local_ids_by_kind(
+        kind: LabelType,
+        tether: &Tether,
+    ) -> Result<Vec<LocalLabelId>, StashError> {
+        Label::find_local_id_by(tether, "WHERE label_type = ?", params![kind]).await
+    }
+
     /// Get all labels with given kinds
     ///
     /// # Errors

@@ -316,6 +316,21 @@ where
         async move { Ok(Self::find(&query, params, tether).await?.into_iter().next()) }
     }
 
+    async fn find_local_id_by(
+        tether: &Tether,
+        query_logic: impl AsRef<str>,
+        params: Vec<Box<dyn ToSql + Send>>,
+    ) -> Result<Vec<Self::IdType>, StashError> {
+        let query = format!(
+            "SELECT {local_id} AS value FROM {table_name} {query_logic}",
+            table_name = Self::table_name(),
+            local_id = Self::id_field_name(),
+            query_logic = query_logic.as_ref(),
+        );
+
+        tether.query_values(query, params).await
+    }
+
     /// Gets the record's local id.
     ///
     /// # Panics

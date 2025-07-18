@@ -9,26 +9,31 @@ pub mod refresh;
 pub mod rollback;
 
 pub use self::available_action::*;
-use crate::AppError;
-use crate::datatypes::{ExclusiveLocation, RollbackItemType};
-use crate::models::RollbackItem;
+use crate::actions::conversations::label_as::UndoLabelAsConversations;
+use crate::actions::messages::label_as::UndoLabelAsMessages;
+use crate::datatypes::RollbackItemType;
+use crate::models::{Conversation, Message, RollbackItem};
+use crate::{AppError, MailUserContext};
 use addresses::{block, unblock, update_incoming_defaults};
+use futures::future::{join, join_all};
 use indoc::formatdoc;
-use itertools::Itertools;
-use proton_action_queue::action::{Action, FactoryError, WriterGuardError};
+use proton_action_queue::action::{Action, FactoryError, WriterGuard, WriterGuardError};
 use proton_action_queue::queue::Queue;
 use proton_core_api::consts::General;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{LabelId, ProtonIdMarker};
+use proton_core_api::session::CoreSession;
 use proton_core_common::action_queue::CoreActionError;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, LabelError, ModelIdExtension};
+use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::response_data::OperationResult;
 use proton_sqlite3::rusqlite::ToSql;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, StashError, Tether};
 use std::collections::{HashMap, HashSet};
+use std::fmt::Display;
 use std::hash::Hash;
 use std::marker::PhantomData;
 use tracing::error;
@@ -386,85 +391,315 @@ where
     }
 }
 
-/// Action which change all the labels of messages or conversations.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct LabelAsData<T>
-where
-    T: ModelIdExtension<IdType: Serialize + DeserializeOwned + Eq + PartialEq + Hash>,
+#[allow(async_fn_in_trait, reason = "not used across threads")]
+pub trait LabelAsTrait:
+    ModelIdExtension<IdType: Copy + Hash + Eq + DeserializeOwned + Serialize, RemoteId: Display>
 {
-    source_label_id: LocalLabelId,
-    local_ids: Vec<T::IdType>,
-    remote_ids: Vec<T::RemoteId>,
-    local_all_label_ids: Vec<LocalLabelId>,
-    remote_all_label_ids: Vec<LabelId>,
-    local_selected_label_ids: Vec<LocalLabelId>,
-    remote_selected_label_ids: Vec<LabelId>,
-    local_partially_selected_label_ids: Vec<LocalLabelId>,
-    remote_partially_selected_label_ids: Vec<LabelId>,
-    must_archive: bool,
-    added_labels: HashMap<T::IdType, HashSet<LocalLabelId>>,
-    removed_labels: HashMap<T::IdType, HashSet<LocalLabelId>>,
-    original_location: HashMap<T::IdType, Option<ExclusiveLocation>>,
-    phantom_data: PhantomData<T>,
+    const ROLLBACK_ITEM_TYPE: RollbackItemType;
+
+    async fn apply_label(
+        local_label_id: LocalLabelId,
+        ids: impl IntoIterator<Item = Self::IdType>,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError>;
+
+    async fn remove_label(
+        local_label_id: LocalLabelId,
+        ids: impl IntoIterator<Item = Self::IdType>,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError>;
+
+    async fn remote_label(
+        api: &impl ProtonMail,
+        ids: Vec<Self::RemoteId>,
+        label_id: LabelId,
+    ) -> Vec<Self::RemoteId>;
+
+    async fn remote_unlabel(
+        api: &impl ProtonMail,
+        ids: Vec<Self::RemoteId>,
+        label_id: LabelId,
+    ) -> Vec<Self::RemoteId>;
 }
 
-impl<T> LabelAsData<T>
-where
-    T: ModelIdExtension<IdType: Serialize + DeserializeOwned + Eq + PartialEq + Hash>,
-{
-    fn new(
-        source_label_id: LocalLabelId,
-        local_ids: Vec<T::IdType>,
-        selected_label_ids: Vec<LocalLabelId>,
-        partially_selected_label_ids: Vec<LocalLabelId>,
-        must_archive: bool,
-    ) -> Self {
-        Self {
-            source_label_id,
-            local_ids,
-            local_all_label_ids: vec![],
-            remote_all_label_ids: vec![],
-            remote_ids: vec![],
-            local_selected_label_ids: selected_label_ids,
-            remote_selected_label_ids: vec![],
-            local_partially_selected_label_ids: partially_selected_label_ids,
-            remote_partially_selected_label_ids: vec![],
-            must_archive,
-            added_labels: HashMap::new(),
-            removed_labels: HashMap::new(),
-            original_location: HashMap::new(),
-            phantom_data: PhantomData,
-        }
-    }
+impl LabelAsTrait for Message {
+    const ROLLBACK_ITEM_TYPE: RollbackItemType = RollbackItemType::Message;
 
-    /// Resolve all local ids into the remote counterpart.
-    async fn resolve_remote_ids(&mut self, tx: &Bond<'_>) -> Result<(), MailActionError> {
-        self.remote_ids = T::local_ids_counterpart(self.local_ids.clone(), tx).await?;
-        self.remote_all_label_ids =
-            Label::local_ids_counterpart(self.local_all_label_ids.clone(), tx).await?;
-        let remote_selected_label_ids =
-            Label::local_ids_counterpart(self.local_selected_label_ids.clone(), tx).await?;
-        self.remote_selected_label_ids = remote_selected_label_ids.into_iter().map_into().collect();
-        let remote_partially_selected_label_ids =
-            Label::local_ids_counterpart(self.local_partially_selected_label_ids.clone(), tx)
-                .await?;
-        self.remote_partially_selected_label_ids = remote_partially_selected_label_ids
-            .into_iter()
-            .map_into()
-            .collect();
-        Ok(())
-    }
-
-    async fn mark_rollback(
-        &self,
-        kind: RollbackItemType,
+    async fn apply_label(
+        local_label_id: LocalLabelId,
+        ids: impl IntoIterator<Item = Self::IdType>,
         bond: &Bond<'_>,
-    ) -> Result<(), MailActionError> {
-        for remote_id in &self.remote_ids {
-            RollbackItem::new(remote_id.to_string(), kind)
-                .save(bond)
-                .await?;
+    ) -> Result<(), StashError> {
+        Self::apply_label(local_label_id, ids, bond).await
+    }
+
+    async fn remove_label(
+        local_label_id: LocalLabelId,
+        ids: impl IntoIterator<Item = Self::IdType>,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        Self::remove_label(local_label_id, ids, bond).await
+    }
+
+    async fn remote_label(
+        api: &impl ProtonMail,
+        ids: Vec<Self::RemoteId>,
+        label_id: LabelId,
+    ) -> Vec<Self::RemoteId> {
+        match api.put_messages_label(ids.clone(), label_id, None).await {
+            Ok(res) => filter_responses(res.responses),
+            Err(e) => {
+                error!("Failed to add message to label {e:?}");
+                ids
+            }
+        }
+    }
+
+    async fn remote_unlabel(
+        api: &impl ProtonMail,
+        ids: Vec<Self::RemoteId>,
+        label_id: LabelId,
+    ) -> Vec<Self::RemoteId> {
+        match api.put_messages_unlabel(ids.clone(), label_id).await {
+            Ok(res) => filter_responses(res.responses),
+            Err(e) => {
+                error!("Failed to remove message from label {e:?}");
+                ids
+            }
+        }
+    }
+}
+
+impl LabelAsTrait for Conversation {
+    const ROLLBACK_ITEM_TYPE: RollbackItemType = RollbackItemType::Conversation;
+
+    async fn apply_label(
+        local_label_id: LocalLabelId,
+        ids: impl IntoIterator<Item = Self::IdType>,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        Self::apply_label(local_label_id, ids, bond).await
+    }
+
+    async fn remove_label(
+        local_label_id: LocalLabelId,
+        ids: impl IntoIterator<Item = Self::IdType>,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        Self::remove_label(local_label_id, ids, bond).await
+    }
+
+    async fn remote_label(
+        api: &impl ProtonMail,
+        ids: Vec<Self::RemoteId>,
+        label_id: LabelId,
+    ) -> Vec<Self::RemoteId> {
+        match api
+            .put_conversations_label(ids.clone(), label_id, None)
+            .await
+        {
+            Ok(res) => filter_responses(res.responses),
+            Err(e) => {
+                error!("Failed to add message to label {e:?}");
+                ids
+            }
+        }
+    }
+
+    async fn remote_unlabel(
+        api: &impl ProtonMail,
+        ids: Vec<Self::RemoteId>,
+        label_id: LabelId,
+    ) -> Vec<Self::RemoteId> {
+        match api.put_conversations_unlabel(ids.clone(), label_id).await {
+            Ok(res) => filter_responses(res.responses),
+            Err(e) => {
+                error!("Failed to remove message from label {e:?}");
+                ids
+            }
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LabelPair<T> {
+    pub label: LocalLabelId,
+    pub id: T,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct LabelAsData<T: LabelAsTrait> {
+    source_label_id: LocalLabelId,
+    add: Vec<LabelPair<T::IdType>>,
+    remove: Vec<LabelPair<T::IdType>>,
+}
+
+impl<T: LabelAsTrait> LabelAsData<T> {
+    pub fn new(
+        cartesian: HashSet<LabelPair<T::IdType>>,
+        source_label_id: LocalLabelId,
+        items: Vec<T::IdType>,
+        selected_label_ids: &[LocalLabelId],
+        partially_selected_label_ids: &[LocalLabelId],
+        all_label_ids: &[LocalLabelId],
+    ) -> Self {
+        // The way this works is simple.
+        // 1. We figure out all existing (label, item) pairs
+        // 2. Fully selected labels must end up in a state where everything is selected, we need to
+        //    figure out the set difference so that we can revert it later (and minimize queries
+        //    and API calls).
+        // 3. If a label is neither selected or partially selected it should be removed. Same
+        //    rationale as above.
+        let mut add = vec![];
+        let mut remove = vec![];
+
+        for &label in all_label_ids {
+            if selected_label_ids.contains(&label) {
+                // Label these items if they haven't been labeled yet.
+                for &id in &items {
+                    let pair = LabelPair { label, id };
+                    if !cartesian.contains(&pair) {
+                        add.push(pair);
+                    }
+                }
+            } else if partially_selected_label_ids.contains(&label) {
+                // do nothing, keep label as is
+            } else {
+                // No selection: Remove
+                for &id in &items {
+                    let pair = LabelPair { label, id };
+                    if cartesian.contains(&pair) {
+                        remove.push(pair);
+                    }
+                }
+            }
+        }
+
+        Self {
+            add,
+            remove,
+            source_label_id,
+        }
+    }
+
+    async fn apply_local_common(&self, tx: &Bond<'_>) -> Result<(), StashError> {
+        let (add, remove) = self.segregate_label();
+
+        for (label, ids) in add {
+            T::apply_label(label, ids, tx).await?;
+        }
+
+        for (label, ids) in remove {
+            T::remove_label(label, ids, tx).await?;
         }
         Ok(())
     }
+
+    async fn revert_local(&mut self, tx: &Bond<'_>) -> Result<(), StashError> {
+        let (add, remove) = self.segregate_label();
+
+        for (label, ids) in add {
+            T::remove_label(label, ids.iter().copied(), tx).await?;
+            let ids = T::local_ids_counterpart(ids, tx).await?;
+            RollbackItem::save_many(tx, ids, T::ROLLBACK_ITEM_TYPE).await?;
+        }
+
+        for (label, ids) in remove {
+            T::apply_label(label, ids.iter().copied(), tx).await?;
+            let ids = T::local_ids_counterpart(ids, tx).await?;
+            RollbackItem::save_many(tx, ids, T::ROLLBACK_ITEM_TYPE).await?;
+        }
+
+        Ok(())
+    }
+
+    async fn apply_remote(
+        &self,
+        ctx: &MailUserContext,
+        mut guard: WriterGuard<'_>,
+    ) -> Result<(), MailActionError> {
+        let session = ctx.session();
+        let api = session.api();
+        let tether = guard.tether();
+
+        let (add, remove) = self.segregate_label();
+
+        let mut add_requests = vec![];
+        for (label, messages) in add {
+            let label = Label::resolve_remote_label_id(label, tether).await?;
+            let messages = T::local_ids_counterpart(messages, tether).await?;
+            for chunk in messages.chunks(150) {
+                let chunk = chunk.to_owned();
+                let label = label.clone();
+                add_requests.push(T::remote_label(api, chunk, label));
+            }
+        }
+
+        let mut remove_requests = vec![];
+        for (label, messages) in remove {
+            let label = Label::resolve_remote_label_id(label, tether).await?;
+            let messages = T::local_ids_counterpart(messages, tether).await?;
+            for chunk in messages.chunks(150) {
+                let chunk = chunk.to_owned();
+                let label = label.clone();
+                remove_requests.push(T::remote_unlabel(api, chunk, label));
+            }
+        }
+
+        let (add_fails, remove_fails) =
+            join(join_all(add_requests), join_all(remove_requests)).await;
+
+        let items = add_fails.into_iter().chain(remove_fails).flatten();
+        guard
+            .tx::<_, _, anyhow::Error>(async move |tx| {
+                RollbackItem::save_many(tx, items, T::ROLLBACK_ITEM_TYPE).await?;
+                Ok(())
+            })
+            .await?;
+
+        Ok(())
+    }
+
+    #[allow(
+        clippy::type_complexity,
+        reason = "It's clear due to how it's used in context"
+    )]
+    fn segregate_label(
+        &self,
+    ) -> (
+        HashMap<LocalLabelId, Vec<T::IdType>>,
+        HashMap<LocalLabelId, Vec<T::IdType>>,
+    ) {
+        let mut add = HashMap::<_, Vec<_>>::new();
+        for &LabelPair { label, id } in &self.add {
+            add.entry(label).or_default().push(id);
+        }
+
+        let mut remove = HashMap::<_, Vec<_>>::new();
+        for &LabelPair { label, id } in &self.remove {
+            remove.entry(label).or_default().push(id);
+        }
+
+        (add, remove)
+    }
+}
+
+pub enum UndoLabelAs {
+    Messages(UndoLabelAsMessages),
+    Conversations(UndoLabelAsConversations),
+}
+
+impl UndoLabelAs {
+    pub async fn undo(self, queue: &Queue, tether: &Tether) -> Result<(), AppError> {
+        tracing::info!("undoing!");
+        match self {
+            UndoLabelAs::Messages(u) => u.undo(queue, tether).await,
+            UndoLabelAs::Conversations(u) => u.undo(queue, tether).await,
+        }
+    }
+}
+
+pub struct LabelAsOutput {
+    pub input_label_is_empty: bool,
+    pub undo: UndoLabelAs,
 }

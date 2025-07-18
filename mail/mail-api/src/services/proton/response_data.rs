@@ -547,6 +547,23 @@ pub struct ConversationLabel {
     pub context_time: u64,
 }
 
+#[cfg(feature = "mocks")]
+impl ConversationLabel {
+    #[must_use]
+    pub fn test_default() -> Self {
+        Self {
+            id: "".into(),
+            context_num_messages: 0,
+            context_expiration_time: 0,
+            context_num_attachments: 0,
+            context_num_unread: 0,
+            context_size: 0,
+            context_snooze_time: 0,
+            context_time: 0,
+        }
+    }
+}
+
 /// Data for an event related to a [`MailEvent`] record.
 #[serde_as]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]

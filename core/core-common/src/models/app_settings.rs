@@ -281,7 +281,7 @@ struct NotAMagicLocalIdError {
 /// `SingleEntry` local id. This is a special value that ALWAYS must be equal the constant
 /// This local id type is shared between `AppSettings` & `PinProtection` to make sure there is
 /// only one entry stored. [`MAGIC_ID`]
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Default)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Default)]
 pub struct SingleEntryId;
 
 impl SingleEntryId {

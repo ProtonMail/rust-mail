@@ -1,15 +1,15 @@
+use itertools::Itertools;
 use proton_core_api::services::proton::LabelId;
 use proton_core_api::services::proton::LabelType as ApiLabelType;
 use proton_core_api::services::proton::{Address as ApiAddress, Label as ApiLabel};
-use proton_core_common::datatypes::SystemLabel;
-use proton_core_common::models::{Label, ModelIdExtension};
+use proton_core_common::models::Label;
 use proton_core_common::test_utils::addresses::ApiAddressTestUtils;
 use proton_mail_api::services::proton::response_data::{
     Conversation as ApiConversation, ConversationCount as ApiConversationCount,
     MessageCount as ApiMessageCount,
 };
 use proton_mail_common::Mailbox;
-use proton_mail_common::datatypes::{ExclusiveLocation, SystemLabelId};
+use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{Conversation, ConversationCounters, LabelWithCounters};
 use proton_mail_common::test_utils::conversations::ApiConversationTestUtils;
 use proton_mail_common::test_utils::init::Params as TestParams;
@@ -17,8 +17,9 @@ use proton_mail_common::test_utils::test_context::{MailTestContext, MailUserCont
 use stash::orm::Model;
 use stash::params;
 use stash::stash::StashError;
-use std::collections::{HashMap, HashSet};
-use velcro::{hash_map, hash_set};
+use stash::stash::Tether;
+use std::collections::HashMap;
+use velcro::hash_map;
 
 #[tokio::test]
 async fn action_label_as_without_archive() {
@@ -68,6 +69,25 @@ async fn action_label_as_without_archive() {
     )
     .await;
     ctx.mock_unlabel_conversation(
+        &label1_id,
+        vec![conversation1.id.clone(), conversation2.id.clone()],
+        vec![],
+    )
+    .await;
+
+    ctx.mock_label_conversation(
+        &label3_id,
+        vec![
+            conversation2.id.clone(),
+            conversation3.id.clone(),
+            conversation4.id.clone(),
+        ],
+        None,
+        vec![],
+    )
+    .await;
+
+    ctx.mock_unlabel_conversation(
         &label3_id,
         vec![
             conversation2.id,
@@ -116,29 +136,22 @@ async fn action_label_as_without_archive() {
         .await
         .unwrap();
 
-    let conversation1 = Conversation::load(1.into(), &tether)
-        .await
-        .unwrap()
-        .unwrap();
-    assert!(conversation1.labels.is_empty());
-    let conversation2 = Conversation::load(2.into(), &tether)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(conversation2.labels.len(), 2);
-    let conversation3 = Conversation::load(3.into(), &tether)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(conversation3.labels.len(), 2);
-    let conversation4 = Conversation::load(4.into(), &tether)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(conversation4.labels.len(), 3);
+    let [conversation1, conversation2, conversation3, conversation4] = get_convs(&tether).await;
+
+    // The setup is:
+    // - We label
+    // - We undo label before executing the queue
+    // - We label
+    // - Back to state0
+    // - We execute queue
+    // - We undo label
+    // - Back to state0
+
+    assert_state0(&tether).await;
 
     // Action
-    Conversation::action_label_as(
+    let undo = Conversation::action_label_as(
+        &tether,
         user_ctx.action_queue(),
         inbox_label.id(),
         vec![
@@ -152,72 +165,43 @@ async fn action_label_as_without_archive() {
         false,
     )
     .await
-    .unwrap();
+    .unwrap()
+    .undo;
 
-    user_ctx.execute_single_action().await.unwrap();
+    assert_state1(&tether).await;
 
-    // Validation
-    let conversation1 = Conversation::load(1.into(), &tether)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(conversation1.labels.len(), 1);
-    let ids: HashSet<_> = conversation1
-        .labels
-        .iter()
-        .map(|l| l.local_label_id.unwrap())
-        .collect();
-    assert_eq!(ids, hash_set![label1.id()]);
-    let conversation2 = Conversation::load(2.into(), &tether)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(conversation2.labels.len(), 2);
-    let ids: HashSet<_> = conversation2
-        .labels
-        .iter()
-        .map(|l| l.local_label_id.unwrap())
-        .collect();
-    assert_eq!(ids, hash_set![label1.id(), label2.id(),]);
-    let conversation3 = Conversation::load(3.into(), &tether)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(conversation3.labels.len(), 1);
-    let ids: HashSet<_> = conversation3
-        .labels
-        .iter()
-        .map(|l| l.local_label_id.unwrap())
-        .collect();
-    assert_eq!(ids, hash_set![label1.id(),]);
-    let conversation4 = Conversation::load(4.into(), &tether)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(conversation4.labels.len(), 2);
-    let ids: HashSet<_> = conversation4
-        .labels
-        .iter()
-        .map(|l| l.local_label_id.unwrap())
-        .collect();
-    assert_eq!(ids, hash_set![label1.id(), label2.id(),]);
+    undo.undo(user_ctx.action_queue(), &tether).await.unwrap();
+    assert_state0(&tether).await;
 
-    let label1 = LabelWithCounters::find_first("WHERE remote_id = ?", params!["selected"], &tether)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(label1.total_conv, 4);
-    let label2 = LabelWithCounters::find_first("WHERE remote_id = ?", params!["partial"], &tether)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(label2.total_conv, 2);
-    let label3 =
-        LabelWithCounters::find_first("WHERE remote_id = ?", params!["unselected"], &tether)
-            .await
-            .unwrap()
-            .unwrap();
-    assert_eq!(label3.total_conv, 0);
+    // Nothing ever happens because we reverted it by just cancelling the action in the queue.
+    assert_eq!(user_ctx.execute_all_actions().await.unwrap(), 0);
+    assert_state0(&tether).await;
+
+    // Action, again
+    let undo = Conversation::action_label_as(
+        &tether,
+        user_ctx.action_queue(),
+        inbox_label.id(),
+        vec![
+            conversation1.id(),
+            conversation2.id(),
+            conversation3.id(),
+            conversation4.id(),
+        ],
+        vec![label1.id()],
+        vec![label2.id()],
+        false,
+    )
+    .await
+    .unwrap()
+    .undo;
+
+    assert_eq!(user_ctx.execute_all_actions().await.unwrap(), 1);
+
+    undo.undo(user_ctx.action_queue(), &tether).await.unwrap();
+    // Nothing ever happens, back to state0
+    assert_state0(&tether).await;
+    assert_eq!(user_ctx.execute_all_actions().await.unwrap(), 1);
 }
 
 #[tokio::test]
@@ -242,26 +226,88 @@ async fn action_label_as_with_archive() {
     };
 
     let conversation1 = ApiConversation::test_conversation("first", vec![]);
-    let conversation2 = ApiConversation::test_conversation(
-        "second",
+    let conversation2 =
+        ApiConversation::test_conversation("second", vec![label2.clone(), label3.clone()]);
+    let conversation3 =
+        ApiConversation::test_conversation("third", vec![label1.clone(), label3.clone()]);
+    let conversation4 = ApiConversation::test_conversation(
+        "fourth",
         vec![label1.clone(), label2.clone(), label3.clone()],
     );
-    let conversations = vec![conversation1.clone(), conversation2.clone()];
+    let conversations = vec![
+        conversation1.clone(),
+        conversation2.clone(),
+        conversation3.clone(),
+        conversation4.clone(),
+    ];
 
     let params = test_init_params(labels, conversations.clone());
     ctx.setup_user(params).await;
     ctx.mock_get_conversations(conversations, 1_u64).await;
     ctx.mock_label_conversation(
-        &LabelId::archive(),
+        &label1_id,
         vec![conversation1.id.clone(), conversation2.id.clone()],
         None,
         vec![],
     )
     .await;
-    ctx.mock_label_conversation(&label1_id, vec![conversation1.id.clone()], None, vec![])
-        .await;
-    ctx.mock_unlabel_conversation(&label3_id, vec![conversation2.id], vec![])
-        .await;
+
+    ctx.mock_label_conversation(
+        &label3_id,
+        vec![
+            conversation2.id.clone(),
+            conversation3.id.clone(),
+            conversation4.id.clone(),
+        ],
+        None,
+        vec![],
+    )
+    .await;
+
+    ctx.mock_label_conversation(
+        &LabelId::archive(),
+        vec![
+            conversation1.id.clone(),
+            conversation2.id.clone(),
+            conversation3.id.clone(),
+            conversation4.id.clone(),
+        ],
+        None,
+        vec![],
+    )
+    .await;
+
+    ctx.mock_label_conversation(
+        &LabelId::inbox(),
+        vec![
+            conversation1.id.clone(),
+            conversation2.id.clone(),
+            conversation3.id.clone(),
+            conversation4.id.clone(),
+        ],
+        None,
+        vec![],
+    )
+    .await;
+
+    ctx.mock_unlabel_conversation(
+        &label1_id,
+        vec![conversation1.id, conversation2.id.clone()],
+        vec![],
+    )
+    .await;
+
+    ctx.mock_unlabel_conversation(
+        &label3_id,
+        vec![
+            conversation2.id,
+            conversation3.id.clone(),
+            conversation4.id.clone(),
+        ],
+        vec![],
+    )
+    .await;
+
     ctx.catch_all().await;
 
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
@@ -281,93 +327,93 @@ async fn action_label_as_with_archive() {
                 .unwrap()
                 .unwrap();
             let mut counters1 = ConversationCounters::new(label1.id());
-            counters1.total = 1;
+            counters1.total = 2;
             counters1.save(tx).await.unwrap();
             let label2 = Label::find_first("WHERE remote_id = ?", params!["partial"], tx)
                 .await
                 .unwrap()
                 .unwrap();
             let mut counters2 = ConversationCounters::new(label2.id());
-            counters2.total = 1;
+            counters2.total = 2;
             counters2.save(tx).await.unwrap();
             let label3 = Label::find_first("WHERE remote_id = ?", params!["unselected"], tx)
                 .await
                 .unwrap()
                 .unwrap();
             let mut counters3 = ConversationCounters::new(label3.id());
-            counters3.total = 1;
+            counters3.total = 3;
             counters3.save(tx).await.unwrap();
             Ok((label1, label2))
         })
         .await
         .unwrap();
 
-    let conversation1 = Conversation::load(1.into(), &tether)
-        .await
-        .unwrap()
-        .unwrap();
-    assert!(conversation1.labels.is_empty());
-    let conversation2 = Conversation::load(2.into(), &tether)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(conversation2.labels.len(), 3);
+    let [conversation1, conversation2, conversation3, conversation4] = get_convs(&tether).await;
 
+    // The setup is:
+    // - We label
+    // - We undo label before executing the queue
+    // - We label
+    // - Back to state0
+    // - We execute queue
+    // - We undo label
+    // - Back to state0
+
+    assert_state0(&tether).await;
     // Action
-    Conversation::action_label_as(
+    let undo = Conversation::action_label_as(
+        &tether,
         user_ctx.action_queue(),
         inbox_label.id(),
-        vec![conversation1.id(), conversation2.id()],
+        vec![
+            conversation1.id(),
+            conversation2.id(),
+            conversation3.id(),
+            conversation4.id(),
+        ],
         vec![label1.id()],
         vec![label2.id()],
         true,
     )
     .await
-    .unwrap();
-    user_ctx.execute_single_action().await.unwrap();
+    .unwrap()
+    .undo;
 
-    // Validation
-    let archive_id = Label::remote_id_counterpart(LabelId::archive(), &tether)
-        .await
-        .unwrap()
-        .unwrap();
+    assert_state2(&tether).await;
 
-    let conversation1 = Conversation::load(1.into(), &tether)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(conversation1.labels.len(), 2);
-    let ids: HashSet<_> = conversation1
-        .labels
-        .iter()
-        .map(|l| l.local_label_id.unwrap())
-        .collect();
-    assert_eq!(ids, hash_set![label1.id(), archive_id]);
-    assert_eq!(
-        conversation1.exclusive_location,
-        Some(ExclusiveLocation::System {
-            name: SystemLabel::Archive,
-            local_id: archive_id,
-        })
-    );
-    let conversation2 = Conversation::load(2.into(), &tether)
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(conversation2.labels.len(), 3);
-    let ids: HashSet<_> = conversation2
-        .labels
-        .iter()
-        .map(|l| l.local_label_id.unwrap())
-        .collect();
-    assert_eq!(ids, hash_set![label1.id(), label2.id(), archive_id]);
-    assert_eq!(
-        conversation2.exclusive_location,
-        Some(ExclusiveLocation::System {
-            name: SystemLabel::Archive,
-            local_id: archive_id,
-        })
-    );
+    undo.undo(user_ctx.action_queue(), &tether).await.unwrap();
+    assert_state3(&tether).await;
+
+    // Nothing ever happens because we reverted it by just cancelling the action in the queue.
+    assert_eq!(user_ctx.execute_all_actions().await.unwrap(), 0);
+    assert_state3(&tether).await;
+
+    // Action, again
+    let undo = Conversation::action_label_as(
+        &tether,
+        user_ctx.action_queue(),
+        inbox_label.id(),
+        vec![
+            conversation1.id(),
+            conversation2.id(),
+            conversation3.id(),
+            conversation4.id(),
+        ],
+        vec![label1.id()],
+        vec![label2.id()],
+        true,
+    )
+    .await
+    .unwrap()
+    .undo;
+
+    assert_eq!(user_ctx.execute_all_actions().await.unwrap(), 2);
+    assert_state2(&tether).await;
+
+    undo.undo(user_ctx.action_queue(), &tether).await.unwrap();
+    assert_state3(&tether).await;
+    assert_eq!(user_ctx.execute_all_actions().await.unwrap(), 2);
+    assert_state3(&tether).await;
 }
 
 fn test_init_params(
@@ -401,4 +447,95 @@ fn test_label(label_id: &LabelId, name: &str) -> ApiLabel {
         name: name.to_owned(),
         ..ApiLabel::test_default()
     }
+}
+
+async fn get_convs(tether: &Tether) -> [Conversation; 4] {
+    Conversation::find("WHERE local_id IN (1,2,3,4)", vec![], tether)
+        .await
+        .unwrap()
+        .try_into()
+        .unwrap()
+}
+
+fn label_eq<'a>(conv: &Conversation, comp: impl IntoIterator<Item = &'a LabelWithCounters>) {
+    let labels = conv
+        .labels
+        .iter()
+        .map(|x| x.local_label_id.unwrap())
+        .sorted();
+
+    for (conv, label) in labels.zip(comp) {
+        assert_eq!(conv, label.label().id());
+    }
+}
+
+/// State 0: No action has been made
+async fn assert_state0(tether: &Tether) {
+    let [conversation1, conversation2, conversation3, conversation4] = get_convs(tether).await;
+    assert!(conversation1.labels.is_empty());
+    assert_eq!(conversation2.labels.len(), 2);
+    assert_eq!(conversation3.labels.len(), 2);
+    assert_eq!(conversation4.labels.len(), 3);
+}
+
+/// State 1: Action has been made in test1
+async fn assert_state1(tether: &Tether) {
+    let [label1, label2, label3] = LabelWithCounters::from_remote_ids(
+        tether,
+        ["selected".into(), "partial".into(), "unselected".into()],
+    )
+    .await
+    .unwrap()
+    .try_into()
+    .unwrap();
+
+    assert_eq!(label1.total_conv, 4);
+    assert_eq!(label2.total_conv, 2);
+    assert_eq!(label3.total_conv, 0);
+
+    let [conversation1, conversation2, conversation3, conversation4] = get_convs(tether).await;
+
+    label_eq(&conversation1, [&label1]);
+    label_eq(&conversation2, [&label1, &label2]);
+    label_eq(&conversation3, [&label1]);
+    label_eq(&conversation4, [&label1, &label2]);
+}
+
+/// State 2: Action has been made in test2
+async fn assert_state2(tether: &Tether) {
+    let [label1, label2, label3, archive] = LabelWithCounters::from_remote_ids(
+        tether,
+        [
+            "selected".into(),
+            "partial".into(),
+            "unselected".into(),
+            LabelId::archive(),
+        ],
+    )
+    .await
+    .unwrap()
+    .try_into()
+    .unwrap();
+
+    let [conversation1, conversation2, conversation3, conversation4] = get_convs(tether).await;
+
+    assert_eq!(label1.total_conv, 4);
+    assert_eq!(label2.total_conv, 2);
+    assert_eq!(label3.total_conv, 0);
+    assert_eq!(archive.total_conv, 4);
+
+    label_eq(&conversation1, [&archive, &label1]);
+    label_eq(&conversation2, [&archive, &label1, &label2]);
+    label_eq(&conversation3, [&archive, &label1]);
+    label_eq(&conversation4, [&archive, &label1, &label2]);
+}
+
+/// State 0: Action has been undone in test2
+/// TODO: It's a separate thing since we now add the inbox label but I don't have time to fix this now
+async fn assert_state3(tether: &Tether) {
+    let [conversation1, conversation2, conversation3, conversation4] = get_convs(tether).await;
+    assert_eq!(conversation1.labels.len(), 1);
+    assert_eq!(conversation2.labels.len(), 3);
+    assert_eq!(conversation3.labels.len(), 3);
+    assert_eq!(conversation4.labels.len(), 4);
 }

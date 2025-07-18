@@ -156,6 +156,7 @@ async fn label_as_without_archive() {
 
     // Action:
     let action_result = Message::action_label_as(
+        &tether,
         user_ctx.action_queue(),
         inbox.id(),
         vec![message1.id(), message2.id(), message3.id(), message4.id()],
@@ -165,13 +166,13 @@ async fn label_as_without_archive() {
     )
     .await
     .unwrap();
-    user_ctx.execute_single_action().await.unwrap();
+    user_ctx.execute_all_actions().await.unwrap();
 
     // Validation:
     //   * All messages are in first label (=> 4)
     //   * All messages with second label still have it (=> 2)
     //   * No message have third label (=> 0)
-    assert!(action_result);
+    assert!(action_result.input_label_is_empty);
     let label1 = Label::find_first("WHERE remote_id = ?", params!["selected"], &tether)
         .await
         .unwrap()
@@ -317,6 +318,7 @@ async fn label_as_with_archive() {
 
     // Action:
     let action_result = Message::action_label_as(
+        &tether,
         user_ctx.action_queue(),
         inbox.id(),
         vec![message1.id(), message2.id()],
@@ -326,7 +328,7 @@ async fn label_as_with_archive() {
     )
     .await
     .unwrap();
-    user_ctx.execute_single_action().await.unwrap();
+    user_ctx.execute_all_actions().await.unwrap();
 
     // Validation:
     let archive_id = Label::remote_id_counterpart(LabelId::archive(), &tether)
@@ -334,7 +336,7 @@ async fn label_as_with_archive() {
         .unwrap()
         .unwrap();
 
-    assert!(action_result);
+    assert!(action_result.input_label_is_empty);
     let message1 = Message::load(1.into(), &tether).await.unwrap().unwrap();
     assert_eq!(message1.label_ids.len(), 2);
     assert!(message1.label_ids.contains(&label1_id));

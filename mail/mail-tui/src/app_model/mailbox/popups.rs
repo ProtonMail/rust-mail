@@ -10,7 +10,7 @@ use proton_mail_common::models::{Conversation, LabelWithCounters, MailLabel};
 use proton_mail_common::{MailContextResult, MailUserContext, Sidebar};
 use ratatui::crossterm::event::{Event, KeyCode, KeyModifiers};
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::text::Span;
+use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, List, ListItem, Tabs};
 use ratatui::{Frame, symbols};
 use stash::orm::Model;
@@ -85,6 +85,7 @@ pub struct LabelItemPopup {
     labels: Vec<LabelAsAction>,
     list_state: ScrollableListState,
     item: Items,
+    must_archive: bool,
 }
 
 impl LabelItemPopup {
@@ -105,6 +106,7 @@ impl LabelItemPopup {
             labels,
             item,
             list_state: ScrollableListState::new(Some(0)),
+            must_archive: false,
         })
     }
     fn selected_label(&self) -> Option<&LabelAsAction> {
@@ -148,6 +150,10 @@ impl crate::app_model::Popup for LabelItemPopup {
                 }
                 Command::None
             }
+            KeyCode::Char(' ') => {
+                self.must_archive = !self.must_archive;
+                Command::None
+            }
             KeyCode::Enter => {
                 let Some(action) = self.selected_label() else {
                     return Command::None;
@@ -169,7 +175,7 @@ impl crate::app_model::Popup for LabelItemPopup {
                             item_ids,
                             selected_label_ids,
                             partially_selected_label_ids,
-                            must_archive: false, // TODO: add this button
+                            must_archive: self.must_archive,
                         });
                         Command::batch([
                             Command::message(Messages::DismissPopup),
@@ -182,7 +188,7 @@ impl crate::app_model::Popup for LabelItemPopup {
                             item_ids,
                             selected_label_ids,
                             partially_selected_label_ids,
-                            must_archive: false, // TODO: add this button
+                            must_archive: self.must_archive,
                         });
                         Command::batch([
                             Command::message(Messages::DismissPopup),
@@ -196,6 +202,9 @@ impl crate::app_model::Popup for LabelItemPopup {
     }
 
     fn view(&mut self, frame: &mut Frame, area: Rect) {
+        let [list_area, must_archive_area] =
+            Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).areas(area);
+
         let list = self
             .labels
             .iter()
@@ -209,7 +218,13 @@ impl crate::app_model::Popup for LabelItemPopup {
             }) // TODO: Color this
             .collect::<List<'_>>();
         let list = ScrollableList::new(list);
-        frame.render_stateful_widget(list, area, &mut self.list_state);
+        frame.render_stateful_widget(list, list_area, &mut self.list_state);
+        let x = Line::from(format!(
+            "[spacebar] Also archive: [{}]",
+            if self.must_archive { 'x' } else { ' ' }
+        ));
+
+        frame.render_widget(x, must_archive_area);
     }
 }
 

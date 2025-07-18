@@ -1,96 +1,49 @@
-use crate::actions::{LabelAsData, MailActionError, filter_responses};
-use crate::datatypes::{LocalMessageId, RollbackItemType, SystemLabelId};
+use crate::actions::messages::r#move::Move as MoveAction;
+use crate::actions::{LabelAsData, MailActionError};
+use crate::datatypes::SystemLabelId;
 use crate::models::{Message, MessageCounters};
 use crate::{AppError, MailUserContext};
-use itertools::Itertools;
+use anyhow::Context;
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Handler as ActionHandler, Type, WriterGuard,
+    self, Action, ActionId, FactoryError, Handler as ActionHandler, MetadataBuilder, Type,
+    VersionConverter, VersionConverterError, WriterGuard,
 };
+use proton_action_queue::queue::Queue;
 use proton_core_api::services::proton::LabelId;
-use proton_core_api::session::CoreSession;
-use proton_core_common::datatypes::{LabelType, LocalLabelId};
-use proton_core_common::models::{Label, ModelExtension, ModelIdExtension};
-use proton_mail_api::services::proton::ProtonMail;
+use proton_core_common::models::Label;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{Bond, Tether};
 use std::collections::HashSet;
-use tracing::{error, warn};
+use std::mem;
 
 /// Action which change the labels of a messages.
-#[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct LabelAs {
-    data: LabelAsData<Message>,
-}
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LabelAs(pub LabelAsData<Message>);
 
-impl LabelAs {
-    pub fn new(
-        source_label_id: LocalLabelId,
-        message_ids: Vec<LocalMessageId>,
-        selected_label_ids: Vec<LocalLabelId>,
-        partially_selected_label_ids: Vec<LocalLabelId>,
-        must_archive: bool,
-    ) -> Self {
-        Self {
-            data: LabelAsData::new(
-                source_label_id,
-                message_ids,
-                selected_label_ids,
-                partially_selected_label_ids,
-                must_archive,
-            ),
+pub struct Converter;
+impl VersionConverter for Converter {
+    type Output = LabelAs;
+
+    fn convert(
+        old_version: u32,
+        current_version: u32,
+        data: &[u8],
+    ) -> Result<Self::Output, FactoryError> {
+        if current_version != LabelAs::VERSION && old_version != LabelAs::VERSION {
+            return Err(FactoryError::VersionConverter(
+                VersionConverterError::InvalidVersion(current_version),
+            ));
         }
-    }
 
-    /// Memorize the data before applying LabelAs action so we can revert modifications later
-    async fn memorize_original_data(&mut self, tether: &Tether) -> Result<(), MailActionError> {
-        let all_labels = Label::find_by_kind(LabelType::Label, tether).await?;
-        self.data.local_all_label_ids = all_labels.iter().map(Model::id).collect();
-
-        self.save_modifications(tether).await?;
-
-        for message_id in &self.data.local_ids {
-            let Some(message) = Message::load(*message_id, tether).await? else {
-                warn!("While memorizing labels, could not find message with id: {message_id:?}");
-                continue;
-            };
-
-            self.data
-                .original_location
-                .insert(*message_id, message.exclusive_location);
-        }
-        Ok(())
-    }
-
-    /// Keep track of labels added/removed
-    async fn save_modifications(&mut self, tether: &Tether) -> Result<(), MailActionError> {
-        let selected = HashSet::from_iter(self.data.local_selected_label_ids.iter().cloned());
-        let partial =
-            HashSet::from_iter(self.data.local_partially_selected_label_ids.iter().cloned());
-        for message_id in &self.data.local_ids {
-            if let Some(message) = Message::load(*message_id, tether).await? {
-                let labels = message.all_message_labels(tether).await?;
-                let labels = labels
-                    .iter()
-                    .filter(|l| l.label_type == LabelType::Label)
-                    .filter_map(|l| l.local_id)
-                    .collect();
-                self.data
-                    .added_labels
-                    .insert(*message_id, &selected - &labels);
-                self.data
-                    .removed_labels
-                    .insert(*message_id, &(&labels - &selected) - &partial);
-            }
-        }
-        Ok(())
+        Ok(action::deserialize::<LabelAs>(data)?)
     }
 }
 
 impl Action for LabelAs {
     const TYPE: Type = Type("label_messages_as");
-    const VERSION: u32 = 1;
-    type VersionConverter = DefaultVersionConverter<Self>;
+    const VERSION: u32 = 2;
+    type VersionConverter = Converter;
     type Handler = Handler;
     type RemoteOutput = ();
 
@@ -101,25 +54,6 @@ impl Action for LabelAs {
 
 #[derive(Default)]
 pub struct Handler;
-
-impl Handler {
-    pub(crate) async fn revert_one_locally(
-        message_id: LocalMessageId,
-        added_labels: HashSet<LocalLabelId>,
-        removed_labels: HashSet<LocalLabelId>,
-        bond: &Bond<'_>,
-    ) -> Result<(), AppError> {
-        for l in removed_labels {
-            Message::apply_label(l, [message_id], bond).await?;
-        }
-
-        for l in added_labels {
-            Message::remove_label(l, [message_id], bond).await?;
-        }
-
-        Ok(())
-    }
-}
 
 impl ActionHandler for Handler {
     type Action = LabelAs;
@@ -132,31 +66,12 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<bool, <Self::Action as Action>::Error> {
-        action.memorize_original_data(tx).await?;
-        action.data.resolve_remote_ids(tx).await?;
+        action.0.apply_local_common(tx).await?;
 
-        Message::label_as(
-            action.data.source_label_id,
-            action.data.local_ids.clone(),
-            &action.data.local_selected_label_ids,
-            &action.data.local_partially_selected_label_ids,
-            &action.data.local_all_label_ids,
-            action.data.must_archive,
-            tx,
-        )
-        .await?;
-
-        if let Some(source_label_counters) =
-            MessageCounters::find_by_id(action.data.source_label_id, tx).await?
-        {
-            Ok(source_label_counters.total == 0)
-        } else {
-            warn!(
-                "Could not find label with id: {}",
-                action.data.source_label_id
-            );
-            Ok(true)
-        }
+        let total = MessageCounters::load(action.0.source_label_id, tx)
+            .await?
+            .map_or(0, |x| x.total);
+        Ok(total == 0)
     }
 
     async fn revert_local(
@@ -166,29 +81,7 @@ impl ActionHandler for Handler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        for &message_id in &action.data.local_ids {
-            Self::revert_one_locally(
-                message_id,
-                action
-                    .data
-                    .added_labels
-                    .remove(&message_id)
-                    .unwrap_or_default(),
-                action
-                    .data
-                    .removed_labels
-                    .remove(&message_id)
-                    .unwrap_or_default(),
-                tx,
-            )
-            .await?;
-        }
-
-        action
-            .data
-            .mark_rollback(RollbackItemType::Message, tx)
-            .await?;
-
+        action.0.revert_local(tx).await?;
         Ok(())
     }
 
@@ -197,82 +90,64 @@ impl ActionHandler for Handler {
         _: ActionId,
         ctx: &Self::Context,
         action: &mut Self::Action,
-        mut guard: WriterGuard<'_>,
+        guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let session = ctx.session();
-        let api = session.api();
+        action.0.apply_remote(ctx, guard).await
+    }
+}
 
-        let failed_ids = Message::remote_relabel(
-            session,
-            &action.data.added_labels,
-            &action.data.removed_labels,
-            guard.tether(),
-        )
-        .await?;
+pub struct UndoLabelAsMessages {
+    pub action: LabelAs,
+    pub id: ActionId,
+    pub must_archive: bool,
+}
 
-        if !failed_ids.is_empty() {
-            error!("LabelAs message operation failed for messages: {failed_ids:?}");
-            let failed_ids = Message::remote_ids_counterpart(failed_ids, guard.tether()).await?;
-            guard
-                .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
-                    for message_id in failed_ids {
-                        Self::revert_one_locally(
-                            message_id,
-                            action
-                                .data
-                                .added_labels
-                                .remove(&message_id)
-                                .unwrap_or_default(),
-                            action
-                                .data
-                                .removed_labels
-                                .remove(&message_id)
-                                .unwrap_or_default(),
-                            tx,
-                        )
-                        .await?;
-                    }
-                    Ok(())
-                })
-                .await?;
-        }
+impl UndoLabelAsMessages {
+    pub async fn undo(self, queue: &Queue, tether: &Tether) -> Result<(), AppError> {
+        let mut action = self.action;
+        let Err(e) = queue.cancel(self.id).await else {
+            // The undoing is done by the revert_local of the action.
+            return Ok(());
+        };
 
-        if action.data.must_archive {
-            let message_ids = action
-                .data
-                .remote_ids
-                .clone()
-                .into_iter()
-                .map_into()
-                .collect();
-            let response = api
-                .put_messages_label(message_ids, LabelId::archive(), None)
-                .await?
-                .responses;
+        tracing::error!("{e:?}");
+        // The queue couldn't revert. This means that we're on our own to undo this.
+        // Let's create the opposite action: Swap add and remove.
+        mem::swap(&mut action.0.add, &mut action.0.remove);
 
-            let failed_ids = filter_responses(response);
-            if !failed_ids.is_empty() {
-                error!("Archive messages operation failed for : {failed_ids:?}");
+        if self.must_archive {
+            // We have to undo the archiving
+            let archive = Label::resolve_local_label_id(LabelId::archive(), tether).await?;
 
-                guard
-                    .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
-                        let archive_id = Label::remote_id_counterpart(LabelId::archive(), tx)
-                            .await?
-                            .expect("Archive label must have a RemoteId");
-                        let local_ids =
-                            Message::remote_ids_counterpart(failed_ids.clone(), tx).await?;
-                        Message::move_messages(
-                            archive_id,
-                            action.data.source_label_id,
-                            local_ids,
-                            tx,
-                        )
-                        .await?;
-                        Ok(())
-                    })
-                    .await?;
+            let mut all = HashSet::new();
+            for &i in &action.0.add {
+                all.insert(i.id);
             }
-        }
+
+            for &i in &action.0.remove {
+                all.insert(i.id);
+            }
+
+            let move_action = MoveAction::new(archive, action.0.source_label_id, all);
+            let queued_move = queue
+                .queue_action(action)
+                .await
+                .context("Error queuing move to archive")?;
+
+            let meta = MetadataBuilder::new()
+                .with_dependency(queued_move.id)
+                .build();
+
+            queue
+                .queue_action_with_metadata(move_action, meta)
+                .await
+                .context("Error queuing with move to archive dependency")?;
+        } else {
+            queue
+                .queue_action(action)
+                .await
+                .context("Error queuing action")?;
+        };
 
         Ok(())
     }

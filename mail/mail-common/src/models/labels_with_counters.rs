@@ -5,15 +5,15 @@ mod labels_with_counters;
 use std::sync::Arc;
 
 use indoc::formatdoc;
-use itertools::Itertools as _;
 use proton_core_api::services::proton::{LabelId, ProtonCore};
 use proton_core_common::datatypes::{LabelColor, LabelType, LocalLabelId};
 use proton_core_common::models::{
     InitializationError, InitializationWatcher, InitializedComponent, Label, LabelError,
+    ModelIdExtension,
 };
 use sqlite_watcher::watcher::TableObserver;
 use stash::stash::{Stash, WatcherHandle};
-use stash::utils::placeholders_n;
+use stash::utils::{IterMapToSql, placeholders};
 use stash::{
     exports::ToSql,
     macros::DbRecord,
@@ -237,16 +237,22 @@ impl LabelWithCounters {
     }
 
     /// Gets all system labels that are displayable
+    pub async fn from_remote_ids(
+        tether: &Tether,
+        ids: impl IntoIterator<Item = LabelId>,
+    ) -> anyhow::Result<Vec<Self>> {
+        let ids = Label::remote_ids_counterpart(Vec::from_iter(ids), tether).await?;
+        Self::from_ids(tether, ids).await
+    }
+
+    /// Gets all system labels that are displayable
     pub async fn from_ids(
         tether: &Tether,
         ids: impl IntoIterator<Item = LocalLabelId>,
     ) -> anyhow::Result<Vec<Self>> {
         // This is not suceptible to SQL injection since the labels are always numbers.
-        let label_ids = ids
-            .into_iter()
-            .map(|id| Box::new(id) as Box<dyn ToSql + Send>)
-            .collect_vec();
-        let placeholders = placeholders_n(label_ids.len());
+        let label_ids = ids.bridge_sql();
+        let placeholders = placeholders(&label_ids);
 
         let values = tether
             .query(

@@ -4,11 +4,11 @@ mod conversations;
 
 use super::network::split_request;
 use crate::actions::conversations::LabelAs;
-use crate::actions::conversations::label_as::Handler as LabelAsHandler;
+use crate::actions::conversations::label_as::UndoLabelAsConversations;
 use crate::actions::conversations::{Label as ActionLabel, MarkRead, MarkUnread, Move, Unlabel};
 use crate::actions::{
-    ConversationAction, ConversationAvailableActions, GeneralActions, LabelAsAction,
-    MailActionError, MoveAction, MoveItemAction, filter_responses,
+    ConversationAction, ConversationAvailableActions, GeneralActions, LabelAsAction, LabelAsData,
+    LabelAsOutput, LabelPair, MailActionError, MoveAction, MoveItemAction, UndoLabelAs,
 };
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
@@ -24,6 +24,7 @@ use anyhow::{Context, anyhow};
 use futures::future;
 use indoc::{formatdoc, indoc};
 use itertools::Itertools;
+use proton_action_queue::action::MetadataBuilder;
 use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedActionOutput};
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::Proton;
@@ -55,7 +56,7 @@ use stash::params;
 use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
 use stash::utils::{MapToSql as _, placeholders};
 use std::collections::hash_map::Entry as HmEntry;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 use std::future::Future;
 use std::ops::AddAssign;
 use std::sync::Arc;
@@ -341,168 +342,74 @@ impl Conversation {
     /// Returns an error if the action can not be applied.
     ///
     pub async fn action_label_as(
+        tether: &Tether,
         queue: &Queue,
         source_label_id: LocalLabelId,
         conversation_ids: Vec<LocalConversationId>,
         selected_label_ids: Vec<LocalLabelId>,
         partially_selected_label_ids: Vec<LocalLabelId>,
         must_archive: bool,
-    ) -> Result<bool, AppError> {
-        let action = LabelAs::new(
+    ) -> Result<LabelAsOutput, AppError> {
+        let all_labels = Label::local_ids_by_kind(LabelType::Label, tether).await?;
+        let cartesian = ConversationLabel::find_by_conversations_and_labels(
+            &conversation_ids,
+            &all_labels,
+            tether,
+        )
+        .await?;
+
+        let action = LabelAs(LabelAsData::new(
+            cartesian
+                .into_iter()
+                .filter_map(|x| {
+                    Some(LabelPair {
+                        label: x.local_label_id?,
+                        id: x.local_conversation_id?,
+                    })
+                })
+                .collect(),
             source_label_id,
-            conversation_ids,
-            selected_label_ids,
-            partially_selected_label_ids,
+            conversation_ids.clone(),
+            &selected_label_ids,
+            &partially_selected_label_ids,
+            &all_labels,
+        ));
+
+        let output = if must_archive {
+            // We have to undo the archiving
+            let archive = Label::resolve_local_label_id(LabelId::archive(), tether).await?;
+            let move_action = Move::new(source_label_id, archive, conversation_ids);
+            let queued_move = queue
+                .queue_action(action.clone())
+                .await
+                .context("Error queuing move to archive")?;
+
+            let meta = MetadataBuilder::new()
+                .with_dependency(queued_move.id)
+                .build();
+
+            queue
+                .queue_action_with_metadata(move_action, meta)
+                .await
+                .context("Error queuing with move to archive dependency")?;
+            queued_move
+        } else {
+            queue
+                .queue_action(action.clone())
+                .await
+                .context("Error queuing action")?
+        };
+
+        let undo = UndoLabelAs::Conversations(UndoLabelAsConversations {
+            action,
+            id: output.id,
             must_archive,
-        );
-        let output = queue
-            .queue_action(action)
-            .await
-            .map_err(|e| AppError::Other(anyhow!(e)))?;
-        Ok(output.local)
-    }
+        });
 
-    /// Locally apply LabelAs action for conversations
-    pub(crate) async fn label_as(
-        source_label_id: LocalLabelId,
-        conversation_ids: Vec<LocalConversationId>,
-        selected_label_ids: &[LocalLabelId],
-        partially_selected_label_ids: &[LocalLabelId],
-        must_archive: bool,
-        bond: &Bond<'_>,
-    ) -> Result<(), AppError> {
-        for label in Label::find_by_kind(LabelType::Label, bond).await? {
-            let label_id = label.id();
-            if selected_label_ids.contains(&label_id) {
-                Self::apply_label(label_id, conversation_ids.clone(), bond).await?
-            } else if !partially_selected_label_ids.contains(&label_id) {
-                Self::remove_label(label_id, conversation_ids.clone(), bond).await?
-            }
-            // else keep label as is
-        }
-
-        if must_archive {
-            let archive_id = Label::remote_id_counterpart(LabelId::archive(), bond)
-                .await?
-                .expect("Archive label must have a RemoteId");
-            Self::move_conversations(source_label_id, archive_id, conversation_ids, bond).await?;
-        }
-
-        Ok(())
-    }
-
-    /// Remotely apply LabelAs action for conversations
-    pub(crate) async fn remote_relabel(
-        session: &Session,
-        added_label_ids: &HashMap<LocalConversationId, HashSet<LocalLabelId>>,
-        removed_label_ids: &HashMap<LocalConversationId, HashSet<LocalLabelId>>,
-        tether: &Tether,
-    ) -> Result<Vec<ConversationId>, AppError> {
-        /// Gets a hashmap of the remote label id and the local ids.
-        async fn group_ids_by_label(
-            label_ids: &HashMap<LocalConversationId, HashSet<LocalLabelId>>,
-            tether: &Tether,
-        ) -> Result<HashMap<LabelId, HashSet<LocalConversationId>>, AppError> {
-            let mut map = HashMap::new();
-            for (conv_id, local_label_ids) in label_ids {
-                let remote_label_ids = Label::local_ids_counterpart(
-                    Vec::from_iter(local_label_ids.iter().cloned()),
-                    tether,
-                )
-                .await?;
-                for remote_label_id in remote_label_ids {
-                    map.entry(remote_label_id)
-                        .or_insert_with(HashSet::new)
-                        .insert(*conv_id);
-                }
-            }
-            Ok(map)
-        }
-
-        let added_by_label = group_ids_by_label(added_label_ids, tether).await?;
-        let removed_by_label = group_ids_by_label(removed_label_ids, tether).await?;
-
-        let api = session.api();
-
-        let mut failed_ids = vec![];
-        for (label_id, conversation_ids) in added_by_label {
-            let conversation_ids =
-                Conversation::local_ids_counterpart(Vec::from_iter(conversation_ids), tether)
-                    .await?;
-            let response = api
-                .put_conversations_label(
-                    conversation_ids.iter().cloned().map_into().collect(),
-                    label_id.clone(),
-                    None,
-                )
-                .await;
-
-            match response {
-                Ok(res) => failed_ids.extend(filter_responses(res.responses)),
-                Err(e) => {
-                    error!("{e:?}");
-                    failed_ids.extend(conversation_ids);
-                }
-            };
-        }
-
-        for (label_id, conversation_ids) in removed_by_label {
-            let conversation_ids =
-                Conversation::local_ids_counterpart(Vec::from_iter(conversation_ids), tether)
-                    .await?;
-            let response = api
-                .put_conversations_unlabel(
-                    conversation_ids.iter().cloned().map_into().collect(),
-                    label_id.clone(),
-                )
-                .await;
-            match response {
-                Ok(res) => failed_ids.extend(filter_responses(res.responses)),
-                Err(e) => {
-                    error!("{e:?}");
-                    failed_ids.extend(conversation_ids);
-                }
-            };
-        }
-
-        Ok(failed_ids)
-    }
-
-    /// Revert locally the LabelAs action for conversation.
-    pub(crate) async fn undo_label_as(
-        local_ids: Vec<LocalConversationId>,
-        source_label_id: LocalLabelId,
-        mut added_labels: HashMap<LocalConversationId, HashSet<LocalLabelId>>,
-        mut removed_labels: HashMap<LocalConversationId, HashSet<LocalLabelId>>,
-        mut original_location: HashMap<LocalConversationId, Option<ExclusiveLocation>>,
-        must_archive: bool,
-        bond: &Bond<'_>,
-    ) -> Result<(), AppError> {
-        let archive_id = Label::remote_id_counterpart(LabelId::archive(), bond)
-            .await?
-            .expect("Archive label must have a RemoteId");
-
-        for conversation_id in &local_ids {
-            LabelAsHandler::revert_one_locally(
-                *conversation_id,
-                added_labels.remove(conversation_id).unwrap_or_default(),
-                removed_labels.remove(conversation_id).unwrap_or_default(),
-                original_location.remove(conversation_id),
-                bond,
-            )
-            .await?;
-
-            if must_archive {
-                Conversation::move_conversations(
-                    archive_id,
-                    source_label_id,
-                    local_ids.clone(),
-                    bond,
-                )
-                .await?;
-            }
-        }
-        Ok(())
+        Ok(LabelAsOutput {
+            input_label_is_empty: output.local,
+            undo,
+        })
     }
 
     /// Find a group of Conversations by their IDs.
@@ -3114,6 +3021,24 @@ impl ConversationLabel {
         Self::find_first(
             "WHERE local_conversation_id = ? AND local_label_id = ?",
             params![*conversation_id, label_id],
+            tether,
+        )
+        .await
+    }
+
+    pub(crate) async fn find_by_conversations_and_labels(
+        messages: &[LocalConversationId],
+        labels: &[LocalLabelId],
+        tether: &Tether,
+    ) -> Result<Vec<Self>, StashError> {
+        Self::find(
+            formatdoc! { "
+                WHERE local_conversation_id IN ({})
+                AND local_label_id IN ({})",
+                placeholders(messages),
+                placeholders(labels)
+            },
+            messages.to_sql_extend(labels),
             tether,
         )
         .await

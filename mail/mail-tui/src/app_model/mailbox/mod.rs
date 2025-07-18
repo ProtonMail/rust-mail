@@ -104,7 +104,7 @@ pub enum MessageMessage {
     NextPage(Vec<MailMessage>),
     DeletePermanently(Vec<LocalMessageId>),
     MoveTo(Vec<LocalMessageId>, LocalLabelId),
-    LabelAs(Box<LabelAs<LocalMessageId>>), // TODO: Handle selection
+    LabelAs(Box<LabelAs<LocalMessageId>>),
     MarkRead(Vec<LocalMessageId>),
     MarkUnread(Vec<LocalMessageId>),
     ReportPhishing(LocalMessageId),

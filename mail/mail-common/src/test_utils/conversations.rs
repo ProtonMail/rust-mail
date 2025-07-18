@@ -1,3 +1,4 @@
+use crate::datatypes::SystemLabelId;
 use crate::test_utils::test_context::MailTestContext;
 use proton_core_api::services::proton::{Label as ApiLabel, LabelId};
 use proton_core_api::services::proton::{ProtonIdMarker, common::ApiErrorInfo};
@@ -209,6 +210,7 @@ fn build_conv_responses<T: ProtonIdMarker>(ids: &[T], failed: Vec<T>) -> Vec<Ope
 
 pub trait ApiConversationTestUtils {
     fn test_conversation(id: &str, labels: Vec<ApiLabel>) -> ApiConversation;
+    fn test_conversation_in_inbox(id: &str, labels: Vec<ApiLabel>) -> ApiConversation;
 }
 
 impl ApiConversationTestUtils for ApiConversation {
@@ -217,13 +219,8 @@ impl ApiConversationTestUtils for ApiConversation {
             .into_iter()
             .map(|l| ApiConversationLabel {
                 id: l.id,
-                context_expiration_time: 0,
-                context_num_attachments: 0,
                 context_num_messages: 1,
-                context_num_unread: 0,
-                context_size: 0,
-                context_snooze_time: 0,
-                context_time: 0,
+                ..ApiConversationLabel::test_default()
             })
             .collect();
         ApiConversation {
@@ -232,5 +229,19 @@ impl ApiConversationTestUtils for ApiConversation {
             labels,
             ..ApiConversation::test_default()
         }
+    }
+
+    fn test_conversation_in_inbox(id: &str, labels: Vec<ApiLabel>) -> ApiConversation {
+        let mut r = Self::test_conversation(id, labels);
+        r.labels.insert(
+            0,
+            ApiConversationLabel {
+                id: LabelId::inbox(),
+                context_num_messages: 1,
+                ..ApiConversationLabel::test_default()
+            },
+        );
+
+        r
     }
 }

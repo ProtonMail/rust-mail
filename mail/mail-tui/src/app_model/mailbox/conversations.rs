@@ -5,7 +5,7 @@ use crate::app_model::mailbox::paginator::Paginator;
 use crate::app_model::mailbox::{ConversationMessage, ITEM_LIMIT, Items, Message};
 use crate::messages::Messages;
 use crate::widgets::{AsIntoTable, CenteredThrobber, ScrollableTable, ScrollableTableState};
-use anyhow::anyhow;
+use anyhow::{Context, anyhow};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_mail_common::datatypes::folder_banner::{AutoDeleteBanner, AutoDeleteState};
 use proton_mail_common::datatypes::{ContextualConversation, LocalConversationId, ReadFilter};
@@ -482,9 +482,11 @@ fn label_conversation(
         must_archive,
     }: LabelAs<LocalConversationId>,
 ) -> Command<Messages> {
-    Command::task(async move {
-        match Conversation::action_label_as(
-            ctx.action_queue(),
+    let ctx2 = ctx.clone();
+    let f = async move {
+        Conversation::action_label_as(
+            &ctx2.user_stash().connection(),
+            ctx2.action_queue(),
             source_label_id,
             conversation_ids,
             selected_label_ids,
@@ -492,10 +494,37 @@ fn label_conversation(
             must_archive,
         )
         .await
-        {
-            Ok(_) => Command::None,
+        .context("Failed to apply label to conversation")
+    };
+    Command::task(async move {
+        match f.await {
+            Ok(output) => {
+                let ctx = ctx.clone();
+                let popup = YesNoPopup::new(
+                    "Undo Labeling?",
+                    "Labelled successfully, would you like to undo this operation?",
+                )
+                .on_accept(Command::batch([
+                    Command::message(Messages::DisplayBackgroundProgress(
+                        "Cancelling Send".to_owned(),
+                    )),
+                    Command::task(async move {
+                        if let Err(e) = output
+                            .undo
+                            .undo(ctx.action_queue(), &ctx.user_stash().connection())
+                            .await
+                            .context("Error undoing conversation labelling")
+                        {
+                            Command::message(e.into())
+                        } else {
+                            Command::None
+                        }
+                    }),
+                    Command::message(Messages::DismissBackgroundProgress),
+                ]));
+                Messages::raise_popup(popup).into()
+            }
             Err(e) => {
-                let e = anyhow!("Failed to label conversation: {e}");
                 tracing::error!("{e:?}");
                 Command::message(e.into())
             }
