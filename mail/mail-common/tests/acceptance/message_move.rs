@@ -103,8 +103,8 @@ async fn move_between_folders() {
     // Action:
     // * move message in the other folder
     Message::action_move(
+        &tether,
         user_ctx.action_queue(),
-        source.id(),
         destination.id(),
         vec![message.id()],
     )
@@ -129,8 +129,8 @@ async fn move_from_label_does_not_unlabel() {
     let source_label_id = LabelId::from("source");
     let source_label = test_label(&source_label_id, ApiLabelType::Label, "source");
     let destination_label_id = LabelId::from("destination");
-    let destination_label = test_label(&destination_label_id, ApiLabelType::Label, "destination");
-    let message = test_message(vec![source_label_id.clone()], true);
+    let destination_label = test_label(&destination_label_id, ApiLabelType::Folder, "destination");
+    let message = test_message(vec![LabelId::inbox(), source_label_id.clone()], true);
     let labels = hash_map! {
         ApiLabelType::Label: vec![ source_label, destination_label ]
     };
@@ -158,11 +158,6 @@ async fn move_from_label_does_not_unlabel() {
         .await
         .unwrap();
 
-    let source = Label::find_first("WHERE remote_id = ?", params!["source"], &tether)
-        .await
-        .unwrap()
-        .unwrap();
-
     let destination = Label::find_first("WHERE remote_id = ?", params!["destination"], &tether)
         .await
         .unwrap()
@@ -176,8 +171,8 @@ async fn move_from_label_does_not_unlabel() {
     // Action:
     // * move message in the other label
     Message::action_move(
+        &tether,
         user_ctx.action_queue(),
-        source.id(),
         destination.id(),
         vec![message.id()],
     )
@@ -206,10 +201,6 @@ async fn move_into_trash_remove_label_and_mark_read() {
     let user_ctx = ctx.uninitialized_mail_user_context().await;
     let tether = user_ctx.user_stash().connection();
 
-    let inbox = Label::find_first("WHERE remote_id = ?", params![LabelId::inbox()], &tether)
-        .await
-        .unwrap()
-        .unwrap();
     let trash = Label::find_first("WHERE remote_id = ?", params![LabelId::trash()], &tether)
         .await
         .unwrap()
@@ -255,8 +246,8 @@ async fn move_into_trash_remove_label_and_mark_read() {
     // Action:
     // * move message in trash
     Message::action_move(
+        &tether,
         user_ctx.action_queue(),
-        inbox.local_id.unwrap(),
         trash.local_id.unwrap(),
         vec![message.local_id.unwrap()],
     )
@@ -323,19 +314,14 @@ async fn move_into_spam_remove_labels() {
         .await
         .unwrap();
 
-    let custom = Label::find_first("WHERE remote_id = ?", params!["custom"], &tether)
-        .await
-        .unwrap()
-        .unwrap();
-
     let mut message = Message::load(1.into(), &tether).await.unwrap().unwrap();
     assert!(message.label_ids.contains(&custom_label_id));
 
     // Action:
     // * move message in spam
     Message::action_move(
+        &tether,
         user_ctx.action_queue(),
-        custom.local_id.unwrap(),
         spam.local_id.unwrap(),
         vec![message.local_id.unwrap()],
     )
@@ -413,8 +399,8 @@ async fn move_out_of_spam_set_almost_all_mail() {
     // Action:
     // * move message out of spam
     Message::action_move(
+        &tether,
         user_ctx.action_queue(),
-        spam.local_id.unwrap(),
         inbox.local_id.unwrap(),
         vec![message.local_id.unwrap()],
     )
@@ -503,8 +489,8 @@ async fn move_message_also_moves_conversation() {
     // Action:
     // * move message in the other folder
     Message::action_move(
+        &tether,
         user_ctx.action_queue(),
-        local_inbox,
         local_spam,
         vec![message.id()],
     )

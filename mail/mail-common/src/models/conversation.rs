@@ -7,16 +7,17 @@ use crate::actions::conversations::LabelAs;
 use crate::actions::conversations::label_as::UndoLabelAsConversations;
 use crate::actions::conversations::{Label as ActionLabel, MarkRead, MarkUnread, Move, Unlabel};
 use crate::actions::{
-    ConversationAction, ConversationAvailableActions, LabelAsAction, LabelAsData, LabelAsOutput,
-    LabelPair, MailActionError, MoveAction, MoveItemAction, UndoLabelAs,
+    ActionMoveData, ConversationAction, ConversationAvailableActions, ConversationOrMessage,
+    GeneralActions, LabelAsAction, LabelAsData, LabelAsOutput, LabelPair, MailActionError,
+    MoveAction, MoveItemAction, UndoLabelAs, filter_responses,
 };
-use crate::datatypes::LocalConversationId;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::{
     AttachmentMetadata, ConversationLabelsCount, CustomLabel, Disposition, ExclusiveLocation,
     LocalMessageId, MessageAttachmentInfos, MessageLabelsCount, MessageRecipients, MessageSenders,
     ReadFilter, SystemLabelId,
 };
+use crate::datatypes::{LocalConversationId, RollbackItemType};
 use crate::models::*;
 use crate::{AppError, actions::conversations::Delete};
 use crate::{MailContextError, find_in_query};
@@ -307,13 +308,15 @@ impl Conversation {
     /// Returns an error if the action failed.
     ///
     pub async fn action_move(
+        tether: &Tether,
         queue: &Queue,
-        source_id: LocalLabelId,
         destination_id: LocalLabelId,
         target_ids: Vec<LocalConversationId>,
-    ) -> Result<QueuedActionOutput<Move>, QueueActionError<Move>> {
-        let action = Move::new(source_id, destination_id, target_ids);
-        queue.queue_action(action).await
+    ) -> anyhow::Result<()> {
+        if let Some(action) = ActionMoveData::new(tether, destination_id, target_ids).await? {
+            queue.queue_action(Move(action)).await?;
+        }
+        Ok(())
     }
 
     /// Soft delete multiple conversations.
@@ -375,10 +378,12 @@ impl Conversation {
             &all_labels,
         ));
 
-        let output = if must_archive {
+        let output = if must_archive
+            && let Some(move_action) = {
+                let archive = Label::resolve_local_label_id(LabelId::archive(), tether).await?;
+                ActionMoveData::new(tether, archive, conversation_ids).await?
+            } {
             // We have to undo the archiving
-            let archive = Label::resolve_local_label_id(LabelId::archive(), tether).await?;
-            let move_action = Move::new(source_label_id, archive, conversation_ids);
             let queued_move = queue
                 .queue_action(action.clone())
                 .await
@@ -389,7 +394,7 @@ impl Conversation {
                 .build();
 
             queue
-                .queue_action_with_metadata(move_action, meta)
+                .queue_action_with_metadata(Move(move_action), meta)
                 .await
                 .context("Error queuing with move to archive dependency")?;
             queued_move
@@ -1428,7 +1433,7 @@ impl Conversation {
     ///
     /// Returns an error if the data could not be written to the database.
     ///
-    pub async fn mark_unread(
+    pub async fn mark_unread_by_label(
         local_label_id: LocalLabelId,
         conversation_ids: impl IntoIterator<Item = LocalConversationId>,
         bond: &Bond<'_>,
@@ -1535,6 +1540,119 @@ impl Conversation {
 
             // update conversation
             conversation.num_unread += 1;
+            conversation.save(bond).await?;
+        }
+        Ok(())
+    }
+
+    /// Mark multiple conversations as unread.
+    /// For each conversation only the last read message gets marked as unread.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the data could not be written to the database.
+    ///
+    pub async fn mark_unread(
+        conversation_ids: impl IntoIterator<Item = LocalConversationId>,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        for conversation_id in conversation_ids {
+            info!("Marking {conversation_id:?} as unread");
+            let Some(mut conversation) = Conversation::find_by_id(conversation_id, bond).await?
+            else {
+                warn!("Conversation with id {conversation_id} does not exist!");
+                continue;
+            };
+            // Find all messages that need to be marked as read.
+            let message = Message::find_first(
+                "
+                JOIN message_labels AS ml ON messages.local_id = ml.local_message_id
+                WHERE local_conversation_id=?
+                AND unread=0
+                ORDER BY time DESC",
+                params![conversation_id],
+                bond,
+            )
+            .await?;
+
+            let total_conversation_message_count = bond
+                .query_value::<_, u64>(
+                    "SELECT COUNT(local_id) AS value FROM messages WHERE local_conversation_id=?",
+                    params![conversation_id],
+                )
+                .await?;
+
+            let Some(mut message) = message else {
+                if total_conversation_message_count == 0 {
+                    // These conversations where asked to be marked as read, but had
+                    // no messages. Either the messages were already mark as read or
+                    // there was no metadata. For these we need to set the unread
+                    // count to 1 and update the current label count. We let the
+                    // event loop take care of the rest.
+
+                    let conv_labels = ConversationLabel::find(
+                        "WHERE local_conversation_id=?",
+                        params![conversation_id],
+                        bond,
+                    )
+                    .await?;
+                    for mut conv_label in conv_labels {
+                        conv_label.context_num_unread += 1;
+                        conv_label.save(bond).await?;
+
+                        if let Some(local_label_id) = conv_label.local_label_id
+                            && let Some(mut counter) =
+                                ConversationCounters::find_by_id(local_label_id, bond).await?
+                        {
+                            counter.unread += 1;
+                            counter.save(bond).await?;
+                        }
+                    }
+
+                    conversation.num_unread += 1;
+                    conversation.save(bond).await?;
+                }
+                continue;
+            };
+
+            // Update the message
+
+            message.unread = true;
+            message.save(bond).await?;
+
+            // Update the label counts
+
+            let label_ids = bond
+                .query_values::<_, LocalLabelId>(
+                    "SELECT local_label_id AS value
+                     FROM message_labels
+                     WHERE local_message_id=?",
+                    params![message.id_value()?],
+                )
+                .await?;
+
+            for label_id in label_ids {
+                if let Some(mut counter) = MessageCounters::find_by_id(label_id, bond).await? {
+                    // Always update the message count
+                    counter.unread += 1;
+                    counter.save(bond).await?;
+                }
+                if let Some(mut counter) = ConversationCounters::find_by_id(label_id, bond).await? {
+                    // Only update conversation unread count if we really marked
+                    // all messages as unread. If we have mixture, this value
+                    // should not be modified
+                    if total_conversation_message_count == 1 {
+                        counter.unread += 1;
+                        counter.save(bond).await?;
+                    }
+                }
+            }
+
+            // update conversations
+            conversation.num_unread += 1;
+            for conversation_label in &mut conversation.labels {
+                conversation_label.context_num_unread += 1;
+            }
             conversation.save(bond).await?;
         }
         Ok(())
@@ -1828,43 +1946,6 @@ impl Conversation {
             }
         };
         Conversation::split_request(ids, request).await
-    }
-
-    async fn remove_all_labels_except_all_mail(
-        ids: &[LocalConversationId],
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        let all_mail_id = Label::remote_id_counterpart(LabelId::all_mail(), bond)
-            .await?
-            .expect("AllMail should be set");
-
-        let label_ids: Vec<LocalLabelId> = bond
-            .query_values(
-                formatdoc! {"
-                SELECT DISTINCT local_label_id AS value
-                FROM conversation_labels
-                WHERE
-                    local_conversation_id in ({})"
-                    , placeholders(ids)
-                },
-                ids.to_sql(),
-            )
-            .await?;
-
-        // It's a good moment to apply all mail label to messages in the case that it slipped by
-        if !label_ids.contains(&all_mail_id) {
-            Self::apply_label(all_mail_id, ids.iter().cloned(), bond).await?;
-        }
-
-        for label_id in label_ids {
-            if label_id == all_mail_id {
-                continue;
-            }
-
-            Self::remove_label(label_id, ids.iter().cloned(), bond).await?;
-        }
-
-        Ok(())
     }
 
     /// Move conversations between two labels.
@@ -2561,6 +2642,112 @@ impl Conversation {
             params![subject, id],
         )
         .await
+    }
+}
+
+impl ConversationOrMessage for Conversation {
+    const ROLLBACK_ITEM_TYPE: RollbackItemType = RollbackItemType::Conversation;
+
+    async fn apply_label(
+        local_label_id: LocalLabelId,
+        ids: impl IntoIterator<Item = Self::IdType>,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        Self::apply_label(local_label_id, ids, bond).await
+    }
+
+    async fn remove_label(
+        local_label_id: LocalLabelId,
+        ids: impl IntoIterator<Item = Self::IdType>,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        Self::remove_label(local_label_id, ids, bond).await
+    }
+
+    async fn remote_label(
+        api: &impl ProtonMail,
+        ids: Vec<Self::RemoteId>,
+        label_id: LabelId,
+    ) -> Vec<Self::RemoteId> {
+        match api
+            .put_conversations_label(ids.clone(), label_id, None)
+            .await
+        {
+            Ok(res) => filter_responses(res.responses),
+            Err(e) => {
+                error!("Failed to add message to label {e:?}");
+                ids
+            }
+        }
+    }
+
+    async fn remote_unlabel(
+        api: &impl ProtonMail,
+        ids: Vec<Self::RemoteId>,
+        label_id: LabelId,
+    ) -> Vec<Self::RemoteId> {
+        match api.put_conversations_unlabel(ids.clone(), label_id).await {
+            Ok(res) => filter_responses(res.responses),
+            Err(e) => {
+                error!("Failed to remove message from label {e:?}");
+                ids
+            }
+        }
+    }
+
+    fn get_exclusive_location(&self) -> Option<LocalLabelId> {
+        self.exclusive_location.as_ref().map(|x| x.local_id())
+    }
+
+    async fn mark_read(
+        ids: impl IntoIterator<Item = Self::IdType>,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        Self::mark_read(ids, bond).await
+    }
+
+    async fn mark_unread(
+        ids: impl IntoIterator<Item = Self::IdType>,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        Self::mark_unread(ids, bond).await
+    }
+
+    async fn remove_all_labels_except_all_mail(
+        ids: &[LocalConversationId],
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        let all_mail_id = Label::remote_id_counterpart(LabelId::all_mail(), bond)
+            .await?
+            .expect("AllMail should be set");
+
+        let label_ids: Vec<LocalLabelId> = bond
+            .query_values(
+                formatdoc! {"
+                SELECT DISTINCT local_label_id AS value
+                FROM conversation_labels
+                WHERE
+                    local_conversation_id in ({})"
+                    , placeholders(ids)
+                },
+                ids.to_sql(),
+            )
+            .await?;
+
+        // It's a good moment to apply all mail label to messages in the case that it slipped by
+        if !label_ids.contains(&all_mail_id) {
+            Self::apply_label(all_mail_id, ids.iter().cloned(), bond).await?;
+        }
+
+        for label_id in label_ids {
+            if label_id == all_mail_id {
+                continue;
+            }
+
+            Self::remove_label(label_id, ids.iter().cloned(), bond).await?;
+        }
+
+        Ok(())
     }
 }
 

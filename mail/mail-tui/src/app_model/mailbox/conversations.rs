@@ -242,7 +242,7 @@ impl ConversationsState {
                         delete_conversation(user_ctx.to_owned(), mbox, id)
                     }
                     ConversationMessage::MoveTo(id, label_id) => {
-                        move_conversation(user_ctx.to_owned(), mbox, id, label_id)
+                        move_conversation(user_ctx.to_owned(), id, label_id)
                     }
                     ConversationMessage::LabelAs(label_as) => {
                         label_conversation(user_ctx.to_owned(), *label_as)
@@ -423,13 +423,12 @@ fn delete_conversation(
 
 fn move_conversation(
     ctx: Arc<MailUserContext>,
-    mailbox: &Mailbox,
     ids: Vec<LocalConversationId>,
     label_id: LocalLabelId,
 ) -> Command<Messages> {
-    let current_label_id = mailbox.label_id();
     Command::task(async move {
-        match Conversation::action_move(ctx.action_queue(), current_label_id, label_id, ids).await {
+        let tether = ctx.user_stash().connection();
+        match Conversation::action_move(&tether, ctx.action_queue(), label_id, ids).await {
             Ok(_) => Command::None,
             Err(e) => {
                 let e = anyhow!("Failed to move conversation: {e}");

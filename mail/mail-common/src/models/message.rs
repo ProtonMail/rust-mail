@@ -7,8 +7,8 @@ use crate::actions::messages::{
     ReportPhishing, UndoLabelAsMessages, Unlabel, Unread,
 };
 use crate::actions::{
-    AllBottomBarMessageActions, BottomBarActions, GeneralActions, LabelAsData, LabelAsOutput,
-    LabelPair, MailActionError, MovableSystemFolderAction, UndoLabelAs,
+    ActionMoveData, AllBottomBarMessageActions, BottomBarActions, GeneralActions, LabelAsData,
+    LabelAsOutput, LabelPair, MailActionError, MovableSystemFolderAction, UndoLabelAs,
 };
 use crate::mail_scroller::ScrollerEq;
 use crate::models::*;
@@ -24,13 +24,14 @@ use stash::utils::{MapToSql, placeholders};
 
 use crate::MailContextResult;
 use crate::actions::{
-    LabelAsAction, MessageAction, MessageAvailableActions, MoveAction, MoveItemAction, ReplyAction,
+    ConversationOrMessage, LabelAsAction, MessageAction, MessageAvailableActions, MoveAction,
+    MoveItemAction, ReplyAction, filter_responses,
 };
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, Disposition, EncryptedMessageBody, ExclusiveLocation,
     LocalMessageId, MessageFlags, MessageLabelsCount, MessageRecipients, MessageSender, MimeType,
-    MobileActions, ParsedHeaders, ReadFilter, SystemLabelId, theme::MailTheme,
+    MobileActions, ParsedHeaders, ReadFilter, RollbackItemType, SystemLabelId, theme::MailTheme,
 };
 use crate::datatypes::{LocalConversationId, ParsedHeaderValue};
 use crate::decrypted_message::ThemeOpts;
@@ -318,13 +319,15 @@ impl Message {
     /// Returns an error if the action failed.
     ///
     pub async fn action_move(
+        tether: &Tether,
         queue: &Queue,
-        source_id: LocalLabelId,
         destination_id: LocalLabelId,
         target_ids: Vec<LocalMessageId>,
-    ) -> Result<QueuedActionOutput<Move>, QueueActionError<Move>> {
-        let action = Move::new(source_id, destination_id, target_ids);
-        queue.queue_action(action).await
+    ) -> anyhow::Result<()> {
+        if let Some(action) = ActionMoveData::new(tether, destination_id, target_ids).await? {
+            queue.queue_action(Move(action)).await?;
+        }
+        Ok(())
     }
 
     /// Mark multiple messages as read.
@@ -374,58 +377,20 @@ impl Message {
         let spam = Label::remote_id_counterpart(LabelId::spam(), tether)
             .await?
             .ok_or_else(|| LabelError::CouldNotResolveLocalLabel(LabelId::spam()))?;
-        let source_label_id = Message::load(message_id, tether)
-            .await?
-            .context("No message")?
-            .exclusive_location
-            .context("No exclusive location")?
-            .local_id();
 
-        let move_action = Move::new(source_label_id, spam, [message_id]);
-        let queued_move = queue.queue_action(move_action).await?;
-        let meta = MetadataBuilder::new()
-            .with_dependency(queued_move.id)
-            .build();
+        let phishing_action = ReportPhishing::new(message_id);
+        if let Some(move_action) = ActionMoveData::new(tether, spam, [message_id]).await? {
+            let queued_move = queue.queue_action(Move(move_action)).await?;
+            let meta = MetadataBuilder::new()
+                .with_dependency(queued_move.id)
+                .build();
 
-        let action = ReportPhishing::new(message_id);
-        queue.queue_action_with_metadata(action, meta).await?;
-        Ok(())
-    }
-
-    async fn remove_all_labels_except_all_mail(
-        ids: &[LocalMessageId],
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        let label_ids: Vec<LocalLabelId> = bond
-            .query_values(
-                formatdoc! {"
-                SELECT DISTINCT local_label_id AS value
-                FROM message_labels
-                WHERE
-                    local_message_id in ({})"
-                    , placeholders(ids)
-                },
-                ids.to_sql(),
-            )
-            .await?;
-
-        let all_mail_id = Label::remote_id_counterpart(LabelId::all_mail(), bond)
-            .await?
-            .expect("AllMail should be set");
-
-        // It's a good moment to apply all mail label to messages in the case that it slipped by
-        if !label_ids.contains(&all_mail_id) {
-            Self::apply_label(all_mail_id, ids.iter().cloned(), bond).await?;
-        }
-
-        for label_id in label_ids {
-            if label_id == all_mail_id {
-                continue;
-            }
-
-            Self::remove_label(label_id, ids.iter().cloned(), bond).await?;
-        }
-
+            queue
+                .queue_action_with_metadata(phishing_action, meta)
+                .await?;
+        } else {
+            queue.queue_action(phishing_action).await?;
+        };
         Ok(())
     }
 
@@ -441,10 +406,6 @@ impl Message {
         bond: &Bond<'_>,
     ) -> Result<(), AppError> {
         debug_assert_ne!(source_id, destination_id);
-        if message_ids.is_empty() {
-            debug!("List of ids was empty");
-            return Ok(());
-        }
         info!("Moving from {source_id:?} to {destination_id:?}: {message_ids:?}");
 
         let spam = Label::resolve_local_label_id(LabelId::spam(), bond).await?;
@@ -561,10 +522,11 @@ impl Message {
             &all_labels,
         ));
 
-        let output = if must_archive {
-            // We have to undo the archiving
-            let archive = Label::resolve_local_label_id(LabelId::archive(), tether).await?;
-            let move_action = Move::new(source_label_id, archive, message_ids);
+        let output = if must_archive
+            && let Some(move_action) = {
+                let archive = Label::resolve_local_label_id(LabelId::archive(), tether).await?;
+                ActionMoveData::new(tether, archive, message_ids).await?
+            } {
             let queued_move = queue
                 .queue_action(action.clone())
                 .await
@@ -575,7 +537,7 @@ impl Message {
                 .build();
 
             queue
-                .queue_action_with_metadata(move_action, meta)
+                .queue_action_with_metadata(Move(move_action), meta)
                 .await
                 .context("Error queuing with move to archive dependency")?;
             queued_move
@@ -1455,36 +1417,6 @@ impl Message {
             .await?;
 
         Ok(())
-    }
-
-    /// Mark the messages with `ids` as read.
-    ///
-    /// This method also updates all the label counters and conversation labels
-    /// where these messages belong to.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the queries fails.
-    pub async fn mark_read(
-        ids: impl IntoIterator<Item = LocalMessageId>,
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        Self::mark_read_or_unread(true, ids, bond).await
-    }
-
-    /// Mark the messages with `ids` as unread.
-    ///
-    /// This method also updates all the label counters and conversation labels
-    /// where these messages belong to.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the queries fails.
-    pub async fn mark_unread(
-        ids: impl IntoIterator<Item = LocalMessageId>,
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        Self::mark_read_or_unread(false, ids, bond).await
     }
 
     async fn mark_read_or_unread(
@@ -2508,6 +2440,109 @@ impl Message {
                 || *label_id == LabelId::drafts()
                 || *label_id == LabelId::all_drafts()
         })
+    }
+}
+
+impl ConversationOrMessage for Message {
+    const ROLLBACK_ITEM_TYPE: RollbackItemType = RollbackItemType::Message;
+
+    async fn apply_label(
+        local_label_id: LocalLabelId,
+        ids: impl IntoIterator<Item = Self::IdType>,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        Self::apply_label(local_label_id, ids, bond).await
+    }
+
+    async fn remove_label(
+        local_label_id: LocalLabelId,
+        ids: impl IntoIterator<Item = Self::IdType>,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        Self::remove_label(local_label_id, ids, bond).await
+    }
+
+    async fn remote_label(
+        api: &impl ProtonMail,
+        ids: Vec<Self::RemoteId>,
+        label_id: LabelId,
+    ) -> Vec<Self::RemoteId> {
+        match api.put_messages_label(ids.clone(), label_id, None).await {
+            Ok(res) => filter_responses(res.responses),
+            Err(e) => {
+                error!("Failed to add message to label {e:?}");
+                ids
+            }
+        }
+    }
+
+    async fn remote_unlabel(
+        api: &impl ProtonMail,
+        ids: Vec<Self::RemoteId>,
+        label_id: LabelId,
+    ) -> Vec<Self::RemoteId> {
+        match api.put_messages_unlabel(ids.clone(), label_id).await {
+            Ok(res) => filter_responses(res.responses),
+            Err(e) => {
+                error!("Failed to remove message from label {e:?}");
+                ids
+            }
+        }
+    }
+
+    fn get_exclusive_location(&self) -> Option<LocalLabelId> {
+        self.exclusive_location.as_ref().map(|x| x.local_id())
+    }
+
+    async fn mark_read(
+        ids: impl IntoIterator<Item = Self::IdType>,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        Self::mark_read_or_unread(true, ids, bond).await
+    }
+
+    async fn mark_unread(
+        ids: impl IntoIterator<Item = Self::IdType>,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        Self::mark_read_or_unread(false, ids, bond).await
+    }
+
+    async fn remove_all_labels_except_all_mail(
+        ids: &[LocalMessageId],
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        let label_ids: Vec<LocalLabelId> = bond
+            .query_values(
+                formatdoc! {"
+                SELECT DISTINCT local_label_id AS value
+                FROM message_labels
+                WHERE
+                    local_message_id in ({})"
+                    , placeholders(ids)
+                },
+                ids.to_sql(),
+            )
+            .await?;
+
+        let all_mail_id = Label::remote_id_counterpart(LabelId::all_mail(), bond)
+            .await?
+            .expect("AllMail should be set");
+
+        // It's a good moment to apply all mail label to messages in the case that it slipped by
+        if !label_ids.contains(&all_mail_id) {
+            Self::apply_label(all_mail_id, ids.iter().cloned(), bond).await?;
+        }
+
+        for label_id in label_ids {
+            if label_id == all_mail_id {
+                continue;
+            }
+
+            Self::remove_label(label_id, ids.iter().cloned(), bond).await?;
+        }
+
+        Ok(())
     }
 }
 

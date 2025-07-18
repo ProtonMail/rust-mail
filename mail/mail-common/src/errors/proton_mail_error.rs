@@ -86,7 +86,7 @@ thread_local! {
 fn log_error<T: std::error::Error>(value: &T) -> LogStackGuard {
     let guard = LogStackGuard::new();
     if guard.can_log() {
-        error!("ProtonMailError::From: {value:?}");
+        tracing::error!("ProtonMailError::From: {value:?}");
     }
     guard
 }

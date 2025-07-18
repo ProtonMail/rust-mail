@@ -435,17 +435,13 @@ pub async fn move_conversations(
     label_id: Id,
     ids: Vec<Id>,
 ) -> Result<(), ActionError> {
-    let user_context = mailbox.ctx()?;
+    let ctx = mailbox.ctx()?;
     uniffi_async(async move {
-        RealConversation::action_move(
-            user_context.action_queue(),
-            mailbox.label_id().into(),
-            label_id.into(),
-            ids.map_vec(),
-        )
-        .await
-        .map(|_| ())
-        .map_err(RealProtonMailError::from)
+        let tether = ctx.user_stash().connection();
+        RealConversation::action_move(&tether, ctx.action_queue(), label_id.into(), ids.map_vec())
+            .await
+            .map(|_| ())
+            .map_err(RealProtonMailError::from)
     })
     .await
     .map_err(ActionError::from)

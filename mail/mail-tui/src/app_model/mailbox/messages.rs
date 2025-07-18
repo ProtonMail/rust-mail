@@ -666,7 +666,7 @@ impl MessagesState {
                 return delete_messages(user_ctx.to_owned(), mbox, id);
             }
             MessageMessage::MoveTo(msg_id, id) => {
-                return move_message(user_ctx.to_owned(), mbox, msg_id, id);
+                return move_message(user_ctx.to_owned(), msg_id, id);
             }
             MessageMessage::LabelAs(label_as) => {
                 return label_message(user_ctx.to_owned(), *label_as);
@@ -1452,13 +1452,12 @@ fn label_message(
 
 fn move_message(
     ctx: Arc<MailUserContext>,
-    mailbox: &Mailbox,
     ids: Vec<LocalMessageId>,
     label_id: LocalLabelId,
 ) -> Command<Messages> {
-    let current_label_id = mailbox.label_id();
     Command::from_future(async move {
-        MailMessage::action_move(ctx.action_queue(), current_label_id, label_id, ids)
+        let tether = ctx.user_stash().connection();
+        MailMessage::action_move(&tether, ctx.action_queue(), label_id, ids)
             .await
             .context("Failed to move message")
             .map(|_| ())

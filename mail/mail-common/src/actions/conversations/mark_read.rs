@@ -68,7 +68,8 @@ impl Handler for MarkReadHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Conversation::mark_unread(action.0.label_id, action.0.data.target_ids.clone(), tx).await?;
+        Conversation::mark_unread_by_label(action.0.label_id, action.0.data.target_ids.clone(), tx)
+            .await?;
         action
             .0
             .mark_rollback(RollbackItemType::Conversation, tx)
@@ -102,7 +103,7 @@ impl Handler for MarkReadHandler {
                     let local_ids =
                         Conversation::remote_ids_counterpart(failed_ids.clone(), tx).await?;
 
-                    Conversation::mark_unread(action.0.label_id, local_ids, tx)
+                    Conversation::mark_unread_by_label(action.0.label_id, local_ids, tx)
                         .await
                         .map_err(|e| {
                             error!("Failed to rollback failed conversations: {e:?}");

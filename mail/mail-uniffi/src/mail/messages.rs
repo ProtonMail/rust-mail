@@ -1171,12 +1171,12 @@ pub async fn move_messages(
     destination_id: Id,
     message_ids: Vec<Id>,
 ) -> Result<(), ActionError> {
-    let user_context = mailbox.ctx()?;
-    let source_id = mailbox.label_id();
+    let ctx = mailbox.ctx()?;
     uniffi_async(async move {
+        let tether = ctx.user_stash().connection();
         RealMessage::action_move(
-            user_context.action_queue(),
-            source_id.into(),
+            &tether,
+            ctx.action_queue(),
             destination_id.into(),
             message_ids.map_vec(),
         )

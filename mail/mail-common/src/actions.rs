@@ -9,12 +9,13 @@ pub mod refresh;
 pub mod rollback;
 
 pub use self::available_action::*;
-use crate::actions::conversations::UndoLabelAsConversations;
-use crate::actions::messages::UndoLabelAsMessages;
-use crate::datatypes::RollbackItemType;
-use crate::models::{Conversation, Message, RollbackItem};
+use crate::actions::conversations::label_as::UndoLabelAsConversations;
+use crate::actions::messages::label_as::UndoLabelAsMessages;
+use crate::datatypes::{RollbackItemType, SystemLabelId};
+use crate::models::{MailLabel, RollbackItem};
 use crate::{AppError, MailUserContext};
 use addresses::{block, unblock, update_incoming_defaults};
+use anyhow::Context;
 use futures::future::{join, join_all};
 use indoc::formatdoc;
 use proton_action_queue::action::{self, FactoryError, Handler, WriterGuard, WriterGuardError};
@@ -30,13 +31,14 @@ use proton_mail_api::services::proton::response_data::OperationResult;
 use proton_sqlite3::rusqlite::ToSql;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use stash::orm::Model;
 use stash::stash::{Bond, StashError, Tether};
+use std::any::type_name;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::hash::Hash;
 use std::marker::PhantomData;
-use std::sync::Weak;
-use tracing::error;
+use tracing::{error, info, warn};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MailActionError {
@@ -347,59 +349,155 @@ pub fn filter_responses_by_codes<T: ProtonIdMarker>(
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ActionMoveData<T>
 where
-    T: ModelIdExtension<IdType: Serialize + DeserializeOwned>,
+    T: ConversationOrMessage,
 {
-    /// The current label whether the items are locate.
-    source_label_id: LocalLabelId,
-    /// The destination label where the items should move to.
-    destination_label_id: LocalLabelId,
-    /// Resolved remote id for the destination label.
-    remote_destination_label_id: Option<LabelId>,
-    /// Local item ids that need to be moved.
-    target_ids: Vec<T::IdType>,
-    /// Resolved remote conversation ids.
-    remote_target_ids: Vec<T::RemoteId>,
-    phantom_data: PhantomData<T>,
+    sources: HashMap<LocalLabelId, Vec<T::IdType>>,
+    destination: LocalLabelId,
 }
 
 impl<T> ActionMoveData<T>
 where
-    T: ModelIdExtension<IdType: Serialize + DeserializeOwned>,
+    T: ConversationOrMessage,
 {
     /// Create a new action which moves items with `target_ids` from `source_label_id` to
     ///`destination_label_id`.
-    pub fn new(
-        source_label_id: LocalLabelId,
-        destination_label_id: LocalLabelId,
+    pub async fn new(
+        tether: &Tether,
+        destination: LocalLabelId,
         target_ids: impl IntoIterator<Item = T::IdType>,
-    ) -> Self {
-        Self {
-            source_label_id,
-            destination_label_id,
-            remote_destination_label_id: None,
-            target_ids: Vec::from_iter(target_ids),
-            remote_target_ids: vec![],
-            phantom_data: PhantomData,
+    ) -> anyhow::Result<Option<Self>> {
+        let mut sources = HashMap::<_, Vec<_>>::new();
+
+        for target in target_ids {
+            let m = T::load(target, tether)
+                .await?
+                .with_context(|| format!("Could not find {}", type_name::<T>()))?;
+            let Some(label) = m.get_exclusive_location() else {
+                error!(
+                    "{} with id {target:?} does not have an exclusive location, skipping...",
+                    type_name::<T>()
+                );
+                continue;
+            };
+
+            debug_assert_ne!(label, destination);
+
+            sources.entry(label).or_default().push(target);
         }
+
+        if sources.is_empty() {
+            return Ok(None); // Don't queue an action unnecessarily
+        }
+
+        Ok(Some(Self {
+            sources,
+            destination,
+        }))
     }
 
-    /// Resolve all remote ids
-    ///
-    /// # Errors
-    ///
-    /// * if some id can not be resolved
-    async fn resolve_ids(&mut self, tx: &Bond<'_>) -> Result<(), MailActionError> {
-        self.remote_destination_label_id =
-            Some(Label::resolve_remote_label_id(self.destination_label_id, tx).await?);
-        self.remote_target_ids = T::local_ids_counterpart(self.target_ids.clone(), tx)
-            .await
-            .inspect_err(|e| error!("Failed to resolve ids: {e:?}"))?;
+    async fn move_to(&self, bond: &Bond<'_>) -> anyhow::Result<()> {
+        let spam = Label::resolve_local_label_id(LabelId::spam(), bond).await?;
+        let trash = Label::resolve_local_label_id(LabelId::trash(), bond).await?;
+
+        if self.destination == trash {
+            T::mark_read(self.sources.values().flatten().copied(), bond).await?;
+        }
+
+        for (&source_id, ids) in &self.sources {
+            let source_label = Label::load(source_id, bond).await?.context(
+            "Failed to load source label. This should never happen because we have the local id.",
+        )?;
+
+            if [trash, spam].contains(&self.destination) {
+                // When moving to trash or spam we delete all labels except all mail.
+                T::remove_all_labels_except_all_mail(ids, bond).await?;
+            } else if source_label.is_movable_folder() {
+                T::remove_label(source_id, ids.iter().cloned(), bond)
+                    .await
+                    .context("Failed to remove source label")?;
+            } else {
+                warn!("Source label {source_id} is not a movable folder, not removing...")
+            }
+
+            if [trash, spam].contains(&source_id) {
+                let almost_all_mail =
+                    Label::resolve_local_label_id(LabelId::almost_all_mail(), bond).await?;
+                // When moving out of Trash or Spam, add AlmostAllMail label
+                T::apply_label(almost_all_mail, ids.iter().cloned(), bond)
+                .await
+                .context(
+                    "Failed to add conversations to almost_all_mail when moving out of spam/trash",
+                )?;
+            }
+
+            T::apply_label(self.destination, ids.clone(), bond)
+                .await
+                .context("Failed to apply destination label")?;
+        }
+
+        Ok(())
+    }
+
+    async fn apply_remote(
+        &self,
+        ctx: &MailUserContext,
+        mut guard: WriterGuard<'_>,
+    ) -> Result<(), MailActionError> {
+        let api = ctx.api();
+        let tether = guard.tether();
+
+        let dest_label = Label::resolve_remote_label_id(self.destination, tether).await?;
+        let mut reqs = vec![];
+        for (&source_id, ids) in &self.sources {
+            let remote_ids = T::local_ids_counterpart(ids.clone(), tether).await?;
+            info!("Applying {source_id:?} to {remote_ids:?}");
+
+            reqs.push(T::remote_label(api, remote_ids, dest_label.clone()));
+        }
+
+        let items = join_all(reqs).await.into_iter().flatten();
+
+        guard
+            .tx::<_, _, anyhow::Error>(async move |tx| {
+                RollbackItem::save_many(tx, items, T::ROLLBACK_ITEM_TYPE).await?;
+                Ok(())
+            })
+            .await?;
+
+        Ok(())
+    }
+
+    fn reverse(&self) -> impl Iterator<Item = Self> {
+        self.sources.clone().into_iter().map(|(source, ids)| {
+            let mut sources = HashMap::new();
+            sources.insert(self.destination, ids);
+            Self {
+                destination: source,
+                sources,
+            }
+        })
+    }
+
+    async fn revert_local(&self, tx: &Bond<'_>) -> anyhow::Result<()> {
+        for reverse in self.reverse() {
+            reverse.move_to(tx).await?;
+            let ids = reverse
+                .sources
+                .values()
+                .map(|x| x.iter())
+                .flatten()
+                .cloned()
+                .collect();
+
+            let ids = T::local_ids_counterpart(ids, tx).await?;
+            RollbackItem::save_many(tx, ids, T::ROLLBACK_ITEM_TYPE).await?;
+        }
         Ok(())
     }
 }
 
 #[allow(async_fn_in_trait, reason = "not used across threads")]
-pub trait LabelAsTrait:
+pub trait ConversationOrMessage:
     ModelIdExtension<IdType: Copy + Hash + Eq + DeserializeOwned + Serialize, RemoteId: Display>
 {
     const ROLLBACK_ITEM_TYPE: RollbackItemType;
@@ -427,105 +525,23 @@ pub trait LabelAsTrait:
         ids: Vec<Self::RemoteId>,
         label_id: LabelId,
     ) -> Vec<Self::RemoteId>;
-}
 
-impl LabelAsTrait for Message {
-    const ROLLBACK_ITEM_TYPE: RollbackItemType = RollbackItemType::Message;
+    fn get_exclusive_location(&self) -> Option<LocalLabelId>;
 
-    async fn apply_label(
-        local_label_id: LocalLabelId,
+    async fn mark_read(
         ids: impl IntoIterator<Item = Self::IdType>,
         bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        Self::apply_label(local_label_id, ids, bond).await
-    }
+    ) -> Result<(), StashError>;
 
-    async fn remove_label(
-        local_label_id: LocalLabelId,
+    async fn mark_unread(
         ids: impl IntoIterator<Item = Self::IdType>,
         bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        Self::remove_label(local_label_id, ids, bond).await
-    }
+    ) -> Result<(), StashError>;
 
-    async fn remote_label(
-        api: &impl ProtonMail,
-        ids: Vec<Self::RemoteId>,
-        label_id: LabelId,
-    ) -> Vec<Self::RemoteId> {
-        match api.put_messages_label(ids.clone(), label_id, None).await {
-            Ok(res) => filter_responses(res.responses),
-            Err(e) => {
-                error!("Failed to add message to label {e:?}");
-                ids
-            }
-        }
-    }
-
-    async fn remote_unlabel(
-        api: &impl ProtonMail,
-        ids: Vec<Self::RemoteId>,
-        label_id: LabelId,
-    ) -> Vec<Self::RemoteId> {
-        match api.put_messages_unlabel(ids.clone(), label_id).await {
-            Ok(res) => filter_responses(res.responses),
-            Err(e) => {
-                error!("Failed to remove message from label {e:?}");
-                ids
-            }
-        }
-    }
-}
-
-impl LabelAsTrait for Conversation {
-    const ROLLBACK_ITEM_TYPE: RollbackItemType = RollbackItemType::Conversation;
-
-    async fn apply_label(
-        local_label_id: LocalLabelId,
-        ids: impl IntoIterator<Item = Self::IdType>,
+    async fn remove_all_labels_except_all_mail(
+        ids: &[Self::IdType],
         bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        Self::apply_label(local_label_id, ids, bond).await
-    }
-
-    async fn remove_label(
-        local_label_id: LocalLabelId,
-        ids: impl IntoIterator<Item = Self::IdType>,
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        Self::remove_label(local_label_id, ids, bond).await
-    }
-
-    async fn remote_label(
-        api: &impl ProtonMail,
-        ids: Vec<Self::RemoteId>,
-        label_id: LabelId,
-    ) -> Vec<Self::RemoteId> {
-        match api
-            .put_conversations_label(ids.clone(), label_id, None)
-            .await
-        {
-            Ok(res) => filter_responses(res.responses),
-            Err(e) => {
-                error!("Failed to add message to label {e:?}");
-                ids
-            }
-        }
-    }
-
-    async fn remote_unlabel(
-        api: &impl ProtonMail,
-        ids: Vec<Self::RemoteId>,
-        label_id: LabelId,
-    ) -> Vec<Self::RemoteId> {
-        match api.put_conversations_unlabel(ids.clone(), label_id).await {
-            Ok(res) => filter_responses(res.responses),
-            Err(e) => {
-                error!("Failed to remove message from label {e:?}");
-                ids
-            }
-        }
-    }
+    ) -> Result<(), StashError>;
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
@@ -535,13 +551,13 @@ pub struct LabelPair<T> {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct LabelAsData<T: LabelAsTrait> {
+pub struct LabelAsData<T: ConversationOrMessage> {
     source_label_id: LocalLabelId,
     add: Vec<LabelPair<T::IdType>>,
     remove: Vec<LabelPair<T::IdType>>,
 }
 
-impl<T: LabelAsTrait> LabelAsData<T> {
+impl<T: ConversationOrMessage> LabelAsData<T> {
     pub fn new(
         cartesian: HashSet<LabelPair<T::IdType>>,
         source_label_id: LocalLabelId,

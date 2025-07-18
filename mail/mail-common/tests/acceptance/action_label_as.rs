@@ -42,12 +42,12 @@ async fn action_label_as_without_archive() {
         ApiLabelType::Label: vec![label1.clone(), label2.clone(), label3.clone()],
     };
 
-    let conversation1 = ApiConversation::test_conversation("first", vec![]);
+    let conversation1 = ApiConversation::test_conversation_in_inbox("first", vec![]);
     let conversation2 =
-        ApiConversation::test_conversation("second", vec![label2.clone(), label3.clone()]);
+        ApiConversation::test_conversation_in_inbox("second", vec![label2.clone(), label3.clone()]);
     let conversation3 =
-        ApiConversation::test_conversation("third", vec![label1.clone(), label3.clone()]);
-    let conversation4 = ApiConversation::test_conversation(
+        ApiConversation::test_conversation_in_inbox("third", vec![label1.clone(), label3.clone()]);
+    let conversation4 = ApiConversation::test_conversation_in_inbox(
         "fourth",
         vec![label1.clone(), label2.clone(), label3.clone()],
     );
@@ -225,12 +225,12 @@ async fn action_label_as_with_archive() {
         ApiLabelType::Label: vec![label1.clone(), label2.clone(), label3.clone()],
     };
 
-    let conversation1 = ApiConversation::test_conversation("first", vec![]);
+    let conversation1 = ApiConversation::test_conversation_in_inbox("first", vec![]);
     let conversation2 =
-        ApiConversation::test_conversation("second", vec![label2.clone(), label3.clone()]);
+        ApiConversation::test_conversation_in_inbox("second", vec![label2.clone(), label3.clone()]);
     let conversation3 =
-        ApiConversation::test_conversation("third", vec![label1.clone(), label3.clone()]);
-    let conversation4 = ApiConversation::test_conversation(
+        ApiConversation::test_conversation_in_inbox("third", vec![label1.clone(), label3.clone()]);
+    let conversation4 = ApiConversation::test_conversation_in_inbox(
         "fourth",
         vec![label1.clone(), label2.clone(), label3.clone()],
     );
@@ -382,11 +382,11 @@ async fn action_label_as_with_archive() {
     assert_state2(&tether).await;
 
     undo.undo(user_ctx.action_queue(), &tether).await.unwrap();
-    assert_state3(&tether).await;
+    assert_state0(&tether).await;
 
     // Nothing ever happens because we reverted it by just cancelling the action in the queue.
     assert_eq!(user_ctx.execute_all_actions().await.unwrap(), 0);
-    assert_state3(&tether).await;
+    assert_state0(&tether).await;
 
     // Action, again
     let undo = Conversation::action_label_as(
@@ -411,9 +411,11 @@ async fn action_label_as_with_archive() {
     assert_state2(&tether).await;
 
     undo.undo(user_ctx.action_queue(), &tether).await.unwrap();
-    assert_state3(&tether).await;
+    // Nothing ever happens because we've reverted
+    assert_state0(&tether).await;
     assert_eq!(user_ctx.execute_all_actions().await.unwrap(), 2);
-    assert_state3(&tether).await;
+    // Same local data but the api calls have been made.
+    assert_state0(&tether).await;
 }
 
 fn test_init_params(
@@ -472,17 +474,22 @@ fn label_eq<'a>(conv: &Conversation, comp: impl IntoIterator<Item = &'a LabelWit
 /// State 0: No action has been made
 async fn assert_state0(tether: &Tether) {
     let [conversation1, conversation2, conversation3, conversation4] = get_convs(tether).await;
-    assert!(conversation1.labels.is_empty());
-    assert_eq!(conversation2.labels.len(), 2);
-    assert_eq!(conversation3.labels.len(), 2);
-    assert_eq!(conversation4.labels.len(), 3);
+    assert_eq!(conversation1.labels.len(), 1);
+    assert_eq!(conversation2.labels.len(), 3);
+    assert_eq!(conversation3.labels.len(), 3);
+    assert_eq!(conversation4.labels.len(), 4);
 }
 
 /// State 1: Action has been made in test1
 async fn assert_state1(tether: &Tether) {
-    let [label1, label2, label3] = LabelWithCounters::from_remote_ids(
+    let [inbox, label1, label2, label3] = LabelWithCounters::from_remote_ids(
         tether,
-        ["selected".into(), "partial".into(), "unselected".into()],
+        [
+            LabelId::inbox(),
+            "selected".into(),
+            "partial".into(),
+            "unselected".into(),
+        ],
     )
     .await
     .unwrap()
@@ -495,10 +502,10 @@ async fn assert_state1(tether: &Tether) {
 
     let [conversation1, conversation2, conversation3, conversation4] = get_convs(tether).await;
 
-    label_eq(&conversation1, [&label1]);
-    label_eq(&conversation2, [&label1, &label2]);
-    label_eq(&conversation3, [&label1]);
-    label_eq(&conversation4, [&label1, &label2]);
+    label_eq(&conversation1, [&inbox, &label1]);
+    label_eq(&conversation2, [&inbox, &label1, &label2]);
+    label_eq(&conversation3, [&inbox, &label1]);
+    label_eq(&conversation4, [&inbox, &label1, &label2]);
 }
 
 /// State 2: Action has been made in test2
@@ -528,14 +535,4 @@ async fn assert_state2(tether: &Tether) {
     label_eq(&conversation2, [&archive, &label1, &label2]);
     label_eq(&conversation3, [&archive, &label1]);
     label_eq(&conversation4, [&archive, &label1, &label2]);
-}
-
-/// State 0: Action has been undone in test2
-/// TODO: It's a separate thing since we now add the inbox label but I don't have time to fix this now
-async fn assert_state3(tether: &Tether) {
-    let [conversation1, conversation2, conversation3, conversation4] = get_convs(tether).await;
-    assert_eq!(conversation1.labels.len(), 1);
-    assert_eq!(conversation2.labels.len(), 3);
-    assert_eq!(conversation3.labels.len(), 3);
-    assert_eq!(conversation4.labels.len(), 4);
 }

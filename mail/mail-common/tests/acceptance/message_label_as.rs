@@ -238,10 +238,15 @@ async fn label_as_with_archive() {
     let label3_id = LabelId::from("unselected");
     let label3 = test_label(&label3_id, "unselected");
 
-    let message1 = test_message("first", vec![]);
+    let message1 = test_message("first", vec![LabelId::inbox()]);
     let message2 = test_message(
         "second",
-        vec![label1_id.clone(), label2_id.clone(), label3_id.clone()],
+        vec![
+            LabelId::inbox(),
+            label1_id.clone(),
+            label2_id.clone(),
+            label3_id.clone(),
+        ],
     );
     let labels = hash_map! {
         ApiLabelType::Label: vec![label1, label2, label3],
@@ -310,10 +315,10 @@ async fn label_as_with_archive() {
         .unwrap();
 
     let message1 = Message::load(1.into(), &tether).await.unwrap().unwrap();
-    assert!(message1.label_ids.is_empty());
+    assert_eq!(message1.label_ids.len(), 1);
     assert!(message1.custom_labels.is_empty());
     let message2 = Message::load(2.into(), &tether).await.unwrap().unwrap();
-    assert_eq!(message2.label_ids.len(), 3);
+    assert_eq!(message2.label_ids.len(), 4);
     assert_eq!(message2.custom_labels.len(), 3);
 
     // Action:
