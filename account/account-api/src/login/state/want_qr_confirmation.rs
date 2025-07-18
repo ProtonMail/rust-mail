@@ -256,10 +256,10 @@ pub async fn process_target_device_qr_code(
             let payload = key.encrypt_legacy(json.to_string(), None).unwrap();
             client
                 .clone()
-                .fork(context.get_client_id())
+                .fork(qr_data.client_id)
                 .payload(payload.encode())
         } else {
-            client.clone().fork(context.get_client_id())
+            client.clone().fork(qr_data.client_id)
         };
 
     match fork_confirmation
