@@ -4,9 +4,8 @@ use proton_core_api::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::async_runtime;
-
 #[derive(Debug, Serialize, Deserialize, uniffi::Enum)]
+#[serde(rename_all = "camelCase")]
 pub enum AccountRecoveryScreenId {
     GracePeriodInfo,
     CancelResetPassword,
@@ -25,12 +24,11 @@ metric! {
 
 #[uniffi_export]
 pub fn record_account_recovery_screen_view(screen_id: AccountRecoveryScreenId) {
-    async_runtime().block_on(async move {
-        ObservabilityRecorder::default().record(AccountRecoveryScreenViewTotal::new(screen_id));
-    });
+    ObservabilityRecorder::default().record(AccountRecoveryScreenViewTotal::new(screen_id));
 }
 
 #[derive(Debug, Serialize, Deserialize, uniffi::Enum)]
+#[serde(rename_all = "camelCase")]
 pub enum LoginScreenId {
     ChooseInternalAddress,
     SignInWithSso,
@@ -48,12 +46,11 @@ metric! {
 
 #[uniffi_export]
 pub fn record_login_screen_view(screen_id: LoginScreenId) {
-    async_runtime().block_on(async move {
-        ObservabilityRecorder::default().record(LoginScreenViewTotal::new(screen_id));
-    });
+    ObservabilityRecorder::default().record(LoginScreenViewTotal::new(screen_id));
 }
 
 #[derive(Debug, Serialize, Deserialize, uniffi::Enum)]
+#[serde(rename_all = "camelCase")]
 pub enum SignupScreenId {
     ChooseExternalEmail,
     ChooseInternalEmail,
@@ -73,7 +70,104 @@ metric! {
 
 #[uniffi_export]
 pub fn record_signup_screen_view(screen_id: SignupScreenId) {
-    async_runtime().block_on(async move {
-        ObservabilityRecorder::default().record(SignupScreenViewTotal::new(screen_id));
-    });
+    ObservabilityRecorder::default().record(SignupScreenViewTotal::new(screen_id));
+}
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+    use proton_core_api::services::proton::PostMetricsRequestData;
+    use proton_core_api::services::proton::PostMetricsRequestElement;
+    use serde_json::{self, json};
+
+    #[test]
+    fn test_account_recovery_screen() {
+        let metric = ObservabilityRecorder::into_metrics_element(
+            AccountRecoveryScreenViewTotal {
+                screen_id: AccountRecoveryScreenId::GracePeriodInfo,
+            },
+            1_741_021_308,
+            1,
+        )
+        .unwrap();
+
+        let serialized = serde_json::to_string(&metric).unwrap();
+        assert_eq!(
+            serialized,
+            r#"{"Name":"core_accountRecovery_screenView_total","Version":1,"Timestamp":1741021308,"Data":{"Labels":{"screen_id":"gracePeriodInfo"},"Value":1}}"#
+        );
+        assert_eq!(
+            PostMetricsRequestElement {
+                name: String::from("core_accountRecovery_screenView_total"),
+                version: 1,
+                timestamp: 1_741_021_308,
+                data: PostMetricsRequestData {
+                    labels: json!({"screen_id": "gracePeriodInfo"}),
+                    value: 1,
+                }
+            },
+            serde_json::de::from_str(&serialized).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_login_screen() {
+        let metric = ObservabilityRecorder::into_metrics_element(
+            LoginScreenViewTotal {
+                screen_id: LoginScreenId::ChooseInternalAddress,
+            },
+            1_741_021_308,
+            1,
+        )
+        .unwrap();
+
+        let serialized = serde_json::to_string(&metric).unwrap();
+        assert_eq!(
+            serialized,
+            r#"{"Name":"core_login_screenView_total","Version":1,"Timestamp":1741021308,"Data":{"Labels":{"screen_id":"chooseInternalAddress"},"Value":1}}"#
+        );
+        assert_eq!(
+            PostMetricsRequestElement {
+                name: String::from("core_login_screenView_total"),
+                version: 1,
+                timestamp: 1_741_021_308,
+                data: PostMetricsRequestData {
+                    labels: json!({"screen_id": "chooseInternalAddress"}),
+                    value: 1,
+                }
+            },
+            serde_json::de::from_str(&serialized).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_signup_screen() {
+        let metric = ObservabilityRecorder::into_metrics_element(
+            SignupScreenViewTotal {
+                screen_id: SignupScreenId::ChooseExternalEmail,
+            },
+            1_741_021_308,
+            1,
+        )
+        .unwrap();
+
+        let serialized = serde_json::to_string(&metric).unwrap();
+        assert_eq!(
+            serialized,
+            r#"{"Name":"core_signup_screenView_total","Version":1,"Timestamp":1741021308,"Data":{"Labels":{"screen_id":"chooseExternalEmail"},"Value":1}}"#
+        );
+        assert_eq!(
+            PostMetricsRequestElement {
+                name: String::from("core_signup_screenView_total"),
+                version: 1,
+                timestamp: 1_741_021_308,
+                data: PostMetricsRequestData {
+                    labels: json!({"screen_id": "chooseExternalEmail"}),
+                    value: 1,
+                }
+            },
+            serde_json::de::from_str(&serialized).unwrap()
+        );
+    }
 }
