@@ -5508,6 +5508,8 @@ dependencies = [
  "proton-account-common",
  "proton-core-api",
  "secrecy",
+ "serde",
+ "serde_json",
  "thiserror 1.0.69",
  "tokio",
  "tracing",

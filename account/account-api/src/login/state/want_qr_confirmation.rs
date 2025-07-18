@@ -5,8 +5,11 @@ use futures::TryFutureExt as _;
 use muon::client::flow::{ForkFlowResult, WithCodeFlow, WithCodePollFlow};
 use proton_core_api::{
     auth::{KeySecret, UserKeySecret},
+    metric,
     services::{
-        observability::ObservabilityRecorder,
+        observability::{
+            ApiServiceObservabilityResponse, ObservabilityMetric, ObservabilityRecorder,
+        },
         proton::{ProtonCore, SessionId},
     },
     session::SessionParts,
@@ -17,6 +20,7 @@ use proton_crypto_account::proton_crypto;
 use proton_crypto_subtle::aead::{AesGcmCiphertext, AesGcmKey};
 use regex::Regex;
 use secrecy::ExposeSecret;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use thiserror::Error;
 
@@ -48,24 +52,45 @@ impl WantQrConfirmation {
     pub async fn check_host_device_confirmation(self) -> Result<State, LoginError> {
         let (client, payload) = match self.fork_flow.poll().await {
             WithCodeFlow::Poll(flow) => {
+                self.observability.record(QrLoginPullFork {
+                    status: QrLoginPullForkStatus::ForkPending,
+                });
                 return Ok(State::WantQrConfirmation(WantQrConfirmation {
                     fork_flow: flow,
                     ..self
                 }));
             }
-            WithCodeFlow::Ok(client, payload) => (client, payload),
+            WithCodeFlow::Ok(client, payload) => {
+                self.observability.record(QrLoginPullFork {
+                    status: QrLoginPullForkStatus::Success,
+                });
+                (client, payload)
+            }
             WithCodeFlow::Failed { reason, .. } => {
+                self.observability.record(QrLoginPullFork {
+                    status: QrLoginPullForkStatus::Failure,
+                });
                 return Err(LoginError::WithCodePollFlowFailed(reason.into()));
             }
         };
         info!("Host Device confirmed QR login");
 
         let passphrase = Self::decode_payload(payload, &self.encryption_key)
-            .inspect_err(|err| error!("{err}"))
+            .inspect_err(|err| {
+                self.observability.record(QrLoginPostLogin {
+                    status: QrLoginPostLoginStatus::PayloadDecodeFailure,
+                });
+                error!("{err}");
+            })
             .map_err(|_| LoginError::QRLoginEncoding)?;
 
         let user = client
             .get_users()
+            .inspect_err(|_| {
+                self.observability.record(QrLoginPostLogin {
+                    status: QrLoginPostLoginStatus::UserFetchFailure,
+                });
+            })
             .map_ok(|res| res.user)
             .map_err(LoginError::UserFetch)
             .await?;
@@ -74,6 +99,9 @@ impl WantQrConfirmation {
         let pgp = proton_crypto::new_pgp_provider();
         let passphrase = KeySecret::new(passphrase);
         let key_secret = if user.keys.unlock(&pgp, &passphrase).unlocked_keys.is_empty() {
+            self.observability.record(QrLoginPostLogin {
+                status: QrLoginPostLoginStatus::KeySecretDecryptionFailure,
+            });
             return Err(LoginError::KeySecretDecryption);
         } else {
             UserKeySecret(passphrase)
@@ -92,6 +120,10 @@ impl WantQrConfirmation {
             .await?;
 
         let auth = self.parts.store.write().await.get_auth().await;
+
+        self.observability.record(QrLoginPostLogin {
+            status: QrLoginPostLoginStatus::Success,
+        });
 
         let data = super::StateData {
             parts: self.parts,
@@ -202,8 +234,11 @@ pub async fn process_target_device_qr_code(
     qr_code: &str,
     client: muon::Client,
     context: Arc<Context>,
+    observability: ObservabilityRecorder,
 ) -> Result<(), ProcessTargetDeviceQrError> {
-    let qr_data = parse_qr_string(qr_code)?;
+    let qr_data = parse_qr_string(qr_code)
+        .inspect(|_| observability.record(QrLoginDecodeQR::success()))
+        .inspect_err(|e| observability.record(QrLoginDecodeQR::failure(e)))?;
 
     let fork_confirmation =
         if let Some(encryption_key) = qr_data.encryption_key.filter(|it| !it.is_empty()) {
@@ -226,16 +261,27 @@ pub async fn process_target_device_qr_code(
         } else {
             client.clone().fork(context.get_client_id())
         };
+
     match fork_confirmation
         .independent()
         .code(&qr_data.user_code)
         .send()
         .await
     {
-        ForkFlowResult::Success(_client, _selector) => Ok(()),
-        ForkFlowResult::Failure { reason, .. } => Err(ProcessTargetDeviceQrError::Api(
-            ApiError::Muon(reason.into()),
-        )),
+        ForkFlowResult::Success(_client, _selector) => {
+            observability.record(QrLoginPushFork {
+                status: ApiServiceObservabilityResponse::Success,
+            });
+            Ok(())
+        }
+        ForkFlowResult::Failure { reason, .. } => {
+            observability.record(QrLoginPushFork {
+                status: ApiServiceObservabilityResponse::NetworkError,
+            });
+            Err(ProcessTargetDeviceQrError::Api(ApiError::Muon(
+                reason.into(),
+            )))
+        }
     }
 }
 
@@ -314,6 +360,98 @@ pub enum EncryptionError {
     EncryptionFailed(#[from] aes_gcm::Error),
     #[error("Base64 decoding failed: {0}")]
     InvalidBase64(base64::DecodeError),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum QrLoginPullForkStatus {
+    Success,
+    ForkPending,
+    Failure,
+}
+
+metric! {
+    #[name = "core_qr_login_pull_fork_total"]
+    #[version = 1]
+    #[doc = "Records the outcomes of the `GET auth/v4/sessions/forks/{selector}` API call on the target device."]
+    pub struct QrLoginPullFork {
+        pub status: QrLoginPullForkStatus
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum QrLoginPostLoginStatus {
+    Success,
+    PayloadDecodeFailure,
+    UserFetchFailure,
+    KeySecretDecryptionFailure,
+}
+
+metric! {
+    #[name = "core_qr_login_post_login_total"]
+    #[version = 1]
+    #[doc = "Records the outcomes of the post-login steps on the target device."]
+    pub struct QrLoginPostLogin {
+        pub status: QrLoginPostLoginStatus
+    }
+}
+
+metric! {
+    #[name = "core_qr_login_push_fork_total"]
+    #[version = 1]
+    #[doc = "Records the outcomes of the `POST auth/v4/sessions/forks` API call on the origin device."]
+    pub struct QrLoginPushFork {
+        pub status: ApiServiceObservabilityResponse
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum QrLoginDecodeQrStatus {
+    Success,
+    InvalidFormat,
+    InvalidVersion,
+    EmptyUserCode,
+    InvalidEncryptionKeyLength,
+    EmptyClientId,
+    Base64DecodeError,
+    VersionParseError,
+}
+
+impl From<&ParseError> for QrLoginDecodeQrStatus {
+    fn from(value: &ParseError) -> Self {
+        match value {
+            ParseError::InvalidFormat(_) => Self::InvalidFormat,
+            ParseError::InvalidVersion(_) => Self::InvalidVersion,
+            ParseError::EmptyUserCode => Self::EmptyUserCode,
+            ParseError::InvalidEncryptionKeyLength(_) => Self::InvalidEncryptionKeyLength,
+            ParseError::EmptyClientId => Self::EmptyClientId,
+            ParseError::Base64DecodeError(_) => Self::Base64DecodeError,
+            ParseError::VersionParseError(_) => Self::VersionParseError,
+        }
+    }
+}
+
+metric! {
+    #[name = "core_qr_login_decode_qr_total"]
+    #[version = 1]
+    #[doc = "Records the outcomes of decoding the QR code on the origin device."]
+    pub struct QrLoginDecodeQR {
+        pub status: QrLoginDecodeQrStatus
+    }
+}
+
+impl QrLoginDecodeQR {
+    fn failure(e: &ParseError) -> Self {
+        QrLoginDecodeQR { status: e.into() }
+    }
+
+    fn success() -> Self {
+        QrLoginDecodeQR {
+            status: QrLoginDecodeQrStatus::Success,
+        }
+    }
 }
 
 #[cfg(test)]

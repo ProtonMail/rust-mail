@@ -18,13 +18,18 @@ uniffi.workspace = true
 uniffi-common.workspace = true
 uniffi-macros.workspace = true
 uniffi-runtime.workspace = true
+
 # crates.io dependencies
 futures.workspace = true
 itertools.workspace = true
 secrecy.workspace = true
+serde = { workspace = true }
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+serde_json = { workspace = true }
