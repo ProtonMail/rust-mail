@@ -1239,7 +1239,7 @@ pub struct Password {
 impl From<ApiPassword> for Password {
     fn from(value: ApiPassword) -> Self {
         Self {
-            mode: value.mode,
+            mode: value.mode as u32,
             expiration_time: value.expiration_time,
         }
     }
@@ -1438,6 +1438,15 @@ impl From<MbpMode> for PasswordMode {
         match value {
             MbpMode::One => Self::One,
             MbpMode::Two => Self::Two,
+        }
+    }
+}
+
+impl From<PasswordMode> for MbpMode {
+    fn from(value: PasswordMode) -> Self {
+        match value {
+            PasswordMode::One => MbpMode::One,
+            PasswordMode::Two => MbpMode::Two,
         }
     }
 }

@@ -50,7 +50,7 @@ where
 pub trait MailContextExt {
     async fn get_user_ctx(&self, username: &str) -> Result<Arc<MailUserContext>>;
 
-    async fn new_login_flow(&self, username: Option<&str>) -> Result<LoginFlow>;
+    async fn new_or_resume_login_flow(&self, username: Option<&str>) -> Result<LoginFlow>;
 }
 
 impl MailContextExt for Arc<MailContext> {
@@ -58,8 +58,8 @@ impl MailContextExt for Arc<MailContext> {
         get_user_ctx(self, username).await
     }
 
-    async fn new_login_flow(&self, username: Option<&str>) -> Result<LoginFlow> {
-        new_login_flow(self, username).await
+    async fn new_or_resume_login_flow(&self, username: Option<&str>) -> Result<LoginFlow> {
+        new_or_resume_login_flow(self, username).await
     }
 }
 
@@ -87,7 +87,7 @@ async fn get_user_ctx(ctx: &Arc<MailContext>, username: &str) -> Result<Arc<Mail
     Err(anyhow!("account not found"))
 }
 
-async fn new_login_flow(ctx: &MailContext, username: Option<&str>) -> Result<LoginFlow> {
+async fn new_or_resume_login_flow(ctx: &MailContext, username: Option<&str>) -> Result<LoginFlow> {
     for acc in ctx.get_accounts().await? {
         if let Some(username) = username {
             if username != acc.name_or_addr {

@@ -7,6 +7,7 @@ use muon::client::flow::LoginFlowData;
 use proton_core_api::service::{ApiServiceError, ServiceError};
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::{CoreSession, Session};
+use proton_core_api::store::MbpMode;
 use proton_core_api::store::{StoreError, UserData};
 use secrecy::SecretString;
 use std::fmt::Debug;
@@ -48,6 +49,10 @@ pub enum LoginError {
     /// Returned if we fail to fetch the user info after login.
     #[error("Failed to fetch user info: {0}")]
     UserFetch(#[source] ApiServiceError),
+
+    /// Returned if we fail to fetch the user settings after login.
+    #[error("Failed to fetch user settings: {0}")]
+    SettingsFetch(#[source] ApiServiceError),
 
     /// Returned if we fail to fetch the user addresses after login.
     #[error("Failed to fetch user addresses: {0}")]
@@ -110,6 +115,14 @@ pub enum LoginError {
 
     #[error("Failed during QR login encoding or encryption")]
     QRLoginEncoding,
+
+    /// Returned when new password setup fails
+    #[error("Failed to setup new password: {0}")]
+    NewPasswordSetup(String),
+
+    /// Returned when new password setup is aborted
+    #[error("New password setup aborted")]
+    NewPasswordSetupAborted,
 }
 
 impl ServiceError for LoginError {}
@@ -140,10 +153,11 @@ impl LoginFlow {
         session: Session,
         user_id: UserId,
         session_id: SessionId,
-        pass: Option<impl Into<SecureString>>,
+        pass: impl Into<SecureString>,
+        mode: MbpMode,
     ) -> Self {
         let (client, parts) = session.to_parts();
-        let state = State::new_from_tfa(client, parts, user_id, session_id, pass.map(Into::into));
+        let state = State::new_from_tfa(client, parts, user_id, session_id, pass.into(), mode);
 
         Self { session, state }
     }
@@ -169,6 +183,7 @@ impl LoginFlow {
         refresh_token: SecretString,
     ) -> Result<(), LoginError> {
         let (client, _) = self.session.to_parts();
+
         self.transition(|s: State| s.migrate(client, user, data, refresh_token))
             .await
             .inspect_err(|_| self.try_recover())?;
@@ -183,13 +198,15 @@ impl LoginFlow {
     /// Returns error if the login request or SRP proof calculations failed.
     pub async fn login_with_credentials(
         &mut self,
-        user: String,
+        user: impl Into<String>,
         pass: impl Into<SecureString>,
         user_behavior: Option<Behavior>,
     ) -> Result<(), LoginError> {
-        self.transition(|s: State| s.login_with_credentials(user, pass.into(), user_behavior))
-            .await
-            .inspect_err(|_| self.try_recover())
+        self.transition(|s: State| {
+            s.login_with_credentials(user.into(), pass.into(), user_behavior)
+        })
+        .await
+        .inspect_err(|_| self.try_recover())
     }
 
     /// Generates a QR code for user sign-in, optionally including an encryption key.
@@ -208,6 +225,7 @@ impl LoginFlow {
         self.transition(|s: State| s.generate_sign_in_qr_code(need_encryption_key))
             .await
             .inspect_err(|_| self.try_recover())?;
+
         match &self.state {
             State::WantQrConfirmation(state) => Ok(state.qr_code.clone()),
             _ => Err(LoginError::InvalidState),
@@ -264,6 +282,16 @@ impl LoginFlow {
             .inspect_err(|_| self.try_recover())
     }
 
+    /// Submit a new password for users with temporary passwords.
+    pub async fn submit_new_password(
+        &mut self,
+        new_pass: impl Into<SecureString>,
+    ) -> Result<(), LoginError> {
+        self.transition(|s: State| s.submit_new_password(new_pass.into()))
+            .await
+            .inspect_err(|_| self.try_recover())
+    }
+
     /// Take the completed session from the flow.
     ///
     /// # Errors
@@ -298,6 +326,12 @@ impl LoginFlow {
         matches!(self.state, State::WantMbp(_))
     }
 
+    /// Check whether the session is awaiting a new password.
+    #[must_use]
+    pub fn is_awaiting_new_password(&self) -> bool {
+        matches!(self.state, State::WantNewPassword(_))
+    }
+
     #[must_use]
     pub fn is_awaiting_host_device_confirmation(&self) -> bool {
         matches!(self.state, State::WantQrConfirmation(_))
@@ -307,15 +341,6 @@ impl LoginFlow {
     #[must_use]
     pub fn is_logged_in(&self) -> bool {
         matches!(self.state, State::Complete(_))
-    }
-
-    /// Check whether password change is required for a logged in user
-    pub fn password_change_required(&self) -> Result<bool, LoginError> {
-        if let State::Complete(c) = &self.state {
-            c.password_change_required().ok_or(LoginError::InvalidState)
-        } else {
-            Err(LoginError::InvalidState)
-        }
     }
 
     /// Return delinquent state of the user
@@ -372,8 +397,8 @@ impl LoginFlow {
                 self.state = State::new(client, parts, None);
             }
 
-            State::TfaRetry(user_id, session_id, pass) => {
-                self.state = State::new_from_tfa(client, parts, user_id, session_id, pass);
+            State::TfaRetry(user_id, session_id, pass, mode) => {
+                self.state = State::new_from_tfa(client, parts, user_id, session_id, pass, mode);
             }
 
             State::MbpRetry(user_id, session_id) => {

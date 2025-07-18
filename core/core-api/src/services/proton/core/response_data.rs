@@ -692,7 +692,7 @@ impl HumanVerificationChallenge {
 #[serde(rename_all = "PascalCase")]
 pub struct Password {
     /// TODO: Document this field.
-    pub mode: u32,
+    pub mode: PasswordMode,
 
     /// TODO: Document this field.
     pub expiration_time: Option<u64>,

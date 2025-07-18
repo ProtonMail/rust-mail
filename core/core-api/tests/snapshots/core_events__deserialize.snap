@@ -239,7 +239,7 @@ CoreEvent {
             log_auth: Advanced,
             news: 244,
             password: Password {
-                mode: 2,
+                mode: Two,
                 expiration_time: None,
             },
             phone: Phone {

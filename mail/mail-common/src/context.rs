@@ -351,37 +351,45 @@ impl MailContext {
         let key = self.core_context.get_encryption_key()?;
         let tether = self.core_context.account_stash().connection();
 
-        let Some(account) = CoreAccount::find_by_id(user_id.clone(), &tether).await? else {
-            return Err(MailContextError::Other(anyhow!("account not found")));
-        };
+        let account = CoreAccount::find_by_id(user_id.clone(), &tether)
+            .await?
+            .ok_or(MailContextError::Other(anyhow!("account not found")))?;
 
-        let Some(session) = CoreSession::find_by_id(session_id.clone(), &tether).await? else {
-            return Err(MailContextError::Other(anyhow!("session not found")));
-        };
+        let session = CoreSession::find_by_id(session_id.clone(), &tether)
+            .await?
+            .ok_or(MailContextError::Other(anyhow!("session not found")))?;
 
-        let password = (account.password)
-            .map(|p| p.decrypt_to_string(&key))
-            .transpose()
-            .or(Err(CoreContextError::Crypto))?
-            .map(|p| p.expose_secret().to_owned());
+        let api_session = self
+            .core_context
+            .new_api_session(Some(&session), None)
+            .await?;
 
         match CoreSessionState::of(&session) {
-            CoreSessionState::NeedTfa => Ok(LoginFlow::new_from_tfa(
-                self.core_context
-                    .new_api_session(Some(&session), None)
-                    .await?,
-                user_id,
-                session_id,
-                password,
-            )),
+            CoreSessionState::NeedTfa => {
+                let password = (account.password)
+                    .map(|p| p.decrypt_to_string(&key))
+                    .transpose()
+                    .or(Err(CoreContextError::Crypto))?
+                    .map(|p| p.expose_secret().to_owned())
+                    .ok_or(MailContextError::Other(anyhow!("password not found")))?;
 
-            CoreSessionState::NeedKey => Ok(LoginFlow::new_from_mbp(
-                self.core_context
-                    .new_api_session(Some(&session), None)
-                    .await?,
-                user_id,
-                session_id,
-            )),
+                let mbp_mode = account
+                    .password_mode
+                    .map(|p| p.into())
+                    .ok_or(MailContextError::Other(anyhow!("password mode not found")))?;
+
+                Ok(LoginFlow::new_from_tfa(
+                    api_session,
+                    user_id,
+                    session_id,
+                    password,
+                    mbp_mode,
+                ))
+            }
+
+            CoreSessionState::NeedKey => {
+                Ok(LoginFlow::new_from_mbp(api_session, user_id, session_id))
+            }
 
             CoreSessionState::Authenticated => Err(MailContextError::Other(anyhow!(
                 "session is already logged in"

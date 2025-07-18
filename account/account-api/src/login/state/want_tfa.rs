@@ -8,26 +8,39 @@ use muon::client::flow::{AuthFlow, LoginTwoFactorFlow};
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::observability::metrics;
 use proton_core_api::services::proton::{SessionId, UserId};
+use proton_core_api::store::MbpMode;
 use tracing::info;
 
 /// Represents the login flow state where the user must provide their two-factor authentication code.
 pub struct WantTfa {
     flow: TfaFlow,
     data: StateData,
-    pass: Option<SecureString>,
+    pass: SecureString,
+    mode: MbpMode,
 }
 
 impl WantTfa {
-    pub(crate) fn new(flow: TfaFlow, data: StateData, pass: Option<SecureString>) -> Self {
+    pub(crate) fn new(flow: TfaFlow, data: StateData, pass: SecureString, mode: MbpMode) -> Self {
         info!("Login flow wants 2FA");
 
-        Self { flow, data, pass }
+        Self {
+            flow,
+            data,
+            pass,
+            mode,
+        }
     }
 
     pub async fn submit_totp(self, code: String) -> Result<State, (State, LoginError)> {
-        let Self { flow, data, pass } = self;
+        let Self {
+            flow,
+            data,
+            pass,
+            mode,
+        } = self;
 
         let result = flow.totp(&code).await;
+
         data.observability
             .record(metrics::SignInSubmitTotpTotal::new(
                 result.as_ref().err().into(),
@@ -35,22 +48,28 @@ impl WantTfa {
 
         match result {
             Ok(client) => {
-                Self::advance(client, data, pass)
+                Self::advance(client, data, pass, mode)
                     .map_err(|err| (State::TfaError, err))
                     .await
             }
 
             Err(err) => Err((
-                State::TfaRetry(data.user_id, data.session_id, pass),
+                State::TfaRetry(data.user_id, data.session_id, pass, mode),
                 LoginError::FlowTotp(err),
             )),
         }
     }
 
     pub async fn submit_fido(self, code: String) -> Result<State, (State, LoginError)> {
-        let Self { flow, data, pass } = self;
+        let Self {
+            flow,
+            data,
+            pass,
+            mode,
+        } = self;
 
         let result = flow.fido(&code).await;
+
         data.observability
             .record(metrics::SignInSubmitFidoTotal::new(
                 result.as_ref().err().into(),
@@ -58,13 +77,13 @@ impl WantTfa {
 
         match result {
             Ok(client) => {
-                Self::advance(client, data, pass)
+                Self::advance(client, data, pass, mode)
                     .map_err(|err| (State::TfaError, err))
                     .await
             }
 
             Err(err) => Err((
-                State::TfaRetry(data.user_id, data.session_id, pass),
+                State::TfaRetry(data.user_id, data.session_id, pass, mode),
                 LoginError::FlowFido(err),
             )),
         }
@@ -73,17 +92,12 @@ impl WantTfa {
     async fn advance(
         client: Client,
         data: StateData,
-        pass: Option<SecureString>,
+        pass: SecureString,
+        mode: MbpMode,
     ) -> Result<State, LoginError> {
         data.parts.store.write().await.clear_temp_pass().await?;
 
-        let state = if let Some(pass) = pass {
-            State::finalize(client, data, pass).await?
-        } else {
-            State::want_mbp(client, data)
-        };
-
-        Ok(state)
+        State::inspect_user(client, data, pass, mode).await
     }
 }
 

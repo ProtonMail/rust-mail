@@ -6,10 +6,10 @@ use proton_core_api::services::proton::{
     DateFormat as ApiDateFormat, DelinquentState, Density as ApiDensity, Email as ApiEmail,
     Flags as ApiFlags, GetSettingsResponse as GetCoreSettingsResponse, GetUsersResponse,
     HighSecurity as ApiHighSecurity, LogAuth as ApiLogAuth, Password as ApiPassword,
-    Phone as ApiPhone, ProductUsedSpace as ApiProductUsedSpace, SettingsFlags as ApiSettingsFlags,
-    TfaStatus as ApiTfaStatus, TimeFormat as ApiTimeFormat, TwoFa as ApiTwoFa, User as ApiUser,
-    UserId, UserMnemonicStatus as ApiUserMnemonicStatus, UserSettings as ApiUserSettings,
-    UserType as ApiUserType, WeekStart as ApiWeekStart,
+    PasswordMode as ApiPasswordMode, Phone as ApiPhone, ProductUsedSpace as ApiProductUsedSpace,
+    SettingsFlags as ApiSettingsFlags, TfaStatus as ApiTfaStatus, TimeFormat as ApiTimeFormat,
+    TwoFa as ApiTwoFa, User as ApiUser, UserId, UserMnemonicStatus as ApiUserMnemonicStatus,
+    UserSettings as ApiUserSettings, UserType as ApiUserType, WeekStart as ApiWeekStart,
 };
 use wiremock::Times;
 use wiremock::{
@@ -67,7 +67,7 @@ static DEFAULT_USER_SETTINGS: LazyLock<ApiUserSettings> = LazyLock::new(|| ApiUs
         reset: 0,
     },
     password: ApiPassword {
-        mode: 0,
+        mode: ApiPasswordMode::One,
         expiration_time: None,
     },
     phone: ApiPhone {

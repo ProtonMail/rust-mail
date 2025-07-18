@@ -14,7 +14,7 @@ pub struct TargetCmd {}
 
 impl TargetCmd {
     pub async fn run(self, ctx: Arc<MailContext>) -> Result<()> {
-        let mut flow = ctx.new_login_flow(None).await?;
+        let mut flow = ctx.new_or_resume_login_flow(None).await?;
 
         let qr = flow.generate_sign_in_qr_code(true).await?;
         println!("QR: {qr}");

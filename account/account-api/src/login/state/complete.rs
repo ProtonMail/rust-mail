@@ -21,11 +21,6 @@ impl Complete {
     }
 
     #[must_use]
-    pub fn password_change_required(&self) -> Option<bool> {
-        Some(self.user.as_ref()?.flags.has_temporary_password)
-    }
-
-    #[must_use]
     pub fn delinquent_state(&self) -> Option<DelinquentState> {
         Some(self.user.as_ref()?.delinquent.into())
     }
