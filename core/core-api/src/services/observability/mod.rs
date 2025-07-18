@@ -102,14 +102,29 @@ impl ObservabilityManager {
         let mut store_lock = self.store.write().await;
         let elements = store_lock.get_first_n(count);
         let metric_count = elements.len();
+
         if metric_count == 0 {
             trace!("No metrics to send");
             return;
         }
+
         if self.status.status(client.clone()).await.is_offline() {
             trace!("Client is offline");
             return;
         }
+
+        debug!("Preparing to send {} metric(s):", metric_count);
+        for (i, metric) in elements.iter().enumerate() {
+            debug!(
+                "  [{}] name: '{}', version: {}, timestamp: {}, labels: {}",
+                i + 1,
+                metric.name,
+                metric.version,
+                metric.timestamp,
+                metric.data.labels,
+            );
+        }
+
         match client.post_metrics(elements).await {
             Ok(()) => {
                 debug!("{metric_count} Metric(s) has been sent");
@@ -118,6 +133,9 @@ impl ObservabilityManager {
                 error!("Error while sending Observability Metrics: {err:?}");
             }
         }
+        // We intentionally drop metrics even on failure. If we break schema compatibility,
+        // we prefer to continue sending newer, supported events rather than getting stuck
+        // retrying outdated or malformed ones indefinitely.
         store_lock.remove_first_n(count);
     }
 }
