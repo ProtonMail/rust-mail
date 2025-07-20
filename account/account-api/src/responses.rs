@@ -92,6 +92,9 @@ pub enum UserType {
     /// TODO: Document this variant.
     External = 3,
 
+    /// Credentialless user
+    CredentialLess = 4,
+
     Unknown(u8),
 }
 
@@ -101,6 +104,7 @@ impl From<u8> for UserType {
             1 => Self::Proton,
             2 => Self::Managed,
             3 => Self::External,
+            4 => Self::CredentialLess,
             v => Self::Unknown(v),
         }
     }
@@ -112,6 +116,7 @@ impl From<UserType> for u8 {
             UserType::Proton => 1,
             UserType::Managed => 2,
             UserType::External => 3,
+            UserType::CredentialLess => 4,
             UserType::Unknown(v) => v,
         }
     }

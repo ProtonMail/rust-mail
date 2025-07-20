@@ -39,6 +39,8 @@ workspace = true
 [dev-dependencies]
 tokio = { workspace = true }
 tracing-subscriber = { workspace = true }
+tempdir = { workspace = true }
+proton-log-service = { workspace = true }
 
 [[example]]
 name = "user_id"

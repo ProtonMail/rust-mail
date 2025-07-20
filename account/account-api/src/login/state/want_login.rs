@@ -1,3 +1,4 @@
+use crate::login::PostLoginValidator;
 use crate::login::state::StateData;
 use crate::login::{LoginError, state::State};
 use crate::shared::SecureString;
@@ -62,6 +63,7 @@ impl WantLogin {
         user: String,
         pass: SecureString,
         user_behavior: Option<Behavior>,
+        post_login_validator: &dyn PostLoginValidator,
     ) -> Result<State, (State, LoginError)> {
         self.parts.store.write().await.set_name_or_addr(&user);
 
@@ -78,7 +80,7 @@ impl WantLogin {
                     .build()
             });
 
-        self.try_login(user, pass, info)
+        self.try_login(user, pass, info, post_login_validator)
             .map_err(|err| (State::LoginRetry, err))
             .await
     }
@@ -180,6 +182,7 @@ impl WantLogin {
         user: String,
         pass: SecureString,
         info: LoginExtraInfo,
+        post_login_validator: &dyn PostLoginValidator,
     ) -> Result<State, LoginError> {
         match self.flow.login_with_extra(user, pass.as_str(), info).await {
             LoginFlow::Ok(client, flow_data) => {
@@ -196,7 +199,14 @@ impl WantLogin {
 
                 // Always inspect the user regardless of password mode from auth call
                 // The password mode from auth is unreliable for temporary password users
-                State::inspect_user(client, data, pass, flow_data.password_mode.into()).await
+                State::inspect_user(
+                    client,
+                    data,
+                    pass,
+                    flow_data.password_mode.into(),
+                    post_login_validator,
+                )
+                .await
             }
 
             LoginFlow::TwoFactor(flow, flow_data) => {

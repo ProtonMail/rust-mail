@@ -28,6 +28,8 @@ use secrecy::SecretString;
 use std::collections::HashMap;
 use want_qr_confirmation::WantQrConfirmation;
 
+use super::PostLoginValidator;
+
 pub mod complete;
 mod want_login;
 mod want_mbp;
@@ -98,10 +100,11 @@ impl State {
         user: String,
         pass: SecureString,
         user_behavior: Option<Behavior>,
+        post_login_validator: &dyn PostLoginValidator,
     ) -> Result<Self, (Self, LoginError)> {
         if let Self::WantLogin(state) = self {
             Ok(state
-                .login_with_credentials(user, pass, user_behavior)
+                .login_with_credentials(user, pass, user_behavior, post_login_validator)
                 .await?)
         } else {
             Err((self, LoginError::InvalidState))
@@ -164,9 +167,13 @@ impl State {
     }
 
     /// Attempt to submit a TOTP code.
-    pub async fn submit_totp(self, code: String) -> Result<Self, (Self, LoginError)> {
+    pub async fn submit_totp(
+        self,
+        code: String,
+        post_login_validator: &dyn PostLoginValidator,
+    ) -> Result<Self, (Self, LoginError)> {
         if let Self::WantTfa(state) = self {
-            Ok(state.submit_totp(code).await?)
+            Ok(state.submit_totp(code, post_login_validator).await?)
         } else {
             Err((self, LoginError::InvalidState))
         }
@@ -174,18 +181,26 @@ impl State {
 
     /// Attempt to submit a FIDO code.
     #[allow(unused)]
-    pub async fn submit_fido(self, fido_data: fido2::Request) -> Result<Self, (Self, LoginError)> {
+    pub async fn submit_fido(
+        self,
+        fido_data: fido2::Request,
+        post_login_validator: &dyn PostLoginValidator,
+    ) -> Result<Self, (Self, LoginError)> {
         if let Self::WantTfa(state) = self {
-            Ok(state.submit_fido(fido_data).await?)
+            Ok(state.submit_fido(fido_data, post_login_validator).await?)
         } else {
             Err((self, LoginError::InvalidState))
         }
     }
 
     /// Attempt to submit a mailbox password.
-    pub async fn submit_mbp(self, pass: SecureString) -> Result<Self, (Self, LoginError)> {
+    pub async fn submit_mbp(
+        self,
+        pass: SecureString,
+        post_login_validator: &dyn PostLoginValidator,
+    ) -> Result<Self, (Self, LoginError)> {
         if let Self::WantMbp(state) = self {
-            Ok(state.submit_mbp(pass).await?)
+            Ok(state.submit_mbp(pass, post_login_validator).await?)
         } else {
             Err((self, LoginError::InvalidState))
         }
@@ -195,9 +210,12 @@ impl State {
     pub async fn submit_new_password(
         self,
         new_pass: SecureString,
+        post_login_validator: &dyn PostLoginValidator,
     ) -> Result<Self, (Self, LoginError)> {
         if let Self::WantNewPassword(state) = self {
-            Ok(state.submit_new_password(new_pass).await?)
+            Ok(state
+                .submit_new_password(new_pass, post_login_validator)
+                .await?)
         } else {
             Err((self, LoginError::InvalidState))
         }
@@ -254,6 +272,7 @@ impl State {
     }
 
     /// Create a `WantTfa` state from a resumed login flow.
+    #[allow(clippy::too_many_arguments)]
     #[must_use]
     pub fn new_from_tfa(
         client: muon::Client,
@@ -331,6 +350,7 @@ impl State {
         data: StateData,
         pass: SecureString,
         mode: MbpMode,
+        post_login_validator: &dyn PostLoginValidator,
     ) -> Result<Self, LoginError> {
         // Fetch user info.
         let user = client
@@ -358,7 +378,7 @@ impl State {
 
         // Check if user has mailbox password - transition to WantMbp
         match mode {
-            MbpMode::One => Self::finalize(client, data, pass).await,
+            MbpMode::One => Self::finalize(client, data, pass, post_login_validator).await,
             MbpMode::Two => Ok(Self::want_mbp(client, data)),
         }
     }
@@ -368,6 +388,7 @@ impl State {
         client: muon::Client,
         data: StateData,
         pass: SecureString,
+        post_login_validator: &dyn PostLoginValidator,
     ) -> Result<Self, LoginError> {
         // Initialize the crypto providers.
         let srp = proton_crypto::new_srp_provider();
@@ -379,6 +400,9 @@ impl State {
             .map_ok(|res| res.user)
             .map_err(LoginError::UserFetch)
             .await?;
+
+        // Run Post Login checks
+        post_login_validator.validate(&user).await?;
 
         // Fetch user addresses.
         let mut addr = ProtonCore::get_addresses(&client)

@@ -382,6 +382,9 @@ pub enum LoginError {
     // Failed to encode QR login payload
     QRLoginEncoding,
 
+    // Post-login check failed.
+    PostLoginCheckFailed(String),
+
     Other(String),
 }
 
@@ -441,6 +444,9 @@ impl From<login_api::LoginError> for LoginError {
             }
 
             login_api::LoginError::QRLoginEncoding => Self::QRLoginEncoding,
+            login_api::LoginError::PostLoginCheckFailed(e) => {
+                Self::PostLoginCheckFailed(e.to_string())
+            }
         }
     }
 }
