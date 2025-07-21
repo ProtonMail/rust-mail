@@ -24,6 +24,7 @@ use proton_core_api::services::proton::SessionId;
 use proton_core_api::services::proton::UserId;
 use proton_core_api::store::AuthInfo;
 use proton_core_api::store::DynStore;
+use proton_core_api::store::MbpMode;
 use proton_core_api::store::TfaMode;
 use proton_core_api::store::UserData;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
@@ -98,7 +99,7 @@ impl WantCreate {
                     user_id: UserId::from(user.id.clone()),
                     session_id: SessionId::from(data.session_id),
                     tfa_mode: TfaMode::none(),
-                    mbp_mode: data.password_mode.into(),
+                    mbp_mode: MbpMode::from(data.password_mode),
                 };
 
                 store

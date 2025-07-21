@@ -3,6 +3,7 @@ use crate::login::LoginError;
 use crate::login::state::complete::Complete;
 use crate::login::state::want_login::WantLogin;
 use crate::login::state::want_mbp::WantMbp;
+use crate::login::state::want_new_password::WantNewPassword;
 use crate::login::state::want_tfa::{TfaFlow, WantTfa};
 use crate::prelude::AuthInput;
 use crate::shared::SecureString;
@@ -16,7 +17,7 @@ use proton_core_api::auth::UserKeySecret;
 use proton_core_api::services::observability::ObservabilityRecorder;
 use proton_core_api::services::proton::{Address, AddressId, ProtonCore, SessionId, User, UserId};
 use proton_core_api::session::{Session, SessionParts};
-use proton_core_api::store::UserData;
+use proton_core_api::store::{MbpMode, UserData};
 use proton_crypto_account::keys::{LockedKey, UnlockedUserKey, UserKeys};
 use proton_crypto_account::proton_crypto;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
@@ -29,6 +30,7 @@ use want_qr_confirmation::WantQrConfirmation;
 pub mod complete;
 mod want_login;
 mod want_mbp;
+mod want_new_password;
 pub mod want_qr_confirmation;
 mod want_tfa;
 
@@ -50,7 +52,7 @@ pub enum State {
 
     /// A recoverable error occurred during the `WantTfa` state.
     #[debug("TfaRetry")]
-    TfaRetry(UserId, SessionId, Option<SecureString>),
+    TfaRetry(UserId, SessionId, SecureString, MbpMode),
 
     /// An error occurred during the `WantTfa` state.
     #[debug("TfaError")]
@@ -63,6 +65,10 @@ pub enum State {
     /// A recoverable error occurred during the `WantMbp` state.
     #[debug("MbpRetry")]
     MbpRetry(UserId, SessionId),
+
+    /// The flow is waiting for the user to provide a new password (for temporary password users).
+    #[debug("WantNewPassword")]
+    WantNewPassword(WantNewPassword),
 
     /// This device is the Target device and is waiting for Origin to scan and therefore confirm the login
     #[debug("WantQrConfirmation")]
@@ -178,6 +184,18 @@ impl State {
         }
     }
 
+    /// Attempt to submit a new password.
+    pub async fn submit_new_password(
+        self,
+        new_pass: SecureString,
+    ) -> Result<Self, (Self, LoginError)> {
+        if let Self::WantNewPassword(state) = self {
+            Ok(state.submit_new_password(new_pass).await?)
+        } else {
+            Err((self, LoginError::InvalidState))
+        }
+    }
+
     /// Attempt to take the completed session from the flow.
     pub fn into_session(self) -> Result<Session, LoginError> {
         if let Self::Complete(state) = self {
@@ -192,6 +210,7 @@ impl State {
         let state: &dyn HasUserId = match self {
             Self::WantTfa(state) => state,
             Self::WantMbp(state) => state,
+            Self::WantNewPassword(state) => state,
             Self::Complete(state) => state,
 
             _ => return Err(LoginError::InvalidState),
@@ -205,6 +224,7 @@ impl State {
         let state: &dyn HasSessionId = match self {
             Self::WantTfa(state) => state,
             Self::WantMbp(state) => state,
+            Self::WantNewPassword(state) => state,
             Self::Complete(state) => state,
 
             _ => return Err(LoginError::InvalidState),
@@ -233,7 +253,8 @@ impl State {
         parts: SessionParts,
         user_id: UserId,
         session_id: SessionId,
-        pass: Option<SecureString>,
+        pass: SecureString,
+        mode: MbpMode,
     ) -> Self {
         let data = StateData {
             parts,
@@ -242,7 +263,7 @@ impl State {
             observability: ObservabilityRecorder::default(),
         };
 
-        Self::want_tfa(client.auth().into(), data, pass)
+        Self::want_tfa(client.auth().into(), data, pass, mode)
     }
 
     /// Create a `WantMbp` state from a resumed login flow.
@@ -276,8 +297,8 @@ impl State {
     }
 
     /// Create a `WantTfa` state.
-    fn want_tfa(flow: TfaFlow, data: StateData, pass: Option<SecureString>) -> Self {
-        WantTfa::new(flow, data, pass).into()
+    fn want_tfa(flow: TfaFlow, data: StateData, pass: SecureString, mode: MbpMode) -> Self {
+        WantTfa::new(flow, data, pass, mode).into()
     }
 
     /// Create a `WantMbp` state.
@@ -285,34 +306,20 @@ impl State {
         WantMbp::new(client, data).into()
     }
 
-    /// Finalize login flow for the migration.
-    async fn finalize_migration(
-        client: muon::Client,
-        data: StateData,
-        user_data: UserData,
-    ) -> Result<Self, LoginError> {
-        data.parts
-            .store
-            .write()
-            .await
-            .set_user_data(user_data)
-            .await?;
-
-        Ok(Complete::new(client, data, None).into())
+    /// Create a `WantNewPassword` state.
+    fn want_new_password(client: muon::Client, data: StateData, user: User) -> Self {
+        WantNewPassword::new(client, data, user).into()
     }
 
-    /// Attempt to finalize the login flow, transitioning to the `Complete` state if successful.
-    async fn finalize(
+    /// Inspect the user after successful authentication and determine the appropriate next step.
+    async fn inspect_user(
         client: muon::Client,
         data: StateData,
         pass: SecureString,
+        mode: MbpMode,
     ) -> Result<Self, LoginError> {
-        // Initialize the crypto providers.
-        let srp = proton_crypto::new_srp_provider();
-        let pgp = proton_crypto::new_pgp_provider();
-
         // Fetch user info.
-        let mut user = client
+        let user = client
             .get_users()
             .map_ok(|res| res.user)
             .map_err(LoginError::UserFetch)
@@ -329,6 +336,35 @@ impl State {
             data.parts.store.write().await.clear_account().await?;
             return Err(LoginError::NoAddress);
         }
+
+        // Check if user has temporary password - transition to WantNewPassword
+        if user.flags.has_temporary_password {
+            return Ok(Self::want_new_password(client, data, user));
+        }
+
+        // Check if user has mailbox password - transition to WantMbp
+        match mode {
+            MbpMode::One => Self::finalize(client, data, pass).await,
+            MbpMode::Two => Ok(Self::want_mbp(client, data)),
+        }
+    }
+
+    /// Complete the finalization with key unlocking and storage.
+    async fn finalize(
+        client: muon::Client,
+        data: StateData,
+        pass: SecureString,
+    ) -> Result<Self, LoginError> {
+        // Initialize the crypto providers.
+        let srp = proton_crypto::new_srp_provider();
+        let pgp = proton_crypto::new_pgp_provider();
+
+        // Fetch user info.
+        let mut user = client
+            .get_users()
+            .map_ok(|res| res.user)
+            .map_err(LoginError::UserFetch)
+            .await?;
 
         // Fetch user addresses.
         let mut addr = ProtonCore::get_addresses(&client)
@@ -396,6 +432,22 @@ impl State {
             .await?;
 
         Ok(Complete::new(client, data, Some(user)).into())
+    }
+
+    /// Finalize login flow for the migration.
+    async fn finalize_migration(
+        client: muon::Client,
+        data: StateData,
+        user_data: UserData,
+    ) -> Result<Self, LoginError> {
+        data.parts
+            .store
+            .write()
+            .await
+            .set_user_data(user_data)
+            .await?;
+
+        Ok(Complete::new(client, data, None).into())
     }
 
     /// Set up a user key for a user that doesn't have any keys.
@@ -598,10 +650,6 @@ fn want_key_setup(user: &User) -> bool {
         return false;
     }
 
-    // TODO(ET-3627): Generate keys for users with temporary passwords.
-    if user.flags.has_temporary_password {
-        return false;
-    }
-
+    // Allow key setup for users with temporary passwords
     true
 }

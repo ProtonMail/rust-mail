@@ -22,17 +22,22 @@ impl Cmd {
         ctx: Arc<MailContext>,
         username: &str,
     ) -> Result<(LoginFlow, Arc<MailUserContext>)> {
-        let mut flow = ctx.new_login_flow(Some(username)).await?;
+        let mut flow = ctx.new_or_resume_login_flow(Some(username)).await?;
 
         loop {
             if flow.is_logged_out() {
                 let _ = flow
-                    .login_with_credentials(username.to_owned(), read("password")?, None)
+                    .login_with_credentials(username, read("password")?, None)
                     .inspect_err(|e| warn!("{e}"))
                     .await;
             } else if flow.is_awaiting_2fa() {
                 let _ = flow
                     .submit_totp(read("2nd factor")?)
+                    .inspect_err(|e| warn!("{e}"))
+                    .await;
+            } else if flow.is_awaiting_new_password() {
+                let _ = flow
+                    .submit_new_password(read("new password")?)
                     .inspect_err(|e| warn!("{e}"))
                     .await;
             } else if flow.is_awaiting_mailbox_password() {

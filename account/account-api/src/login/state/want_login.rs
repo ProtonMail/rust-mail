@@ -5,7 +5,6 @@ use crate::shared::challenge::{Behavior, ChallengeInfo, ChallengePayload};
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
 use futures::TryFutureExt;
-use muon::client::PasswordMode::{One, Two};
 use muon::client::flow::{AuthFlow, LoginFlow, LoginFlowData, WithCodeFlow};
 use muon::client::{Auth, Tokens};
 use proton_core_api::auth::KeySecret;
@@ -181,7 +180,7 @@ impl WantLogin {
         pass: SecureString,
         info: LoginExtraInfo,
     ) -> Result<State, LoginError> {
-        match self.flow.login_with_extra(&user, pass.as_str(), info).await {
+        match self.flow.login_with_extra(user, pass.as_str(), info).await {
             LoginFlow::Ok(client, flow_data) => {
                 info!("Login flow does not require 2FA");
                 self.observability.record(AuthV4RequestMetric::new(
@@ -192,10 +191,9 @@ impl WantLogin {
                 self.parts.store.write().await.set_auth_info(info).await?;
                 let data = get_state_data(&flow_data, self.parts);
 
-                match flow_data.password_mode {
-                    One => State::finalize(client, data, pass).await,
-                    Two => Ok(State::want_mbp(client, data)),
-                }
+                // Always inspect the user regardless of password mode from auth call
+                // The password mode from auth is unreliable for temporary password users
+                State::inspect_user(client, data, pass, flow_data.password_mode.into()).await
             }
 
             LoginFlow::TwoFactor(flow, flow_data) => {
@@ -204,22 +202,18 @@ impl WantLogin {
                     ApiServiceObservabilityResponse::Success,
                 ));
 
-                if let One = flow_data.password_mode {
-                    self.parts.store.write().await.set_temp_pass(&pass).await?;
-                } else {
-                    info!("Not caching password (user has separate mailbox password)");
-                }
+                // Always cache the password temporarily - we'll determine later if we need it
+                self.parts.store.write().await.set_temp_pass(&pass).await?;
 
                 let has_totp = flow.has_totp();
                 let has_fido = flow.fido_details().is_some();
                 let info = get_auth_info(&flow_data, has_totp, has_fido);
+                let mode = flow_data.password_mode.into();
                 self.parts.store.write().await.set_auth_info(info).await?;
                 let data = get_state_data(&flow_data, self.parts);
 
-                match flow_data.password_mode {
-                    One => Ok(State::want_tfa(flow.into(), data, Some(pass))),
-                    Two => Ok(State::want_tfa(flow.into(), data, None)),
-                }
+                // Always pass the password to TFA state - password mode from auth is unreliable
+                Ok(State::want_tfa(flow.into(), data, pass, mode))
             }
 
             LoginFlow::Failed { reason, .. } => {

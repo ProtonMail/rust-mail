@@ -48,7 +48,7 @@ impl LoginFlow {
     /// * `fingerprint_payload` - a JSON array of objects serialized to a `String`.
     pub async fn login(
         &self,
-        email: String,
+        username: String,
         password: String,
         user_behavior: Option<UserBehavior>,
     ) -> Result<(), LoginError> {
@@ -57,7 +57,7 @@ impl LoginFlow {
         uniffi_async::<_, LoginError, _>(async move {
             let mut guard = flow.lock().await;
             guard
-                .login_with_credentials(email, password, user_behavior.map(Into::into))
+                .login_with_credentials(username.as_str(), password, user_behavior.map(Into::into))
                 .await
                 .map_err(LoginError::from)
         })
@@ -200,18 +200,6 @@ impl LoginFlow {
         async_runtime().block_on(async { self.flow.lock().await.is_logged_in() })
     }
 
-    /// Check whether password change is required for a logged in user
-    #[must_use]
-    pub fn password_change_required(&self) -> Result<bool, LoginError> {
-        async_runtime().block_on(async {
-            self.flow
-                .lock()
-                .await
-                .password_change_required()
-                .map_err(LoginError::from)
-        })
-    }
-
     /// Return delinquent state of the user
     #[must_use]
     pub fn delinquent_state(&self) -> Result<DelinquentState, LoginError> {
@@ -266,6 +254,26 @@ impl LoginFlow {
     pub fn is_awaiting_mailbox_password(&self) -> bool {
         async_runtime().block_on(async { self.flow.lock().await.is_awaiting_mailbox_password() })
     }
+
+    /// Submit a new password for users with temporary passwords.
+    pub async fn submit_new_password(&self, new_password: String) -> Result<(), LoginError> {
+        let flow = self.flow.clone();
+        uniffi_async::<_, LoginError, _>(async move {
+            let mut guard = flow.lock().await;
+            guard
+                .submit_new_password(new_password)
+                .await
+                .map_err(LoginError::from)
+        })
+        .await
+        .into()
+    }
+
+    /// Check whether the login flow is awaiting a new password.
+    #[must_use]
+    pub fn is_awaiting_new_password(&self) -> bool {
+        async_runtime().block_on(async { self.flow.lock().await.is_awaiting_new_password() })
+    }
 }
 impl LoginFlow {
     #[must_use]
@@ -305,6 +313,9 @@ pub enum LoginError {
 
     /// Returned if we fail to fetch the user info after login.
     UserFetch(UserApiServiceError),
+
+    /// Returned if we fail to fetch the user settings after login.
+    SettingsFetch(UserApiServiceError),
 
     /// Returned if we fail to setup the user key.
     UserKeySetup(String),
@@ -368,8 +379,12 @@ impl From<login_api::LoginError> for LoginError {
             login_api::LoginError::FlowFido(e) => LoginError::FlowFido(e.into()),
 
             login_api::LoginError::UserFetch(e) => LoginError::UserFetch(e.into()),
-            login_api::LoginError::UserKeySetup(e) => LoginError::UserKeySetup(e),
-            login_api::LoginError::UserKeySetupAborted => LoginError::UserKeySetupAborted,
+            login_api::LoginError::SettingsFetch(e) => LoginError::SettingsFetch(e.into()),
+            login_api::LoginError::UserKeySetup(e) | login_api::LoginError::NewPasswordSetup(e) => {
+                LoginError::UserKeySetup(e)
+            }
+            login_api::LoginError::UserKeySetupAborted
+            | login_api::LoginError::NewPasswordSetupAborted => LoginError::UserKeySetupAborted,
 
             login_api::LoginError::AddressFetch(e) => LoginError::AddressFetch(e.into()),
             login_api::LoginError::AddressSetup(e) => LoginError::AddressSetup(e.to_string()),
