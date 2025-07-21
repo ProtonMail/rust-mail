@@ -38,6 +38,7 @@ pub trait ObservabilityMetric: Serialize {
 /// thread-safe `MetricStore` for storing metrics. It supports periodic metric
 /// sending via an asynchronous task.
 // #[derive(Clone)]
+#[derive(Debug)]
 pub struct ObservabilityManager {
     status: StatusObserver,
     store: Arc<RwLock<InMemoryMetricStore>>,
@@ -48,7 +49,7 @@ pub struct ObservabilityManager {
 /// This struct provides a convenient interface for recording metrics, delegating
 /// storage to the global [`ObservabilityManager`]. It uses a reference to the
 /// singleton `MANAGER` for thread-safe operations.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ObservabilityRecorder {
     manager: Arc<RwLock<ObservabilityManager>>,
 }

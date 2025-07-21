@@ -7,6 +7,7 @@ const DEFAULT_STORE_CAPACITY: usize = 512;
 /// Stores metrics in a fixed-capacity FIFO queue.
 ///
 /// Removes the oldest element (from the back) if the capacity is reached, then adds the new element to the front.
+#[derive(Debug)]
 pub struct InMemoryMetricStore {
     metrics: VecDeque<PostMetricsRequestElement>,
     max_metrics: usize,
