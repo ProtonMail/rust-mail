@@ -34,7 +34,7 @@ pub trait ProtonCalendarMock {
         &self,
         uid: &str,
         rid: Option<i64>,
-        event: Option<CalendarEvent>,
+        events: Vec<CalendarEvent>,
     ) -> impl Future<Output = ()> + Send;
 
     fn mock_upgrade_calendar_event_invite(
@@ -96,11 +96,9 @@ impl ProtonCalendarMock for MockServer {
         &self,
         uid: &str,
         rid: Option<i64>,
-        event: Option<CalendarEvent>,
+        events: Vec<CalendarEvent>,
     ) {
-        let response = FoundCalendarEvents {
-            events: Vec::from_iter(event),
-        };
+        let response = FoundCalendarEvents { events };
 
         let mock = Mock::given(method("GET"))
             .and(path("/api/calendar/v1/events"))

@@ -1,4 +1,4 @@
-use crate::{ATTENDEES_EVENT, INVITE, RsvpEventIdExt, SHARED_EVENT, world};
+use crate::{CALENDAR_ID, EVENT_ID, EVENT_UID, INVITE, RsvpEventIdExt, world};
 use itertools::Itertools;
 use jiff::civil::Weekday;
 use pretty_assertions as pa;
@@ -49,18 +49,18 @@ const TEST_NO: fn() -> TestCase = || TestCase {
 async fn answer(case: fn() -> TestCase) {
     let case = case();
     let world = world().await;
-    let event = world.event("address-key", SHARED_EVENT, ATTENDEES_EVENT, None);
+    let event = world.event(|event| event.basic().using_address_key());
 
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_bootstrap_ex("HzNtbT1J", world.bootstrap(), |mock| mock.expect(2))
+        .mock_get_calendar_bootstrap_ex(CALENDAR_ID, world.bootstrap(), |mock| mock.expect(2))
         .await;
 
     world
         .ctx
         .mock_web_server
-        .mock_find_calendar_events("8maQ3qBa", None, Some(event.clone()))
+        .mock_find_calendar_events(EVENT_UID, None, vec![event.clone()])
         .await;
 
     let mut event = RsvpEventId::invite(INVITE)
@@ -89,15 +89,15 @@ async fn answer(case: fn() -> TestCase) {
     world
         .ctx
         .mock_web_server
-        .mock_upgrade_calendar_event_invite("HzNtbT1J", "pFmwNlJp")
+        .mock_upgrade_calendar_event_invite(CALENDAR_ID, EVENT_ID)
         .await;
 
     world
         .ctx
         .mock_web_server
         .mock_update_calendar_event_attendee_status(
-            "HzNtbT1J",
-            "pFmwNlJp",
+            CALENDAR_ID,
+            EVENT_ID,
             "gWfsHvDg",
             case.expected_status,
             &answer.now,
@@ -108,8 +108,8 @@ async fn answer(case: fn() -> TestCase) {
         .ctx
         .mock_web_server
         .mock_update_calendar_event_personal_part(
-            "HzNtbT1J",
-            "pFmwNlJp",
+            CALENDAR_ID,
+            EVENT_ID,
             Some("#aabbcc"),
             case.expected_notifs,
         )

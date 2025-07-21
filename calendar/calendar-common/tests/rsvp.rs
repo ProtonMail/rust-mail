@@ -26,6 +26,10 @@ use proton_crypto_account::salts::KeySalt;
 use proton_crypto_calendar::{CalendarEventEncryptor, KeyPacket, UnlockedCalendarKey};
 use std::sync::Arc;
 
+const EVENT_ID: &str = "pFmwNlJp";
+const EVENT_UID: &str = "8maQ3qBa";
+const CALENDAR_ID: &str = "HzNtbT1J";
+
 const INVITE: &str = indoc! {"
     BEGIN:VCALENDAR
     METHOD:REQUEST
@@ -63,12 +67,33 @@ const ATTENDEES_EVENT: &str = indoc! {"
     BEGIN:VCALENDAR
     VERSION:2.0
     BEGIN:VEVENT
-    UID:1Gax95xN@proton.me
+    UID:8maQ3qBa
     ATTENDEE;CN=foo@localhost;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=245902dc:mailto:foo@localhost
     ATTENDEE;CN=bar@localhost;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=d15cf90c:mailto:bar@localhost
     END:VEVENT
     END:VCALENDAR
 "};
+
+const BAR_ATTENDEE_ID: &str = "gWfsHvDg";
+const BAR_ATTENDEE_TOKEN: &str = "d15cf90c";
+
+const FOO_ATTENDEE_ID: &str = "V3FdcecX";
+const FOO_ATTENDEE_TOKEN: &str = "245902dc";
+
+const ATTENDEES: fn() -> Vec<CalendarAttendee> = || {
+    vec![
+        CalendarAttendee {
+            id: BAR_ATTENDEE_ID.into(),
+            token: BAR_ATTENDEE_TOKEN.into(),
+            status: CalendarAttendeeStatus::Unanswered,
+        },
+        CalendarAttendee {
+            id: FOO_ATTENDEE_ID.into(),
+            token: FOO_ATTENDEE_TOKEN.into(),
+            status: CalendarAttendeeStatus::Maybe,
+        },
+    ]
+};
 
 struct World<P>
 where
@@ -165,39 +190,111 @@ where
         }
     }
 
-    fn event(
-        &self,
-        mode: &str,
-        shared_event: &str,
-        attendees_event: &str,
-        calendar_event: Option<&str>,
-    ) -> CalendarEvent {
-        let encryptor = match mode {
+    fn event(&self, f: impl FnOnce(EventBuilder<P>) -> EventBuilder<P>) -> CalendarEvent {
+        f(EventBuilder::new(self)).build()
+    }
+}
+
+struct EventBuilder<'a, P>
+where
+    P: PGPProviderSync,
+{
+    world: &'a World<P>,
+    encryption: &'static str,
+    id: Option<&'static str>,
+    shared_event: Option<&'static str>,
+    attendees_event: Option<&'static str>,
+    calendar_event: Option<&'static str>,
+    attendees: Vec<CalendarAttendee>,
+}
+
+impl<'a, P> EventBuilder<'a, P>
+where
+    P: PGPProviderSync,
+{
+    fn new(world: &'a World<P>) -> Self {
+        Self {
+            world,
+            id: None,
+            encryption: "calendar-key",
+            shared_event: None,
+            attendees_event: None,
+            calendar_event: None,
+            attendees: Vec::new(),
+        }
+    }
+
+    fn basic(self) -> Self {
+        self.with_id(EVENT_ID)
+            .with_shared_event(SHARED_EVENT)
+            .with_attendees_event(ATTENDEES_EVENT)
+            .with_attendees(ATTENDEES())
+    }
+
+    fn with_id(mut self, id: &'static str) -> Self {
+        self.id = Some(id);
+        self
+    }
+
+    fn with_shared_event(mut self, ics: &'static str) -> Self {
+        self.shared_event = Some(ics);
+        self
+    }
+
+    fn with_attendees_event(mut self, ics: &'static str) -> Self {
+        self.attendees_event = Some(ics);
+        self
+    }
+
+    fn with_calendar_event(mut self, ics: &'static str) -> Self {
+        self.calendar_event = Some(ics);
+        self
+    }
+
+    fn with_attendees(mut self, atts: Vec<CalendarAttendee>) -> Self {
+        self.attendees.extend(atts);
+        self
+    }
+
+    fn using_address_key(mut self) -> Self {
+        self.encryption = "address-key";
+        self
+    }
+
+    fn build(self) -> CalendarEvent {
+        let encryptor = match self.encryption {
             "address-key" => {
-                CalendarEventEncryptor::for_address(&self.pgp, &self.address_keys).unwrap()
+                CalendarEventEncryptor::for_address(&self.world.pgp, &self.world.address_keys)
+                    .unwrap()
             }
+
             "calendar-key" => CalendarEventEncryptor::for_calendar(
-                &self.pgp,
-                &self.address_keys,
-                &self.calendar_key,
+                &self.world.pgp,
+                &self.world.address_keys,
+                &self.world.calendar_key,
             )
             .unwrap(),
+
             _ => unreachable!(),
         };
 
+        let shared_event = self.shared_event.unwrap();
+        let attendees_event = self.attendees_event.unwrap();
+
         let (shared_event, _) = encryptor
-            .encrypt(&self.pgp, shared_event.as_bytes())
+            .encrypt(&self.world.pgp, shared_event.as_bytes())
             .unwrap();
 
         let (attendees_event, _) = encryptor
-            .encrypt(&self.pgp, attendees_event.as_bytes())
+            .encrypt(&self.world.pgp, attendees_event.as_bytes())
             .unwrap();
 
-        let key_packets = encryptor.finish(&self.pgp).unwrap();
+        let key_packets = encryptor.finish(&self.world.pgp).unwrap();
         let address_key_packet = key_packets.address_key_packet.map(KeyPacket::into_base64);
         let shared_key_packet = key_packets.shared_key_packet.map(KeyPacket::into_base64);
 
-        let calendar_events = calendar_event
+        let calendar_events = self
+            .calendar_event
             .into_iter()
             .map(|data| CalendarEventPayload {
                 ty: CalendarEventPayloadType::ClearText,
@@ -215,8 +312,8 @@ where
                 author: "foo@localhost".into(),
             }],
             calendar_events,
-            id: "pFmwNlJp".into(),
-            calendar_id: "HzNtbT1J".into(),
+            id: self.id.unwrap().into(),
+            calendar_id: CALENDAR_ID.into(),
             address_key_packet,
             shared_key_packet,
             attendees_events: [CalendarEventPayload {
@@ -225,18 +322,7 @@ where
                 signature: None,
                 author: "foo@localhost".into(),
             }],
-            attendees: vec![
-                CalendarAttendee {
-                    id: "gWfsHvDg".into(),
-                    token: "d15cf90c".into(),
-                    status: CalendarAttendeeStatus::Unanswered,
-                },
-                CalendarAttendee {
-                    id: "V3FdcecX".into(),
-                    token: "245902dc".into(),
-                    status: CalendarAttendeeStatus::Maybe,
-                },
-            ],
+            attendees: self.attendees,
             notifications: None,
             color: Some("#aabbcc".into()),
             is_proton_proton_invite: true,

@@ -528,7 +528,8 @@ fn app_tracing_env_filter() -> EnvFilter {
         proton_core_common=trace,
         proton_mail_common=trace,
         proton_event_loop=trace,
-        proton_action_queue=trace",
+        proton_action_queue=trace,
+        proton_calendar_common=debug",
         )
         .split_inclusive(',')
         .map(str::trim)
@@ -610,7 +611,7 @@ impl Popup for InfoDialog {
         let text = match &self.text {
             DialogText::Error(error) => {
                 frame.render_widget(Block::new().white().on_red(), area);
-                error.to_string()
+                format!("{error:?}")
             }
             DialogText::Text(text) => {
                 frame.render_widget(Block::new(), area);

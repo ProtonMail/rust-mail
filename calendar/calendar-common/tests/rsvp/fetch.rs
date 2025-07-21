@@ -1,6 +1,6 @@
 use crate::{
-    ATTENDEES_EVENT, INVITE, RsvpEventIdExt, SHARED_EVENT, expected_event, expected_offline_event,
-    world,
+    CALENDAR_ID, EVENT_ID, EVENT_UID, INVITE, RsvpEventIdExt, expected_event,
+    expected_offline_event, world,
 };
 use indoc::indoc;
 use jiff::{Zoned, civil::Weekday};
@@ -18,18 +18,18 @@ use std::str::FromStr;
 #[tokio::test]
 async fn using_address_key() {
     let world = world().await;
-    let event = world.event("address-key", SHARED_EVENT, ATTENDEES_EVENT, None);
+    let event = world.event(|event| event.basic().using_address_key());
 
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_bootstrap("HzNtbT1J", world.bootstrap())
+        .mock_get_calendar_bootstrap(CALENDAR_ID, world.bootstrap())
         .await;
 
     world
         .ctx
         .mock_web_server
-        .mock_find_calendar_events("8maQ3qBa", None, Some(event.clone()))
+        .mock_find_calendar_events(EVENT_UID, None, vec![event.clone()])
         .await;
 
     let actual = RsvpEventId::invite(INVITE)
@@ -52,20 +52,21 @@ async fn using_address_key() {
 /// Such events get re-encrypted using the calendar key, which requires going
 /// through different crypto code paths.
 #[tokio::test]
-async fn using_shared_key() {
+#[allow(clippy::redundant_closure_for_method_calls, reason = "false-positive")]
+async fn using_calendar_key() {
     let world = world().await;
-    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
+    let event = world.event(|event| event.basic());
 
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_bootstrap("HzNtbT1J", world.bootstrap())
+        .mock_get_calendar_bootstrap(CALENDAR_ID, world.bootstrap())
         .await;
 
     world
         .ctx
         .mock_web_server
-        .mock_find_calendar_events("8maQ3qBa", None, Some(event.clone()))
+        .mock_find_calendar_events(EVENT_UID, None, vec![event.clone()])
         .await;
 
     let actual = RsvpEventId::invite(INVITE)
@@ -83,9 +84,11 @@ async fn using_shared_key() {
     pa::assert_eq!(Some(expected_event(RsvpIntent::Invite, event)), actual);
 }
 
-/// Make sure we can fetch recurring events - those are identified by an extra
-/// header and require passing an extra query parameter for the backend.
+/// Make sure we can fetch recurring events - those are identified by the
+/// presence of `RECURRENCE-ID` and require passing an extra query parameter
+/// when we ask backend about it.
 #[tokio::test]
+#[allow(clippy::redundant_closure_for_method_calls, reason = "false-positive")]
 async fn recurring() {
     const INVITE: &str = indoc! {"
         BEGIN:VCALENDAR
@@ -105,7 +108,7 @@ async fn recurring() {
     "};
 
     let world = world().await;
-    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
+    let event = world.event(|event| event.basic());
 
     let rid = Zoned::from_str("20180101T123000[UTC]")
         .unwrap()
@@ -115,13 +118,13 @@ async fn recurring() {
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_bootstrap("HzNtbT1J", world.bootstrap())
+        .mock_get_calendar_bootstrap(CALENDAR_ID, world.bootstrap())
         .await;
 
     world
         .ctx
         .mock_web_server
-        .mock_find_calendar_events("8maQ3qBa", Some(rid), Some(event.clone()))
+        .mock_find_calendar_events(EVENT_UID, Some(rid), vec![event.clone()])
         .await;
 
     let actual = RsvpEventId::invite(INVITE)
@@ -140,23 +143,24 @@ async fn recurring() {
 }
 
 #[tokio::test]
+#[allow(clippy::redundant_closure_for_method_calls, reason = "false-positive")]
 async fn reminder() {
     let world = world().await;
-    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
+    let event = world.event(|event| event.basic());
 
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_bootstrap("HzNtbT1J", world.bootstrap())
+        .mock_get_calendar_bootstrap(CALENDAR_ID, world.bootstrap())
         .await;
 
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_event("8maQ3qBa", "pFmwNlJp", event.clone())
+        .mock_get_calendar_event(EVENT_UID, EVENT_ID, event.clone())
         .await;
 
-    let actual = RsvpEventId::reminder("8maQ3qBa", "pFmwNlJp")
+    let actual = RsvpEventId::reminder(EVENT_UID, EVENT_ID)
         .fetch(
             &world.sess,
             &world.pgp,
@@ -173,6 +177,7 @@ async fn reminder() {
 }
 
 #[tokio::test]
+#[allow(clippy::redundant_closure_for_method_calls, reason = "false-positive")]
 async fn outdated() {
     const INVITE: &str = indoc! {"
         BEGIN:VCALENDAR
@@ -191,18 +196,18 @@ async fn outdated() {
     "};
 
     let world = world().await;
-    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
+    let event = world.event(|event| event.basic());
 
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_bootstrap("HzNtbT1J", world.bootstrap())
+        .mock_get_calendar_bootstrap(CALENDAR_ID, world.bootstrap())
         .await;
 
     world
         .ctx
         .mock_web_server
-        .mock_find_calendar_events("8maQ3qBa", None, Some(event.clone()))
+        .mock_find_calendar_events(EVENT_UID, None, vec![event.clone()])
         .await;
 
     let actual = RsvpEventId::invite(INVITE)
@@ -229,7 +234,7 @@ async fn cancelled() {
         BEGIN:VCALENDAR
         VERSION:2.0
         BEGIN:VEVENT
-        UID:1Gax95xN@proton.me
+        UID:8maQ3qBa
         DTSTAMP:20180101T080000Z
         STATUS:CANCELLED
         TRANSP:OPAQUE
@@ -238,24 +243,18 @@ async fn cancelled() {
     "};
 
     let world = world().await;
-
-    let event = world.event(
-        "calendar-key",
-        SHARED_EVENT,
-        ATTENDEES_EVENT,
-        Some(CALENDAR_EVENT),
-    );
+    let event = world.event(|event| event.basic().with_calendar_event(CALENDAR_EVENT));
 
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_bootstrap("HzNtbT1J", world.bootstrap())
+        .mock_get_calendar_bootstrap(CALENDAR_ID, world.bootstrap())
         .await;
 
     world
         .ctx
         .mock_web_server
-        .mock_find_calendar_events("8maQ3qBa", None, Some(event.clone()))
+        .mock_find_calendar_events(EVENT_UID, None, vec![event.clone()])
         .await;
 
     let actual = RsvpEventId::invite(INVITE)
@@ -287,7 +286,7 @@ async fn unknown() {
     world
         .ctx
         .mock_web_server
-        .mock_find_calendar_events("8maQ3qBa", None, None)
+        .mock_find_calendar_events(EVENT_UID, None, Vec::new())
         .await;
 
     let actual = RsvpEventId::invite(INVITE)
@@ -347,7 +346,7 @@ async fn err_unknown_attendee() {
         BEGIN:VCALENDAR
         VERSION:2.0
         BEGIN:VEVENT
-        UID:1Gax95xN@proton.me
+        UID:8maQ3qBa
         ATTENDEE;CN=foo@localhost;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=245902dc:mailto:foo@localhost
         ATTENDEE;CN=bar@localhost;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=d15cf90c:mailto:bar@localhost
         ATTENDEE;CN=zar@localhost;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=a06bf6c2:mailto:zar@localhost
@@ -356,18 +355,18 @@ async fn err_unknown_attendee() {
     "};
 
     let world = world().await;
-    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
+    let event = world.event(|event| event.basic().with_attendees_event(ATTENDEES_EVENT));
 
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_bootstrap("HzNtbT1J", world.bootstrap())
+        .mock_get_calendar_bootstrap(CALENDAR_ID, world.bootstrap())
         .await;
 
     world
         .ctx
         .mock_web_server
-        .mock_find_calendar_events("8maQ3qBa", None, Some(event))
+        .mock_find_calendar_events(EVENT_UID, None, vec![event])
         .await;
 
     let actual = RsvpEventId::invite(INVITE)
@@ -392,25 +391,25 @@ async fn err_missing_x_pm_token() {
         BEGIN:VCALENDAR
         VERSION:2.0
         BEGIN:VEVENT
-        UID:1Gax95xN@proton.me
+        UID:8maQ3qBa
         ATTENDEE;CN=bar@localhost;ROLE=REQ-PARTICIPANT;RSVP=TRUE:mailto:bar@localhost
         END:VEVENT
         END:VCALENDAR
     "};
 
     let world = world().await;
-    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
+    let event = world.event(|event| event.basic().with_attendees_event(ATTENDEES_EVENT));
 
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_bootstrap("HzNtbT1J", world.bootstrap())
+        .mock_get_calendar_bootstrap(CALENDAR_ID, world.bootstrap())
         .await;
 
     world
         .ctx
         .mock_web_server
-        .mock_find_calendar_events("8maQ3qBa", None, Some(event))
+        .mock_find_calendar_events(EVENT_UID, None, vec![event])
         .await;
 
     let actual = RsvpEventId::invite(INVITE)
@@ -446,18 +445,18 @@ async fn err_many_events_in_ics() {
     "};
 
     let world = world().await;
-    let event = world.event("calendar-key", SHARED_EVENT, ATTENDEES_EVENT, None);
+    let event = world.event(|event| event.basic().with_attendees_event(ATTENDEES_EVENT));
 
     world
         .ctx
         .mock_web_server
-        .mock_get_calendar_bootstrap("HzNtbT1J", world.bootstrap())
+        .mock_get_calendar_bootstrap(CALENDAR_ID, world.bootstrap())
         .await;
 
     world
         .ctx
         .mock_web_server
-        .mock_find_calendar_events("8maQ3qBa", None, Some(event))
+        .mock_find_calendar_events(EVENT_UID, None, vec![event])
         .await;
 
     let actual = RsvpEventId::invite(INVITE)
