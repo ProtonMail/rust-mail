@@ -98,17 +98,37 @@ async fn move_between_folders() {
         .unwrap();
 
     let mut message = Message::load(1.into(), &tether).await.unwrap().unwrap();
-    assert_eq!(message.label_ids, vec![source_label_id]);
+    assert_eq!(message.label_ids, vec![source_label_id.clone()]);
 
     // Action:
     // * move message in the other folder
-    Message::action_move(
+    let undo = Message::action_move(
         &tether,
         user_ctx.action_queue(),
         destination.id(),
         vec![message.id()],
     )
     .await
+    .unwrap()
+    .unwrap();
+
+    message.reload(&tether).await.unwrap();
+    assert_eq!(message.label_ids, vec![destination_label_id.clone()]);
+
+    undo.undo(user_ctx.action_queue(), &mut tether)
+        .await
+        .unwrap();
+    message.reload(&tether).await.unwrap();
+    assert_eq!(message.label_ids, vec![source_label_id.clone()]);
+
+    let undo = Message::action_move(
+        &tether,
+        user_ctx.action_queue(),
+        destination.id(),
+        vec![message.id()],
+    )
+    .await
+    .unwrap()
     .unwrap();
     user_ctx.execute_single_action().await.unwrap();
 
@@ -117,6 +137,12 @@ async fn move_between_folders() {
     // * the message is not in the first folder
     message.reload(&tether).await.unwrap();
     assert_eq!(message.label_ids, vec![destination_label_id]);
+
+    undo.undo(user_ctx.action_queue(), &mut tether)
+        .await
+        .unwrap();
+    message.reload(&tether).await.unwrap();
+    assert_eq!(message.label_ids, vec![source_label_id]);
 }
 
 #[tokio::test]

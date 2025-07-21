@@ -13,7 +13,7 @@ use crate::core::datatypes::Id;
 use crate::errors::{ActionError, VoidActionResult};
 use crate::mail::datatypes::{
     AllBottomBarMessageActions, AutoDeleteBanner, Conversation, ConversationAvailableActions,
-    ConversationSearchOptions, LabelAsAction, LabelAsOutput, Message, MoveAction,
+    ConversationSearchOptions, LabelAsAction, LabelAsOutput, Message, MoveAction, Undo,
 };
 use crate::mail::mail_scroller::{
     ConversationScroller, ConversationScrollerLiveQueryCallback, ReadFilter,
@@ -434,13 +434,13 @@ pub async fn move_conversations(
     mailbox: Arc<Mailbox>,
     label_id: Id,
     ids: Vec<Id>,
-) -> Result<(), ActionError> {
+) -> Result<Option<Arc<Undo>>, ActionError> {
     let ctx = mailbox.ctx()?;
     uniffi_async(async move {
         let tether = ctx.user_stash().connection();
         RealConversation::action_move(&tether, ctx.action_queue(), label_id.into(), ids.map_vec())
             .await
-            .map(|_| ())
+            .map(|undo| undo.map(|undo| Arc::new(undo.into())))
             .map_err(RealProtonMailError::from)
     })
     .await
@@ -709,11 +709,11 @@ pub async fn label_conversations_as(
     selected_label_ids: Vec<Id>,
     partially_selected_label_ids: Vec<Id>,
     must_archive: bool,
-) -> Result<Arc<LabelAsOutput>, ActionError> {
+) -> Result<LabelAsOutput, ActionError> {
     let ctx = mailbox.ctx()?;
     let source_label_id = mailbox.label_id();
     uniffi_async(async move {
-        Result::<_, RealProtonMailError>::Ok(Arc::new(
+        Result::<_, RealProtonMailError>::Ok(
             RealConversation::action_label_as(
                 &ctx.user_stash().connection(),
                 ctx.action_queue(),
@@ -725,7 +725,7 @@ pub async fn label_conversations_as(
             )
             .await?
             .into(),
-        ))
+        )
     })
     .await
     .map_err(ActionError::from)

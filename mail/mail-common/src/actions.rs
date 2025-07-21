@@ -10,7 +10,9 @@ pub mod rollback;
 
 pub use self::available_action::*;
 use crate::actions::conversations::label_as::UndoLabelAsConversations;
+use crate::actions::conversations::r#move::UndoMoveToConversations;
 use crate::actions::messages::label_as::UndoLabelAsMessages;
+use crate::actions::messages::r#move::UndoMoveToMessages;
 use crate::datatypes::{RollbackItemType, SystemLabelId};
 use crate::models::{MailLabel, RollbackItem};
 use crate::{AppError, MailUserContext};
@@ -365,7 +367,7 @@ where
         tether: &Tether,
         destination: LocalLabelId,
         target_ids: impl IntoIterator<Item = T::IdType>,
-    ) -> anyhow::Result<Option<Self>> {
+    ) -> Result<Option<Self>, StashError> {
         let mut sources = HashMap::<_, Vec<_>>::new();
 
         for target in target_ids {
@@ -478,20 +480,23 @@ where
         })
     }
 
-    async fn revert_local(&self, tx: &Bond<'_>) -> anyhow::Result<()> {
+    async fn revert_local(&self, tx: &Bond<'_>) -> Result<(), MailActionError> {
         for reverse in self.reverse() {
             reverse.move_to(tx).await?;
-            let ids = reverse
-                .sources
-                .values()
-                .map(|x| x.iter())
-                .flatten()
-                .cloned()
-                .collect();
-
-            let ids = T::local_ids_counterpart(ids, tx).await?;
-            RollbackItem::save_many(tx, ids, T::ROLLBACK_ITEM_TYPE).await?;
         }
+        self.queue_rollback_items(tx).await?;
+        Ok(())
+    }
+
+    async fn queue_rollback_items(&self, tx: &Bond<'_>) -> Result<(), StashError> {
+        let ids = self
+            .sources
+            .values()
+            .flat_map(|x| x.iter())
+            .cloned()
+            .collect();
+        let ids = T::local_ids_counterpart(ids, tx).await?;
+        RollbackItem::save_many(tx, ids, T::ROLLBACK_ITEM_TYPE).await?;
         Ok(())
     }
 }
@@ -710,22 +715,26 @@ impl<T: ConversationOrMessage> LabelAsData<T> {
     }
 }
 
-pub enum UndoLabelAs {
-    Messages(UndoLabelAsMessages),
-    Conversations(UndoLabelAsConversations),
+pub enum Undo {
+    MessagesLabelAs(UndoLabelAsMessages),
+    MessagesMoveTo(UndoMoveToMessages),
+    ConversationsLabelAs(UndoLabelAsConversations),
+    ConversationsMoveTo(UndoMoveToConversations),
 }
 
-impl UndoLabelAs {
-    pub async fn undo(self, queue: &Queue, tether: &Tether) -> Result<(), AppError> {
+impl Undo {
+    pub async fn undo(self, queue: &Queue, tether: &mut Tether) -> Result<(), AppError> {
         tracing::info!("undoing!");
         match self {
-            UndoLabelAs::Messages(u) => u.undo(queue, tether).await,
-            UndoLabelAs::Conversations(u) => u.undo(queue, tether).await,
+            Undo::MessagesLabelAs(u) => u.undo(queue, tether).await,
+            Undo::ConversationsLabelAs(u) => u.undo(queue, tether).await,
+            Undo::MessagesMoveTo(u) => u.undo(queue, tether).await,
+            Undo::ConversationsMoveTo(u) => u.undo(queue, tether).await,
         }
     }
 }
 
 pub struct LabelAsOutput {
     pub input_label_is_empty: bool,
-    pub undo: UndoLabelAs,
+    pub undo: Undo,
 }

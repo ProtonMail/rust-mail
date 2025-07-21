@@ -3,7 +3,7 @@ mod label;
 pub(crate) mod label_as;
 mod mark_read;
 mod mark_unread;
-mod r#move;
+pub mod r#move;
 mod prefetch;
 mod refresh_metadata;
 mod unlabel;

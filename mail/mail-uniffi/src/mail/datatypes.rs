@@ -74,7 +74,7 @@ use proton_mail_api::MAX_PAGE_ELEMENT_COUNT_U64;
 use proton_mail_api::services::proton::request_data::MessageMetadataSortMode as RealMessageMetadataSortMode;
 use proton_mail_api::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
 use proton_mail_common::AppError;
-use proton_mail_common::actions::LabelAsOutput as RealLabelAsOutput;
+use proton_mail_common::actions::{LabelAsOutput as RealLabelAsOutput, Undo as RealUndo};
 use proton_mail_common::datatypes::{
     AlmostAllMail as RealAlmostAllMail, AttachmentMetadata as RealAttachmentMetadata,
     ComposerDirection as RealComposerDirection, ComposerMode as RealComposerMode,
@@ -1906,24 +1906,26 @@ impl From<RealMobileSettings> for MobileSettings {
     }
 }
 
-#[derive(uniffi::Object)]
-pub struct LabelAsOutput(Mutex<Option<RealLabelAsOutput>>);
+#[derive(uniffi::Record)]
+pub struct LabelAsOutput {
+    pub input_label_is_empty: bool,
+    pub undo: Arc<Undo>,
+}
 
 impl From<RealLabelAsOutput> for LabelAsOutput {
     fn from(value: RealLabelAsOutput) -> Self {
-        Self(Mutex::new(Some(value)))
+        Self {
+            input_label_is_empty: value.input_label_is_empty,
+            undo: Arc::new(value.undo.into()),
+        }
     }
 }
 
-#[uniffi_export]
-impl LabelAsOutput {
-    fn input_label_is_empty(&self) -> bool {
-        self.0
-            .lock()
-            .as_ref()
-            .is_some_and(|x| x.input_label_is_empty)
-    }
+#[derive(uniffi::Object)]
+pub struct Undo(Mutex<Option<RealUndo>>);
 
+#[uniffi_export]
+impl Undo {
     async fn undo(&self, ctx: Arc<MailUserSession>) -> Result<(), ActionError> {
         let Some(output) = self.0.lock().take() else {
             warn!("already undone");
@@ -1932,13 +1934,17 @@ impl LabelAsOutput {
 
         let ctx = ctx.ctx()?;
         uniffi_async(async move {
-            output
-                .undo
-                .undo(ctx.action_queue(), &ctx.user_stash().connection())
-                .await?;
+            let mut tether = ctx.user_stash().connection();
+            output.undo(ctx.action_queue(), &mut tether).await?;
             Ok::<_, ProtonMailError>(())
         })
         .await
         .map_err(ActionError::from)
+    }
+}
+
+impl From<RealUndo> for Undo {
+    fn from(value: RealUndo) -> Self {
+        Self(Mutex::new(Some(value)))
     }
 }

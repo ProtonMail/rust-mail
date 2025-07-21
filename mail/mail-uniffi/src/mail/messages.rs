@@ -17,8 +17,8 @@ use crate::core::datatypes::{Id, RemoteId, UnixTimestamp};
 use crate::errors::{
     ActionError, BodyOutputResult, EmbeddedAttachmentInfoResult, ProtonError, VoidActionResult,
 };
-use crate::mail::datatypes::LabelAsOutput;
 use crate::mail::datatypes::MessageSearchOptions;
+use crate::mail::datatypes::{LabelAsOutput, Undo};
 use crate::mail::mail_scroller::{
     MessageScroller, MessageScrollerLiveQueryCallback, ReadFilter, SearchScroller,
     spawn_message_scroller_watcher,
@@ -1136,11 +1136,11 @@ pub async fn label_messages_as(
     selected_label_ids: Vec<Id>,
     partially_selected_label_ids: Vec<Id>,
     must_archive: bool,
-) -> Result<Arc<LabelAsOutput>, ActionError> {
+) -> Result<LabelAsOutput, ActionError> {
     let ctx = mailbox.ctx()?;
     let source_label_id = mailbox.label_id();
     uniffi_async(async move {
-        Result::<_, RealProtonMailError>::Ok(Arc::new(
+        Result::<_, RealProtonMailError>::Ok(
             RealMessage::action_label_as(
                 &ctx.user_stash().connection(),
                 ctx.action_queue(),
@@ -1152,7 +1152,7 @@ pub async fn label_messages_as(
             )
             .await?
             .into(),
-        ))
+        )
     })
     .await
     .map_err(ActionError::from)
@@ -1170,7 +1170,7 @@ pub async fn move_messages(
     mailbox: Arc<Mailbox>,
     destination_id: Id,
     message_ids: Vec<Id>,
-) -> Result<(), ActionError> {
+) -> Result<Option<Arc<Undo>>, ActionError> {
     let ctx = mailbox.ctx()?;
     uniffi_async(async move {
         let tether = ctx.user_stash().connection();
@@ -1181,7 +1181,7 @@ pub async fn move_messages(
             message_ids.map_vec(),
         )
         .await
-        .map(|_| ())
+        .map(|undo| undo.map(|undo| Arc::new(undo.into())))
         .map_err(RealProtonMailError::from)
     })
     .await

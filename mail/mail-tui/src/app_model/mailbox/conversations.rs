@@ -427,9 +427,35 @@ fn move_conversation(
     label_id: LocalLabelId,
 ) -> Command<Messages> {
     Command::task(async move {
+        // TODO: refactor into common undo toast
         let tether = ctx.user_stash().connection();
         match Conversation::action_move(&tether, ctx.action_queue(), label_id, ids).await {
-            Ok(_) => Command::None,
+            Ok(None) => Command::None,
+            Ok(Some(undo)) => {
+                let ctx = ctx.clone();
+                let popup = YesNoPopup::new(
+                    "Undo move?",
+                    "Moved successfully, would you like to undo this operation?",
+                )
+                .on_accept(Command::batch([
+                    Command::message(Messages::DisplayBackgroundProgress(
+                        "Cancelling Send".to_owned(),
+                    )),
+                    Command::task(async move {
+                        if let Err(e) = undo
+                            .undo(ctx.action_queue(), &mut ctx.user_stash().connection())
+                            .await
+                            .context("Error undoing conversation labelling")
+                        {
+                            Command::message(e.into())
+                        } else {
+                            Command::None
+                        }
+                    }),
+                    Command::message(Messages::DismissBackgroundProgress),
+                ]));
+                Messages::raise_popup(popup).into()
+            }
             Err(e) => {
                 let e = anyhow!("Failed to move conversation: {e}");
                 tracing::error!("{e:?}");
@@ -495,6 +521,7 @@ fn label_conversation(
         .await
         .context("Failed to apply label to conversation")
     };
+    // TODO: refactor into common undo toast
     Command::task(async move {
         match f.await {
             Ok(output) => {
@@ -510,7 +537,7 @@ fn label_conversation(
                     Command::task(async move {
                         if let Err(e) = output
                             .undo
-                            .undo(ctx.action_queue(), &ctx.user_stash().connection())
+                            .undo(ctx.action_queue(), &mut ctx.user_stash().connection())
                             .await
                             .context("Error undoing conversation labelling")
                         {

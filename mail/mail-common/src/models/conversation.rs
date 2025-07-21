@@ -5,11 +5,12 @@ mod conversations;
 use super::network::split_request;
 use crate::actions::conversations::LabelAs;
 use crate::actions::conversations::label_as::UndoLabelAsConversations;
+use crate::actions::conversations::r#move::UndoMoveToConversations;
 use crate::actions::conversations::{Label as ActionLabel, MarkRead, MarkUnread, Move, Unlabel};
 use crate::actions::{
     ActionMoveData, ConversationAction, ConversationAvailableActions, ConversationOrMessage,
     GeneralActions, LabelAsAction, LabelAsData, LabelAsOutput, LabelPair, MailActionError,
-    MoveAction, MoveItemAction, UndoLabelAs, filter_responses,
+    MoveAction, MoveItemAction, Undo, filter_responses,
 };
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::{
@@ -312,11 +313,17 @@ impl Conversation {
         queue: &Queue,
         destination_id: LocalLabelId,
         target_ids: Vec<LocalConversationId>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<Option<Undo>, MailContextError> {
         if let Some(action) = ActionMoveData::new(tether, destination_id, target_ids).await? {
-            queue.queue_action(Move(action)).await?;
+            let action = Move(action);
+            let id = queue.queue_action(action.clone()).await?.id;
+            Ok(Some(Undo::ConversationsMoveTo(UndoMoveToConversations {
+                action,
+                id,
+            })))
+        } else {
+            Ok(None)
         }
-        Ok(())
     }
 
     /// Soft delete multiple conversations.
@@ -405,7 +412,7 @@ impl Conversation {
                 .context("Error queuing action")?
         };
 
-        let undo = UndoLabelAs::Conversations(UndoLabelAsConversations {
+        let undo = Undo::ConversationsLabelAs(UndoLabelAsConversations {
             action,
             id: output.id,
             must_archive,

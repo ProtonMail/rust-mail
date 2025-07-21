@@ -170,7 +170,9 @@ async fn action_label_as_without_archive() {
 
     assert_state1(&tether).await;
 
-    undo.undo(user_ctx.action_queue(), &tether).await.unwrap();
+    undo.undo(user_ctx.action_queue(), &mut tether)
+        .await
+        .unwrap();
     assert_state0(&tether).await;
 
     // Nothing ever happens because we reverted it by just cancelling the action in the queue.
@@ -198,7 +200,9 @@ async fn action_label_as_without_archive() {
 
     assert_eq!(user_ctx.execute_all_actions().await.unwrap(), 1);
 
-    undo.undo(user_ctx.action_queue(), &tether).await.unwrap();
+    undo.undo(user_ctx.action_queue(), &mut tether)
+        .await
+        .unwrap();
     // Nothing ever happens, back to state0
     assert_state0(&tether).await;
     assert_eq!(user_ctx.execute_all_actions().await.unwrap(), 1);
@@ -381,7 +385,9 @@ async fn action_label_as_with_archive() {
 
     assert_state2(&tether).await;
 
-    undo.undo(user_ctx.action_queue(), &tether).await.unwrap();
+    undo.undo(user_ctx.action_queue(), &mut tether)
+        .await
+        .unwrap();
     assert_state0(&tether).await;
 
     // Nothing ever happens because we reverted it by just cancelling the action in the queue.
@@ -410,7 +416,9 @@ async fn action_label_as_with_archive() {
     assert_eq!(user_ctx.execute_all_actions().await.unwrap(), 2);
     assert_state2(&tether).await;
 
-    undo.undo(user_ctx.action_queue(), &tether).await.unwrap();
+    undo.undo(user_ctx.action_queue(), &mut tether)
+        .await
+        .unwrap();
     // Nothing ever happens because we've reverted
     assert_state0(&tether).await;
     assert_eq!(user_ctx.execute_all_actions().await.unwrap(), 2);

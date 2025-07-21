@@ -4,8 +4,8 @@ use crate::actions::{ActionMoveData, LabelAsData, MailActionError};
 use crate::models::{Message, MessageCounters};
 use anyhow::Context;
 use proton_action_queue::action::{
-    self, Action, ActionId, FactoryError, Handler as ActionHandler, MetadataBuilder,
-    SingleVersionConverter, Type, VersionConverter, VersionConverterError, WriterGuard,
+    Action, ActionId, Handler as ActionHandler, MetadataBuilder, SingleVersionConverter, Type,
+    WriterGuard,
 };
 use proton_action_queue::queue::Queue;
 use serde::{Deserialize, Serialize};

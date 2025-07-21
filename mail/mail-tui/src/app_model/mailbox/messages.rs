@@ -1414,6 +1414,7 @@ fn label_message(
         .await
         .context("Failed to apply label to message")
     };
+    // TODO: refactor into common undo toast
     Command::task(async move {
         match f.await {
             Ok(output) => {
@@ -1429,7 +1430,7 @@ fn label_message(
                     Command::task(async move {
                         if let Err(e) = output
                             .undo
-                            .undo(ctx.action_queue(), &ctx.user_stash().connection())
+                            .undo(ctx.action_queue(), &mut ctx.user_stash().connection())
                             .await
                             .context("Error undoing message labelling")
                         {
@@ -1455,12 +1456,42 @@ fn move_message(
     ids: Vec<LocalMessageId>,
     label_id: LocalLabelId,
 ) -> Command<Messages> {
-    Command::from_future(async move {
+    // TODO: refactor into common undo toast
+    Command::task(async move {
         let tether = ctx.user_stash().connection();
-        MailMessage::action_move(&tether, ctx.action_queue(), label_id, ids)
-            .await
-            .context("Failed to move message")
-            .map(|_| ())
+        match MailMessage::action_move(&tether, ctx.action_queue(), label_id, ids).await {
+            Ok(None) => Command::None,
+            Ok(Some(undo)) => {
+                let ctx = ctx.clone();
+                let popup = YesNoPopup::new(
+                    "Undo move?",
+                    "Moved successfully, would you like to undo this operation?",
+                )
+                .on_accept(Command::batch([
+                    Command::message(Messages::DisplayBackgroundProgress(
+                        "Cancelling Send".to_owned(),
+                    )),
+                    Command::task(async move {
+                        if let Err(e) = undo
+                            .undo(ctx.action_queue(), &mut ctx.user_stash().connection())
+                            .await
+                            .context("Error undoing conversation labelling")
+                        {
+                            Command::message(e.into())
+                        } else {
+                            Command::None
+                        }
+                    }),
+                    Command::message(Messages::DismissBackgroundProgress),
+                ]));
+                Messages::raise_popup(popup).into()
+            }
+            Err(e) => {
+                let e = anyhow!("Failed to move conversation: {e}");
+                tracing::error!("{e:?}");
+                Command::message(e.into())
+            }
+        }
     })
 }
 

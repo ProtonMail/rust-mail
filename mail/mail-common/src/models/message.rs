@@ -2,13 +2,19 @@
 #[path = "../tests/models/messages.rs"]
 mod messages;
 
-use crate::actions::messages::{
-    Delete, DeleteAllMessagesInLabel, Ham, Label as ActionLabel, LabelAs, Move, Read,
-    ReportPhishing, UndoLabelAsMessages, Unlabel, Unread,
-};
+use crate::actions::messages::delete::Delete;
+use crate::actions::messages::delete_all::DeleteAllMessagesInLabel;
+use crate::actions::messages::ham::Ham;
+use crate::actions::messages::label::Label as ActionLabel;
+use crate::actions::messages::label_as::{LabelAs, UndoLabelAsMessages};
+use crate::actions::messages::r#move::{Move, UndoMoveToMessages};
+use crate::actions::messages::phishing::ReportPhishing;
+use crate::actions::messages::read::Read;
+use crate::actions::messages::unlabel::Unlabel;
+use crate::actions::messages::unread::Unread;
 use crate::actions::{
     ActionMoveData, AllBottomBarMessageActions, BottomBarActions, GeneralActions, LabelAsData,
-    LabelAsOutput, LabelPair, MailActionError, MovableSystemFolderAction, UndoLabelAs,
+    LabelAsOutput, LabelPair, MailActionError, MovableSystemFolderAction, Undo,
 };
 use crate::mail_scroller::ScrollerEq;
 use crate::models::*;
@@ -323,11 +329,17 @@ impl Message {
         queue: &Queue,
         destination_id: LocalLabelId,
         target_ids: Vec<LocalMessageId>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<Option<Undo>, MailContextError> {
         if let Some(action) = ActionMoveData::new(tether, destination_id, target_ids).await? {
-            queue.queue_action(Move(action)).await?;
+            let action = Move(action);
+            let id = queue.queue_action(action.clone()).await?.id;
+            Ok(Some(Undo::MessagesMoveTo(UndoMoveToMessages {
+                action,
+                id,
+            })))
+        } else {
+            Ok(None)
         }
-        Ok(())
     }
 
     /// Mark multiple messages as read.
@@ -547,7 +559,7 @@ impl Message {
                 .await
                 .context("Error queuing action")?
         };
-        let undo = UndoLabelAs::Messages(UndoLabelAsMessages {
+        let undo = Undo::MessagesLabelAs(UndoLabelAsMessages {
             action,
             id: output.id,
             must_archive,

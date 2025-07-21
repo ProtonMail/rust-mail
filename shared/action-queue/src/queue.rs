@@ -4,7 +4,8 @@ mod tests;
 
 use crate::action::{
     Action, ActionGroup, ActionId, Error as ActionErrorTrait, Factory, FactoryError, FactoryResult,
-    Handler, LocalOutput, Metadata, Priority, Resources, WriterGuard, WriterGuardError,
+    Handler, LocalOutput, Metadata, MetadataBuilder, Priority, Resources, Type, WriterGuard,
+    WriterGuardError,
 };
 use crate::db::{
     self, ActionDependency, DEFAULT_LOCK_TIMEOUT, DependencyType, ExecutionGuard, StoredAction,
@@ -315,6 +316,30 @@ impl Queue {
     pub async fn queue_action<T: Action>(&self, action: T) -> LocalOutput<T> {
         self.queue_action_with_metadata::<T>(action, Metadata::default())
             .await
+    }
+
+    /// Queue actions of the same type sequentially, where each action is a dependency of the next.
+    ///
+    /// A default [`Metadata`] type is assigned to this `action`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if action could not be executed locally.
+    pub async fn queue_actions<T: Action>(
+        &self,
+        actions: impl IntoIterator<Item = T>,
+    ) -> Result<Vec<QueuedActionOutput<T>>, ActionError<T>> {
+        let mut res: Vec<QueuedActionOutput<T>> = vec![];
+        for action in actions {
+            let action = if let Some(last) = res.last() {
+                let meta = MetadataBuilder::new().with_dependency(last.id).build();
+                self.queue_action_with_metadata(action, meta).await?
+            } else {
+                self.queue_action(action).await?
+            };
+            res.push(action);
+        }
+        Ok(res)
     }
 
     /// Queue an `action` for execution at a later time with a custom `metadata`.
