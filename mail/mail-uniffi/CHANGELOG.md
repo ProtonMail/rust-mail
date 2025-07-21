@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [mail-uniffi-v0.106.0] - 2025-07-21
+
+### Features
+
+- [ET-3677] Rework label_as and add the undo action to its return type
+- [ET-3176] Qr login observability
+
+### Fixes
+
+- Send client id from qr code
+- [ET-1450] Use camelcase for observability enums
+- [ET-3760] Create_or_get_local to preserve api conversation data over unknown data
+
+
 ## [mail-uniffi-v0.105.1] - 2025-07-16
 
 ### Fixes
@@ -41,6 +55,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [mail-uniffi-v0.103.0] - 2025-07-15
 
+### Changed
+
+- [ET-3550] Fetch more returns `scrollerupdate::none` when requested by client
+
 ### Features
 
 - [ET-3609] Add encrypt-to-outside (eo) crypto logic
@@ -67,10 +85,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ## [mail-uniffi-v0.102.0] - 2025-07-10
-
-### Changed
-
-- [ET-3550] Fetch more returns `scrollerupdate::none` when requested by client
 
 ### Fixes
 
