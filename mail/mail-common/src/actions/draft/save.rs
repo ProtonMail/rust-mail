@@ -550,7 +550,7 @@ impl Save {
             result?
         } else {
             info!("Creating new draft");
-            let message_id = Draft::remote_create(
+            let message = Draft::remote_create(
                 ctx,
                 session,
                 action.address_id.clone(),
@@ -564,8 +564,8 @@ impl Save {
             .inspect_err(|e| {
                 error!("Failed to create draft on remote: {e:?}");
             })?;
-            info!("Draft created with {message_id:?}");
-            message_id
+            info!("Draft created with {:?}", message.metadata.id);
+            message
         };
 
         // Note: This section will be generalized as part of ET-1353 when
