@@ -789,3 +789,135 @@ async fn test_cashed_scroller_correctly_reads_empty_conversations_from_the_trash
 
     assert_eq!(items, 4);
 }
+
+#[tokio::test]
+async fn test_create_or_get_local_fix_preserves_api_conversations_with_labels() {
+    // This test verifies the fix where create_or_get_local preserves API conversation data
+    // (with labels) over unknown conversation data (without labels), ensuring conversations
+    // pass the filter and reach the prefetcher successfully.
+
+    let stash = new_test_connection().await;
+    let mut tether = stash.connection();
+
+    // Set up inbox label
+    let inbox_remote_id = SystemLabel::Inbox.remote_id();
+    let mut inbox_label = label!(remote_id: Some(inbox_remote_id.clone()));
+    tether
+        .tx(async |bond| inbox_label.save(bond).await)
+        .await
+        .unwrap();
+    let inbox_local_id = inbox_label.id();
+
+    let test_remote_id: ConversationId = conv_id!("test_conversation_123").unwrap();
+
+    // Step 1: Create an unknown conversation (simulating message event creating it first)
+    let mut unknown_conversation = Conversation::unknown(test_remote_id.clone());
+    tether
+        .tx(async |bond| {
+            unknown_conversation.save(bond).await.unwrap();
+            Ok::<(), StashError>(())
+        })
+        .await
+        .unwrap();
+
+    // Verify unknown conversation has no labels and is_known = false
+    assert_eq!(unknown_conversation.labels.len(), 0);
+    assert!(!unknown_conversation.is_known);
+
+    let mut cached_scroller = CachedScrollData::<ConversationScrollData>::all(
+        inbox_local_id,
+        ReadFilter::All,
+        10,
+        LabelScrollOrder::Descending,
+    );
+    let items = cached_scroller.fetch_more(&tether).await.unwrap();
+    assert_eq!(items.len(), 0);
+    let count = cached_scroller.seen_count(&tether).await.unwrap();
+    assert_eq!(count, 0);
+
+    // Step 2: Create API conversation with proper labels (simulating API response)
+    let mut api_conversation = conversation!(
+        remote_id: Some(test_remote_id.clone()),
+        display_order: 100,
+        is_known: true,
+        subject: "Test API Conversation".to_string()
+    );
+
+    // Add inbox label to API conversation
+    let conv_label = conv_label!(
+        local_conversation_id: None, // Will be set after save
+        remote_label_id: Some(inbox_remote_id.clone()),
+        local_label_id: Some(inbox_local_id),
+        context_time: 100.into()
+    );
+    api_conversation.labels = vec![conv_label];
+
+    // Verify API conversation has labels and is_known = true
+    assert_eq!(api_conversation.labels.len(), 1);
+    assert!(api_conversation.is_known);
+    assert_eq!(
+        api_conversation.subject,
+        "Test API Conversation".to_string()
+    );
+
+    // Step 3: Call create_or_get_local (this is where the bug happened)
+    tether
+        .tx(async |bond| {
+            api_conversation.create_or_get_local(bond).await.unwrap();
+            Ok::<(), StashError>(())
+        })
+        .await
+        .unwrap();
+
+    // Step 4: Verify the fix - API conversation data is preserved over unknown data
+    // After create_or_get_local with the fix, the conversation should have:
+    // - Kept its labels (API data preserved)
+    // - Kept its known status (API data preserved)
+    // - Kept its subject (API data preserved)
+    assert_eq!(
+        api_conversation.labels.len(),
+        1,
+        "FIX: API conversation preserved its labels after create_or_get_local"
+    );
+    assert!(
+        api_conversation.is_known,
+        "FIX: API conversation preserved its known status after create_or_get_local"
+    );
+    assert_eq!(
+        api_conversation.subject,
+        "Test API Conversation".to_string(),
+        "FIX: API conversation preserved its subject after create_or_get_local"
+    );
+
+    // Step 5: Simulate the save_conversations filter that happens next
+    let conversations = vec![api_conversation.clone()];
+    let filtered_conversations: Vec<_> = conversations
+        .iter()
+        .filter_map(|conv| {
+            let conv_label = conv.label(inbox_local_id)?;
+            Some((conv, conv_label))
+        })
+        .collect();
+
+    // Step 6: Verify the conversation is NOT filtered out (fix allows it to reach prefetcher)
+    assert_eq!(
+        filtered_conversations.len(),
+        1,
+        "FIX: Conversation with labels passes filter and reaches prefetcher"
+    );
+
+    // Step 7: Verify the conversation DOES appear in scroller queries
+    let items = cached_scroller.fetch_more(&tether).await.unwrap();
+    assert_eq!(items.len(), 1);
+    let visible_conversations = cached_scroller.visible_elements(&tether).await.unwrap();
+    assert_eq!(visible_conversations.len(), 1);
+    assert_eq!(visible_conversations[0].remote_id, Some(test_remote_id));
+
+    // This test proves the fix works:
+    // 1. Unknown conversations (created by message events) are detected correctly
+    // 2. API conversations overwrite their labels due to create_or_get_local fix
+    // 3. Conversations with labels pass the filter in save_conversations
+    // 4. Filtered conversations reach the prefetcher successfully as they have labels
+    // 5. Conversations appear in scroller results
+    // 6. The circular dependency is broken: labels preserved → passes filter → reaches prefetcher → becomes known
+}

@@ -462,24 +462,32 @@ impl Conversation {
     /// is required due to multiprocess nature of mail application and the possibility to
     /// view mailboxes without interfering with processes triggered by the user.
     ///
-    /// Method also gives back existing conversation if it was not saved.
+    /// However it will replace existing conversation with API data if
+    /// existing conversation is not fully known yet.
     ///
     /// # Errors
     ///
-    /// Returns an error if the local conversation id is not set or the query
-    /// failed.
+    /// Returns an error if the local conversation id is not set or the query failed.
     ///
     pub async fn create_or_get_local(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(existing) = Self::find_by_remote_id(remote_id, bond).await? {
-                *self = existing;
+                if existing.is_known {
+                    *self = existing;
 
-                tracing::trace!(
+                    tracing::trace!(
+                        remote_id = ?self.remote_id,
+                        "Skipping saving conversation, we already have it in the local DB"
+                    );
+                    return Ok(());
+                }
+
+                // Otherwise, update the unknown conversation with API data
+                self.local_id = existing.local_id;
+                tracing::debug!(
                     remote_id = ?self.remote_id,
-                    "Skipping saving conversation, we already have it in the local DB"
+                    "Updating unknown conversation with API data"
                 );
-
-                return Ok(());
             }
         }
 
