@@ -610,7 +610,7 @@ impl Popup for InfoDialog {
         let text = match &self.text {
             DialogText::Error(error) => {
                 frame.render_widget(Block::new().white().on_red(), area);
-                error.to_string()
+                format!("{error:?}")
             }
             DialogText::Text(text) => {
                 frame.render_widget(Block::new(), area);
