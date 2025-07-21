@@ -1,5 +1,7 @@
 use std::collections::VecDeque;
 
+use muon::util::IntoIterExt;
+
 use crate::services::proton::prelude::PostMetricsRequestElement;
 
 const DEFAULT_STORE_CAPACITY: usize = 512;
@@ -22,15 +24,12 @@ impl InMemoryMetricStore {
         self.metrics.push_back(metric);
     }
 
-    /// Returns the first n elements (oldest first).
-    #[must_use]
-    pub fn get_first_n(&self, count: usize) -> Vec<PostMetricsRequestElement> {
-        self.metrics.iter().take(count).cloned().collect()
-    }
-
     /// Removes the first n elements (oldest first).
-    pub fn remove_first_n(&mut self, count: usize) {
-        self.metrics.drain(0..count.min(self.metrics.len()));
+    #[must_use]
+    pub fn remove_first_n(&mut self, count: usize) -> Vec<PostMetricsRequestElement> {
+        self.metrics
+            .drain(0..count.min(self.metrics.len()))
+            .into_vec()
     }
 }
 
@@ -72,8 +71,7 @@ mod tests {
         };
         store.store(element.clone());
         assert_eq!(store.metrics.len(), 1);
-        assert_eq!(store.get_first_n(1).len(), 1);
-        assert_eq!(store.get_first_n(1)[0], element);
+        assert_eq!(store.remove_first_n(1)[0], element);
     }
 
     #[test]
@@ -93,7 +91,7 @@ mod tests {
         }
         assert_eq!(store.metrics.len(), 10);
 
-        let batch = store.get_first_n(3);
+        let batch = store.remove_first_n(3);
         assert_eq!(batch.len(), 3);
         assert_eq!(batch[0].version, 0);
         assert_eq!(batch[1].version, 1);
@@ -116,9 +114,9 @@ mod tests {
             store.store(element.clone());
         }
 
-        store.remove_first_n(3);
+        let _ = store.remove_first_n(3);
         assert_eq!(store.metrics.len(), 7);
-        let batch = store.get_first_n(3);
+        let batch = store.remove_first_n(3);
         assert_eq!(batch.len(), 3);
         assert_eq!(batch[0].version, 3);
         assert_eq!(batch[1].version, 4);
@@ -142,7 +140,7 @@ mod tests {
         }
         assert_eq!(store.metrics.len(), 10);
 
-        store.remove_first_n(500);
+        let _ = store.remove_first_n(500);
         assert_eq!(store.metrics.len(), 0);
     }
 

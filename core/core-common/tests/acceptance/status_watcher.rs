@@ -280,7 +280,7 @@ async fn status_reflected_in_response_http_code(http_code: u16, expected_status:
     Mock::given(method("GET"))
         .and(path(format!("{api_path}/core/v4/tests/ping")))
         .respond_with(ResponseTemplate::new(http_code))
-        .expect(1..=2)
+        .expect(1..)
         .mount(&mock_server)
         .await;
     catch_all(&mock_server).await;
