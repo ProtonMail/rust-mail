@@ -26,6 +26,7 @@ pub enum RsvpEventId {
     Invite {
         uid: CalendarEventUid,
         rid: Option<CalendarEventRecurrenceId>,
+        method: ical::Method,
         invite: Box<ical::VEvent>,
     },
     Reminder {
@@ -41,7 +42,11 @@ impl RsvpEventId {
     pub fn from_invite(ics: &[u8]) -> RsvpResult<Self> {
         let cal = ical::VCalendar::from_bytes(ics)?.cal;
 
-        let Some(ical::Method::Cancel | ical::Method::Request) = cal.method else {
+        let Some(method) = cal.method else {
+            return Err(RsvpError::IcsIsNotRsvp);
+        };
+
+        let (ical::Method::Cancel | ical::Method::Request) = method else {
             return Err(RsvpError::IcsIsNotRsvp);
         };
 
@@ -73,6 +78,7 @@ impl RsvpEventId {
         Ok(RsvpEventId::Invite {
             uid,
             rid,
+            method,
             invite: Box::new(event),
         })
     }
@@ -651,6 +657,7 @@ mod tests {
         let expected = RsvpEventId::Invite {
             uid: "1234-1234-1234-1234".into(),
             rid: None,
+            method: ical::Method::Request,
             invite: Box::new(ical::VEvent {
                 dtstamp: Some(ical::DtStamp {
                     value: ical::utils::dt("20180101T120000Z"),
@@ -686,6 +693,7 @@ mod tests {
         let expected = RsvpEventId::Invite {
             uid: "1234-1234-1234-1234".into(),
             rid: None,
+            method: ical::Method::Cancel,
             invite: Box::new(ical::VEvent {
                 dtstamp: Some(ical::DtStamp {
                     value: ical::utils::dt("20180101T120000Z"),
@@ -728,6 +736,7 @@ mod tests {
             RsvpEventId::Invite {
                 uid: "1234-1234-1234-1234".into(),
                 rid: Some(CalendarEventRecurrenceId::new(rid)),
+                method: ical::Method::Request,
                 invite: Box::new(ical::VEvent {
                     dtstamp: Some(ical::DtStamp {
                         value: ical::utils::dt("20180101T120000Z"),
@@ -767,6 +776,7 @@ mod tests {
         let expected = RsvpEventId::Invite {
             uid: "1234-1234-1234-1234".into(),
             rid: None,
+            method: ical::Method::Request,
             invite: Box::new(ical::VEvent {
                 dtstamp: Some(ical::DtStamp {
                     value: ical::utils::dt("20180101T120000Z"),

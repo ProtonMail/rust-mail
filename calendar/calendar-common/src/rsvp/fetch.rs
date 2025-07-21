@@ -141,9 +141,10 @@ where
 {
     let (Some(raw), Some(decryptor)) = (event, decryptor) else {
         return match id {
-            RsvpEventId::Invite { invite, .. } => Ok(Some(Source::Invite {
+            RsvpEventId::Invite { method, invite, .. } => Ok(Some(Source::Invite {
                 raw: None,
                 event: None,
+                method: *method,
                 invite,
             })),
 
@@ -180,9 +181,10 @@ where
         })?;
 
     Ok(Some(match id {
-        RsvpEventId::Invite { invite, .. } => Source::Invite {
+        RsvpEventId::Invite { method, invite, .. } => Source::Invite {
             raw: Some(raw),
             event: Some(event),
+            method: *method,
             invite,
         },
 
@@ -913,9 +915,30 @@ fn extract_progress(now: &Zoned, source: &Source, occurrence: &RsvpOccurrence) -
             return RsvpProgress::Cancelled;
         }
     } else {
-        // If the event is not available, it means we're offline - in that case
-        // we can't know whether the event was cancelled or not, so let's assume
-        // it wasn't.
+        // If the event is not available, it means that either we're offline or
+        // the event has been deleted from the user's calendar - in any of those
+        // cases there's nothing better we can do beyond checking the invite's
+        // `METHOD` property:
+        //
+        // - `METHOD:REQUEST` = event is (probably) good and alive,
+        // - `METHOD:CANCEL` = event is (probably) cancelled.
+        //
+        // Note that for offline mode this can yield both false-positives and
+        // false-negatives - e.g. if you have two emails:
+        //
+        // - "Invitation for an event starting on ..."
+        // - "Cancellation of an event starting on ...".
+        //
+        // ... then opening the first mail will show the event as still in
+        // progress, while opening the second mail will show the event as
+        // cancelled - no better solution here, though.
+        if let Source::Invite {
+            method: ical::Method::Cancel,
+            ..
+        } = source
+        {
+            return RsvpProgress::Cancelled;
+        }
     }
 
     // Figuring out whether a recurring event has an instance that happens to
@@ -1008,6 +1031,9 @@ enum Source<'a> {
         /// This field will be `None` if there's no internet connection.
         event: Option<Box<ical::VEvent>>,
 
+        /// Method (REQUEST / CANCEL) as extracted from `invite.ics`.
+        method: ical::Method,
+
         /// Event data as parsed from `invite.ics`.
         invite: &'a ical::VEvent,
     },
@@ -1098,6 +1124,7 @@ mod tests {
             let source = Source::Invite {
                 raw: None,
                 event: None,
+                method: ical::Method::Request,
                 invite: &invite,
             };
 
@@ -1124,6 +1151,7 @@ mod tests {
             let source = Source::Invite {
                 raw: None,
                 event: None,
+                method: ical::Method::Request,
                 invite: &invite,
             };
 
@@ -1155,6 +1183,7 @@ mod tests {
             let source = Source::Invite {
                 raw: None,
                 event: None,
+                method: ical::Method::Request,
                 invite: &invite,
             };
 
@@ -1166,6 +1195,29 @@ mod tests {
             assert_eq!(
                 RsvpProgress::Pending,
                 extract_progress(&now, &source, &occurrence),
+            );
+        }
+
+        #[test]
+        fn cancelled() {
+            let now = "20180101T120000[UTC]".parse().unwrap();
+            let invite = ical::VEvent::default();
+
+            let source = Source::Invite {
+                raw: None,
+                event: None,
+                method: ical::Method::Cancel,
+                invite: &invite,
+            };
+
+            let occurrence = RsvpOccurrence::DateTime {
+                starts_at: "20180101T120000[UTC]".parse().unwrap(),
+                ends_at: "20180101T133000[UTC]".parse().unwrap(),
+            };
+
+            assert_eq!(
+                RsvpProgress::Cancelled,
+                extract_progress(&now, &source, &occurrence)
             );
         }
     }
