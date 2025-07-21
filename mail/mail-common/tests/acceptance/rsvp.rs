@@ -297,7 +297,7 @@ async fn fetch_and_answer() {
         .await;
 
     ctx.mock_web_server
-        .mock_find_calendar_events(EVENT_UID, None, Some(event))
+        .mock_find_calendar_events(EVENT_UID, None, vec![event])
         .await;
 
     let mut rsvp = rsvp.fetch(&user_ctx, &mut db).await.unwrap().unwrap();
