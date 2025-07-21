@@ -1094,6 +1094,17 @@ impl DecryptedMessage {
                 let occurrence = 1;
                 let location = usize::from(rsvp.location.is_some());
                 let recurrence = usize::from(rsvp.recurrence.is_some());
+
+                let answer = if rsvp.can_be_answered() {
+                    if rsvp.user_attendee().status.unwrap().is_unanswered() {
+                        2
+                    } else {
+                        3
+                    }
+                } else {
+                    0
+                };
+
                 let organizer = 1;
                 let attendees = rsvp.attendees.len();
 
@@ -1104,6 +1115,7 @@ impl DecryptedMessage {
                     + location
                     + recurrence
                     + 1
+                    + answer
                     + organizer
                     + attendees
             }
@@ -1144,6 +1156,7 @@ impl DecryptedMessage {
         frame.render_widget(Paragraph::new("Loading event..."), area);
     }
 
+    #[allow(clippy::too_many_lines)]
     fn draw_rsvp_success(frame: &mut Frame, area: Rect, rsvp: &RsvpEvent) {
         let rsvp_header = {
             let recency = match rsvp.recency {
@@ -1231,6 +1244,27 @@ impl DecryptedMessage {
             .fg(fg)
         });
 
+        let rsvp_answer = if rsvp.can_be_answered() {
+            let status = rsvp.user_attendee().status.and_then(|status| match status {
+                CalendarAttendeeStatus::Unanswered => None,
+                CalendarAttendeeStatus::Maybe => Some("Maybe"),
+                CalendarAttendeeStatus::No => Some("No"),
+                CalendarAttendeeStatus::Yes => Some("Yes"),
+            });
+
+            if let Some(status) = status {
+                vec![
+                    Text::from(format!("$ Attending? {status}")).fg(fg),
+                    Text::from("  [A] Change answer").fg(fg),
+                    Text::from(""),
+                ]
+            } else {
+                vec![Text::from("$ [A] Answer").fg(fg).bold(), Text::from("")]
+            }
+        } else {
+            Vec::new()
+        };
+
         // ---
 
         // Usually we keep event's summary next to its occurrence:
@@ -1269,6 +1303,7 @@ impl DecryptedMessage {
             .chain(rsvp_location)
             .chain(rsvp_recurrence)
             .chain(iter::once(Text::raw("")))
+            .chain(rsvp_answer)
             .chain(iter::once(rsvp_organizer))
             .chain(rsvp_attendees);
 
