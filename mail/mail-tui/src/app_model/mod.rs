@@ -528,7 +528,8 @@ fn app_tracing_env_filter() -> EnvFilter {
         proton_core_common=trace,
         proton_mail_common=trace,
         proton_event_loop=trace,
-        proton_action_queue=trace",
+        proton_action_queue=trace,
+        proton_calendar_common=debug",
         )
         .split_inclusive(',')
         .map(str::trim)
