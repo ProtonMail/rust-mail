@@ -5,7 +5,7 @@ use crate::datatypes::MessageFlags;
 use crate::datatypes::SystemLabelId;
 use crate::datatypes::attachment;
 use crate::datatypes::{Disposition, MessageRecipient, MessageRecipients, MessageSender};
-use crate::datatypes::{LocalAttachmentId, PmSignature};
+use crate::datatypes::{LocalAttachmentId, ParsedHeaders, PmSignature};
 use crate::decrypted_message::DecryptedMessageBody;
 use crate::draft::recipients::{MaybeEmptyString, NullContactGroupResolver};
 use crate::draft::{Draft, MetadataId};
@@ -326,6 +326,54 @@ async fn reply_to_sent_message_should_use_to_list_rather_than_sender(reply_mode:
 
     assert!(draft.to_list.contains_email(&to_address));
     assert!(!draft.to_list.contains_email(sender_address.as_ref()));
+}
+
+#[test]
+fn resolve_sender_alias_mixed_case() {
+    // It is possible to receive the alias address completely in lowercased, we need to make
+    // sure it is applied to the original address instead.
+    let email = "FooBar@proton.me";
+    let body_metadata = alias_body_metadata("foobar+alias@proton.me".to_owned());
+    let sender_email = resolve_sender_alias(email, &body_metadata);
+    assert_eq!(sender_email, "FooBar+alias@proton.me");
+}
+
+#[test]
+fn resolve_sender_alias_no_alias() {
+    // if no alias exist, the value should be ignored
+    let email = "FooBar@proton.me";
+    let body_metadata = alias_body_metadata("omega@proton.me".to_owned());
+    let sender_email = resolve_sender_alias(email, &body_metadata);
+    assert_eq!(sender_email, "FooBar@proton.me");
+}
+
+#[test_case::test_case("foobar-alias@proton.me";"missing_plus")]
+#[test_case::test_case("foobar+alias-proton.me";"missing_at")]
+#[test_case::test_case("foobarproton.me";"missing_both")]
+#[test_case::test_case("foobar@alias+proton.me";"swapped indices")]
+fn resolve_sender_alias_invalid_value(alias: &str) {
+    // if no alias exist, the value should be ignored
+    let email = "FooBar@proton.me";
+    let body_metadata = alias_body_metadata(alias.to_owned());
+    let sender_email = resolve_sender_alias(email, &body_metadata);
+    assert_eq!(sender_email, "FooBar@proton.me");
+}
+
+fn alias_body_metadata(alias: String) -> MessageBodyMetadata {
+    let mut parsed_headers = ParsedHeaders::default();
+    parsed_headers
+        .headers
+        .insert("X-Original-To".to_owned(), serde_json::Value::String(alias));
+    MessageBodyMetadata {
+        local_message_id: None,
+        remote_message_id: None,
+        header: "".to_string(),
+        mime_type: Default::default(),
+        parsed_headers,
+        attachments: vec![],
+        reply_to: Default::default(),
+        reply_tos: vec![],
+    }
 }
 
 fn sanitize_message_body_metadata(mime_type: MimeType) -> MessageBodyMetadata {

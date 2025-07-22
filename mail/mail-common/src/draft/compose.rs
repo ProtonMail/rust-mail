@@ -1,4 +1,4 @@
-use crate::datatypes::{MessageRecipient, MessageSender, MimeType};
+use crate::datatypes::{MessageRecipient, MessageSender, MimeType, ParsedHeaderValue};
 use crate::draft::recipients::{ContactGroupResolver, MaybeEmptyString, RecipientList};
 use crate::draft::{
     AttachmentRemovalId, Draft, DraftAttachmentRemovalQueuer, Error, ReplyMode, SaveError,
@@ -570,4 +570,45 @@ impl DraftAddressChangeRequest {
             sender: address.email,
         }))
     }
+}
+
+/// Check for the presence of an alias in the original message and correctly patch
+/// the address to have said alias.
+pub fn resolve_sender_alias(
+    address_email: &str,
+    source_body_metadata: &MessageBodyMetadata,
+) -> String {
+    // We need to check if this header is present to correctly determine the destination
+    // address of this email. This contains the email alias (email+alias@domain) which we
+    // need to use to reply.
+    source_body_metadata
+        .parsed_header_value("X-Original-To")
+        .map(|v| match v {
+            ParsedHeaderValue::String(v) => v,
+            ParsedHeaderValue::Array(mut a) => {
+                tracing::warn!("Found array value for `X-Original-To`, using first value");
+                a.drain(..).next().unwrap_or(address_email.to_owned())
+            }
+        })
+        .map_or(address_email.to_owned(), |original_to| {
+            // Check if the email has an alias attribute. We can't use the values as is, since
+            // the backend does not resolve the emails in the sender correctly unless they
+            // have the same capitalization. We have to extract the alias and apply it to
+            // our identity.
+            if let (Some(plus_index), Some(at_index)) =
+                (original_to.find("+"), original_to.as_str().find("@"))
+                && at_index > plus_index
+                && original_to.is_char_boundary(plus_index)
+                && original_to.is_char_boundary(at_index)
+            {
+                let alias = &original_to[plus_index + 1..at_index];
+                address_email
+                    .split_once('@')
+                    .map_or(address_email.to_owned(), |(local, domain)| {
+                        format!("{local}+{alias}@{domain}")
+                    })
+            } else {
+                address_email.to_owned()
+            }
+        })
 }

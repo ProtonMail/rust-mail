@@ -37,7 +37,7 @@ use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::message_banner::MessageBanner as RealMessageBanner;
 use proton_mail_common::datatypes::theme::MailTheme as RealMailTheme;
 use proton_mail_common::decrypted_message::{
-    self, BodyOutput as RealBodyOutput, DecryptedMessageBody, ThemeOpts as RealThemeOpts,
+    BodyOutput as RealBodyOutput, DecryptedMessageBody, ThemeOpts as RealThemeOpts,
     TransformOpts as RealTransformOpts,
 };
 use proton_mail_common::errors::{
@@ -97,8 +97,8 @@ impl DecryptedMessage {
     /// Returns a (possibly empty) array of header values.
     pub fn parsed_header_value(&self, key: &str) -> Vec<String> {
         match self.body.parsed_header_value(key) {
-            Some(decrypted_message::ParsedHeaderValue::Array(arr)) => arr,
-            Some(decrypted_message::ParsedHeaderValue::String(s)) => vec![s],
+            Some(proton_mail_common::datatypes::ParsedHeaderValue::Array(arr)) => arr,
+            Some(proton_mail_common::datatypes::ParsedHeaderValue::String(s)) => vec![s],
             None => vec![],
         }
     }

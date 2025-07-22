@@ -4,7 +4,7 @@
 use crate::datatypes::attachment::ContentId;
 use crate::datatypes::message_banner::MessageBanner;
 use crate::datatypes::theme::MailTheme;
-use crate::datatypes::{Disposition, LocalAttachmentId, MimeType};
+use crate::datatypes::{Disposition, LocalAttachmentId, MimeType, ParsedHeaderValue};
 use crate::models::{
     Attachment, AttachmentType, EmbeddedAttachmentInfo, MailSettings, Message, MessageBodyMetadata,
 };
@@ -18,7 +18,6 @@ use proton_mail_html_transformer::Transformer;
 use proton_mail_html_transformer::transforms::ColorMode;
 use proton_mail_html_transformer::transforms::styles::{BrowserCapabilities, IncludeFullStaticCss};
 use proton_task_service::AsyncTaskResult;
-use serde_json::Value;
 use stash::orm::Model;
 use stash::stash::Tether;
 use std::collections::HashMap;
@@ -155,12 +154,6 @@ impl From<TransformOptsResolved> for TransformOpts {
             theme: Some(val.theme),
         }
     }
-}
-
-/// A message parsed header value can either be a string or an array of strings.
-pub enum ParsedHeaderValue {
-    String(String),
-    Array(Vec<String>),
 }
 
 type InFlightAttachments =
@@ -301,31 +294,7 @@ impl DecryptedMessageBody {
 
     /// Retrieve a parsed header value for a given `key`.
     pub fn parsed_header_value(&self, key: &str) -> Option<ParsedHeaderValue> {
-        let value = self.metadata.parsed_headers.headers.get(key)?;
-        match value {
-            Value::String(s) => Some(ParsedHeaderValue::String(s.clone())),
-            Value::Array(array) => {
-                let mut result = Vec::with_capacity(array.len());
-                for (idx, item) in array.iter().enumerate() {
-                    if let Value::String(str) = item {
-                        result.push(str.clone());
-                    } else {
-                        tracing::warn!(
-                            "Header array value {key}[{idx}] of message {:?} has invalid value type",
-                            self.metadata.remote_message_id
-                        );
-                    }
-                }
-                Some(ParsedHeaderValue::Array(result))
-            }
-            _ => {
-                tracing::warn!(
-                    "Header value {key} of message {:?} has invalid value type",
-                    self.metadata.remote_message_id
-                );
-                None
-            }
-        }
+        self.metadata.parsed_header_value(key)
     }
 
     /// Gets the message body as an HTML. This does all of the transformations that are
