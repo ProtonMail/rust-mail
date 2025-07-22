@@ -380,7 +380,7 @@ async fn party_crasher() {
         .await
         .unwrap_err();
 
-    assert!(matches!(actual, RsvpError::NotActuallyInvited));
+    assert!(matches!(actual, RsvpError::NotInvited));
 }
 
 #[tokio::test]

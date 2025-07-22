@@ -598,8 +598,8 @@ pub enum RsvpError {
     #[error("Invitation can't be answered")]
     NonAnswerable,
 
-    #[error("User has not been actually invited to this event")]
-    NotActuallyInvited,
+    #[error("User has not been invited to this event")]
+    NotInvited,
 
     #[error("{0}")]
     Api(#[from] ApiServiceError),

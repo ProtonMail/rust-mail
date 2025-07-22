@@ -266,7 +266,7 @@ where
             // This can happen whan an attendee forwards their own invite to
             // another user that hasn't been invited by the organizer; this is
             // known as "party crasher" and it's not yet supported.
-            RsvpError::NotActuallyInvited
+            RsvpError::NotInvited
         })?;
 
     let intent = match id {
