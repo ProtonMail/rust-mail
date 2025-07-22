@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- [ET-3783] Missing attachments
+
+
+## [mail-uniffi-v0.105.2] - 2025-07-22
+
+### Fixes
+
 - [ET-3759] Unable to reply to messages
 - [ET-3760] Create_or_get_local to preserve api conversation data over unknown data
 
