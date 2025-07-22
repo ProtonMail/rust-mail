@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixes
+
+- [ET-3759] Unable to reply to messages
+- [ET-3760] Create_or_get_local to preserve api conversation data over unknown data
+
+
 ## [mail-uniffi-v0.105.1] - 2025-07-16
 
 ### Fixes
