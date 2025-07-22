@@ -278,6 +278,31 @@ impl ProtonMail for Proton {
             .into_body_json()?)
     }
 
+    async fn put_conversations_snooze(
+        &self,
+        ids: Vec<ConversationId>,
+        snooze_time: u64,
+    ) -> ApiServiceResult<PutConversationsSnoozeResponse> {
+        Ok(PUT!("{MAIL_V4}/conversations/snooze")
+            .body_json(PutConversationsSnoozeRequest { ids, snooze_time })?
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
+    async fn put_conversations_unsnooze(
+        &self,
+        ids: Vec<ConversationId>,
+    ) -> ApiServiceResult<PutConversationsUnsnoozeResponse> {
+        Ok(PUT!("{MAIL_V4}/conversations/unsnooze")
+            .body_json(PutConversationsUnsnoozeRequest { ids })?
+            .send_with(self)
+            .await?
+            .ok()?
+            .into_body_json()?)
+    }
+
     async fn put_messages_delete(
         &self,
         ids: Vec<MessageId>,

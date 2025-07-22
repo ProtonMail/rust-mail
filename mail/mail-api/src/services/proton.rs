@@ -232,6 +232,29 @@ pub trait ProtonMail {
         conversation_ids: Vec<ConversationId>,
     ) -> ApiServiceResult<PutConversationsUnreadResponse>;
 
+    /// Snooze conversations with the given `snooze_until` timestamp.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    async fn put_conversations_snooze(
+        &self,
+        conversation_ids: Vec<ConversationId>,
+        snooze_until: u64,
+    ) -> ApiServiceResult<PutConversationsSnoozeResponse>;
+
+    /// Unsnooze conversations.
+    ///
+    /// # Errors
+    ///
+    /// This method will return an error if the request fails.
+    ///
+    async fn put_conversations_unsnooze(
+        &self,
+        conversation_ids: Vec<ConversationId>,
+    ) -> ApiServiceResult<PutConversationsUnsnoozeResponse>;
+
     /// TODO: Document this method.
     ///
     /// # Errors
