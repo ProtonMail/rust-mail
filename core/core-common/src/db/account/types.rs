@@ -18,6 +18,7 @@ use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
 use derive_more::{AsRef, Deref};
 use proton_core_api::auth::{Tokens, UserKeySecret};
+use proton_core_api::services::proton::muon::rest::auth::v4::fido2;
 use proton_core_api::services::proton::{SessionId, UserId};
 use secrecy::{ExposeSecret, SecretString};
 use serde::{Deserialize, Serialize};
@@ -288,6 +289,19 @@ pub struct CoreSession {
 
     #[DbField]
     pub key_secret: Option<EncryptedKeySecret>,
+
+    #[DbField]
+    pub fido_details: Option<Fido2DbColumn>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Fido2DbColumn(fido2::Response);
+sql_using_serde!(Fido2DbColumn);
+impl Fido2DbColumn {
+    #[must_use]
+    pub fn into_inner(self) -> fido2::Response {
+        self.0
+    }
 }
 
 #[derive(Debug, Error)]
@@ -339,7 +353,17 @@ impl CoreSession {
 
             // --- Optional fields ---
             key_secret: None,
+            fido_details: None,
         })
+    }
+
+    /// Update fido details of the session
+    #[must_use]
+    pub fn with_fido_auth_options(self, auth_options: Option<fido2::Response>) -> Self {
+        Self {
+            fido_details: auth_options.map(Fido2DbColumn),
+            ..self
+        }
     }
 
     /// Update the auth tokens.

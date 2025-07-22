@@ -13,6 +13,7 @@ use derive_more::{Debug, From};
 use futures::TryFutureExt;
 use itertools::Itertools;
 use muon::client::flow::LoginFlowData;
+use muon::rest::auth::v4::fido2;
 use proton_core_api::auth::UserKeySecret;
 use proton_core_api::services::observability::ObservabilityRecorder;
 use proton_core_api::services::proton::{Address, AddressId, ProtonCore, SessionId, User, UserId};
@@ -52,7 +53,13 @@ pub enum State {
 
     /// A recoverable error occurred during the `WantTfa` state.
     #[debug("TfaRetry")]
-    TfaRetry(UserId, SessionId, SecureString, MbpMode),
+    TfaRetry(
+        UserId,
+        SessionId,
+        SecureString,
+        MbpMode,
+        Option<fido2::Response>,
+    ),
 
     /// An error occurred during the `WantTfa` state.
     #[debug("TfaError")]
@@ -167,9 +174,9 @@ impl State {
 
     /// Attempt to submit a FIDO code.
     #[allow(unused)]
-    pub async fn submit_fido(self, code: String) -> Result<Self, (Self, LoginError)> {
+    pub async fn submit_fido(self, fido_data: fido2::Request) -> Result<Self, (Self, LoginError)> {
         if let Self::WantTfa(state) = self {
-            Ok(state.submit_fido(code).await?)
+            Ok(state.submit_fido(fido_data).await?)
         } else {
             Err((self, LoginError::InvalidState))
         }
@@ -255,6 +262,7 @@ impl State {
         session_id: SessionId,
         pass: SecureString,
         mode: MbpMode,
+        fido_details: Option<fido2::Response>,
     ) -> Self {
         let data = StateData {
             parts,
@@ -263,7 +271,7 @@ impl State {
             observability: ObservabilityRecorder::default(),
         };
 
-        Self::want_tfa(client.auth().into(), data, pass, mode)
+        Self::want_tfa(client.auth().into(), data, pass, mode, fido_details)
     }
 
     /// Create a `WantMbp` state from a resumed login flow.
@@ -297,8 +305,14 @@ impl State {
     }
 
     /// Create a `WantTfa` state.
-    fn want_tfa(flow: TfaFlow, data: StateData, pass: SecureString, mode: MbpMode) -> Self {
-        WantTfa::new(flow, data, pass, mode).into()
+    fn want_tfa(
+        flow: TfaFlow,
+        data: StateData,
+        pass: SecureString,
+        mode: MbpMode,
+        fido_details: Option<fido2::Response>,
+    ) -> Self {
+        WantTfa::new(flow, data, pass, mode, fido_details).into()
     }
 
     /// Create a `WantMbp` state.

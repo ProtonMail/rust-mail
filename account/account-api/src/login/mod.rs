@@ -4,6 +4,7 @@ use crate::login::state::State;
 use crate::shared::SecureString;
 use crate::shared::challenge::{Behavior, ChallengeInfo};
 use muon::client::flow::LoginFlowData;
+use muon::rest::auth::v4::fido2;
 use proton_core_api::service::{ApiServiceError, ServiceError};
 use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::{CoreSession, Session};
@@ -155,9 +156,18 @@ impl LoginFlow {
         session_id: SessionId,
         pass: impl Into<SecureString>,
         mode: MbpMode,
+        fido_details: Option<fido2::Response>,
     ) -> Self {
         let (client, parts) = session.to_parts();
-        let state = State::new_from_tfa(client, parts, user_id, session_id, pass.into(), mode);
+        let state = State::new_from_tfa(
+            client,
+            parts,
+            user_id,
+            session_id,
+            pass.into(),
+            mode,
+            fido_details,
+        );
 
         Self { session, state }
     }
@@ -256,15 +266,19 @@ impl LoginFlow {
 
     /// Submit FIDO 2FA code.
     ///
-    /// This function is not yet implemented.
-    ///
-    /// # Errors
-    ///
-    /// Once implemented, this function will return an error if the request failed.
-    pub async fn submit_fido(&mut self, code: String) -> Result<(), LoginError> {
-        self.transition(|s: State| s.submit_fido(code))
+    /// Returns error if the request failed.
+    pub async fn submit_fido(&mut self, fido_data: fido2::Request) -> Result<(), LoginError> {
+        self.transition(|s: State| s.submit_fido(fido_data))
             .await
             .inspect_err(|_| self.try_recover())
+    }
+
+    #[must_use]
+    pub fn get_fido_details(&self) -> Option<fido2::Response> {
+        match &self.state {
+            State::WantTfa(flow) => flow.fido_details().cloned(),
+            _ => None,
+        }
     }
 
     /// Submit the second mailbox password in two password mode.
@@ -397,8 +411,16 @@ impl LoginFlow {
                 self.state = State::new(client, parts, None);
             }
 
-            State::TfaRetry(user_id, session_id, pass, mode) => {
-                self.state = State::new_from_tfa(client, parts, user_id, session_id, pass, mode);
+            State::TfaRetry(user_id, session_id, pass, mode, fido_details) => {
+                self.state = State::new_from_tfa(
+                    client,
+                    parts,
+                    user_id,
+                    session_id,
+                    pass,
+                    mode,
+                    fido_details,
+                );
             }
 
             State::MbpRetry(user_id, session_id) => {

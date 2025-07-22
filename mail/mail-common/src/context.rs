@@ -384,6 +384,7 @@ impl MailContext {
                     session_id,
                     password,
                     mbp_mode,
+                    session.fido_details.map(|it| it.into_inner()),
                 ))
             }
 

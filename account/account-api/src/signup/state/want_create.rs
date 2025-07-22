@@ -100,6 +100,7 @@ impl WantCreate {
                     session_id: SessionId::from(data.session_id),
                     tfa_mode: TfaMode::none(),
                     mbp_mode: MbpMode::from(data.password_mode),
+                    fido_details: None,
                 };
 
                 store
