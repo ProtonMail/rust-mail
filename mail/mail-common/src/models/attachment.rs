@@ -418,7 +418,7 @@ impl Attachment {
                 Attachment::find_by_remote_id(&metadata.attachment_type, bond).await?
             };
 
-            if let Some(attachment) = maybe_existing_attachment {
+            let id = if let Some(attachment) = maybe_existing_attachment {
                 // This attachment exists, we need to update only the parts we
                 // want to modify.
                 bond.execute(
@@ -439,7 +439,7 @@ impl Attachment {
                 )
                 .await
                 .inspect_err(|e| error!("Failed to update attachment from message: {}", e))?;
-                result.push(attachment.id())
+                attachment.id()
             } else {
                 let mut attachment = Attachment::from(metadata.clone());
                 // This attachment does not exist, we need to create it.
@@ -451,8 +451,10 @@ impl Attachment {
                     .save(bond)
                     .await
                     .inspect_err(|e| error!("Failed to save attachment from message: {e:?}"))?;
-                result.push(attachment.id())
-            }
+                attachment.id()
+            };
+            metadata.local_id = Some(id);
+            result.push(id);
         }
         Ok(result)
     }
@@ -477,7 +479,7 @@ impl Attachment {
                 Attachment::find_by_remote_id(&metadata.attachment_type, bond).await?
             };
 
-            if let Some(attachment) = maybe_existing_attachment {
+            let id = if let Some(attachment) = maybe_existing_attachment {
                 // This attachment exists, we need to update only the parts we
                 // want to modify.
                 bond.execute(
@@ -494,7 +496,7 @@ impl Attachment {
                 )
                 .await
                 .inspect_err(|e| error!("Failed to update attachment from conversation: {}", e))?;
-                result.push(attachment.id());
+                attachment.id()
             } else {
                 let mut attachment = Attachment::from(metadata.clone());
                 // This attachment does not exist, we need to create it.
@@ -503,8 +505,10 @@ impl Attachment {
                 attachment.save(bond).await.inspect_err(|e| {
                     error!("Failed to save attachment from conversation: {e:?}")
                 })?;
-                result.push(attachment.id());
-            }
+                attachment.id()
+            };
+            metadata.local_id = Some(id);
+            result.push(id);
         }
 
         Ok(result)
