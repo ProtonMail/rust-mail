@@ -7,10 +7,10 @@ use std::{
 
 use chrono::Utc;
 use muon::Client;
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use store::InMemoryMetricStore;
-use tokio::sync::RwLock;
-use tracing::{Instrument, Span, debug, error, info, trace};
+use tracing::{debug, error, info, trace};
 
 pub mod metrics;
 pub mod store;
@@ -20,11 +20,11 @@ use crate::status_observer::StatusObserver;
 static START: Once = Once::new();
 
 /// Global singleton for the observability manager, lazily initialized.
-static MANAGER: LazyLock<Arc<RwLock<ObservabilityManager>>> = LazyLock::new(|| {
-    Arc::new(RwLock::new(ObservabilityManager {
+static MANAGER: LazyLock<Arc<ObservabilityManager>> = LazyLock::new(|| {
+    Arc::new(ObservabilityManager {
         status: StatusObserver::default(),
         store: Arc::new(RwLock::new(InMemoryMetricStore::default())),
-    }))
+    })
 });
 
 pub trait ObservabilityMetric: Serialize {
@@ -50,7 +50,7 @@ pub struct ObservabilityManager {
 /// singleton `MANAGER` for thread-safe operations.
 #[derive(Clone)]
 pub struct ObservabilityRecorder {
-    manager: Arc<RwLock<ObservabilityManager>>,
+    manager: Arc<ObservabilityManager>,
 }
 
 impl Default for ObservabilityRecorder {
@@ -81,8 +81,7 @@ impl ObservabilityManager {
                 loop {
                     interval.tick().await;
                     trace!("ObservabilityManager tick");
-                    let mut manager = MANAGER.write().await;
-                    manager.post_metrics(batch_size, &client).await;
+                    Self::post_metrics(batch_size, &client, MANAGER.store.clone()).await;
                 }
             });
         });
@@ -98,18 +97,26 @@ impl ObservabilityManager {
     ///
     /// * `count` - The maximum number of metrics to send.
     /// * `client` - The client used to send metrics.
-    async fn post_metrics(&mut self, count: usize, client: &Client) {
-        let mut store_lock = self.store.write().await;
-        let elements = store_lock.get_first_n(count);
+    async fn post_metrics(
+        batch_size: usize,
+        client: &Client,
+        store: Arc<RwLock<InMemoryMetricStore>>,
+    ) {
+        if MANAGER.status.status(client.clone()).await.is_offline() {
+            trace!("Client is offline");
+            return;
+        }
+        let elements = {
+            let mut store_lock = store.write();
+            // We intentionally drop metrics even on failure. If we break schema compatibility,
+            // we prefer to continue sending newer, supported events rather than getting stuck
+            // retrying outdated or malformed ones indefinitely.
+            store_lock.remove_first_n(batch_size)
+        };
         let metric_count = elements.len();
 
         if metric_count == 0 {
             trace!("No metrics to send");
-            return;
-        }
-
-        if self.status.status(client.clone()).await.is_offline() {
-            trace!("Client is offline");
             return;
         }
 
@@ -133,10 +140,6 @@ impl ObservabilityManager {
                 error!("Error while sending Observability Metrics: {err:?}");
             }
         }
-        // We intentionally drop metrics even on failure. If we break schema compatibility,
-        // we prefer to continue sending newer, supported events rather than getting stuck
-        // retrying outdated or malformed ones indefinitely.
-        store_lock.remove_first_n(count);
     }
 }
 
@@ -146,7 +149,6 @@ impl ObservabilityRecorder {
     /// Serializes the metric and stores it
     /// asynchronously in the manager's store. Errors during serialization or
     /// storage are logged.
-    /// ```
     pub fn record<T: ObservabilityMetric>(&self, metric: T) {
         let element = match Self::into_metrics_element(metric, Utc::now().timestamp(), 1) {
             Ok(element) => element,
@@ -155,15 +157,8 @@ impl ObservabilityRecorder {
                 return;
             }
         };
-        let manager = Arc::clone(&self.manager);
-        tokio::spawn(
-            async move {
-                let manager_lock = manager.write().await;
-                let mut store_lock = manager_lock.store.write().await;
-                store_lock.store(element);
-            }
-            .instrument(Span::current()),
-        );
+        let mut store_lock = self.manager.store.write();
+        store_lock.store(element);
     }
 
     pub fn into_metrics_element<T: ObservabilityMetric>(

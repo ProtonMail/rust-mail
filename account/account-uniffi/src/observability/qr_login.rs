@@ -98,4 +98,10 @@ mod tests {
             r#"{"Name":"core_qr_login_show_qr_code_screen_total","Version":1,"Timestamp":1741021308,"Data":{"Labels":{"screen_id":"target_instructions"},"Value":1}}"#
         );
     }
+
+    #[test]
+    fn test_observability_methods_without_async_runtime_no_panic() {
+        qr_login_scan_screen_total(QrLoginScanScreenViewTotalScreenId::Success);
+        qr_login_show_qr_screen_total(QrLoginShowQrCodeScreenViewTotalScreenId::Instructions);
+    }
 }

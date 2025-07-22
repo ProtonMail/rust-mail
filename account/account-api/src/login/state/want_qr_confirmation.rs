@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use base64::{Engine as _, engine::general_purpose};
-use futures::TryFutureExt as _;
 use muon::client::flow::{ForkFlowResult, WithCodeFlow, WithCodePollFlow};
 use proton_core_api::{
     auth::{KeySecret, UserKeySecret},
@@ -83,18 +82,16 @@ impl WantQrConfirmation {
                 error!("{err}");
             })
             .map_err(|_| LoginError::QRLoginEncoding)?;
-
         let user = client
             .get_users()
+            .await
             .inspect_err(|_| {
                 self.observability.record(QrLoginPostLogin {
                     status: QrLoginPostLoginStatus::UserFetchFailure,
                 });
             })
-            .map_ok(|res| res.user)
-            .map_err(LoginError::UserFetch)
-            .await?;
-
+            .map(|res| res.user)
+            .map_err(LoginError::UserFetch)?;
         info!("Validate passphrarse");
         let pgp = proton_crypto::new_pgp_provider();
         let passphrase = KeySecret::new(passphrase);
@@ -239,7 +236,6 @@ pub async fn process_target_device_qr_code(
     let qr_data = parse_qr_string(qr_code)
         .inspect(|_| observability.record(QrLoginDecodeQR::success()))
         .inspect_err(|e| observability.record(QrLoginDecodeQR::failure(e)))?;
-
     let fork_confirmation =
         if let Some(encryption_key) = qr_data.encryption_key.filter(|it| !it.is_empty()) {
             // Encrypt this device's passphrase with the encryption key from the Target Device's QR code
