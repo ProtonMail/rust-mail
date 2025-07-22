@@ -6,7 +6,7 @@ use crate::datatypes::attachment::ContentId;
 use crate::datatypes::{Disposition, LocalAttachmentId, LocalMessageId, MimeType};
 
 use crate::datatypes::LocalConversationId;
-use crate::decrypted_message::{DecryptedMessageBody, ParsedHeaderValue, ThemeOpts};
+use crate::decrypted_message::{DecryptedMessageBody, ThemeOpts};
 use crate::draft::attachments::{DraftAttachment, build_attachment_key_packets};
 use crate::draft::recipients::{ContactGroupResolver, ProtonContactGroupResolver, RecipientList};
 use crate::models::{
@@ -60,7 +60,7 @@ pub(crate) mod send;
 use crate::draft::compose::{
     DraftAddressChangeOutput, DraftAddressChangeRequest, PM_SIGNATURE_DIV_CLASS,
     encrypt_draft_body, get_full_signature, inject_dark_mode, patch_draft_with_reply_mode,
-    prepare_html_reply, prepare_plain_text_reply,
+    prepare_html_reply, prepare_plain_text_reply, resolve_sender_alias,
 };
 pub use send::ScheduleSendOptions;
 
@@ -928,22 +928,7 @@ impl Draft {
             attachments.retain(|attachment| attachment.disposition == Disposition::Inline);
         };
 
-        // We need to check if this header is present to correctly determine the destination
-        // address of this email. This contains the email alias (email+alias@domain) which we
-        // need to use to reply.
-        let sender_email = source_message_body
-            .parsed_header_value("X-Original-To")
-            .map_or(address.email.clone(), |v| match v {
-                ParsedHeaderValue::String(v) => v,
-                ParsedHeaderValue::Array(a) => {
-                    tracing::warn!("Found array value for `X-Original-To`, using first value");
-                    if a.is_empty() {
-                        address.email.clone()
-                    } else {
-                        a[0].clone()
-                    }
-                }
-            });
+        let sender_email = resolve_sender_alias(&address.email, &source_message_body.metadata);
 
         let mut draft = Self {
             metadata_id,

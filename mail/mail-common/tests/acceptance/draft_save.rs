@@ -448,7 +448,7 @@ async fn create_draft_reply_plain_text() {
 async fn create_draft_reply_with_alias() {
     // Check if we received the email on an alias it is set correctly
     // on the message.
-    let alias_email = "my_alias_email+alias@proton.me";
+    let alias_email = "rust_test+alias@proton.ch";
     create_draft_reply_with_override_impl(
         MimeType::TextHtml,
         ReplyMode::Sender,

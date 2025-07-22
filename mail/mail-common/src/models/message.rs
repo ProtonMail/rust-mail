@@ -32,13 +32,13 @@ use crate::MailContextResult;
 use crate::actions::{
     LabelAsAction, MessageAction, MessageAvailableActions, MoveAction, MoveItemAction, ReplyAction,
 };
-use crate::datatypes::LocalConversationId;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::{
     AttachmentMetadata, CustomLabel, Disposition, EncryptedMessageBody, ExclusiveLocation,
     LocalMessageId, MessageFlags, MessageLabelsCount, MessageRecipients, MessageSender, MimeType,
     MobileActions, ParsedHeaders, ReadFilter, SystemLabelId, theme::MailTheme,
 };
+use crate::datatypes::{LocalConversationId, ParsedHeaderValue};
 use crate::decrypted_message::ThemeOpts;
 use crate::mailbox::decrypted_message::DecryptedMessageBody;
 use crate::{AppError, MailUserContext};
@@ -2870,6 +2870,33 @@ impl MessageBodyMetadata {
         )
         .await?;
         Ok(())
+    }
+    pub fn parsed_header_value(&self, key: &str) -> Option<ParsedHeaderValue> {
+        let value = self.parsed_headers.headers.get(key)?;
+        match value {
+            serde_json::Value::String(s) => Some(ParsedHeaderValue::String(s.clone())),
+            serde_json::Value::Array(array) => {
+                let mut result = Vec::with_capacity(array.len());
+                for (idx, item) in array.iter().enumerate() {
+                    if let serde_json::Value::String(str) = item {
+                        result.push(str.clone());
+                    } else {
+                        tracing::warn!(
+                            "Header array value {key}[{idx}] of message {:?} has invalid value type",
+                            self.remote_message_id
+                        );
+                    }
+                }
+                Some(ParsedHeaderValue::Array(result))
+            }
+            _ => {
+                tracing::warn!(
+                    "Header value {key} of message {:?} has invalid value type",
+                    self.remote_message_id
+                );
+                None
+            }
+        }
     }
 }
 
