@@ -425,11 +425,8 @@ impl ToSql for NextMessageOnMove {
 /// A message parsed header value can either be a string or an array of strings.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub enum ParsedHeaderValue {
-    /// TODO: Document this variant.
-    Array(Vec<String>),
-
-    /// TODO: Document this variant.
     String(String),
+    Array(Vec<String>),
 }
 
 /// TODO: Document this enum.
