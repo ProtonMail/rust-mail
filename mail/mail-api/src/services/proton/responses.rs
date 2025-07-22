@@ -255,6 +255,22 @@ pub struct PutMessageHamResponse {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[cfg_attr(feature = "mocks", derive(Serialize))]
 #[serde(rename_all = "PascalCase")]
+pub struct PutConversationsSnoozeResponse {
+    code: i64,
+    pub responses: Vec<OperationResult<ConversationId>>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
+pub struct PutConversationsUnsnoozeResponse {
+    code: i64,
+    pub responses: Vec<OperationResult<ConversationId>>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+#[cfg_attr(feature = "mocks", derive(Serialize))]
+#[serde(rename_all = "PascalCase")]
 pub struct PostMessagesRelabelResponse {
     pub message: MessageMetadata,
 }

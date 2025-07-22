@@ -282,6 +282,27 @@ pub struct PutConversationsUnreadRequest {
     pub ids: Vec<ConversationId>,
 }
 
+/// Request to snooze conversations.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PutConversationsSnoozeRequest {
+    /// The ids of the conversations to snooze
+    #[serde(rename = "IDs")]
+    pub ids: Vec<ConversationId>,
+
+    /// The timestamp to snooze until
+    pub snooze_time: u64,
+}
+
+/// Request to unsnooze conversations.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct PutConversationsUnsnoozeRequest {
+    /// The ids of the conversations to unsnooze
+    #[serde(rename = "IDs")]
+    pub ids: Vec<ConversationId>,
+}
+
 /// TODO: Document this struct.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "PascalCase")]
