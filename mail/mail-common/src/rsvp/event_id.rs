@@ -1,8 +1,11 @@
 use crate::datatypes::LocalMessageId;
-use crate::{MailContextResult, MailUserContext, RsvpEvent};
+use crate::models::Message;
+use crate::{AppError, MailContextError, MailContextResult, MailUserContext, RsvpEvent};
+use anyhow::Context;
 use proton_calendar_common::{self as cal};
 use proton_core_api::services::proton::AddressId;
 use proton_crypto_inbox::proton_crypto;
+use stash::orm::Model;
 use stash::stash::Tether;
 use std::ops;
 use tracing::{debug, info, instrument, warn};
@@ -43,19 +46,46 @@ impl RsvpEventId {
             })?;
 
         let now = ctx.mail_context().core_context().clock().now();
+
+        let email = {
+            let tether = ctx.user_stash().connection();
+
+            let msg = Message::load(self.msg_id, &tether)
+                .await
+                .context("Couldn't load invite's message")
+                .map_err(MailContextError::Other)?
+                .ok_or_else(|| AppError::MessageMissing(self.msg_id))?;
+
+            msg.to_list
+                .value
+                .first()
+                .context("Invite's message has no recipient")
+                .map_err(MailContextError::Other)?
+                .to_owned()
+                .address
+        };
+
         let week_start = ctx.user_settings().await?.week_start.into();
 
         match self
             .id
-            .fetch(ctx.api(), &pgp, &keys, ctx.rsvp_cache(), &now, week_start)
+            .fetch(
+                ctx.api(),
+                &pgp,
+                &keys,
+                ctx.rsvp_cache(),
+                &now,
+                email.as_clear_text_str(),
+                week_start,
+            )
             .await
         {
             Ok(event) => {
                 if let Some(event) = event {
                     Ok(Some(RsvpEvent::new(event, self.msg_id)))
                 } else {
-                    // Can happen if user has disabled the invite auto-import
-                    // feature
+                    // Can happen if the `invite.ics` attachment isn't really a
+                    // valid invite
                     debug!("False-positive, API says no such event exists");
 
                     Ok(None)

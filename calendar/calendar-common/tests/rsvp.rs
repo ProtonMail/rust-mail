@@ -251,6 +251,16 @@ where
         self
     }
 
+    fn with_attendee(mut self, id: &str, token: &str, status: CalendarAttendeeStatus) -> Self {
+        self.attendees.push(CalendarAttendee {
+            id: id.into(),
+            token: token.into(),
+            status,
+        });
+
+        self
+    }
+
     fn with_attendees(mut self, atts: Vec<CalendarAttendee>) -> Self {
         self.attendees.extend(atts);
         self
@@ -372,6 +382,7 @@ fn expected_event(intent: RsvpIntent, raw: CalendarEvent) -> RsvpEvent {
             email: "bar@localhost".into(),
             status: Some(CalendarAttendeeStatus::Unanswered),
         }],
+        user_attendee_idx: 0,
         calendar: Some(RsvpCalendar {
             id: "HzNtbT1J".into(),
             name: "My calendar".into(),
@@ -380,6 +391,7 @@ fn expected_event(intent: RsvpIntent, raw: CalendarEvent) -> RsvpEvent {
         progress: RsvpProgress::Pending,
         recency: RsvpRecency::Fresh,
         raw: Some(Box::new(raw)),
+        children: Vec::new(),
     }
 }
 
@@ -409,10 +421,12 @@ fn expected_offline_event() -> RsvpEvent {
             email: "bar@localhost".into(),
             status: None,
         }],
+        user_attendee_idx: 0,
         calendar: None,
         progress: RsvpProgress::Pending,
         recency: RsvpRecency::Unknown,
         raw: None,
+        children: Vec::new(),
     }
 }
 

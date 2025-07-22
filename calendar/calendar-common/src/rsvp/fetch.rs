@@ -19,36 +19,56 @@ use proton_ical as ical;
 use std::{collections::HashMap, num::NonZeroU32};
 use tracing::{debug, info, instrument, warn};
 
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn run<P>(
     api: &Proton,
     pgp: &P,
     keys: &UnlockedAddressKeys<P>,
     cache: &impl RsvpCache,
     now: &Zoned,
+    email: &str,
     week_start: Weekday,
     id: &RsvpEventId,
 ) -> RsvpResult<Option<RsvpEvent>>
 where
     P: PGPProviderSync,
 {
-    let (calendar, event, decryptor) = match fetch(api, cache, id).await {
-        Ok(Some((calendar, event))) => {
-            let decryptor = calendar.create_decryptor(pgp, keys, &event)?;
-
-            (Some(calendar), Some(Box::new(event)), Some(decryptor))
-        }
-
-        Ok(None) => (None, None, None),
+    let fetched = match fetch(api, cache, id).await {
+        Ok(fetched) => fetched,
 
         Err(err) if err.is_network_failure() => {
             warn!(?err, "Got a network failure, trying to continue anyway");
-            (None, None, None)
+            None
         }
 
         Err(err) => {
             return Err(err);
         }
     };
+
+    let decryptor;
+    let calendar;
+    let event;
+    let children;
+
+    if let Some(fetched) = fetched {
+        decryptor = Some(
+            fetched
+                .calendar
+                .create_decryptor(pgp, keys, &fetched.event)?,
+        );
+
+        calendar = Some(fetched.calendar);
+        event = Some(fetched.event);
+        children = fetched.children;
+    } else {
+        decryptor = None;
+        calendar = None;
+        event = None;
+        children = Vec::new();
+    }
+
+    // ---
 
     let Some(source) = inflate(pgp, id, event, decryptor.as_ref())? else {
         // This is the case for reminders - there we only know the corresponding
@@ -67,10 +87,12 @@ where
     extract(
         pgp,
         now,
+        email,
         week_start,
         id,
         calendar,
         source,
+        children,
         decryptor.as_ref(),
     )
     .map(Some)
@@ -81,28 +103,42 @@ async fn fetch(
     api: &Proton,
     cache: &impl RsvpCache,
     id: &RsvpEventId,
-) -> RsvpResult<Option<(CalendarBootstrap, CalendarEvent)>> {
+) -> RsvpResult<Option<Fetched>> {
     info!("Fetching event data");
 
-    let event = match id {
+    let (event, children) = match id {
         RsvpEventId::Invite { uid, rid, .. } => {
-            let events = api.find_calendar_events(uid, *rid).await?;
+            let mut events = api.find_calendar_events(uid, *rid).await?;
 
-            // If this is a repeating event, but we're asking the API without
-            // providing any recurrence id[1], the API will return us both the
-            // original event and all of its single edits.
-            //
-            // Since we're interested only in the original event, we can just
-            // ignore the single edits and pick the first event from the list
-            // (which is guaranteed to be this original we're looking for).
-            //
-            // [1] you can imagine we're asking about the "original" or "parent"
-            //     event, so to say
-            events.into_iter().next()
+            let event = if events.is_empty() {
+                None
+            } else {
+                // If this is a repeating event and we're asking the API without
+                // providing any recurrence id, the API will return us both the
+                // original event /and/ all of its single edits[1].
+                //
+                // What we're interested the most is the original event - which
+                // is guaranteed to be the first item on the list - but we need
+                // to note down the "children-events" as well, because those are
+                // needed for the answering functionality.
+                //
+                // [1] exceptions to the recurrence schedule, like "oh, this one
+                //     instance will actually happen on 12:30, not 12:00"
+                Some(Box::new(events.remove(0)))
+            };
+
+            (event, events)
         }
 
         RsvpEventId::Reminder { cal_id, event_id } => {
-            Some(api.get_calendar_event(cal_id, event_id).await?)
+            let event = api.get_calendar_event(cal_id, event_id).await?;
+
+            // Children events are only used by the answering functionality -
+            // since you can't answer a reminder, no need to bother fetching
+            // children here
+            let children = Vec::new();
+
+            (Some(Box::new(event)), children)
         }
     };
 
@@ -120,10 +156,14 @@ async fn fetch(
             })
             .await?;
 
-        Ok(Some((calendar, event)))
+        Ok(Some(Fetched {
+            calendar,
+            event,
+            children,
+        }))
     } else {
-        // Not an error - user might simply have decided to disable the RSVP
-        // auto-importing feature.
+        // Not an error - event might've been already deleted, user might've
+        // decided to disable the RSVP auto-importing feature etc.
 
         Ok(None)
     }
@@ -192,13 +232,16 @@ where
     }))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn extract<P>(
     pgp: &P,
     now: &Zoned,
+    email: &str,
     week_start: Weekday,
     id: &RsvpEventId,
     calendar: Option<CalendarBootstrap>,
     source: Source,
+    children: Vec<CalendarEvent>,
     decryptor: Option<&CalendarEventDecryptor<P>>,
 ) -> RsvpResult<RsvpEvent>
 where
@@ -213,6 +256,21 @@ where
     let progress = extract_progress(now, &source, &occurrence);
     let recency = extract_recency(source.invite(), source.event());
 
+    let user_attendee_idx = attendees
+        .iter()
+        .enumerate()
+        .find_map(
+            |(idx, att)| {
+                if att.email == email { Some(idx) } else { None }
+            },
+        )
+        .ok_or({
+            // This can happen whan an attendee forwards their own invite to
+            // another user that hasn't been invited by the organizer; this is
+            // known as "party crasher" and it's not yet supported.
+            RsvpError::NotInvited
+        })?;
+
     let intent = match id {
         RsvpEventId::Invite { .. } => RsvpIntent::Invite,
         RsvpEventId::Reminder { .. } => RsvpIntent::Reminder,
@@ -226,11 +284,13 @@ where
         occurrence,
         organizer,
         attendees,
+        user_attendee_idx,
         calendar,
         progress,
         recency,
         intent,
         raw: source.into_raw_event(),
+        children,
     })
 }
 
@@ -1014,6 +1074,13 @@ fn extract_recency(invite: Option<&ical::VEvent>, event: Option<&ical::VEvent>) 
     } else {
         RsvpRecency::Fresh
     }
+}
+
+#[derive(Clone, Debug)]
+struct Fetched {
+    calendar: CalendarBootstrap,
+    event: Box<CalendarEvent>,
+    children: Vec<CalendarEvent>,
 }
 
 #[derive(Debug)]

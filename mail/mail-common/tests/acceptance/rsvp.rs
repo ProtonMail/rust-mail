@@ -1,7 +1,7 @@
 use indoc::formatdoc;
 use jiff::Zoned;
 use proton_calendar_api::{self as cal, ProtonCalendarMock};
-use proton_calendar_common::{RsvpAnswerStatus, RsvpEventId};
+use proton_calendar_common::{RsvpAnswer, RsvpEventId};
 use proton_core_api::services::proton::{GetKeysAllResponse, PrivateString, UserId};
 use proton_core_common::models::ModelExtension;
 use proton_crypto_calendar::{CalendarEventEncryptor, KeyPacket, UnlockedCalendarKey};
@@ -401,7 +401,7 @@ async fn fetch_and_answer() {
             .all(|att| att.status == Some(cal::CalendarAttendeeStatus::Yes))
     );
 
-    rsvp.answer(&user_ctx, &mut db, RsvpAnswerStatus::Yes)
+    rsvp.answer(&user_ctx, &mut db, RsvpAnswer::Yes)
         .await
         .unwrap();
 

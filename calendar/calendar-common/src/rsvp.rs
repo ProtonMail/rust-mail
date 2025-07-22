@@ -118,6 +118,7 @@ impl RsvpEventId {
     /// Note that this function needs to know the address keys of the currently
     /// logged-in user (i.e. the one who got the invite).
     #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
     pub async fn fetch<P>(
         &self,
         api: &Proton,
@@ -125,12 +126,13 @@ impl RsvpEventId {
         keys: &UnlockedAddressKeys<P>,
         cache: &impl RsvpCache,
         now: &Zoned,
+        email: &str,
         week_start: Weekday,
     ) -> RsvpResult<Option<RsvpEvent>>
     where
         P: PGPProviderSync,
     {
-        fetch::run(api, pgp, keys, cache, now, week_start, self).await
+        fetch::run(api, pgp, keys, cache, now, email, week_start, self).await
     }
 }
 
@@ -158,11 +160,13 @@ pub struct RsvpEvent {
     pub occurrence: RsvpOccurrence,
     pub organizer: RsvpOrganizer,
     pub attendees: Vec<RsvpAttendee>,
+    pub user_attendee_idx: usize,
     pub calendar: Option<RsvpCalendar>,
     pub progress: RsvpProgress,
     pub recency: RsvpRecency,
     pub intent: RsvpIntent,
     pub raw: Option<Box<CalendarEvent>>,
+    pub children: Vec<CalendarEvent>,
 }
 
 impl RsvpEvent {
@@ -175,6 +179,7 @@ impl RsvpEvent {
     /// Note that this function needs to know the address keys of the currently
     /// logged-in user (i.e. the one who got the invite).
     #[instrument(skip_all)]
+    #[allow(clippy::too_many_arguments)]
     pub async fn answer<P, M>(
         &mut self,
         api: &Proton,
@@ -182,29 +187,42 @@ impl RsvpEvent {
         keys: &UnlockedAddressKeys<P>,
         cache: &impl RsvpCache,
         sender: M,
-        answer: RsvpAnswer<'_>,
+        now: &Zoned,
+        answer: RsvpAnswer,
     ) -> RsvpAnswerResult<(), M>
     where
         P: PGPProviderSync,
         M: RsvpMailSender,
     {
-        answer::run(api, pgp, keys, cache, sender, self, answer).await
+        answer::run(api, pgp, keys, cache, sender, self, now, answer).await
+    }
+
+    #[must_use]
+    pub fn user_attendee(&self) -> &RsvpAttendee {
+        &self.attendees[self.user_attendee_idx]
+    }
+
+    #[must_use]
+    pub fn is_unanswered(&self) -> bool {
+        self.user_attendee()
+            .status
+            .is_some_and(|stat| stat.is_unanswered())
     }
 
     #[must_use]
     pub fn can_be_answered(&self) -> bool {
         self.intent == RsvpIntent::Invite
             && self.recency == RsvpRecency::Fresh
-            && self.calendar.is_some() // [1]
+            && self.progress != RsvpProgress::Cancelled
             && self.raw.is_some() // [1]
 
-        // [1] `calendar` and `raw` can be missing only if there's no internet
-        //     connection - but if there was no internet connection, we wouldn't
-        //     be able to confirm that the invite is fresh
+        // [1] `raw` can be missing only if there's no internet connection - but
+        //     if there was no internet connection, we wouldn't be able to
+        //     confirm that the invite is fresh
         //
-        //     this makes those checks overzealous, but it's still nice to have
-        //     them as a safeguard as the rsvp answering code requires for both
-        //     of those properties to be present (`.unwrap()`)
+        //     this makes this check overzealous, but it's still nice to have it
+        //     as a safeguard as the rsvp answering code requires access to the
+        //     raw data
     }
 }
 
@@ -485,36 +503,29 @@ impl RsvpIntent {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct RsvpAnswer<'a> {
-    pub now: Zoned,
-    pub email: &'a str,
-    pub status: RsvpAnswerStatus,
-}
-
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub enum RsvpAnswerStatus {
+pub enum RsvpAnswer {
     Maybe,
     No,  // aka "rejected"
     Yes, // aka "accepted"
 }
 
-impl From<RsvpAnswerStatus> for CalendarAttendeeStatus {
-    fn from(value: RsvpAnswerStatus) -> Self {
+impl From<RsvpAnswer> for CalendarAttendeeStatus {
+    fn from(value: RsvpAnswer) -> Self {
         match value {
-            RsvpAnswerStatus::Maybe => CalendarAttendeeStatus::Maybe,
-            RsvpAnswerStatus::No => CalendarAttendeeStatus::No,
-            RsvpAnswerStatus::Yes => CalendarAttendeeStatus::Yes,
+            RsvpAnswer::Maybe => CalendarAttendeeStatus::Maybe,
+            RsvpAnswer::No => CalendarAttendeeStatus::No,
+            RsvpAnswer::Yes => CalendarAttendeeStatus::Yes,
         }
     }
 }
 
-impl From<RsvpAnswerStatus> for ical::PartStat {
-    fn from(value: RsvpAnswerStatus) -> Self {
+impl From<RsvpAnswer> for ical::PartStat {
+    fn from(value: RsvpAnswer) -> Self {
         match value {
-            RsvpAnswerStatus::Maybe => ical::PartStat::Tentative,
-            RsvpAnswerStatus::No => ical::PartStat::Declined,
-            RsvpAnswerStatus::Yes => ical::PartStat::Accepted,
+            RsvpAnswer::Maybe => ical::PartStat::Tentative,
+            RsvpAnswer::No => ical::PartStat::Declined,
+            RsvpAnswer::Yes => ical::PartStat::Accepted,
         }
     }
 }
@@ -592,6 +603,9 @@ pub enum RsvpError {
 
     #[error("Invitation can't be answered")]
     NonAnswerable,
+
+    #[error("User has not been invited to this event")]
+    NotInvited,
 
     #[error("{0}")]
     Api(#[from] ApiServiceError),
