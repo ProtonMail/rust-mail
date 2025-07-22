@@ -1,3 +1,4 @@
+use derive_more::Display;
 use proton_core_common::datatypes::LocalLabelId;
 use stash::stash::{StashError, Tether};
 
@@ -12,13 +13,15 @@ use crate::{
 /// This is used to differentiate between online, offline, not synced and none states.
 /// Which can dynamically change based on the remote availability of the data.
 ///
-#[derive(Debug)]
+#[derive(Debug, Display)]
 pub enum MailScrollerState<T: ScrollData> {
     /// The data is source is ordered and synced with the server.
+    #[display("Online")]
     Online(CachedScrollData<T>),
 
     /// Partially synced data, where the ordered data is synced with the server.
     /// But server is not available so we have to rely on the unordered data.
+    #[display("Offline")]
     Offline {
         ordered: CachedScrollData<T>,
         unordered: CachedScrollData<T>,
@@ -26,10 +29,8 @@ pub enum MailScrollerState<T: ScrollData> {
 
     /// The data is not synced with the server. This is used when the server is not available.
     /// And we have to rely on the unordered data.
+    #[display("NotSynced")]
     NotSynced(CachedScrollData<T>),
-
-    /// The data is not available and/or is not yet initialized
-    None,
 }
 
 impl<T: ScrollData> MailScrollerState<T> {
@@ -44,7 +45,16 @@ impl<T: ScrollData> MailScrollerState<T> {
 
         match ordered {
             Some(ordered) => Ok(MailScrollerState::Online(ordered)),
-            None => Ok(MailScrollerState::None),
+            None => {
+                let scroll_order =
+                    LabelScrollOrder::for_local_label_id(local_label_id, tether).await?;
+                Ok(MailScrollerState::new_not_synced(
+                    local_label_id,
+                    unread,
+                    page_size,
+                    scroll_order,
+                ))
+            }
         }
     }
 
@@ -84,15 +94,6 @@ impl<T: ScrollData> MailScrollerState<T> {
         }
     }
 
-    /// If state is offline, return the mutable reference to the unordered data.
-    pub fn offline_mut(&mut self) -> Option<&mut CachedScrollData<T>> {
-        match self {
-            MailScrollerState::Offline { unordered, .. } => Some(unordered),
-            MailScrollerState::NotSynced(unordered) => Some(unordered),
-            _ => None,
-        }
-    }
-
     /// Try to switch from online to offline state.
     pub fn to_offline(&mut self) {
         if let MailScrollerState::Online(ordered) = self {
@@ -117,11 +118,6 @@ impl<T: ScrollData> MailScrollerState<T> {
         matches!(self, MailScrollerState::NotSynced { .. })
     }
 
-    /// Check if the state is none
-    pub fn is_none(&self) -> bool {
-        matches!(self, MailScrollerState::None)
-    }
-
     /// Try to sync ordered data end cursor.
     pub async fn sync(
         &mut self,
@@ -132,7 +128,7 @@ impl<T: ScrollData> MailScrollerState<T> {
     ) -> Result<(), StashError> {
         match self {
             MailScrollerState::Online(ordered) | MailScrollerState::Offline { ordered, .. } => {
-                if !ordered.has_more_than_a_page(tether).await? {
+                if !ordered.has_next_page(tether).await? {
                     if let Err(e) = ordered.update(tether).await {
                         tracing::error!(
                             "Could not update scroller end cursor, it has been removed: `{e}`"

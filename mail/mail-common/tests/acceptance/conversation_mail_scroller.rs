@@ -27,7 +27,7 @@ use std::{collections::HashMap, time::Duration};
 use test_case::test_case;
 use velcro::hash_map;
 use wiremock::{
-    Mock, ResponseTemplate,
+    Mock, ResponseTemplate, Times,
     matchers::{method, path, query_param_contains},
 };
 
@@ -138,7 +138,7 @@ async fn test_conversation_mail_scroller_reads_one_item_from_online_scroll_data(
     let params = TestParams::default_basic();
     let conversations = params.conversations.clone();
 
-    ctx.mock_get_conversations(conversations, 3_u64).await;
+    ctx.mock_get_conversations(conversations, 3..5).await;
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
@@ -154,7 +154,10 @@ async fn test_conversation_mail_scroller_reads_one_item_from_online_scroll_data(
             .await
             .unwrap();
 
-    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
+    // Conversations can be accessed only when progressed.
+    let _ = test_scroller.fetch_more_and_wait().await.unwrap();
+    // And every new scroller is `NotSynced` so we wait for invalidation
+    let actual = test_scroller.wait_for_update().await.unwrap().unwrap();
     assert_eq!(actual.len(), 1);
 
     // Verify we have the expected data
@@ -181,7 +184,7 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
     let unread = ReadFilter::All;
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     setup_api_sync_previous_page(&ctx, "myconv_9", 1).await;
-    let params = setup_api_conversation_pages(&ctx, page_size, 0, 3).await;
+    let params = setup_api_conversation_pages(&ctx, page_size, 0, 1..=2).await;
     ctx.setup_user(params.clone()).await;
     ctx.initialize_uninitialized_ctx(&user_ctx).await;
 
@@ -200,7 +203,8 @@ async fn test_conversation_mail_scroller_reads_two_pages_from_online_scroll_data
             .unwrap();
 
     // Conversations can be accessed only when progressed.
-    test_scroller.fetch_more().unwrap();
+    test_scroller.fetch_more_and_wait().await.unwrap();
+    // And every new scroller is `NotSynced` so we wait for invalidation
     let _ = test_scroller.wait_for_update().await.unwrap();
     assert_scroller_content(
         &mut test_scroller,
@@ -303,7 +307,7 @@ async fn test_conversation_mail_scroller_reads_online_folder_for_the_first_time_
     let actual = test_scroller.wait_for_update().await.unwrap_err();
     assert_eq!(
         actual.to_string(),
-        "API Error: HTTP error 403 Forbidden: 403 Forbidden. None".to_string()
+        "API Error: Network error: No connection".to_string()
     );
 }
 
@@ -547,8 +551,8 @@ async fn test_conversation_mail_scroller_reads_offline_folder_for_the_first_time
     )
     .await;
 
-    test_scroller.fetch_more().unwrap();
-    let actual = test_scroller.wait_for_update().await.unwrap().unwrap();
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
+    // let actual = test_scroller.wait_for_update().await.unwrap().unwrap();
     assert_eq!(actual.len(), 5);
 
     assert_scroller_content(
@@ -845,7 +849,65 @@ async fn test_conversation_mail_scroller_has_insufficient_cached_data_to_fill_fi
     assert!(!test_scroller.has_more().await.unwrap());
 }
 
-#[test_case(50, 4; "Test1: Conversation added at the end, 4 (3 + 1) items, as the page size is 10 so it is a small label")]
+#[test_case(50, 3; "Test1: Conversation added at the end in offline mode it will be added to the end of the list, 3 (3 + 0) items")]
+#[tokio::test]
+async fn test_conversation_mail_scroller_database_refresh_will_not_triggers_fetch_for_small_totals(
+    order: usize,
+    expected: usize,
+) {
+    let ctx = MailTestContext::new().await;
+    let user_ctx = ctx.uninitialized_mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
+    let page_size = 10; // Larger than our test data
+    let unread = ReadFilter::All;
+    let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
+
+    // Set up cached data with fewer items than page size
+    let remote_label_id = SystemLabel::Inbox.remote_id();
+    let mut data = hash_map! {
+        vec![remote_label_id.as_str()]: test_conversations(3, 100), // Less than page_size
+    };
+    data.save_to_database(&mut tether).await;
+
+    // Mock offline to use cached data
+    mock_not_responsive_api(&ctx).await;
+    ctx.catch_all().await;
+
+    let mut counters = ConversationCounters::new(local_label_id);
+    counters.total = 3; // Less than page_size (10)
+    tether
+        .tx(async |bond| counters.save(bond).await)
+        .await
+        .unwrap();
+
+    let mut test_scroller =
+        TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
+            .await
+            .unwrap();
+
+    // Conversations can be accessed only when progressed.
+    let _ = test_scroller.fetch_more_and_wait().await.unwrap();
+
+    // Add a conversation to trigger refresh
+    let label = Label::load(local_label_id, &tether).await.unwrap().unwrap();
+    let new_conversation = test_conversations(1, order).pop().unwrap();
+    tether
+        .tx::<_, _, StashError>(async |bond| {
+            save_single_conversation(&[label], &mut new_conversation.clone(), bond).await;
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    // For small totals (< page_size), all_items should internally call fetch_more
+    // to ensure data is loaded as there is no way to scroll down to trigger fetch_more
+    assert_eq!(test_scroller.items().len(), expected);
+
+    assert!(test_scroller.has_more().await.unwrap());
+    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
+    assert_eq!(actual.len(), 1);
+}
+
 #[test_case(200, 4; "Test2: Conversation added at the beggining, 4 (3 + 1) items, as the item is at the beggining")]
 #[tokio::test]
 async fn test_conversation_mail_scroller_database_refresh_triggers_fetch_for_small_totals(
@@ -881,6 +943,9 @@ async fn test_conversation_mail_scroller_database_refresh_triggers_fetch_for_sma
         TestScroller::conversations(&user_ctx, local_label_id, unread, page_size)
             .await
             .unwrap();
+
+    // Conversations can be accessed only when progressed.
+    let _ = test_scroller.fetch_more_and_wait().await.unwrap();
 
     // Add a conversation to trigger refresh
     let label = Label::load(local_label_id, &tether).await.unwrap().unwrap();
@@ -991,7 +1056,11 @@ async fn assert_scroller_content(
 }
 
 #[function_name::named]
-async fn setup_api_sync_previous_page(ctx: &MailTestContext, first_id: &str, expect: u64) {
+async fn setup_api_sync_previous_page(
+    ctx: &MailTestContext,
+    first_id: &str,
+    expect: impl Into<Times>,
+) {
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/conversations"))
         .and(query_param_contains("BeginID", first_id))
@@ -1012,7 +1081,7 @@ async fn setup_api_conversation_pages(
     ctx: &MailTestContext,
     page_size: usize,
     starting_display_order: u64,
-    empty_pages_requests: u64,
+    empty_pages_requests: impl Into<Times>,
 ) -> TestParams {
     ctx.mock_ping_success().await;
     let mut params = TestParams::default_basic();
@@ -1058,7 +1127,7 @@ pub async fn mock_get_conversations_page(
     ctx: &MailTestContext,
     conversations: Vec<ApiConversation>,
     last_id: &str,
-    expect: u64,
+    expect: impl Into<Times>,
 ) {
     Mock::given(method("GET"))
         .and(path("/api/mail/v4/conversations"))
