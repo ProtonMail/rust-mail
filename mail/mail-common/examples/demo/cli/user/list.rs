@@ -1,5 +1,5 @@
 use anyhow::Result;
-use proton_core_common::CoreAccountState;
+use proton_core_common::{CoreAccountState, db::account::CoreAccount};
 use proton_mail_common::MailContext;
 use std::sync::Arc;
 
@@ -13,15 +13,15 @@ impl Cmd {
     pub async fn run(self, ctx: Arc<MailContext>) -> Result<()> {
         let primary = ctx.get_primary_account().await?;
 
-        for acount in ctx.get_accounts().await? {
-            let Some(state) = ctx.get_account_state(acount.remote_id.clone()).await? else {
+        for account in ctx.get_accounts().await? {
+            let Some(state) = ctx.get_account_state(account.remote_id.clone()).await? else {
                 continue;
             };
 
-            if (primary.as_ref()).is_some_and(|p| p.remote_id == acount.remote_id) {
-                print!("* {}", acount.name_or_addr);
+            if (primary.as_ref()).is_some_and(|p| p.remote_id == account.remote_id) {
+                print!("* {}", get_account_name(&account));
             } else {
-                print!("  {}", acount.name_or_addr);
+                print!("  {}", get_account_name(&account));
             }
 
             match state {
@@ -35,4 +35,16 @@ impl Cmd {
 
         Ok(())
     }
+}
+
+fn get_account_name(account: &CoreAccount) -> &str {
+    if let Some(addr) = &account.primary_addr {
+        return addr;
+    }
+
+    if let Some(name) = &account.username {
+        return name;
+    }
+
+    &account.name_or_addr
 }

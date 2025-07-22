@@ -5,6 +5,7 @@ use proton_core_api::services::proton::muon::util::DurationExt;
 use proton_core_api::session::Config;
 use proton_core_api::verification::ChallengeNotifier;
 use proton_core_common::CoreAccountState;
+use proton_core_common::db::account::CoreAccount;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::os::KeyChain;
 use proton_log_service::{Config as LogConfig, LogService};
@@ -65,7 +66,7 @@ impl MailContextExt for Arc<MailContext> {
 
 async fn get_user_ctx(ctx: &Arc<MailContext>, username: &str) -> Result<Arc<MailUserContext>> {
     for acc in ctx.get_accounts().await? {
-        if acc.name_or_addr != username {
+        if !match_account(&acc, username) {
             continue;
         }
 
@@ -90,7 +91,7 @@ async fn get_user_ctx(ctx: &Arc<MailContext>, username: &str) -> Result<Arc<Mail
 async fn new_or_resume_login_flow(ctx: &MailContext, username: Option<&str>) -> Result<LoginFlow> {
     for acc in ctx.get_accounts().await? {
         if let Some(username) = username {
-            if username != acc.name_or_addr {
+            if !match_account(&acc, username) {
                 continue;
             }
         }
@@ -106,4 +107,24 @@ async fn new_or_resume_login_flow(ctx: &MailContext, username: Option<&str>) -> 
     }
 
     Ok(ctx.new_login_flow().await?)
+}
+
+fn match_account(account: &CoreAccount, query: &str) -> bool {
+    if account
+        .username
+        .as_deref()
+        .is_some_and(|name| name == query)
+    {
+        return true;
+    }
+
+    if account
+        .primary_addr
+        .as_deref()
+        .is_some_and(|addr| addr == query)
+    {
+        return true;
+    }
+
+    account.name_or_addr == query
 }
