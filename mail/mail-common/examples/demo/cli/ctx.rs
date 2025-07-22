@@ -97,7 +97,6 @@ async fn new_or_resume_login_flow(ctx: &MailContext, username: Option<&str>) -> 
         }
 
         let session = match ctx.get_account_state(acc.remote_id.clone()).await? {
-            Some(CoreAccountState::LoggedIn(_)) => Err(anyhow!("account already logged in"))?,
             Some(CoreAccountState::NeedMbp(mut s)) => s.pop().unwrap(),
             Some(CoreAccountState::NeedTfa(mut s)) => s.pop().unwrap(),
             _ => continue,

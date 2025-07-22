@@ -337,6 +337,12 @@ pub enum LoginError {
     /// Returned if the FIDO2 challenge response fails.
     FlowFido(UserApiServiceError),
 
+    /// Returned if the auth is missing from the store after login.
+    MissingSession,
+
+    /// Returned if a duplicate session is found in the store after login.
+    DuplicateSession(String),
+
     /// Returned if we fail to fetch the user info after login.
     UserFetch(UserApiServiceError),
 
@@ -416,6 +422,9 @@ impl From<login_api::LoginError> for LoginError {
             login_api::LoginError::AddressSetup(e) => LoginError::AddressSetup(e.to_string()),
             login_api::LoginError::AddressKeySetup(e) => LoginError::AddressKeySetup(e.to_string()),
             login_api::LoginError::AddressKeySetupAborted => LoginError::AddressKeySetupAborted,
+
+            login_api::LoginError::MissingSession => LoginError::MissingSession,
+            login_api::LoginError::DuplicateSession(id) => LoginError::DuplicateSession(id),
 
             login_api::LoginError::MissingPrimaryKey
             | login_api::LoginError::KeySecretDecryption

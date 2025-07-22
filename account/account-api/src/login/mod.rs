@@ -79,6 +79,14 @@ pub enum LoginError {
     #[error("Address key setup aborted")]
     AddressKeySetupAborted,
 
+    /// Returned if the auth is missing from the store after login.
+    #[error("Failed to find auth in store")]
+    MissingSession,
+
+    /// Returned if a duplicate session is found in the store after login.
+    #[error("Duplicate session found in store")]
+    DuplicateSession(String),
+
     /// Returned if the user keyring is invalid.
     #[error("Failed to find primary key in user keyring")]
     MissingPrimaryKey,

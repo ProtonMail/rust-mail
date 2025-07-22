@@ -183,6 +183,8 @@ impl WantLogin {
     ) -> Result<State, LoginError> {
         match self.flow.login_with_extra(user, pass.as_str(), info).await {
             LoginFlow::Ok(client, flow_data) => {
+                check_store_auth(&self.parts, &flow_data.user_id).await?;
+
                 info!("Login flow does not require 2FA");
                 self.observability.record(AuthV4RequestMetric::new(
                     ApiServiceObservabilityResponse::Success,
@@ -198,6 +200,8 @@ impl WantLogin {
             }
 
             LoginFlow::TwoFactor(flow, flow_data) => {
+                check_store_auth(&self.parts, &flow_data.user_id).await?;
+
                 info!("Login flow requires 2FA");
                 self.observability.record(AuthV4RequestMetric::new(
                     ApiServiceObservabilityResponse::Success,
@@ -251,6 +255,27 @@ impl QrLoginInitiateFork {
             status: ApiServiceObservabilityResponse::NetworkError,
         }
     }
+}
+
+// Check that the auth was saved by muon to the store.
+// Our db has the constraint that each account can have at most one session.
+// If a user tries to log in with the same account twice, the second session will be rejected.
+// However, muon fails silently if it cannot write to the store (not my fault).
+// So here we check that muon actually managed to save the auth.
+async fn check_store_auth(parts: &SessionParts, user_id: &str) -> Result<(), LoginError> {
+    let lock = parts.store.read().await;
+
+    if let Auth::Internal { .. } = lock.get_auth().await {
+        debug!("Session found in store");
+        return Ok(());
+    }
+
+    if let Some(id) = lock.get_session_id(&UserId::from(user_id)).await? {
+        warn!(?id, "Found existing session in database");
+        return Err(LoginError::DuplicateSession(id.into_inner()));
+    }
+
+    Err(LoginError::MissingSession)
 }
 
 fn get_auth_info(
