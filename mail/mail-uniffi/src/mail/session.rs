@@ -929,7 +929,7 @@ impl MailSession {
     pub async fn to_user_context(
         &self,
         ffi_flow: Arc<LoginFlow>,
-    ) -> Result<Arc<MailUserSession>, ProtonError> {
+    ) -> Result<Arc<MailUserSession>, UserContextError> {
         let core_flow = ffi_flow.inner_flow();
         let mut guard = core_flow.lock().await;
         async_runtime()
@@ -941,7 +941,7 @@ impl MailSession {
                     .map_err(RealProtonMailError::from)
                     .await
             })
-            .map_err(ProtonError::from)
+            .map_err(UserContextError::from)
     }
 }
 
