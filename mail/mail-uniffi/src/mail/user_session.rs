@@ -126,51 +126,30 @@ impl MailUserSession {
         .map_err(UserContextError::from)
     }
 
-    /// Fork the current session.
+    /// Fork the current session for a child with the given platform and product.
     ///
     /// This call has to be made from a parent session, and forks the current
     /// logged-in user session in order to provide a new session for the same
     /// user.
     ///
     /// If successful, this will return the "Selector" string for the new
-    /// session.
+    /// session. The child must present an app version that matches the platform
+    /// and product.
     ///
     /// # Errors
     ///
     /// Any of the [`MailSessionError::Http`] possibilities could be returned if
     /// there is a problem with the HTTP request.
     ///
-    pub async fn fork(&self) -> Result<String, UserContextError> {
+    pub async fn fork(
+        &self,
+        platform: String,
+        product: String,
+    ) -> Result<String, UserContextError> {
         let ctx = self.ctx()?;
         uniffi_async(async move {
             ctx.session()
-                .fork_with_version("web-account-lite".to_owned())
-                .await
-                .map_err(RealProtonMailError::from)
-        })
-        .await
-        .map_err(UserContextError::from)
-    }
-
-    /// Fork the current session for a child with the given app version.
-    ///
-    /// This call has to be made from a parent session, and forks the current
-    /// logged-in user session in order to provide a new session for the same
-    /// user.
-    ///
-    /// If successful, this will return the "Selector" string for the new
-    /// session.
-    ///
-    /// # Errors
-    ///
-    /// Any of the [`MailSessionError::Http`] possibilities could be returned if
-    /// there is a problem with the HTTP request.
-    ///
-    pub async fn fork_with_version(&self, app_version: String) -> Result<String, UserContextError> {
-        let ctx = self.ctx()?;
-        uniffi_async(async move {
-            ctx.session()
-                .fork_with_version(app_version)
+                .fork(platform, product)
                 .await
                 .map_err(RealProtonMailError::from)
         })

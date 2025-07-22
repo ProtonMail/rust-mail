@@ -305,34 +305,26 @@ impl Session {
         Builder::new()
     }
 
-    /// Fork the current session.
-    ///
-    /// This call has to be made from a parent session, and forks the current
-    /// logged-in user session in order to provide a new session for the same
-    /// user.
-    ///
-    /// If successful, this will return the "Selector" string for the new
-    /// session.
+    /// Fork the current session for a child with the given platform and product.
+    /// If successful, returns a selector by which the child can acquire the new
+    /// session. The child must present an app version that matches the platform
+    /// and product.
     ///
     /// # Errors
     ///
     /// Any of the [`ApiServiceError`] variants could be returned if there is a
     /// problem with the HTTP request.
     ///
-    pub async fn fork(&self) -> ApiServiceResult<String> {
-        self.fork_with_version(&self.config.app_version).await
-    }
+    pub async fn fork(
+        &self,
+        platform: impl AsRef<str>,
+        product: impl AsRef<str>,
+    ) -> ApiServiceResult<String> {
+        let platform = platform.as_ref();
+        let product = product.as_ref();
+        let version = format!("{platform}-{product}");
 
-    /// Fork the current session with a user and a version.
-    /// for more details see [`Fork`]
-    ///
-    /// # Errors
-    ///
-    /// Any of the [`ApiServiceError`] variants could be returned if there is a
-    /// problem with the HTTP request.
-    ///
-    pub async fn fork_with_version(&self, version: impl AsRef<str>) -> ApiServiceResult<String> {
-        match self.client.clone().fork(version.as_ref()).send().await {
+        match self.client.clone().fork(version).send().await {
             ForkFlowResult::Success(_, selector) => Ok(selector),
             ForkFlowResult::Failure { reason, .. } => Err(muon::Error::from(reason))?,
         }
