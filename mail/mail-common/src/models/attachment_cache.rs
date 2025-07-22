@@ -157,13 +157,19 @@ impl Attachment {
     ///
     /// Returns an error if the encrypted attachment fetching or decryption fails.
     /// Signature verification failures are not returned as errors.
+    #[tracing::instrument(skip_all, fields(id=?attachment_id))]
     pub async fn get_attachment(
         ctx: &MailUserContext,
         attachment_id: LocalAttachmentId,
     ) -> MailContextResult<DecryptedAttachment> {
-        let attachment = Self::sync(ctx, attachment_id).await?;
+        let attachment = Self::sync(ctx, attachment_id)
+            .await
+            .inspect_err(|e| error!("Failed to sync attachment: {e:?}"))?;
         let mut tether = ctx.user_stash().connection();
-        let data_path = attachment.content_path(ctx, &mut tether).await?;
+        let data_path = attachment
+            .content_path(ctx, &mut tether)
+            .await
+            .inspect_err(|e| error!("Failed to get attachment path: {e:?}"))?;
         Ok(DecryptedAttachment {
             attachment_metadata: AttachmentMetadata {
                 local_id: Some(attachment_id),
@@ -265,6 +271,7 @@ impl Attachment {
         data: Vec<u8>,
         bond: &Bond<'_>,
     ) -> MailContextResult<PathBuf> {
+        tracing::debug!("Storing attachment in cache");
         let (path, path_string) = Self::attachment_cache_file_path(ctx, id, name).await?;
 
         let data_len = data.len();
@@ -358,6 +365,7 @@ impl Attachment {
             }
         };
 
+        tracing::info!("Fetching {remote_attachment_id:?} from server");
         let encrypted_content = Attachment::fetch_content(remote_attachment_id.clone(), ctx.api())
             .await
             .map_err(|e| {

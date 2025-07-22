@@ -189,6 +189,7 @@ impl ScrollerEq for Message {
             && self.snooze_time == other.snooze_time
             && self.unread == other.unread
             && self.custom_labels == other.custom_labels
+            && self.attachments_metadata == other.attachments_metadata
     }
 }
 
