@@ -125,14 +125,13 @@ where
         parent.chain(children)
     };
 
-    let steps: Vec<_> = events
+    let steps = events
         .map(|(event, event_ty, event_idx)| {
             plan_event(
                 pgp, keys, calendar, event, event_ty, event_idx, answer, token,
             )
         })
-        .flatten_ok()
-        .collect::<RsvpResult<_>>()?;
+        .flatten_ok();
 
     // For Proton-to-Proton invites the most important action is updating the
     // calendar event - sending email is sorta optional in the sense that we do
@@ -142,13 +141,12 @@ where
     // This situation is reversed for external invites where sending the reply
     // is the most important bit - if it fails, we don't want to update user's
     // calendar.
+    let notify = iter::once(Ok(Step::NotifyOrganizer));
+
     if event.raw().is_proton_proton_invite {
-        Ok(steps
-            .into_iter()
-            .chain(iter::once(Step::NotifyOrganizer))
-            .collect())
+        steps.chain(notify).collect()
     } else {
-        Ok(iter::once(Step::NotifyOrganizer).chain(steps).collect())
+        notify.chain(steps).collect()
     }
 }
 
