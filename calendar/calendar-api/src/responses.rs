@@ -122,6 +122,17 @@ impl CalendarEvent {
     pub fn attendees_event(&self) -> &CalendarEventPayload {
         &self.attendees_events[0]
     }
+
+    #[must_use]
+    pub fn attendee_status(&self, token: &CalendarAttendeeToken) -> Option<CalendarAttendeeStatus> {
+        self.attendees.iter().find_map(|att| {
+            if att.token == *token {
+                Some(att.status)
+            } else {
+                None
+            }
+        })
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

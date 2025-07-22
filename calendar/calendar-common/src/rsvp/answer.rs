@@ -68,7 +68,7 @@ enum Step {
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum EventType {
     Parent,
-    Child, // aka single-edit
+    Child, // aka single edit
 }
 
 #[instrument(skip_all)]
@@ -367,11 +367,14 @@ where
     P: PGPProviderSync,
     M: RsvpMailSender,
 {
-    fn get_event<'a>(event: &'a AnswerableRsvpEvent, idx: Option<usize>) -> &'a CalendarEvent {
+    fn get_event<'a>(
+        event: &'a mut AnswerableRsvpEvent,
+        idx: Option<usize>,
+    ) -> &'a mut CalendarEvent {
         match idx {
             // Unwrap-safety: We generate indices ourselves, they are in bounds
-            Some(idx) => &event.children[idx],
-            None => event.raw(),
+            Some(idx) => &mut event.children[idx],
+            None => event.raw_mut(),
         }
     }
 
@@ -394,15 +397,15 @@ where
                 exec_update_attendee(
                     api,
                     now,
-                    get_event(&event, event_idx),
+                    get_event(&mut event, event_idx),
                     &att_id,
                     att_old_status,
                     att_new_status,
                 )
                 .await?;
 
-                // Update the event's object as well so that the caller can
-                // see the answer without having to reload the RSVP object.
+                // Update the [`RsvpEvent`] object so that the updated status is
+                // visible on the user interface.
                 //
                 // We do this only for the parent event (`event_idx = None`),
                 // because that's the only event for which we've got the
@@ -422,8 +425,13 @@ where
                 event_color,
                 event_notifs,
             } => {
-                exec_update_event(api, get_event(&event, event_idx), event_color, event_notifs)
-                    .await?;
+                exec_update_event(
+                    api,
+                    get_event(&mut event, event_idx),
+                    event_color,
+                    event_notifs,
+                )
+                .await?;
             }
 
             Step::NotifyOrganizer => {
@@ -497,8 +505,9 @@ where
     )
     .await?;
 
-    // Modify the invitation object as well, in case user changes the reply
-    // without refreshing the view first
+    // Update the [`CalendarEvent`] object so that if user changes their reply
+    // without refreshing the RSVP, our logic is aware of the updated key
+    // packets
     event.raw_mut().address_key_packet = None;
     event.raw_mut().shared_key_packet = Some(key_packet.into_base64());
 
@@ -509,7 +518,7 @@ where
 async fn exec_update_attendee(
     api: &Proton,
     now: &Zoned,
-    event: &CalendarEvent,
+    event: &mut CalendarEvent,
     att_id: &CalendarAttendeeId,
     att_old_status: CalendarAttendeeStatus,
     att_new_status: CalendarAttendeeStatus,
@@ -529,6 +538,15 @@ async fn exec_update_attendee(
         now,
     )
     .await?;
+
+    // Update the [`CalendarEvent`] object so that if user changes their reply
+    // without refreshing the RSVP, our logic is aware of the updated attendance
+    // statuses
+    for att in &mut event.attendees {
+        if att.id == *att_id {
+            att.status = att_new_status;
+        }
+    }
 
     Ok(())
 }

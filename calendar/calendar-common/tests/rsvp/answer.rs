@@ -156,6 +156,28 @@ async fn basic(case: fn() -> TestCase) {
     );
 }
 
+/// Make sure that changing answer on a recurring event resets single edits with
+/// different answers.
+///
+/// We're given the following events:
+///
+/// - ice bucket challenge
+///   (recurring event, answered `Maybe`)
+///
+/// - ice bucket challenge with eminem
+///   (single edit, answered `Yes`)
+///
+/// - ice bucket challenge with vsauce
+///   (single edit, answered `No`)
+///
+/// - ice bucket challenge with linus
+///   (single edit, unanswered)
+///
+/// - ice bucket challenge with bill
+///   (single edit, cancelled)
+///
+/// We then change the answer on the recurring event to `Yes` which should
+/// cascade to the single edits.
 #[tokio::test]
 #[allow(clippy::items_after_statements)]
 #[allow(clippy::too_many_lines)]
@@ -195,13 +217,13 @@ async fn recurring_with_single_edits() {
             .with_attendee(
                 FOO_ATTENDEE_ID,
                 FOO_ATTENDEE_TOKEN,
-                CalendarAttendeeStatus::Yes,
+                CalendarAttendeeStatus::No,
             )
             .with_shared_event(SHARED_EVENT)
             .with_attendees_event(ATTENDEES_EVENT)
     });
 
-    // Single edit #0, answered "yes"
+    // Single edit #0, answered `Yes`
     let child0 = world.event(|event| {
         const SHARED_EVENT: &str = indoc! {"
             BEGIN:VCALENDAR
@@ -232,7 +254,7 @@ async fn recurring_with_single_edits() {
             .with_attendees_event(ATTENDEES_EVENT)
     });
 
-    // Single edit #1, answered "no"
+    // Single edit #1, answered `No`
     let child1 = world.event(|event| {
         const SHARED_EVENT: &str = indoc! {"
             BEGIN:VCALENDAR
@@ -257,7 +279,7 @@ async fn recurring_with_single_edits() {
             .with_attendee(
                 FOO_ATTENDEE_ID,
                 FOO_ATTENDEE_TOKEN,
-                CalendarAttendeeStatus::Yes,
+                CalendarAttendeeStatus::Maybe,
             )
             .with_shared_event(SHARED_EVENT)
             .with_attendees_event(ATTENDEES_EVENT)
@@ -424,8 +446,8 @@ async fn recurring_with_single_edits() {
         )
         .await;
 
-    // Answer to the first single edit remains unchanged (Yes -> Yes), but the
-    // second single edit gets reset from `No` to `Unanswered`
+    // Answer to the first single edit remains unchanged (`Yes` -> `Yes`), but
+    // the second single edit gets reset from `No` to `Unanswered`
     world
         .ctx
         .mock_web_server
@@ -493,6 +515,101 @@ async fn recurring_with_single_edits() {
             "}
         }),
         mail
+    );
+
+    // Bar's answer on the parent event changes from `Maybe` to `Yes`
+    assert_eq!(
+        CalendarAttendeeStatus::Yes,
+        event
+            .raw
+            .as_ref()
+            .unwrap()
+            .attendee_status(&BAR_ATTENDEE_TOKEN.into())
+            .unwrap()
+    );
+
+    // Foo's answer on the parent event remains unchanged since they are the
+    // organizer
+    assert_eq!(
+        CalendarAttendeeStatus::No,
+        event
+            .raw
+            .as_ref()
+            .unwrap()
+            .attendee_status(&FOO_ATTENDEE_TOKEN.into())
+            .unwrap()
+    );
+
+    // Bar's answer on the single edit #0 remains unchanged (i.e. not reset)
+    // since it already was `Yes`
+    assert_eq!(
+        CalendarAttendeeStatus::Yes,
+        event.children[0]
+            .attendee_status(&BAR_ATTENDEE_TOKEN.into())
+            .unwrap()
+    );
+
+    // Foo's answer on the parent event remains unchanged since they are the
+    // organizer
+    assert_eq!(
+        CalendarAttendeeStatus::Yes,
+        event.children[0]
+            .attendee_status(&FOO_ATTENDEE_TOKEN.into())
+            .unwrap()
+    );
+
+    // Bar's answer on the single edit #1 gets reset since it was `No` which
+    // doesn't match the new answer on the parent event (`Yes`)
+    assert_eq!(
+        CalendarAttendeeStatus::Unanswered,
+        event.children[1]
+            .attendee_status(&BAR_ATTENDEE_TOKEN.into())
+            .unwrap()
+    );
+
+    // Foo's answer on the single edit #1 remains unchanged since they are the
+    // organizer
+    assert_eq!(
+        CalendarAttendeeStatus::Maybe,
+        event.children[1]
+            .attendee_status(&FOO_ATTENDEE_TOKEN.into())
+            .unwrap()
+    );
+
+    // Bar's answer on the single edit #2 remains unchanged since it already was
+    // unanswered
+    assert_eq!(
+        CalendarAttendeeStatus::Unanswered,
+        event.children[2]
+            .attendee_status(&BAR_ATTENDEE_TOKEN.into())
+            .unwrap()
+    );
+
+    // Foo's answer on the single edit #2 remains unchanged since they are the
+    // organizer
+    assert_eq!(
+        CalendarAttendeeStatus::Yes,
+        event.children[2]
+            .attendee_status(&FOO_ATTENDEE_TOKEN.into())
+            .unwrap()
+    );
+
+    // Bar's answer on the single edit #3 remains unchanged since the event was
+    // cancelled
+    assert_eq!(
+        CalendarAttendeeStatus::No,
+        event.children[3]
+            .attendee_status(&BAR_ATTENDEE_TOKEN.into())
+            .unwrap()
+    );
+
+    // Foo's answer on single edit #3 remains unchanged since they are the
+    // organizer (plus the event got cancelled)
+    assert_eq!(
+        CalendarAttendeeStatus::Yes,
+        event.children[3]
+            .attendee_status(&FOO_ATTENDEE_TOKEN.into())
+            .unwrap()
     );
 }
 
