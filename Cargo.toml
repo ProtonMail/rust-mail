@@ -12,6 +12,7 @@ members = [
   "core/core-common",
   "core/event-loop",
   "shared/ical",
+  "shared/ical-fuzz",
   "shared/ical-cli",
   "shared/log-service",
   "shared/proton-canonical-email",
@@ -130,6 +131,7 @@ walkdir = "2.5.0"
 wiremock = "0.6.2"
 wiremock-multipart = "1.0.1"
 zeroize = { version = "1.8.1", features = ["zeroize_derive"] }
+libfuzzer-sys = "0.4"
 
 [workspace.dependencies.proton-account-api]
 version = "0.1"
