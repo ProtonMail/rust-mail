@@ -29,13 +29,12 @@ impl DeleteAllMessagesInLabel {
 impl Action for DeleteAllMessagesInLabel {
     const TYPE: Type = Type("delete_all_messages_in_label");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = MailActionError;
-
     type Context = MailUserContext;
 }
 
@@ -55,6 +54,7 @@ impl proton_action_queue::action::Handler for Handler {
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         let ids = Message::ids_in_label(action.local_id, tx).await?;
+
         Message::mark_deleted(ids.clone(), tx).await?;
         action.ids_for_rollback = ids;
 
@@ -69,6 +69,7 @@ impl proton_action_queue::action::Handler for Handler {
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Message::mark_undeleted(mem::take(&mut action.ids_for_rollback), tx).await?;
+
         Ok(())
     }
 
@@ -88,6 +89,8 @@ impl proton_action_queue::action::Handler for Handler {
 
         info!("Deleting all messages in {id}");
         ctx.api().delete_all_messages_in_label(id).await?;
+
+
         Ok(())
     }
 }

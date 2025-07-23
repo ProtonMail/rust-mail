@@ -40,16 +40,14 @@ impl Discard {
 impl Action for Discard {
     const TYPE: Type = Type("discard_draft");
     const VERSION: u32 = 1;
-
     const PRIORITY: Priority = Priority::High;
     const GROUP: ActionGroup = SEND_ACTION_GROUP;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = DiscardHandler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = MailContextError;
-
     type Context = MailUserContext;
 }
 
@@ -67,6 +65,7 @@ impl proton_action_queue::action::Handler for DiscardHandler {
         bond: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
         info!("Discarding draft {}", action.metadata_id);
+
         let Some(metadata) = DraftMetadata::find_by_id(action.metadata_id, bond)
             .await
             .inspect_err(|e| {
@@ -90,6 +89,7 @@ impl proton_action_queue::action::Handler for DiscardHandler {
 
         action.local_message_id = metadata.local_message_id;
         action.local_conversation_id = metadata.local_conversation_id;
+
         Ok(())
     }
 

@@ -21,6 +21,7 @@ use std::mem;
 pub struct LabelAs(pub LabelAsData<Message>);
 
 pub struct Converter;
+
 impl VersionConverter for Converter {
     type Output = LabelAs;
 
@@ -42,10 +43,10 @@ impl VersionConverter for Converter {
 impl Action for LabelAs {
     const TYPE: Type = Type("label_messages_as");
     const VERSION: u32 = 2;
+
     type VersionConverter = Converter;
     type Handler = Handler;
     type RemoteOutput = ();
-
     type LocalOutput = bool;
     type Error = MailActionError;
     type Context = MailUserContext;
@@ -70,6 +71,7 @@ impl ActionHandler for Handler {
         let total = MessageCounters::load(action.0.source_label_id, tx)
             .await?
             .map_or(0, |x| x.total);
+
         Ok(total == 0)
     }
 
@@ -104,12 +106,14 @@ pub struct UndoLabelAsMessages {
 impl UndoLabelAsMessages {
     pub async fn undo(self, queue: &Queue, tether: &Tether) -> Result<(), AppError> {
         let mut action = self.action;
+
         let Err(e) = queue.cancel(self.id).await else {
             // The undoing is done by the revert_local of the action.
             return Ok(());
         };
 
         tracing::error!("{e:?}");
+
         // The queue couldn't revert. This means that we're on our own to undo this.
         // Let's create the opposite action: Swap add and remove.
         mem::swap(&mut action.0.add, &mut action.0.remove);
@@ -119,15 +123,16 @@ impl UndoLabelAsMessages {
             let archive = Label::resolve_local_label_id(LabelId::archive(), tether).await?;
 
             let mut all = HashSet::new();
+
             for &i in &action.0.add {
                 all.insert(i.id);
             }
-
             for &i in &action.0.remove {
                 all.insert(i.id);
             }
 
             let move_action = MoveAction::new(archive, action.0.source_label_id, all);
+
             let queued_move = queue
                 .queue_action(action)
                 .await

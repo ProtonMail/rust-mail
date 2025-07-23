@@ -23,10 +23,10 @@ impl Unlabel {
 impl Action for Unlabel {
     const TYPE: Type = Type("unlabel_conversation");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = MailActionError;
     type Context = MailUserContext;

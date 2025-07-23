@@ -31,10 +31,10 @@ impl Action for Prefetch {
     const TYPE: Type = Type("prefetch_conversation");
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Lowest;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = MailActionError;
     type Context = MailUserContext;
@@ -78,7 +78,9 @@ impl proton_action_queue::action::Handler for Handler {
         let session = ctx.session();
         let _ =
             Conversation::sync_conversation_messages(action.local_id, &mut guard, session).await;
+
         let messages = Message::in_conversation(action.local_id, guard.tether()).await?;
+
         let Some(label) = Label::load(action.local_label_id, guard.tether()).await? else {
             error!(
                 "Label not found for prefetch action, label_id: `{}`",
@@ -86,6 +88,7 @@ impl proton_action_queue::action::Handler for Handler {
             );
             return Ok(());
         };
+
         let Ok(message_id_to_open) =
             Conversation::message_id_to_open(action.local_id, &label, &messages)
         else {
@@ -95,10 +98,12 @@ impl proton_action_queue::action::Handler for Handler {
             );
             return Ok(());
         };
+
         tracing::debug!(
             "Prefetching message {message_id_to_open} body for conversation `{local_id}`",
             local_id = action.local_id
         );
+
         let Some(local_message) = Message::load(message_id_to_open, guard.tether()).await? else {
             error!(
                 "Message not found for prefetch action, conversation_id: `{}`",
@@ -109,7 +114,7 @@ impl proton_action_queue::action::Handler for Handler {
 
         if let Err(e) = local_message.fetch_message_body(ctx, &mut guard).await {
             tracing::error!("Couldn't prefetch message body, details: `{e}`");
-        };
+        }
 
         Ok(())
     }

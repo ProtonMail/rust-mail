@@ -27,10 +27,10 @@ impl Unlabel {
 impl Action for Unlabel {
     const TYPE: Type = Type("unlabel_messages");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = MailActionError;
     type Context = MailUserContext;
@@ -80,6 +80,7 @@ impl ActionHandler for Handler {
         let api = ctx.api();
         let message_ids = action.0.data.remote_target_ids.clone();
         let label_id = action.0.remote_label_id.clone().expect("Should be set");
+
         info!("Removing {label_id:?} from {message_ids:?}");
         let response = api
             .put_messages_unlabel(message_ids, label_id)
@@ -98,10 +99,12 @@ impl ActionHandler for Handler {
                     Message::apply_label(action.0.label_id, local_ids, tx)
                         .await
                         .inspect_err(|e| error!("Failed to rollback unlabel on messages: {e:?}"))?;
+
                     Ok(())
                 })
                 .await?;
         }
+
         Ok(())
     }
 }

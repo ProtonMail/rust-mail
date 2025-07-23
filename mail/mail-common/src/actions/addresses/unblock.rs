@@ -17,13 +17,12 @@ pub struct Unblock {
 impl Action for Unblock {
     const TYPE: Type = Type("unblock");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = MailActionError;
-
     type Context = MailUserContext;
 }
 
@@ -42,11 +41,13 @@ impl ActionHandler for Handler {
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         tracing::info!("Unblocking {}", action.email);
+
         bond.execute(
             "UPDATE incoming_default SET location = NULL WHERE email = ?",
             params![action.email.clone()],
         )
         .await?;
+
         Ok(())
     }
 
@@ -58,11 +59,13 @@ impl ActionHandler for Handler {
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         tracing::info!("Restoring block for {}", action.email);
+
         bond.execute(
             "UPDATE incoming_default SET location = ? WHERE email = ?",
             params![IncomingDefaultLocation::Blocked, action.email.clone()],
         )
         .await?;
+
         Ok(())
     }
 
@@ -74,6 +77,7 @@ impl ActionHandler for Handler {
         guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         tracing::info!("Unblocking {}", action.email);
+
         let id = guard
             .tether()
             .query_value::<_, IncomingDefaultId>(

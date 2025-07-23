@@ -126,6 +126,7 @@ impl UserContext {
         fs::create_dir_all(this.trash_path())?;
 
         let init_watcher = this.initialization_watcher.clone();
+
         this.spawn(async move {
             if let Err(e) = init_watcher.task().await {
                 error!("Initialization watcher finished with error: {e:?}");

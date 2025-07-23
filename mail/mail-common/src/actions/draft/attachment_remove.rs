@@ -56,6 +56,7 @@ impl Action for AttachmentRemove {
     const GROUP: ActionGroup = SEND_ACTION_GROUP;
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Normal;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();

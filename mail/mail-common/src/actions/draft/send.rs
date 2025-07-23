@@ -101,6 +101,7 @@ impl Action for Send {
     const VERSION: u32 = SEND_ACTION_VERSION;
     const PRIORITY: Priority = Priority::High;
     const GROUP: ActionGroup = SEND_ACTION_GROUP;
+
     type VersionConverter = SendVersionConverter;
     type Handler = SendHandler;
     type RemoteOutput = (MessageId, UndoTimestamp);
@@ -290,6 +291,7 @@ impl proton_action_queue::action::Handler for SendHandler {
         if let Err(e) = save_send_status(action, &mut guard, &r).await {
             error!("Failed to save draft send result: {e:?}");
         }
+
         r
     }
 }
@@ -303,7 +305,6 @@ impl Send {
         guard: &mut WriterGuard<'_>,
     ) -> Result<<Self as Action>::RemoteOutput, <Self as Action>::Error> {
         let local_message_id = action.local_message_id.expect("Should be set");
-
         let session_encryption_key = context.core_context().get_encryption_key()?;
 
         if let Some(delivery_time) = action.delivery_time {

@@ -38,10 +38,10 @@ impl Action for RefreshMetadata {
     const TYPE: Type = Type("refresh_conversation_metadata");
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Normal;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = MailActionError;
     type Context = MailUserContext;
@@ -99,6 +99,7 @@ impl proton_action_queue::action::Handler for Handler {
 
         let items_sync_result =
             Conversation::sync_metadata(remote_ids.clone(), ctx.api(), &mut guard).await;
+
         let refreshed_items = match items_sync_result {
             Ok(items) => items,
             Err(AppError::API(e)) if e.is_network_failure() => {
@@ -118,11 +119,14 @@ impl proton_action_queue::action::Handler for Handler {
                 return Err(e.into());
             }
         };
+
         let refreshed_ids: HashSet<_> = refreshed_items
             .iter()
             .filter_map(|conv| conv.local_id)
             .collect();
+
         let mut not_refreshed = Vec::new();
+
         for not_fresh in action
             .local_ids
             .iter()
@@ -141,6 +145,7 @@ impl proton_action_queue::action::Handler for Handler {
             // The conversation appears to be not found remotely, delete it.
             tracing::warn!("Local conversation without remote counterpart found while refreshing.");
             tracing::info!("Deleting local conversations: `{:?}`", not_refreshed);
+
             guard
                 .tx(async |tx| {
                     Conversation::delete_by_ids(not_refreshed, tx).await?;

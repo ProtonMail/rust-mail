@@ -30,13 +30,12 @@ impl Delete {
 impl Action for Delete {
     const TYPE: Type = Type("delete_messages");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = MailActionError;
-
     type Context = MailUserContext;
 }
 
@@ -85,6 +84,7 @@ impl ActionHandler for Handler {
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         action.0.resolve_ids(guard.tether()).await?;
+
         let local_ids_without_remote_id = action
             .0
             .unsynced_item_ids(guard.tether())
@@ -96,7 +96,9 @@ impl ActionHandler for Handler {
         } else {
             let api = ctx.api();
             let message_ids = action.0.data.remote_target_ids.clone();
+
             info!("Deleting {message_ids:?}");
+
             let label_id = action.0.remote_label_id.clone();
             let response = api
                 .put_messages_delete(message_ids, label_id)

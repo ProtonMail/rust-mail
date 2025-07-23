@@ -18,6 +18,7 @@ impl Action for EventPoll {
     const TYPE: Type = Type("event_poll");
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Low;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = EventPollHandler;
     type RemoteOutput = ();

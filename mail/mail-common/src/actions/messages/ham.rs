@@ -31,13 +31,12 @@ impl Ham {
 impl Action for Ham {
     const TYPE: Type = Type("mark_ham");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = MailActionError;
-
     type Context = MailUserContext;
 }
 
@@ -58,17 +57,21 @@ impl ActionHandler for Handler {
         if action.0.is_empty() {
             return Err(MailActionError::NoInput);
         }
+
         let inbox = Label::remote_id_counterpart(LabelId::inbox(), bond)
             .await?
             .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::inbox()))?;
+
         let spam = Label::remote_id_counterpart(LabelId::spam(), bond)
             .await?
             .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::spam()))?;
 
         Message::move_messages(spam, inbox, action.0.clone(), bond).await?;
+
         for &id in &action.0 {
             Message::set_flags(id, MessageFlags::HAM_MANUAL, bond).await?;
         }
+
         Ok(())
     }
 
@@ -82,6 +85,7 @@ impl ActionHandler for Handler {
         let inbox = Label::remote_id_counterpart(LabelId::inbox(), bond)
             .await?
             .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::inbox()))?;
+
         let spam = Label::remote_id_counterpart(LabelId::spam(), bond)
             .await?
             .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::spam()))?;
@@ -93,6 +97,7 @@ impl ActionHandler for Handler {
         }
 
         let ids = Message::local_ids_counterpart(action.0.clone(), bond).await?;
+
         for id in ids {
             RollbackItem::new(id.to_string(), RollbackItemType::Message)
                 .save(bond)
@@ -111,10 +116,12 @@ impl ActionHandler for Handler {
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let tether = guard.tether();
         let ids = Message::local_ids_counterpart(action.0.clone(), tether).await?;
+
         info!("Marking {ids:?} as not spam");
         let iter = ids.iter().map(|id| ctx.api().put_message_ham(id));
 
         _ = try_join_all(iter).await?;
+
         Ok(())
     }
 }

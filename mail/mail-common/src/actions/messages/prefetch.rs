@@ -25,10 +25,10 @@ impl Action for Prefetch {
     const TYPE: Type = Type("prefetch_message");
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Lowest;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = MailActionError;
     type Context = MailUserContext;

@@ -84,6 +84,7 @@ impl Action for AttachmentUpload {
     const GROUP: ActionGroup = SEND_ACTION_GROUP;
     const VERSION: u32 = 0;
     const PRIORITY: Priority = Priority::High;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = AttachmentUploadHandler;
     type RemoteOutput = ();

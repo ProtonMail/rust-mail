@@ -25,10 +25,10 @@ impl Unread {
 impl Action for Unread {
     const TYPE: Type = Type("mark_messages_unread");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = MailActionError;
     type Context = MailUserContext;
@@ -50,6 +50,7 @@ impl ActionHandler for Handler {
     ) -> Result<(), <Self::Action as Action>::Error> {
         // API call return an error 2501(Message does not exist) for message already unread
         let messages = Message::find_by_ids(action.0.target_ids.clone(), tx).await?;
+
         action.0.target_ids = messages
             .into_iter()
             .filter(|m| !m.unread)
@@ -58,6 +59,7 @@ impl ActionHandler for Handler {
 
         action.0.resolve_ids(tx).await?;
         Message::mark_unread(action.0.target_ids.iter().copied(), tx).await?;
+
         Ok(())
     }
 
@@ -69,10 +71,12 @@ impl ActionHandler for Handler {
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         Message::mark_read(action.0.target_ids.iter().copied(), tx).await?;
+
         action
             .0
             .mark_rollback(RollbackItemType::Message, tx)
             .await?;
+
         Ok(())
     }
 
@@ -91,6 +95,7 @@ impl ActionHandler for Handler {
             .cloned()
             .map_into()
             .collect();
+
         info!("Marking {message_ids:?} as unread");
         let responses = api.put_messages_unread(message_ids).await?.responses;
 
@@ -110,10 +115,12 @@ impl ActionHandler for Handler {
                     Message::mark_read(local_ids, tx)
                         .await
                         .inspect_err(|e| error!("Failed to rollback unread on messages: {e:?}"))?;
+
                     Ok(())
                 })
                 .await?;
         }
+
         Ok(())
     }
 }

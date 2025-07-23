@@ -621,27 +621,31 @@ impl<T: LabelAsTrait> LabelAsData<T> {
         let session = ctx.session();
         let api = session.api();
         let tether = guard.tether();
-
         let (add, remove) = self.segregate_label();
-
         let mut add_requests = vec![];
+
         for (label, messages) in add {
             let label = Label::resolve_remote_label_id(label, tether).await?;
             let messages = T::local_ids_counterpart(messages, tether).await?;
+
             for chunk in messages.chunks(150) {
                 let chunk = chunk.to_owned();
                 let label = label.clone();
+
                 add_requests.push(T::remote_label(api, chunk, label));
             }
         }
 
         let mut remove_requests = vec![];
+
         for (label, messages) in remove {
             let label = Label::resolve_remote_label_id(label, tether).await?;
             let messages = T::local_ids_counterpart(messages, tether).await?;
+
             for chunk in messages.chunks(150) {
                 let chunk = chunk.to_owned();
                 let label = label.clone();
+
                 remove_requests.push(T::remote_unlabel(api, chunk, label));
             }
         }
@@ -650,6 +654,7 @@ impl<T: LabelAsTrait> LabelAsData<T> {
             join(join_all(add_requests), join_all(remove_requests)).await;
 
         let items = add_fails.into_iter().chain(remove_fails).flatten();
+
         guard
             .tx::<_, _, anyhow::Error>(async move |tx| {
                 RollbackItem::save_many(tx, items, T::ROLLBACK_ITEM_TYPE).await?;

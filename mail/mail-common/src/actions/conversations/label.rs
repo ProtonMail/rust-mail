@@ -23,13 +23,12 @@ impl Label {
 impl Action for Label {
     const TYPE: Type = Type("label_conversations");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = MailActionError;
-
     type Context = MailUserContext;
 }
 

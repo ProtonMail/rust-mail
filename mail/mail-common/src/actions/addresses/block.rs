@@ -18,13 +18,12 @@ pub struct Block {
 impl Action for Block {
     const TYPE: Type = Type("block");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = MailActionError;
-
     type Context = MailUserContext;
 }
 
@@ -43,11 +42,13 @@ impl ActionHandler for Handler {
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         tracing::info!("Blocking {}", action.email);
+
         bond.execute(
             "INSERT INTO incoming_default (email, location) VALUES (?,?)",
             params![action.email.clone(), IncomingDefaultLocation::Blocked],
         )
         .await?;
+
         Ok(())
     }
 
@@ -59,11 +60,13 @@ impl ActionHandler for Handler {
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         tracing::info!("Removing block for {}", action.email);
+
         IncomingDefaultLocation::delete_by_email(
             action.email.clone().into_clear_text_string(),
             bond,
         )
         .await?;
+
         Ok(())
     }
 
@@ -80,6 +83,7 @@ impl ActionHandler for Handler {
             .post_incoming_default(ApiIncomingDefaultLocation::Blocked, &action.email)
             .await?
             .incoming_default;
+
         guard
             .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
                 IncomingDefaultLocation::store_by_email([new_incoming], tx).await?;

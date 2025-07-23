@@ -1,6 +1,3 @@
-use std::collections::HashSet;
-use std::mem;
-
 use crate::actions::conversations::Move;
 use crate::actions::{LabelAsData, MailActionError};
 use crate::datatypes::SystemLabelId;
@@ -17,11 +14,14 @@ use proton_core_common::models::Label;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{Bond, Tether};
+use std::collections::HashSet;
+use std::mem;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LabelAs(pub LabelAsData<Conversation>);
 
 pub struct Converter;
+
 impl VersionConverter for Converter {
     type Output = LabelAs;
 
@@ -43,12 +43,12 @@ impl VersionConverter for Converter {
 impl Action for LabelAs {
     const TYPE: Type = Type("label_conversation_as");
     const VERSION: u32 = 1;
+
     type VersionConverter = Converter;
     type Handler = Handler;
     type RemoteOutput = ();
     type LocalOutput = bool;
     type Error = MailActionError;
-
     type Context = MailUserContext;
 }
 

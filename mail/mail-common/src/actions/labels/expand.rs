@@ -41,13 +41,12 @@ impl Expand {
 impl Action for Expand {
     const TYPE: Type = Type("expand_label");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = MailActionError;
-
     type Context = MailUserContext;
 }
 

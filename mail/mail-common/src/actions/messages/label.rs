@@ -26,10 +26,10 @@ impl Label {
 impl Action for Label {
     const TYPE: Type = Type("label_messages");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = MailActionError;
     type Context = MailUserContext;
@@ -79,6 +79,7 @@ impl ActionHandler for Handler {
         let api = ctx.api();
         let message_ids = action.0.data.remote_target_ids.clone();
         let label_id = action.0.remote_label_id.clone().expect("Should be set");
+
         info!("Applying {label_id:?} to {message_ids:?}");
         let response = api
             .put_messages_label(message_ids, label_id, None)

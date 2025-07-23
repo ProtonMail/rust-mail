@@ -23,12 +23,11 @@ impl Read {
 impl Action for Read {
     const TYPE: Type = Type("mark_messages_read");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
-
     type Error = MailActionError;
     type Context = MailUserContext;
 }
@@ -50,6 +49,7 @@ impl ActionHandler for Handler {
     ) -> Result<(), <Self::Action as Action>::Error> {
         // API call return an error 2501(Message does not exist) for message already read
         let messages = Message::find_by_ids(action.0.target_ids.clone(), tx).await?;
+
         action.0.target_ids = messages
             .into_iter()
             .filter(|m| m.unread)
@@ -85,6 +85,7 @@ impl ActionHandler for Handler {
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let api = ctx.api();
         let message_ids = action.0.remote_target_ids.clone();
+
         info!("Marking {message_ids:?} as read");
         let response = api.put_messages_read(message_ids).await?.responses;
 

@@ -30,13 +30,12 @@ impl ReportPhishing {
 impl Action for ReportPhishing {
     const TYPE: Type = Type("report_phishing");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = MailActionError;
-
     type Context = MailUserContext;
 }
 

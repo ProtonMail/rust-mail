@@ -34,10 +34,10 @@ impl Action for RefreshMetadata {
     const TYPE: Type = Type("refresh_message_metadata");
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Normal;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = MailActionError;
     type Context = MailUserContext;
@@ -85,11 +85,13 @@ impl proton_action_queue::action::Handler for Handler {
 
         let messages = Message::find_by_ids(action.local_ids.clone(), guard.tether()).await?;
         let mut non_drafts = vec![];
+
         for msg in messages.into_iter().filter(|msg| msg.remote_id.is_some()) {
             if !msg.is_local_draft(guard.tether()).await? {
                 non_drafts.push(msg);
             }
         }
+
         let remote_ids = non_drafts
             .iter()
             .filter_map(|msg| msg.remote_id.clone())
@@ -116,10 +118,12 @@ impl proton_action_queue::action::Handler for Handler {
                 return Err(e.into());
             }
         };
+
         let refreshed_ids: HashSet<_> = refreshed_items
             .iter()
             .filter_map(|msg| msg.local_id)
             .collect();
+
         let not_refreshed = non_drafts
             .iter()
             .filter_map(|msg| msg.local_id)
@@ -130,6 +134,7 @@ impl proton_action_queue::action::Handler for Handler {
             // The conversation appears to be not found remotely, delete it.
             tracing::warn!("Local messages without remote counterpart found while refreshing.");
             tracing::info!("Deleting local messages: `{:?}`", not_refreshed);
+
             guard
                 .tx(async |tx| {
                     Message::delete_by_ids(not_refreshed, tx).await?;

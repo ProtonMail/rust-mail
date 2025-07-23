@@ -47,8 +47,8 @@ impl Action for UndoSend {
     const TYPE: Type = Type("undo_send");
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Highest;
-
     const GROUP: ActionGroup = SEND_ACTION_GROUP;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = UndoSendHandler;
     type RemoteOutput = ();

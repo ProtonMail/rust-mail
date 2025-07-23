@@ -24,10 +24,10 @@ impl MarkUnread {
 impl Action for MarkUnread {
     const TYPE: Type = Type("mark_conversations_unread");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = MailActionError;
     type Context = MailUserContext;

@@ -24,6 +24,7 @@ impl Action for ActionRefresh {
     const TYPE: Type = Type("refresh");
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Normal;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = RefreshHandler;
     type RemoteOutput = ();

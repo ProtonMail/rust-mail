@@ -26,13 +26,12 @@ impl Delete {
 impl Action for Delete {
     const TYPE: Type = Type("delete_contacts");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = CoreContextError;
-
     type Context = UserContext;
 }
 
@@ -94,6 +93,7 @@ impl proton_action_queue::action::Handler for Handler {
             Ok(())
         } else {
             let conn = guard.tether();
+
             for remote_id in failed {
                 let Some(local_id) = Contact::remote_id_counterpart(remote_id, conn).await? else {
                     continue;

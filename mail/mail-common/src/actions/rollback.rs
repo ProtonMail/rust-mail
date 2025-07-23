@@ -18,8 +18,8 @@ const ROLLBACK_BATCH_SIZE: usize = 50;
 impl Action for RollbackAction {
     const TYPE: Type = Type("item_rollback");
     const VERSION: u32 = 1;
-
     const PRIORITY: Priority = Priority::Low;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = RollbackActionHandler;
     type RemoteOutput = ();

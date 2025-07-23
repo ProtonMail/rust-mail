@@ -33,13 +33,12 @@ impl Move {
 impl Action for Move {
     const TYPE: Type = Type("move_conversations");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = MailActionError;
-
     type Context = MailUserContext;
 }
 
@@ -110,6 +109,7 @@ impl ActionHandler for Handler {
             .into_iter()
             .map_into()
             .collect();
+
         let label_id = action
             .0
             .remote_destination_label_id
