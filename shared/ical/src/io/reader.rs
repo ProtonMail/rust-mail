@@ -472,8 +472,12 @@ impl<'a> IcsReader<'a> {
     /// etc.) and returns it.
     #[must_use]
     pub fn entry(&mut self) -> Option<ReadEntry> {
-        if self.peek() == Some('\n') {
-            return Some(ReadEntry::Newline);
+        if self.peek()? == '\n' {
+            _ = self.char();
+
+            return Some(ReadEntry::Newline {
+                span: Span::one(self.pos.prev()),
+            });
         }
 
         if self.try_eat(':').is_some() {
@@ -508,7 +512,9 @@ impl<'a> IcsReader<'a> {
             //
             // Fortunately properties etc. can already handle spurious newlines,
             // we just have to report them as such:
-            return Some(ReadEntry::Newline);
+            return Some(ReadEntry::Newline {
+                span: Span::one(self.pos.prev()),
+            });
         };
 
         if name.eq_ignore_ascii_case("BEGIN") {
@@ -676,7 +682,7 @@ pub enum ReadEntry {
     Value,
 
     /// Newline character (`\n`), used for error recovery.
-    Newline,
+    Newline { span: Span },
 }
 
 impl ReadEntry {
@@ -937,7 +943,7 @@ impl ReadEntry {
                 Some(())
             }
 
-            ReadEntry::Newline => {
+            ReadEntry::Newline { span } => {
                 // Newline is always kinda unexpected in the sense that both of
                 // those are technically illegal cases:
                 //
@@ -961,16 +967,11 @@ impl ReadEntry {
                 // up on `None`, meaning "dear caller, give up".
                 match kind {
                     Kind::Component => {
-                        r.warn(Span::one(r.pos().prev()), "quirky newline");
-                        _ = r.eat('\n');
+                        r.warn(span, "quirky newline");
                         Some(())
                     }
-
                     Kind::Property => {
-                        r.error(
-                            Span::one(r.pos().prev()),
-                            "unexpected newline, expecting property's value",
-                        );
+                        r.error(span, "unexpected newline, expecting property's value");
                         None
                     }
                 }
@@ -1068,24 +1069,16 @@ mod tests {
 
         r.entry().unwrap().burn(&mut r, Kind::Component).unwrap();
 
-        assert_eq!(Some(ReadEntry::Newline), r.entry());
+        assert_eq!(None, r.entry());
 
         let actual = r.finish();
 
-        let expected = vec![
-            ReadMsg {
-                at: Some(Span::new((1, 7), (1, 12))),
-                body: "unknown component `VEVENT`".into(),
-                kind: ReadMsgKind::Error,
-                context: Vec::new(),
-            },
-            ReadMsg {
-                at: Some(Span::new((4, 11), (4, 11))),
-                body: "incomplete source".into(),
-                kind: ReadMsgKind::Error,
-                context: Vec::new(),
-            },
-        ];
+        let expected = vec![ReadMsg {
+            at: Some(Span::new((1, 7), (1, 12))),
+            body: "unknown component `VEVENT`".into(),
+            kind: ReadMsgKind::Error,
+            context: Vec::new(),
+        }];
 
         pa::assert_eq!(expected, actual);
     }
@@ -1104,7 +1097,7 @@ mod tests {
         r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
         r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
 
-        assert_eq!(Some(ReadEntry::Newline), r.entry());
+        assert_eq!(None, r.entry());
 
         let actual = r.finish();
 
@@ -1133,12 +1126,6 @@ mod tests {
                 kind: ReadMsgKind::Warning,
                 context: Vec::new(),
             },
-            ReadMsg {
-                at: Some(Span::new((4, 11), (4, 11))),
-                body: "incomplete source".into(),
-                kind: ReadMsgKind::Error,
-                context: Vec::new(),
-            },
         ];
 
         pa::assert_eq!(expected, actual);
@@ -1154,7 +1141,7 @@ mod tests {
         r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
         r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
 
-        assert_eq!(Some(ReadEntry::Newline), r.entry());
+        assert_eq!(None, r.entry());
 
         let actual = r.finish();
 
@@ -1174,12 +1161,6 @@ mod tests {
             ReadMsg {
                 at: Some(Span::new((1, 30), (1, 32))),
                 body: "unknown parameter `ZAR`".into(),
-                kind: ReadMsgKind::Error,
-                context: Vec::new(),
-            },
-            ReadMsg {
-                at: Some(Span::new((1, 38), (1, 38))),
-                body: "incomplete source".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             },

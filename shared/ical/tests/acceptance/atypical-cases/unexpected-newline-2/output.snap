@@ -1,5 +1,5 @@
 ---
-source: core/ical/tests/acceptance.rs
+source: shared/ical/tests/acceptance.rs
 ---
 ```
 VCalendar {
@@ -76,7 +76,7 @@ VCalendar {
 # messages
 
 error: unexpected newline, expecting property's value
- --> at 6:14
+ --> at 6:15
   | when parsing `Organizer` at 6:10
   | when parsing `VEvent` at 5:1
   | when parsing `VCalendar` at 2:1
