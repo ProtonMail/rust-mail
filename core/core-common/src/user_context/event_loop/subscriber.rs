@@ -58,7 +58,7 @@ pub mod macros {
             let max_attempts = 2;
             let mut attempts = 0;
 
-            while let Err(e) = $fn_name($ctx.clone()).await {
+            while let Err(e) = $fn_name($ctx).await {
                 if attempts >= max_attempts {
                     return Err(e);
                 }
@@ -286,25 +286,21 @@ impl Subscriber<CoreEvent> for CoreEventSubscriber {
 }
 
 impl UserContext {
-    pub async fn on_refresh_impl(
-        self: &Arc<Self>,
-        refresh: Refresh,
-    ) -> Result<(), SubscriberError> {
+    pub async fn on_refresh_impl(&self, refresh: Refresh) -> Result<(), SubscriberError> {
         info!("Handling refresh event: {refresh:?}");
-        let ctx = self;
 
         match refresh {
             Refresh::None => {
                 warn!("Nothing to refresh, this may idicate bug in SDK event loop implementation");
             }
             Refresh::Contacts => {
-                try_refresh!(refresh_contacts, ctx);
+                try_refresh!(refresh_contacts, self);
             }
             Refresh::Mail => {
                 // Mail refresh is handled by the mail context
             }
             Refresh::All => {
-                try_refresh!(refresh_core, ctx);
+                try_refresh!(refresh_core, self);
             }
             Refresh::Unknown(other) => {
                 warn!("Unknown refresh event type: {other}");
@@ -360,7 +356,7 @@ impl UserContext {
 }
 
 #[tracing::instrument(skip_all)]
-async fn refresh_core(ctx: Arc<UserContext>) -> Result<(), SubscriberError> {
+async fn refresh_core(ctx: &UserContext) -> Result<(), SubscriberError> {
     let api = ctx.session().api().clone();
     let contacts = ctx.spawn(async move { Contact::sync(&api).await });
     let api = ctx.session().api().clone();
@@ -454,7 +450,7 @@ async fn refresh_core(ctx: Arc<UserContext>) -> Result<(), SubscriberError> {
 }
 
 #[tracing::instrument(skip_all)]
-async fn refresh_contacts(ctx: Arc<UserContext>) -> Result<(), SubscriberError> {
+async fn refresh_contacts(ctx: &UserContext) -> Result<(), SubscriberError> {
     let api = ctx.session().api().clone();
     let contacts = ctx.spawn(async move { Contact::sync(&api).await });
     let api = ctx.session().api().clone();
