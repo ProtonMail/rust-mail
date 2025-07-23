@@ -9,7 +9,7 @@ use ratatui::widgets::{Cell, Row};
 impl AsIntoTable for Vec<ContextualConversation> {
     fn as_table(&self) -> IntoTable<'_> {
         let rows = self.iter().map(|conv| {
-            let flags = format_flags(conv.is_starred, false);
+            let flags = format_flags(conv.is_starred, false, conv.expiration_time);
             let date = date_from_timestamp(conv.time);
             let num_attachments = conv.num_attachments;
             let num_labels = conv.custom_labels.len();

@@ -4,6 +4,7 @@ use proton_mail_common::errors::{
     DraftAttachmentUploadErrorReason as RealDraftAttachmentErrorReason,
     DraftCancelScheduleSendErrorReason as RealDraftCancelScheduleSendErrorReason,
     DraftDiscardErrorReason as RealDraftDiscardErrorReason,
+    DraftExpirationErrorReason as RealDraftExpirationErrorReason,
     DraftOpenErrorReason as RealDraftOpenErrorReason,
     DraftPasswordErrorReason as RealDraftPasswordErrorReason,
     DraftSaveErrorReason as RealDraftSaveErrorReason,
@@ -319,6 +320,25 @@ impl From<RealDraftPasswordErrorReason> for DraftPasswordErrorReason {
     fn from(value: RealDraftPasswordErrorReason) -> Self {
         match value {
             RealDraftPasswordErrorReason::PasswordTooShort => Self::PasswordTooShort,
+        }
+    }
+}
+
+#[derive(Debug, UniffiEnum)]
+pub enum DraftExpirationErrorReason {
+    ExpirationTimeInThePast,
+    ExpirationTimeExceeds30Days,
+}
+
+impl From<RealDraftExpirationErrorReason> for DraftExpirationErrorReason {
+    fn from(value: RealDraftExpirationErrorReason) -> Self {
+        match value {
+            RealDraftExpirationErrorReason::ExpirationTimeInThePast => {
+                Self::ExpirationTimeInThePast
+            }
+            RealDraftExpirationErrorReason::ExpirationTimeExceeds30Days => {
+                Self::ExpirationTimeExceeds30Days
+            }
         }
     }
 }

@@ -397,6 +397,7 @@ pub trait ProtonMail {
         auto_save_contacts: Option<bool>,
         delay: Option<Duration>,
         delivery_time: Option<u64>,
+        expiration_time: Option<u64>,
     ) -> ApiServiceResult<PostSendMessageResponse>;
 
     /// <https://protonmail.gitlab-pages.protontech.ch/Slim-API/mail/#tag/Message/operation/post_mail-v4-messages-send-direct>

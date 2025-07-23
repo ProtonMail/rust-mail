@@ -95,6 +95,7 @@ export_void_result! {
     VoidProtonResult(ProtonError),
     VoidSessionResult(UserContextError),
     VoidDraftPasswordResult(DraftPasswordError),
+    VoidDraftExpirationResult(DraftExpirationError),
 }
 
 export_typed_result! {

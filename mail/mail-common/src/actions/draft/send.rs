@@ -435,6 +435,7 @@ impl Send {
                 auto_save_contacts,
                 Some(Duration::from_secs(mail_settings.delay_send_seconds as u64)),
                 action.delivery_time.map(|v| v.as_u64()),
+                draft_metadata.expiration_time.map(|v| v.as_u64()),
             )
             .await
         {

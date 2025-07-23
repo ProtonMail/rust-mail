@@ -143,6 +143,7 @@ pub enum ComposerMessage {
     StartChangeAddress(AddressId),
     FinishChangeAddress(DraftAddressChangeOutput),
     SetPasswordProtection(SecretString, Option<String>),
+    SetExpirationTime(DateTime<Local>),
 }
 
 impl From<ComposerMessage> for Messages {
