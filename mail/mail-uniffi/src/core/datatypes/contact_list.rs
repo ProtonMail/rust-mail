@@ -226,7 +226,7 @@ pub enum ContactSuggestionKind {
     /// A device, native contact, stored only locally on the current device.
     DeviceContact(DeviceContactSuggestion),
     /// Proton contact group, that consists only other proton contacts, and never device contact.
-    ContactGroup(Vec<ContactItem>),
+    ContactGroup(Vec<ContactEmailItem>),
 }
 
 impl From<RealContactSuggestionKind> for ContactSuggestionKind {

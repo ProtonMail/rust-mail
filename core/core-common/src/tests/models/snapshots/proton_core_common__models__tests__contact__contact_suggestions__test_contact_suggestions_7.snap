@@ -1,8 +1,9 @@
 ---
 source: core/core-common/src/tests/models/contact.rs
 expression: display_suggestions(res)
+snapshot_kind: text
 ---
-6 suggestions:
+8 suggestions:
 
 contact/678: Jason Mendoza
 J (#764AC4): jianyu.li@pm.me <jXXXXXXXX@XXXXX>,  local_id: 678, Proton address, last used: 2
@@ -19,7 +20,13 @@ J (#9C89FF): jake.peralta@99.com <jXXXXXXXXXXX@XXXXXX>,  local_id: 456, last use
 contact/112: Jake Peralta
 H (#764AC4): harvey@jp.com <hXXXXX@XXXXXX>,  local_id: 112, last used: 1
 
+device-contact-email/000-0: Aunt Molly
+A (#7B3185): <mXXXX@XXXXXXXXXX>
+
+device-contact-email/001-0: Aunt Molly
+A (#7B3185): <bXXXXX@XXXXXXXX>
+
 group/910: M. Schur Productions
-M (#495EA9): Michael Scott <mXXXXXX@XXXXX>, local_id: 234
-J (#51BE50): Jason Mendoza <jXXXXXXXX@XXXXX>, local_id: 678
-J (#9C89FF): Jake Peralta <jXXXXXXXXXXX@XXXXXX, hXXXXX@XXXXXX>, local_id: 456
+J (#764AC4): jianyu.li@pm.me <jXXXXXXXX@XXXXX>,  local_id: 678, Proton address, last used: 2
+M (#4989FF): m.scott@pm.me <mXXXXXX@XXXXX>,  local_id: 234, Proton address, last used: 2
+J (#9C89FF): jake.peralta@99.com <jXXXXXXXXXXX@XXXXXX>,  local_id: 456, last used: 3
