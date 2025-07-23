@@ -4,6 +4,7 @@ use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
 use proton_core_api::consts::{CoreBundle, Mail};
 use proton_core_api::services::proton::common::ApiErrorInfo;
 use proton_core_api::services::proton::{LabelId, UserId};
+use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::attachment::KeyPackets;
 use proton_mail_api::services::proton::prelude::{AttachmentId, MessageAttachmentHeaders};
@@ -88,6 +89,7 @@ async fn create_empty_draft() {
     assert!(draft_message.label_ids.contains(&LabelId::all_mail()));
     assert!(!draft_message.label_ids.contains(&LabelId::starred()));
     assert!(draft_message.is_draft());
+    assert_eq!(draft_message.expiration_time, UnixTimestamp::new(0));
 
     // Local conversation id should have been assigned.
     assert!(draft_message.local_conversation_id.is_some());
