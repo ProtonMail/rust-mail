@@ -14,6 +14,10 @@ pub struct IcsReader<'a> {
 }
 
 impl<'a> IcsReader<'a> {
+    /// Maximum number of messages that can be reported (to avoid running out of
+    /// memory for reaaly malformed input files).
+    const MAX_MSGS: usize = 32;
+
     #[must_use]
     pub fn new(src: &'a [u8]) -> Self {
         Self {
@@ -50,16 +54,39 @@ impl<'a> IcsReader<'a> {
         self.msgs
     }
 
-    fn msg<M>(&mut self, at: impl Into<Option<Span>>, body: M, kind: ReadMsgKind)
+    fn msg<M>(
+        &mut self,
+        at: impl Into<Option<Span>>,
+        body: M,
+        kind: ReadMsgKind,
+        context: impl Into<Option<Vec<Spanned<String>>>>,
+    ) -> Result<(), ()>
     where
         M: fmt::Display,
     {
-        self.msgs.push(ReadMsg {
-            at: at.into(),
-            body: body.to_string(),
-            kind,
-            context: self.context.clone(),
-        });
+        if self.msgs.len() < Self::MAX_MSGS {
+            self.msgs.push(ReadMsg {
+                at: at.into(),
+                body: body.to_string(),
+                kind,
+                context: context.into().unwrap_or_else(|| self.context.clone()),
+            });
+
+            Ok(())
+        } else {
+            if self.msgs.len() == Self::MAX_MSGS {
+                self.msgs.push(ReadMsg {
+                    at: None,
+                    body: "got too many messages, going silent".into(),
+                    kind: ReadMsgKind::Warning,
+                    context: Vec::new(),
+                });
+            } else {
+                // Avoid reporting "got too many messagse" multiple times
+            }
+
+            Err(())
+        }
     }
 
     /// Reports a warning.
@@ -67,7 +94,7 @@ impl<'a> IcsReader<'a> {
     where
         M: fmt::Display,
     {
-        self.msg(at, body, ReadMsgKind::Warning);
+        _ = self.msg(at, body, ReadMsgKind::Warning, None);
     }
 
     /// Reports an error.
@@ -75,7 +102,7 @@ impl<'a> IcsReader<'a> {
     where
         M: fmt::Display,
     {
-        self.msg(at, body, ReadMsgKind::Error);
+        _ = self.msg(at, body, ReadMsgKind::Error, None);
     }
 
     /// Runs `f` under a parser with modified hints.
@@ -127,10 +154,13 @@ impl<'a> IcsReader<'a> {
         if let Some(val) = f(&mut this) {
             self.pos = this.pos;
 
-            self.msgs.extend(this.msgs.into_iter().map(|mut entry| {
-                entry.context = self.context.iter().cloned().chain(entry.context).collect();
-                entry
-            }));
+            for mut msg in this.msgs {
+                msg.context = self.context.iter().cloned().chain(msg.context).collect();
+
+                if self.msg(msg.at, msg.body, msg.kind, msg.context).is_err() {
+                    break;
+                }
+            }
 
             self.context.extend(this.context);
 
@@ -442,8 +472,12 @@ impl<'a> IcsReader<'a> {
     /// etc.) and returns it.
     #[must_use]
     pub fn entry(&mut self) -> Option<ReadEntry> {
-        if self.peek() == Some('\n') {
-            return Some(ReadEntry::Newline);
+        if self.peek()? == '\n' {
+            _ = self.char();
+
+            return Some(ReadEntry::Newline {
+                span: Span::one(self.pos.prev()),
+            });
         }
 
         if self.try_eat(':').is_some() {
@@ -478,7 +512,9 @@ impl<'a> IcsReader<'a> {
             //
             // Fortunately properties etc. can already handle spurious newlines,
             // we just have to report them as such:
-            return Some(ReadEntry::Newline);
+            return Some(ReadEntry::Newline {
+                span: Span::one(self.pos.prev()),
+            });
         };
 
         if name.eq_ignore_ascii_case("BEGIN") {
@@ -646,7 +682,7 @@ pub enum ReadEntry {
     Value,
 
     /// Newline character (`\n`), used for error recovery.
-    Newline,
+    Newline { span: Span },
 }
 
 impl ReadEntry {
@@ -821,8 +857,6 @@ impl ReadEntry {
                             if e.try_comp_end(name.as_str()) {
                                 return Some(());
                             }
-
-                            e.burn(r, kind)?;
                         }
 
                         None::<()>
@@ -909,7 +943,7 @@ impl ReadEntry {
                 Some(())
             }
 
-            ReadEntry::Newline => {
+            ReadEntry::Newline { span } => {
                 // Newline is always kinda unexpected in the sense that both of
                 // those are technically illegal cases:
                 //
@@ -933,16 +967,11 @@ impl ReadEntry {
                 // up on `None`, meaning "dear caller, give up".
                 match kind {
                     Kind::Component => {
-                        r.warn(Span::one(r.pos().prev()), "quirky newline");
-                        _ = r.eat('\n');
+                        r.warn(span, "quirky newline");
                         Some(())
                     }
-
                     Kind::Property => {
-                        r.error(
-                            Span::one(r.pos().prev()),
-                            "unexpected newline, expecting property's value",
-                        );
+                        r.error(span, "unexpected newline, expecting property's value");
                         None
                     }
                 }
@@ -1040,24 +1069,16 @@ mod tests {
 
         r.entry().unwrap().burn(&mut r, Kind::Component).unwrap();
 
-        assert_eq!(Some(ReadEntry::Newline), r.entry());
+        assert_eq!(None, r.entry());
 
         let actual = r.finish();
 
-        let expected = vec![
-            ReadMsg {
-                at: Some(Span::new((1, 7), (1, 12))),
-                body: "unknown component `VEVENT`".into(),
-                kind: ReadMsgKind::Error,
-                context: Vec::new(),
-            },
-            ReadMsg {
-                at: Some(Span::new((4, 11), (4, 11))),
-                body: "incomplete source".into(),
-                kind: ReadMsgKind::Error,
-                context: Vec::new(),
-            },
-        ];
+        let expected = vec![ReadMsg {
+            at: Some(Span::new((1, 7), (1, 12))),
+            body: "unknown component `VEVENT`".into(),
+            kind: ReadMsgKind::Error,
+            context: Vec::new(),
+        }];
 
         pa::assert_eq!(expected, actual);
     }
@@ -1076,7 +1097,7 @@ mod tests {
         r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
         r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
 
-        assert_eq!(Some(ReadEntry::Newline), r.entry());
+        assert_eq!(None, r.entry());
 
         let actual = r.finish();
 
@@ -1105,12 +1126,6 @@ mod tests {
                 kind: ReadMsgKind::Warning,
                 context: Vec::new(),
             },
-            ReadMsg {
-                at: Some(Span::new((4, 11), (4, 11))),
-                body: "incomplete source".into(),
-                kind: ReadMsgKind::Error,
-                context: Vec::new(),
-            },
         ];
 
         pa::assert_eq!(expected, actual);
@@ -1126,7 +1141,7 @@ mod tests {
         r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
         r.entry().unwrap().burn(&mut r, Kind::Property).unwrap();
 
-        assert_eq!(Some(ReadEntry::Newline), r.entry());
+        assert_eq!(None, r.entry());
 
         let actual = r.finish();
 
@@ -1146,12 +1161,6 @@ mod tests {
             ReadMsg {
                 at: Some(Span::new((1, 30), (1, 32))),
                 body: "unknown parameter `ZAR`".into(),
-                kind: ReadMsgKind::Error,
-                context: Vec::new(),
-            },
-            ReadMsg {
-                at: Some(Span::new((1, 38), (1, 38))),
-                body: "incomplete source".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
             },

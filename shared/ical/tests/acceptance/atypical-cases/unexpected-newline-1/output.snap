@@ -1,5 +1,5 @@
 ---
-source: core/ical/tests/acceptance.rs
+source: shared/ical/tests/acceptance.rs
 ---
 ```
 VCalendar {
@@ -19,5 +19,5 @@ VCalendar {
 # messages
 
 warn: quirky newline
- --> at 5:1
+ --> at 6:1
   | when parsing `VCalendar` at 2:1
