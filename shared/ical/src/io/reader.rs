@@ -14,6 +14,10 @@ pub struct IcsReader<'a> {
 }
 
 impl<'a> IcsReader<'a> {
+    /// Maximum number of messages that can be reported (to avoid running out of
+    /// memory for reaaly malformed input files).
+    const MAX_MSGS: usize = 32;
+
     #[must_use]
     pub fn new(src: &'a [u8]) -> Self {
         Self {
@@ -50,16 +54,39 @@ impl<'a> IcsReader<'a> {
         self.msgs
     }
 
-    fn msg<M>(&mut self, at: impl Into<Option<Span>>, body: M, kind: ReadMsgKind)
+    fn msg<M>(
+        &mut self,
+        at: impl Into<Option<Span>>,
+        body: M,
+        kind: ReadMsgKind,
+        context: impl Into<Option<Vec<Spanned<String>>>>,
+    ) -> Result<(), ()>
     where
         M: fmt::Display,
     {
-        self.msgs.push(ReadMsg {
-            at: at.into(),
-            body: body.to_string(),
-            kind,
-            context: self.context.clone(),
-        });
+        if self.msgs.len() < Self::MAX_MSGS {
+            self.msgs.push(ReadMsg {
+                at: at.into(),
+                body: body.to_string(),
+                kind,
+                context: context.into().unwrap_or_else(|| self.context.clone()),
+            });
+
+            Ok(())
+        } else {
+            if self.msgs.len() == Self::MAX_MSGS {
+                self.msgs.push(ReadMsg {
+                    at: None,
+                    body: "got too many messages, going silent".into(),
+                    kind: ReadMsgKind::Warning,
+                    context: Vec::new(),
+                });
+            } else {
+                // Avoid reporting "got too many messagse" multiple times
+            }
+
+            Err(())
+        }
     }
 
     /// Reports a warning.
@@ -67,7 +94,7 @@ impl<'a> IcsReader<'a> {
     where
         M: fmt::Display,
     {
-        self.msg(at, body, ReadMsgKind::Warning);
+        _ = self.msg(at, body, ReadMsgKind::Warning, None);
     }
 
     /// Reports an error.
@@ -75,7 +102,7 @@ impl<'a> IcsReader<'a> {
     where
         M: fmt::Display,
     {
-        self.msg(at, body, ReadMsgKind::Error);
+        _ = self.msg(at, body, ReadMsgKind::Error, None);
     }
 
     /// Runs `f` under a parser with modified hints.
@@ -127,10 +154,13 @@ impl<'a> IcsReader<'a> {
         if let Some(val) = f(&mut this) {
             self.pos = this.pos;
 
-            self.msgs.extend(this.msgs.into_iter().map(|mut entry| {
-                entry.context = self.context.iter().cloned().chain(entry.context).collect();
-                entry
-            }));
+            for mut msg in this.msgs {
+                msg.context = self.context.iter().cloned().chain(msg.context).collect();
+
+                if self.msg(msg.at, msg.body, msg.kind, msg.context).is_err() {
+                    break;
+                }
+            }
 
             self.context.extend(this.context);
 
