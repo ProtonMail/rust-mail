@@ -851,8 +851,6 @@ impl ReadEntry {
                             if e.try_comp_end(name.as_str()) {
                                 return Some(());
                             }
-
-                            e.burn(r, kind)?;
                         }
 
                         None::<()>
