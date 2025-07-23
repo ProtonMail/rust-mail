@@ -787,7 +787,7 @@ impl Save {
             bcc_list: self.bcc_list.to_message_recipients().into(),
             deleted: false,
             exclusive_location: None,
-            expiration_time: Default::default(),
+            expiration_time: 0.into(),
             external_id: None,
             flags: Default::default(),
             is_forwarded: false,
