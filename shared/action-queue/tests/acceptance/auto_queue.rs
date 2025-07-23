@@ -15,9 +15,9 @@ use tokio::time::sleep;
 #[tokio::test]
 async fn auto_queued_on_network_failure() {
     // check if the remote action returns a network error it is queued for execution later.
-    let queue = new_queue_typed::<ErrorAction>().await;
+    let queue = new_queue_typed::<ErrorAction>(ErrorActionHandler).await;
 
-    queue.queue_action(ErrorAction {}).await.unwrap();
+    queue.queue_action(ErrorAction).await.unwrap();
 
     let output = queue.new_executor().execute_one().await.unwrap().unwrap();
 
@@ -29,7 +29,7 @@ async fn auto_queued_on_network_failure() {
 
 #[tokio::test]
 async fn auto_queued_on_pause() {
-    let queue = new_queue_typed::<SuccessAction>().await;
+    let queue = new_queue_typed::<SuccessAction>(SuccessActionHandler).await;
     let mut broadcast = queue.new_broadcast_receiver();
     let task_spawner = TokioTaskSpawner;
     let online = watch::channel(true);
@@ -39,7 +39,7 @@ async fn auto_queued_on_pause() {
         .into_auto_executor(online.1, &task_spawner);
 
     auto_executor.pause();
-    queue.queue_action(SuccessAction {}).await.unwrap();
+    queue.queue_action(SuccessAction).await.unwrap();
 
     sleep(Duration::from_secs(1)).await;
     assert!(broadcast.is_empty());
@@ -55,10 +55,10 @@ async fn auto_queued_on_pause() {
 
 #[tokio::test]
 async fn auto_queued_on_multiple_unpause() {
-    let queue = new_queue_typed::<SuccessAction>().await;
+    let queue = new_queue_typed::<SuccessAction>(SuccessActionHandler).await;
     let mut broadcast = queue.new_broadcast_receiver();
 
-    queue.queue_action(SuccessAction {}).await.unwrap();
+    queue.queue_action(SuccessAction).await.unwrap();
 
     let task_spawner = TokioTaskSpawner;
     let online = watch::channel(true);
@@ -81,7 +81,7 @@ async fn auto_queued_on_multiple_unpause() {
 
 #[tokio::test]
 async fn auto_queued_on_multiple_pause() {
-    let queue = new_queue_typed::<SuccessAction>().await;
+    let queue = new_queue_typed::<SuccessAction>(SuccessActionHandler).await;
     let mut broadcast = queue.new_broadcast_receiver();
     let task_spawner = TokioTaskSpawner;
     let online = watch::channel(true);
@@ -94,7 +94,7 @@ async fn auto_queued_on_multiple_pause() {
     auto_executor.pause();
     auto_executor.pause();
     auto_executor.pause();
-    queue.queue_action(SuccessAction {}).await.unwrap();
+    queue.queue_action(SuccessAction).await.unwrap();
 
     sleep(Duration::from_secs(1)).await;
     assert!(broadcast.is_empty());
@@ -113,7 +113,7 @@ async fn auto_queued_on_multiple_pause() {
 
 #[tokio::test]
 async fn auto_queued_on_pause_and_partially_manual_execution() {
-    let queue = new_queue_typed::<SuccessAction>().await;
+    let queue = new_queue_typed::<SuccessAction>(SuccessActionHandler).await;
     let mut broadcast = queue.new_broadcast_receiver();
     let task_spawner = TokioTaskSpawner;
     let online = watch::channel(true);
@@ -123,8 +123,8 @@ async fn auto_queued_on_pause_and_partially_manual_execution() {
         .into_auto_executor(online.1, &task_spawner);
 
     auto_executor.pause();
-    queue.queue_action(SuccessAction {}).await.unwrap();
-    queue.queue_action(SuccessAction {}).await.unwrap();
+    queue.queue_action(SuccessAction).await.unwrap();
+    queue.queue_action(SuccessAction).await.unwrap();
 
     sleep(Duration::from_secs(1)).await;
     assert!(broadcast.is_empty());
@@ -149,7 +149,7 @@ async fn auto_queued_on_pause_and_partially_manual_execution() {
 #[tokio::test]
 async fn auto_queued_on_writer_guard_failure() {
     // check if the remote action returns a network error it is queued for execution later.
-    let queue = new_queue_typed::<WriteGuardExpiredAction>().await;
+    let queue = new_queue_typed::<WriteGuardExpiredAction>(WriterGuardExpiredActionHandler).await;
 
     queue
         .queue_action(WriteGuardExpiredAction {})
@@ -168,9 +168,9 @@ async fn auto_queued_on_writer_guard_failure() {
 async fn execute_all_does_not_loop_forever_on_network_failure() {
     // There was a bug where execute all would loop forever if an action was re-queued due to
     // network failure.
-    let queue = new_queue_typed::<ErrorAction>().await;
+    let queue = new_queue_typed::<ErrorAction>(ErrorActionHandler).await;
 
-    let _ = queue.queue_action(ErrorAction {}).await.unwrap();
+    let _ = queue.queue_action(ErrorAction).await.unwrap();
 
     queue.new_executor().execute_all().await.unwrap();
 }
@@ -178,7 +178,7 @@ async fn execute_all_does_not_loop_forever_on_network_failure() {
 #[tokio::test]
 async fn execute_all_waits_for_network_to_reoccur() {
     let online = watch::channel(false);
-    let queue = new_queue_typed::<ErrorAction>().await;
+    let queue = new_queue_typed::<ErrorAction>(ErrorActionHandler).await;
     let mut broadcast = queue.new_broadcast_receiver();
     let task_spawner = TokioTaskSpawner;
 
@@ -187,7 +187,7 @@ async fn execute_all_waits_for_network_to_reoccur() {
         .into_auto_executor(online.1, &task_spawner);
 
     auto_executor.pause();
-    queue.queue_action(ErrorAction {}).await.unwrap();
+    queue.queue_action(ErrorAction).await.unwrap();
     auto_executor.unpause();
 
     sleep(Duration::from_secs(5)).await;
@@ -196,7 +196,7 @@ async fn execute_all_waits_for_network_to_reoccur() {
 }
 
 #[derive(Serialize, Deserialize)]
-struct SuccessAction {}
+struct SuccessAction;
 
 impl Action for SuccessAction {
     const TYPE: Type = Type("success");
@@ -206,21 +206,17 @@ impl Action for SuccessAction {
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = DefaultError;
-    type Context = ();
 }
 
 #[derive(Default)]
-struct SuccessActionHandler {}
+struct SuccessActionHandler;
 
 impl Handler for SuccessActionHandler {
     type Action = SuccessAction;
 
-    type Context = ();
-
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -231,7 +227,6 @@ impl Handler for SuccessActionHandler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -241,7 +236,6 @@ impl Handler for SuccessActionHandler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
@@ -250,34 +244,28 @@ impl Handler for SuccessActionHandler {
 }
 
 #[derive(Serialize, Deserialize)]
-struct ErrorAction {}
+struct ErrorAction;
 
 impl Action for ErrorAction {
     const TYPE: Type = Type("error");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = ErrorActionHandler;
     type RemoteOutput = u32;
-
     type LocalOutput = ();
-
     type Error = DefaultError;
-
-    type Context = ();
 }
 
 #[derive(Default)]
-struct ErrorActionHandler {}
+struct ErrorActionHandler;
 
 impl Handler for ErrorActionHandler {
     type Action = ErrorAction;
 
-    type Context = ();
-
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -288,7 +276,6 @@ impl Handler for ErrorActionHandler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -298,7 +285,6 @@ impl Handler for ErrorActionHandler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
@@ -311,29 +297,23 @@ struct WriteGuardExpiredAction {}
 impl Action for WriteGuardExpiredAction {
     const TYPE: Type = Type("writer_guard_expired");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = WriterGuardExpiredActionHandler;
     type RemoteOutput = u32;
-
     type LocalOutput = ();
-
     type Error = DefaultError;
-
-    type Context = ();
 }
 
 #[derive(Default)]
-struct WriterGuardExpiredActionHandler {}
+struct WriterGuardExpiredActionHandler;
 
 impl Handler for WriterGuardExpiredActionHandler {
     type Action = WriteGuardExpiredAction;
 
-    type Context = ();
-
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -344,7 +324,6 @@ impl Handler for WriterGuardExpiredActionHandler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -354,7 +333,6 @@ impl Handler for WriterGuardExpiredActionHandler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {

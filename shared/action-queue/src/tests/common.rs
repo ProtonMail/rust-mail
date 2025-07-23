@@ -20,12 +20,10 @@ where
     <T as Action>::LocalOutput: Default,
 {
     type Action = T;
-    type Context = ();
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<<T as Action>::LocalOutput, T::Error> {
@@ -35,7 +33,6 @@ where
     fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> impl Future<Output = Result<(), T::Error>> + Send {
@@ -45,7 +42,6 @@ where
     fn apply_remote(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: WriterGuard,
     ) -> impl Future<Output = Result<<T as Action>::RemoteOutput, T::Error>> + Send {

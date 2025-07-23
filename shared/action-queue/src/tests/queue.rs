@@ -13,17 +13,16 @@ use std::time::Duration;
 struct TestAction {
     v: u32,
 }
+
 impl Action for TestAction {
     const TYPE: Type = Type("test_action");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = NoopActionHandler<Self>;
-
     type RemoteOutput = ();
     type LocalOutput = ();
-
     type Error = NoopError;
-    type Context = ();
 }
 
 #[tokio::test]
@@ -284,8 +283,13 @@ async fn check_action_only_executed_without_dependencies() {
 }
 
 async fn new_queue() -> Queue {
-    let mut factory = Factory::new();
-    factory.register::<TestAction>().unwrap();
+    let mut factory = Factory::default();
+
+    factory
+        .register::<TestAction>(NoopActionHandler::default())
+        .unwrap();
+
     let pool = Stash::new(StashConfiguration::test()).unwrap();
+
     Queue::with_factory(pool, factory).await.unwrap()
 }

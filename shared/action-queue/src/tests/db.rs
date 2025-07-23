@@ -49,15 +49,12 @@ impl From<WriterGuardError> for Error {
 impl Action for TestAction {
     const TYPE: Type = Type("test_action");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = NoopActionHandler<Self>;
-
     type RemoteOutput = ();
     type LocalOutput = ();
-
     type Error = Error;
-
-    type Context = ();
 
     fn dependency_keys(&self) -> ActionDependencyKeys {
         self.dependency_keys.clone()

@@ -11,8 +11,12 @@ use std::time::Duration;
 
 #[tokio::test]
 async fn failure_action_observer_remote() {
-    let queue = new_queue_typed::<ErrorAction>().await;
-    queue.register::<SuccessAction>().unwrap();
+    let queue = new_queue_typed::<ErrorAction>(ErrorActionHandler).await;
+
+    queue
+        .register::<SuccessAction>(SuccessActionHandler)
+        .unwrap();
+
     let executor = queue.new_executor();
 
     let id_cancel = queue.queue_action(ErrorAction {}).await.unwrap().id;
@@ -68,8 +72,11 @@ async fn failure_action_observer_remote() {
 
 #[tokio::test]
 async fn action_awaiter() {
-    let queue = new_queue_typed::<ErrorAction>().await;
-    queue.register::<SuccessAction>().unwrap();
+    let queue = new_queue_typed::<ErrorAction>(ErrorActionHandler).await;
+
+    queue
+        .register::<SuccessAction>(SuccessActionHandler)
+        .unwrap();
 
     let id_cancel = queue.queue_action(ErrorAction {}).await.unwrap().id;
     let id_delete = queue.queue_action(ErrorAction {}).await.unwrap().id;
@@ -119,30 +126,28 @@ async fn action_awaiter() {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ErrorAction {}
+pub struct ErrorAction;
 
 impl Action for ErrorAction {
     const TYPE: Type = Type("remote_error_action");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<ErrorAction>;
     type Handler = ErrorActionHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = DefaultError;
-    type Context = ();
 }
 
 #[derive(Default)]
-pub struct ErrorActionHandler {}
+pub struct ErrorActionHandler;
 
 impl Handler for ErrorActionHandler {
     type Action = ErrorAction;
-    type Context = ();
 
     fn apply_local(
         &self,
         _: ActionId,
-        (): &Self::Context,
         _: &mut Self::Action,
         _: &Bond,
     ) -> impl Future<
@@ -154,7 +159,6 @@ impl Handler for ErrorActionHandler {
     fn revert_local(
         &self,
         _: ActionId,
-        (): &Self::Context,
         _: &mut Self::Action,
         _: &Bond,
     ) -> impl Future<Output = Result<(), <Self::Action as Action>::Error>> + Send {
@@ -164,7 +168,6 @@ impl Handler for ErrorActionHandler {
     fn apply_remote(
         &self,
         _: ActionId,
-        (): &Self::Context,
         _: &mut Self::Action,
         _: WriterGuard,
     ) -> impl Future<
@@ -175,30 +178,28 @@ impl Handler for ErrorActionHandler {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct SuccessAction {}
+pub struct SuccessAction;
 
 impl Action for SuccessAction {
     const TYPE: Type = Type("success_action");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<SuccessAction>;
     type Handler = SuccessActionHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = DefaultError;
-    type Context = ();
 }
 
 #[derive(Default)]
-pub struct SuccessActionHandler {}
+pub struct SuccessActionHandler;
 
 impl Handler for SuccessActionHandler {
     type Action = SuccessAction;
-    type Context = ();
 
     fn apply_local(
         &self,
         _: ActionId,
-        (): &Self::Context,
         _: &mut Self::Action,
         _: &Bond,
     ) -> impl Future<
@@ -210,7 +211,6 @@ impl Handler for SuccessActionHandler {
     fn revert_local(
         &self,
         _: ActionId,
-        (): &Self::Context,
         _: &mut Self::Action,
         _: &Bond,
     ) -> impl Future<Output = Result<(), <Self::Action as Action>::Error>> + Send {
@@ -220,7 +220,6 @@ impl Handler for SuccessActionHandler {
     fn apply_remote(
         &self,
         _: ActionId,
-        (): &Self::Context,
         _: &mut Self::Action,
         _: WriterGuard<'_>,
     ) -> impl Future<

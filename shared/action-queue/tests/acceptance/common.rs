@@ -18,20 +18,22 @@ pub async fn new_queue_with_stash(stash: Stash, factory: Factory) -> Queue {
 pub async fn new_stash() -> Stash {
     let stash = Stash::new(StashConfiguration::test()).unwrap();
     let mut conn = stash.connection();
+
     conn.tx(async |tx| tx.ext_create_table().await)
         .await
         .unwrap();
+
     stash
 }
 
-pub async fn new_queue_typed<T: Action<Context: Default>>() -> Queue {
-    new_queue(new_factory::<T>()).await
+pub async fn new_queue_typed<T: Action>(handler: T::Handler) -> Queue {
+    new_queue(new_factory::<T>(handler)).await
 }
 
-/// Create a new factory with an action.
-pub fn new_factory<T: Action>() -> Factory {
-    let mut factory = Factory::new();
-    factory.register::<T>().unwrap();
+pub fn new_factory<T: Action>(handler: T::Handler) -> Factory {
+    let mut factory = Factory::default();
+
+    factory.register::<T>(handler).unwrap();
     factory
 }
 
@@ -41,9 +43,7 @@ pub trait TestReadExtension {
 
 pub trait TestWriteExtension: TestReadExtension {
     async fn ext_create_table(&self) -> Result<(), StashError>;
-
     async fn ext_insert_value(&self, key: &str, value: u32) -> Result<(), StashError>;
-
     async fn ext_delete_value(&self, key: &str) -> Result<(), StashError>;
 }
 

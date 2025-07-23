@@ -120,7 +120,7 @@ async fn parent_main(process_count: usize, action_count: usize, consume: bool) {
         // Otherwise we produce actions and the children execute them.
         println!("QUEUEING_ACTIONS");
         for _ in 0..action_count {
-            queue.queue_action(TestAction::new()).await.unwrap();
+            queue.queue_action(TestAction).await.unwrap();
         }
 
         wait_on_queue_empty(&queue).await;
@@ -155,7 +155,7 @@ async fn child_main(directory: &Path, action_count: Option<usize>) {
     println!("STARTING CHILD: {}", executor_id());
     if let Some(action_count) = action_count {
         for _ in 0..action_count {
-            queue.queue_action(TestAction::new()).await.unwrap();
+            queue.queue_action(TestAction).await.unwrap();
         }
     } else {
         let task_spawner = TokioTaskSpawner;
@@ -205,19 +205,16 @@ async fn new_queue(directory: &Path) -> Queue {
         &directory.join("sqlite.db"),
     ))
     .unwrap();
+
     let queue = Queue::new(stash).await.unwrap();
-    queue.register::<TestAction>().unwrap();
+
+    queue.register::<TestAction>(TestHandler).unwrap();
     queue
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct TestAction {}
+struct TestAction;
 
-impl TestAction {
-    fn new() -> Self {
-        Self {}
-    }
-}
 impl Action for TestAction {
     const TYPE: Type = Type("test_action");
     const VERSION: u32 = 1;
@@ -226,20 +223,17 @@ impl Action for TestAction {
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = NoopError;
-    type Context = ();
 }
 
 #[derive(Default)]
-struct TestHandler {}
+struct TestHandler;
 
 impl Handler for TestHandler {
     type Action = TestAction;
-    type Context = ();
 
     async fn apply_local(
         &self,
         id: ActionId,
-        (): &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
@@ -254,7 +248,6 @@ impl Handler for TestHandler {
     async fn revert_local(
         &self,
         _: ActionId,
-        (): &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -264,7 +257,6 @@ impl Handler for TestHandler {
     async fn apply_remote(
         &self,
         id: ActionId,
-        (): &Self::Context,
         _: &mut Self::Action,
         _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {

@@ -10,7 +10,7 @@ use stash::stash::Bond;
 #[tokio::test]
 async fn network_failure_causes_revert_on_apply() {
     // Check that if remote fails to execute when action is applied, local state is reverted.
-    let queue = new_queue_typed::<RevertAction>().await;
+    let queue = new_queue_typed::<RevertAction>(RevertActionHandler).await;
 
     let key = "foo";
     let value = 30_u32;
@@ -45,7 +45,7 @@ async fn network_failure_causes_revert_on_apply() {
 #[tokio::test]
 async fn network_failure_causes_revert_on_queue() {
     // Check that if remote fails to execute when action is queued, local state is reverted.
-    let queue = new_queue_typed::<RevertAction>().await;
+    let queue = new_queue_typed::<RevertAction>(RevertActionHandler).await;
     let executor = queue.new_executor();
 
     let key = "foo";
@@ -97,7 +97,7 @@ async fn network_failure_causes_revert_on_queue() {
 async fn revert_cancels_all_dependent_actions() {
     // Check that if an action fails to execute and all the subsequent actions
     // that depend on the failed action also revert.
-    let queue = new_queue_typed::<ChainCancelAction>().await;
+    let queue = new_queue_typed::<ChainCancelAction>(ChainCancelActionHandler).await;
     let executor = queue.new_executor();
 
     let key = "foo";
@@ -197,26 +197,23 @@ struct RevertAction {
 impl Action for RevertAction {
     const TYPE: Type = Type("revert");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = RevertActionHandler;
     type RemoteOutput = u32;
-
     type LocalOutput = ();
     type Error = DefaultError;
-    type Context = ();
 }
 
 #[derive(Default)]
-struct RevertActionHandler {}
+struct RevertActionHandler;
 
 impl Handler for RevertActionHandler {
     type Action = RevertAction;
-    type Context = ();
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -226,7 +223,6 @@ impl Handler for RevertActionHandler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -236,7 +232,6 @@ impl Handler for RevertActionHandler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
@@ -254,26 +249,23 @@ pub struct ChainCancelAction {
 impl Action for ChainCancelAction {
     const TYPE: Type = Type("chain_revert");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = ChainCancelActionHandler;
-
     type RemoteOutput = u32;
     type LocalOutput = ();
-
     type Error = DefaultError;
-    type Context = ();
 }
 
 #[derive(Default)]
-pub struct ChainCancelActionHandler {}
+pub struct ChainCancelActionHandler;
 
 impl Handler for ChainCancelActionHandler {
     type Action = ChainCancelAction;
-    type Context = ();
+
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -285,7 +277,6 @@ impl Handler for ChainCancelActionHandler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -297,7 +288,6 @@ impl Handler for ChainCancelActionHandler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
