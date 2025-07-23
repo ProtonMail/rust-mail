@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 use stash::params;
 use stash::stash::Bond;
 
-/// Action which blocks or unblocks an address
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Unblock {
     pub email: PrivateEmail,

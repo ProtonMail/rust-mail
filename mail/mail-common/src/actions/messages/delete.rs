@@ -15,12 +15,10 @@ use stash::params;
 use stash::stash::{Bond, StashError};
 use tracing::{error, info};
 
-/// Action which marks messages as deleted.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Delete(GenericLabelRelatedActionData<Message>);
 
 impl Delete {
-    /// Create a new instance which marks the messages as deleted.
     pub fn new(
         label_id: LocalLabelId,
         message_ids: impl IntoIterator<Item = LocalMessageId>,

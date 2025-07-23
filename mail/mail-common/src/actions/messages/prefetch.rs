@@ -10,14 +10,12 @@ use stash::orm::Model;
 use stash::stash::Bond;
 use tracing::error;
 
-/// Prefetch message body action.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Prefetch {
     local_id: LocalMessageId,
 }
 
 impl Prefetch {
-    /// Create new instance.
     pub fn new(local_id: LocalMessageId) -> Self {
         Self { local_id }
     }

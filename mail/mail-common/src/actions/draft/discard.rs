@@ -28,7 +28,6 @@ pub struct Discard {
 }
 
 impl Discard {
-    /// Create a new instance for the `draft`.
     pub fn new(metadata_id: MetadataId) -> Self {
         Self {
             metadata_id,

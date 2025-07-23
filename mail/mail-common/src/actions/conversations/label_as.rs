@@ -18,7 +18,6 @@ use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{Bond, Tether};
 
-/// Action to change the labels of a group of conversations.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LabelAs(pub LabelAsData<Conversation>);
 

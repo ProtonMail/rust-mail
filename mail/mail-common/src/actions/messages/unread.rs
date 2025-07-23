@@ -13,12 +13,10 @@ use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use tracing::{error, info};
 
-/// Action which marks messages as unread.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Unread(GenericActionData<Message>);
 
 impl Unread {
-    /// Create a new instance which marks the messages as unread.
     pub fn new(message_ids: impl IntoIterator<Item = LocalMessageId>) -> Self {
         Self(GenericActionData::new(message_ids))
     }

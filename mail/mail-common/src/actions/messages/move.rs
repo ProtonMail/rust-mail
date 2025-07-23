@@ -12,13 +12,10 @@ use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use tracing::{error, info};
 
-/// Action which applies a label to messages.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Move(ActionMoveData<Message>);
 
 impl Move {
-    /// Create a new action which moves messages with `target_ids` from `source_label_id` to
-    /// `destination_label_id`.
     pub fn new(
         source_label_id: LocalLabelId,
         destination_label_id: LocalLabelId,

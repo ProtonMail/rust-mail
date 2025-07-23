@@ -13,13 +13,10 @@ use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use tracing::error;
 
-/// Action which moves conversations between two labels.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Move(ActionMoveData<Conversation>);
 
 impl Move {
-    /// Create a new action which moves conversations with `ids` from `source_label_id` to
-    /// `destination_label_id`.
     pub fn new(
         source_label_id: LocalLabelId,
         destination_label_id: LocalLabelId,

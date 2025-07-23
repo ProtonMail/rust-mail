@@ -17,7 +17,6 @@ use tracing::error;
 pub struct Delete(GenericLabelRelatedActionData<Conversation>);
 
 impl Delete {
-    /// Create new instance.
     pub fn new(label_id: LocalLabelId, ids: impl IntoIterator<Item = LocalConversationId>) -> Self {
         Self(GenericLabelRelatedActionData::new(label_id, ids))
     }

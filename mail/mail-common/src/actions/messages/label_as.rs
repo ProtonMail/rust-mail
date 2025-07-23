@@ -17,7 +17,6 @@ use stash::stash::{Bond, Tether};
 use std::collections::HashSet;
 use std::mem;
 
-/// Action which change the labels of a messages.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LabelAs(pub LabelAsData<Message>);
 

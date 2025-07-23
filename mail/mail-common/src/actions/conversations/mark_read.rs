@@ -12,12 +12,10 @@ use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use tracing::error;
 
-/// Action to mark conversations read.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MarkRead(GenericLabelRelatedActionData<Conversation>);
 
 impl MarkRead {
-    /// Create a new action which marks the conversations with `ids` as read.
     pub fn new(label_id: LocalLabelId, ids: impl IntoIterator<Item = LocalConversationId>) -> Self {
         // TODO(db-tests): label_id was present in the original action, why was it used.
         Self(GenericLabelRelatedActionData::new(label_id, ids))

@@ -92,7 +92,6 @@ impl UserContext {
         let cancellation_token = context.new_child_cancellation_token();
         let queue = Queue::new(user_stash.clone()).await?;
 
-        // Register core actions
         register_core_actions(&queue);
 
         let initialization_watcher = InitializationWatcher::new(&user_stash)?;

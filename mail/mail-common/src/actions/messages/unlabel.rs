@@ -12,12 +12,10 @@ use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use tracing::{error, info};
 
-/// Action which remove a label from messages.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Unlabel(GenericLabelRelatedActionData<Message>);
 
 impl Unlabel {
-    /// Create a new instance which remove `label_id` from the messages with `message_ids`
     pub fn new(
         label_id: LocalLabelId,
         message_ids: impl IntoIterator<Item = LocalMessageId>,

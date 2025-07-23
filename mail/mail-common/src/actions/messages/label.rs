@@ -11,12 +11,10 @@ use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use tracing::{error, info};
 
-/// Action which applies a label to messages.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Label(GenericLabelRelatedActionData<Message>);
 
 impl Label {
-    /// Create a new instance which applies `label_id` to the messages with `message_ids`.
     pub fn new(
         label_id: LocalLabelId,
         message_ids: impl IntoIterator<Item = LocalMessageId>,

@@ -11,12 +11,10 @@ use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use tracing::error;
 
-/// Action to mark conversations as unread.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MarkUnread(GenericLabelRelatedActionData<Conversation>);
 
 impl MarkUnread {
-    /// Create a new action which marks the conversations with `ids` as read.
     pub fn new(label_id: LocalLabelId, ids: impl IntoIterator<Item = LocalConversationId>) -> Self {
         // TODO(db-tests): label_id was present in the original action, why was it used.
         Self(GenericLabelRelatedActionData::new(label_id, ids))

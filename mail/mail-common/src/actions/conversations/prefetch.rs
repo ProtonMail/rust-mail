@@ -12,7 +12,6 @@ use stash::orm::Model;
 use stash::stash::Bond;
 use tracing::{error, info};
 
-/// Prefetch conversation data action.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Prefetch {
     local_id: LocalConversationId,
@@ -20,7 +19,6 @@ pub struct Prefetch {
 }
 
 impl Prefetch {
-    /// Create new instance.
     pub fn new(local_id: LocalConversationId, local_label_id: LocalLabelId) -> Self {
         Self {
             local_id,

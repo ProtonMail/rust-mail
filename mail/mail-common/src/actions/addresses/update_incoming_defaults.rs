@@ -6,7 +6,6 @@ use proton_action_queue::action::{ActionId, Handler as ActionHandler};
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 
-/// Action which blocks or unblocks an address
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncIncomingDefaults;
 
