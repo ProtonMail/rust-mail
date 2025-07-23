@@ -133,6 +133,9 @@ pub trait Store: Send + Sync + 'static {
 
     /// Clear all account data.
     async fn clear_account(&mut self) -> Result<(), StoreError>;
+
+    /// Get the session ID for the given user id.
+    async fn get_session_id(&self, user_id: &UserId) -> Result<Option<SessionId>, StoreError>;
 }
 
 #[async_trait]
@@ -180,6 +183,10 @@ impl<S: ?Sized + Store> Store for Box<S> {
 
     async fn clear_account(&mut self) -> Result<(), StoreError> {
         self.deref_mut().clear_account().await
+    }
+
+    async fn get_session_id(&self, user_id: &UserId) -> Result<Option<SessionId>, StoreError> {
+        self.deref().get_session_id(user_id).await
     }
 }
 
@@ -254,5 +261,17 @@ impl Store for TempStore {
         *self = Self::default();
 
         Ok(())
+    }
+
+    async fn get_session_id(&self, user_id: &UserId) -> Result<Option<SessionId>, StoreError> {
+        let Some(info) = &self.info else {
+            return Ok(None);
+        };
+
+        if &info.user_id != user_id {
+            return Ok(None);
+        }
+
+        Ok(Some(info.session_id.clone()))
     }
 }

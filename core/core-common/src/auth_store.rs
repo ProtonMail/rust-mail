@@ -413,6 +413,16 @@ impl Store for AuthStore {
 
         Ok(())
     }
+
+    async fn get_session_id(&self, user_id: &UserId) -> Result<Option<SessionId>, StoreError> {
+        info!("getting user auth UID from store");
+
+        let tether = self.stash.connection();
+        let sessions = CoreSession::find_by_user_id(user_id.to_owned(), &tether).await?;
+        let session_id = sessions.into_iter().next().map(|s| s.remote_id);
+
+        Ok(session_id)
+    }
 }
 
 pub trait DecryptExt
