@@ -219,6 +219,20 @@ impl IcsRead<Value> for ParamValue {
 
                         mode = Mode::Plain;
                         quote = false;
+                    } else {
+                        _ = r.char();
+
+                        let span = Span::new(r.pos().prev(), r.pos());
+
+                        match r.char()? {
+                            ch @ (';' | ':' | ',') => {
+                                r.warn(span, "quirky escape sequence");
+                                value.push(ch);
+                            }
+                            _ => {
+                                r.error(span, "unrecognized escape sequence");
+                            }
+                        }
                     }
                 }
 
@@ -372,7 +386,7 @@ mod tests {
     #[test_case(';' ; "semicolon")]
     #[test_case(':' ; "colon")]
     #[test_case(',' ; "comma")]
-    fn escape(ch: char) {
+    fn plain_escape(ch: char) {
         let (obj, msgs) = ParamValue::from_str_ex(&format!("John Smith\\{ch} MD"), Value);
 
         assert_eq!(
@@ -395,7 +409,7 @@ mod tests {
     }
 
     #[test]
-    fn unrecognized_escape() {
+    fn unrecognized_plain_escape() {
         let (obj, msgs) = ParamValue::from_str_ex("John Smith\\n MD", Value);
 
         assert_eq!(
@@ -409,6 +423,54 @@ mod tests {
         assert_eq!(
             vec![ReadMsg {
                 at: Some(Span::new((1, 11), (1, 12))),
+                body: "unrecognized escape sequence".into(),
+                kind: ReadMsgKind::Error,
+                context: Vec::new(),
+            }],
+            msgs,
+        );
+    }
+
+    #[test_case(';' ; "semicolon")]
+    #[test_case(':' ; "colon")]
+    #[test_case(',' ; "comma")]
+    fn quoted_escape(ch: char) {
+        let (obj, msgs) = ParamValue::from_str_ex(&format!("\"John Smith\\{ch} MD\""), Value);
+
+        assert_eq!(
+            Some(ParamValue {
+                value: format!("John Smith{ch} MD"),
+                quote: true,
+            }),
+            obj,
+        );
+
+        assert_eq!(
+            vec![ReadMsg {
+                at: Some(Span::new((1, 12), (1, 13))),
+                body: "quirky escape sequence".into(),
+                kind: ReadMsgKind::Warning,
+                context: Vec::new(),
+            }],
+            msgs,
+        );
+    }
+
+    #[test]
+    fn unrecognized_quoted_escape() {
+        let (obj, msgs) = ParamValue::from_str_ex("\"John Smith\\n MD\"", Value);
+
+        assert_eq!(
+            Some(ParamValue {
+                value: "John Smith MD".into(),
+                quote: true,
+            }),
+            obj,
+        );
+
+        assert_eq!(
+            vec![ReadMsg {
+                at: Some(Span::new((1, 12), (1, 13))),
                 body: "unrecognized escape sequence".into(),
                 kind: ReadMsgKind::Error,
                 context: Vec::new(),
