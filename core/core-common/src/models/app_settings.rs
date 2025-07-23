@@ -63,12 +63,11 @@ impl AppSettings {
         }
     }
 
-    pub async fn should_auto_lock(&self, ctx: &Context) -> bool {
+    pub fn should_auto_lock(&self, ctx: &Context) -> bool {
         if self.protection.is_unset() {
             false
         } else {
             let lock_elapsed = ctx.clock().auto_lock_elapsed();
-
             let should_lock = self.auto_lock.should_autolock(lock_elapsed);
 
             // If the app is not supposed to lock, we need to mark that the auto lock has been accessed
@@ -85,7 +84,6 @@ impl AppSettings {
         Self::load(SingleEntryId, tether).await
     }
 
-    /// Get the mail settings from database, fallback on default
     pub async fn get_or_default(tether: &Tether) -> Self {
         Self::get(tether)
             .await
@@ -384,19 +382,19 @@ mod tests {
         app_settings.auto_lock = ProtectionAutoLock::Minutes(10);
 
         // First calls to should_auto_lock will return true
-        assert!(app_settings.should_auto_lock(core_ctx).await);
-        assert!(app_settings.should_auto_lock(core_ctx).await);
+        assert!(app_settings.should_auto_lock(core_ctx));
+        assert!(app_settings.should_auto_lock(core_ctx));
         // Ticking the clock will not change the result
         core_ctx.clock().auto_lock_tick();
-        assert!(app_settings.should_auto_lock(core_ctx).await);
+        assert!(app_settings.should_auto_lock(core_ctx));
         // We need to mark that the auto lock has been accessed
         // in order to reset the timer
         core_ctx.clock().auto_lock_accessed();
         core_ctx.clock().auto_lock_tick();
         // Now the app is unlocked for the next 10 minutes
         let last_lock_1 = core_ctx.clock().auto_lock_elapsed();
-        assert!(!app_settings.should_auto_lock(core_ctx).await);
-        assert!(!app_settings.should_auto_lock(core_ctx).await);
+        assert!(!app_settings.should_auto_lock(core_ctx));
+        assert!(!app_settings.should_auto_lock(core_ctx));
         let last_lock_2 = core_ctx.clock().auto_lock_elapsed();
 
         assert!(last_lock_1 < last_lock_2);
@@ -411,12 +409,12 @@ mod tests {
             .auto_lock_duration_sub(ten_minutes_one_second);
 
         // After 10 minutes, it will return `true`
-        assert!(app_settings.should_auto_lock(core_ctx).await);
+        assert!(app_settings.should_auto_lock(core_ctx));
         // Till the auto lock is not accessed it will return `true`
-        assert!(app_settings.should_auto_lock(core_ctx).await);
+        assert!(app_settings.should_auto_lock(core_ctx));
 
         // Now it will return `false` as we have accessed the app
         core_ctx.clock().auto_lock_tick();
-        assert!(!app_settings.should_auto_lock(core_ctx).await);
+        assert!(!app_settings.should_auto_lock(core_ctx));
     }
 }
