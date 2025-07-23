@@ -43,6 +43,7 @@ pub async fn mock_auth_endpoints(mock_server: &MockServer) {
         .await;
 
     let refresh_response = serde_json::json!({
+        "UID": "dummy",
         "AccessToken": "dummy",
         "RefreshToken": "dummy",
         "Scopes": ["dummy"],
