@@ -227,7 +227,9 @@ impl StatusObserver {
                 || (self.get_cached_status().is_offline()
                     && self.history.was_online_most_of_the_time())
             {
-                Self::ping(api.clone(), self.config.fg_timeout, self.config.fg_retry).await;
+                self.clone()
+                    .ping(api.clone(), self.config.fg_timeout, self.config.fg_retry)
+                    .await;
             } else {
                 self.spawn_ping(api.clone());
             }
@@ -270,8 +272,14 @@ impl StatusObserver {
         trace!("Status has been updated to {:?}", new);
     }
 
-    async fn ping(api: Proton, timeout: Duration, retry: RetryPolicy) {
-        let _ = api.get_tests_ping(Some(timeout), Some(retry)).await;
+    async fn ping(self, api: Proton, timeout: Duration, retry: RetryPolicy) {
+        // TIMEOUT is never passed through the layer, which means
+        // we need to make the assertion here to detect it.
+        match api.get_tests_ping(Some(timeout), Some(retry)).await {
+            Err(e) if e.is_server_unreachable() => self.update(ConnectionStatus::ServerUnreachable),
+            Err(e) if e.is_network_failure() => self.update(ConnectionStatus::Offline),
+            _ => self.update(ConnectionStatus::Online),
+        }
     }
 
     fn spawn_ping(&self, api: Proton) {
@@ -284,12 +292,9 @@ impl StatusObserver {
             }
         }
 
+        let this = self.clone();
         *ping = Some(BackgroundPing {
-            request: tokio::spawn(Self::ping(
-                api,
-                self.config.bg_timeout,
-                self.config.bg_retry,
-            )),
+            request: tokio::spawn(this.ping(api, self.config.bg_timeout, self.config.bg_retry)),
         });
     }
 
