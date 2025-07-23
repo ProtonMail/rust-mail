@@ -12,6 +12,7 @@ use state::State;
 use std::fmt::Debug;
 use thiserror::Error;
 
+mod observability;
 pub mod state;
 
 /// Errors that can occur during the signup flow.
