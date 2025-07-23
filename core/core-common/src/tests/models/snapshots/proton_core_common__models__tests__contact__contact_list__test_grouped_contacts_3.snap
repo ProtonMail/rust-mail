@@ -2,8 +2,10 @@
 source: core/core-common/src/tests/models/contact.rs
 expression: display_group(groups)
 ---
-1 keys:
+2 keys:
 
-B (2 items)
-Contact B (#3F8B8E): 🦊 Barbara Fox (0 addresses)
-Contact B (#4F66DF): 🐂 Barbara Lox (0 addresses)
+🐂 (1 item)
+Contact 🐂 (#4F66DF): 🐂 Barbara Lox (0 addresses)
+
+🦊 (1 item)
+Contact 🦊 (#3F8B8E): 🦊 Barbara Fox (0 addresses)
