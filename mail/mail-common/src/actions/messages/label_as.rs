@@ -82,13 +82,10 @@ pub struct UndoLabelAsMessages {
 impl UndoLabelAsMessages {
     pub async fn undo(self, queue: &Queue, tether: &Tether) -> Result<(), AppError> {
         let mut action = self.action;
-
-        let Err(e) = queue.cancel(self.id).await else {
+        if queue.cancel(self.id).await.is_ok() {
             // The undoing is done by the revert_local of the action.
             return Ok(());
         };
-
-        tracing::error!("{e:?}");
 
         // The queue couldn't revert. This means that we're on our own to undo this.
         // Let's create the opposite action: Swap add and remove.

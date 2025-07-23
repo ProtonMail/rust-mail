@@ -566,6 +566,12 @@ impl Metadata {
     pub fn builder() -> MetadataBuilder {
         MetadataBuilder::new()
     }
+
+    pub fn with_dependency(dependency_id: ActionId) -> Self {
+        MetadataBuilder::new()
+            .with_dependency(dependency_id)
+            .build()
+    }
 }
 
 pub struct MetadataBuilder {

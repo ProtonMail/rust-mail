@@ -71,23 +71,17 @@ pub struct UndoMoveToMessages {
 }
 
 impl UndoMoveToMessages {
-    pub async fn undo(self, queue: &Queue, tether: &mut Tether) -> Result<(), AppError> {
-        let Err(e) = queue.cancel(self.id).await else {
+    pub async fn undo(self, queue: &Queue, _: &Tether) -> Result<(), AppError> {
+        if queue.cancel(self.id).await.is_ok() {
             // The undoing is done by the revert_local of the action.
             return Ok(());
         };
-
-        tracing::error!("{e:?}");
         // The queue couldn't revert. This means that we're on our own to undo this.
 
         _ = queue
             .queue_actions(self.action.0.reverse().map(Move))
             .await
             .context("Error undoing")?;
-
-        tether
-            .tx(async |tx| self.action.0.queue_rollback_items(tx).await)
-            .await?;
 
         Ok(())
     }
