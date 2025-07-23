@@ -1,7 +1,6 @@
 #![allow(clippy::wildcard_imports)]
 #![allow(clippy::similar_names)]
 
-use crate::AccountApi;
 use crate::requests::*;
 use crate::responses::*;
 use crate::shared::SecureString;
@@ -13,6 +12,7 @@ use crate::signup::state::StateData;
 use crate::signup::state::StateResult;
 use crate::signup::state::Username;
 use crate::signup::state::complete::Complete;
+use crate::{AccountApi, ApiError};
 use derive_more::Display;
 use futures::TryFutureExt;
 use muon::Client;
@@ -20,6 +20,9 @@ use muon::Client;
 use muon::client::flow::LoginExtraInfo;
 use muon::client::flow::LoginFlow;
 use proton_core_api::auth::UserKeySecret;
+use proton_core_api::services::observability::{
+    ApiServiceObservabilityResponse, ObservabilityRecorder,
+};
 use proton_core_api::services::proton::SessionId;
 use proton_core_api::services::proton::UserId;
 use proton_core_api::store::AuthInfo;
@@ -27,10 +30,12 @@ use proton_core_api::store::DynStore;
 use proton_core_api::store::MbpMode;
 use proton_core_api::store::TfaMode;
 use proton_core_api::store::UserData;
+use proton_core_api::{metric, services::observability::ObservabilityMetric};
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::proton_crypto::srp::SRPProvider;
 use proton_crypto_account::proton_crypto::{new_pgp_provider, new_srp_provider};
 use proton_crypto_account::salts::KeySecret;
+use serde::{Deserialize, Serialize};
 
 /// Represents the state where the user can provide recovery information.
 #[derive(Debug, Display, Clone)]
@@ -41,6 +46,7 @@ pub struct WantCreate {
     password: SecureString,
     recovery: Recovery,
     data: StateData,
+    recorder: ObservabilityRecorder,
 }
 
 impl WantCreate {
@@ -59,6 +65,7 @@ impl WantCreate {
             password,
             recovery,
             data,
+            recorder: ObservabilityRecorder::default(),
         }
     }
 
@@ -200,7 +207,14 @@ impl WantCreate {
 
                 self.client
                     .create_user(req)
-                    .inspect_err(|e| error!("create internal user: {e} ({:?})", e.body_str()))
+                    .inspect_err(|err| {
+                        self.recorder
+                            .record(UserStatus::error(UserKind::Internal, err));
+                    })
+                    .inspect_ok(|_| {
+                        self.recorder
+                            .record(UserStatus::success(UserKind::Internal));
+                    })
                     .await?
             }
 
@@ -214,7 +228,14 @@ impl WantCreate {
 
                 self.client
                     .create_external_user(req)
-                    .inspect_err(|e| error!("create external user: {e} ({:?})", e.body_str()))
+                    .inspect_err(|err| {
+                        self.recorder
+                            .record(UserStatus::error(UserKind::External, err));
+                    })
+                    .inspect_ok(|_| {
+                        self.recorder
+                            .record(UserStatus::success(UserKind::External));
+                    })
                     .await?
             }
         };
@@ -248,5 +269,112 @@ impl WantCreate {
             .await?;
 
         Ok((res.user, user_key.pass))
+    }
+}
+
+#[derive(Display, Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum UserKind {
+    Internal,
+    External,
+}
+
+metric! {
+    #[name = "core_signup_account_creation_total"]
+    #[version = 1]
+    #[doc = "Records the outcomes of the `GET core/v4/users` and `GET core/v4/users/external` API calls on the origin device."]
+    pub struct UserStatus {
+        pub status: ApiServiceObservabilityResponse,
+        pub kind: UserKind,
+    }
+}
+
+impl UserStatus {
+    fn success(kind: UserKind) -> Self {
+        UserStatus {
+            status: ApiServiceObservabilityResponse::Success,
+            kind,
+        }
+    }
+    fn error(kind: UserKind, error: &ApiError) -> Self {
+        UserStatus {
+            status: error.into(),
+            kind,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use proton_core_api::services::{
+        observability::ObservabilityRecorder,
+        proton::prelude::{PostMetricsRequestData, PostMetricsRequestElement},
+    };
+    use serde_json::{self, json};
+
+    fn assert_serialization_deserialization(
+        status: ApiServiceObservabilityResponse,
+        expected_status: &str,
+        kind: UserKind,
+        expected_kind: &str,
+    ) {
+        let metric = ObservabilityRecorder::into_metrics_element(
+            UserStatus { status, kind },
+            1_741_021_308,
+            1,
+        )
+        .unwrap();
+
+        let serialized = serde_json::to_string(&metric).unwrap();
+
+        let expected_json = format!(
+            r#"{{"Name":"core_signup_account_creation_total","Version":1,"Timestamp":1741021308,"Data":{{"Labels":{{"kind":"{expected_kind}","status":"{expected_status}"}},"Value":1}}}}"#
+        );
+
+        assert_eq!(serialized, expected_json);
+
+        assert_eq!(
+            PostMetricsRequestElement {
+                name: "core_signup_account_creation_total".into(),
+                version: 1,
+                timestamp: 1_741_021_308,
+                data: PostMetricsRequestData {
+                    labels: json!({
+                        "status": expected_status,
+                        "kind": expected_kind
+                    }),
+                    value: 1,
+                }
+            },
+            serde_json::from_str(&serialized).unwrap()
+        );
+    }
+
+    #[test]
+    fn test_username_availability_serialization_deserialization_for_all_variants() {
+        let statuses = vec![
+            (ApiServiceObservabilityResponse::Success, "success"),
+            (ApiServiceObservabilityResponse::Http4xx, "http4xx"),
+            (ApiServiceObservabilityResponse::Http5xx, "http5xx"),
+            (
+                ApiServiceObservabilityResponse::NetworkError,
+                "network_error",
+            ),
+            (
+                ApiServiceObservabilityResponse::SerializationError,
+                "serialization_error",
+            ),
+            (ApiServiceObservabilityResponse::Unknown, "unknown"),
+        ];
+
+        for (status, expected_status) in statuses {
+            assert_serialization_deserialization(
+                status,
+                expected_status,
+                UserKind::Internal,
+                "internal",
+            );
+        }
     }
 }
