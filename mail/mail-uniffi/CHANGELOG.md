@@ -16,14 +16,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-1450] Derive debug for observabilityrecorder
 - [ET-1450] Map apierror to apiserviceobservabilityresponse
 - [ET-1450] Record observability metrics for users/available endpoint
+- [ET-1450] Record observability metrics for users endpoint
 
 ### Fixes
 
 - Fix migration filename
 - Present a clear fork api
-- Correct error mapping for duplicatecontext variant
 - Make observabilityrecorder.record sync
+- Correct error mapping for duplicatecontext variant
 - [ET-3706] Prevent duplicate account login
+
+
+## [mail-uniffi-v0.105.4] - 2025-07-23
+
+### Fixes
+
+- Improve scroller offline mode capabilities
 
 
 ## [mail-uniffi-v0.105.2] - 2025-07-22
@@ -31,6 +39,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixes
 
 - [ET-3759] Unable to reply to messages
+
+
+## [mail-uniffi-v0.105.3] - 2025-07-22
+
+### Fixes
+
+- [ET-3783] Missing attachments
 
 
 ## [mail-uniffi-v0.106.0] - 2025-07-21
@@ -83,6 +98,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [mail-uniffi-v0.103.0] - 2025-07-15
 
+### Changed
+
+- [ET-3550] Fetch more returns `scrollerupdate::none` when requested by client
+
 ### Features
 
 - [ET-3609] Add encrypt-to-outside (eo) crypto logic
@@ -109,10 +128,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ## [mail-uniffi-v0.102.0] - 2025-07-10
-
-### Changed
-
-- [ET-3550] Fetch more returns `scrollerupdate::none` when requested by client
 
 ### Fixes
 
