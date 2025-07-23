@@ -253,7 +253,7 @@ async fn multiple_subscribers() {
 #[test_case(204, ConnectionStatus::Online; "TEST 3 - 204 No Content")]
 #[test_case(304, ConnectionStatus::Online; "TEST 4 - 304 Not Modified")]
 #[test_case(400, ConnectionStatus::Online; "TEST 5 - 400 Bad Request")]
-// #[test_case(401, ConnectionStatus::Online; "TEST 6 - 401 Unauthorized")] // Problematic test case - layer handles it as Offline which is not true
+#[test_case(401, ConnectionStatus::Online; "TEST 6 - 401 Unauthorized")]
 #[test_case(403, ConnectionStatus::Online; "TEST 7 - 403 Forbidden")]
 #[test_case(404, ConnectionStatus::Online; "TEST 8 - 404 Not Found")]
 #[test_case(408, ConnectionStatus::Online; "TEST 9 - 408 Request Timeout")]
