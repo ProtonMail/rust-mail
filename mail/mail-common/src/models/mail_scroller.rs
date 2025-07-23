@@ -821,14 +821,14 @@ impl<T: ScrollData> CachedScrollData<T> {
         Ok(cursor_count < all)
     }
 
-    /// Check if there are more than a page worth of items to fetch for in memory cursor.
+    /// Check if there is a next page to fetch for in memory cursor.
     ///
-    pub async fn has_more_than_a_page(&self, tether: &Tether) -> Result<bool, StashError> {
+    pub async fn has_next_page(&self, tether: &Tether) -> Result<bool, StashError> {
         let all = self.end.seen_count(tether).await?;
         let cursor_count = self.cursor.seen_count(tether).await?;
 
         if all > cursor_count {
-            Ok(all - cursor_count > self.page_size as u64)
+            Ok(all - cursor_count >= self.page_size as u64)
         } else {
             Ok(false)
         }

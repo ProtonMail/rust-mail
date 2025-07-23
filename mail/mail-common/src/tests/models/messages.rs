@@ -3199,3 +3199,107 @@ fn message_can_reply_property() {
     assert!(!message_draft.can_reply());
     assert!(!message_all_draft.can_reply());
 }
+
+#[tokio::test]
+async fn message_save_updates_local_ids_for_attachment_metadata() {
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection();
+    let address = create_address(&mut tether).await;
+    let inline_attachment_id = AttachmentId::from("inline-att");
+    let regular_attachment_id = AttachmentId::from("regular-att");
+    let mut conv = conversation!(remote_id: conv_id!("my_conv"));
+    let api_message = ApiMessage {
+        metadata: ApiMessageMetadata {
+            id: MessageId::from("MY-MSG-ID"),
+            conversation_id: ConversationId::from("my_conv"),
+            address_id: address.remote_id.clone().unwrap(),
+            attachments_metadata: vec![ApiAttachmentMetadata {
+                id: regular_attachment_id.clone(),
+                disposition: proton_mail_api::services::proton::prelude::Disposition::Attachment,
+                mime_type: "application/pdf".to_string(),
+                name: "file.pdf".to_string(),
+                size: 1024,
+            }],
+            bcc_list: vec![],
+            cc_list: vec![],
+            expiration_time: 0,
+            external_id: None,
+            flags: ApiMessageFlags::empty(),
+            is_forwarded: false,
+            is_replied: false,
+            is_replied_all: false,
+            label_ids: vec![],
+            num_attachments: 0,
+            order: 0,
+            sender: Default::default(),
+            size: 0,
+            snooze_time: 0,
+            subject: "".to_string(),
+            time: 0,
+            to_list: vec![],
+            unread: false,
+        },
+        body: ApiMessageBody {
+            attachments: vec![
+                ApiMessageAttachment {
+                    id: regular_attachment_id.clone(),
+                    disposition:
+                        proton_mail_api::services::proton::prelude::Disposition::Attachment,
+                    enc_signature: None,
+                    headers: ApiMessageAttachmentHeaders {
+                        content_disposition: "".to_string(),
+                        content_id: None,
+                        content_transfer_encoding: None,
+                        image_height: None,
+                        image_width: None,
+                    },
+                    key_packets: KeyPackets::from_vec(vec![]),
+                    mime_type: "application/pdf".to_string(),
+                    name: "file.pdf".to_string(),
+                    signature: None,
+                    size: 1024,
+                },
+                ApiMessageAttachment {
+                    id: inline_attachment_id.clone(),
+                    disposition: proton_mail_api::services::proton::prelude::Disposition::Inline,
+                    enc_signature: None,
+                    headers: ApiMessageAttachmentHeaders {
+                        content_disposition: "cid-10".to_string(),
+                        content_id: None,
+                        content_transfer_encoding: None,
+                        image_height: None,
+                        image_width: None,
+                    },
+                    key_packets: KeyPackets::from_vec(vec![]),
+                    mime_type: "image/png".to_string(),
+                    name: "image.png".to_string(),
+                    signature: None,
+                    size: 2048,
+                },
+            ],
+            body: "".to_string(),
+            reply_to: Default::default(),
+            reply_tos: vec![],
+            header: "".to_string(),
+            mime_type: Default::default(),
+            parsed_headers: Default::default(),
+        },
+    };
+
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            conv.save(tx).await?;
+            let (mut msg, mut body, _) = Message::from_api_data(api_message, tx).await.unwrap();
+            msg.save(tx).await?;
+            assert!(
+                msg.attachments_metadata
+                    .iter()
+                    .all(|a| a.local_id.is_some())
+            );
+            body.save(tx).await?;
+            assert!(body.attachments.iter().all(|a| a.local_id.is_some()));
+            Ok(msg.id())
+        })
+        .await
+        .unwrap();
+}

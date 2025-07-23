@@ -220,20 +220,18 @@ impl From<RealContactSuggestion> for ContactSuggestion {
 #[derive(Clone, Debug, Eq, PartialEq, UniffiEnum)]
 pub enum ContactSuggestionKind {
     /// Proton contact, stored in the local cache and shared between user devices
-    // On Android uniffi codegen `ContactSuggestionKind::ContactItem` is being mistaken with `ContactItem` structure (causing uniffi codegen failure).
-    // Therefore we use `Contact` variant name to avoid confusion.
-    Contact(ContactEmailItem),
+    ContactItem(ContactEmailItem),
     /// A device, native contact, stored only locally on the current device.
     DeviceContact(DeviceContactSuggestion),
     /// Proton contact group, that consists only other proton contacts, and never device contact.
-    ContactGroup(Vec<ContactItem>),
+    ContactGroup(Vec<ContactEmailItem>),
 }
 
 impl From<RealContactSuggestionKind> for ContactSuggestionKind {
     fn from(value: RealContactSuggestionKind) -> Self {
         match value {
             RealContactSuggestionKind::ContactItem(suggestion) => {
-                ContactSuggestionKind::Contact(suggestion.into())
+                ContactSuggestionKind::ContactItem(suggestion.into())
             }
             RealContactSuggestionKind::DeviceContact(suggestion) => {
                 ContactSuggestionKind::DeviceContact(suggestion.into())

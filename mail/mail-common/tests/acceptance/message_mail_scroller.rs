@@ -123,7 +123,7 @@ async fn test_message_mail_scroller_reads_one_item_from_online_scroll_data() {
         label_ids: vec![SystemLabel::Inbox.remote_id()]
     );
 
-    ctx.mock_get_messages_total_expect(vec![message], 1, 1..=3)
+    ctx.mock_get_messages_total_expect(vec![message], 1, 1..=4)
         .await;
     ctx.mock_ping_success().await;
     ctx.setup_user(params.clone()).await;
@@ -139,7 +139,10 @@ async fn test_message_mail_scroller_reads_one_item_from_online_scroll_data() {
         .await
         .unwrap();
 
-    let actual = test_scroller.fetch_more_and_wait().await.unwrap();
+    let _ = test_scroller.fetch_more_and_wait().await.unwrap();
+    // We wait for invalidation
+    let actual = test_scroller.wait_for_update().await.unwrap().unwrap();
+
     assert_eq!(actual.len(), 1);
 
     // Verify we have the expected data
@@ -168,7 +171,7 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
     let local_label_id = SystemLabel::Inbox.local_id(&tether).await.unwrap().unwrap();
     // mocks
     mock_api_sync_prevous_messages_page(&ctx, "mymsg_9", 1).await;
-    let params = setup_api_message_pages(&ctx, page_size, 1..=5).await;
+    let params = setup_api_message_pages(&ctx, page_size, 1..=4).await;
 
     ctx.setup_user(params.clone()).await;
 
@@ -191,7 +194,7 @@ async fn test_message_mail_scroller_reads_two_pages_from_online_scroll_data() {
         .unwrap();
 
     // Messages can be accessed only when progressed.
-    test_scroller.fetch_more().unwrap();
+    test_scroller.fetch_more_and_wait().await.unwrap();
     let _ = test_scroller.wait_for_update().await.unwrap();
 
     let actual = test_scroller.items();
@@ -323,7 +326,7 @@ async fn test_message_mail_scroller_notificate_about_changes() {
         .unwrap();
 
     // Fetch initial page
-    test_scroller.fetch_more().unwrap();
+    test_scroller.fetch_more_and_wait().await.unwrap();
     let _ = test_scroller.wait_for_update().await.unwrap();
 
     let actual = test_scroller.items();
@@ -340,11 +343,14 @@ async fn test_message_mail_scroller_notificate_about_changes() {
         ]
     );
 
-    // Get next page
+    // Get next page - due to change in cached scroller detecting if there is more than a page
+    // now it will return an empty page for invalidation process
     let actual_page = test_scroller.fetch_more_and_wait().await.unwrap();
+    // Next page will have 5 items
     assert_eq!(actual_page.len(), 5);
+
     let actual_page = test_scroller.fetch_more_and_wait().await.unwrap();
-    assert_eq!(actual_page.len(), 0);
+    assert!(actual_page.is_empty());
 
     let actual = test_scroller.items();
     assert_eq!(actual.len(), 10);
@@ -454,8 +460,11 @@ async fn all_scheduled_is_displayed_in_ascending_order() {
         .await
         .unwrap();
 
-    let fetched = test_scroller.fetch_more_and_wait().await.unwrap();
-    assert_eq!(fetched.len(), 5);
+    let _ = test_scroller.fetch_more_and_wait().await.unwrap();
+    // We wait for invalidation
+    let actual = test_scroller.wait_for_update().await.unwrap().unwrap();
+
+    assert_eq!(actual.len(), 5);
 
     let actual = test_scroller.items();
     assert_eq!(actual.len(), 5);
@@ -579,10 +588,12 @@ async fn setup_api_message_pages_ext(
     let first_page_last_id = first_page.last().map(|conv| conv.id.to_string()).unwrap();
     let second_page_last_id = second_page.last().map(|conv| conv.id.to_string()).unwrap();
 
-    mock_get_messages_page(ctx, second_page, &first_page_last_id, 1_u64).await;
+    mock_get_messages_page(ctx, second_page, &first_page_last_id, 1).await;
     // last page is empty
     mock_get_messages_page(ctx, vec![], &second_page_last_id, empty_pages_requests).await;
-    ctx.mock_get_messages(first_page).await;
+    let first_page_total = first_page.len() as u64;
+    ctx.mock_get_messages_total_expect(first_page, first_page_total, 1..3)
+        .await;
 
     params
 }

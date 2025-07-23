@@ -3108,3 +3108,46 @@ async fn test_conversation_move_to() {
         }
     }
 }
+
+#[tokio::test]
+async fn conversation_save_updates_local_ids_for_attachment_metadata() {
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection();
+    let regular_attachment_id = AttachmentId::from("regular-att");
+    let api_conversation = ApiConversation {
+        id: ConversationId::from("My-Conv"),
+        attachment_info: Default::default(),
+        attachments_metadata: vec![ApiAttachmentMetadata {
+            id: regular_attachment_id.clone(),
+            disposition: proton_mail_api::services::proton::prelude::Disposition::Attachment,
+            mime_type: "application/pdf".to_string(),
+            name: "file.pdf".to_string(),
+            size: 1024,
+        }],
+        display_snooze_reminder: false,
+        expiration_time: 0,
+        labels: vec![],
+        num_attachments: 0,
+        num_messages: 0,
+        num_unread: 0,
+        order: 0,
+        recipients: vec![],
+        senders: vec![],
+        size: 0,
+        subject: "".to_string(),
+        context_time: None,
+    };
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            let mut conv = Conversation::from(api_conversation);
+            conv.save(tx).await?;
+            assert!(
+                conv.attachments_metadata
+                    .iter()
+                    .all(|a| a.local_id.is_some())
+            );
+            Ok(())
+        })
+        .await
+        .unwrap();
+}

@@ -681,9 +681,8 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
     ) -> Result<ScrollerUpdate<T::Item>, MailContextError> {
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
         tracing::debug!("Changing filter to {filter:?}");
-        // In order to avoid race conditions we need to
-        // await the current task before changing the filter.
-        Self::await_task(&mut self.task).await?;
+        // We drop the task, we cannot await it in offline mode.
+        let _ = self.task.take();
         self.source
             .write()
             .await
@@ -701,9 +700,8 @@ impl<T: MailScrollerSource + 'static> ScrollerWorker<T> {
     ) -> Result<ScrollerUpdate<T::Item>, MailContextError> {
         tracing::info!("Clearing cursor for current label");
         let ctx = self.ctx.upgrade().ok_or(MailContextError::MissingContext)?;
-        // In order to avoid race conditions we need to
-        // await the current task before clearing the cursor.
-        Self::await_task(&mut self.task).await?;
+        // We drop the task, we cannot await it in offline mode.
+        let _ = self.task.take();
         self.source.write().await.clear_cursor(&ctx).await?;
         self.items.clear();
         self.fetch_more(src.clone()).await?;

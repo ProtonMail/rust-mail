@@ -157,13 +157,19 @@ impl Attachment {
     ///
     /// Returns an error if the encrypted attachment fetching or decryption fails.
     /// Signature verification failures are not returned as errors.
+    #[tracing::instrument(skip_all, fields(id=?attachment_id))]
     pub async fn get_attachment(
         ctx: &MailUserContext,
         attachment_id: LocalAttachmentId,
     ) -> MailContextResult<DecryptedAttachment> {
-        let attachment = Self::sync(ctx, attachment_id).await?;
+        let attachment = Self::sync(ctx, attachment_id)
+            .await
+            .inspect_err(|e| error!("Failed to sync attachment: {e:?}"))?;
         let mut tether = ctx.user_stash().connection();
-        let data_path = attachment.content_path(ctx, &mut tether).await?;
+        let data_path = attachment
+            .content_path(ctx, &mut tether)
+            .await
+            .inspect_err(|e| error!("Failed to get attachment path: {e:?}"))?;
         Ok(DecryptedAttachment {
             attachment_metadata: AttachmentMetadata {
                 local_id: Some(attachment_id),
@@ -265,6 +271,7 @@ impl Attachment {
         data: Vec<u8>,
         bond: &Bond<'_>,
     ) -> MailContextResult<PathBuf> {
+        tracing::debug!("Storing attachment in cache");
         let (path, path_string) = Self::attachment_cache_file_path(ctx, id, name).await?;
 
         let data_len = data.len();
@@ -358,6 +365,7 @@ impl Attachment {
             }
         };
 
+        tracing::info!("Fetching {remote_attachment_id:?} from server");
         let encrypted_content = Attachment::fetch_content(remote_attachment_id.clone(), ctx.api())
             .await
             .map_err(|e| {
@@ -1231,7 +1239,7 @@ mod test {
         writeln!(output, "--- SECS  ---").unwrap();
         let mut test_secs = |secs: u64| {
             let factor = atime_factor(Duration::from_secs(secs));
-            writeln!(output, "{secs:?}: {factor}").unwrap();
+            writeln!(output, "{secs:?}: {factor:.5e}").unwrap();
         };
         test_secs(0);
         test_secs(1);
@@ -1242,7 +1250,7 @@ mod test {
         writeln!(output, "--- HOURS ---").unwrap();
         let mut test_hour = |hours: u64| {
             let factor = atime_factor(Duration::from_secs(hours * 3600));
-            writeln!(output, "{hours}h: {factor}").unwrap();
+            writeln!(output, "{hours}h: {factor:.5e}").unwrap();
         };
 
         test_hour(1);
@@ -1252,7 +1260,7 @@ mod test {
         writeln!(output, "--- DAYS  ---").unwrap();
         let mut test_day = |day: u64| {
             let factor = atime_factor(days(day));
-            writeln!(output, "{day}d: {factor}").unwrap();
+            writeln!(output, "{day}d: {factor:.5e}").unwrap();
         };
         test_day(1);
         test_day(2);
