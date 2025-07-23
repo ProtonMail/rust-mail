@@ -754,9 +754,7 @@ impl MailSession {
             let tether = ctx.core_context().account_stash().connection();
             let app_settings = RealAppSettings::get_or_default(&tether).await;
 
-            Result::<_, RealProtonMailError>::Ok(
-                app_settings.should_auto_lock(ctx.core_context()).await,
-            )
+            Result::<_, RealProtonMailError>::Ok(app_settings.should_auto_lock(ctx.core_context()))
         })
         .await
         .map_err(UserContextError::from)

@@ -1090,7 +1090,6 @@ pub async fn unblock_address(mailbox: Arc<Mailbox>, email: String) -> Result<(),
 /// Returns an error if the action can not be executed.
 ///
 #[allow(unused)]
-#[allow(clippy::unused_async)]
 #[uniffi_export]
 #[returns(VoidActionResult)]
 pub async fn report_phishing(mailbox: Arc<Mailbox>, message_id: Id) -> Result<(), ActionError> {

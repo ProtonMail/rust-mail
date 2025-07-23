@@ -4,11 +4,9 @@ pub mod auth_store;
 mod context;
 pub mod core_clock;
 pub mod datatypes;
-#[allow(clippy::unused_async)]
 pub mod db;
 pub mod device_registration;
 pub mod events;
-#[allow(clippy::unused_async)]
 pub mod models;
 pub mod os;
 pub mod pin_code;
