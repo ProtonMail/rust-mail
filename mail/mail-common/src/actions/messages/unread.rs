@@ -1,4 +1,3 @@
-use crate::MailUserContext;
 use crate::actions::{GenericActionData, MailActionError, filter_responses_by_codes};
 use crate::datatypes::{LocalMessageId, RollbackItemType};
 use crate::models::Message;
@@ -7,6 +6,7 @@ use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler as ActionHandler, Type, WriterGuard,
 };
 use proton_core_api::consts::General;
+use proton_core_api::services::proton::Proton;
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
@@ -27,24 +27,22 @@ impl Action for Unread {
     const VERSION: u32 = 1;
 
     type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
+    type Handler = UnreadHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct Handler;
+pub struct UnreadHandler {
+    pub api: Proton,
+}
 
-impl ActionHandler for Handler {
+impl ActionHandler for UnreadHandler {
     type Action = Unread;
-    type Context = MailUserContext;
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -66,7 +64,6 @@ impl ActionHandler for Handler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -83,11 +80,9 @@ impl ActionHandler for Handler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let api = ctx.api();
         let message_ids = action
             .0
             .remote_target_ids
@@ -97,7 +92,8 @@ impl ActionHandler for Handler {
             .collect();
 
         info!("Marking {message_ids:?} as unread");
-        let responses = api.put_messages_unread(message_ids).await?.responses;
+
+        let responses = self.api.put_messages_unread(message_ids).await?.responses;
 
         // In this case General::NotExists is returned also for messages already marked as unread
         let failed_ids = filter_responses_by_codes(

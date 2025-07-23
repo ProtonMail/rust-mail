@@ -68,8 +68,6 @@ impl MailUserContext {
         mail_context: Arc<MailContext>,
         user_context: Arc<UserContext>,
     ) -> MailContextResult<Arc<Self>> {
-        register_mail_actions(user_context.queue());
-
         let online = user_context
             .session()
             .status_watcher()
@@ -92,24 +90,23 @@ impl MailUserContext {
 
         let initialization_mediator = InitializationMediator::new(task_service);
 
-        let this = Arc::new_cyclic(|this| Self {
-            this: Weak::clone(this),
-            mail_context,
-            user_context,
-            prefetch: OnceLock::new(),
-            default_queue_executor,
-            send_queue_executors,
-            initialization_mediator,
-            rsvp_cache: Default::default(),
-            is_cleanup_cache_running: Default::default(),
+        let this = Arc::new_cyclic(|this| {
+            register_mail_actions(user_context.queue(), this, user_context.session().api());
+
+            Self {
+                this: Weak::clone(this),
+                mail_context,
+                user_context,
+                prefetch: OnceLock::new(),
+                default_queue_executor,
+                send_queue_executors,
+                initialization_mediator,
+                rsvp_cache: Default::default(),
+                is_cleanup_cache_running: Default::default(),
+            }
         });
 
-        // Start draft staging area cleaner.
         DraftStagingAreaCleaner::new().run(Arc::clone(&this))?;
-
-        this.user_context
-            .queue()
-            .register_execution_context(Weak::clone(&this.this));
         this.init_expiration_loop();
         this.register_subscribers().await?;
 

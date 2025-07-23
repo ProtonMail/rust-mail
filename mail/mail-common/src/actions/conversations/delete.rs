@@ -1,9 +1,10 @@
+use crate::AppError;
 use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_responses};
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::RollbackItemType;
 use crate::models::Conversation;
-use crate::{AppError, MailUserContext};
 use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
+use proton_core_api::services::proton::Proton;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use serde::{self, Deserialize, Serialize};
@@ -27,25 +28,22 @@ impl Action for Delete {
     const VERSION: u32 = 1;
 
     type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
+    type Handler = DeleteHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct Handler {}
+pub struct DeleteHandler {
+    pub api: Proton,
+}
 
-impl proton_action_queue::action::Handler for Handler {
+impl proton_action_queue::action::Handler for DeleteHandler {
     type Action = Delete;
-
-    type Context = MailUserContext;
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
@@ -61,7 +59,6 @@ impl proton_action_queue::action::Handler for Handler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -78,7 +75,6 @@ impl proton_action_queue::action::Handler for Handler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
@@ -101,7 +97,7 @@ impl proton_action_queue::action::Handler for Handler {
             let responses = Conversation::delete_multiple_remote(
                 action.0.data.remote_target_ids.clone(),
                 remote_label_id,
-                ctx.api(),
+                &self.api,
             )
             .await
             .map_err(|e| {

@@ -28,6 +28,7 @@ use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{Bond, StashError};
 use std::collections::HashSet;
+use std::sync::Weak;
 use std::time::Duration;
 use tracing::{error, info};
 
@@ -107,7 +108,6 @@ impl Action for Send {
     type RemoteOutput = (MessageId, UndoTimestamp);
     type LocalOutput = ();
     type Error = MailContextError;
-    type Context = MailUserContext;
 }
 
 pub struct SendVersionConverter;
@@ -134,17 +134,16 @@ impl VersionConverter for SendVersionConverter {
 
 const MAX_SCHEDULED_SEND_COUNT: u64 = 100;
 
-#[derive(Default)]
-pub struct SendHandler;
+pub struct SendHandler {
+    pub ctx: Weak<MailUserContext>,
+}
 
 impl proton_action_queue::action::Handler for SendHandler {
     type Action = Send;
-    type Context = MailUserContext;
 
     async fn apply_local(
         &self,
         action_id: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
@@ -237,7 +236,6 @@ impl proton_action_queue::action::Handler for SendHandler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -283,11 +281,12 @@ impl proton_action_queue::action::Handler for SendHandler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        context: &Self::Context,
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let r = Send::apply_remote_impl(context, action, &mut guard).await;
+        let ctx = self.ctx.upgrade().expect("context has died");
+        let r = Send::apply_remote_impl(&ctx, action, &mut guard).await;
+
         if let Err(e) = save_send_status(action, &mut guard, &r).await {
             error!("Failed to save draft send result: {e:?}");
         }
@@ -300,12 +299,12 @@ const SEND_DELIVERY_DELTA_INTERVAL: Duration = Duration::from_secs(60);
 
 impl Send {
     async fn apply_remote_impl(
-        context: &<Self as Action>::Context,
+        ctx: &MailUserContext,
         action: &mut Self,
         guard: &mut WriterGuard<'_>,
     ) -> Result<<Self as Action>::RemoteOutput, <Self as Action>::Error> {
         let local_message_id = action.local_message_id.expect("Should be set");
-        let session_encryption_key = context.core_context().get_encryption_key()?;
+        let session_encryption_key = ctx.core_context().get_encryption_key()?;
 
         if let Some(delivery_time) = action.delivery_time {
             let current_time_stamp: UnixTimestamp =
@@ -387,7 +386,7 @@ impl Send {
 
         // Load send preferences for each recipient of the message.
         let send_preferences = load_prefs(
-            context,
+            ctx,
             &pgp,
             guard,
             &action.recipients,
@@ -398,7 +397,7 @@ impl Send {
         .inspect_err(|err| error!("Failed to load send preferences for recipients: {err:?}"))?;
 
         // Unlock sender address keys
-        let address_keys = context
+        let address_keys = ctx
             .unlocked_address_keys(&pgp, guard.tether(), &message_metadata.remote_address_id)
             .await
             .inspect_err(|err| error!("Failed to load address key for sending: {err:?}"))?;
@@ -409,7 +408,7 @@ impl Send {
                 .inspect_err(|e| error!("Failed to load draft attachments : {e:?}"))?;
 
         let packages = build_packages(
-            context,
+            ctx,
             MailType::Draft,
             &pgp,
             &address_keys,
@@ -427,7 +426,8 @@ impl Send {
         let auto_save_contacts = Some(mail_settings.auto_save_contacts);
 
         info!("Sending {:?}", remote_message_id);
-        let delivery_time = match context
+
+        let delivery_time = match ctx
             .api()
             .send_mail(
                 remote_message_id.clone(),
@@ -543,7 +543,8 @@ impl Send {
         };
 
         // try to delete staging path.
-        let staging_path = draft_attachment_staging_path(context, action.metadata_id);
+        let staging_path = draft_attachment_staging_path(ctx, action.metadata_id);
+
         if let Err(e) = tokio::fs::remove_dir_all(&staging_path).await {
             if e.kind() != std::io::ErrorKind::NotFound {
                 // This is a warning as the background process will try again.

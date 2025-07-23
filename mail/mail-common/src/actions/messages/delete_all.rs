@@ -1,14 +1,14 @@
-use std::mem;
-
+use crate::actions::MailActionError;
 use crate::datatypes::LocalMessageId;
 use crate::models::Message;
-use crate::{MailUserContext, actions::MailActionError};
 use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
+use proton_core_api::services::proton::Proton;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, LabelError, ModelIdExtension as _};
 use proton_mail_api::services::proton::ProtonMail as _;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
+use std::mem;
 use tracing::{error, info};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -31,25 +31,22 @@ impl Action for DeleteAllMessagesInLabel {
     const VERSION: u32 = 1;
 
     type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
+    type Handler = DeleteAllMessagesInLabelHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct Handler;
+pub struct DeleteAllMessagesInLabelHandler {
+    pub api: Proton,
+}
 
-impl proton_action_queue::action::Handler for Handler {
+impl proton_action_queue::action::Handler for DeleteAllMessagesInLabelHandler {
     type Action = DeleteAllMessagesInLabel;
-
-    type Context = MailUserContext;
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -64,7 +61,6 @@ impl proton_action_queue::action::Handler for Handler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -76,7 +72,6 @@ impl proton_action_queue::action::Handler for Handler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         guard: WriterGuard<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -88,8 +83,8 @@ impl proton_action_queue::action::Handler for Handler {
             })?;
 
         info!("Deleting all messages in {id}");
-        ctx.api().delete_all_messages_in_label(id).await?;
 
+        self.api.delete_all_messages_in_label(id).await?;
 
         Ok(())
     }

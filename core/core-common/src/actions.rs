@@ -1,12 +1,18 @@
-use proton_action_queue::action::{Action, FactoryError};
-use proton_action_queue::queue::Queue;
-
 pub mod contacts;
 pub mod event_poll;
 
-pub(crate) fn register_core_actions(queue: &Queue) {
-    fn register_action<T: Action>(queue: &Queue) {
-        if let Err(e) = queue.register::<T>() {
+use crate::UserContext;
+use proton_action_queue::action::{Action, FactoryError, Handler};
+use proton_action_queue::queue::Queue;
+use std::sync::Weak;
+
+pub(crate) fn register_core_actions(queue: &Queue, ctx: &Weak<UserContext>) {
+    fn register_action<T>(queue: &Queue, handler: T)
+    where
+        T: Handler,
+        T::Action: Action<Handler = T>,
+    {
+        if let Err(e) = queue.register::<T::Action>(handler) {
             match e {
                 FactoryError::AlreadyRegistered(_) => {
                     // Do nothing it is possible we already registered this action
@@ -19,6 +25,6 @@ pub(crate) fn register_core_actions(queue: &Queue) {
         }
     }
 
-    register_action::<event_poll::EventPoll>(queue);
-    register_action::<contacts::Delete>(queue);
+    register_action(queue, event_poll::EventPollHandler { ctx: ctx.clone() });
+    register_action(queue, contacts::DeleteHandler { ctx: ctx.clone() });
 }

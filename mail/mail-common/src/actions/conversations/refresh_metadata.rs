@@ -1,12 +1,9 @@
-use anyhow::anyhow;
-use stash::orm::Model;
-use std::collections::{HashMap, HashSet};
-
 use crate::AppError;
 use crate::actions::MailActionError;
 use crate::datatypes::LocalConversationId;
 use crate::models::{Conversation, ConversationScrollData};
 use crate::{MailUserContext, models::Message};
+use anyhow::anyhow;
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
 };
@@ -14,7 +11,10 @@ use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_api::services::proton::prelude::GetMessagesOptions;
 use proton_task_service::AsyncTaskResult;
 use serde::{self, Deserialize, Serialize};
+use stash::orm::Model;
 use stash::stash::Bond;
+use std::collections::{HashMap, HashSet};
+use std::sync::Weak;
 
 /// Refresh conversation metadata action.
 ///
@@ -40,24 +40,22 @@ impl Action for RefreshMetadata {
     const PRIORITY: Priority = Priority::Normal;
 
     type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
+    type Handler = RefreshMetadataHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct Handler {}
+pub struct RefreshMetadataHandler {
+    pub ctx: Weak<MailUserContext>,
+}
 
-impl proton_action_queue::action::Handler for Handler {
+impl proton_action_queue::action::Handler for RefreshMetadataHandler {
     type Action = RefreshMetadata;
-    type Context = MailUserContext;
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
@@ -67,7 +65,6 @@ impl proton_action_queue::action::Handler for Handler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -77,10 +74,11 @@ impl proton_action_queue::action::Handler for Handler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        let ctx = self.ctx.upgrade().expect("context has died");
+
         if action.local_ids.is_empty() {
             tracing::debug!("Refresh metadata for conversations called with empty id list");
             return Ok(());
@@ -156,7 +154,7 @@ impl proton_action_queue::action::Handler for Handler {
         }
 
         for conv in refreshed_items {
-            refresh_conversation_messages(conv, ctx, &mut guard).await?;
+            refresh_conversation_messages(conv, &ctx, &mut guard).await?;
         }
 
         Ok(())

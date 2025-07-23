@@ -5,6 +5,7 @@ use proton_action_queue::action::{
 };
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
+use std::sync::Weak;
 
 /// This action flushes the rollback items.
 ///
@@ -25,20 +26,18 @@ impl Action for RollbackAction {
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailContextError;
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct RollbackActionHandler {}
+pub struct RollbackActionHandler {
+    pub ctx: Weak<MailUserContext>,
+}
 
 impl Handler for RollbackActionHandler {
     type Action = RollbackAction;
-    type Context = MailUserContext;
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
@@ -49,7 +48,6 @@ impl Handler for RollbackActionHandler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -60,16 +58,13 @@ impl Handler for RollbackActionHandler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        context: &Self::Context,
         _: &mut Self::Action,
         mut writer_guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        RollbackItem::sync_all(
-            context.session(),
-            &mut writer_guard,
-            Some(ROLLBACK_BATCH_SIZE),
-        )
-        .await?;
+        let ctx = self.ctx.upgrade().expect("context has died");
+
+        RollbackItem::sync_all(ctx.session(), &mut writer_guard, Some(ROLLBACK_BATCH_SIZE)).await?;
+
         Ok(())
     }
 }

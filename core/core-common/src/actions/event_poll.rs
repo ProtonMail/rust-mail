@@ -6,6 +6,7 @@ use proton_event_loop::EventLoopError;
 use proton_event_loop::subscriber::SubscriberError;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
+use std::sync::Weak;
 
 /// Action which polls the event loop.
 ///
@@ -24,7 +25,6 @@ impl Action for EventPoll {
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = ActionEventLoopError;
-    type Context = UserContext;
 }
 
 /// Wrapper type for [`EventLoopError`].
@@ -58,17 +58,16 @@ impl proton_action_queue::action::Error for ActionEventLoopError {
     }
 }
 
-#[derive(Default)]
-pub struct EventPollHandler;
+pub struct EventPollHandler {
+    pub ctx: Weak<UserContext>,
+}
 
 impl proton_action_queue::action::Handler for EventPollHandler {
     type Action = EventPoll;
-    type Context = UserContext;
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
@@ -79,7 +78,6 @@ impl proton_action_queue::action::Handler for EventPollHandler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -90,11 +88,12 @@ impl proton_action_queue::action::Handler for EventPollHandler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        context: &Self::Context,
         _: &mut Self::Action,
         _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        context
+        self.ctx
+            .upgrade()
+            .expect("context has died")
             .poll_event_loop_impl()
             .await
             .map_err(ActionEventLoopError::from)?;

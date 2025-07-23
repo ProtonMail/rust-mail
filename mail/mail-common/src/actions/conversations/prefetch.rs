@@ -10,6 +10,7 @@ use proton_core_common::models::Label;
 use serde::{self, Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::Bond;
+use std::sync::Weak;
 use tracing::{error, info};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -33,24 +34,22 @@ impl Action for Prefetch {
     const PRIORITY: Priority = Priority::Lowest;
 
     type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
+    type Handler = PrefetchHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct Handler {}
+pub struct PrefetchHandler {
+    pub ctx: Weak<MailUserContext>,
+}
 
-impl proton_action_queue::action::Handler for Handler {
+impl proton_action_queue::action::Handler for PrefetchHandler {
     type Action = Prefetch;
-    type Context = MailUserContext;
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
@@ -60,7 +59,6 @@ impl proton_action_queue::action::Handler for Handler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -70,14 +68,16 @@ impl proton_action_queue::action::Handler for Handler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         info!("Prefetching {:?}", action.local_id);
-        let session = ctx.session();
+
+        let ctx = self.ctx.upgrade().expect("context has died");
+
         let _ =
-            Conversation::sync_conversation_messages(action.local_id, &mut guard, session).await;
+            Conversation::sync_conversation_messages(action.local_id, &mut guard, ctx.session())
+                .await;
 
         let messages = Message::in_conversation(action.local_id, guard.tether()).await?;
 
@@ -112,7 +112,7 @@ impl proton_action_queue::action::Handler for Handler {
             return Ok(());
         };
 
-        if let Err(e) = local_message.fetch_message_body(ctx, &mut guard).await {
+        if let Err(e) = local_message.fetch_message_body(&ctx, &mut guard).await {
             tracing::error!("Couldn't prefetch message body, details: `{e}`");
         }
 

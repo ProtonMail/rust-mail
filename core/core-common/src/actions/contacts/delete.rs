@@ -6,6 +6,7 @@ use proton_core_api::services::proton::ContactId;
 use proton_core_api::session::CoreSession;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
+use std::sync::Weak;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Delete {
@@ -28,24 +29,22 @@ impl Action for Delete {
     const VERSION: u32 = 1;
 
     type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
+    type Handler = DeleteHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = CoreContextError;
-    type Context = UserContext;
 }
 
-#[derive(Default)]
-pub struct Handler;
+pub struct DeleteHandler {
+    pub ctx: Weak<UserContext>,
+}
 
-impl proton_action_queue::action::Handler for Handler {
+impl proton_action_queue::action::Handler for DeleteHandler {
     type Action = Delete;
-    type Context = UserContext;
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -66,7 +65,6 @@ impl proton_action_queue::action::Handler for Handler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -82,11 +80,15 @@ impl proton_action_queue::action::Handler for Handler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         guard: WriterGuard<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        let failed = Contact::delete_from_remote(&action.remote_ids, ctx.session().api()).await?;
+        let failed = Contact::delete_from_remote(
+            &action.remote_ids,
+            self.ctx.upgrade().unwrap().session().api(),
+        )
+        .await?;
+
         let mut failed_local_ids = Vec::with_capacity(failed.len());
 
         if failed.is_empty() {

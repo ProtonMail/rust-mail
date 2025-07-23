@@ -1,10 +1,10 @@
-use crate::MailUserContext;
 use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_responses_by_codes};
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::{ContextualConversation, RollbackItemType};
 use crate::models::Conversation;
 use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
 use proton_core_api::consts::General;
+use proton_core_api::services::proton::Proton;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
 use serde::{Deserialize, Serialize};
@@ -26,24 +26,22 @@ impl Action for MarkUnread {
     const VERSION: u32 = 1;
 
     type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
+    type Handler = MarkUnreadHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct Handler {}
+pub struct MarkUnreadHandler {
+    pub api: Proton,
+}
 
-impl proton_action_queue::action::Handler for Handler {
+impl proton_action_queue::action::Handler for MarkUnreadHandler {
     type Action = MarkUnread;
-    type Context = MailUserContext;
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -65,7 +63,6 @@ impl proton_action_queue::action::Handler for Handler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -81,14 +78,13 @@ impl proton_action_queue::action::Handler for Handler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let responses = Conversation::mark_multiple_as_unread_remote(
             action.0.data.remote_target_ids.clone(),
             action.0.remote_label_id.clone().expect("Should be set"),
-            ctx.api(),
+            &self.api,
         )
         .await?;
 

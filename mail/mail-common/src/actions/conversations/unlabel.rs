@@ -1,4 +1,3 @@
-use crate::MailUserContext;
 use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_responses};
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::RollbackItemType;
@@ -25,24 +24,22 @@ impl Action for Unlabel {
     const VERSION: u32 = 1;
 
     type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
+    type Handler = UnlabelHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct Handler {}
+pub struct UnlabelHandler {
+    pub api: Proton,
+}
 
-impl proton_action_queue::action::Handler for Handler {
+impl proton_action_queue::action::Handler for UnlabelHandler {
     type Action = Unlabel;
-    type Context = MailUserContext;
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -54,7 +51,6 @@ impl proton_action_queue::action::Handler for Handler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -69,14 +65,13 @@ impl proton_action_queue::action::Handler for Handler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let response = Conversation::remove_label_from_multiple_remote::<Proton>(
+        let response = Conversation::remove_label_from_multiple_remote(
             action.0.remote_label_id.clone().expect("Should be set"),
             action.0.data.remote_target_ids.clone(),
-            ctx.api(),
+            &self.api,
         )
         .await?;
 

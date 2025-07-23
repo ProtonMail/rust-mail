@@ -1,15 +1,14 @@
+use crate::{
+    MailContextResult, MailUserContext,
+    actions::messages::{Move, Read},
+    datatypes::mail_notifications::PushNotificationQuickAction,
+    models::Message,
+};
 use proton_core_common::{
     datatypes::SystemLabel,
     models::{LabelError, ModelExtension},
 };
 use proton_mail_api::services::proton::common::MessageId;
-
-use crate::{
-    MailContextResult, MailUserContext,
-    actions::messages::{r#move::Move, read::Read},
-    datatypes::mail_notifications::PushNotificationQuickAction,
-    models::Message,
-};
 
 /// Insert the quick action into the queue and execute local part immediately.
 ///

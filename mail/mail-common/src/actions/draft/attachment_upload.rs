@@ -22,6 +22,7 @@ use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, Tether};
+use std::sync::Weak;
 use tracing::{debug, error, info};
 
 /// Action to upload attachments for a given draft.
@@ -90,20 +91,18 @@ impl Action for AttachmentUpload {
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailContextError;
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct AttachmentUploadHandler {}
+pub struct AttachmentUploadHandler {
+    pub ctx: Weak<MailUserContext>,
+}
 
 impl proton_action_queue::action::Handler for AttachmentUploadHandler {
     type Action = AttachmentUpload;
-    type Context = MailUserContext;
 
     async fn apply_local(
         &self,
         this_id: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
@@ -173,7 +172,6 @@ impl proton_action_queue::action::Handler for AttachmentUploadHandler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -192,11 +190,12 @@ impl proton_action_queue::action::Handler for AttachmentUploadHandler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        context: &Self::Context,
         action: &mut Self::Action,
         mut writer_guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let r = action.apply_remote_impl(context, &mut writer_guard).await;
+        let ctx = self.ctx.upgrade().expect("context has died");
+        let r = action.apply_remote_impl(&ctx, &mut writer_guard).await;
+
         if let Err(e) = &r {
             if let Err(e) = action
                 .save_attachment_upload_result(&mut writer_guard, e)
@@ -212,7 +211,7 @@ impl proton_action_queue::action::Handler for AttachmentUploadHandler {
 impl AttachmentUpload {
     async fn apply_remote_impl(
         &self,
-        context: &<Self as Action>::Context,
+        ctx: &MailUserContext,
         writer_guard: &mut WriterGuard<'_>,
     ) -> Result<<Self as Action>::RemoteOutput, <Self as Action>::Error> {
         let local_message_id = self.local_message_id(writer_guard.tether()).await?;
@@ -238,7 +237,7 @@ impl AttachmentUpload {
         }
 
         encrypt_and_upload_attachment(
-            context,
+            ctx,
             &self.address_id,
             local_message_id,
             &remote_message_id,

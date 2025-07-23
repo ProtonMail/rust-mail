@@ -1,15 +1,15 @@
+use crate::AppError;
 use crate::actions::messages::r#move::Move as MoveAction;
 use crate::actions::{LabelAsData, MailActionError};
 use crate::datatypes::SystemLabelId;
 use crate::models::{Message, MessageCounters};
-use crate::{AppError, MailUserContext};
 use anyhow::Context;
 use proton_action_queue::action::{
     self, Action, ActionId, FactoryError, Handler as ActionHandler, MetadataBuilder, Type,
     VersionConverter, VersionConverterError, WriterGuard,
 };
 use proton_action_queue::queue::Queue;
-use proton_core_api::services::proton::LabelId;
+use proton_core_api::services::proton::{LabelId, Proton};
 use proton_core_common::models::Label;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
@@ -45,24 +45,22 @@ impl Action for LabelAs {
     const VERSION: u32 = 2;
 
     type VersionConverter = Converter;
-    type Handler = Handler;
+    type Handler = LabelAsHandler;
     type RemoteOutput = ();
     type LocalOutput = bool;
     type Error = MailActionError;
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct Handler;
+pub struct LabelAsHandler {
+    pub api: Proton,
+}
 
-impl ActionHandler for Handler {
+impl ActionHandler for LabelAsHandler {
     type Action = LabelAs;
-    type Context = MailUserContext;
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<bool, <Self::Action as Action>::Error> {
@@ -78,7 +76,6 @@ impl ActionHandler for Handler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -89,11 +86,10 @@ impl ActionHandler for Handler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        action.0.apply_remote(ctx, guard).await
+        action.0.apply_remote(&self.api, guard).await
     }
 }
 

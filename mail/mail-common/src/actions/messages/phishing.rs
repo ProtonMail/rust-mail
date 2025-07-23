@@ -9,6 +9,7 @@ use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
+use std::sync::Weak;
 use tracing::info;
 
 /// Action which reports a message as phishing.
@@ -32,24 +33,22 @@ impl Action for ReportPhishing {
     const VERSION: u32 = 1;
 
     type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
+    type Handler = ReportPhishingHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct Handler;
+pub struct ReportPhishingHandler {
+    pub ctx: Weak<MailUserContext>,
+}
 
-impl ActionHandler for Handler {
+impl ActionHandler for ReportPhishingHandler {
     type Action = ReportPhishing;
 
-    type Context = MailUserContext;
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -61,7 +60,6 @@ impl ActionHandler for Handler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -73,13 +71,13 @@ impl ActionHandler for Handler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        let ctx = self.ctx.upgrade().expect("context has died");
         let tether = guard.tether();
 
-        let body = Message::message_body(ctx, action.message_id)
+        let body = Message::message_body(&ctx, action.message_id)
             .await
             .context("Failed to get message body")
             .map_err(AppError::Other)?;

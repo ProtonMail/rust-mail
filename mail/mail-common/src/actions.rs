@@ -9,20 +9,19 @@ pub mod refresh;
 pub mod rollback;
 
 pub use self::available_action::*;
-use crate::actions::conversations::label_as::UndoLabelAsConversations;
-use crate::actions::messages::label_as::UndoLabelAsMessages;
+use crate::actions::conversations::UndoLabelAsConversations;
+use crate::actions::messages::UndoLabelAsMessages;
 use crate::datatypes::RollbackItemType;
 use crate::models::{Conversation, Message, RollbackItem};
 use crate::{AppError, MailUserContext};
 use addresses::{block, unblock, update_incoming_defaults};
 use futures::future::{join, join_all};
 use indoc::formatdoc;
-use proton_action_queue::action::{Action, FactoryError, WriterGuard, WriterGuardError};
+use proton_action_queue::action::{Action, FactoryError, Handler, WriterGuard, WriterGuardError};
 use proton_action_queue::queue::Queue;
 use proton_core_api::consts::General;
 use proton_core_api::service::ApiServiceError;
-use proton_core_api::services::proton::{LabelId, ProtonIdMarker};
-use proton_core_api::session::CoreSession;
+use proton_core_api::services::proton::{LabelId, Proton, ProtonIdMarker};
 use proton_core_common::action_queue::CoreActionError;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, LabelError, ModelIdExtension};
@@ -36,6 +35,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::hash::Hash;
 use std::marker::PhantomData;
+use std::sync::Weak;
 use tracing::error;
 
 #[derive(Debug, thiserror::Error)]
@@ -98,9 +98,13 @@ impl From<CoreActionError> for MailActionError {
     }
 }
 
-pub(crate) fn register_mail_actions(queue: &Queue) {
-    fn register_action<T: Action>(queue: &Queue) {
-        if let Err(e) = queue.register::<T>() {
+pub(crate) fn register_mail_actions(queue: &Queue, ctx: &Weak<MailUserContext>, api: &Proton) {
+    fn register_action<T>(queue: &Queue, handler: T)
+    where
+        T: Handler,
+        T::Action: Action<Handler = T>,
+    {
+        if let Err(e) = queue.register::<T::Action>(handler) {
             match e {
                 FactoryError::AlreadyRegistered(_) => {
                     // Do nothing it is possible we already registered this action
@@ -113,39 +117,48 @@ pub(crate) fn register_mail_actions(queue: &Queue) {
         }
     }
 
-    register_action::<conversations::Delete>(queue);
-    register_action::<conversations::Unlabel>(queue);
-    register_action::<conversations::Label>(queue);
-    register_action::<conversations::MarkRead>(queue);
-    register_action::<conversations::MarkUnread>(queue);
-    register_action::<conversations::Prefetch>(queue);
-    register_action::<block::Block>(queue);
-    register_action::<unblock::Unblock>(queue);
-    register_action::<update_incoming_defaults::SyncIncomingDefaults>(queue);
-    register_action::<conversations::Move>(queue);
-    register_action::<conversations::RefreshMetadata>(queue);
-    register_action::<messages::label::Label>(queue);
-    register_action::<messages::unlabel::Unlabel>(queue);
-    register_action::<messages::r#move::Move>(queue);
-    register_action::<messages::delete::Delete>(queue);
-    register_action::<messages::delete_all::DeleteAllMessagesInLabel>(queue);
-    register_action::<messages::read::Read>(queue);
-    register_action::<messages::unread::Unread>(queue);
-    register_action::<messages::ham::Ham>(queue);
-    register_action::<messages::phishing::ReportPhishing>(queue);
-    register_action::<messages::prefetch::Prefetch>(queue);
-    register_action::<messages::refresh_metadata::RefreshMetadata>(queue);
-    register_action::<draft::Save>(queue);
-    register_action::<draft::Send>(queue);
-    register_action::<labels::Expand>(queue);
-    register_action::<messages::label_as::LabelAs>(queue);
-    register_action::<conversations::label_as::LabelAs>(queue);
-    register_action::<draft::Discard>(queue);
-    register_action::<draft::UndoSend>(queue);
-    register_action::<draft::AttachmentUpload>(queue);
-    register_action::<draft::AttachmentRemove>(queue);
-    register_action::<refresh::ActionRefresh>(queue);
-    register_action::<rollback::RollbackAction>(queue);
+    register_action(queue, conversations::DeleteHandler { api: api.clone() });
+    register_action(queue, conversations::UnlabelHandler { api: api.clone() });
+    register_action(queue, conversations::LabelHandler { api: api.clone() });
+    register_action(queue, conversations::MarkReadHandler { api: api.clone() });
+    register_action(queue, conversations::MarkUnreadHandler { api: api.clone() });
+    register_action(queue, conversations::PrefetchHandler { ctx: ctx.clone() });
+    register_action(queue, block::BlockHandler { api: api.clone() });
+    register_action(queue, unblock::UnblockHandler { api: api.clone() });
+    register_action(
+        queue,
+        update_incoming_defaults::SyncIncomingDefaultsHandler { api: api.clone() },
+    );
+    register_action(queue, conversations::MoveHandler { api: api.clone() });
+    register_action(
+        queue,
+        conversations::RefreshMetadataHandler { ctx: ctx.clone() },
+    );
+    register_action(queue, messages::LabelHandler { api: api.clone() });
+    register_action(queue, messages::UnlabelHandler { api: api.clone() });
+    register_action(queue, messages::MoveHandler { api: api.clone() });
+    register_action(queue, messages::DeleteHandler { api: api.clone() });
+    register_action(
+        queue,
+        messages::DeleteAllMessagesInLabelHandler { api: api.clone() },
+    );
+    register_action(queue, messages::ReadHandler { api: api.clone() });
+    register_action(queue, messages::UnreadHandler { api: api.clone() });
+    register_action(queue, messages::HamHandler { api: api.clone() });
+    register_action(queue, messages::ReportPhishingHandler { ctx: ctx.clone() });
+    register_action(queue, messages::PrefetchHandler { ctx: ctx.clone() });
+    register_action(queue, messages::RefreshMetadataHandler { api: api.clone() });
+    register_action(queue, draft::SaveHandler { ctx: ctx.clone() });
+    register_action(queue, draft::SendHandler { ctx: ctx.clone() });
+    register_action(queue, labels::ExpandHandler { api: api.clone() });
+    register_action(queue, messages::LabelAsHandler { api: api.clone() });
+    register_action(queue, conversations::LabelAsHandler { api: api.clone() });
+    register_action(queue, draft::DiscardHandler { api: api.clone() });
+    register_action(queue, draft::UndoSendHandler { api: api.clone() });
+    register_action(queue, draft::AttachmentUploadHandler { ctx: ctx.clone() });
+    register_action(queue, draft::AttachmentRemoveHandler { api: api.clone() });
+    register_action(queue, refresh::ActionRefreshHandler { ctx: ctx.clone() });
+    register_action(queue, rollback::RollbackActionHandler { ctx: ctx.clone() });
 }
 
 /// Convenience type which contains data common to many actions.
@@ -615,11 +628,9 @@ impl<T: LabelAsTrait> LabelAsData<T> {
 
     async fn apply_remote(
         &self,
-        ctx: &MailUserContext,
+        api: &Proton,
         mut guard: WriterGuard<'_>,
     ) -> Result<(), MailActionError> {
-        let session = ctx.session();
-        let api = session.api();
         let tether = guard.tether();
         let (add, remove) = self.segregate_label();
         let mut add_requests = vec![];

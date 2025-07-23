@@ -1,8 +1,8 @@
-use crate::MailUserContext;
 use crate::actions::MailActionError;
 use crate::models::default_location::IncomingDefaultLocation;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
 use proton_action_queue::action::{ActionId, Handler as ActionHandler};
+use proton_core_api::services::proton::Proton;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 
@@ -14,24 +14,22 @@ impl Action for SyncIncomingDefaults {
     const VERSION: u32 = 1;
 
     type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
+    type Handler = SyncIncomingDefaultsHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct Handler;
+pub struct SyncIncomingDefaultsHandler {
+    pub api: Proton,
+}
 
-impl ActionHandler for Handler {
+impl ActionHandler for SyncIncomingDefaultsHandler {
     type Action = SyncIncomingDefaults;
 
-    type Context = MailUserContext;
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -41,7 +39,6 @@ impl ActionHandler for Handler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -51,11 +48,10 @@ impl ActionHandler for Handler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         _: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let data = IncomingDefaultLocation::sync(ctx.api()).await?;
+        let data = IncomingDefaultLocation::sync(&self.api).await?;
 
         tracing::info!("Updating incoming defaults");
 

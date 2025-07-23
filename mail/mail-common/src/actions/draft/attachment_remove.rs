@@ -1,3 +1,4 @@
+use crate::MailContextError;
 use crate::actions::draft::SEND_ACTION_GROUP;
 use crate::datatypes::{LocalAttachmentId, LocalMessageId};
 use crate::draft::{AttachmentRemoveError, AttachmentUploadError};
@@ -5,10 +6,10 @@ use crate::models::{
     Attachment, AttachmentType, DraftAttachmentMetadata, DraftAttachmentOwnership, DraftMetadata,
     MetadataId,
 };
-use crate::{MailContextError, MailUserContext};
 use proton_action_queue::action::{
     Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
 };
+use proton_core_api::services::proton::Proton;
 use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::Deserialize;
@@ -58,24 +59,22 @@ impl Action for AttachmentRemove {
     const PRIORITY: Priority = Priority::Normal;
 
     type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
+    type Handler = AttachmentRemoveHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailContextError;
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct Handler;
+pub struct AttachmentRemoveHandler {
+    pub api: Proton,
+}
 
-impl proton_action_queue::action::Handler for Handler {
+impl proton_action_queue::action::Handler for AttachmentRemoveHandler {
     type Action = AttachmentRemove;
-    type Context = MailUserContext;
 
     async fn apply_local(
         &self,
         this_id: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
@@ -124,7 +123,6 @@ impl proton_action_queue::action::Handler for Handler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -154,7 +152,6 @@ impl proton_action_queue::action::Handler for Handler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         mut writer_guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
@@ -179,7 +176,8 @@ impl proton_action_queue::action::Handler for Handler {
                     .await?
             {
                 info!("Deleting {remote_id:?}");
-                ctx.api()
+
+                self.api
                     .delete_attachment(remote_id)
                     .await
                     .inspect_err(|e| error!("Failed to delete attachment on the server{e}"))?;

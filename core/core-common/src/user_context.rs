@@ -6,7 +6,6 @@ use crate::db::migrations::{migrate_account_db, migrate_core_db};
 use crate::event_loop::{EventLoopActionIds, EventPollMode};
 use crate::models::{InitializationWatcher, UserSettings};
 use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse};
-use anyhow::Context as _;
 pub use event_loop::subscriber::CoreEventLoopContext;
 use proton_action_queue::queue::Queue;
 use proton_core_api::connection_status::ConnectionStatus;
@@ -91,12 +90,11 @@ impl UserContext {
         let user_stash = Self::new_user_db(user_stash_path, db_initializers).await?;
         let cancellation_token = context.new_child_cancellation_token();
         let queue = Queue::new(user_stash.clone()).await?;
-
-        register_core_actions(&queue);
-
         let initialization_watcher = InitializationWatcher::new(&user_stash)?;
 
         let this = Arc::new_cyclic(|this| {
+            register_core_actions(&queue, this);
+
             let event_ctx = CoreEventLoopContext::from(Weak::clone(this));
 
             Self {
@@ -115,12 +113,6 @@ impl UserContext {
                 last_event_loop_action_ids: Arc::new(Mutex::new(EventLoopActionIds::default())),
             }
         });
-        let this_weak = Arc::downgrade(&this);
-
-        fs::create_dir_all(this.sender_images_cache_path())
-            .context("Error creating sender image cache path")?;
-
-        this.queue().register_execution_context(this_weak);
 
         fs::create_dir_all(this.sender_images_cache_path())?;
         fs::create_dir_all(this.trash_path())?;

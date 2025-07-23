@@ -6,6 +6,7 @@ use proton_core_common::actions::event_poll::ActionEventLoopError;
 use proton_core_common::datatypes::Refresh;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
+use std::sync::Weak;
 
 /// Action which runs whole refresh simulating Subscriber::on_refresh for Resync of eventloop.
 ///
@@ -26,24 +27,23 @@ impl Action for ActionRefresh {
     const PRIORITY: Priority = Priority::Normal;
 
     type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = RefreshHandler;
+    type Handler = ActionRefreshHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = ActionEventLoopError;
-    type Context = MailUserContext;
 }
 
 #[derive(Default)]
-pub struct RefreshHandler;
+pub struct ActionRefreshHandler {
+    pub ctx: Weak<MailUserContext>,
+}
 
-impl proton_action_queue::action::Handler for RefreshHandler {
+impl proton_action_queue::action::Handler for ActionRefreshHandler {
     type Action = ActionRefresh;
-    type Context = MailUserContext;
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
@@ -54,7 +54,6 @@ impl proton_action_queue::action::Handler for RefreshHandler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -65,15 +64,13 @@ impl proton_action_queue::action::Handler for RefreshHandler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        context: &Self::Context,
         action: &mut Self::Action,
         _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        context
-            .user_context_arc()
-            .on_refresh_impl(action.refresh)
-            .await?;
-        context.as_arc().on_refresh_impl(action.refresh).await?;
+        let ctx = self.ctx.upgrade().expect("context has died");
+
+        ctx.user_context().on_refresh_impl(action.refresh).await?;
+        ctx.on_refresh_impl(action.refresh).await?;
 
         Ok(())
     }

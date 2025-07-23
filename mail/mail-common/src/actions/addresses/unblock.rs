@@ -1,9 +1,8 @@
-use crate::MailUserContext;
 use crate::actions::MailActionError;
 use crate::models::default_location::IncomingDefaultLocation;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
 use proton_action_queue::action::{ActionId, Handler as ActionHandler};
-use proton_core_api::services::proton::{IncomingDefaultId, PrivateEmail};
+use proton_core_api::services::proton::{IncomingDefaultId, PrivateEmail, Proton};
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
 use stash::params;
@@ -19,24 +18,22 @@ impl Action for Unblock {
     const VERSION: u32 = 1;
 
     type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
+    type Handler = UnblockHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct Handler;
+pub struct UnblockHandler {
+    pub api: Proton,
+}
 
-impl ActionHandler for Handler {
+impl ActionHandler for UnblockHandler {
     type Action = Unblock;
 
-    type Context = MailUserContext;
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -54,7 +51,6 @@ impl ActionHandler for Handler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -72,7 +68,6 @@ impl ActionHandler for Handler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
@@ -86,7 +81,7 @@ impl ActionHandler for Handler {
             )
             .await?;
 
-        ctx.api().delete_incoming_default(&id).await?;
+        self.api.delete_incoming_default(&id).await?;
 
         Ok(())
     }

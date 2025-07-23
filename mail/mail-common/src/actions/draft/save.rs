@@ -33,6 +33,7 @@ use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, StashError};
+use std::sync::Weak;
 use tracing::{debug, error, info, warn};
 
 /// Action which creates or updates a draft on the server.
@@ -149,7 +150,6 @@ impl Action for Save {
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailContextError;
-    type Context = MailUserContext;
 }
 
 pub struct SaveVersionConverter {}
@@ -166,18 +166,16 @@ impl VersionConverter for SaveVersionConverter {
     }
 }
 
-#[derive(Default)]
-pub struct SaveHandler {}
+pub struct SaveHandler {
+    pub ctx: Weak<MailUserContext>,
+}
 
 impl proton_action_queue::action::Handler for SaveHandler {
     type Action = Save;
 
-    type Context = MailUserContext;
-
     async fn apply_local(
         &self,
         action_id: ActionId,
-        _: &MailUserContext,
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
@@ -394,7 +392,6 @@ impl proton_action_queue::action::Handler for SaveHandler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &MailUserContext,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -406,11 +403,12 @@ impl proton_action_queue::action::Handler for SaveHandler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &MailUserContext,
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let r = Save::apply_remote_impl(ctx, action, &mut guard).await;
+        let ctx = self.ctx.upgrade().expect("context has died");
+        let r = Save::apply_remote_impl(&ctx, action, &mut guard).await;
+
         if let Err(e) = &r {
             if let Err(e) = save_send_error(action, &mut guard, e).await {
                 error!("Failed to save draft send result: {e:?}");
