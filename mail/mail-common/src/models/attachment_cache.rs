@@ -1239,7 +1239,7 @@ mod test {
         writeln!(output, "--- SECS  ---").unwrap();
         let mut test_secs = |secs: u64| {
             let factor = atime_factor(Duration::from_secs(secs));
-            writeln!(output, "{secs:?}: {factor}").unwrap();
+            writeln!(output, "{secs:?}: {factor:.5e}").unwrap();
         };
         test_secs(0);
         test_secs(1);
@@ -1250,7 +1250,7 @@ mod test {
         writeln!(output, "--- HOURS ---").unwrap();
         let mut test_hour = |hours: u64| {
             let factor = atime_factor(Duration::from_secs(hours * 3600));
-            writeln!(output, "{hours}h: {factor}").unwrap();
+            writeln!(output, "{hours}h: {factor:.5e}").unwrap();
         };
 
         test_hour(1);
@@ -1260,7 +1260,7 @@ mod test {
         writeln!(output, "--- DAYS  ---").unwrap();
         let mut test_day = |day: u64| {
             let factor = atime_factor(days(day));
-            writeln!(output, "{day}d: {factor}").unwrap();
+            writeln!(output, "{day}d: {factor:.5e}").unwrap();
         };
         test_day(1);
         test_day(2);
