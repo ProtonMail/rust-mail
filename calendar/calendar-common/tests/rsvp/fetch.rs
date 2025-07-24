@@ -374,7 +374,7 @@ async fn party_crasher() {
             &world.address_keys,
             &world.cache,
             &world.now,
-            "zar@localhost",
+            "root@localhost",
             Weekday::Monday,
         )
         .await

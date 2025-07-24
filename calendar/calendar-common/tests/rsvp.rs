@@ -24,6 +24,7 @@ use proton_crypto_account::keys::{
 };
 use proton_crypto_account::salts::KeySalt;
 use proton_crypto_calendar::{CalendarEventEncryptor, KeyPacket, UnlockedCalendarKey};
+use proton_ical as ical;
 use std::sync::Arc;
 
 const EVENT_ID: &str = "pFmwNlJp";
@@ -44,6 +45,7 @@ const INVITE: &str = indoc! {"
     LOCATION:some location
     ORGANIZER:mailto:foo@localhost
     ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION:mailto:bar@localhost
+    ATTENDEE;ROLE=OPT-PARTICIPANT:mailto:zar@localhost
     END:VEVENT
     END:VCALENDAR
 "};
@@ -70,6 +72,7 @@ const ATTENDEES_EVENT: &str = indoc! {"
     UID:8maQ3qBa
     ATTENDEE;CN=foo@localhost;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=245902dc:mailto:foo@localhost
     ATTENDEE;CN=bar@localhost;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=d15cf90c:mailto:bar@localhost
+    ATTENDEE;CN=zar@localhost;ROLE=OPT-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=fdec9604:mailto:zar@localhost
     END:VEVENT
     END:VCALENDAR
 "};
@@ -79,6 +82,9 @@ const BAR_ATTENDEE_TOKEN: &str = "d15cf90c";
 
 const FOO_ATTENDEE_ID: &str = "V3FdcecX";
 const FOO_ATTENDEE_TOKEN: &str = "245902dc";
+
+const ZAR_ATTENDEE_ID: &str = "m4x8IpHm";
+const ZAR_ATTENDEE_TOKEN: &str = "fdec9604";
 
 const ATTENDEES: fn() -> Vec<CalendarAttendee> = || {
     vec![
@@ -91,6 +97,11 @@ const ATTENDEES: fn() -> Vec<CalendarAttendee> = || {
             id: FOO_ATTENDEE_ID.into(),
             token: FOO_ATTENDEE_TOKEN.into(),
             status: CalendarAttendeeStatus::Maybe,
+        },
+        CalendarAttendee {
+            id: ZAR_ATTENDEE_ID.into(),
+            token: ZAR_ATTENDEE_TOKEN.into(),
+            status: CalendarAttendeeStatus::Yes,
         },
     ]
 };
@@ -376,12 +387,22 @@ fn expected_event(intent: RsvpIntent, raw: CalendarEvent) -> RsvpEvent {
         organizer: RsvpOrganizer {
             email: "foo@localhost".into(),
         },
-        attendees: vec![RsvpAttendee {
-            id: Some("gWfsHvDg".into()),
-            token: Some("d15cf90c".into()),
-            email: "bar@localhost".into(),
-            status: Some(CalendarAttendeeStatus::Unanswered),
-        }],
+        attendees: vec![
+            RsvpAttendee {
+                id: Some(BAR_ATTENDEE_ID.into()),
+                token: Some(BAR_ATTENDEE_TOKEN.into()),
+                email: "bar@localhost".into(),
+                status: Some(CalendarAttendeeStatus::Unanswered),
+                role: ical::Role::ReqParticipant,
+            },
+            RsvpAttendee {
+                id: Some(ZAR_ATTENDEE_ID.into()),
+                token: Some(ZAR_ATTENDEE_TOKEN.into()),
+                email: "zar@localhost".into(),
+                status: Some(CalendarAttendeeStatus::Yes),
+                role: ical::Role::OptParticipant,
+            },
+        ],
         user_attendee_idx: 0,
         calendar: Some(RsvpCalendar {
             id: "HzNtbT1J".into(),
@@ -415,12 +436,22 @@ fn expected_offline_event() -> RsvpEvent {
         organizer: RsvpOrganizer {
             email: "foo@localhost".into(),
         },
-        attendees: vec![RsvpAttendee {
-            id: None,
-            token: None,
-            email: "bar@localhost".into(),
-            status: None,
-        }],
+        attendees: vec![
+            RsvpAttendee {
+                id: None,
+                token: None,
+                email: "bar@localhost".into(),
+                status: None,
+                role: ical::Role::ReqParticipant,
+            },
+            RsvpAttendee {
+                id: None,
+                token: None,
+                email: "zar@localhost".into(),
+                status: None,
+                role: ical::Role::OptParticipant,
+            },
+        ],
         user_attendee_idx: 0,
         calendar: None,
         progress: RsvpProgress::Pending,

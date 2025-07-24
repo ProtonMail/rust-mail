@@ -3,9 +3,10 @@ use super::*;
 /// Participation role.
 ///
 /// <https://www.rfc-editor.org/rfc/rfc5545#section-3.2.16>
-#[derive(Clone, Copy, Debug, PartialEq, Eq, EnumString)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, EnumString)]
 pub enum Role {
     Chair,
+    #[default]
     ReqParticipant,
     OptParticipant,
     NonParticipant,

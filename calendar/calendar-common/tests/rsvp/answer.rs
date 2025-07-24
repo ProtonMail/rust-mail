@@ -1,6 +1,7 @@
 use crate::{
     ATTENDEES_EVENT, BAR_ATTENDEE_ID, BAR_ATTENDEE_TOKEN, CALENDAR_ID, EVENT_ID, EVENT_UID,
-    FOO_ATTENDEE_ID, FOO_ATTENDEE_TOKEN, INVITE, RsvpEventIdExt, world,
+    FOO_ATTENDEE_ID, FOO_ATTENDEE_TOKEN, INVITE, RsvpEventIdExt, ZAR_ATTENDEE_ID,
+    ZAR_ATTENDEE_TOKEN, world,
 };
 use indoc::indoc;
 use itertools::Itertools;
@@ -219,6 +220,11 @@ async fn recurring_with_single_edits() {
                 FOO_ATTENDEE_TOKEN,
                 CalendarAttendeeStatus::No,
             )
+            .with_attendee(
+                ZAR_ATTENDEE_ID,
+                ZAR_ATTENDEE_TOKEN,
+                CalendarAttendeeStatus::No,
+            )
             .with_shared_event(SHARED_EVENT)
             .with_attendees_event(ATTENDEES_EVENT)
     });
@@ -249,6 +255,11 @@ async fn recurring_with_single_edits() {
                 FOO_ATTENDEE_ID,
                 FOO_ATTENDEE_TOKEN,
                 CalendarAttendeeStatus::Yes,
+            )
+            .with_attendee(
+                ZAR_ATTENDEE_ID,
+                ZAR_ATTENDEE_TOKEN,
+                CalendarAttendeeStatus::No,
             )
             .with_shared_event(SHARED_EVENT)
             .with_attendees_event(ATTENDEES_EVENT)
@@ -281,6 +292,11 @@ async fn recurring_with_single_edits() {
                 FOO_ATTENDEE_TOKEN,
                 CalendarAttendeeStatus::Maybe,
             )
+            .with_attendee(
+                ZAR_ATTENDEE_ID,
+                ZAR_ATTENDEE_TOKEN,
+                CalendarAttendeeStatus::No,
+            )
             .with_shared_event(SHARED_EVENT)
             .with_attendees_event(ATTENDEES_EVENT)
     });
@@ -311,6 +327,11 @@ async fn recurring_with_single_edits() {
                 FOO_ATTENDEE_ID,
                 FOO_ATTENDEE_TOKEN,
                 CalendarAttendeeStatus::Yes,
+            )
+            .with_attendee(
+                ZAR_ATTENDEE_ID,
+                ZAR_ATTENDEE_TOKEN,
+                CalendarAttendeeStatus::No,
             )
             .with_shared_event(SHARED_EVENT)
             .with_attendees_event(ATTENDEES_EVENT)
@@ -354,6 +375,11 @@ async fn recurring_with_single_edits() {
                 FOO_ATTENDEE_ID,
                 FOO_ATTENDEE_TOKEN,
                 CalendarAttendeeStatus::Yes,
+            )
+            .with_attendee(
+                ZAR_ATTENDEE_ID,
+                ZAR_ATTENDEE_TOKEN,
+                CalendarAttendeeStatus::No,
             )
             .with_shared_event(SHARED_EVENT)
             .with_attendees_event(ATTENDEES_EVENT)

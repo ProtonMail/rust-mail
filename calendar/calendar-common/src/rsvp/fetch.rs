@@ -931,6 +931,7 @@ fn extract_attendee_from_event(
         email,
         status: Some(*status),
         token: Some(token.into()),
+        role: attendee.role.unwrap_or_default(),
     }))
 }
 
@@ -940,16 +941,16 @@ fn extract_attendees_from_invite(invite: &ical::VEvent) -> Vec<RsvpAttendee> {
         .iter()
         .filter_map(|attendee| {
             if let ical::CalAddress::Email(email) = &attendee.address {
-                Some(email.value().as_str().into())
+                Some(RsvpAttendee {
+                    id: None,
+                    token: None,
+                    email: email.value().as_str().into(),
+                    status: None,
+                    role: attendee.role.unwrap_or_default(),
+                })
             } else {
                 None
             }
-        })
-        .map(|email| RsvpAttendee {
-            id: None,
-            token: None,
-            email,
-            status: None,
         })
         .collect()
 }

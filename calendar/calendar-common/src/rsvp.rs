@@ -444,6 +444,7 @@ pub struct RsvpAttendee {
     pub token: Option<CalendarAttendeeToken>,
     pub email: String,
     pub status: Option<CalendarAttendeeStatus>,
+    pub role: ical::Role,
 }
 
 #[derive(Clone, Debug, PartialEq)]
