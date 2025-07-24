@@ -9,8 +9,8 @@ use crate::models::{
 };
 use crate::{MailContextError, MailUserContext};
 use proton_action_queue::action::{
-    Action, ActionGroup, ActionId, DefaultVersionConverter, Error, Handler, Priority, Type,
-    WriterGuard, WriterGuardError,
+    Action, ActionGroup, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
+    WriterGuardError,
 };
 use proton_core_api::consts::Mail;
 use proton_core_api::services::proton::AddressId;

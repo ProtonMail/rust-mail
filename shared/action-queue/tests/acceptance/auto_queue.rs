@@ -4,7 +4,7 @@ use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard, WriterGuardError,
 };
 use proton_action_queue::queue::{
-    BroadcastMessage, QueuedActionReason, QueuedActionState, TokioTaskSpawner,
+    ActionRequeueReason, BroadcastMessage, QueuedActionState, TokioTaskSpawner,
 };
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
@@ -23,7 +23,7 @@ async fn auto_queued_on_network_failure() {
 
     assert!(matches!(
         output,
-        QueuedActionState::Queued(_, QueuedActionReason::Network)
+        QueuedActionState::Queued(_, ActionRequeueReason::NetworkFailed)
     ));
 }
 
@@ -160,7 +160,7 @@ async fn auto_queued_on_writer_guard_failure() {
 
     assert!(matches!(
         output,
-        QueuedActionState::Queued(_, QueuedActionReason::GuardExpired)
+        QueuedActionState::Queued(_, ActionRequeueReason::GuardExpired)
     ),);
 }
 

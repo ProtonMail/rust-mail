@@ -1,5 +1,8 @@
 use crate::models::LabelError;
-use proton_action_queue::action::WriterGuardError;
+use proton_action_queue::{
+    action::{self, WriterGuardError},
+    queue::ActionRequeueReason,
+};
 use proton_core_api::service::ApiServiceError;
 use stash::stash::StashError;
 
@@ -19,17 +22,13 @@ pub enum CoreActionError {
     Other(anyhow::Error),
 }
 
-impl proton_action_queue::action::Error for CoreActionError {
-    fn is_network_failure(&self) -> bool {
-        if let Self::Http(e) = self {
-            e.is_network_failure()
-        } else {
-            false
+impl action::Error for CoreActionError {
+    fn can_requeue(&self) -> Option<ActionRequeueReason> {
+        match self {
+            Self::Http(e) if e.is_network_failure() => Some(ActionRequeueReason::NetworkFailed),
+            Self::QueueWriterGuardExpired => Some(ActionRequeueReason::GuardExpired),
+            _ => None,
         }
-    }
-
-    fn is_writer_guard_expired(&self) -> bool {
-        matches!(self, Self::QueueWriterGuardExpired)
     }
 }
 

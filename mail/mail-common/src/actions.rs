@@ -17,8 +17,10 @@ use crate::{AppError, MailUserContext};
 use addresses::{block, unblock, update_incoming_defaults};
 use futures::future::{join, join_all};
 use indoc::formatdoc;
-use proton_action_queue::action::{Action, FactoryError, Handler, WriterGuard, WriterGuardError};
-use proton_action_queue::queue::Queue;
+use proton_action_queue::action::{
+    self, Action, FactoryError, Handler, WriterGuard, WriterGuardError,
+};
+use proton_action_queue::queue::{ActionRequeueReason, Queue};
 use proton_core_api::consts::General;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{LabelId, Proton, ProtonIdMarker};
@@ -56,17 +58,13 @@ pub enum MailActionError {
     Other(anyhow::Error),
 }
 
-impl proton_action_queue::action::Error for MailActionError {
-    fn is_network_failure(&self) -> bool {
-        if let Self::Http(e) = self {
-            e.is_network_failure()
-        } else {
-            false
+impl action::Error for MailActionError {
+    fn can_requeue(&self) -> Option<ActionRequeueReason> {
+        match self {
+            Self::Http(e) if e.is_network_failure() => Some(ActionRequeueReason::NetworkFailed),
+            Self::QueueWriterGuardExpired => Some(ActionRequeueReason::GuardExpired),
+            _ => None,
         }
-    }
-
-    fn is_writer_guard_expired(&self) -> bool {
-        matches!(self, Self::QueueWriterGuardExpired)
     }
 }
 

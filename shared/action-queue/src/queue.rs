@@ -245,7 +245,7 @@ pub enum ActionRemoteOutput<Remote> {
     /// Action was executed successfully on local and on remote.
     Executed(Remote),
     /// Action could not be executed on the remote at this time and was queued.
-    Queued(ActionId, QueuedActionReason),
+    Queued(ActionId, ActionRequeueReason),
 }
 
 /// Output of queueing the [`Action`] with [`Queue::queue_action`] or
@@ -542,24 +542,20 @@ impl Queue {
     }
 }
 
-/// Indicates the state of the action.
 #[derive(Debug, Clone, Copy)]
 pub enum QueuedActionState {
-    /// The action was executed, which led to either a success or failure result.
     Executed(ActionId),
-    /// The action was deferred due to lack of network.
-    Queued(ActionId, QueuedActionReason),
+    Queued(ActionId, ActionRequeueReason),
 }
 
-/// Reason why the action was queued
-///
 #[derive(Debug, Clone, Copy)]
-pub enum QueuedActionReason {
-    /// Action execution failed because of the network
-    ///
-    Network,
-    /// Action execution failed because of execution/writer guard expired
-    ///
+pub enum ActionRequeueReason {
+    /// There was an intermittent networking issue - the action should be
+    /// restarted later.
+    NetworkFailed,
+
+    /// Another executor was already working on this action, but then died or
+    /// dead-locked mid-execution - the action should be restarted later.
     GuardExpired,
 }
 
@@ -568,7 +564,7 @@ pub(crate) trait ErasedQueuedAction: Send {
         &'a mut self,
         shared: &'a Shared,
         tether: &'a mut Tether,
-        execution_guard: ExecutionGuard,
+        guard: ExecutionGuard,
         metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<QueuedActionState>> + 'a + Send>>;
 
@@ -590,7 +586,7 @@ impl<T: Action> ErasedQueuedAction for QueuedAction<T> {
         &'a mut self,
         shared: &'a Shared,
         tether: &'a mut Tether,
-        exec_guard: ExecutionGuard,
+        guard: ExecutionGuard,
         metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<QueuedActionState>> + 'a + Send>> {
         Box::pin(async move {
@@ -600,7 +596,7 @@ impl<T: Action> ErasedQueuedAction for QueuedAction<T> {
                 &*self.handler,
                 &mut self.action,
                 tether,
-                exec_guard,
+                guard,
             )
             .await
             .map_err(|e| QueuedError::Action(Arc::new(anyhow::Error::new(e)), metadata))?;
@@ -929,7 +925,7 @@ impl QueueAutoExecutor {
 
             let followup = match executor.execute_one().await {
                 Ok(None) => ActionExecutionFollowup::WaitForAction,
-                Ok(Some(QueuedActionState::Queued(_, QueuedActionReason::Network))) => {
+                Ok(Some(QueuedActionState::Queued(_, ActionRequeueReason::NetworkFailed))) => {
                     if termination_policy.is_network_loss_policy() {
                         return;
                     }
@@ -1178,24 +1174,17 @@ async fn execute_action_remote<T: Action>(
                         StoredAction::delete(tx, id).await?;
 
                         info!("Action executed");
+
                         Ok(ActionRemoteOutput::Executed(result))
                     }
 
                     Err(e) => {
                         error!("Failed to apply on server: {e:?}");
 
-                        if e.is_network_failure() {
-                            debug!("Action remains in queue due to lack of network");
+                        if let Some(reason) = e.can_requeue() {
+                            debug!(?reason, "Action will be requeued");
 
-                            // if this failed due to network error we should leave it in the queue.
-                            return Ok(ActionRemoteOutput::Queued(id, QueuedActionReason::Network));
-                        } else if e.is_writer_guard_expired() {
-                            debug!("Action remains in queue due to expired writer guard");
-
-                            return Ok(ActionRemoteOutput::Queued(
-                                id,
-                                QueuedActionReason::GuardExpired,
-                            ));
+                            return Ok(ActionRemoteOutput::Queued(id, reason));
                         }
 
                         match cancel_action_with_dependees(shared, tx, id).await {
@@ -1222,7 +1211,7 @@ async fn execute_action_remote<T: Action>(
         Err(WriterGuardError::Expired) => {
             return Ok(ActionRemoteOutput::Queued(
                 id,
-                QueuedActionReason::GuardExpired,
+                ActionRequeueReason::GuardExpired,
             ));
         }
         Err(WriterGuardError::Stash(e)) => return Err(e.into()),

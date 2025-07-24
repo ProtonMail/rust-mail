@@ -1,7 +1,10 @@
 use crate::UserContext;
-use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
-    WriterGuardError,
+use proton_action_queue::{
+    action::{
+        self, Action, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
+        WriterGuardError,
+    },
+    queue::ActionRequeueReason,
 };
 use proton_event_loop::EventLoopError;
 use proton_event_loop::subscriber::SubscriberError;
@@ -28,7 +31,6 @@ impl Action for EventPoll {
     type Error = ActionEventLoopError;
 }
 
-/// Wrapper type for [`EventLoopError`].
 #[derive(Debug, thiserror::Error)]
 pub enum ActionEventLoopError {
     #[error(transparent)]
@@ -39,23 +41,20 @@ pub enum ActionEventLoopError {
     WriterGuard(#[from] WriterGuardError),
 }
 
-impl proton_action_queue::action::Error for ActionEventLoopError {
-    fn is_network_failure(&self) -> bool {
-        if let ActionEventLoopError::EventLoop(
-            EventLoopError::Provider(e)
-            | EventLoopError::Subscriber(_, SubscriberError::Api(e))
-            | EventLoopError::Refresh(_, SubscriberError::Api(e)),
-        )
-        | ActionEventLoopError::Subscriber(SubscriberError::Api(e)) = &self
-        {
-            return e.is_network_failure();
+impl action::Error for ActionEventLoopError {
+    fn can_requeue(&self) -> Option<ActionRequeueReason> {
+        match self {
+            Self::EventLoop(
+                EventLoopError::Provider(_)
+                | EventLoopError::Subscriber(_, SubscriberError::Api(_))
+                | EventLoopError::Refresh(_, SubscriberError::Api(_)),
+            )
+            | Self::Subscriber(SubscriberError::Api(_)) => Some(ActionRequeueReason::NetworkFailed),
+
+            Self::WriterGuard(WriterGuardError::Expired) => Some(ActionRequeueReason::GuardExpired),
+
+            _ => None,
         }
-
-        false
-    }
-
-    fn is_writer_guard_expired(&self) -> bool {
-        matches!(self, Self::WriterGuard(WriterGuardError::Expired))
     }
 }
 

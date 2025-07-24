@@ -1,6 +1,7 @@
 use crate::db::{ActionDependency, ExecutionGuard, StoredAction};
 use crate::queue::{
-    ActionError, ErasedQueuedAction, QueuedAction, QueuedActionOutput, QueuedMetadata,
+    ActionError, ActionRequeueReason, ErasedQueuedAction, QueuedAction, QueuedActionOutput,
+    QueuedMetadata,
 };
 use anyhow::Context;
 use derive_more::derive::TryFrom;
@@ -21,26 +22,23 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use tracing::error;
 
-/// Actions can return any error type, but we need to be able to inspect the http request error
-/// to detect network failure and [`WriterGuard`] expirations so we can gracefully retry the
-/// action.
+/// While actions can return any error type, for better user experience it makes
+/// sense to distinguish "fatal errors" from "retryable errors" - this is what
+/// this trait allows.
+///
+/// See [`Self::requeueable()`] for details.
 pub trait Error: std::error::Error + Send + Sync {
-    /// Check if the error is the result of a network failure.
+    /// If this error is not fatal (e.g. a temporary networking issue), this
+    /// method returns `Some` - doing so causes the action to be requeued and
+    /// retried on the next opportunity.
     ///
-    /// An error is considered a network failure the server replies with 429/5xx HTTP status codes
-    /// or there was an issue with the underlying network transport layer.
-    fn is_network_failure(&self) -> bool;
-
-    /// Check whether this error was the result of a [`WriterGuardError::Expired`].
-    ///
-    /// This should return true when the presence of this error is detected.
-    fn is_writer_guard_expired(&self) -> bool;
+    /// If this error is fatal (e.g. missing database table), this method
+    /// returns `None` - doing so causes the action to be cancelled.
+    fn can_requeue(&self) -> Option<ActionRequeueReason>;
 }
 
-/// Errors that may occur during action version conversion.
 #[derive(Debug, thiserror::Error)]
 pub enum VersionConverterError {
-    /// Return this error
     #[error("Action version {0} is invalid")]
     InvalidVersion(u32),
     #[error("Failed to migrate action: {0}")]
@@ -811,12 +809,8 @@ impl Display for NoopError {
 }
 
 impl Error for NoopError {
-    fn is_network_failure(&self) -> bool {
-        false
-    }
-
-    fn is_writer_guard_expired(&self) -> bool {
-        false
+    fn can_requeue(&self) -> Option<ActionRequeueReason> {
+        None
     }
 }
 

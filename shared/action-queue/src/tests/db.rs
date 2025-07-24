@@ -4,6 +4,7 @@ use super::*;
 use crate::action::{
     ActionGroup, DefaultVersionConverter, MetadataBuilder, Type, WriterGuardError,
 };
+use crate::queue::ActionRequeueReason;
 use crate::tests::common::NoopActionHandler;
 use pretty_assertions::assert_eq;
 use serde::{Deserialize, Serialize};
@@ -27,12 +28,12 @@ enum Error {
 }
 
 impl action::Error for Error {
-    fn is_network_failure(&self) -> bool {
-        false
-    }
-
-    fn is_writer_guard_expired(&self) -> bool {
-        matches!(self, Error::WriterGuardExpired)
+    fn can_requeue(&self) -> Option<ActionRequeueReason> {
+        if matches!(self, Error::WriterGuardExpired) {
+            Some(ActionRequeueReason::GuardExpired)
+        } else {
+            None
+        }
     }
 }
 

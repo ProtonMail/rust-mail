@@ -2,6 +2,7 @@
 #![allow(clippy::ignored_unit_patterns)]
 
 use crate::action::{Action, ActionId, Error, Handler, WriterGuard, WriterGuardError};
+use crate::queue::ActionRequeueReason;
 use stash::stash::{Bond, StashError};
 use std::future::Future;
 use std::marker::PhantomData;
@@ -73,11 +74,11 @@ impl From<WriterGuardError> for DefaultError {
 }
 
 impl Error for DefaultError {
-    fn is_network_failure(&self) -> bool {
-        matches!(self, DefaultError::NetworkFailure)
-    }
-
-    fn is_writer_guard_expired(&self) -> bool {
-        matches!(self, DefaultError::WriterGuardExpired)
+    fn can_requeue(&self) -> Option<ActionRequeueReason> {
+        match self {
+            DefaultError::NetworkFailure => Some(ActionRequeueReason::NetworkFailed),
+            DefaultError::WriterGuardExpired => Some(ActionRequeueReason::GuardExpired),
+            _ => None,
+        }
     }
 }

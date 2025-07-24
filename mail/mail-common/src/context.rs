@@ -6,8 +6,10 @@ use futures::executor::block_on;
 use proton_account_api::login::LoginFlow;
 use proton_account_api::shared::challenge::ChallengeInfo;
 use proton_account_api::signup::SignupFlow;
-use proton_action_queue::action::{Action, WriterGuardError};
-use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
+use proton_action_queue::action::{self, Action, WriterGuardError};
+use proton_action_queue::queue::{
+    ActionError as QueueActionError, ActionRequeueReason, QueuedError,
+};
 use proton_calendar_common::RsvpError;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::BuildError;
@@ -139,10 +141,9 @@ impl MailContextError {
     pub fn no_connection() -> Self {
         Self::Api(ApiServiceError::NetworkError("No connection".to_string()))
     }
-}
 
-impl proton_action_queue::action::Error for MailContextError {
-    fn is_network_failure(&self) -> bool {
+    #[must_use]
+    pub fn is_network_failure(&self) -> bool {
         match self {
             Self::Api(e) => e.is_network_failure(),
             Self::Draft(draft::Error::Send(draft::SendError::SendMessage(
@@ -151,14 +152,27 @@ impl proton_action_queue::action::Error for MailContextError {
             _ => false,
         }
     }
+}
 
-    fn is_writer_guard_expired(&self) -> bool {
-        if let Self::IntoTransactionError(err) = self {
-            if let Some(WriterGuardError::Expired) = err.downcast_ref() {
-                return true;
-            }
+impl action::Error for MailContextError {
+    fn can_requeue(&self) -> Option<ActionRequeueReason> {
+        if self.is_network_failure() {
+            return Some(ActionRequeueReason::NetworkFailed);
         }
-        matches!(self, Self::QueueWriterGuardExpired)
+
+        match self {
+            Self::IntoTransactionError(err) => {
+                if let Some(WriterGuardError::Expired) = err.downcast_ref() {
+                    Some(ActionRequeueReason::GuardExpired)
+                } else {
+                    None
+                }
+            }
+
+            Self::QueueWriterGuardExpired => Some(ActionRequeueReason::GuardExpired),
+
+            _ => None,
+        }
     }
 }
 
