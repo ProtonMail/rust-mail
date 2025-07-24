@@ -558,9 +558,9 @@ pub enum ActionRequeueReason {
     /// dead-locked mid-execution - the action should be restarted later.
     GuardExpired,
 
-    /// Action's handler needs access to some external data that is now lost
-    /// (e.g. it has a `Weak` that can't be upgraded anymore) - the action
-    /// should be restarted later.
+    /// Action's handler needs access to some external data that is now gone
+    /// (e.g. it has a `Weak` pointer that can't be upgraded anymore) - the
+    /// action should be restarted later.
     LostContext,
 }
 
