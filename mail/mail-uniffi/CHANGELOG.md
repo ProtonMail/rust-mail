@@ -33,6 +33,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- Mail-common: drop `saveaspdf` and `print` actions
+- [ET-3920] Sync missing dependencies in mail scrollers
+
+
+## [mail-uniffi-v0.105.7] - 2025-07-24
+
+### Fixes
+
 - Marking conversations unread
 - [ET-2992] Open pgp attachments via `get_attachment`
 
