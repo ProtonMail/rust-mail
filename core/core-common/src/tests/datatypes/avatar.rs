@@ -10,9 +10,9 @@ use test_case::test_case;
 #[test_case("J" => "J")]
 #[test_case("John 1Doe" => "J")]
 #[test_case("123 John" => "1")]
-#[test_case("🙂" => ""; "emoji")]
-#[test_case("🙂 John" => "J"; "John with emoji")]
-#[test_case("🙂 John Doe" => "J")]
+#[test_case("🙂" => "🙂"; "emoji")]
+#[test_case("🙂 John" => "🙂"; "John with emoji")]
+#[test_case("🙂 John Doe" => "🙂")]
 #[test_case("brains@tracyisland.com" => "B")]
 #[test_case("    brains@tracyisland.com" => "B"; "leading spaces")]
 #[test_case("A@test.com" => "A")]
@@ -22,7 +22,7 @@ use test_case::test_case;
 #[test_case("emojiname@test.com`" => "E")]
 #[test_case("OnePart" => "O")]
 #[test_case("onepart@test.com" => "O")]
-#[test_case("🧑‍🔬 Doctor Rebecca" => "D")]
+#[test_case("🧑‍🔬 Doctor Rebecca" => "🧑‍🔬")]
 #[test_case("Milti-Part Surname" => "M")] // Name with dashes
 #[test_case("日本人の氏名" => "日")] // Japanese
 #[test_case("ім'я прізвище" => "І")] // Ukrainian (Cyrillic)

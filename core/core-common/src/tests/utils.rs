@@ -5,6 +5,7 @@ use test_case::test_case;
 #[test_case("B" => "B")]
 #[test_case("1" => "1")]
 #[test_case("y̆es" => "Y̆")]
+#[test_case("@user" => "@")]
 #[test_case("🗻∈🌏" => "🗻")]
 #[test_case("\"This is a quote\"" => "\"")]
 #[test_case("🧑‍🔬 Doctor Rebecca" => "🧑‍🔬")]

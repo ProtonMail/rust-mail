@@ -68,11 +68,11 @@ where
 {
     fn from(value: S) -> Self {
         let name = value.as_ref();
-        let text = name
-            .unicode_words()
-            .take(1)
-            .filter_map(first_grapheme_upppercase)
-            .collect();
+
+        let text = first_emoji_grapheme(name)
+            .or_else(|| name.unicode_words().find_map(first_grapheme_upppercase))
+            .unwrap_or_default();
+
         let color = proton_color(name);
 
         Self {
@@ -80,4 +80,17 @@ where
             color: color.to_string(),
         }
     }
+}
+
+fn first_emoji_grapheme(s: &str) -> Option<String> {
+    s.trim()
+        .graphemes(true)
+        .find(|g| {
+            g.chars().next().is_some_and(|c| {
+                ('\u{1F300}'..='\u{1FAFF}').contains(&c)        // Misc emoji
+                    || ('\u{1F600}'..='\u{1F64F}').contains(&c) // Emoticons
+                    || ('\u{2700}'..='\u{27BF}').contains(&c) // Dingbats & symbols
+            })
+        })
+        .map(str::to_string)
 }
