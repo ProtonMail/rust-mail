@@ -718,6 +718,7 @@ impl Message {
         let any_unstarred = messages.iter().any(|m| !m.is_starred());
 
         BottomBarActions::hidden_bottom_bar_actions(
+            false,
             current_label,
             any_unread,
             any_read,

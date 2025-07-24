@@ -38,6 +38,7 @@ pub enum BottomBarActions {
     PermanentDelete,
     Star,
     Unstar,
+    Snooze,
 }
 
 impl From<RealBottomBarActions> for BottomBarActions {
@@ -55,6 +56,7 @@ impl From<RealBottomBarActions> for BottomBarActions {
             RealBottomBarActions::PermanentDelete => Self::PermanentDelete,
             RealBottomBarActions::Star => Self::Star,
             RealBottomBarActions::Unstar => Self::Unstar,
+            RealBottomBarActions::Snooze => Self::Snooze,
         }
     }
 }

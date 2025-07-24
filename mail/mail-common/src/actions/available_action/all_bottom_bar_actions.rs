@@ -31,6 +31,7 @@ pub enum BottomBarActions {
     PermanentDelete,
     Star,
     Unstar,
+    Snooze,
 }
 
 impl BottomBarActions {
@@ -54,6 +55,7 @@ impl BottomBarActions {
             MobileActions::ToggleRead => Some(Self::toggle_read(any_unread)),
             MobileActions::ToggleStar => Some(Self::toggle_star(all_starred)),
             MobileActions::Trash => Some(Self::toggle_trash(current_label, trash)),
+            MobileActions::Snooze => Some(Self::Snooze),
             _ => {
                 warn!("Invalid mobile action type: {mobile_actions:?}");
                 None
@@ -114,6 +116,7 @@ impl BottomBarActions {
     /// Get actions not displayed in bottom_bar when selecting messages or actions
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn hidden_bottom_bar_actions(
+        is_conversation: bool,
         current_label: LabelId,
         any_unread: bool,
         any_read: bool,
@@ -148,6 +151,10 @@ impl BottomBarActions {
         // Label as...
         if !visible_actions.contains(&BottomBarActions::LabelAs) {
             result.push(BottomBarActions::LabelAs);
+        }
+        // Snooze
+        if is_conversation && !visible_actions.contains(&BottomBarActions::Snooze) {
+            result.push(BottomBarActions::Snooze);
         }
         // Move to Inbox
         if [LabelId::trash(), LabelId::archive()].contains(&current_label)

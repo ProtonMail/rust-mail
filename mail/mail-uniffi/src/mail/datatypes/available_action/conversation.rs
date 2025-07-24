@@ -39,6 +39,7 @@ pub enum ConversationAction {
     MarkRead,
     MarkUnread,
     Delete,
+    Snooze,
 }
 
 impl From<RealConversationAction> for ConversationAction {
@@ -52,6 +53,7 @@ impl From<RealConversationAction> for ConversationAction {
             RealConversationAction::MarkRead => ConversationAction::MarkRead,
             RealConversationAction::MarkUnread => ConversationAction::MarkUnread,
             RealConversationAction::Delete => ConversationAction::Delete,
+            RealConversationAction::Snooze => ConversationAction::Snooze,
         }
     }
 }
