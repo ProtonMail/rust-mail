@@ -273,13 +273,14 @@ pub struct PutConversationsUnlabelRequest {
     pub label_id: LabelId,
 }
 
-/// TODO: Document this struct.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct PutConversationsUnreadRequest {
-    /// TODO: Document this field.
     #[serde(rename = "IDs")]
     pub ids: Vec<ConversationId>,
+
+    #[serde(rename = "LabelID")]
+    pub label_id: LabelId,
 }
 
 /// TODO: Document this struct.
