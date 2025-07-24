@@ -4,7 +4,7 @@ use crate::datatypes::LocalMessageId;
 use crate::models::{Message, MessageScrollData};
 use itertools::Itertools;
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
+    Action, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
 };
 use proton_core_api::services::proton::Proton;
 use proton_core_common::models::ModelExtension;
@@ -46,7 +46,7 @@ pub struct RefreshMetadataHandler {
     pub api: Proton,
 }
 
-impl proton_action_queue::action::Handler for RefreshMetadataHandler {
+impl Handler for RefreshMetadataHandler {
     type Action = RefreshMetadata;
 
     async fn apply_local(

@@ -3,7 +3,7 @@ use crate::actions::MailActionError;
 use crate::datatypes::LocalConversationId;
 use crate::models::{Conversation, Message};
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
+    Action, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
 };
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label;
@@ -44,7 +44,7 @@ pub struct PrefetchHandler {
     pub ctx: Weak<MailUserContext>,
 }
 
-impl proton_action_queue::action::Handler for PrefetchHandler {
+impl Handler for PrefetchHandler {
     type Action = Prefetch;
 
     async fn apply_local(

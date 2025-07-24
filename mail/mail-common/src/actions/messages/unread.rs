@@ -3,7 +3,7 @@ use crate::datatypes::{LocalMessageId, RollbackItemType};
 use crate::models::Message;
 use itertools::Itertools;
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Handler as ActionHandler, Type, WriterGuard,
+    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
 use proton_core_api::consts::General;
 use proton_core_api::services::proton::Proton;
@@ -37,7 +37,7 @@ pub struct UnreadHandler {
     pub api: Proton,
 }
 
-impl ActionHandler for UnreadHandler {
+impl Handler for UnreadHandler {
     type Action = Unread;
 
     async fn apply_local(

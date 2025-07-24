@@ -1,7 +1,7 @@
 use crate::actions::MailActionError;
 use crate::models::default_location::IncomingDefaultLocation;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
-use proton_action_queue::action::{ActionId, Handler as ActionHandler};
+use proton_action_queue::action::{ActionId, Handler};
 use proton_core_api::services::proton::{IncomingDefaultId, PrivateEmail, Proton};
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
@@ -28,7 +28,7 @@ pub struct UnblockHandler {
     pub api: Proton,
 }
 
-impl ActionHandler for UnblockHandler {
+impl Handler for UnblockHandler {
     type Action = Unblock;
 
     async fn apply_local(

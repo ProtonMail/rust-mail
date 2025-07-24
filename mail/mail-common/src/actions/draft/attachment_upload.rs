@@ -9,8 +9,8 @@ use crate::models::{
 };
 use crate::{MailContextError, MailUserContext};
 use proton_action_queue::action::{
-    Action, ActionGroup, ActionId, DefaultVersionConverter, Error, Priority, Type, WriterGuard,
-    WriterGuardError,
+    Action, ActionGroup, ActionId, DefaultVersionConverter, Error, Handler, Priority, Type,
+    WriterGuard, WriterGuardError,
 };
 use proton_core_api::consts::Mail;
 use proton_core_api::services::proton::AddressId;
@@ -97,7 +97,7 @@ pub struct AttachmentUploadHandler {
     pub ctx: Weak<MailUserContext>,
 }
 
-impl proton_action_queue::action::Handler for AttachmentUploadHandler {
+impl Handler for AttachmentUploadHandler {
     type Action = AttachmentUpload;
 
     async fn apply_local(

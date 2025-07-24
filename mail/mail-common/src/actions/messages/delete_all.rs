@@ -1,7 +1,9 @@
 use crate::actions::MailActionError;
 use crate::datatypes::LocalMessageId;
 use crate::models::Message;
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
+use proton_action_queue::action::{
+    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+};
 use proton_core_api::services::proton::Proton;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, LabelError, ModelIdExtension as _};
@@ -41,7 +43,7 @@ pub struct DeleteAllMessagesInLabelHandler {
     pub api: Proton,
 }
 
-impl proton_action_queue::action::Handler for DeleteAllMessagesInLabelHandler {
+impl Handler for DeleteAllMessagesInLabelHandler {
     type Action = DeleteAllMessagesInLabel;
 
     async fn apply_local(

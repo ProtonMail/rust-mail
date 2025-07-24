@@ -7,7 +7,7 @@ use crate::models::{
     MetadataId,
 };
 use proton_action_queue::action::{
-    Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
+    Action, ActionGroup, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
 };
 use proton_core_api::services::proton::Proton;
 use proton_core_common::models::ModelExtension;
@@ -69,7 +69,7 @@ pub struct AttachmentRemoveHandler {
     pub api: Proton,
 }
 
-impl proton_action_queue::action::Handler for AttachmentRemoveHandler {
+impl Handler for AttachmentRemoveHandler {
     type Action = AttachmentRemove;
 
     async fn apply_local(

@@ -1,7 +1,7 @@
 use crate::actions::MailActionError;
 use crate::models::default_location::IncomingDefaultLocation;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
-use proton_action_queue::action::{ActionId, Handler as ActionHandler};
+use proton_action_queue::action::{ActionId, Handler};
 use proton_core_api::services::proton::{PrivateEmail, Proton};
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::response_data::IncomingDefaultLocation as ApiIncomingDefaultLocation;
@@ -29,7 +29,7 @@ pub struct BlockHandler {
     pub api: Proton,
 }
 
-impl ActionHandler for BlockHandler {
+impl Handler for BlockHandler {
     type Action = Block;
 
     async fn apply_local(

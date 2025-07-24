@@ -2,7 +2,7 @@ use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_resp
 use crate::datatypes::{LocalMessageId, RollbackItemType};
 use crate::models::Message;
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Handler as ActionHandler, Type, WriterGuard,
+    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
 use proton_core_api::services::proton::Proton;
 use proton_core_common::datatypes::LocalLabelId;
@@ -39,7 +39,7 @@ pub struct UnlabelHandler {
     pub api: Proton,
 }
 
-impl ActionHandler for UnlabelHandler {
+impl Handler for UnlabelHandler {
     type Action = Unlabel;
 
     async fn apply_local(

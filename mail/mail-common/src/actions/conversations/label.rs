@@ -2,7 +2,9 @@ use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_resp
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::RollbackItemType;
 use crate::models::Conversation;
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
+use proton_action_queue::action::{
+    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+};
 use proton_core_api::services::proton::Proton;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
@@ -34,7 +36,7 @@ pub struct LabelHandler {
     pub api: Proton,
 }
 
-impl proton_action_queue::action::Handler for LabelHandler {
+impl Handler for LabelHandler {
     type Action = Label;
 
     async fn apply_local(

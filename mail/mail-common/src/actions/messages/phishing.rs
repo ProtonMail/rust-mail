@@ -4,7 +4,7 @@ use crate::models::Message;
 use crate::{AppError, MailUserContext};
 use anyhow::Context as _;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
-use proton_action_queue::action::{ActionId, Handler as ActionHandler};
+use proton_action_queue::action::{ActionId, Handler};
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
@@ -43,7 +43,7 @@ pub struct ReportPhishingHandler {
     pub ctx: Weak<MailUserContext>,
 }
 
-impl ActionHandler for ReportPhishingHandler {
+impl Handler for ReportPhishingHandler {
     type Action = ReportPhishing;
 
     async fn apply_local(

@@ -13,8 +13,8 @@ use crate::models::{
 use crate::{AppError, MailContextError, MailUserContext};
 use chrono::{DateTime, Local};
 use proton_action_queue::action::{
-    Action, ActionGroup, ActionId, FactoryError, FactoryResult, Priority, Type, VersionConverter,
-    VersionConverterError, WriterGuard, WriterGuardError, deserialize,
+    Action, ActionGroup, ActionId, FactoryError, FactoryResult, Handler, Priority, Type,
+    VersionConverter, VersionConverterError, WriterGuard, WriterGuardError, deserialize,
 };
 use proton_core_api::consts::Mail;
 use proton_core_api::services::proton::PrivateEmail;
@@ -138,7 +138,7 @@ pub struct SendHandler {
     pub ctx: Weak<MailUserContext>,
 }
 
-impl proton_action_queue::action::Handler for SendHandler {
+impl Handler for SendHandler {
     type Action = Send;
 
     async fn apply_local(

@@ -2,7 +2,9 @@ use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_resp
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::{ContextualConversation, RollbackItemType};
 use crate::models::Conversation;
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
+use proton_action_queue::action::{
+    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+};
 use proton_core_api::consts::General;
 use proton_core_api::services::proton::Proton;
 use proton_core_common::datatypes::LocalLabelId;
@@ -36,7 +38,7 @@ pub struct MarkReadHandler {
     pub api: Proton,
 }
 
-impl proton_action_queue::action::Handler for MarkReadHandler {
+impl Handler for MarkReadHandler {
     type Action = MarkRead;
 
     async fn apply_local(

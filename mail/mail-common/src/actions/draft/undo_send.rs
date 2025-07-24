@@ -8,7 +8,7 @@ use crate::draft::compose::create_timestamp;
 use crate::models::Message;
 use crate::{AppError, MailContextError};
 use proton_action_queue::action::{
-    Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
+    Action, ActionGroup, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
 };
 use proton_core_api::consts::Mail;
 use proton_core_api::services::proton::{LabelId, Proton};
@@ -60,7 +60,7 @@ pub struct UndoSendHandler {
     pub api: Proton,
 }
 
-impl proton_action_queue::action::Handler for UndoSendHandler {
+impl Handler for UndoSendHandler {
     type Action = UndoSend;
 
     async fn apply_local(

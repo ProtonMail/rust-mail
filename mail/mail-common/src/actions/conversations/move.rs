@@ -4,7 +4,7 @@ use crate::datatypes::RollbackItemType;
 use crate::models::{Conversation, RollbackItem};
 use itertools::Itertools;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
-use proton_action_queue::action::{ActionId, Handler as ActionHandler};
+use proton_action_queue::action::{ActionId, Handler};
 use proton_core_api::services::proton::Proton;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
@@ -45,7 +45,7 @@ pub struct MoveHandler {
     pub api: Proton,
 }
 
-impl ActionHandler for MoveHandler {
+impl Handler for MoveHandler {
     type Action = Move;
 
     async fn apply_local(

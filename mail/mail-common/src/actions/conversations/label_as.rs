@@ -5,8 +5,8 @@ use crate::datatypes::SystemLabelId;
 use crate::models::{Conversation, ConversationCounters};
 use anyhow::Context;
 use proton_action_queue::action::{
-    self, Action, ActionId, FactoryError, Handler as ActionHandler, MetadataBuilder, Type,
-    VersionConverter, VersionConverterError, WriterGuard,
+    self, Action, ActionId, FactoryError, Handler, MetadataBuilder, Type, VersionConverter,
+    VersionConverterError, WriterGuard,
 };
 use proton_action_queue::queue::Queue;
 use proton_core_api::services::proton::{LabelId, Proton};
@@ -55,7 +55,7 @@ pub struct LabelAsHandler {
     pub api: Proton,
 }
 
-impl ActionHandler for LabelAsHandler {
+impl Handler for LabelAsHandler {
     type Action = LabelAs;
 
     async fn apply_local(

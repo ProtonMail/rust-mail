@@ -1,6 +1,6 @@
 use crate::MailUserContext;
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
+    Action, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
 };
 use proton_core_common::actions::event_poll::ActionEventLoopError;
 use proton_core_common::datatypes::Refresh;
@@ -33,12 +33,11 @@ impl Action for ActionRefresh {
     type Error = ActionEventLoopError;
 }
 
-#[derive(Default)]
 pub struct ActionRefreshHandler {
     pub ctx: Weak<MailUserContext>,
 }
 
-impl proton_action_queue::action::Handler for ActionRefreshHandler {
+impl Handler for ActionRefreshHandler {
     type Action = ActionRefresh;
 
     async fn apply_local(

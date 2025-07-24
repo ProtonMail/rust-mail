@@ -2,7 +2,7 @@ use crate::actions::{GenericActionData, MailActionError, filter_responses_by_cod
 use crate::datatypes::{LocalMessageId, RollbackItemType};
 use crate::models::Message;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
-use proton_action_queue::action::{ActionId, Handler as ActionHandler};
+use proton_action_queue::action::{ActionId, Handler};
 use proton_core_api::consts::General;
 use proton_core_api::services::proton::Proton;
 use proton_core_common::models::ModelIdExtension;
@@ -35,7 +35,7 @@ pub struct ReadHandler {
     pub api: Proton,
 }
 
-impl ActionHandler for ReadHandler {
+impl Handler for ReadHandler {
     type Action = Read;
 
     async fn apply_local(

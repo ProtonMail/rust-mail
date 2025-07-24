@@ -1,7 +1,7 @@
 use crate::actions::MailActionError;
 use crate::models::default_location::IncomingDefaultLocation;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
-use proton_action_queue::action::{ActionId, Handler as ActionHandler};
+use proton_action_queue::action::{ActionId, Handler};
 use proton_core_api::services::proton::Proton;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
@@ -24,7 +24,7 @@ pub struct SyncIncomingDefaultsHandler {
     pub api: Proton,
 }
 
-impl ActionHandler for SyncIncomingDefaultsHandler {
+impl Handler for SyncIncomingDefaultsHandler {
     type Action = SyncIncomingDefaults;
 
     async fn apply_local(

@@ -3,7 +3,7 @@ use crate::actions::MailActionError;
 use crate::datatypes::LocalMessageId;
 use crate::models::Message;
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
+    Action, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
 };
 use serde::{self, Deserialize, Serialize};
 use stash::orm::Model;
@@ -38,7 +38,7 @@ pub struct PrefetchHandler {
     pub ctx: Weak<MailUserContext>,
 }
 
-impl proton_action_queue::action::Handler for PrefetchHandler {
+impl Handler for PrefetchHandler {
     type Action = Prefetch;
 
     async fn apply_local(

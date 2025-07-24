@@ -1,6 +1,7 @@
 use crate::UserContext;
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard, WriterGuardError,
+    Action, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
+    WriterGuardError,
 };
 use proton_event_loop::EventLoopError;
 use proton_event_loop::subscriber::SubscriberError;
@@ -62,7 +63,7 @@ pub struct EventPollHandler {
     pub ctx: Weak<UserContext>,
 }
 
-impl proton_action_queue::action::Handler for EventPollHandler {
+impl Handler for EventPollHandler {
     type Action = EventPoll;
 
     async fn apply_local(

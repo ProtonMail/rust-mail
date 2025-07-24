@@ -5,7 +5,7 @@ use crate::models::{Conversation, ConversationScrollData};
 use crate::{MailUserContext, models::Message};
 use anyhow::anyhow;
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
+    Action, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
 };
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_api::services::proton::prelude::GetMessagesOptions;
@@ -50,7 +50,7 @@ pub struct RefreshMetadataHandler {
     pub ctx: Weak<MailUserContext>,
 }
 
-impl proton_action_queue::action::Handler for RefreshMetadataHandler {
+impl Handler for RefreshMetadataHandler {
     type Action = RefreshMetadata;
 
     async fn apply_local(

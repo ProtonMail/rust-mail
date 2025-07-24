@@ -3,7 +3,7 @@ use crate::datatypes::{LocalMessageId, MessageFlags, RollbackItemType, SystemLab
 use crate::models::{Message, RollbackItem};
 use futures::future::try_join_all;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
-use proton_action_queue::action::{ActionId, Handler as ActionHandler};
+use proton_action_queue::action::{ActionId, Handler};
 use proton_core_api::services::proton::{LabelId, Proton};
 use proton_core_common::models::{Label, LabelError, ModelIdExtension};
 use proton_mail_api::services::proton::ProtonMail;
@@ -42,7 +42,7 @@ pub struct HamHandler {
     pub api: Proton,
 }
 
-impl ActionHandler for HamHandler {
+impl Handler for HamHandler {
     type Action = Ham;
 
     async fn apply_local(

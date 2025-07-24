@@ -3,7 +3,7 @@ use crate::datatypes::LocalConversationId;
 use crate::datatypes::{LocalMessageId, RollbackItemType};
 use crate::models::{Conversation, Message};
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
-use proton_action_queue::action::{ActionId, Handler as ActionHandler};
+use proton_action_queue::action::{ActionId, Handler};
 use proton_core_api::services::proton::Proton;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
@@ -42,7 +42,7 @@ pub struct DeleteHandler {
     pub api: Proton,
 }
 
-impl ActionHandler for DeleteHandler {
+impl Handler for DeleteHandler {
     type Action = Delete;
 
     async fn apply_local(

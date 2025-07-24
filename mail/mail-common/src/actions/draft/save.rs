@@ -18,7 +18,7 @@ use crate::models::{
 use crate::{AppError, MailContextError, MailUserContext, draft};
 use indoc::indoc;
 use proton_action_queue::action::{
-    Action, ActionGroup, ActionId, FactoryResult, Priority, Type, VersionConverter,
+    Action, ActionGroup, ActionId, FactoryResult, Handler, Priority, Type, VersionConverter,
     VersionConverterError, WriterGuard, WriterGuardError, deserialize,
 };
 use proton_core_api::services::proton::{AddressId, LabelId};
@@ -170,7 +170,7 @@ pub struct SaveHandler {
     pub ctx: Weak<MailUserContext>,
 }
 
-impl proton_action_queue::action::Handler for SaveHandler {
+impl Handler for SaveHandler {
     type Action = Save;
 
     async fn apply_local(

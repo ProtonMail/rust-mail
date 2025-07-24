@@ -1,7 +1,9 @@
 use crate::datatypes::RollbackItemType;
 use crate::models::RollbackItem;
 use crate::{AppError, actions::MailActionError};
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
+use proton_action_queue::action::{
+    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+};
 use proton_core_api::services::proton::{LabelId, Proton};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label;
@@ -53,7 +55,7 @@ pub struct ExpandHandler {
     pub api: Proton,
 }
 
-impl proton_action_queue::action::Handler for ExpandHandler {
+impl Handler for ExpandHandler {
     type Action = Expand;
 
     async fn apply_local(

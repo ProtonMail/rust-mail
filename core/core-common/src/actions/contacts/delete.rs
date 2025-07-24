@@ -1,7 +1,9 @@
 use crate::datatypes::LocalContactId;
 use crate::models::{Contact, ModelExtension, ModelIdExtension};
 use crate::{CoreContextError, UserContext};
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
+use proton_action_queue::action::{
+    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+};
 use proton_core_api::services::proton::ContactId;
 use proton_core_api::session::CoreSession;
 use serde::{Deserialize, Serialize};
@@ -39,7 +41,7 @@ pub struct DeleteHandler {
     pub ctx: Weak<UserContext>,
 }
 
-impl proton_action_queue::action::Handler for DeleteHandler {
+impl Handler for DeleteHandler {
     type Action = Delete;
 
     async fn apply_local(

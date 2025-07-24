@@ -5,7 +5,7 @@ use crate::datatypes::{LocalConversationId, LocalMessageId};
 use crate::draft::DiscardError;
 use crate::models::{Conversation, DraftMetadata, Message, MetadataId};
 use proton_action_queue::action::{
-    Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
+    Action, ActionGroup, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
 };
 use proton_core_api::consts::General;
 use proton_core_api::services::proton::{LabelId, Proton};
@@ -53,7 +53,7 @@ pub struct DiscardHandler {
     pub api: Proton,
 }
 
-impl proton_action_queue::action::Handler for DiscardHandler {
+impl Handler for DiscardHandler {
     type Action = Discard;
 
     async fn apply_local(
