@@ -527,18 +527,30 @@ impl AppStateHandler for ContactsModel {
                     }
                     // For groups for now we use the available data (to be changed in the future)
                     Some(ContactItemType::Group(group)) => {
+                        let group_clone = group.clone();
                         self.open_contact = OpenedContactState::Group(group);
-                        Command::None
+
+                        // Sanity check that our data is legit, only in debug mode.
+                        if cfg!(debug_assertions) {
+                            let tether = self.ctx.user_stash().connection();
+                            Command::task(async move {
+                                let group_from_db =
+                                    Contact::contact_group_by_id(&tether, group_clone.local_id)
+                                        .await
+                                        .unwrap();
+                                assert_eq!(group_from_db, group_clone);
+                                Command::None
+                            })
+                        } else {
+                            Command::None
+                        }
                     }
                     None => Command::none(),
                 }
             }
             Message::LoadContactDetails(contacts) => {
-                match self.open_contact {
-                    OpenedContactState::Loading(_) => {
-                        self.open_contact = OpenedContactState::Contact(contacts);
-                    }
-                    _ => unreachable!(),
+                if let OpenedContactState::Loading(_) = self.open_contact {
+                    self.open_contact = OpenedContactState::Contact(contacts);
                 }
                 Command::none()
             }
