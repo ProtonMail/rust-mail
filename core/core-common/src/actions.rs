@@ -4,9 +4,10 @@ pub mod event_poll;
 use crate::UserContext;
 use proton_action_queue::action::{Action, FactoryError, Handler};
 use proton_action_queue::queue::Queue;
+use proton_core_api::services::proton::Proton;
 use std::sync::Weak;
 
-pub(crate) fn register_core_actions(queue: &Queue, ctx: &Weak<UserContext>) {
+pub(crate) fn register_core_actions(queue: &Queue, ctx: &Weak<UserContext>, api: &Proton) {
     fn register_action<T>(queue: &Queue, handler: T)
     where
         T: Handler,
@@ -26,5 +27,5 @@ pub(crate) fn register_core_actions(queue: &Queue, ctx: &Weak<UserContext>) {
     }
 
     register_action(queue, event_poll::EventPollHandler { ctx: ctx.clone() });
-    register_action(queue, contacts::DeleteHandler { ctx: ctx.clone() });
+    register_action(queue, contacts::DeleteHandler { api: api.clone() });
 }

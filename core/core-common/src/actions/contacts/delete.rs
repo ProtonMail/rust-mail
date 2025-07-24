@@ -1,14 +1,12 @@
+use crate::CoreContextError;
 use crate::datatypes::LocalContactId;
 use crate::models::{Contact, ModelExtension, ModelIdExtension};
-use crate::{CoreContextError, UserContext};
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
 };
-use proton_core_api::services::proton::ContactId;
-use proton_core_api::session::CoreSession;
+use proton_core_api::services::proton::{ContactId, Proton};
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
-use std::sync::Weak;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Delete {
@@ -38,7 +36,7 @@ impl Action for Delete {
 }
 
 pub struct DeleteHandler {
-    pub ctx: Weak<UserContext>,
+    pub api: Proton,
 }
 
 impl Handler for DeleteHandler {
@@ -85,12 +83,7 @@ impl Handler for DeleteHandler {
         action: &mut Self::Action,
         guard: WriterGuard<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        let failed = Contact::delete_from_remote(
-            &action.remote_ids,
-            self.ctx.upgrade().unwrap().session().api(),
-        )
-        .await?;
-
+        let failed = Contact::delete_from_remote(&action.remote_ids, &self.api).await?;
         let mut failed_local_ids = Vec::with_capacity(failed.len());
 
         if failed.is_empty() {

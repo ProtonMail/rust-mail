@@ -10,7 +10,7 @@ pub use event_loop::subscriber::CoreEventLoopContext;
 use proton_action_queue::queue::Queue;
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::services::proton::{SessionId, UserId};
-use proton_core_api::session::Session;
+use proton_core_api::session::{CoreSession, Session};
 use proton_event_loop::EventPoll;
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
@@ -87,13 +87,14 @@ impl UserContext {
         cache_path: PathBuf,
     ) -> CoreContextResult<Arc<Self>> {
         info!("Creating new user context");
+
         let user_stash = Self::new_user_db(user_stash_path, db_initializers).await?;
         let cancellation_token = context.new_child_cancellation_token();
         let queue = Queue::new(user_stash.clone()).await?;
         let initialization_watcher = InitializationWatcher::new(&user_stash)?;
 
         let this = Arc::new_cyclic(|this| {
-            register_core_actions(&queue, this);
+            register_core_actions(&queue, this, session.api());
 
             let event_ctx = CoreEventLoopContext::from(Weak::clone(this));
 
