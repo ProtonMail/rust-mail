@@ -4,7 +4,6 @@
 use crate::action::{Action, ActionId, Error, Handler, WriterGuard, WriterGuardError};
 use crate::queue::ActionRequeueReason;
 use stash::stash::{Bond, StashError};
-use std::future::Future;
 use std::marker::PhantomData;
 
 pub struct NoopActionHandler<T: Action>(PhantomData<T>);
@@ -30,22 +29,22 @@ where
         Ok(<T as Action>::LocalOutput::default())
     }
 
-    fn revert_local(
+    async fn revert_local(
         &self,
         _: ActionId,
         _: &mut Self::Action,
         _: &Bond<'_>,
-    ) -> impl Future<Output = Result<(), T::Error>> + Send {
-        std::future::ready(Ok(()))
+    ) -> Result<(), T::Error> {
+        Ok(())
     }
 
-    fn apply_remote(
+    async fn apply_remote(
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: WriterGuard,
-    ) -> impl Future<Output = Result<<T as Action>::RemoteOutput, T::Error>> + Send {
-        std::future::ready(Ok(T::RemoteOutput::default()))
+        _: WriterGuard<'_>,
+    ) -> Result<<T as Action>::RemoteOutput, T::Error> {
+        Ok(T::RemoteOutput::default())
     }
 }
 

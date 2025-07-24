@@ -6,7 +6,6 @@ use proton_action_queue::observers::{ActionAwaiter, ActionFailureObserver, Actio
 use proton_action_queue::queue::BroadcastMessage;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
-use std::future::Future;
 use std::time::Duration;
 
 #[tokio::test]
@@ -145,35 +144,31 @@ pub struct ErrorActionHandler;
 impl Handler for ErrorActionHandler {
     type Action = ErrorAction;
 
-    fn apply_local(
+    async fn apply_local(
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: &Bond,
-    ) -> impl Future<
-        Output = Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error>,
-    > + Send {
-        std::future::ready(Ok(()))
+        _: &Bond<'_>,
+    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+        Ok(())
     }
 
-    fn revert_local(
+    async fn revert_local(
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: &Bond,
-    ) -> impl Future<Output = Result<(), <Self::Action as Action>::Error>> + Send {
-        std::future::ready(Ok(()))
+        _: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
+        Ok(())
     }
 
-    fn apply_remote(
+    async fn apply_remote(
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: WriterGuard,
-    ) -> impl Future<
-        Output = Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error>,
-    > + Send {
-        std::future::ready(Err(DefaultError::APIFailure))
+        _: WriterGuard<'_>,
+    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        Err(DefaultError::APIFailure)
     }
 }
 
@@ -197,34 +192,30 @@ pub struct SuccessActionHandler;
 impl Handler for SuccessActionHandler {
     type Action = SuccessAction;
 
-    fn apply_local(
+    async fn apply_local(
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: &Bond,
-    ) -> impl Future<
-        Output = Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error>,
-    > + Send {
-        std::future::ready(Ok(()))
+        _: &Bond<'_>,
+    ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
+        Ok(())
     }
 
-    fn revert_local(
+    async fn revert_local(
         &self,
         _: ActionId,
         _: &mut Self::Action,
-        _: &Bond,
-    ) -> impl Future<Output = Result<(), <Self::Action as Action>::Error>> + Send {
-        std::future::ready(Ok(()))
+        _: &Bond<'_>,
+    ) -> Result<(), <Self::Action as Action>::Error> {
+        Ok(())
     }
 
-    fn apply_remote(
+    async fn apply_remote(
         &self,
         _: ActionId,
         _: &mut Self::Action,
         _: WriterGuard<'_>,
-    ) -> impl Future<
-        Output = Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error>,
-    > + Send {
-        std::future::ready(Ok(()))
+    ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        Ok(())
     }
 }
