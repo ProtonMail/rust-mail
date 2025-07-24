@@ -64,7 +64,10 @@ impl Handler for ActionRefreshHandler {
         action: &mut Self::Action,
         _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let ctx = self.ctx.upgrade().expect("context has died");
+        let ctx = self
+            .ctx
+            .upgrade()
+            .ok_or(ActionEventLoopError::LostContext)?;
 
         ctx.user_context().on_refresh_impl(action.refresh).await?;
         ctx.on_refresh_impl(action.refresh).await?;

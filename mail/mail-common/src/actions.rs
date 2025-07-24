@@ -54,6 +54,8 @@ pub enum MailActionError {
     NoInput,
     #[error("Queue Writer Guard Expired")]
     QueueWriterGuardExpired,
+    #[error("Lost context")]
+    LostContext,
     #[error("Other: {0}")]
     Other(anyhow::Error),
 }
@@ -63,6 +65,7 @@ impl action::Error for MailActionError {
         match self {
             Self::Http(e) if e.is_network_failure() => Some(ActionRequeueReason::NetworkFailed),
             Self::QueueWriterGuardExpired => Some(ActionRequeueReason::GuardExpired),
+            Self::LostContext => Some(ActionRequeueReason::LostContext),
             _ => None,
         }
     }

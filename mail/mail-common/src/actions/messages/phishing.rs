@@ -74,7 +74,7 @@ impl Handler for ReportPhishingHandler {
         action: &mut Self::Action,
         guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let ctx = self.ctx.upgrade().expect("context has died");
+        let ctx = self.ctx.upgrade().ok_or(MailActionError::LostContext)?;
         let tether = guard.tether();
 
         let body = Message::message_body(&ctx, action.message_id)

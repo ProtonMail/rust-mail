@@ -284,7 +284,7 @@ impl Handler for SendHandler {
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let ctx = self.ctx.upgrade().expect("context has died");
+        let ctx = self.ctx.upgrade().ok_or(MailContextError::LostContext)?;
         let r = Send::apply_remote_impl(&ctx, action, &mut guard).await;
 
         if let Err(e) = save_send_status(action, &mut guard, &r).await {

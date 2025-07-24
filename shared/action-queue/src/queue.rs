@@ -557,6 +557,11 @@ pub enum ActionRequeueReason {
     /// Another executor was already working on this action, but then died or
     /// dead-locked mid-execution - the action should be restarted later.
     GuardExpired,
+
+    /// Action's handler needs access to some external data that is now lost
+    /// (e.g. it has a `Weak` that can't be upgraded anymore) - the action
+    /// should be restarted later.
+    LostContext,
 }
 
 pub(crate) trait ErasedQueuedAction: Send {

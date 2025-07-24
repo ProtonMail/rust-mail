@@ -70,7 +70,7 @@ impl Handler for PrefetchHandler {
             local_id = action.local_id
         );
 
-        let ctx = self.ctx.upgrade().expect("context has died");
+        let ctx = self.ctx.upgrade().ok_or(MailActionError::LostContext)?;
 
         let Some(local_message) = Message::load(action.local_id, guard.tether()).await? else {
             error!(

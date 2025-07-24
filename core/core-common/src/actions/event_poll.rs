@@ -39,6 +39,8 @@ pub enum ActionEventLoopError {
     Subscriber(#[from] SubscriberError),
     #[error(transparent)]
     WriterGuard(#[from] WriterGuardError),
+    #[error("Lost context")]
+    LostContext,
 }
 
 impl action::Error for ActionEventLoopError {
@@ -52,6 +54,7 @@ impl action::Error for ActionEventLoopError {
             | Self::Subscriber(SubscriberError::Api(_)) => Some(ActionRequeueReason::NetworkFailed),
 
             Self::WriterGuard(WriterGuardError::Expired) => Some(ActionRequeueReason::GuardExpired),
+            Self::LostContext => Some(ActionRequeueReason::LostContext),
 
             _ => None,
         }
@@ -91,7 +94,7 @@ impl Handler for EventPollHandler {
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         self.ctx
             .upgrade()
-            .expect("context has died")
+            .ok_or(ActionEventLoopError::LostContext)?
             .poll_event_loop_impl()
             .await
             .map_err(ActionEventLoopError::from)?;

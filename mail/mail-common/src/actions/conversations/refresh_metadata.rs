@@ -77,7 +77,7 @@ impl Handler for RefreshMetadataHandler {
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let ctx = self.ctx.upgrade().expect("context has died");
+        let ctx = self.ctx.upgrade().ok_or(MailActionError::LostContext)?;
 
         if action.local_ids.is_empty() {
             tracing::debug!("Refresh metadata for conversations called with empty id list");

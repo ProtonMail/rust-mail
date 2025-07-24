@@ -131,6 +131,8 @@ pub enum MailContextError {
     IntoTransactionError(anyhow::Error),
     #[error("Communication error with init mediator")]
     InitMediatorError,
+    #[error("Lost context")]
+    LostContext,
     #[error(transparent)]
     Rsvp(#[from] RsvpError),
     #[error("{0}")]
@@ -170,6 +172,7 @@ impl action::Error for MailContextError {
             }
 
             Self::QueueWriterGuardExpired => Some(ActionRequeueReason::GuardExpired),
+            Self::LostContext => Some(ActionRequeueReason::LostContext),
 
             _ => None,
         }

@@ -73,7 +73,7 @@ impl Handler for PrefetchHandler {
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         info!("Prefetching {:?}", action.local_id);
 
-        let ctx = self.ctx.upgrade().expect("context has died");
+        let ctx = self.ctx.upgrade().ok_or(MailActionError::LostContext)?;
 
         let _ =
             Conversation::sync_conversation_messages(action.local_id, &mut guard, ctx.session())
