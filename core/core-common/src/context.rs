@@ -135,7 +135,7 @@ impl From<JoinError> for CoreContextError {
 impl action::Error for CoreContextError {
     fn can_requeue(&self) -> Option<ActionRequeueReason> {
         match self {
-            Self::Api(_) => Some(ActionRequeueReason::NetworkFailed),
+            Self::Api(e) if e.is_network_failure() => Some(ActionRequeueReason::NetworkFailed),
             Self::QueueWriterGuardExpired => Some(ActionRequeueReason::GuardExpired),
             _ => None,
         }
