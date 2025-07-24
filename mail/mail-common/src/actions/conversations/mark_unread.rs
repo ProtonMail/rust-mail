@@ -89,6 +89,7 @@ impl proton_action_queue::action::Handler for Handler {
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let responses = Conversation::mark_multiple_as_unread_remote(
             action.0.data.remote_target_ids.clone(),
+            action.0.remote_label_id.clone().expect("Should be set"),
             ctx.api(),
         )
         .await?;

@@ -1056,6 +1056,10 @@ impl EncryptedMessageBody {
                 encrypted_subject,
                 ..
             }) => {
+                tracing::info!(
+                    "Message is PGP Encrypted with {} PGP attachment",
+                    pgp_attachments.len()
+                );
                 // We create the models first to keep the tx open for less time.
                 let mut model_attachments = vec![];
                 for att in pgp_attachments {
@@ -1081,6 +1085,7 @@ impl EncryptedMessageBody {
                             att.save(tx).await?;
                             Attachment::store_in_cache(&ctx, &att.filename, att.id(), data, tx)
                                 .await?;
+                            tracing::info!("Created PGP attachment {:?}", att.id());
                             self.metadata.attachments.push(att);
                         }
                         Ok(self.metadata.save(tx).await?)

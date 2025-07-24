@@ -400,7 +400,7 @@ impl Attachment {
             })?
             .ok_or(AppError::AttachmentMissing(attachment_id))?;
         // First check if the metadata is complete for decryption.
-        if !attachment.has_complete_metadata() {
+        if !attachment.is_pgp_attachment() && !attachment.has_complete_metadata() {
             attachment
                 .sync_complete_metadata(ctx.api(), &mut conn)
                 .await
@@ -587,6 +587,10 @@ impl Attachment {
                 error!("Error cleaning up attachments: {e}");
             }
         });
+    }
+
+    pub fn is_pgp_attachment(&self) -> bool {
+        matches!(self.attachment_type, AttachmentType::Pgp)
     }
 }
 

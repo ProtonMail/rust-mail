@@ -269,9 +269,10 @@ impl ProtonMail for Proton {
     async fn put_conversations_unread(
         &self,
         ids: Vec<ConversationId>,
+        label_id: LabelId,
     ) -> ApiServiceResult<PutConversationsUnreadResponse> {
         Ok(PUT!("{MAIL_V4}/conversations/unread")
-            .body_json(PutConversationsUnreadRequest { ids })?
+            .body_json(PutConversationsUnreadRequest { ids, label_id })?
             .send_with(self)
             .await?
             .ok()?

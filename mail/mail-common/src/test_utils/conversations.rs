@@ -3,6 +3,7 @@ use crate::test_utils::test_context::MailTestContext;
 use proton_core_api::services::proton::{Label as ApiLabel, LabelId};
 use proton_core_api::services::proton::{ProtonIdMarker, common::ApiErrorInfo};
 use proton_mail_api::services::proton::common::ConversationId;
+use proton_mail_api::services::proton::prelude::PutConversationsUnreadRequest;
 use proton_mail_api::services::proton::requests::{
     PutConversationsLabelRequest, PutConversationsReadRequest, PutConversationsUnlabelRequest,
 };
@@ -122,10 +123,14 @@ impl MailTestContext {
     pub async fn mock_mark_conversation_unread(
         &self,
         ids: Vec<ConversationId>,
+        label_id: LabelId,
         failed: Vec<ConversationId>,
     ) {
         let ids = ids.into_iter().collect::<Vec<_>>();
-        let request = PutConversationsReadRequest { ids: ids.clone() };
+        let request = PutConversationsUnreadRequest {
+            ids: ids.clone(),
+            label_id,
+        };
         let resp = PutConversationsReadResponse {
             responses: build_conv_responses(&ids, failed),
         };

@@ -193,7 +193,8 @@ async fn mark_conversation_unread(conversations: &[TestItem], expected_read: usi
     ctx.setup_user(params.clone()).await;
     ctx.mock_get_conversations(params.conversations, 1).await;
     for id in expected_to_mark {
-        ctx.mock_mark_conversation_unread(vec![id], vec![]).await;
+        ctx.mock_mark_conversation_unread(vec![id], LabelId::inbox(), vec![])
+            .await;
     }
     ctx.catch_all().await;
 

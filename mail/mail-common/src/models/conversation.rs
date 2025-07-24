@@ -1452,14 +1452,13 @@ impl Conversation {
             )
             .await?;
 
-            let total_conversation_message_count = bond
-                .query_value::<_, u64>(
-                    "SELECT COUNT(local_id) AS value FROM messages WHERE local_conversation_id=?",
+            let Some(mut message) = message else {
+                let total_conversation_message_count = Message::count(
+                    "WHERE local_conversation_id=?",
                     params![conversation_id],
+                    bond,
                 )
                 .await?;
-
-            let Some(mut message) = message else {
                 if total_conversation_message_count == 0 {
                     // These conversations where asked to be marked as read, but had
                     // no messages. Either the messages were already mark as read or
@@ -1492,7 +1491,6 @@ impl Conversation {
             };
 
             // Update the message
-
             message.unread = true;
             message.save(bond).await?;
 
@@ -1513,22 +1511,26 @@ impl Conversation {
                     counter.unread += 1;
                     counter.save(bond).await?;
                 }
+
                 if let Some(mut counter) = ConversationCounters::find_by_id(label_id, bond).await? {
-                    // Only update conversation unread count if we really marked
-                    // all messages as unread. If we have mixture, this value
-                    // should not be modified
-                    if total_conversation_message_count == 1 {
-                        counter.unread += 1;
-                        counter.save(bond).await?;
+                    if let Some(conv_label) = conversation
+                        .labels
+                        .iter_mut()
+                        .find(|l| l.local_label_id.unwrap() == label_id)
+                    {
+                        // Only update conversation unread count if it is the first time we are marking
+                        // the message as read.
+                        if conv_label.context_num_unread == 0 {
+                            counter.unread += 1;
+                            counter.save(bond).await?;
+                        }
+                        conv_label.context_num_unread += 1;
                     }
                 }
             }
 
-            // update conversations
+            // update conversation
             conversation.num_unread += 1;
-            for conversation_label in &mut conversation.labels {
-                conversation_label.context_num_unread += 1;
-            }
             conversation.save(bond).await?;
         }
         Ok(())
@@ -1542,11 +1544,14 @@ impl Conversation {
     ///
     pub async fn mark_multiple_as_unread_remote(
         ids: Vec<ConversationId>,
+        label_id: LabelId,
         api: &impl ProtonMail,
     ) -> Result<Vec<OperationResult<ConversationId>>, ApiServiceError> {
         info!("Marking {ids:?} as unread");
         let request = |ids: Vec<ConversationId>| async {
-            api.put_conversations_unread(ids).await.map(|r| r.responses)
+            api.put_conversations_unread(ids, label_id.clone())
+                .await
+                .map(|r| r.responses)
         };
         Conversation::split_request(ids, request).await
     }

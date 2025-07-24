@@ -25,6 +25,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Make observabilityrecorder.record sync
 - Correct error mapping for duplicatecontext variant
 - [ET-3706] Prevent duplicate account login
+- Fix implementation of first_graphem_uppercase to support emoji.
+- Fix snapshot tests.
+
+
+## [mail-uniffi-v0.105.6] - 2025-07-23
+
+### Fixes
+
+- Incorrect expiration time on new draft messages
 
 
 ## [mail-uniffi-v0.105.4] - 2025-07-23
@@ -546,12 +555,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
+- [ET-2568] Attach public key to messages
+- [ET-2568] Removing public keys is considered an error
+- Et-3080 add email and phone validation
+- Et-3080 fix build errors
+- Et-3080 fixes
+- Et-3080 run cargo fmt
+- Et-3080 fix clippy issues
 - [ET-3178] Sanitize deprecated html attributes for dark mode
 - [ET-3090] Autolock defaults to 15 minutes and is respected on first lock
 - [ET-1410] Sender address change
 
 ### Fixes
 
+- [ET-2066] Do not use sender when replying to a sent message
+- [ET-3021] Update list of proton colors used for avatars
+- Convert html signature to plain text
 - Report phishing moves the conversation too
 - Several bugfixes to move-to and label-as.
 - [ET-3178] Use different selector for ids that works with spaces
@@ -565,24 +584,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-- [ET-2568] Attach public key to messages
-- [ET-2568] Removing public keys is considered an error
-- Et-3080 add email and phone validation
-- Et-3080 fix build errors
-- Et-3080 fixes
-- Et-3080 run cargo fmt
 - [ET-3101] Do not remove !important flag from stylesheets
-- Et-3080 fix clippy issues
 - [ET-3101] Insert extra id to the html root
 - [ET-3101] Expose `html_head_content_for_composer()` method in drafts
 - [ET-3101] Removing !important from style attributes is reversible
 - [ET-3101] Revert dark mode before saving a draft
-
-### Fixes
-
-- [ET-2066] Do not use sender when replying to a sent message
-- [ET-3021] Update list of proton colors used for avatars
-- Convert html signature to plain text
 
 
 ## [mail-uniffi-v0.83.0] - 2025-05-28
