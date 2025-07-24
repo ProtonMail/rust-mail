@@ -989,7 +989,6 @@ enum ActionExecutionFollowup {
     PickNextAction,
 }
 
-/// Manages a pool of queue auto executors.
 pub struct QueueAutoExecutorPool {
     executors: Vec<QueueAutoExecutor>,
 }
@@ -1040,28 +1039,24 @@ impl QueueAutoExecutorPool {
         Self { executors }
     }
 
-    /// Stop all queue executors.
     pub fn terminate(&self) {
         for executor in &self.executors {
             executor.terminate();
         }
     }
 
-    /// Pause all queue executors.
     pub fn pause(&self) {
         for executor in &self.executors {
             executor.pause();
         }
     }
 
-    /// Unpause all queue executors.
     pub fn unpause(&self) {
         for executor in &self.executors {
             executor.unpause();
         }
     }
 
-    /// Wait on all executors to finish
     pub async fn await_finished(self) {
         for executor in self.executors {
             executor.await_finished().await;

@@ -142,7 +142,6 @@ impl UserContext {
             }
         });
 
-        // Register the core event subscribers.
         this.register_subscribers().await?;
 
         Ok(this)
@@ -153,81 +152,60 @@ impl UserContext {
         self.this.upgrade().expect("Should never fail")
     }
 
-    /// Get the network session.
     #[must_use]
     pub fn session(&self) -> &Session {
         &self.session
     }
 
-    /// Get the network session converted to a type that accepts this type.
     #[must_use]
     pub fn session_as<T: From<Session>>(&self) -> T {
         T::from(self.session.clone())
     }
 
-    /// Get the database connection.
     #[must_use]
     pub fn stash(&self) -> &Stash {
         &self.user_stash
     }
 
-    /// Get `ActionQueue` instance.
     #[must_use]
     pub fn queue(&self) -> &Queue {
         &self.queue
     }
 
-    /// Get the user id of this context.
     #[must_use]
     pub fn user_id(&self) -> &UserId {
         &self.user_id
     }
 
-    /// Get the event loop.
     #[must_use]
     pub fn event_loop(&self) -> &EventPoll {
         &self.event_loop
     }
 
-    /// Get the event poll mode of this context.
     pub fn event_poll_mode(&self) -> EventPollMode {
         self.context.event_poll_mode
     }
 
-    /// Get last event loop action ids.
     #[must_use]
     pub fn last_event_loop_action_ids(&self) -> &Arc<Mutex<EventLoopActionIds>> {
         &self.last_event_loop_action_ids
     }
 
-    /// Get path to the log file.
     #[must_use]
     pub fn log_service(&self) -> &LogService {
         self.context.log_service()
     }
 
-    /// Get path to the database file
     #[must_use]
     pub fn get_user_db_path(&self) -> PathBuf {
         self.context.user_db_path(self.user_id())
     }
 
-    /// Retrieves the current user's account details.
-    ///
-    /// # Errors
-    ///
-    /// Returns `CoreContextError` if the account does not exist or if an error occurs
-    /// during the database query.
     pub async fn account_details(&self) -> CoreContextResult<AccountDetails> {
         let account = self.core_account().await?;
         Ok(account.details())
     }
 
-    /// Retrieves the user's settings.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database query fails.
     pub async fn user_settings(&self) -> CoreContextResult<UserSettings> {
         let user_id = self.user_id();
         let tether = self.stash().connection();
@@ -236,12 +214,6 @@ impl UserContext {
         settings.ok_or_else(|| CoreContextError::SettingsMissing(user_id.to_owned()))
     }
 
-    /// Retrieves the current user's account.
-    ///
-    /// # Errors
-    ///
-    /// Returns `CoreContextError` if the account does not exist or if an error occurs
-    /// during the database query.
     pub async fn core_account(&self) -> CoreContextResult<CoreAccount> {
         let tether = self.context.account_stash().connection();
         let user_id = self.user_id();
@@ -252,13 +224,11 @@ impl UserContext {
         Ok(account)
     }
 
-    /// Get the session id of this context.
     #[must_use]
     pub fn session_id(&self) -> &SessionId {
         &self.session_id
     }
 
-    /// Get the connection status of the current user session.
     pub async fn connection_status(&self) -> ConnectionStatus {
         self.session.status().await
     }
@@ -313,7 +283,6 @@ impl UserContext {
         self.cancellation_token.is_cancelled()
     }
 
-    /// Cancel all tasks which are bound to this context.
     pub fn cancel_all_tasks(&self) {
         self.cancellation_token.cancel();
     }
