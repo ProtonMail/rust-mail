@@ -1,11 +1,11 @@
+use crate::MailContextError;
 use crate::models::RollbackItem;
-use crate::{MailContextError, MailUserContext};
 use proton_action_queue::action::{
     Action, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
 };
+use proton_core_api::services::proton::Proton;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
-use std::sync::Weak;
 
 /// This action flushes the rollback items.
 ///
@@ -29,7 +29,7 @@ impl Action for RollbackAction {
 }
 
 pub struct RollbackActionHandler {
-    pub ctx: Weak<MailUserContext>,
+    pub api: Proton,
 }
 
 impl Handler for RollbackActionHandler {
@@ -59,9 +59,7 @@ impl Handler for RollbackActionHandler {
         _: &mut Self::Action,
         mut writer_guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let ctx = self.ctx.upgrade().expect("context has died");
-
-        RollbackItem::sync_all(ctx.session(), &mut writer_guard, Some(ROLLBACK_BATCH_SIZE)).await?;
+        RollbackItem::sync_all(&self.api, &mut writer_guard, Some(ROLLBACK_BATCH_SIZE)).await?;
 
         Ok(())
     }

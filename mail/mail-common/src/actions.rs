@@ -158,7 +158,7 @@ pub(crate) fn register_mail_actions(queue: &Queue, ctx: &Weak<MailUserContext>, 
     register_action(queue, draft::AttachmentUploadHandler { ctx: ctx.clone() });
     register_action(queue, draft::AttachmentRemoveHandler { api: api.clone() });
     register_action(queue, refresh::ActionRefreshHandler { ctx: ctx.clone() });
-    register_action(queue, rollback::RollbackActionHandler { ctx: ctx.clone() });
+    register_action(queue, rollback::RollbackActionHandler { api: api.clone() });
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
