@@ -158,11 +158,6 @@ impl UserContext {
     }
 
     #[must_use]
-    pub fn session_as<T: From<Session>>(&self) -> T {
-        T::from(self.session.clone())
-    }
-
-    #[must_use]
     pub fn stash(&self) -> &Stash {
         &self.user_stash
     }
