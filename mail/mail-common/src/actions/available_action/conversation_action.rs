@@ -9,7 +9,6 @@ use typed_builder::TypedBuilder;
 pub struct ConversationAvailableActions {
     pub conversation_actions: Vec<ConversationAction>,
     pub move_actions: Vec<MoveItemAction>,
-    #[builder(default = GeneralActions::all())]
     pub general_actions: Vec<GeneralActions>,
 }
 

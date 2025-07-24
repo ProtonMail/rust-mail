@@ -389,7 +389,7 @@ mod available_actions {
                 ConversationAction::Unstar,
                 ConversationAction::LabelAs,
             ])
-            .general_actions(vec![GeneralActions::SaveAsPdf, GeneralActions::Print])
+            .general_actions(vec![])
             .build()),
     });
 
@@ -423,7 +423,7 @@ mod available_actions {
                 ConversationAction::Unstar,
                 ConversationAction::LabelAs,
             ])
-            .general_actions(vec![GeneralActions::SaveAsPdf, GeneralActions::Print])
+            .general_actions(vec![])
             .build()),
     });
 
@@ -457,7 +457,7 @@ mod available_actions {
                 ConversationAction::Star,
                 ConversationAction::LabelAs,
             ])
-            .general_actions(vec![GeneralActions::SaveAsPdf, GeneralActions::Print])
+            .general_actions(vec![])
             .build()),
     });
 
@@ -486,7 +486,7 @@ mod available_actions {
                 ConversationAction::Star,
                 ConversationAction::LabelAs,
             ])
-            .general_actions(vec![GeneralActions::SaveAsPdf, GeneralActions::Print])
+            .general_actions(vec![])
             .build()),
     });
 
@@ -528,7 +528,7 @@ mod available_actions {
                 ConversationAction::Star,
                 ConversationAction::LabelAs,
             ])
-            .general_actions(vec![GeneralActions::SaveAsPdf, GeneralActions::Print])
+            .general_actions(vec![])
             .build()),
     });
 
