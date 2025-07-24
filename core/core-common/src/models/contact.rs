@@ -37,6 +37,7 @@ use stash::macros::Model;
 use stash::orm::{Model, ModelHooks};
 use stash::params;
 use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
+use stash::utils::{IterMapToSql, placeholders};
 use tokio::task::JoinSet;
 use tracing::{debug, error, info};
 
@@ -428,6 +429,7 @@ impl Contact {
     ///
     /// when querying the database fails.
     ///
+    #[tracing::instrument(skip_all)]
     pub async fn contact_list(tether: &Tether) -> Result<Vec<GroupedContacts>, StashError> {
         // TODO (ET-2028): Use pagination
         let (mut contacts, contact_groups) = try_join!(
@@ -446,6 +448,10 @@ impl Contact {
     }
 
     // This is not necessary but android wants this.
+    //
+    // This is particularly inefficient because we're getting all contacts just to get one
+    // group, given our data model (labels being serialized into the contacts) we need to do a full scan.
+    #[tracing::instrument(skip(tether))]
     pub async fn contact_group_by_id(
         tether: &Tether,
         id: LocalLabelId,
@@ -456,7 +462,28 @@ impl Contact {
 
         debug_assert_eq!(l.label_type, LabelType::ContactGroup);
 
-        let res = ContactEmail::find("WHERE local_contact_id = ?", params![id], tether).await?;
+        let remote = Label::resolve_remote_label_id(id, tether)
+            .await
+            .with_context(|| "Local contact groups are not yet implemented: Trying to resolve nonexistent remote label for local label {id}")?;
+
+        let contact_ids = Contact::find("WHERE deleted = 0", vec![], tether)
+            .await?
+            .into_iter()
+            .filter(|x| x.label_ids.contains(&remote))
+            .filter_map(|x| x.remote_id)
+            .bridge_sql();
+
+        let mut res = ContactEmail::find(
+            format!(
+                "WHERE remote_contact_id IN ({})",
+                placeholders(&contact_ids)
+            ),
+            contact_ids,
+            tether,
+        )
+        .await?;
+
+        res.sort_unstable_by_key(|x| (x.display_order, x.id()));
 
         Ok(ContactGroupItem {
             local_id: l.id(),

@@ -45,44 +45,50 @@ impl GroupedContacts {
 
         let mut btmap: BTreeMap<String, Vec<ContactItemType>> = BTreeMap::new();
 
-        let mut contact_group_items: HashMap<LabelId, ContactGroupItem> = contact_groups
-            .into_iter()
-            .filter(|group| !cfg!(debug_assertions) || group.remote_id.is_some())
-            .filter(|group| group.label_type == LabelType::ContactGroup)
-            .map(|group| {
-                let local_id = group.id();
-                (
-                    group.remote_id.unwrap().clone(),
-                    ContactGroupItem {
-                        local_id,
-                        name: group.name.clone(),
-                        avatar_information: AvatarInformation::from(&group.name),
-                        contacts: vec![],
-                    },
-                )
-            })
-            .collect();
+        let mut contact_group_items: HashMap<LabelId, (ContactGroupItem, Vec<ContactEmail>)> =
+            contact_groups
+                .into_iter()
+                .filter(|group| !cfg!(debug_assertions) || group.remote_id.is_some())
+                .filter(|group| group.label_type == LabelType::ContactGroup)
+                .map(|group| {
+                    let local_id = group.id();
+                    (
+                        group.remote_id.unwrap().clone(),
+                        (
+                            ContactGroupItem {
+                                local_id,
+                                name: group.name.clone(),
+                                avatar_information: AvatarInformation::from(&group.name),
+                                contacts: vec![],
+                            },
+                            vec![],
+                        ),
+                    )
+                })
+                .collect();
 
         contacts.sort_by_key(|c| c.name.unicode_words().collect::<String>());
         for contact in &contacts {
             for id in &contact.label_ids.0 {
-                if let Some(group) = contact_group_items.get_mut(id) {
-                    group
-                        .contacts
-                        .extend(contact.contact_emails.iter().map(|x| x.clone().into()));
+                if let Some((_, emails)) = contact_group_items.get_mut(id) {
+                    emails.extend(contact.contact_emails.clone());
                 }
             }
         }
+
+        let groups = contact_group_items
+            .into_values()
+            .map(|(mut group, mut emails)| {
+                emails.sort_unstable_by_key(|x| (x.display_order, x.id()));
+                group.contacts = emails.map_vec();
+                ContactItemType::from(group)
+            });
 
         contacts
             .into_iter()
             .map_into::<ContactItem>()
             .map_into::<ContactItemType>()
-            .chain(
-                contact_group_items
-                    .into_values()
-                    .map_into::<ContactItemType>(),
-            )
+            .chain(groups)
             .for_each(|contact| {
                 let key = contact.key();
                 let key = if key.is_empty() || key == "?" {
