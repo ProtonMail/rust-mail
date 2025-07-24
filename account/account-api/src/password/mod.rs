@@ -1,8 +1,10 @@
 use crate::ApiError;
+use crate::password::observability::{ObservableResult, ObservableState};
 use crate::password::state::{State, StateKind};
 use crate::shared::SecureString;
 use proton_core_api::auth::KeySecret;
 use proton_core_api::service::{ApiServiceError, ServiceError};
+use proton_core_api::services::observability::ObservabilityRecorder;
 use proton_core_api::services::proton::prelude::*;
 use proton_core_api::session::Session;
 use proton_core_api::store::StoreError;
@@ -18,6 +20,8 @@ pub type SaltError = proton_crypto_account::salts::SaltError;
 
 /// Implements the possible states that the password change flow can be in.
 pub mod state;
+
+mod observability;
 
 /// Errors that can occur during the password change flow.
 #[derive(Debug, Error)]
@@ -68,6 +72,7 @@ impl ServiceError for PasswordError {}
 #[derive(Debug)]
 pub struct PasswordFlow {
     state: Vec<State>,
+    recorder: ObservabilityRecorder,
 }
 
 impl PasswordFlow {
@@ -96,7 +101,10 @@ impl PasswordFlow {
             client, parts, username, user_keys, key_secret, tfa_mode, mbp_mode,
         );
 
-        Self { state: vec![state] }
+        Self {
+            state: vec![state],
+            recorder: ObservabilityRecorder::default(),
+        }
     }
 
     /// Submit current password.
@@ -108,7 +116,12 @@ impl PasswordFlow {
         &mut self,
         pass: impl Into<SecureString>,
     ) -> Result<(), PasswordError> {
-        let next = self.state()?.submit_pass(pass.into()).await?;
+        let state = self.state()?;
+        let observable_data = state.observable_data();
+        let next = state
+            .submit_pass(pass.into())
+            .await
+            .observe(&self.recorder, observable_data)?;
 
         self.state.push(next);
 
@@ -121,7 +134,12 @@ impl PasswordFlow {
     ///
     /// Returns error if the TOTP code submission fails.
     pub async fn submit_totp(&mut self, totp: String) -> Result<(), PasswordError> {
-        let next = self.state()?.submit_totp(totp).await?;
+        let state = self.state()?;
+        let observable_data = state.observable_data();
+        let next = state
+            .submit_totp(totp)
+            .await
+            .observe(&self.recorder, observable_data)?;
 
         self.state.push(next);
 
@@ -137,7 +155,12 @@ impl PasswordFlow {
         &mut self,
         new_pass: impl Into<SecureString>,
     ) -> Result<(), PasswordError> {
-        let next = self.state()?.change_pass(new_pass.into()).await?;
+        let state = self.state()?;
+        let observable_data = state.observable_data();
+        let next = state
+            .change_pass(new_pass.into())
+            .await
+            .observe(&self.recorder, observable_data)?;
 
         self.state.push(next);
 
@@ -153,7 +176,12 @@ impl PasswordFlow {
         &mut self,
         new_mbox_pass: impl Into<SecureString>,
     ) -> Result<(), PasswordError> {
-        let next = self.state()?.change_mbox_pass(new_mbox_pass.into()).await?;
+        let state = self.state()?;
+        let observable_data = state.observable_data();
+        let next = state
+            .change_mbox_pass(new_mbox_pass.into())
+            .await
+            .observe(&self.recorder, observable_data)?;
 
         self.state.push(next);
 

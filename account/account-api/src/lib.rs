@@ -3,6 +3,7 @@
 use crate::prelude::*;
 use derive_more::Display;
 use muon::{Status, http::HttpReqExt, serde_to_query};
+use proton_core_api::services::observability::ApiServiceObservabilityResponse;
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -96,6 +97,25 @@ impl ApiError {
     #[must_use]
     pub fn is_network_failure(&self) -> bool {
         matches!(self, ApiError::Muon(_))
+    }
+}
+
+impl From<&ApiError> for ApiServiceObservabilityResponse {
+    fn from(value: &ApiError) -> Self {
+        match value {
+            ApiError::Serialization(_) => ApiServiceObservabilityResponse::SerializationError,
+            ApiError::Muon(_) => ApiServiceObservabilityResponse::NetworkError,
+            ApiError::Status(status_err) => {
+                if status_err.0.is_client_error() {
+                    ApiServiceObservabilityResponse::Http4xx
+                } else if status_err.0.is_server_error() {
+                    ApiServiceObservabilityResponse::Http5xx
+                } else {
+                    ApiServiceObservabilityResponse::NetworkError
+                }
+            }
+            ApiError::Internal(_) => ApiServiceObservabilityResponse::Unknown,
+        }
     }
 }
 
