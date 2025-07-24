@@ -2295,15 +2295,12 @@ async fn test_conversation_mark_unread() {
     // There should be 1 unread message.
     assert_eq!(db_conversation.num_unread, 1);
 
-    // Assert label conversation counts are 0
-    // The unread conversation counts should be 0 because the conversation is
-    // not fully marked as unread
     {
         let conv_counts = conv_counts_as_map(&tether).await;
         {
             let start_label_counts = state_map.conversation_counts.get(&MY_LABEL_ID1).unwrap();
             let label_counts = conv_counts.get(&local_label_id1).unwrap();
-            assert_eq!(label_counts.unread, 0);
+            assert_eq!(label_counts.unread, 1);
             assert_eq!(label_counts.total, start_label_counts.total);
         }
         {

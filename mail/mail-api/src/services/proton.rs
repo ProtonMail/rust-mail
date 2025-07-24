@@ -230,6 +230,7 @@ pub trait ProtonMail {
     async fn put_conversations_unread(
         &self,
         conversation_ids: Vec<ConversationId>,
+        label_id: LabelId,
     ) -> ApiServiceResult<PutConversationsUnreadResponse>;
 
     /// TODO: Document this method.
