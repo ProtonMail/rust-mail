@@ -1,8 +1,10 @@
 use crate::datatypes::RollbackItemType;
 use crate::models::RollbackItem;
-use crate::{AppError, MailUserContext, actions::MailActionError};
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
-use proton_core_api::services::proton::LabelId;
+use crate::{AppError, actions::MailActionError};
+use proton_action_queue::action::{
+    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+};
+use proton_core_api::services::proton::{LabelId, Proton};
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::Label;
 use serde::{Deserialize, Serialize};
@@ -41,28 +43,24 @@ impl Expand {
 impl Action for Expand {
     const TYPE: Type = Type("expand_label");
     const VERSION: u32 = 1;
-    type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
-    type RemoteOutput = ();
 
+    type VersionConverter = DefaultVersionConverter<Self>;
+    type Handler = ExpandHandler;
+    type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
-
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct Handler;
+pub struct ExpandHandler {
+    pub api: Proton,
+}
 
-impl proton_action_queue::action::Handler for Handler {
+impl Handler for ExpandHandler {
     type Action = Expand;
-
-    type Context = MailUserContext;
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -104,7 +102,6 @@ impl proton_action_queue::action::Handler for Handler {
     async fn revert_local(
         &self,
         id: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -117,7 +114,7 @@ impl proton_action_queue::action::Handler for Handler {
 
         action.expand = original_state;
 
-        self.apply_local(id, ctx, action, tx).await?;
+        self.apply_local(id, action, tx).await?;
 
         if let Some(remote_id) = action.remote_id.clone() {
             RollbackItem::new(remote_id.to_string(), RollbackItemType::Label)
@@ -131,7 +128,6 @@ impl proton_action_queue::action::Handler for Handler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         guard: WriterGuard<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -159,7 +155,7 @@ impl proton_action_queue::action::Handler for Handler {
                     .is_some();
 
                 if label_is_equal_action {
-                    return Ok(()); // Nothing to do
+                    return Ok(());
                 }
 
                 label
@@ -173,7 +169,8 @@ impl proton_action_queue::action::Handler for Handler {
             "Patching expanded for {:?} value={}",
             remote_id, action.expand
         );
-        Label::patch_expanded(remote_id, action.expand, ctx.api()).await?;
+
+        Label::patch_expanded(remote_id, action.expand, &self.api).await?;
 
         Ok(())
     }

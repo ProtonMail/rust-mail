@@ -1,11 +1,10 @@
-use crate::MailUserContext;
 use crate::actions::MailActionError;
 use crate::datatypes::{LocalMessageId, MessageFlags, RollbackItemType, SystemLabelId};
 use crate::models::{Message, RollbackItem};
 use futures::future::try_join_all;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
-use proton_action_queue::action::{ActionId, Handler as ActionHandler};
-use proton_core_api::services::proton::LabelId;
+use proton_action_queue::action::{ActionId, Handler};
+use proton_core_api::services::proton::{LabelId, Proton};
 use proton_core_common::models::{Label, LabelError, ModelIdExtension};
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
@@ -31,57 +30,58 @@ impl Ham {
 impl Action for Ham {
     const TYPE: Type = Type("mark_ham");
     const VERSION: u32 = 1;
-    type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
-    type RemoteOutput = ();
 
+    type VersionConverter = DefaultVersionConverter<Self>;
+    type Handler = HamHandler;
+    type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
-
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct Handler;
+pub struct HamHandler {
+    pub api: Proton,
+}
 
-impl ActionHandler for Handler {
+impl Handler for HamHandler {
     type Action = Ham;
 
-    type Context = MailUserContext;
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         if action.0.is_empty() {
             return Err(MailActionError::NoInput);
         }
+
         let inbox = Label::remote_id_counterpart(LabelId::inbox(), bond)
             .await?
             .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::inbox()))?;
+
         let spam = Label::remote_id_counterpart(LabelId::spam(), bond)
             .await?
             .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::spam()))?;
 
         Message::move_messages(spam, inbox, action.0.clone(), bond).await?;
+
         for &id in &action.0 {
             Message::set_flags(id, MessageFlags::HAM_MANUAL, bond).await?;
         }
+
         Ok(())
     }
 
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         let inbox = Label::remote_id_counterpart(LabelId::inbox(), bond)
             .await?
             .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::inbox()))?;
+
         let spam = Label::remote_id_counterpart(LabelId::spam(), bond)
             .await?
             .ok_or(LabelError::CouldNotResolveLocalLabel(LabelId::spam()))?;
@@ -93,6 +93,7 @@ impl ActionHandler for Handler {
         }
 
         let ids = Message::local_ids_counterpart(action.0.clone(), bond).await?;
+
         for id in ids {
             RollbackItem::new(id.to_string(), RollbackItemType::Message)
                 .save(bond)
@@ -105,16 +106,18 @@ impl ActionHandler for Handler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let tether = guard.tether();
         let ids = Message::local_ids_counterpart(action.0.clone(), tether).await?;
+
         info!("Marking {ids:?} as not spam");
-        let iter = ids.iter().map(|id| ctx.api().put_message_ham(id));
+
+        let iter = ids.iter().map(|id| self.api.put_message_ham(id));
 
         _ = try_join_all(iter).await?;
+
         Ok(())
     }
 }

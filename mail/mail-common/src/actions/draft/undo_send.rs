@@ -6,12 +6,12 @@ use crate::datatypes::{MessageFlags, SystemLabelId};
 use crate::draft::UndoError;
 use crate::draft::compose::create_timestamp;
 use crate::models::Message;
-use crate::{AppError, MailContextError, MailUserContext};
+use crate::{AppError, MailContextError};
 use proton_action_queue::action::{
-    Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
+    Action, ActionGroup, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
 };
 use proton_core_api::consts::Mail;
-use proton_core_api::services::proton::LabelId;
+use proton_core_api::services::proton::{LabelId, Proton};
 use proton_core_common::models::ModelExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::MessageId;
@@ -47,27 +47,25 @@ impl Action for UndoSend {
     const TYPE: Type = Type("undo_send");
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Highest;
-
     const GROUP: ActionGroup = SEND_ACTION_GROUP;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = UndoSendHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailContextError;
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct UndoSendHandler {}
+pub struct UndoSendHandler {
+    pub api: Proton,
+}
 
-impl proton_action_queue::action::Handler for UndoSendHandler {
+impl Handler for UndoSendHandler {
     type Action = UndoSend;
-    type Context = MailUserContext;
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -123,7 +121,6 @@ impl proton_action_queue::action::Handler for UndoSendHandler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -159,7 +156,6 @@ impl proton_action_queue::action::Handler for UndoSendHandler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
@@ -169,7 +165,8 @@ impl proton_action_queue::action::Handler for UndoSendHandler {
             .expect("remote id should not be None");
 
         info!("Undo sending {:?}", remote_id);
-        let response = match ctx.api().cancel_send(remote_id.clone()).await {
+
+        let response = match self.api.cancel_send(remote_id.clone()).await {
             Ok(r) => r,
             Err(e) => {
                 error!("Failed to cancel send: {e:?}");

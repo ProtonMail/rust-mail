@@ -257,6 +257,7 @@ impl From<MailContextError> for ProtonMailError {
             MailContextError::UserContextNotInitialized(user_id) => Self::reason(
                 ContextErrorReason::UserContextNotInitialized(user_id.into_inner()),
             ),
+            MailContextError::LostContext => Self::Unexpected(Unexpected::Internal),
             MailContextError::Rsvp(_) => Self::Unexpected(Unexpected::Unknown),
             MailContextError::MailScroller(mail_scroller_error) => Self::from(mail_scroller_error),
         }
@@ -625,6 +626,7 @@ impl From<MailActionError> for ProtonMailError {
             MailActionError::NoInput => Self::Unexpected(Unexpected::Internal),
             MailActionError::Label(label_error) => Self::from(label_error),
             MailActionError::Other(anyhow) => Self::from(anyhow),
+            MailActionError::LostContext => Self::Unexpected(Unexpected::Queue),
             MailActionError::QueueWriterGuardExpired => Self::Unexpected(Unexpected::Queue),
         }
     }

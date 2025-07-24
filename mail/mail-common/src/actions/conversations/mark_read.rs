@@ -1,9 +1,10 @@
-use crate::MailUserContext;
 use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_responses_by_codes};
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::{ContextualConversation, RollbackItemType};
 use crate::models::Conversation;
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
+use proton_action_queue::action::{
+    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+};
 use proton_core_api::consts::General;
 use proton_core_api::services::proton::Proton;
 use proton_core_common::datatypes::LocalLabelId;
@@ -12,12 +13,10 @@ use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use tracing::error;
 
-/// Action to mark conversations read.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MarkRead(GenericLabelRelatedActionData<Conversation>);
 
 impl MarkRead {
-    /// Create a new action which marks the conversations with `ids` as read.
     pub fn new(label_id: LocalLabelId, ids: impl IntoIterator<Item = LocalConversationId>) -> Self {
         // TODO(db-tests): label_id was present in the original action, why was it used.
         Self(GenericLabelRelatedActionData::new(label_id, ids))
@@ -27,26 +26,24 @@ impl MarkRead {
 impl Action for MarkRead {
     const TYPE: Type = Type("mark_conversations_read");
     const VERSION: u32 = 1;
-    type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
-    type RemoteOutput = ();
 
+    type VersionConverter = DefaultVersionConverter<Self>;
+    type Handler = MarkReadHandler;
+    type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct Handler {}
+pub struct MarkReadHandler {
+    pub api: Proton,
+}
 
-impl proton_action_queue::action::Handler for Handler {
+impl Handler for MarkReadHandler {
     type Action = MarkRead;
-    type Context = MailUserContext;
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -68,7 +65,6 @@ impl proton_action_queue::action::Handler for Handler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -84,13 +80,12 @@ impl proton_action_queue::action::Handler for Handler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         let responses = Conversation::mark_multiple_as_read_remote::<Proton>(
             action.0.data.remote_target_ids.clone(),
-            ctx.api(),
+            &self.api,
         )
         .await?;
 

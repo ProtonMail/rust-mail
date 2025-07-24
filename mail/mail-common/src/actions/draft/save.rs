@@ -18,7 +18,7 @@ use crate::models::{
 use crate::{AppError, MailContextError, MailUserContext, draft};
 use indoc::indoc;
 use proton_action_queue::action::{
-    Action, ActionGroup, ActionId, FactoryResult, Priority, Type, VersionConverter,
+    Action, ActionGroup, ActionId, FactoryResult, Handler, Priority, Type, VersionConverter,
     VersionConverterError, WriterGuard, WriterGuardError, deserialize,
 };
 use proton_core_api::services::proton::{AddressId, LabelId};
@@ -33,6 +33,7 @@ use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, StashError};
+use std::sync::Weak;
 use tracing::{debug, error, info, warn};
 
 /// Action which creates or updates a draft on the server.
@@ -143,14 +144,12 @@ impl Action for Save {
     const VERSION: u32 = 2;
     const PRIORITY: Priority = Priority::High;
     const GROUP: ActionGroup = SEND_ACTION_GROUP;
+
     type VersionConverter = SaveVersionConverter;
     type Handler = SaveHandler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = MailContextError;
-
-    type Context = MailUserContext;
 }
 
 pub struct SaveVersionConverter {}
@@ -162,26 +161,26 @@ impl VersionConverter for SaveVersionConverter {
         if !(old_version <= 2 && current_version == 2) {
             return Err(VersionConverterError::InvalidVersion(current_version).into());
         }
+
         Ok(deserialize::<Save>(data)?)
     }
 }
 
-#[derive(Default)]
-pub struct SaveHandler {}
+pub struct SaveHandler {
+    pub ctx: Weak<MailUserContext>,
+}
 
-impl proton_action_queue::action::Handler for SaveHandler {
+impl Handler for SaveHandler {
     type Action = Save;
-
-    type Context = MailUserContext;
 
     async fn apply_local(
         &self,
         action_id: ActionId,
-        _: &MailUserContext,
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
         info!("Saving Draft {}", action.metadata_id);
+
         let local_draft_id = local_draft_label_id(bond).await?;
         let local_all_draft_id = local_all_draft_label_id(bond).await?;
         let local_all_mail_id = local_all_mail_label_id(bond).await?;
@@ -199,6 +198,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
         tracing::info!("Saving draft {}", action.metadata_id);
 
         let body_len = action.body.len() as u64;
+
         let Some(address) = Address::find_by_remote_id(action.address_id.clone(), bond)
             .await
             .inspect_err(|e| error!("Failed to load address: {e:?}"))?
@@ -215,7 +215,9 @@ impl proton_action_queue::action::Handler for SaveHandler {
             .attachments(bond)
             .await
             .inspect_err(|e| error!("Failed to load attachments: {e:?}"))?;
+
         debug!("Draft has {} attachments", attachments.len());
+
         let attachment_metadata = Save::attachment_metadata(&attachments);
         let attachment_ids = attachments.iter().map(|a| a.id()).collect::<Vec<_>>();
 
@@ -229,9 +231,11 @@ impl proton_action_queue::action::Handler for SaveHandler {
             id
         } else {
             info!("Conversation does not exist, creating");
+
             let display_order = Conversation::next_display_order(bond)
                 .await
                 .inspect_err(|e| error!("Failed to get next conversation display order: {e:?}"))?;
+
             let mut conversation = action.create_new_conversation(
                 &address,
                 sender_email.clone(),
@@ -241,17 +245,21 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 attachments.len() as u64,
                 action.subject.clone(),
             );
+
             conversation
                 .save(bond)
                 .await
                 .inspect_err(|e| error!("Failed to create new conversation: {e:?}"))?;
+
             metadata.local_conversation_id = Some(conversation.id());
             conversation.id()
         };
 
         let time = draft::compose::create_timestamp();
+
         let message = if let Some(message_id) = metadata.local_message_id {
             info!("Local message id is set, update");
+
             let Some(mut message) = Message::find_by_id(message_id, bond)
                 .await
                 .inspect_err(|e| error!("Failed to load message: {e:?}"))?
@@ -298,9 +306,11 @@ impl proton_action_queue::action::Handler for SaveHandler {
             message
         } else {
             info!("Local message id is not set, creating new draft");
+
             let display_order = Message::next_display_order(bond)
                 .await
                 .inspect_err(|e| error!("Failed to get next message display order: {e:?}"))?;
+
             let mut message = action.create_new_message(
                 &address,
                 sender_email,
@@ -310,7 +320,9 @@ impl proton_action_queue::action::Handler for SaveHandler {
                 time,
                 display_order,
             );
+
             message.local_conversation_id = Some(conversation_id);
+
             message
                 .save(bond)
                 .await
@@ -361,6 +373,7 @@ impl proton_action_queue::action::Handler for SaveHandler {
 
         metadata.local_message_id = Some(message.id());
         metadata.save_action_id = Some(action_id);
+
         metadata.save(bond).await.inspect_err(|e| {
             error!("Failed to save draft metadata: {e:?}");
         })?;
@@ -379,7 +392,6 @@ impl proton_action_queue::action::Handler for SaveHandler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &MailUserContext,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -387,19 +399,22 @@ impl proton_action_queue::action::Handler for SaveHandler {
         // These items will be removed via a discard action.
         Ok(())
     }
+
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &MailUserContext,
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let r = Save::apply_remote_impl(ctx, action, &mut guard).await;
+        let ctx = self.ctx.upgrade().ok_or(MailContextError::LostContext)?;
+        let r = Save::apply_remote_impl(&ctx, action, &mut guard).await;
+
         if let Err(e) = &r {
             if let Err(e) = save_send_error(action, &mut guard, e).await {
                 error!("Failed to save draft send result: {e:?}");
             }
         }
+
         r
     }
 }

@@ -1,15 +1,14 @@
+use crate::MailContextError;
 use crate::actions::draft::SEND_ACTION_GROUP;
 use crate::datatypes::SystemLabelId;
 use crate::datatypes::{LocalConversationId, LocalMessageId};
 use crate::draft::DiscardError;
 use crate::models::{Conversation, DraftMetadata, Message, MetadataId};
-use crate::{MailContextError, MailUserContext};
 use proton_action_queue::action::{
-    Action, ActionGroup, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
+    Action, ActionGroup, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
 };
 use proton_core_api::consts::General;
-use proton_core_api::services::proton::LabelId;
-use proton_core_api::session::CoreSession;
+use proton_core_api::services::proton::{LabelId, Proton};
 use proton_core_common::models::{ModelExtension, ModelIdExtension};
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
@@ -28,7 +27,6 @@ pub struct Discard {
 }
 
 impl Discard {
-    /// Create a new instance for the `draft`.
     pub fn new(metadata_id: MetadataId) -> Self {
         Self {
             metadata_id,
@@ -41,33 +39,31 @@ impl Discard {
 impl Action for Discard {
     const TYPE: Type = Type("discard_draft");
     const VERSION: u32 = 1;
-
     const PRIORITY: Priority = Priority::High;
     const GROUP: ActionGroup = SEND_ACTION_GROUP;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = DiscardHandler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
     type Error = MailContextError;
-
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct DiscardHandler {}
+pub struct DiscardHandler {
+    pub api: Proton,
+}
 
-impl proton_action_queue::action::Handler for DiscardHandler {
+impl Handler for DiscardHandler {
     type Action = Discard;
-    type Context = MailUserContext;
+
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &MailUserContext,
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
         info!("Discarding draft {}", action.metadata_id);
+
         let Some(metadata) = DraftMetadata::find_by_id(action.metadata_id, bond)
             .await
             .inspect_err(|e| {
@@ -91,13 +87,13 @@ impl proton_action_queue::action::Handler for DiscardHandler {
 
         action.local_message_id = metadata.local_message_id;
         action.local_conversation_id = metadata.local_conversation_id;
+
         Ok(())
     }
 
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &MailUserContext,
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -115,7 +111,6 @@ impl proton_action_queue::action::Handler for DiscardHandler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &MailUserContext,
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
@@ -166,9 +161,9 @@ impl proton_action_queue::action::Handler for DiscardHandler {
         // Server will take care of deleting orphaned conversations, we do not have
         // to do anything.
         info!("Deleting {message_id:?}");
-        let session = ctx.session();
-        let response = session
-            .api()
+
+        let response = self
+            .api
             .put_messages_delete(vec![message_id.clone()], Some(LabelId::drafts()))
             .await
             .inspect_err(|e| error!("Failed to delete message on server: {e:?}"))?;

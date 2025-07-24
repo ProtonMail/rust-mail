@@ -11,7 +11,7 @@ use stash::stash::Bond;
 async fn replace_updates_local_state() {
     // When replacing, check that local state is updated when the action is stored.
 
-    let queue = new_queue(new_factory::<TestAction>()).await;
+    let queue = new_queue(new_factory::<TestAction>(TestActionHandler)).await;
     let executor = queue.new_executor();
 
     // Check direct execution.
@@ -44,7 +44,7 @@ async fn replace_updates_local_state() {
 async fn replace_updates_queues_if_action_no_longer_present() {
     // When attempting to replace an action that does not exist, it will be
     // queued instead.
-    let queue = new_queue(new_factory::<TestAction>()).await;
+    let queue = new_queue(new_factory::<TestAction>(TestActionHandler)).await;
     let executor = queue.new_executor();
 
     // Check direct execution.
@@ -79,7 +79,7 @@ async fn replace_updates_queues_if_action_no_longer_present() {
 async fn replace_updates_queues_if_action_is_executing() {
     // When attempting to replace an action that does not exist, it will be
     // queued instead.
-    let queue = new_queue(new_factory::<TestAction>()).await;
+    let queue = new_queue(new_factory::<TestAction>(TestActionHandler)).await;
 
     // Check direct execution.
     let queued_output = queue
@@ -114,7 +114,7 @@ async fn replace_updates_local_state_with_resources() {
     // There was a subtle failure related to the resource table having duplicate entries.
     // This test makes sure this doesn't happen.
 
-    let queue = new_queue(new_factory::<TestAction>()).await;
+    let queue = new_queue(new_factory::<TestAction>(TestActionHandler)).await;
     let mut counter: usize = 10;
 
     let metadata = MetadataBuilder::default()
@@ -167,18 +167,16 @@ struct TestAction {
 impl Action for TestAction {
     const TYPE: Type = Type("test");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = TestActionHandler;
     type RemoteOutput = u32;
-
     type LocalOutput = ();
-
     type Error = DefaultError;
-    type Context = ();
 }
 
 #[derive(Default)]
-struct TestActionHandler {}
+struct TestActionHandler;
 
 const ACTION_VALUE_AFTER_LOCAL_APPLY: u32 = 10;
 const ACTION_VALUE_AFTER_REPLACE: u32 = 30;
@@ -186,12 +184,10 @@ const ACTION_KEY: &str = "bar";
 
 impl Handler for TestActionHandler {
     type Action = TestAction;
-    type Context = ();
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -201,7 +197,6 @@ impl Handler for TestActionHandler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -212,7 +207,6 @@ impl Handler for TestActionHandler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {

@@ -1,9 +1,10 @@
-use crate::MailUserContext;
 use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_responses};
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::RollbackItemType;
 use crate::models::Conversation;
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
+use proton_action_queue::action::{
+    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+};
 use proton_core_api::services::proton::Proton;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
@@ -11,12 +12,10 @@ use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use tracing::error;
 
-/// Action which applies a label to conversations.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Label(GenericLabelRelatedActionData<Conversation>);
 
 impl Label {
-    /// Create a new instance which applies `label_id` to the conversations with `ids`.
     pub fn new(label_id: LocalLabelId, ids: impl IntoIterator<Item = LocalConversationId>) -> Self {
         Self(GenericLabelRelatedActionData::new(label_id, ids))
     }
@@ -25,27 +24,24 @@ impl Label {
 impl Action for Label {
     const TYPE: Type = Type("label_conversations");
     const VERSION: u32 = 1;
-    type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
-    type RemoteOutput = ();
 
+    type VersionConverter = DefaultVersionConverter<Self>;
+    type Handler = LabelHandler;
+    type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
-
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct Handler {}
+pub struct LabelHandler {
+    pub api: Proton,
+}
 
-impl proton_action_queue::action::Handler for Handler {
+impl Handler for LabelHandler {
     type Action = Label;
-    type Context = MailUserContext;
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -58,7 +54,6 @@ impl proton_action_queue::action::Handler for Handler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -74,7 +69,6 @@ impl proton_action_queue::action::Handler for Handler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
@@ -87,7 +81,7 @@ impl proton_action_queue::action::Handler for Handler {
                 .clone(),
             action.0.data.remote_target_ids.clone(),
             None,
-            ctx.api(),
+            &self.api,
         )
         .await?;
 

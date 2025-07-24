@@ -1,11 +1,11 @@
-use crate::MailUserContext;
 use crate::actions::{ActionMoveData, MailActionError, filter_responses};
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::RollbackItemType;
 use crate::models::{Conversation, RollbackItem};
 use itertools::Itertools;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
-use proton_action_queue::action::{ActionId, Handler as ActionHandler};
+use proton_action_queue::action::{ActionId, Handler};
+use proton_core_api::services::proton::Proton;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
@@ -13,13 +13,10 @@ use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use tracing::error;
 
-/// Action which moves conversations between two labels.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Move(ActionMoveData<Conversation>);
 
 impl Move {
-    /// Create a new action which moves conversations with `ids` from `source_label_id` to
-    /// `destination_label_id`.
     pub fn new(
         source_label_id: LocalLabelId,
         destination_label_id: LocalLabelId,
@@ -36,28 +33,24 @@ impl Move {
 impl Action for Move {
     const TYPE: Type = Type("move_conversations");
     const VERSION: u32 = 1;
-    type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
-    type RemoteOutput = ();
 
+    type VersionConverter = DefaultVersionConverter<Self>;
+    type Handler = MoveHandler;
+    type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
-
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct Handler {}
+pub struct MoveHandler {
+    pub api: Proton,
+}
 
-impl ActionHandler for Handler {
+impl Handler for MoveHandler {
     type Action = Move;
-
-    type Context = MailUserContext;
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -77,7 +70,6 @@ impl ActionHandler for Handler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -101,11 +93,9 @@ impl ActionHandler for Handler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let api = ctx.api();
         let conversation_ids = action
             .0
             .remote_target_ids
@@ -113,12 +103,15 @@ impl ActionHandler for Handler {
             .into_iter()
             .map_into()
             .collect();
+
         let label_id = action
             .0
             .remote_destination_label_id
             .clone()
             .expect("Should be set");
-        let responses = api
+
+        let responses = self
+            .api
             .put_conversations_label(conversation_ids, label_id, None)
             .await?
             .responses;

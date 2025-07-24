@@ -13,7 +13,7 @@ use tokio::sync::watch;
 
 #[tokio::test]
 async fn auto_execute_until_empty() {
-    let queue = new_queue(new_factory::<TestAction>()).await;
+    let queue = new_queue(new_factory::<TestAction>(TestHandler)).await;
     let task_spawner = TokioTaskSpawner;
     let online = watch::channel(true);
 
@@ -23,6 +23,7 @@ async fn auto_execute_until_empty() {
         })
         .await
         .unwrap();
+
     queue
         .queue_action(TestAction {
             fail_network: false,
@@ -34,6 +35,7 @@ async fn auto_execute_until_empty() {
 
     let executor = queue.new_executor().into_auto_executor_with_policy(
         online.1,
+        false,
         &task_spawner,
         QueueAutoTerminationPolicy::Empty,
     );
@@ -44,7 +46,7 @@ async fn auto_execute_until_empty() {
 
 #[tokio::test]
 async fn auto_execute_until_network_failure() {
-    let queue = new_queue(new_factory::<TestAction>()).await;
+    let queue = new_queue(new_factory::<TestAction>(TestHandler)).await;
     let task_spawner = TokioTaskSpawner;
     let online = watch::channel(true);
 
@@ -71,6 +73,7 @@ async fn auto_execute_until_network_failure() {
 
     let executor = queue.new_executor().into_auto_executor_with_policy(
         online.1,
+        false,
         &task_spawner,
         QueueAutoTerminationPolicy::NetworkLoss,
     );
@@ -81,7 +84,7 @@ async fn auto_execute_until_network_failure() {
 
 #[tokio::test]
 async fn auto_execute_until_empty_or_network_failure() {
-    let queue = new_queue(new_factory::<TestAction>()).await;
+    let queue = new_queue(new_factory::<TestAction>(TestHandler)).await;
     let task_spawner = TokioTaskSpawner;
     let online = watch::channel(true);
 
@@ -109,6 +112,7 @@ async fn auto_execute_until_empty_or_network_failure() {
 
     let executor = queue.new_executor().into_auto_executor_with_policy(
         online.1.clone(),
+        false,
         &task_spawner,
         QueueAutoTerminationPolicy::EmptyOrNetworkLoss,
     );
@@ -122,6 +126,7 @@ async fn auto_execute_until_empty_or_network_failure() {
 
     let executor = queue.new_executor().into_auto_executor_with_policy(
         online.1,
+        false,
         &task_spawner,
         QueueAutoTerminationPolicy::EmptyOrNetworkLoss,
     );
@@ -132,7 +137,7 @@ async fn auto_execute_until_empty_or_network_failure() {
 
 #[tokio::test]
 async fn auto_execute_pool() {
-    let queue = new_queue(new_factory::<TestAction>()).await;
+    let queue = new_queue(new_factory::<TestAction>(TestHandler)).await;
     let task_spawner = TokioTaskSpawner;
     let online = watch::channel(true);
 
@@ -152,6 +157,7 @@ async fn auto_execute_pool() {
         &ActionGroup::default(),
         NonZeroUsize::new(3).unwrap(),
         online.1,
+        false,
         &task_spawner,
         QueueAutoTerminationPolicy::Empty,
     );
@@ -167,7 +173,7 @@ async fn auto_execute_pool() {
 
 #[tokio::test]
 async fn auto_execute_forever() {
-    let queue = new_queue(new_factory::<TestAction>()).await;
+    let queue = new_queue(new_factory::<TestAction>(TestHandler)).await;
     let task_spawner = TokioTaskSpawner;
     let online = watch::channel(true);
 
@@ -182,6 +188,7 @@ async fn auto_execute_forever() {
 
     let executor = queue.new_executor().into_auto_executor_with_policy(
         online.1,
+        false,
         &task_spawner,
         QueueAutoTerminationPolicy::Never,
     );
@@ -201,12 +208,12 @@ struct TestAction {
 impl Action for TestAction {
     const TYPE: Type = Type("TEST_ACTION");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = TestHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = DefaultError;
-    type Context = ();
 }
 
 #[derive(Default)]
@@ -214,12 +221,10 @@ struct TestHandler;
 
 impl Handler for TestHandler {
     type Action = TestAction;
-    type Context = ();
 
     async fn apply_local(
         &self,
         _: ActionId,
-        (): &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -229,7 +234,6 @@ impl Handler for TestHandler {
     async fn revert_local(
         &self,
         _: ActionId,
-        (): &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -240,7 +244,6 @@ impl Handler for TestHandler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        (): &Self::Context,
         action: &mut Self::Action,
         _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {

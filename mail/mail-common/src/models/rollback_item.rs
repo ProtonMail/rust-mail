@@ -1,13 +1,10 @@
-use std::fmt::Display;
-
 use crate::MailContextError;
 use crate::datatypes::RollbackItemType;
 use crate::models::{Conversation, Message};
 use futures::stream::{FuturesUnordered, StreamExt};
 use proton_core_api::service::ApiServiceError;
-use proton_core_api::services::proton::ProtonCore;
 use proton_core_api::services::proton::{LabelId, ProtonIdMarker};
-use proton_core_api::session::{CoreSession, Session};
+use proton_core_api::services::proton::{Proton, ProtonCore};
 use proton_core_common::models::Label;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
@@ -17,14 +14,13 @@ use stash::macros::Model;
 use stash::orm::Model;
 use stash::params;
 use stash::stash::{Bond, RunTransaction, StashError, Tether};
+use std::fmt::Display;
 use tracing::{debug, error};
 
 #[cfg(test)]
 #[path = "../tests/models/rollback_item.rs"]
 mod tests;
 
-/// A record of an action that was rolled back.
-///
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("rollback_actions")]
 pub struct RollbackItem {
@@ -92,60 +88,54 @@ impl RollbackItem {
     ///
     ///
     pub async fn sync_all<I>(
-        session: &Session,
+        api: &Proton,
         tx: &mut impl RunTransaction,
         batch: I,
     ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>> + Copy,
     {
-        Self::sync_labels(session, tx, batch).await?;
-        Self::sync_messages(session, tx, batch).await?;
-        Self::sync_conversations(session, tx, batch).await?;
+        Self::sync_labels(api, tx, batch).await?;
+        Self::sync_messages(api, tx, batch).await?;
+        Self::sync_conversations(api, tx, batch).await?;
 
         Ok(())
     }
 
-    /// Synchronize all labels with remote counterparts.
-    ///
     #[tracing::instrument(skip_all)]
     pub async fn sync_labels<I>(
-        session: &Session,
+        api: &Proton,
         tx: &mut impl RunTransaction,
         batch: I,
     ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>>,
     {
-        Self::sync_items_impl::<LabelRollbackHandler, _>(session, tx, batch.into()).await
+        Self::sync_items_impl::<LabelRollbackHandler, _>(api, tx, batch.into()).await
     }
 
-    /// Synchronize all messages with remote counterparts.
-    ///
     #[tracing::instrument(skip_all)]
     pub async fn sync_messages<I>(
-        session: &Session,
+        api: &Proton,
         tx: &mut impl RunTransaction,
         batch: I,
     ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>>,
     {
-        Self::sync_items_impl::<MessageRollbackHandler, _>(session, tx, batch.into()).await
+        Self::sync_items_impl::<MessageRollbackHandler, _>(api, tx, batch.into()).await
     }
 
-    /// Synchronize all conversations with remote counterparts.
-    ///
     #[tracing::instrument(skip_all)]
     pub async fn sync_conversations<I>(
-        session: &Session,
+        api: &Proton,
         tx: &mut impl RunTransaction,
         batch: I,
     ) -> Result<(), MailContextError>
     where
         I: Into<Option<usize>>,
     {
-        Self::sync_items_impl::<ConversationRollbackHandler, _>(session, tx, batch.into()).await
+        Self::sync_items_impl::<ConversationRollbackHandler, _>(api, tx, batch.into()).await
     }
 
     /// This helper method is used to find all rollback items of a specific kind.
@@ -207,7 +197,7 @@ impl RollbackItem {
     }
 
     async fn sync_items_impl<H: RollbackHandler, T: RunTransaction>(
-        session: &Session,
+        api: &Proton,
         tx_runner: &mut T,
         batch: Option<usize>,
     ) -> Result<(), MailContextError> {
@@ -217,17 +207,20 @@ impl RollbackItem {
                 .into_iter()
                 .map(H::RemoteId::from)
                 .collect();
+
         if items.is_empty() {
             // Nothing to sync.
             return Ok(());
         }
+
         debug!("Found {} items to sync", items.len());
+
         let batch = batch.unwrap_or(items.len() + 1);
 
         // Can't use itertools chunks as it is not send compatible.
         let batches = items
             .chunks(batch)
-            .map(async |ids| Ok((ids, H::fetch_items(session, ids).await?)));
+            .map(async |ids| Ok((ids, H::fetch_items(api, ids).await?)));
 
         let mut tasks = FuturesUnordered::from_iter(batches);
 
@@ -235,6 +228,7 @@ impl RollbackItem {
             let (ids, items) = result.inspect_err(|e: &ApiServiceError| {
                 error!("Failed to fetch batch ({:?}): {e:?}", H::item_type());
             })?;
+
             tx_runner
                 .run_tx(async |tx| {
                     H::store_items(items, tx).await.inspect_err(|e| {
@@ -251,39 +245,30 @@ impl RollbackItem {
                                 );
                             })?;
                     }
+
                     Ok(())
                 })
                 .await
                 .map_err(MailContextError::Other)?;
         }
+
         debug!("Sync finished");
+
         Ok(())
     }
 }
 
-/// Defines behaviors for use with `RollbackItem::sync_items_impl`.
 trait RollbackHandler: 'static + Send + Sync {
     type Item: 'static;
     type RemoteId: ProtonIdMarker + From<String> + std::fmt::Display;
 
-    /// Return the respective [`RollbackItemType`] for this handler.
     fn item_type() -> RollbackItemType;
 
-    /// Fetch the items with `remote_ids` from the server.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the fetching failed.
     fn fetch_items(
-        session: &Session,
+        api: &Proton,
         remote_ids: &[Self::RemoteId],
     ) -> impl Future<Output = Result<Vec<Self::Item>, ApiServiceError>> + Send;
 
-    /// Convert and store the `items` in the local database.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the conversion or the storing of the items failed.
     fn store_items(
         items: Vec<Self::Item>,
         tx: &Bond<'_>,
@@ -295,12 +280,13 @@ struct MessageRollbackHandler {}
 impl RollbackHandler for MessageRollbackHandler {
     type Item = MessageMetadata;
     type RemoteId = MessageId;
+
     fn item_type() -> RollbackItemType {
         RollbackItemType::Message
     }
 
     async fn fetch_items(
-        session: &Session,
+        api: &Proton,
         remote_ids: &[Self::RemoteId],
     ) -> Result<Vec<Self::Item>, ApiServiceError> {
         let options = GetMessagesOptions {
@@ -309,14 +295,15 @@ impl RollbackHandler for MessageRollbackHandler {
             ids: Some(remote_ids.to_vec()),
             ..Default::default()
         };
-        Ok(session.api().get_messages(options).await?.messages)
+
+        Ok(api.get_messages(options).await?.messages)
     }
 
     async fn store_items(items: Vec<Self::Item>, tx: &Bond<'_>) -> Result<(), MailContextError> {
         for item in items {
-            let mut message = Message::from_api_metadata(item, tx).await?;
-            message.save(tx).await?;
+            Message::from_api_metadata(item, tx).await?.save(tx).await?;
         }
+
         Ok(())
     }
 }
@@ -326,12 +313,13 @@ struct ConversationRollbackHandler {}
 impl RollbackHandler for ConversationRollbackHandler {
     type Item = proton_mail_api::services::proton::response_data::Conversation;
     type RemoteId = ConversationId;
+
     fn item_type() -> RollbackItemType {
         RollbackItemType::Conversation
     }
 
     async fn fetch_items(
-        session: &Session,
+        api: &Proton,
         remote_ids: &[Self::RemoteId],
     ) -> Result<Vec<Self::Item>, ApiServiceError> {
         let options = GetConversationsOptions {
@@ -340,18 +328,15 @@ impl RollbackHandler for ConversationRollbackHandler {
             ids: Some(remote_ids.to_vec()),
             ..Default::default()
         };
-        Ok(session
-            .api()
-            .get_conversations(options)
-            .await?
-            .conversations)
+
+        Ok(api.get_conversations(options).await?.conversations)
     }
 
     async fn store_items(items: Vec<Self::Item>, tx: &Bond<'_>) -> Result<(), MailContextError> {
         for item in items {
-            let mut message = Conversation::from(item);
-            message.save(tx).await?;
+            Conversation::from(item).save(tx).await?;
         }
+
         Ok(())
     }
 }
@@ -361,26 +346,23 @@ struct LabelRollbackHandler {}
 impl RollbackHandler for LabelRollbackHandler {
     type Item = proton_core_api::services::proton::Label;
     type RemoteId = LabelId;
+
     fn item_type() -> RollbackItemType {
         RollbackItemType::Label
     }
 
     async fn fetch_items(
-        session: &Session,
+        api: &Proton,
         remote_ids: &[Self::RemoteId],
     ) -> Result<Vec<Self::Item>, ApiServiceError> {
-        Ok(session
-            .api()
-            .get_labels_by_ids(remote_ids.to_vec())
-            .await?
-            .labels)
+        Ok(api.get_labels_by_ids(remote_ids.to_vec()).await?.labels)
     }
 
     async fn store_items(items: Vec<Self::Item>, tx: &Bond<'_>) -> Result<(), MailContextError> {
         for item in items {
-            let mut label = Label::from(item);
-            label.save(tx).await?;
+            Label::from(item).save(tx).await?;
         }
+
         Ok(())
     }
 }

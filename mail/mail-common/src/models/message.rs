@@ -2,16 +2,10 @@
 #[path = "../tests/models/messages.rs"]
 mod messages;
 
-use crate::actions::messages::delete::Delete;
-use crate::actions::messages::delete_all::DeleteAllMessagesInLabel;
-use crate::actions::messages::ham::Ham;
-use crate::actions::messages::label::Label as ActionLabel;
-use crate::actions::messages::label_as::{LabelAs, UndoLabelAsMessages};
-use crate::actions::messages::r#move::Move;
-use crate::actions::messages::phishing::ReportPhishing;
-use crate::actions::messages::read::Read;
-use crate::actions::messages::unlabel::Unlabel;
-use crate::actions::messages::unread::Unread;
+use crate::actions::messages::{
+    Delete, DeleteAllMessagesInLabel, Ham, Label as ActionLabel, LabelAs, Move, Read,
+    ReportPhishing, UndoLabelAsMessages, Unlabel, Unread,
+};
 use crate::actions::{
     AllBottomBarMessageActions, BottomBarActions, GeneralActions, LabelAsData, LabelAsOutput,
     LabelPair, MailActionError, MovableSystemFolderAction, UndoLabelAs,

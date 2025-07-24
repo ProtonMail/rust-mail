@@ -1,11 +1,16 @@
 use crate::UserContext;
-use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard, WriterGuardError,
+use proton_action_queue::{
+    action::{
+        self, Action, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
+        WriterGuardError,
+    },
+    queue::ActionRequeueReason,
 };
 use proton_event_loop::EventLoopError;
 use proton_event_loop::subscriber::SubscriberError;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
+use std::sync::Weak;
 
 /// Action which polls the event loop.
 ///
@@ -18,15 +23,14 @@ impl Action for EventPoll {
     const TYPE: Type = Type("event_poll");
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Low;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = EventPollHandler;
     type RemoteOutput = ();
     type LocalOutput = ();
     type Error = ActionEventLoopError;
-    type Context = UserContext;
 }
 
-/// Wrapper type for [`EventLoopError`].
 #[derive(Debug, thiserror::Error)]
 pub enum ActionEventLoopError {
     #[error(transparent)]
@@ -35,65 +39,66 @@ pub enum ActionEventLoopError {
     Subscriber(#[from] SubscriberError),
     #[error(transparent)]
     WriterGuard(#[from] WriterGuardError),
+    #[error("Lost context")]
+    LostContext,
 }
 
-impl proton_action_queue::action::Error for ActionEventLoopError {
-    fn is_network_failure(&self) -> bool {
-        if let ActionEventLoopError::EventLoop(
-            EventLoopError::Provider(e)
-            | EventLoopError::Subscriber(_, SubscriberError::Api(e))
-            | EventLoopError::Refresh(_, SubscriberError::Api(e)),
-        )
-        | ActionEventLoopError::Subscriber(SubscriberError::Api(e)) = &self
-        {
-            return e.is_network_failure();
+impl action::Error for ActionEventLoopError {
+    fn can_requeue(&self) -> Option<ActionRequeueReason> {
+        match self {
+            Self::EventLoop(
+                EventLoopError::Provider(e)
+                | EventLoopError::Subscriber(_, SubscriberError::Api(e))
+                | EventLoopError::Refresh(_, SubscriberError::Api(e)),
+            )
+            | Self::Subscriber(SubscriberError::Api(e))
+                if e.is_network_failure() =>
+            {
+                Some(ActionRequeueReason::NetworkFailed)
+            }
+
+            Self::WriterGuard(WriterGuardError::Expired) => Some(ActionRequeueReason::GuardExpired),
+            Self::LostContext => Some(ActionRequeueReason::LostContext),
+
+            _ => None,
         }
-
-        false
-    }
-
-    fn is_writer_guard_expired(&self) -> bool {
-        matches!(self, Self::WriterGuard(WriterGuardError::Expired))
     }
 }
 
-#[derive(Default)]
-pub struct EventPollHandler;
+pub struct EventPollHandler {
+    pub ctx: Weak<UserContext>,
+}
 
-impl proton_action_queue::action::Handler for EventPollHandler {
+impl Handler for EventPollHandler {
     type Action = EventPoll;
-    type Context = UserContext;
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
-        // Nothing to do.
         Ok(())
     }
 
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        // Nothing to do
         Ok(())
     }
 
     async fn apply_remote(
         &self,
         _: ActionId,
-        context: &Self::Context,
         _: &mut Self::Action,
         _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        context
+        self.ctx
+            .upgrade()
+            .ok_or(ActionEventLoopError::LostContext)?
             .poll_event_loop_impl()
             .await
             .map_err(ActionEventLoopError::from)?;

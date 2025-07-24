@@ -11,7 +11,7 @@ async fn state_preserved_after_local_change() {
     // Check if the action state is persisted after local changes and correctly transmitted
     // to subsequent follow ups.
 
-    let queue = new_queue(new_factory::<TestAction>()).await;
+    let queue = new_queue(new_factory::<TestAction>(TestActionHandler)).await;
     let executor = queue.new_executor();
 
     // Check direct execution.
@@ -39,6 +39,7 @@ async fn state_preserved_after_local_change() {
         .queue_action(TestAction { v: ACTION_VALUE })
         .await
         .unwrap();
+
     executor.execute_all().await.unwrap();
 }
 
@@ -50,18 +51,16 @@ struct TestAction {
 impl Action for TestAction {
     const TYPE: Type = Type("test");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = TestActionHandler;
     type RemoteOutput = u32;
-
     type LocalOutput = ();
-
     type Error = DefaultError;
-    type Context = ();
 }
 
 #[derive(Default)]
-struct TestActionHandler {}
+struct TestActionHandler;
 
 const ACTION_VALUE: u32 = 10;
 const ACTION_VALUE_AFTER_LOCAL_APPLY: u32 = 30;
@@ -71,12 +70,10 @@ const ACTION_KEY: &str = "bar";
 
 impl Handler for TestActionHandler {
     type Action = TestAction;
-    type Context = ();
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -90,7 +87,6 @@ impl Handler for TestActionHandler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -100,7 +96,6 @@ impl Handler for TestActionHandler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         mut writer_guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {

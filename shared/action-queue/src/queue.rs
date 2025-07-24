@@ -4,7 +4,7 @@ mod tests;
 
 use crate::action::{
     Action, ActionGroup, ActionId, Error as ActionErrorTrait, Factory, FactoryError, FactoryResult,
-    Handler, LocalOutput, Metadata, Priority, Resources, Type, WriterGuard, WriterGuardError,
+    Handler, LocalOutput, Metadata, Priority, Resources, WriterGuard, WriterGuardError,
 };
 use crate::db::{
     self, ActionDependency, DEFAULT_LOCK_TIMEOUT, DependencyType, ExecutionGuard, StoredAction,
@@ -15,27 +15,17 @@ use parking_lot::RwLock;
 use proton_sqlite3::MigratorError;
 use stash::orm::Model;
 use stash::stash::{Bond, Stash, StashError, Tether};
-use std::any::{Any, TypeId};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt;
 use std::future::Future;
 use std::num::NonZeroUsize;
 use std::pin::Pin;
-use std::sync::{Arc, Weak};
+use std::sync::Arc;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use topological_sort::TopologicalSort;
 use tracing::{Instrument, debug, error, info};
 use uuid::Uuid;
-
-/// Execution context errors
-#[derive(Debug, thiserror::Error)]
-pub enum ContextError {
-    #[error("Could not find execution context for {0}")]
-    ContextNotFound(Type),
-    #[error("Could not upgrade execution context for {0}")]
-    ContextUpgrade(Type),
-}
 
 /// Errors which can occur while operating on the queue.
 #[derive(Debug, thiserror::Error)]
@@ -46,8 +36,6 @@ pub enum Error {
     DB(#[from] StashError),
     #[error("Serialization error: {0}")]
     Serialization(#[from] rmp_serde::encode::Error),
-    #[error("{0}")]
-    Context(#[from] ContextError),
     #[error("Unknown action: {0}")]
     UnknownAction(String),
     #[error("Cyclic Dependency detected")]
@@ -100,8 +88,6 @@ pub enum QueuedError {
     ActionNotFound(ActionId),
     #[error("Action {0} is being executed")]
     ActionInExecution(ActionId),
-    #[error("{0}")]
-    Context(#[from] ContextError),
 }
 
 /// Helper trait to extract errors from queued actions.
@@ -118,20 +104,6 @@ impl AsActionError for anyhow::Error {
     }
 }
 
-impl QueuedError {
-    /// If queued action failed you can attempt to retrieve the error of the action via this
-    /// function.
-    ///
-    /// If the action type does not match or the error type does not match, `None` is returned.
-    #[must_use]
-    pub fn action_error<T: Action>(&self) -> Option<&ActionError<T>> {
-        let Self::Action(err, _) = self else {
-            return None;
-        };
-
-        err.as_action_error::<T>()
-    }
-}
 pub type QueuedResult<T> = Result<T, QueuedError>;
 
 /// Metadata associated with a queued [`Action`].
@@ -239,14 +211,6 @@ pub enum BroadcastMessage {
 /// using the [`QueuedError::action_error`] function. Alternatively you  can also
 /// extract the error from [`anyhow::Error`] directly using the [`AsActionError`] extension.
 ///
-///
-/// # Execution Contexts
-///
-/// Every action can be assigned an execution context which contains runtime
-/// data which is not represented by this API. The execution contexts need
-/// to be registered with the queue upfront so that they can also
-/// be used by actions that are queued for later execution.
-///
 /// # Remarks
 ///
 /// There can only be on queue per database connection. Multiple queues in the same database
@@ -256,35 +220,22 @@ pub enum BroadcastMessage {
 ///
 pub struct Queue {
     shared: Arc<Shared>,
-    // Keep the default context alive so that it is available for any action
-    // which does not need a custom context.
-    _default_context: Arc<()>,
 }
 
 /// Internal shared data used by the [`Queue`] and [`BackgroundWorker`].
 pub(crate) struct Shared {
     stash: Stash,
     factory: RwLock<Factory>,
-    execution_contexts: RwLock<HashMap<TypeId, Weak<dyn Any + Send + Sync>>>,
     broadcast_sender: tokio::sync::broadcast::Sender<BroadcastMessage>,
     queued_action_notifier: tokio::sync::Notify,
 }
 
 impl Shared {
-    fn has_action<T: Action>(&self) -> bool {
-        self.factory.read().has_action::<T>()
-    }
-
-    fn resolve_execution_context<T: Action>(&self) -> Result<Arc<T::Context>, ContextError> {
-        let type_id = TypeId::of::<T::Context>();
-        let exec_contexts = self.execution_contexts.read();
-        let context = exec_contexts
-            .get(&type_id)
-            .ok_or(ContextError::ContextNotFound(T::TYPE))?;
-        let context = context
-            .upgrade()
-            .ok_or(ContextError::ContextUpgrade(T::TYPE))?;
-        Ok(context.downcast::<T::Context>().expect("Should not fail"))
+    fn handler<T>(&self) -> Option<Arc<T::Handler>>
+    where
+        T: Action,
+    {
+        self.factory.read().handler::<T>()
     }
 }
 
@@ -294,7 +245,7 @@ pub enum ActionRemoteOutput<Remote> {
     /// Action was executed successfully on local and on remote.
     Executed(Remote),
     /// Action could not be executed on the remote at this time and was queued.
-    Queued(ActionId, QueuedActionReason),
+    Queued(ActionId, ActionRequeueReason),
 }
 
 /// Output of queueing the [`Action`] with [`Queue::queue_action`] or
@@ -324,24 +275,19 @@ impl Queue {
     /// Returns error if the database migration failed.
     pub async fn with_factory(stash: Stash, factory: Factory) -> Result<Self> {
         let mut tether = stash.connection();
+
         db::create_tables(&mut tether).await?;
-        let default_context = Arc::new(());
-        let default_context_downgraded = Arc::downgrade(&default_context);
+
         let (sender, _) = tokio::sync::broadcast::channel(32);
+
         let shared = Arc::new(Shared {
             stash,
             factory: RwLock::new(factory),
-            execution_contexts: RwLock::new(HashMap::new()),
             broadcast_sender: sender,
             queued_action_notifier: tokio::sync::Notify::new(),
         });
-        let queue = Self {
-            shared,
-            _default_context: default_context,
-        };
 
-        queue.register_execution_context(default_context_downgraded);
-        Ok(queue)
+        Ok(Self { shared })
     }
 
     /// Register an [`Action`] with the factory.
@@ -349,19 +295,8 @@ impl Queue {
     /// # Errors
     ///
     /// Returns error if the action type was already registered before.
-    pub fn register<T: Action>(&self) -> FactoryResult<()> {
-        self.shared.factory.write().register::<T>()
-    }
-
-    /// Register an execution context with the queue.
-    ///
-    /// Execution context are used by actions to access runtime data.
-    ///
-    pub fn register_execution_context<E: Any + Send + Sync + 'static>(&self, context: Weak<E>) {
-        self.shared
-            .execution_contexts
-            .write()
-            .insert(TypeId::of::<E>(), context);
+    pub fn register<T: Action>(&self, handler: T::Handler) -> FactoryResult<()> {
+        self.shared.factory.write().register::<T>(handler)
     }
 
     /// Return the database associated with the queue.
@@ -393,30 +328,20 @@ impl Queue {
         metadata: Metadata,
     ) -> LocalOutput<T> {
         let span = tracing::debug_span!("queue::queue", type=T::TYPE.0);
+
         async {
             debug!("Dependencies: {:?}", metadata.dependencies);
-            if !self.shared.has_action::<T>() {
-                error!("Unknown action queued: {}", T::TYPE);
-                return Err(Error::UnknownAction(T::TYPE.to_string()).into());
-            }
-            let handler = T::Handler::default();
-            let context = self
-                .shared
-                .resolve_execution_context::<T>()
-                .map_err(|e| ActionError::Queue(e.into()))?;
 
-            let (local_output, id) = execute_action_local(
-                &self.shared,
-                context.as_ref(),
-                &handler,
-                &mut action,
-                metadata,
-                None,
-            )
-            .await?;
+            let handler = self.shared.handler::<T>().ok_or_else(|| {
+                error!("Tried to enqueue an unknown action: {}", T::TYPE);
+                Error::UnknownAction(T::TYPE.to_string())
+            })?;
+
+            let (local_output, id) =
+                execute_action_local(&self.shared, &mut action, &handler, metadata, None).await?;
+
             info!("Action queued with id={id}");
 
-            // Notify executors.
             self.shared.queued_action_notifier.notify_waiters();
 
             Ok(QueuedActionOutput {
@@ -463,34 +388,25 @@ impl Queue {
             info!("Replacing {existing_id:?}");
             debug!("Dependencies: {:?}", metadata.dependencies);
 
-            if !self.shared.has_action::<T>() {
-                error!("Unknown action queued: {}", T::TYPE);
-                return Err(Error::UnknownAction(T::TYPE.to_string()).into());
-            }
-
-            let handler = T::Handler::default();
-            let context = self
-                .shared
-                .resolve_execution_context::<T>()
-                .map_err(|e| ActionError::Queue(e.into()))?;
-
-            let shared = Arc::clone(&self.shared);
+            let handler = self.shared.handler::<T>().ok_or_else(|| {
+                error!("Tried to enqueue an unknown action: {}", T::TYPE);
+                Error::UnknownAction(T::TYPE.to_string())
+            })?;
 
             let (local_output, id) = execute_action_local(
-                &shared,
-                context.as_ref(),
-                &handler,
+                &self.shared,
                 &mut action,
+                &handler,
                 metadata,
                 Some(existing_id),
             )
             .await?;
+
             if existing_id == id {
                 info!("Action has been updated");
                 // We don't want to notify executors in this case.
             } else {
                 info!("Action queued with id={id}");
-                // Notify executors.
                 self.shared.queued_action_notifier.notify_waiters();
             }
 
@@ -626,81 +542,72 @@ impl Queue {
     }
 }
 
-/// Indicates the state of the action.
 #[derive(Debug, Clone, Copy)]
 pub enum QueuedActionState {
-    /// The action was executed, which led to either a success or failure result.
     Executed(ActionId),
-    /// The action was deferred due to lack of network.
-    Queued(ActionId, QueuedActionReason),
+    Queued(ActionId, ActionRequeueReason),
 }
 
-/// Reason why the action was queued
-///
 #[derive(Debug, Clone, Copy)]
-pub enum QueuedActionReason {
-    /// Action execution failed because of the network
-    ///
-    Network,
-    /// Action execution failed because of execution/writer guard expired
-    ///
+pub enum ActionRequeueReason {
+    /// There was an intermittent networking issue - the action should be
+    /// restarted later.
+    NetworkFailed,
+
+    /// Another executor was already working on this action, but then died or
+    /// dead-locked mid-execution - the action should be restarted later.
     GuardExpired,
+
+    /// Action's handler needs access to some external data that is now gone
+    /// (e.g. it has a `Weak` pointer that can't be upgraded anymore) - the
+    /// action should be restarted later.
+    LostContext,
 }
 
-/// Wrapper trait around the actual action type.
-pub(crate) trait QueuedAction: Send {
-    fn execute<'a, 's: 'a>(
+pub(crate) trait ErasedQueuedAction: Send {
+    fn execute<'a>(
         &'a mut self,
         shared: &'a Shared,
         tether: &'a mut Tether,
-        execution_guard: ExecutionGuard,
+        guard: ExecutionGuard,
         metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<QueuedActionState>> + 'a + Send>>;
 
     fn cancel<'a>(
         &'a mut self,
-        shared: &'a Shared,
         tx: &'a Bond,
         metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>>;
 }
 
-/// Type erasure trait for the action implementation.
-pub(crate) struct TypeErasedAction<T: Action + Send> {
-    /// Id of the action.
-    pub action_id: ActionId,
-    /// Handler of the action.
-    pub handler: T::Handler,
-    /// The action itself.
+pub(crate) struct QueuedAction<T: Action + Send> {
+    pub id: ActionId,
     pub action: T,
+    pub handler: Arc<T::Handler>,
 }
 
-impl<T: Action> QueuedAction for TypeErasedAction<T> {
-    fn execute<'a, 's: 'a>(
+impl<T: Action> ErasedQueuedAction for QueuedAction<T> {
+    fn execute<'a>(
         &'a mut self,
         shared: &'a Shared,
         tether: &'a mut Tether,
-        exec_guard: ExecutionGuard,
+        guard: ExecutionGuard,
         metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<QueuedActionState>> + 'a + Send>> {
-        let result = shared.resolve_execution_context::<T>();
         Box::pin(async move {
-            let context = result?;
-            // Can't return result here as there is no one to consume it.
             let output = execute_action_remote(
                 shared,
-                self.action_id,
-                context.as_ref(),
-                &self.handler,
+                self.id,
+                &*self.handler,
                 &mut self.action,
                 tether,
-                exec_guard,
+                guard,
             )
             .await
             .map_err(|e| QueuedError::Action(Arc::new(anyhow::Error::new(e)), metadata))?;
 
             Ok(match output {
-                ActionRemoteOutput::Executed(_) => QueuedActionState::Executed(self.action_id),
+                ActionRemoteOutput::Executed(_) => QueuedActionState::Executed(self.id),
                 ActionRemoteOutput::Queued(id, reason) => QueuedActionState::Queued(id, reason),
             })
         })
@@ -708,32 +615,31 @@ impl<T: Action> QueuedAction for TypeErasedAction<T> {
 
     fn cancel<'a>(
         &'a mut self,
-        shared: &'a Shared,
         tx: &'a Bond,
         metadata: Arc<QueuedMetadata>,
     ) -> Pin<Box<dyn Future<Output = QueuedResult<()>> + 'a + Send>> {
-        let result = shared.resolve_execution_context::<T>();
-        let span = tracing::trace_span!("queue::revert", id=self.action_id.0, type=T::TYPE.0);
+        let span = tracing::trace_span!("queue::revert", id=self.id.0, type=T::TYPE.0);
+
         Box::pin(
             async move {
-                let context = result?;
-                // Can't return result here as there is no one to consume it.
                 info!("Reverting local state");
-                // Revert local changes and remove action from queue.
+
                 if let Err(e) = self
                     .handler
-                    .revert_local(self.action_id, &context, &mut self.action, tx)
+                    .revert_local(self.id, &mut self.action, tx)
                     .await
                 {
                     error!("Failed to revert local changes: {e:?}");
                 }
-                StoredAction::delete(tx, self.action_id)
+
+                StoredAction::delete(tx, self.id)
                     .await
                     .map_err(|e| {
                         error!("Failed to delete action: {e:?}");
                         e
                     })
                     .map_err(|e| QueuedError::Action(Arc::new(anyhow::Error::new(e)), metadata))?;
+
                 Ok(())
             }
             .instrument(span),
@@ -771,9 +677,15 @@ impl QueueExecutor {
     pub fn into_auto_executor(
         self,
         online: watch::Receiver<bool>,
+        start_paused: bool,
         task_spawner: &impl TaskSpawner,
     ) -> QueueAutoExecutor {
-        self.into_auto_executor_with_policy(online, task_spawner, QueueAutoTerminationPolicy::Never)
+        self.into_auto_executor_with_policy(
+            online,
+            start_paused,
+            task_spawner,
+            QueueAutoTerminationPolicy::Never,
+        )
     }
 
     /// Convert this executor into a [`QueueAutoExecutor`] with a custom termination policy
@@ -781,10 +693,11 @@ impl QueueExecutor {
     pub fn into_auto_executor_with_policy(
         self,
         online: watch::Receiver<bool>,
+        start_paused: bool,
         task_spawner: &impl TaskSpawner,
         termination_policy: QueueAutoTerminationPolicy,
     ) -> QueueAutoExecutor {
-        QueueAutoExecutor::new(self, online, task_spawner, termination_policy)
+        QueueAutoExecutor::new(self, online, start_paused, task_spawner, termination_policy)
     }
 
     /// Execute one action from the queue.
@@ -938,9 +851,9 @@ impl TaskSpawner for TokioTaskSpawner {
 /// In a cross-process setting we currently rely on a timeout to ensure that actions queued
 /// by another process are executed.
 pub struct QueueAutoExecutor {
-    join_handle: JoinHandle<()>,
+    task: JoinHandle<()>,
     id: String,
-    pause: watch::Sender<bool>,
+    paused: watch::Sender<bool>,
 }
 
 impl Drop for QueueAutoExecutor {
@@ -953,19 +866,21 @@ impl QueueAutoExecutor {
     fn new(
         executor: QueueExecutor,
         online: watch::Receiver<bool>,
+        start_paused: bool,
         task_spawner: &impl TaskSpawner,
         termination_policy: QueueAutoTerminationPolicy,
     ) -> Self {
         let id = executor.id.clone();
-        let (pause, listener) = watch::channel(false);
-        let handle = task_spawner.spawn_task(async move {
-            Self::run(executor, listener, online, termination_policy).await;
+        let (paused_tx, paused_rx) = watch::channel(start_paused);
+
+        let task = task_spawner.spawn_task(async move {
+            Self::run(executor, paused_rx, online, termination_policy).await;
         });
 
         QueueAutoExecutor {
-            join_handle: handle,
+            task,
             id,
-            pause,
+            paused: paused_tx,
         }
     }
 
@@ -978,19 +893,19 @@ impl QueueAutoExecutor {
     /// Pause auto execution.
     ///
     /// When executor is currently running it will pause before picking another task.
-    /// It will be paused until `unpause` is called.
+    /// It will be paused until `resume` is called.
     ///
     pub fn pause(&self) {
-        self.pause.send_replace(true);
+        self.paused.send_replace(true);
     }
 
-    /// Unpause auto execution.
+    /// Resume auto execution.
     ///
-    /// It will have an effect only if executor was paused before calling `unpause`.
+    /// It will have an effect only if executor was paused before calling `resume`.
     /// The execution will be resumed.
     ///
-    pub fn unpause(&self) {
-        self.pause.send_replace(false);
+    pub fn resume(&self) {
+        self.paused.send_replace(false);
     }
 
     async fn run(
@@ -1015,7 +930,7 @@ impl QueueAutoExecutor {
 
             let followup = match executor.execute_one().await {
                 Ok(None) => ActionExecutionFollowup::WaitForAction,
-                Ok(Some(QueuedActionState::Queued(_, QueuedActionReason::Network))) => {
+                Ok(Some(QueuedActionState::Queued(_, ActionRequeueReason::NetworkFailed))) => {
                     if termination_policy.is_network_loss_policy() {
                         return;
                     }
@@ -1068,12 +983,12 @@ impl QueueAutoExecutor {
 
     /// Terminate the execution of actions.
     pub fn terminate(&self) {
-        self.join_handle.abort();
+        self.task.abort();
     }
 
     /// Wait on the executor to finish.
     pub async fn await_finished(mut self) {
-        let _ = (&mut self.join_handle).await;
+        let _ = (&mut self.task).await;
     }
 }
 
@@ -1084,19 +999,18 @@ enum ActionExecutionFollowup {
     PickNextAction,
 }
 
-/// Manages a pool of queue auto executors.
 pub struct QueueAutoExecutorPool {
     executors: Vec<QueueAutoExecutor>,
 }
 
 impl QueueAutoExecutorPool {
-    /// Create a new auto executor pool with `count` executors for the `action_group`.
     #[must_use]
     pub fn new(
         queue: &Queue,
         action_group: &ActionGroup,
         count: NonZeroUsize,
         online: watch::Receiver<bool>,
+        start_paused: bool,
         task_spawner: &impl TaskSpawner,
     ) -> Self {
         Self::with_termination_policy(
@@ -1104,19 +1018,19 @@ impl QueueAutoExecutorPool {
             action_group,
             count,
             online,
+            start_paused,
             task_spawner,
             QueueAutoTerminationPolicy::Never,
         )
     }
 
-    /// Create a new auto executor pool with `count` executors for the `action_group` and with
-    /// a `termination_policy`
     #[must_use]
     pub fn with_termination_policy(
         queue: &Queue,
         action_group: &ActionGroup,
         count: NonZeroUsize,
         online: watch::Receiver<bool>,
+        start_paused: bool,
         task_spawner: &impl TaskSpawner,
         termination_policy: QueueAutoTerminationPolicy,
     ) -> Self {
@@ -1126,6 +1040,7 @@ impl QueueAutoExecutorPool {
                     .new_executor_with_group(action_group.clone())
                     .into_auto_executor_with_policy(
                         online.clone(),
+                        start_paused,
                         task_spawner,
                         termination_policy,
                     )
@@ -1135,28 +1050,24 @@ impl QueueAutoExecutorPool {
         Self { executors }
     }
 
-    /// Stop all queue executors.
     pub fn terminate(&self) {
         for executor in &self.executors {
             executor.terminate();
         }
     }
 
-    /// Pause all queue executors.
     pub fn pause(&self) {
         for executor in &self.executors {
             executor.pause();
         }
     }
 
-    /// Unpause all queue executors.
-    pub fn unpause(&self) {
+    pub fn resume(&self) {
         for executor in &self.executors {
-            executor.unpause();
+            executor.resume();
         }
     }
 
-    /// Wait on all executors to finish
     pub async fn await_finished(self) {
         for executor in self.executors {
             executor.await_finished().await;
@@ -1164,20 +1075,20 @@ impl QueueAutoExecutorPool {
     }
 }
 
-/// Shared snippet to execute actions locally.
 async fn execute_action_local<T: Action>(
     shared: &Shared,
-    context: &T::Context,
-    handler: &T::Handler,
     action: &mut T,
+    handler: &T::Handler,
     metadata: Metadata,
     existing_id: Option<ActionId>,
 ) -> Result<(T::LocalOutput, ActionId), ActionError<T>> {
     let mut tether = shared.stash.connection();
+
     tether
         .tx::<_, _, ActionError<T>>(async |tx| {
             let mut stored_action =
                 StoredAction::without_state::<T>(action.dependency_keys(), metadata);
+
             if let Some(exising_id) = existing_id {
                 stored_action
                     .create_or_update(exising_id, tx)
@@ -1198,66 +1109,68 @@ async fn execute_action_local<T: Action>(
                 let mut sorter = TopologicalSort::<ActionId>::new();
                 let mut pending_action_ids = vec![stored_action.id.unwrap()];
                 let mut visited = HashSet::new();
+
                 while let Some(action_id) = pending_action_ids.pop() {
                     let deps = StoredAction::all_dependencies(tx, action_id).await?;
+
                     if !visited.insert(action_id) {
                         continue;
                     }
                     if deps.is_empty() {
                         continue;
                     }
+
                     for dep in &deps {
                         sorter.add_dependency(action_id, dep.dependency_id);
                     }
+
                     pending_action_ids.extend(deps.into_iter().map(|dep| dep.dependency_id));
                 }
+
                 if sorter.pop().is_none() && !sorter.is_empty() {
                     return Err(Error::CyclicDependency.into());
                 }
             }
 
-            // Execute the local changes
             let local_output = handler
-                .apply_local(stored_action.id.unwrap(), context, action, tx)
+                .apply_local(stored_action.id.unwrap(), action, tx)
                 .await
                 .map_err(|e| {
                     error!("Failed to apply local changes: {e:?}");
                     ActionError::Action(e)
                 })?;
 
-            // Update action state.
             stored_action.set_action_state(action).map_err(|e| {
                 error!("Failed to set action state: {e:?}");
                 Error::from(e)
             })?;
+
             stored_action
                 .update_action_state(tx)
                 .await
                 .inspect_err(|e| {
                     error!("Failed to update action state: {e:?}");
                 })?;
+
             Ok((local_output, stored_action.id.unwrap()))
         })
         .await
 }
-/// Shared snippet to execute actions remotely.
+
 async fn execute_action_remote<T: Action>(
     shared: &Shared,
     id: ActionId,
-    context: &T::Context,
     handler: &T::Handler,
     action: &mut T,
     tether: &mut Tether,
     guard: ExecutionGuard,
 ) -> Result<ActionRemoteOutput<T::RemoteOutput>, ActionError<T>> {
-    //1) Attempt to execute on remote
     debug!("Applying action on remote");
 
     let writer_guard = WriterGuard::new(tether, &guard);
-    let result = handler
-        .apply_remote(id, context, action, writer_guard)
-        .await;
+    let result = handler.apply_remote(id, action, writer_guard).await;
     let mut cancelled_actions = vec![];
+
     let result = match guard
         .tx_and_release(tether, async |tx| {
             let result = async {
@@ -1266,21 +1179,19 @@ async fn execute_action_remote<T: Action>(
                         StoredAction::delete(tx, id).await?;
 
                         info!("Action executed");
+
                         Ok(ActionRemoteOutput::Executed(result))
                     }
+
                     Err(e) => {
                         error!("Failed to apply on server: {e:?}");
-                        if e.is_network_failure() {
-                            debug!("Action remains in queue due to lack of network");
-                            // if this failed due to network error we should leave it in the queue.
-                            return Ok(ActionRemoteOutput::Queued(id, QueuedActionReason::Network));
-                        } else if e.is_writer_guard_expired() {
-                            debug!("Action remains in queue due to expired writer guard");
-                            return Ok(ActionRemoteOutput::Queued(
-                                id,
-                                QueuedActionReason::GuardExpired,
-                            ));
+
+                        if let Some(reason) = e.can_requeue() {
+                            debug!(?reason, "Action will be requeued");
+
+                            return Ok(ActionRemoteOutput::Queued(id, reason));
                         }
+
                         match cancel_action_with_dependees(shared, tx, id).await {
                             Ok(ids) => {
                                 cancelled_actions = ids;
@@ -1305,11 +1216,12 @@ async fn execute_action_remote<T: Action>(
         Err(WriterGuardError::Expired) => {
             return Ok(ActionRemoteOutput::Queued(
                 id,
-                QueuedActionReason::GuardExpired,
+                ActionRequeueReason::GuardExpired,
             ));
         }
         Err(WriterGuardError::Stash(e)) => return Err(e.into()),
     };
+
     for cancelled_action in cancelled_actions.into_iter().filter(|meta| {
         // We don't want to report cancellation of our own action, only of the dependees.
         meta.id != id
@@ -1319,10 +1231,10 @@ async fn execute_action_remote<T: Action>(
             .broadcast_sender
             .send(BroadcastMessage::Cancelled(cancelled_action));
     }
+
     result
 }
 
-/// Cancel
 async fn cancel_action_with_dependees(
     shared: &Shared,
     bond: &Bond<'_>,
@@ -1331,6 +1243,7 @@ async fn cancel_action_with_dependees(
     let mut remaining_actions = vec![action_id];
     let mut sorter = TopologicalSort::<ActionId>::new();
     let mut cancelled_actions = Vec::new();
+
     while let Some(action_id) = remaining_actions.pop() {
         let dependees = StoredAction::dependees_of_type(bond, action_id, DependencyType::Direct)
             .await
@@ -1338,8 +1251,10 @@ async fn cancel_action_with_dependees(
                 error!("Failed to load action dependees: {e:?}");
                 e
             })?;
+
         debug!("Action {action_id} has {:?} as dependees", dependees);
         remaining_actions.extend(dependees.iter().copied());
+
         for id in dependees {
             sorter.add_dependency(id, action_id);
         }
@@ -1354,11 +1269,11 @@ async fn cancel_action_with_dependees(
 
         let (mut decoded, metadata) = decode_action(&shared.factory, action)?;
 
-        decoded.cancel(shared, bond, Arc::clone(&metadata)).await?;
-
+        decoded.cancel(bond, Arc::clone(&metadata)).await?;
         cancelled_actions.push(metadata);
     } else {
         debug!("Reverting {} dependent actions", sorter.len());
+
         // Cancel all actions in reversed order
         while let Some(current_action_id) = sorter.pop() {
             let Some(action) = StoredAction::load(current_action_id, bond).await? else {
@@ -1367,20 +1282,20 @@ async fn cancel_action_with_dependees(
 
             let (mut decoded, metadata) = decode_action(&shared.factory, action)?;
 
-            decoded.cancel(shared, bond, Arc::clone(&metadata)).await?;
-
+            decoded.cancel(bond, Arc::clone(&metadata)).await?;
             cancelled_actions.push(metadata);
         }
     }
+
     Ok(cancelled_actions)
 }
 
-/// Decode stored action and return an executor.
 fn decode_action(
     factory: &RwLock<Factory>,
     stored_action: StoredAction,
-) -> QueuedResult<(Box<dyn QueuedAction>, Arc<QueuedMetadata>)> {
+) -> QueuedResult<(Box<dyn ErasedQueuedAction>, Arc<QueuedMetadata>)> {
     let action_id = stored_action.id.unwrap();
+
     factory.read().decode(stored_action).map_err(|e| {
         error!("Failed to decode action: {e:?}");
         QueuedError::Factory(action_id, e)

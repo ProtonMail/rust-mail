@@ -6,12 +6,11 @@ use crate::db::migrations::{migrate_account_db, migrate_core_db};
 use crate::event_loop::{EventLoopActionIds, EventPollMode};
 use crate::models::{InitializationWatcher, UserSettings};
 use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse};
-use anyhow::Context as _;
 pub use event_loop::subscriber::CoreEventLoopContext;
 use proton_action_queue::queue::Queue;
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::services::proton::{SessionId, UserId};
-use proton_core_api::session::Session;
+use proton_core_api::session::{CoreSession, Session};
 use proton_event_loop::EventPoll;
 use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
@@ -88,16 +87,15 @@ impl UserContext {
         cache_path: PathBuf,
     ) -> CoreContextResult<Arc<Self>> {
         info!("Creating new user context");
+
         let user_stash = Self::new_user_db(user_stash_path, db_initializers).await?;
         let cancellation_token = context.new_child_cancellation_token();
         let queue = Queue::new(user_stash.clone()).await?;
-
-        // Register core actions
-        register_core_actions(&queue);
-
         let initialization_watcher = InitializationWatcher::new(&user_stash)?;
 
         let this = Arc::new_cyclic(|this| {
+            register_core_actions(&queue, this, session.api());
+
             let event_ctx = CoreEventLoopContext::from(Weak::clone(this));
 
             Self {
@@ -116,17 +114,12 @@ impl UserContext {
                 last_event_loop_action_ids: Arc::new(Mutex::new(EventLoopActionIds::default())),
             }
         });
-        let this_weak = Arc::downgrade(&this);
-
-        fs::create_dir_all(this.sender_images_cache_path())
-            .context("Error creating sender image cache path")?;
-
-        this.queue().register_execution_context(this_weak);
 
         fs::create_dir_all(this.sender_images_cache_path())?;
         fs::create_dir_all(this.trash_path())?;
 
         let init_watcher = this.initialization_watcher.clone();
+
         this.spawn(async move {
             if let Err(e) = init_watcher.task().await {
                 error!("Initialization watcher finished with error: {e:?}");
@@ -150,7 +143,6 @@ impl UserContext {
             }
         });
 
-        // Register the core event subscribers.
         this.register_subscribers().await?;
 
         Ok(this)
@@ -161,81 +153,55 @@ impl UserContext {
         self.this.upgrade().expect("Should never fail")
     }
 
-    /// Get the network session.
     #[must_use]
     pub fn session(&self) -> &Session {
         &self.session
     }
 
-    /// Get the network session converted to a type that accepts this type.
-    #[must_use]
-    pub fn session_as<T: From<Session>>(&self) -> T {
-        T::from(self.session.clone())
-    }
-
-    /// Get the database connection.
     #[must_use]
     pub fn stash(&self) -> &Stash {
         &self.user_stash
     }
 
-    /// Get `ActionQueue` instance.
     #[must_use]
     pub fn queue(&self) -> &Queue {
         &self.queue
     }
 
-    /// Get the user id of this context.
     #[must_use]
     pub fn user_id(&self) -> &UserId {
         &self.user_id
     }
 
-    /// Get the event loop.
     #[must_use]
     pub fn event_loop(&self) -> &EventPoll {
         &self.event_loop
     }
 
-    /// Get the event poll mode of this context.
     pub fn event_poll_mode(&self) -> EventPollMode {
         self.context.event_poll_mode
     }
 
-    /// Get last event loop action ids.
     #[must_use]
     pub fn last_event_loop_action_ids(&self) -> &Arc<Mutex<EventLoopActionIds>> {
         &self.last_event_loop_action_ids
     }
 
-    /// Get path to the log file.
     #[must_use]
     pub fn log_service(&self) -> &LogService {
         self.context.log_service()
     }
 
-    /// Get path to the database file
     #[must_use]
     pub fn get_user_db_path(&self) -> PathBuf {
         self.context.user_db_path(self.user_id())
     }
 
-    /// Retrieves the current user's account details.
-    ///
-    /// # Errors
-    ///
-    /// Returns `CoreContextError` if the account does not exist or if an error occurs
-    /// during the database query.
     pub async fn account_details(&self) -> CoreContextResult<AccountDetails> {
         let account = self.core_account().await?;
         Ok(account.details())
     }
 
-    /// Retrieves the user's settings.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database query fails.
     pub async fn user_settings(&self) -> CoreContextResult<UserSettings> {
         let user_id = self.user_id();
         let tether = self.stash().connection();
@@ -244,12 +210,6 @@ impl UserContext {
         settings.ok_or_else(|| CoreContextError::SettingsMissing(user_id.to_owned()))
     }
 
-    /// Retrieves the current user's account.
-    ///
-    /// # Errors
-    ///
-    /// Returns `CoreContextError` if the account does not exist or if an error occurs
-    /// during the database query.
     pub async fn core_account(&self) -> CoreContextResult<CoreAccount> {
         let tether = self.context.account_stash().connection();
         let user_id = self.user_id();
@@ -260,13 +220,11 @@ impl UserContext {
         Ok(account)
     }
 
-    /// Get the session id of this context.
     #[must_use]
     pub fn session_id(&self) -> &SessionId {
         &self.session_id
     }
 
-    /// Get the connection status of the current user session.
     pub async fn connection_status(&self) -> ConnectionStatus {
         self.session.status().await
     }
@@ -321,7 +279,6 @@ impl UserContext {
         self.cancellation_token.is_cancelled()
     }
 
-    /// Cancel all tasks which are bound to this context.
     pub fn cancel_all_tasks(&self) {
         self.cancellation_token.cancel();
     }

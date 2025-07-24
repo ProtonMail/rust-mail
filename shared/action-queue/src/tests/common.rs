@@ -2,8 +2,8 @@
 #![allow(clippy::ignored_unit_patterns)]
 
 use crate::action::{Action, ActionId, Error, Handler, WriterGuard, WriterGuardError};
+use crate::queue::ActionRequeueReason;
 use stash::stash::{Bond, StashError};
-use std::future::Future;
 use std::marker::PhantomData;
 
 pub struct NoopActionHandler<T: Action>(PhantomData<T>);
@@ -14,42 +14,37 @@ impl<T: Action> Default for NoopActionHandler<T> {
     }
 }
 
-impl<T: Action + 'static + Sync> Handler for NoopActionHandler<T>
+impl<T> Handler for NoopActionHandler<T>
 where
-    <T as Action>::RemoteOutput: Default + Send,
-    <T as Action>::LocalOutput: Default,
+    T: Action<Handler = Self, LocalOutput: Default, RemoteOutput: Default> + Send + Sync,
 {
     type Action = T;
-    type Context = ();
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<<T as Action>::LocalOutput, T::Error> {
         Ok(<T as Action>::LocalOutput::default())
     }
 
-    fn revert_local(
+    async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
-    ) -> impl Future<Output = Result<(), T::Error>> + Send {
-        std::future::ready(Ok(()))
+    ) -> Result<(), T::Error> {
+        Ok(())
     }
 
-    fn apply_remote(
+    async fn apply_remote(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
-        _: WriterGuard,
-    ) -> impl Future<Output = Result<<T as Action>::RemoteOutput, T::Error>> + Send {
-        std::future::ready(Ok(T::RemoteOutput::default()))
+        _: WriterGuard<'_>,
+    ) -> Result<<T as Action>::RemoteOutput, T::Error> {
+        Ok(T::RemoteOutput::default())
     }
 }
 
@@ -77,11 +72,11 @@ impl From<WriterGuardError> for DefaultError {
 }
 
 impl Error for DefaultError {
-    fn is_network_failure(&self) -> bool {
-        matches!(self, DefaultError::NetworkFailure)
-    }
-
-    fn is_writer_guard_expired(&self) -> bool {
-        matches!(self, DefaultError::WriterGuardExpired)
+    fn can_requeue(&self) -> Option<ActionRequeueReason> {
+        match self {
+            DefaultError::NetworkFailure => Some(ActionRequeueReason::NetworkFailed),
+            DefaultError::WriterGuardExpired => Some(ActionRequeueReason::GuardExpired),
+            _ => None,
+        }
     }
 }

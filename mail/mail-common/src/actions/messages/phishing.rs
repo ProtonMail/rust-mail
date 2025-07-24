@@ -4,11 +4,12 @@ use crate::models::Message;
 use crate::{AppError, MailUserContext};
 use anyhow::Context as _;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
-use proton_action_queue::action::{ActionId, Handler as ActionHandler};
+use proton_action_queue::action::{ActionId, Handler};
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
+use std::sync::Weak;
 use tracing::info;
 
 /// Action which reports a message as phishing.
@@ -30,27 +31,24 @@ impl ReportPhishing {
 impl Action for ReportPhishing {
     const TYPE: Type = Type("report_phishing");
     const VERSION: u32 = 1;
-    type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
-    type RemoteOutput = ();
 
+    type VersionConverter = DefaultVersionConverter<Self>;
+    type Handler = ReportPhishingHandler;
+    type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
-
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct Handler;
+pub struct ReportPhishingHandler {
+    pub ctx: Weak<MailUserContext>,
+}
 
-impl ActionHandler for Handler {
+impl Handler for ReportPhishingHandler {
     type Action = ReportPhishing;
 
-    type Context = MailUserContext;
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -62,7 +60,6 @@ impl ActionHandler for Handler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -74,13 +71,13 @@ impl ActionHandler for Handler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
+        let ctx = self.ctx.upgrade().ok_or(MailActionError::LostContext)?;
         let tether = guard.tether();
 
-        let body = Message::message_body(ctx, action.message_id)
+        let body = Message::message_body(&ctx, action.message_id)
             .await
             .context("Failed to get message body")
             .map_err(AppError::Other)?;

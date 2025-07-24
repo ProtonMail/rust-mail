@@ -10,7 +10,7 @@ use stash::stash::Bond;
 #[tokio::test]
 async fn cancel_causes_revert() {
     // Check that cancellation reverts local state.
-    let queue = new_queue_typed::<CancelAction>().await;
+    let queue = new_queue_typed::<CancelAction>(CancelActionHandler).await;
 
     let key = "foo";
     let value = 30_u32;
@@ -59,7 +59,7 @@ async fn cancel_causes_revert() {
 async fn cancel_causes_revert_with_dependees() {
     // Check that cancellation reverts local state and all the subsequent actions
     // that depend on the cancelled action.
-    let queue = new_queue_typed::<ChainCancelAction>().await;
+    let queue = new_queue_typed::<ChainCancelAction>(ChainCancelActionHandler).await;
 
     let key = "foo";
     let value = 30_u32;
@@ -159,7 +159,7 @@ async fn accidental_cyclic_dependency_with_replace() {
     // Action 143 has [ActionId(145), ActionId(146), ActionId(147), ActionId(148)]
     // 147:[143]
     // 184:[]
-    let queue = new_queue_typed::<ChainCancelAction>().await;
+    let queue = new_queue_typed::<ChainCancelAction>(ChainCancelActionHandler).await;
 
     let action_143 = create_action(143);
     let action_145 = create_action(145);
@@ -208,7 +208,7 @@ async fn accidental_cyclic_dependency_with_replace() {
 async fn cancel_causes_revert_to_only_direct_dependees() {
     // Check that cancellation reverts local state and all the subsequent actions
     // that depend on the cancelled action.
-    let queue = new_queue_typed::<ChainCancelAction>().await;
+    let queue = new_queue_typed::<ChainCancelAction>(ChainCancelActionHandler).await;
 
     let key = "foo";
     let value = 30_u32;
@@ -279,26 +279,23 @@ pub struct CancelAction {
 impl Action for CancelAction {
     const TYPE: Type = Type("revert");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = CancelActionHandler;
     type RemoteOutput = u32;
-
     type LocalOutput = ();
     type Error = DefaultError;
-    type Context = ();
 }
 
 #[derive(Default)]
-pub struct CancelActionHandler {}
+pub struct CancelActionHandler;
 
 impl Handler for CancelActionHandler {
     type Action = CancelAction;
-    type Context = ();
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -308,7 +305,6 @@ impl Handler for CancelActionHandler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -318,7 +314,6 @@ impl Handler for CancelActionHandler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
@@ -336,26 +331,23 @@ pub struct ChainCancelAction {
 impl Action for ChainCancelAction {
     const TYPE: Type = Type("chain_revert");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = ChainCancelActionHandler;
-
     type RemoteOutput = u32;
     type LocalOutput = ();
-
     type Error = DefaultError;
-    type Context = ();
 }
 
 #[derive(Default)]
-pub struct ChainCancelActionHandler {}
+pub struct ChainCancelActionHandler;
 
 impl Handler for ChainCancelActionHandler {
     type Action = ChainCancelAction;
-    type Context = ();
+
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -367,7 +359,6 @@ impl Handler for ChainCancelActionHandler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -377,7 +368,6 @@ impl Handler for ChainCancelActionHandler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {

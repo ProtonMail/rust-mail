@@ -25,8 +25,10 @@ use anyhow::{Error as AnyhowError, anyhow};
 use async_trait::async_trait;
 use futures::TryFutureExt;
 use itertools::Itertools;
-use proton_action_queue::action::{Action, WriterGuardError};
-use proton_action_queue::queue::{ActionError as QueueActionError, QueuedError};
+use proton_action_queue::action::{self, Action, WriterGuardError};
+use proton_action_queue::queue::{
+    ActionError as QueueActionError, ActionRequeueReason, QueuedError,
+};
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::muon::client::{Fingerprint, InfoProvider};
 use proton_core_api::services::proton::{BuildError, PrivateEmail};
@@ -130,17 +132,13 @@ impl From<JoinError> for CoreContextError {
     }
 }
 
-impl proton_action_queue::action::Error for CoreContextError {
-    fn is_network_failure(&self) -> bool {
-        if let Self::Api(e) = self {
-            e.is_network_failure()
-        } else {
-            false
+impl action::Error for CoreContextError {
+    fn can_requeue(&self) -> Option<ActionRequeueReason> {
+        match self {
+            Self::Api(e) if e.is_network_failure() => Some(ActionRequeueReason::NetworkFailed),
+            Self::QueueWriterGuardExpired => Some(ActionRequeueReason::GuardExpired),
+            _ => None,
         }
-    }
-
-    fn is_writer_guard_expired(&self) -> bool {
-        matches!(self, Self::QueueWriterGuardExpired)
     }
 }
 

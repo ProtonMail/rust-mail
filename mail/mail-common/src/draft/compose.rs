@@ -479,7 +479,6 @@ impl DraftAddressChangeRequest {
     ) -> MailContextResult<Option<DraftAddressChangeOutput>> {
         tracing::info!("Updating sender address");
         if address_id == self.current_address_id {
-            // Nothing to do
             return Ok(None);
         }
         let address = Address::find_by_remote_id(address_id.clone(), tether)

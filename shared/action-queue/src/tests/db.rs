@@ -4,6 +4,7 @@ use super::*;
 use crate::action::{
     ActionGroup, DefaultVersionConverter, MetadataBuilder, Type, WriterGuardError,
 };
+use crate::queue::ActionRequeueReason;
 use crate::tests::common::NoopActionHandler;
 use pretty_assertions::assert_eq;
 use serde::{Deserialize, Serialize};
@@ -27,12 +28,12 @@ enum Error {
 }
 
 impl action::Error for Error {
-    fn is_network_failure(&self) -> bool {
-        false
-    }
-
-    fn is_writer_guard_expired(&self) -> bool {
-        matches!(self, Error::WriterGuardExpired)
+    fn can_requeue(&self) -> Option<ActionRequeueReason> {
+        if matches!(self, Error::WriterGuardExpired) {
+            Some(ActionRequeueReason::GuardExpired)
+        } else {
+            None
+        }
     }
 }
 
@@ -49,15 +50,12 @@ impl From<WriterGuardError> for Error {
 impl Action for TestAction {
     const TYPE: Type = Type("test_action");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = NoopActionHandler<Self>;
-
     type RemoteOutput = ();
     type LocalOutput = ();
-
     type Error = Error;
-
-    type Context = ();
 
     fn dependency_keys(&self) -> ActionDependencyKeys {
         self.dependency_keys.clone()

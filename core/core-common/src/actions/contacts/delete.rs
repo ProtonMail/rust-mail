@@ -1,9 +1,10 @@
+use crate::CoreContextError;
 use crate::datatypes::LocalContactId;
 use crate::models::{Contact, ModelExtension, ModelIdExtension};
-use crate::{CoreContextError, UserContext};
-use proton_action_queue::action::{Action, ActionId, DefaultVersionConverter, Type, WriterGuard};
-use proton_core_api::services::proton::ContactId;
-use proton_core_api::session::CoreSession;
+use proton_action_queue::action::{
+    Action, ActionId, DefaultVersionConverter, Handler, Type, WriterGuard,
+};
+use proton_core_api::services::proton::{ContactId, Proton};
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 
@@ -26,27 +27,24 @@ impl Delete {
 impl Action for Delete {
     const TYPE: Type = Type("delete_contacts");
     const VERSION: u32 = 1;
-    type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
-    type RemoteOutput = ();
 
+    type VersionConverter = DefaultVersionConverter<Self>;
+    type Handler = DeleteHandler;
+    type RemoteOutput = ();
     type LocalOutput = ();
     type Error = CoreContextError;
-
-    type Context = UserContext;
 }
 
-#[derive(Default)]
-pub struct Handler;
+pub struct DeleteHandler {
+    pub api: Proton,
+}
 
-impl proton_action_queue::action::Handler for Handler {
+impl Handler for DeleteHandler {
     type Action = Delete;
-    type Context = UserContext;
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -67,7 +65,6 @@ impl proton_action_queue::action::Handler for Handler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -83,17 +80,17 @@ impl proton_action_queue::action::Handler for Handler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         guard: WriterGuard<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        let failed = Contact::delete_from_remote(&action.remote_ids, ctx.session().api()).await?;
+        let failed = Contact::delete_from_remote(&action.remote_ids, &self.api).await?;
         let mut failed_local_ids = Vec::with_capacity(failed.len());
 
         if failed.is_empty() {
             Ok(())
         } else {
             let conn = guard.tether();
+
             for remote_id in failed {
                 let Some(local_id) = Contact::remote_id_counterpart(remote_id, conn).await? else {
                     continue;

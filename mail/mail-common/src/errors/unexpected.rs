@@ -122,7 +122,6 @@ impl From<QueuedError> for Unexpected {
             // TODO: Check with Leander if there is a better Category
             QueuedError::ActionNotFound(_id) => Self::Internal,
             // TODO: Check with Leander if there is a better Category
-            QueuedError::Context(_) => Self::Internal,
             QueuedError::ActionInExecution(_) => Self::Internal,
         }
     }

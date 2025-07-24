@@ -22,7 +22,7 @@ use proton_core_common::models::{Label, ModelExtension};
 use proton_event_loop::subscriber::{Subscriber, SubscriberError};
 use stash::orm::Model;
 use std::collections::HashMap;
-use std::sync::{Arc, Weak};
+use std::sync::Weak;
 use tracing::{debug, error, info, warn};
 
 // Import common macros from core
@@ -185,19 +185,15 @@ impl MailUserContext {
             .await
     }
 
-    pub async fn on_refresh_impl(
-        self: &Arc<Self>,
-        refresh: Refresh,
-    ) -> Result<(), SubscriberError> {
+    pub async fn on_refresh_impl(&self, refresh: Refresh) -> Result<(), SubscriberError> {
         info!("Handling refresh event: {refresh:?}");
-        let ctx = self;
 
         match refresh {
             Refresh::None => {
                 warn!("Nothing to refresh, this may idicate bug in SDK event loop implementation");
             }
             Refresh::Mail | Refresh::All => {
-                try_refresh!(refresh_mail, ctx);
+                try_refresh!(refresh_mail, self);
             }
             Refresh::Contacts => {
                 // Contacts refresh is handled by the core event subscriber
@@ -212,7 +208,7 @@ impl MailUserContext {
 }
 
 #[tracing::instrument(skip_all)]
-async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> {
+async fn refresh_mail(ctx: &MailUserContext) -> Result<(), SubscriberError> {
     let api = ctx.api().clone();
     let all_remote_labels = ctx.spawn(async move { Label::fetch_mail_labels(&api).await });
     let api = ctx.api().clone();

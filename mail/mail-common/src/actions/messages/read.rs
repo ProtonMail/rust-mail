@@ -1,22 +1,20 @@
-use crate::MailUserContext;
 use crate::actions::{GenericActionData, MailActionError, filter_responses_by_codes};
 use crate::datatypes::{LocalMessageId, RollbackItemType};
 use crate::models::Message;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
-use proton_action_queue::action::{ActionId, Handler as ActionHandler};
+use proton_action_queue::action::{ActionId, Handler};
 use proton_core_api::consts::General;
+use proton_core_api::services::proton::Proton;
 use proton_core_common::models::ModelIdExtension;
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
 use stash::stash::Bond;
 use tracing::{error, info};
 
-/// Action which marks messages as read.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Read(GenericActionData<Message>);
 
 impl Read {
-    /// Create a new instance which marks the messages as read.
     pub fn new(message_ids: impl IntoIterator<Item = LocalMessageId>) -> Self {
         Self(GenericActionData::new(message_ids))
     }
@@ -25,33 +23,30 @@ impl Read {
 impl Action for Read {
     const TYPE: Type = Type("mark_messages_read");
     const VERSION: u32 = 1;
+
     type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
+    type Handler = ReadHandler;
     type RemoteOutput = ();
-
     type LocalOutput = ();
-
     type Error = MailActionError;
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct Handler;
+pub struct ReadHandler {
+    pub api: Proton,
+}
 
-impl ActionHandler for Handler {
+impl Handler for ReadHandler {
     type Action = Read;
-
-    type Context = MailUserContext;
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         // API call return an error 2501(Message does not exist) for message already read
         let messages = Message::find_by_ids(action.0.target_ids.clone(), tx).await?;
+
         action.0.target_ids = messages
             .into_iter()
             .filter(|m| m.unread)
@@ -66,7 +61,6 @@ impl ActionHandler for Handler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -81,14 +75,14 @@ impl ActionHandler for Handler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let api = ctx.api();
         let message_ids = action.0.remote_target_ids.clone();
+
         info!("Marking {message_ids:?} as read");
-        let response = api.put_messages_read(message_ids).await?.responses;
+
+        let response = self.api.put_messages_read(message_ids).await?.responses;
 
         // In this case General::NotExists is returned also for messages already marked as read
         let failed_ids = filter_responses_by_codes(

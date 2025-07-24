@@ -67,28 +67,22 @@ impl DraftSendResultWatcher {
                 Self::load_send_results(self.mode, &self.stash.connection()).await?;
 
             if all_unseen.is_empty() {
-                // Nothing to do.
                 continue;
             }
 
             let new_state = HashSet::from_iter(all_unseen.clone());
             if new_state == self.unseen {
-                // no difference, continue loop
                 continue;
             }
 
-            // remove old entries
             all_unseen.retain(|v| !self.unseen.contains(v));
 
-            // Update state
             self.unseen = new_state;
 
             if all_unseen.is_empty() {
-                // Nothing to report.
                 continue;
             }
 
-            // return result.
             return Ok(all_unseen);
         }
     }

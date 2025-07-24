@@ -15,7 +15,9 @@ use crate::user_context::initialization::InitializationMediator;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 use proton_account_api::password::PasswordFlow;
-use proton_action_queue::queue::{Queue, QueueAutoExecutor, QueueAutoExecutorPool};
+use proton_action_queue::queue::{
+    Queue, QueueAutoExecutor, QueueAutoExecutorPool, TaskSpawner as QueueTaskSpawner,
+};
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::crypto_clock;
 use proton_core_api::services::proton::{AddressId, PrivateEmailRef, SessionId, UserId};
@@ -62,15 +64,11 @@ pub struct MailUserContext {
 }
 
 impl MailUserContext {
-    /// Create a new user context.
-    #[allow(clippy::too_many_arguments)]
     #[tracing::instrument(name = "NewMailUserContext", skip_all, fields(user_id=%user_context.user_id()))]
     pub(crate) async fn new(
         mail_context: Arc<MailContext>,
         user_context: Arc<UserContext>,
     ) -> MailContextResult<Arc<Self>> {
-        register_mail_actions(user_context.queue());
-
         let online = user_context
             .session()
             .status_watcher()
@@ -93,24 +91,23 @@ impl MailUserContext {
 
         let initialization_mediator = InitializationMediator::new(task_service);
 
-        let this = Arc::new_cyclic(|this| Self {
-            this: Weak::clone(this),
-            mail_context,
-            user_context,
-            prefetch: OnceLock::new(),
-            default_queue_executor,
-            send_queue_executors,
-            initialization_mediator,
-            rsvp_cache: Default::default(),
-            is_cleanup_cache_running: Default::default(),
+        let this = Arc::new_cyclic(|this| {
+            register_mail_actions(user_context.queue(), this, user_context.session().api());
+
+            Self {
+                this: Weak::clone(this),
+                mail_context,
+                user_context,
+                prefetch: OnceLock::new(),
+                default_queue_executor,
+                send_queue_executors,
+                initialization_mediator,
+                rsvp_cache: Default::default(),
+                is_cleanup_cache_running: Default::default(),
+            }
         });
 
-        // Start draft staging area cleaner.
         DraftStagingAreaCleaner::new().run(Arc::clone(&this))?;
-
-        this.user_context
-            .queue()
-            .register_execution_context(Weak::clone(&this.this));
         this.init_expiration_loop();
         this.register_subscribers().await?;
 
@@ -118,37 +115,45 @@ impl MailUserContext {
             this.init_event_loop_poll(interval);
         }
 
+        // There's a race condition between initializing queues and `self` - to
+        // avoid it, we start our queues as paused and resume once everything
+        // has been initialized, i.e. here:
+        this.resume_queue_executors();
+
         Ok(this)
     }
 
-    /// Create a new default action executor.
     fn new_default_queue_executor(
         queue: &Queue,
         online: watch::Receiver<bool>,
-        task_spawner: &impl proton_action_queue::queue::TaskSpawner,
+        task_spawner: &impl QueueTaskSpawner,
     ) -> QueueAutoExecutor {
         queue
             .new_executor()
-            .into_auto_executor(online, task_spawner)
+            .into_auto_executor(online, true, task_spawner)
     }
 
-    /// Create a new send group action executor.
     fn new_send_queue_executor(
         queue: &Queue,
         online: watch::Receiver<bool>,
         pool_size: NonZeroUsize,
-        task_spawner: &impl proton_action_queue::queue::TaskSpawner,
+        task_spawner: &impl QueueTaskSpawner,
     ) -> QueueAutoExecutorPool {
-        QueueAutoExecutorPool::new(queue, &SEND_ACTION_GROUP, pool_size, online, task_spawner)
+        QueueAutoExecutorPool::new(
+            queue,
+            &SEND_ACTION_GROUP,
+            pool_size,
+            online,
+            true,
+            task_spawner,
+        )
     }
 
-    /// Get the current Arc instance for this context.
     #[must_use]
     pub fn as_arc(&self) -> Arc<Self> {
         self.this.upgrade().expect("Should never fail")
     }
 
-    /// Get a weak reference to this context.
     #[must_use]
     pub fn as_weak(&self) -> Weak<Self> {
         Weak::clone(&self.this)
@@ -185,68 +190,52 @@ impl MailUserContext {
         self.user_context.session()
     }
 
-    /// Get the action queue instance.
     pub fn action_queue(&self) -> &Queue {
         self.user_context.queue()
     }
 
-    /// Pause all action queue executors.
     pub fn pause_queue_executors(&self) {
         self.default_queue_executor.pause();
         self.send_queue_executors.pause();
     }
 
-    /// Unpause all action queue executors.
-    pub fn unpause_queue_executors(&self) {
-        self.default_queue_executor.unpause();
-        self.send_queue_executors.unpause();
+    pub fn resume_queue_executors(&self) {
+        self.default_queue_executor.resume();
+        self.send_queue_executors.resume();
     }
 
-    /// Terminate all action queue executors.
     pub fn terminate_queue_executors(&self) {
         self.default_queue_executor.terminate();
         self.send_queue_executors.terminate();
     }
 
-    /// Get the API service.
     pub fn api(&self) -> &Proton {
         self.user_context.session().api()
     }
 
-    /// Get the database connection.
     #[must_use]
     pub fn user_stash(&self) -> &Stash {
         self.user_context.stash()
     }
 
-    /// Get the event loop.
     #[must_use]
     pub fn event_loop(&self) -> &EventPoll {
         self.user_context.event_loop()
     }
 
-    /// Get the mail context within which this user context resides.
     pub fn mail_context(&self) -> &MailContext {
         &self.mail_context
     }
 
-    /// Get the mail context within which this user context resides.
     pub fn mail_context_arc(&self) -> &Arc<MailContext> {
         &self.mail_context
     }
 
-    /// Get the core context within which this user context resides.
     pub fn core_context(&self) -> &Arc<CoreContext> {
         self.mail_context.core_context()
     }
 
-    /// Get the inner core context which this context wraps.
     pub fn user_context(&self) -> &UserContext {
-        &self.user_context
-    }
-
-    /// Get the inner core context which this context wraps as an Arc.
-    pub fn user_context_arc(&self) -> &Arc<UserContext> {
         &self.user_context
     }
 
@@ -264,12 +253,10 @@ impl MailUserContext {
             .await
     }
 
-    /// Get the remote (API) ID of the user associated with this context.
     pub fn user_id(&self) -> &UserId {
         self.user_context.user_id()
     }
 
-    /// Get the remote (API) ID of the session associated with this context.
     pub fn session_id(&self) -> &SessionId {
         self.user_context.session_id()
     }
@@ -278,11 +265,6 @@ impl MailUserContext {
         &self.rsvp_cache
     }
 
-    /// Provides a way to get the core::models::User instance.
-    ///
-    /// # Errors
-    ///
-    /// Either when MailSessionError::Stash occurs or somehow the user is missing.
     pub async fn user(&self) -> MailContextResult<User> {
         let stash = self.user_stash();
         let tether = stash.connection();
@@ -294,31 +276,15 @@ impl MailUserContext {
         Ok(real_user)
     }
 
-    /// Retrieves the account details of the current account.
-    ///
-    /// Returns the active account's details or an error if active account does not exist.
-    ///
-    /// # Errors
-    /// - Returns `MailContextError::Other` if the active account is missing.
     pub async fn account_details(&self) -> MailContextResult<AccountDetails> {
         let account_details = self.user_context.account_details().await?;
         Ok(account_details)
     }
 
-    /// Retrieves the user's settings.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the database query fails.
     pub async fn user_settings(&self) -> MailContextResult<UserSettings> {
         Ok(self.user_context.user_settings().await?)
     }
 
-    /// Returns the unlocked user keys of this user.
-    ///
-    /// # Errors
-    /// Returns a wrapped [`MailContextError::KeyHandlingError`] if the operation fails.
-    ///
     pub async fn unlocked_user_keys<P>(
         &self,
         pgp: &P,
@@ -334,11 +300,6 @@ impl MailUserContext {
         Ok(keys)
     }
 
-    /// Returns the unlocked address keys of this user for the provided address.
-    ///
-    /// # Errors
-    /// Returns a wrapped [`KeyHandlingError`] if the operation fails.
-    ///
     pub async fn unlocked_address_keys<P>(
         &self,
         pgp: &P,
@@ -444,7 +405,6 @@ impl MailUserContext {
         Ok(send_preferences)
     }
 
-    /// Create a new password change flow.
     pub async fn new_password_change_flow(&self) -> MailContextResult<PasswordFlow> {
         let user = self.user().await?;
         let session = self.session().to_owned();
@@ -467,7 +427,6 @@ impl MailUserContext {
         ))
     }
 
-    /// Logs this user out.
     pub async fn logout(&self) -> MailContextResult<()> {
         self.mail_context
             .logout_account(self.user_id().to_owned())
@@ -537,7 +496,6 @@ impl MailUserContext {
         Ok(())
     }
 
-    /// Ping the proton servers to see if they are responsive/alive.
     pub async fn ping(&self) -> MailContextResult<()> {
         self.user_context
             .session()
@@ -547,7 +505,6 @@ impl MailUserContext {
         Ok(())
     }
 
-    /// Get the connection status of the current user session.
     pub async fn connection_status(&self) -> ConnectionStatus {
         self.user_context.connection_status().await
     }

@@ -1,15 +1,13 @@
-use crate::MailUserContext;
 use crate::actions::MailActionError;
 use crate::models::default_location::IncomingDefaultLocation;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
-use proton_action_queue::action::{ActionId, Handler as ActionHandler};
-use proton_core_api::services::proton::{IncomingDefaultId, PrivateEmail};
+use proton_action_queue::action::{ActionId, Handler};
+use proton_core_api::services::proton::{IncomingDefaultId, PrivateEmail, Proton};
 use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
 use stash::params;
 use stash::stash::Bond;
 
-/// Action which blocks or unblocks an address
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Unblock {
     pub email: PrivateEmail,
@@ -18,63 +16,63 @@ pub struct Unblock {
 impl Action for Unblock {
     const TYPE: Type = Type("unblock");
     const VERSION: u32 = 1;
-    type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
-    type RemoteOutput = ();
 
+    type VersionConverter = DefaultVersionConverter<Self>;
+    type Handler = UnblockHandler;
+    type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
-
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct Handler;
+pub struct UnblockHandler {
+    pub api: Proton,
+}
 
-impl ActionHandler for Handler {
+impl Handler for UnblockHandler {
     type Action = Unblock;
 
-    type Context = MailUserContext;
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         tracing::info!("Unblocking {}", action.email);
+
         bond.execute(
             "UPDATE incoming_default SET location = NULL WHERE email = ?",
             params![action.email.clone()],
         )
         .await?;
+
         Ok(())
     }
 
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         bond: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
         tracing::info!("Restoring block for {}", action.email);
+
         bond.execute(
             "UPDATE incoming_default SET location = ? WHERE email = ?",
             params![IncomingDefaultLocation::Blocked, action.email.clone()],
         )
         .await?;
+
         Ok(())
     }
 
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
         tracing::info!("Unblocking {}", action.email);
+
         let id = guard
             .tether()
             .query_value::<_, IncomingDefaultId>(
@@ -83,7 +81,7 @@ impl ActionHandler for Handler {
             )
             .await?;
 
-        ctx.api().delete_incoming_default(&id).await?;
+        self.api.delete_incoming_default(&id).await?;
 
         Ok(())
     }

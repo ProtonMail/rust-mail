@@ -1,6 +1,7 @@
 use crate::db::{ActionDependency, ExecutionGuard, StoredAction};
 use crate::queue::{
-    ActionError, QueuedAction, QueuedActionOutput, QueuedMetadata, TypeErasedAction,
+    ActionError, ActionRequeueReason, ErasedQueuedAction, QueuedAction, QueuedActionOutput,
+    QueuedMetadata,
 };
 use anyhow::Context;
 use derive_more::derive::TryFrom;
@@ -21,26 +22,23 @@ use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use tracing::error;
 
-/// Actions can return any error type, but we need to be able to inspect the http request error
-/// to detect network failure and [`WriterGuard`] expirations so we can gracefully retry the
-/// action.
+/// While actions can return any error type, for better user experience it makes
+/// sense to distinguish "fatal errors" from "retryable errors" - this is what
+/// this trait allows.
+///
+/// See [`Self::requeueable()`] for details.
 pub trait Error: std::error::Error + Send + Sync {
-    /// Check if the error is the result of a network failure.
+    /// If this error is not fatal (e.g. a temporary networking issue), this
+    /// method returns `Some` - doing so causes the action to be requeued and
+    /// retried on the next opportunity.
     ///
-    /// An error is considered a network failure the server replies with 429/5xx HTTP status codes
-    /// or there was an issue with the underlying network transport layer.
-    fn is_network_failure(&self) -> bool;
-
-    /// Check whether this error was the result of a [`WriterGuardError::Expired`].
-    ///
-    /// This should return true when the presence of this error is detected.
-    fn is_writer_guard_expired(&self) -> bool;
+    /// If this error is fatal (e.g. missing database table), this method
+    /// returns `None` - doing so causes the action to be cancelled.
+    fn can_requeue(&self) -> Option<ActionRequeueReason>;
 }
 
-/// Errors that may occur during action version conversion.
 #[derive(Debug, thiserror::Error)]
 pub enum VersionConverterError {
-    /// Return this error
     #[error("Action version {0} is invalid")]
     InvalidVersion(u32),
     #[error("Failed to migrate action: {0}")]
@@ -250,20 +248,9 @@ pub struct ActionDependencyKeys {
 /// Its is recommended to assign this trait to the part of the action which contains the
 /// data required for it to operate on. Execution of the action is defined by the [`Handler`] trait.
 ///
-/// Each action can also be assigned an execution context which can be
-/// used to pass in runtime data. The context needs to be registered with
-/// the queue before it can be used. See
-/// [`register_execution_context()`](`queue::Queue::register_execution_context()`)
-/// for more details.
-///
 pub trait Action: Serialize + DeserializeOwned + 'static + Send {
-    /// Unique type identifier.
     const TYPE: Type;
-
-    /// The Group in which this action should execute.
     const GROUP: ActionGroup = ActionGroup::default();
-
-    /// Version of the current implementation.
     const VERSION: u32;
 
     /// Default priority for this action.
@@ -279,7 +266,7 @@ pub trait Action: Serialize + DeserializeOwned + 'static + Send {
     /// Execution handler for this action.
     ///
     /// For more details see the [`Handler`] trait.
-    type Handler: Handler<Context = Self::Context, Action = Self>;
+    type Handler: Handler<Action = Self>;
 
     /// Output returned by executing this action on the remote.
     ///
@@ -296,22 +283,14 @@ pub trait Action: Serialize + DeserializeOwned + 'static + Send {
     /// to implement the [`Error`] trait.
     type Error: Error + Send + From<WriterGuardError>;
 
-    /// Type of the execution context associated with this action.
-    ///
-    /// If no context is necessary simply use `()`.
-    type Context: Send + Sync + Any + 'static;
-
-    /// Action version.
     fn version(&self) -> u32 {
         Self::VERSION
     }
 
-    /// Action Type.
     fn action_type(&self) -> Type {
         Self::TYPE
     }
 
-    /// Action priority.
     fn priority(&self) -> Priority {
         Self::PRIORITY
     }
@@ -344,6 +323,7 @@ impl<'t> WriterGuard<'t> {
             execution_guard,
         }
     }
+
     /// Create a new transaction.
     ///
     /// # Errors
@@ -384,7 +364,6 @@ impl RunTransaction for WriterGuard<'_> {
     }
 }
 
-/// Possible [`WriterGuardErrors`]
 #[derive(Debug, thiserror::Error)]
 pub enum WriterGuardError {
     #[error("This executor lock has expired")]
@@ -396,12 +375,8 @@ pub enum WriterGuardError {
 /// Defines how an action behaves.
 ///
 /// To define the data on which an action operates see the [`Action`] trait.
-#[allow(async_fn_in_trait)]
-pub trait Handler: Default + 'static + Send + Sync {
-    /// Action on which this handler operates.
-    type Action: Action;
-
-    type Context: Any + Send + Sync + 'static;
+pub trait Handler: Send + Sync {
+    type Action: Action<Handler = Self>;
 
     /// Apply the `action` to the local database using the given `tx` transaction.
     ///
@@ -416,7 +391,6 @@ pub trait Handler: Default + 'static + Send + Sync {
     fn apply_local(
         &self,
         this_id: ActionId,
-        context: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond,
     ) -> impl Future<
@@ -435,7 +409,6 @@ pub trait Handler: Default + 'static + Send + Sync {
     fn revert_local(
         &self,
         this_id: ActionId,
-        context: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond,
     ) -> impl Future<Output = Result<(), <Self::Action as Action>::Error>> + Send;
@@ -457,7 +430,6 @@ pub trait Handler: Default + 'static + Send + Sync {
     fn apply_remote(
         &self,
         this_id: ActionId,
-        context: &Self::Context,
         action: &mut Self::Action,
         writer_guard: WriterGuard<'_>,
     ) -> impl Future<
@@ -572,17 +544,16 @@ impl Default for Metadata {
 }
 
 impl Metadata {
-    /// Create a new builder for this type.
     #[must_use]
     pub fn builder() -> MetadataBuilder {
         MetadataBuilder::new()
     }
 }
 
-/// Builder for [`Metadata`].
 pub struct MetadataBuilder {
     metadata: Metadata,
 }
+
 impl Default for MetadataBuilder {
     fn default() -> Self {
         Self::new()
@@ -590,7 +561,6 @@ impl Default for MetadataBuilder {
 }
 
 impl MetadataBuilder {
-    /// Create new instance of the builder.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -738,7 +708,6 @@ impl MetadataBuilder {
     }
 }
 
-/// Errors that can occur during factory operations.
 #[derive(Debug, thiserror::Error)]
 pub enum FactoryError {
     #[error("Stored action {0} has unknown action type: {1}")]
@@ -754,44 +723,7 @@ pub enum FactoryError {
 }
 
 pub type FactoryResult<T> = Result<T, FactoryError>;
-
-/// Internal trait used by the [`Factory`] to convert a [`StoredAction`] into a [`QueuedAction`].
-trait Decoder: Send + Sync {
-    /// Convert the stored `action` into a [`QueuedAction`] which can be executed by the queue.
-    fn decode(
-        &self,
-        action: StoredAction,
-    ) -> FactoryResult<(Box<dyn QueuedAction>, Arc<QueuedMetadata>)>;
-}
-
-/// [`Decoder`] implementation that works for any [`Action`] type.
-struct TypeErasedDecoder<T: Action> {
-    p: PhantomData<fn() -> T>,
-}
-
-impl<T: Action> Decoder for TypeErasedDecoder<T> {
-    fn decode(
-        &self,
-        stored_action: StoredAction,
-    ) -> FactoryResult<(Box<dyn QueuedAction>, Arc<QueuedMetadata>)> {
-        // Check version
-        let deserialized: T =
-            T::VersionConverter::convert(stored_action.version, T::VERSION, &stored_action.state)?;
-
-        let id = stored_action.id.unwrap();
-        let queued_metadata = QueuedMetadata::from(stored_action);
-
-        // Return type.
-        Ok((
-            Box::new(TypeErasedAction::<T> {
-                action_id: id,
-                handler: T::Handler::default(),
-                action: deserialized,
-            }),
-            Arc::new(queued_metadata),
-        ))
-    }
-}
+pub(crate) type DecodedAction = (Box<dyn ErasedQueuedAction>, Arc<QueuedMetadata>);
 
 /// A Factory pattern implementation for [`Action`]s which are stored on the [`Queue`](crate::queue::Queue).
 ///
@@ -800,57 +732,71 @@ impl<T: Action> Decoder for TypeErasedDecoder<T> {
 ///
 #[derive(Default)]
 pub struct Factory {
-    factories: HashMap<String, Box<dyn Decoder>>,
+    actions: HashMap<String, ActionFactory>,
 }
 
 impl Factory {
-    /// Create a new instance.
     #[must_use]
-    pub fn new() -> Self {
-        Self {
-            factories: HashMap::new(),
-        }
+    pub fn handler<T: Action>(&self) -> Option<Arc<T::Handler>> {
+        self.actions
+            .get(T::TYPE.0)
+            .and_then(|action| Arc::downcast(action.handler.clone()).ok())
     }
 
-    /// Check whether the given action is registered with the queue.
-    #[must_use]
-    pub fn has_action<T: Action>(&self) -> bool {
-        self.factories.contains_key(T::TYPE.as_ref())
-    }
-
-    /// Register an [`Action`] with the factory.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the action type was already registered before.
-    pub fn register<T: Action>(&mut self) -> FactoryResult<()> {
-        match self.factories.entry(T::TYPE.to_string()) {
+    pub fn register<T: Action>(&mut self, handler: T::Handler) -> FactoryResult<()> {
+        match self.actions.entry(T::TYPE.to_string()) {
             Entry::Occupied(_) => Err(FactoryError::AlreadyRegistered(T::TYPE)),
-            Entry::Vacant(v) => {
-                v.insert(Box::new(TypeErasedDecoder::<T> { p: PhantomData }));
+
+            Entry::Vacant(action) => {
+                let handler = Arc::new(handler);
+
+                #[allow(trivial_casts, reason = "false-positive")]
+                let decoder = Box::new({
+                    let handler = handler.clone();
+
+                    move |stored_action: StoredAction| {
+                        let action: T = T::VersionConverter::convert(
+                            stored_action.version,
+                            T::VERSION,
+                            &stored_action.state,
+                        )?;
+
+                        let id = stored_action.id.unwrap();
+                        let meta = QueuedMetadata::from(stored_action);
+
+                        Ok((
+                            Box::new(QueuedAction {
+                                id,
+                                action,
+                                handler: handler.clone(),
+                            }) as Box<dyn ErasedQueuedAction>,
+                            Arc::new(meta),
+                        ))
+                    }
+                });
+
+                action.insert(ActionFactory { decoder, handler });
+
                 Ok(())
             }
         }
     }
 
-    /// Decode the stored action.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the decoding failed.
-    pub(crate) fn decode(
-        &self,
-        action: StoredAction,
-    ) -> FactoryResult<(Box<dyn QueuedAction>, Arc<QueuedMetadata>)> {
-        let Some(factory) = self.factories.get(&action.action_type) else {
+    pub(crate) fn decode(&self, action: StoredAction) -> FactoryResult<DecodedAction> {
+        let Some(factory) = self.actions.get(&action.action_type) else {
             return Err(FactoryError::UnknownType(
                 action.id.unwrap(),
                 action.action_type.clone(),
             ));
         };
 
-        factory.decode(action)
+        (factory.decoder)(action)
     }
+}
+
+struct ActionFactory {
+    decoder: Box<dyn Fn(StoredAction) -> FactoryResult<DecodedAction> + Send + Sync>,
+    handler: Arc<dyn Any + Send + Sync + 'static>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -863,12 +809,8 @@ impl Display for NoopError {
 }
 
 impl Error for NoopError {
-    fn is_network_failure(&self) -> bool {
-        false
-    }
-
-    fn is_writer_guard_expired(&self) -> bool {
-        false
+    fn can_requeue(&self) -> Option<ActionRequeueReason> {
+        None
     }
 }
 
@@ -878,20 +820,10 @@ impl From<WriterGuardError> for NoopError {
     }
 }
 
-/// Serialize the `action` to a binary format.
-///
-/// # Errors
-///
-/// Returns error if the serialization failed.
 pub(crate) fn serialize<T: Action>(action: &T) -> Result<Vec<u8>, rmp_serde::encode::Error> {
     rmp_serde::to_vec(action)
 }
 
-/// Deserialize and action from `data`.
-///
-/// # Errors
-///
-/// Returns error if the deserialization failed.
 pub fn deserialize<T: DeserializeOwned>(data: &[u8]) -> Result<T, rmp_serde::decode::Error> {
     rmp_serde::from_slice(data)
 }

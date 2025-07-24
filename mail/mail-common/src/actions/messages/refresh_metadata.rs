@@ -1,16 +1,16 @@
-use std::collections::HashSet;
-
+use crate::AppError;
 use crate::actions::MailActionError;
 use crate::datatypes::LocalMessageId;
 use crate::models::{Message, MessageScrollData};
-use crate::{AppError, MailUserContext};
 use itertools::Itertools;
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Priority, Type, WriterGuard,
+    Action, ActionId, DefaultVersionConverter, Handler, Priority, Type, WriterGuard,
 };
+use proton_core_api::services::proton::Proton;
 use proton_core_common::models::ModelExtension;
 use serde::{self, Deserialize, Serialize};
 use stash::stash::Bond;
+use std::collections::HashSet;
 
 /// Refresh message metadata action.
 ///
@@ -34,27 +34,24 @@ impl Action for RefreshMetadata {
     const TYPE: Type = Type("refresh_message_metadata");
     const VERSION: u32 = 1;
     const PRIORITY: Priority = Priority::Normal;
-    type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
-    type RemoteOutput = ();
 
+    type VersionConverter = DefaultVersionConverter<Self>;
+    type Handler = RefreshMetadataHandler;
+    type RemoteOutput = ();
     type LocalOutput = ();
     type Error = MailActionError;
-    type Context = MailUserContext;
 }
 
-#[derive(Default)]
-pub struct Handler {}
+pub struct RefreshMetadataHandler {
+    pub api: Proton,
+}
 
-impl proton_action_queue::action::Handler for Handler {
+impl Handler for RefreshMetadataHandler {
     type Action = RefreshMetadata;
-
-    type Context = MailUserContext;
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
@@ -64,7 +61,6 @@ impl proton_action_queue::action::Handler for Handler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
@@ -74,7 +70,6 @@ impl proton_action_queue::action::Handler for Handler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        ctx: &Self::Context,
         action: &mut Self::Action,
         mut guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
@@ -85,18 +80,21 @@ impl proton_action_queue::action::Handler for Handler {
 
         let messages = Message::find_by_ids(action.local_ids.clone(), guard.tether()).await?;
         let mut non_drafts = vec![];
+
         for msg in messages.into_iter().filter(|msg| msg.remote_id.is_some()) {
             if !msg.is_local_draft(guard.tether()).await? {
                 non_drafts.push(msg);
             }
         }
+
         let remote_ids = non_drafts
             .iter()
             .filter_map(|msg| msg.remote_id.clone())
             .collect_vec();
 
         let items_sync_result =
-            Message::sync_metadata(remote_ids.clone(), ctx.api(), &mut guard).await;
+            Message::sync_metadata(remote_ids.clone(), &self.api, &mut guard).await;
+
         let refreshed_items = match items_sync_result {
             Ok(items) => items,
             Err(AppError::API(e)) if e.is_network_failure() => {
@@ -116,10 +114,12 @@ impl proton_action_queue::action::Handler for Handler {
                 return Err(e.into());
             }
         };
+
         let refreshed_ids: HashSet<_> = refreshed_items
             .iter()
             .filter_map(|msg| msg.local_id)
             .collect();
+
         let not_refreshed = non_drafts
             .iter()
             .filter_map(|msg| msg.local_id)
@@ -130,6 +130,7 @@ impl proton_action_queue::action::Handler for Handler {
             // The conversation appears to be not found remotely, delete it.
             tracing::warn!("Local messages without remote counterpart found while refreshing.");
             tracing::info!("Deleting local messages: `{:?}`", not_refreshed);
+
             guard
                 .tx(async |tx| {
                     Message::delete_by_ids(not_refreshed, tx).await?;
