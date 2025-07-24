@@ -15,10 +15,9 @@ impl<T: Action> Default for NoopActionHandler<T> {
     }
 }
 
-impl<T: Action + 'static + Sync> Handler for NoopActionHandler<T>
+impl<T> Handler for NoopActionHandler<T>
 where
-    <T as Action>::RemoteOutput: Default + Send,
-    <T as Action>::LocalOutput: Default,
+    T: Action<Handler = Self, LocalOutput: Default, RemoteOutput: Default> + Send + Sync,
 {
     type Action = T;
 

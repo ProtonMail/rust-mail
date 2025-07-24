@@ -17,9 +17,7 @@ use crate::{AppError, MailUserContext};
 use addresses::{block, unblock, update_incoming_defaults};
 use futures::future::{join, join_all};
 use indoc::formatdoc;
-use proton_action_queue::action::{
-    self, Action, FactoryError, Handler, WriterGuard, WriterGuardError,
-};
+use proton_action_queue::action::{self, FactoryError, Handler, WriterGuard, WriterGuardError};
 use proton_action_queue::queue::{ActionRequeueReason, Queue};
 use proton_core_api::consts::General;
 use proton_core_api::service::ApiServiceError;
@@ -103,7 +101,6 @@ pub(crate) fn register_mail_actions(queue: &Queue, ctx: &Weak<MailUserContext>, 
     fn register_action<T>(queue: &Queue, handler: T)
     where
         T: Handler,
-        T::Action: Action<Handler = T>,
     {
         if let Err(e) = queue.register::<T::Action>(handler) {
             match e {

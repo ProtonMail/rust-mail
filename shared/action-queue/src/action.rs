@@ -376,7 +376,7 @@ pub enum WriterGuardError {
 ///
 /// To define the data on which an action operates see the [`Action`] trait.
 pub trait Handler: Send + Sync {
-    type Action: Action;
+    type Action: Action<Handler = Self>;
 
     /// Apply the `action` to the local database using the given `tx` transaction.
     ///

@@ -44,7 +44,7 @@ impl<A> Default for ActionHandler<A> {
 
 impl<A> Handler for ActionHandler<A>
 where
-    A: Action<LocalOutput: Default, RemoteOutput: Default> + Send + Sync,
+    A: Action<Handler = Self, LocalOutput: Default, RemoteOutput: Default> + Send + Sync,
 {
     type Action = A;
 
