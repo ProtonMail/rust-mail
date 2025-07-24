@@ -676,9 +676,15 @@ impl QueueExecutor {
     pub fn into_auto_executor(
         self,
         online: watch::Receiver<bool>,
+        start_paused: bool,
         task_spawner: &impl TaskSpawner,
     ) -> QueueAutoExecutor {
-        self.into_auto_executor_with_policy(online, task_spawner, QueueAutoTerminationPolicy::Never)
+        self.into_auto_executor_with_policy(
+            online,
+            start_paused,
+            task_spawner,
+            QueueAutoTerminationPolicy::Never,
+        )
     }
 
     /// Convert this executor into a [`QueueAutoExecutor`] with a custom termination policy
@@ -686,10 +692,11 @@ impl QueueExecutor {
     pub fn into_auto_executor_with_policy(
         self,
         online: watch::Receiver<bool>,
+        start_paused: bool,
         task_spawner: &impl TaskSpawner,
         termination_policy: QueueAutoTerminationPolicy,
     ) -> QueueAutoExecutor {
-        QueueAutoExecutor::new(self, online, task_spawner, termination_policy)
+        QueueAutoExecutor::new(self, online, start_paused, task_spawner, termination_policy)
     }
 
     /// Execute one action from the queue.
@@ -843,9 +850,9 @@ impl TaskSpawner for TokioTaskSpawner {
 /// In a cross-process setting we currently rely on a timeout to ensure that actions queued
 /// by another process are executed.
 pub struct QueueAutoExecutor {
-    join_handle: JoinHandle<()>,
+    task: JoinHandle<()>,
     id: String,
-    pause: watch::Sender<bool>,
+    paused: watch::Sender<bool>,
 }
 
 impl Drop for QueueAutoExecutor {
@@ -858,19 +865,21 @@ impl QueueAutoExecutor {
     fn new(
         executor: QueueExecutor,
         online: watch::Receiver<bool>,
+        start_paused: bool,
         task_spawner: &impl TaskSpawner,
         termination_policy: QueueAutoTerminationPolicy,
     ) -> Self {
         let id = executor.id.clone();
-        let (pause, listener) = watch::channel(false);
-        let handle = task_spawner.spawn_task(async move {
-            Self::run(executor, listener, online, termination_policy).await;
+        let (paused_tx, paused_rx) = watch::channel(start_paused);
+
+        let task = task_spawner.spawn_task(async move {
+            Self::run(executor, paused_rx, online, termination_policy).await;
         });
 
         QueueAutoExecutor {
-            join_handle: handle,
+            task,
             id,
-            pause,
+            paused: paused_tx,
         }
     }
 
@@ -883,19 +892,19 @@ impl QueueAutoExecutor {
     /// Pause auto execution.
     ///
     /// When executor is currently running it will pause before picking another task.
-    /// It will be paused until `unpause` is called.
+    /// It will be paused until `resume` is called.
     ///
     pub fn pause(&self) {
-        self.pause.send_replace(true);
+        self.paused.send_replace(true);
     }
 
-    /// Unpause auto execution.
+    /// Resume auto execution.
     ///
-    /// It will have an effect only if executor was paused before calling `unpause`.
+    /// It will have an effect only if executor was paused before calling `resume`.
     /// The execution will be resumed.
     ///
-    pub fn unpause(&self) {
-        self.pause.send_replace(false);
+    pub fn resume(&self) {
+        self.paused.send_replace(false);
     }
 
     async fn run(
@@ -973,12 +982,12 @@ impl QueueAutoExecutor {
 
     /// Terminate the execution of actions.
     pub fn terminate(&self) {
-        self.join_handle.abort();
+        self.task.abort();
     }
 
     /// Wait on the executor to finish.
     pub async fn await_finished(mut self) {
-        let _ = (&mut self.join_handle).await;
+        let _ = (&mut self.task).await;
     }
 }
 
@@ -994,13 +1003,13 @@ pub struct QueueAutoExecutorPool {
 }
 
 impl QueueAutoExecutorPool {
-    /// Create a new auto executor pool with `count` executors for the `action_group`.
     #[must_use]
     pub fn new(
         queue: &Queue,
         action_group: &ActionGroup,
         count: NonZeroUsize,
         online: watch::Receiver<bool>,
+        start_paused: bool,
         task_spawner: &impl TaskSpawner,
     ) -> Self {
         Self::with_termination_policy(
@@ -1008,19 +1017,19 @@ impl QueueAutoExecutorPool {
             action_group,
             count,
             online,
+            start_paused,
             task_spawner,
             QueueAutoTerminationPolicy::Never,
         )
     }
 
-    /// Create a new auto executor pool with `count` executors for the `action_group` and with
-    /// a `termination_policy`
     #[must_use]
     pub fn with_termination_policy(
         queue: &Queue,
         action_group: &ActionGroup,
         count: NonZeroUsize,
         online: watch::Receiver<bool>,
+        start_paused: bool,
         task_spawner: &impl TaskSpawner,
         termination_policy: QueueAutoTerminationPolicy,
     ) -> Self {
@@ -1030,6 +1039,7 @@ impl QueueAutoExecutorPool {
                     .new_executor_with_group(action_group.clone())
                     .into_auto_executor_with_policy(
                         online.clone(),
+                        start_paused,
                         task_spawner,
                         termination_policy,
                     )
@@ -1051,9 +1061,9 @@ impl QueueAutoExecutorPool {
         }
     }
 
-    pub fn unpause(&self) {
+    pub fn resume(&self) {
         for executor in &self.executors {
-            executor.unpause();
+            executor.resume();
         }
     }
 

@@ -36,7 +36,7 @@ async fn auto_queued_on_pause() {
 
     let auto_executor = queue
         .new_executor()
-        .into_auto_executor(online.1, &task_spawner);
+        .into_auto_executor(online.1, false, &task_spawner);
 
     auto_executor.pause();
     queue.queue_action(SuccessAction).await.unwrap();
@@ -44,7 +44,7 @@ async fn auto_queued_on_pause() {
     sleep(Duration::from_secs(1)).await;
     assert!(broadcast.is_empty());
 
-    auto_executor.unpause();
+    auto_executor.resume();
 
     let output = broadcast.recv().await.unwrap();
 
@@ -54,7 +54,7 @@ async fn auto_queued_on_pause() {
 }
 
 #[tokio::test]
-async fn auto_queued_on_multiple_unpause() {
+async fn auto_queued_on_multiple_resume() {
     let queue = new_queue_typed::<SuccessAction>(SuccessActionHandler).await;
     let mut broadcast = queue.new_broadcast_receiver();
 
@@ -65,12 +65,12 @@ async fn auto_queued_on_multiple_unpause() {
 
     let auto_executor = queue
         .new_executor()
-        .into_auto_executor(online.1, &task_spawner);
+        .into_auto_executor(online.1, false, &task_spawner);
 
-    // Calling unpause should have no effect as auto executors starts unpaused.
-    auto_executor.unpause();
-    auto_executor.unpause();
-    auto_executor.unpause();
+    // Calling resume should have no effect as auto executors starts active.
+    auto_executor.resume();
+    auto_executor.resume();
+    auto_executor.resume();
 
     let output = broadcast.recv().await.unwrap();
 
@@ -88,7 +88,7 @@ async fn auto_queued_on_multiple_pause() {
 
     let auto_executor = queue
         .new_executor()
-        .into_auto_executor(online.1, &task_spawner);
+        .into_auto_executor(online.1, false, &task_spawner);
 
     // Calling pause multiple times should still end up in paused state.
     auto_executor.pause();
@@ -100,9 +100,9 @@ async fn auto_queued_on_multiple_pause() {
     assert!(broadcast.is_empty());
 
     // Calling unpause multiple times should always end up in upaused state.
-    auto_executor.unpause();
-    auto_executor.unpause();
-    auto_executor.unpause();
+    auto_executor.resume();
+    auto_executor.resume();
+    auto_executor.resume();
 
     let output = broadcast.recv().await.unwrap();
 
@@ -120,7 +120,7 @@ async fn auto_queued_on_pause_and_partially_manual_execution() {
 
     let auto_executor = queue
         .new_executor()
-        .into_auto_executor(online.1, &task_spawner);
+        .into_auto_executor(online.1, false, &task_spawner);
 
     auto_executor.pause();
     queue.queue_action(SuccessAction).await.unwrap();
@@ -137,7 +137,7 @@ async fn auto_queued_on_pause_and_partially_manual_execution() {
 
     assert!(matches!(output, BroadcastMessage::Success(_)));
 
-    auto_executor.unpause();
+    auto_executor.resume();
 
     let output = broadcast.recv().await.unwrap();
 
@@ -184,11 +184,11 @@ async fn execute_all_waits_for_network_to_reoccur() {
 
     let auto_executor = queue
         .new_executor()
-        .into_auto_executor(online.1, &task_spawner);
+        .into_auto_executor(online.1, false, &task_spawner);
 
     auto_executor.pause();
     queue.queue_action(ErrorAction).await.unwrap();
-    auto_executor.unpause();
+    auto_executor.resume();
 
     sleep(Duration::from_secs(5)).await;
 

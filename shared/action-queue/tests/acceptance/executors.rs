@@ -35,6 +35,7 @@ async fn auto_execute_until_empty() {
 
     let executor = queue.new_executor().into_auto_executor_with_policy(
         online.1,
+        false,
         &task_spawner,
         QueueAutoTerminationPolicy::Empty,
     );
@@ -72,6 +73,7 @@ async fn auto_execute_until_network_failure() {
 
     let executor = queue.new_executor().into_auto_executor_with_policy(
         online.1,
+        false,
         &task_spawner,
         QueueAutoTerminationPolicy::NetworkLoss,
     );
@@ -110,6 +112,7 @@ async fn auto_execute_until_empty_or_network_failure() {
 
     let executor = queue.new_executor().into_auto_executor_with_policy(
         online.1.clone(),
+        false,
         &task_spawner,
         QueueAutoTerminationPolicy::EmptyOrNetworkLoss,
     );
@@ -123,6 +126,7 @@ async fn auto_execute_until_empty_or_network_failure() {
 
     let executor = queue.new_executor().into_auto_executor_with_policy(
         online.1,
+        false,
         &task_spawner,
         QueueAutoTerminationPolicy::EmptyOrNetworkLoss,
     );
@@ -153,6 +157,7 @@ async fn auto_execute_pool() {
         &ActionGroup::default(),
         NonZeroUsize::new(3).unwrap(),
         online.1,
+        false,
         &task_spawner,
         QueueAutoTerminationPolicy::Empty,
     );
@@ -183,6 +188,7 @@ async fn auto_execute_forever() {
 
     let executor = queue.new_executor().into_auto_executor_with_policy(
         online.1,
+        false,
         &task_spawner,
         QueueAutoTerminationPolicy::Never,
     );

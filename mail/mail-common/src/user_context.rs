@@ -15,7 +15,9 @@ use crate::user_context::initialization::InitializationMediator;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
 use anyhow::anyhow;
 use proton_account_api::password::PasswordFlow;
-use proton_action_queue::queue::{Queue, QueueAutoExecutor, QueueAutoExecutorPool};
+use proton_action_queue::queue::{
+    Queue, QueueAutoExecutor, QueueAutoExecutorPool, TaskSpawner as QueueTaskSpawner,
+};
 use proton_core_api::connection_status::ConnectionStatus;
 use proton_core_api::crypto_clock;
 use proton_core_api::services::proton::{AddressId, PrivateEmailRef, SessionId, UserId};
@@ -62,7 +64,6 @@ pub struct MailUserContext {
 }
 
 impl MailUserContext {
-    #[allow(clippy::too_many_arguments)]
     #[tracing::instrument(name = "NewMailUserContext", skip_all, fields(user_id=%user_context.user_id()))]
     pub(crate) async fn new(
         mail_context: Arc<MailContext>,
@@ -114,26 +115,38 @@ impl MailUserContext {
             this.init_event_loop_poll(interval);
         }
 
+        // There's a race condition between initializing queues and `self` - to
+        // avoid it, we start our queues as paused and resume once everything
+        // has been initialized, i.e. here:
+        this.resume_queue_executors();
+
         Ok(this)
     }
 
     fn new_default_queue_executor(
         queue: &Queue,
         online: watch::Receiver<bool>,
-        task_spawner: &impl proton_action_queue::queue::TaskSpawner,
+        task_spawner: &impl QueueTaskSpawner,
     ) -> QueueAutoExecutor {
         queue
             .new_executor()
-            .into_auto_executor(online, task_spawner)
+            .into_auto_executor(online, true, task_spawner)
     }
 
     fn new_send_queue_executor(
         queue: &Queue,
         online: watch::Receiver<bool>,
         pool_size: NonZeroUsize,
-        task_spawner: &impl proton_action_queue::queue::TaskSpawner,
+        task_spawner: &impl QueueTaskSpawner,
     ) -> QueueAutoExecutorPool {
-        QueueAutoExecutorPool::new(queue, &SEND_ACTION_GROUP, pool_size, online, task_spawner)
+        QueueAutoExecutorPool::new(
+            queue,
+            &SEND_ACTION_GROUP,
+            pool_size,
+            online,
+            true,
+            task_spawner,
+        )
     }
 
     #[must_use]
@@ -186,9 +199,9 @@ impl MailUserContext {
         self.send_queue_executors.pause();
     }
 
-    pub fn unpause_queue_executors(&self) {
-        self.default_queue_executor.unpause();
-        self.send_queue_executors.unpause();
+    pub fn resume_queue_executors(&self) {
+        self.default_queue_executor.resume();
+        self.send_queue_executors.resume();
     }
 
     pub fn terminate_queue_executors(&self) {

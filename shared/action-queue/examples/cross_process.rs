@@ -113,6 +113,7 @@ async fn parent_main(process_count: usize, action_count: usize, consume: bool) {
             &ActionGroup::default(),
             NonZeroUsize::new(process_count * 2).unwrap(),
             online.1,
+            false,
             &task_spawner,
         );
         wait_on_queue_empty(&queue).await;
@@ -165,6 +166,7 @@ async fn child_main(directory: &Path, action_count: Option<usize>) {
             &ActionGroup::default(),
             NonZeroUsize::new(2).unwrap(),
             online.1,
+            false,
             &task_spawner,
         );
         notifier.notified().await;
