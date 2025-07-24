@@ -7,8 +7,8 @@ use crate::actions::conversations::LabelAs;
 use crate::actions::conversations::label_as::Handler as LabelAsHandler;
 use crate::actions::conversations::{Label as ActionLabel, MarkRead, MarkUnread, Move, Unlabel};
 use crate::actions::{
-    ConversationAction, ConversationAvailableActions, GeneralActions, LabelAsAction,
-    MailActionError, MoveAction, MoveItemAction, filter_responses,
+    ConversationAction, ConversationAvailableActions, LabelAsAction, MailActionError, MoveAction,
+    MoveItemAction, filter_responses,
 };
 use crate::datatypes::LocalConversationId;
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
@@ -2062,14 +2062,14 @@ impl Conversation {
 
         let move_actions = MoveItemAction::from_view(view, tether).await?;
 
-        let general_actions = vec![GeneralActions::SaveAsPdf, GeneralActions::Print];
-
         let res = ConversationAvailableActions::builder()
             .conversation_actions(conversation_actions)
             .move_actions(move_actions)
-            .general_actions(general_actions)
+            .general_actions(Vec::new())
             .build();
+
         debug!("available actions for conversations: {res:?}");
+
         Ok(res)
     }
 
