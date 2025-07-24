@@ -62,7 +62,6 @@ impl Handler for V1ActionHandler {
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        // Nothing to do
         Ok(())
     }
 

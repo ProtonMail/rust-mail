@@ -366,7 +366,6 @@ impl RunTransaction for WriterGuard<'_> {
     }
 }
 
-/// Possible [`WriterGuardErrors`]
 #[derive(Debug, thiserror::Error)]
 pub enum WriterGuardError {
     #[error("This executor lock has expired")]

@@ -155,7 +155,7 @@ impl Handler for ExpandHandler {
                     .is_some();
 
                 if label_is_equal_action {
-                    return Ok(()); // Nothing to do
+                    return Ok(());
                 }
 
                 label

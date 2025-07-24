@@ -220,7 +220,6 @@ impl Handler for SuccessActionHandler {
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        // Nothing to do
         Ok(())
     }
 
@@ -269,7 +268,6 @@ impl Handler for ErrorActionHandler {
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        // Nothing to do
         Ok(())
     }
 
@@ -317,7 +315,6 @@ impl Handler for WriterGuardExpiredActionHandler {
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        // Nothing to do
         Ok(())
     }
 

@@ -161,16 +161,13 @@ pub(crate) fn register_mail_actions(queue: &Queue, ctx: &Weak<MailUserContext>, 
     register_action(queue, rollback::RollbackActionHandler { ctx: ctx.clone() });
 }
 
-/// Convenience type which contains data common to many actions.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(bound = "")]
 struct GenericActionData<T>
 where
     T: ModelIdExtension<IdType: Serialize + DeserializeOwned>,
 {
-    /// Local ids for the action to act on.
     target_ids: Vec<T::IdType>,
-    /// Resolved remote ids.
     remote_target_ids: Vec<T::RemoteId>,
     phantom: PhantomData<T>,
 }
@@ -179,7 +176,6 @@ impl<T> GenericActionData<T>
 where
     T: ModelIdExtension<IdType: Serialize + DeserializeOwned>,
 {
-    /// Create a new instance with the given target `ids`.
     pub fn new(target_ids: impl IntoIterator<Item = T::IdType>) -> Self {
         Self {
             target_ids: Vec::from_iter(target_ids),

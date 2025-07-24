@@ -23,8 +23,6 @@ use tracing::{debug, error};
 #[path = "../tests/models/rollback_item.rs"]
 mod tests;
 
-/// A record of an action that was rolled back.
-///
 #[derive(Clone, Debug, Eq, Model, PartialEq)]
 #[TableName("rollback_actions")]
 pub struct RollbackItem {
@@ -106,8 +104,6 @@ impl RollbackItem {
         Ok(())
     }
 
-    /// Synchronize all labels with remote counterparts.
-    ///
     #[tracing::instrument(skip_all)]
     pub async fn sync_labels<I>(
         session: &Session,
@@ -120,8 +116,6 @@ impl RollbackItem {
         Self::sync_items_impl::<LabelRollbackHandler, _>(session, tx, batch.into()).await
     }
 
-    /// Synchronize all messages with remote counterparts.
-    ///
     #[tracing::instrument(skip_all)]
     pub async fn sync_messages<I>(
         session: &Session,
@@ -134,8 +128,6 @@ impl RollbackItem {
         Self::sync_items_impl::<MessageRollbackHandler, _>(session, tx, batch.into()).await
     }
 
-    /// Synchronize all conversations with remote counterparts.
-    ///
     #[tracing::instrument(skip_all)]
     pub async fn sync_conversations<I>(
         session: &Session,
@@ -261,29 +253,17 @@ impl RollbackItem {
     }
 }
 
-/// Defines behaviors for use with `RollbackItem::sync_items_impl`.
 trait RollbackHandler: 'static + Send + Sync {
     type Item: 'static;
     type RemoteId: ProtonIdMarker + From<String> + std::fmt::Display;
 
-    /// Return the respective [`RollbackItemType`] for this handler.
     fn item_type() -> RollbackItemType;
 
-    /// Fetch the items with `remote_ids` from the server.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the fetching failed.
     fn fetch_items(
         session: &Session,
         remote_ids: &[Self::RemoteId],
     ) -> impl Future<Output = Result<Vec<Self::Item>, ApiServiceError>> + Send;
 
-    /// Convert and store the `items` in the local database.
-    ///
-    /// # Errors
-    ///
-    /// Return error if the conversion or the storing of the items failed.
     fn store_items(
         items: Vec<Self::Item>,
         tx: &Bond<'_>,

@@ -46,7 +46,6 @@ impl Handler for ActionRefreshHandler {
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<<Self::Action as Action>::LocalOutput, <Self::Action as Action>::Error> {
-        // Nothing to do.
         Ok(())
     }
 
@@ -56,7 +55,6 @@ impl Handler for ActionRefreshHandler {
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        // Nothing to do
         Ok(())
     }
 
