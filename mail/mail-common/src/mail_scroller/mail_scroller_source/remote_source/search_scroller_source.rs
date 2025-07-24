@@ -1,11 +1,14 @@
 use std::{cmp, sync::Arc};
 
+use super::MailPaginatorJoinHandle;
+use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::{
     MailContextError, MailUserContext,
     datatypes::{ReadFilter, SearchOptions},
     mail_scroller::MailScrollerSource,
     models::{Message, MessageCounters, MessageLabel, SearchScrollData},
 };
+use proton_core_api::services::proton::Proton;
 use proton_core_api::{
     services::proton::LabelId,
     session::{CoreSession, Session},
@@ -21,8 +24,6 @@ use stash::{
 };
 use tokio::sync::Mutex;
 use tracing::debug;
-
-use super::MailPaginatorJoinHandle;
 
 /// Mail scroller implementation for Server search.
 ///
@@ -163,7 +164,7 @@ impl SearchScrollerSource {
             messages.push(Message::from_api_metadata(message, tether).await?);
         }
 
-        Self::save_messages(&mut messages, tether).await?;
+        Self::save_messages(&mut messages, session.api(), tether).await?;
 
         Ok(messages)
     }
@@ -222,18 +223,26 @@ impl SearchScrollerSource {
             messages.push(Message::from_api_metadata(message, &tether).await?);
         }
 
-        Self::save_messages(&mut messages, &mut tether).await?;
+        Self::save_messages(&mut messages, session.api(), &mut tether).await?;
 
         Ok(messages)
     }
 
     async fn save_messages(
         messages: &mut [Message],
+        api: &Proton,
         tether: &mut Tether,
     ) -> Result<(), MailContextError> {
         if messages.is_empty() {
             return Ok(());
         }
+
+        // Resolve missing dependencies.
+        let mut dependency_fetcher = MessageOrConversationDependencyFetcher::new();
+        for message in messages.iter() {
+            dependency_fetcher.check_message(message, tether).await?;
+        }
+        dependency_fetcher.fetch_and_store(api, tether).await?;
         // We do not want to notify the UI about the not visible items
         // downloaded in the background
         tether

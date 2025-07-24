@@ -1,4 +1,13 @@
+use super::{MailPaginatorJoinHandle, RemoteSource};
+use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
+use crate::{
+    MailContextError, MailUserContext,
+    datatypes::ReadFilter,
+    models::{Message, MessageScrollData},
+};
+use crate::{datatypes::labels::LabelScrollOrder, prefetch::PrefetchJob};
 use anyhow::anyhow;
+use proton_core_api::services::proton::Proton;
 use proton_core_api::{
     services::proton::LabelId,
     session::{CoreSession, Session},
@@ -9,14 +18,6 @@ use proton_mail_api::services::proton::{
 };
 use stash::stash::{Bond, Stash, Tether};
 use tracing::debug;
-
-use super::{MailPaginatorJoinHandle, RemoteSource};
-use crate::{
-    MailContextError, MailUserContext,
-    datatypes::ReadFilter,
-    models::{Message, MessageScrollData},
-};
-use crate::{datatypes::labels::LabelScrollOrder, prefetch::PrefetchJob};
 
 /// Mail scroller implementation for [`Message`] on in a [`Label`].
 ///
@@ -208,6 +209,7 @@ impl RemoteMessageScrollerSource {
             unread,
             true,
             scroll_order,
+            session.api(),
             &mut tether,
         )
         .await?;
@@ -279,6 +281,7 @@ impl RemoteMessageScrollerSource {
             unread,
             true,
             scroll_order,
+            session.api(),
             &mut tether,
         )
         .await?;
@@ -338,6 +341,7 @@ impl RemoteMessageScrollerSource {
             unread,
             false,
             scroll_order,
+            session.api(),
             &mut tether,
         )
         .await?;
@@ -351,11 +355,20 @@ impl RemoteMessageScrollerSource {
         unread: ReadFilter,
         update_scroller: bool,
         scroll_order: LabelScrollOrder,
+        api: &Proton,
         tether: &mut Tether,
     ) -> Result<(), MailContextError> {
         if messages.is_empty() {
             return Ok(());
         }
+
+        // Resolve missing dependencies.
+        let mut dependency_fetcher = MessageOrConversationDependencyFetcher::new();
+        for message in messages.iter() {
+            dependency_fetcher.check_message(message, tether).await?;
+        }
+        dependency_fetcher.fetch_and_store(api, tether).await?;
+
         // We do not want to notify the UI about the not visible items
         // downloaded in the background
         tether

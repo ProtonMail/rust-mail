@@ -1,4 +1,13 @@
+use super::{MailPaginatorJoinHandle, RemoteSource};
+use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
+use crate::{
+    MailContextError, MailUserContext,
+    datatypes::{ContextualConversation, ReadFilter},
+    models::{Conversation, ConversationScrollData},
+};
+use crate::{datatypes::labels::LabelScrollOrder, prefetch::PrefetchJob};
 use anyhow::anyhow;
+use proton_core_api::services::proton::Proton;
 use proton_core_api::{
     services::proton::LabelId,
     session::{CoreSession, Session},
@@ -11,14 +20,6 @@ use proton_mail_api::services::proton::{
 };
 use stash::stash::{Bond, Stash, Tether};
 use tracing::debug;
-
-use super::{MailPaginatorJoinHandle, RemoteSource};
-use crate::{
-    MailContextError, MailUserContext,
-    datatypes::{ContextualConversation, ReadFilter},
-    models::{Conversation, ConversationScrollData},
-};
-use crate::{datatypes::labels::LabelScrollOrder, prefetch::PrefetchJob};
 
 /// Mail scroller implementation for [`Conversation`] on in a [`Label`].
 ///
@@ -197,8 +198,8 @@ impl RemoteConversationScrollerSource {
         if response.conversations.is_empty() {
             return Ok(vec![]);
         }
-        let context_time = Self::context_time(&response, unread);
 
+        let context_time = Self::context_time(&response, unread);
         let mut conversations: Vec<Conversation> = response
             .conversations
             .into_iter()
@@ -212,6 +213,7 @@ impl RemoteConversationScrollerSource {
             context_time,
             true,
             scroll_order,
+            session.api(),
             &mut tether,
         )
         .await?;
@@ -278,6 +280,7 @@ impl RemoteConversationScrollerSource {
             context_time,
             false,
             scroll_order,
+            session.api(),
             &mut tether,
         )
         .await?;
@@ -355,6 +358,7 @@ impl RemoteConversationScrollerSource {
             context_time,
             true,
             scroll_order,
+            session.api(),
             &mut tether,
         )
         .await?;
@@ -392,6 +396,7 @@ impl RemoteConversationScrollerSource {
             .collect()
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn save_conversations(
         local_label_id: LocalLabelId,
         conversations: &mut [Conversation],
@@ -399,8 +404,18 @@ impl RemoteConversationScrollerSource {
         context_time: Option<UnixTimestamp>,
         update_scroller: bool,
         scroll_order: LabelScrollOrder,
+        api: &Proton,
         tether: &mut Tether,
     ) -> Result<(), MailContextError> {
+        // Resolve missing dependencies.
+        let mut dependency_fetcher = MessageOrConversationDependencyFetcher::new();
+        for conversation in conversations.iter() {
+            dependency_fetcher
+                .check_conversation(conversation, tether)
+                .await?;
+        }
+        dependency_fetcher.fetch_and_store(api, tether).await?;
+
         // We do not want to notify the UI about the not visible items
         // downloaded in the background
         tether
