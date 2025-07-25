@@ -255,7 +255,7 @@ async fn refresh_mail(ctx: Arc<MailUserContext>) -> Result<(), SubscriberError> 
 
             for local_label_to_remove in all_local_labels.into_values() {
                 if let Some(_system_label) =
-                    SystemLabel::from_rid(local_label_to_remove.remote_id.as_ref())
+                    SystemLabel::from_opt_rid(local_label_to_remove.remote_id.as_ref())
                 {
                     // For some reason API does not return all system labels
                     // we have to make sure to not delete those

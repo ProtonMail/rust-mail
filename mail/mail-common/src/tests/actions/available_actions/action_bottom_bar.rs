@@ -761,7 +761,6 @@ mod conversation {
         expected_hidden: vec![
             TestActions::MoveTo,
             TestActions::LabelAs,
-            TestActions::Snooze,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
@@ -777,7 +776,6 @@ mod conversation {
         expected_hidden: vec![
             TestActions::MoveTo,
             TestActions::LabelAs,
-            TestActions::Snooze,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Inbox),
         ],
         ..Default::default()
@@ -793,7 +791,6 @@ mod conversation {
         expected_hidden: vec![
             TestActions::MoveTo,
             TestActions::LabelAs,
-            TestActions::Snooze,
             TestActions::NotSpam(MovableSystemFolder::Inbox),
         ],
         ..Default::default()

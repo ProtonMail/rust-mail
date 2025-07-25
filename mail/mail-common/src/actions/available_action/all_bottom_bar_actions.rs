@@ -5,6 +5,7 @@ mod tests;
 use crate::actions::MovableSystemFolderAction;
 use crate::datatypes::{MobileActions, SystemLabelId};
 use proton_core_api::services::proton::LabelId;
+use proton_core_common::datatypes::SystemLabel;
 use tracing::warn;
 
 /// All actions available from bottom bar for messages
@@ -153,7 +154,13 @@ impl BottomBarActions {
             result.push(BottomBarActions::LabelAs);
         }
         // Snooze
-        if is_conversation && !visible_actions.contains(&BottomBarActions::Snooze) {
+        let is_snooze_location = SystemLabel::from_rid(&current_label)
+            .filter(|label| label.is_snooze_location())
+            .is_some();
+        if is_conversation
+            && is_snooze_location
+            && !visible_actions.contains(&BottomBarActions::Snooze)
+        {
             result.push(BottomBarActions::Snooze);
         }
         // Move to Inbox
