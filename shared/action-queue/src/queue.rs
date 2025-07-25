@@ -378,7 +378,7 @@ impl Queue {
     /// # Errors
     ///
     /// Returns error if action could not be executed locally.
-    pub async fn queue_action_with_metadata_in_tx<T: Action>(
+    async fn queue_action_with_metadata_in_tx<T: Action>(
         &self,
         mut action: T,
         metadata: Metadata,
