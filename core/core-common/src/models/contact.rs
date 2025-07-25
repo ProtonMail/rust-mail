@@ -37,7 +37,6 @@ use stash::macros::Model;
 use stash::orm::{Model, ModelHooks};
 use stash::params;
 use stash::stash::{Bond, RunTransaction, Stash, StashError, Tether, WatcherHandle};
-use stash::utils::{IterMapToSql, placeholders};
 use tokio::task::JoinSet;
 use tracing::{debug, error, info};
 
@@ -466,19 +465,16 @@ impl Contact {
             .await
             .with_context(|| "Local contact groups are not yet implemented: Trying to resolve nonexistent remote label for local label {id}")?;
 
-        let contact_ids = Contact::find("WHERE deleted = 0", vec![], tether)
-            .await?
-            .into_iter()
-            .filter(|x| x.label_ids.contains(&remote))
-            .filter_map(|x| x.remote_id)
-            .bridge_sql();
-
-        let mut res = ContactEmail::find(
-            format!(
-                "WHERE remote_contact_id IN ({})",
-                placeholders(&contact_ids)
-            ),
-            contact_ids,
+        let mut res = ContactEmail::load_inner(
+            "SELECT contact_emails.* FROM contact_emails
+             JOIN contacts ON contact_emails.remote_contact_id = contacts.remote_id
+             WHERE contacts.deleted = 0 
+             AND EXISTS (
+                 SELECT 1 FROM json_each(contacts.label_ids) 
+                 WHERE json_each.value = ?
+             )
+             ORDER BY contact_emails.display_order, contact_emails.local_id",
+            params![remote],
             tether,
         )
         .await?;
