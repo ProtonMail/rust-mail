@@ -1466,22 +1466,26 @@ impl Conversation {
                     // count to 1 and update the current label count. We let the
                     // event loop take care of the rest.
 
-                    let conv_labels = ConversationLabel::find(
-                        "WHERE local_conversation_id=? AND local_label_id=?",
-                        params![conversation_id, local_label_id],
-                        bond,
-                    )
-                    .await?;
-                    for mut conv_label in conv_labels {
+                    let should_update_counter = if let Some(conv_label) = conversation
+                        .labels
+                        .iter_mut()
+                        .find(|l| l.local_label_id.unwrap() == local_label_id)
+                    {
+                        // we only want to update the counter if it's the first time we have an
+                        // unread message.
+                        let should_update = conv_label.context_num_unread == 0;
                         conv_label.context_num_unread += 1;
-                        conv_label.save(bond).await?;
-                    }
+                        should_update
+                    } else {
+                        false
+                    };
 
                     conversation.num_unread += 1;
                     conversation.save(bond).await?;
 
-                    if let Some(mut counter) =
-                        ConversationCounters::find_by_id(local_label_id, bond).await?
+                    if should_update_counter
+                        && let Some(mut counter) =
+                            ConversationCounters::find_by_id(local_label_id, bond).await?
                     {
                         counter.unread += 1;
                         counter.save(bond).await?;
