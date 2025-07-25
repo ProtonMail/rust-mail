@@ -3,7 +3,7 @@ use crate::models::Conversation;
 use crate::{AppError, MailUserContext};
 use anyhow::Context;
 use proton_action_queue::action::{
-    Action, ActionId, Handler as ActionHandler, SingleVersionConverter, Type, WriterGuard,
+    Action, ActionId, DefaultVersionConverter, Handler as ActionHandler, Type, WriterGuard,
 };
 use proton_action_queue::queue::Queue;
 use serde::{Deserialize, Serialize};
@@ -15,7 +15,7 @@ pub struct Move(pub ActionMoveData<Conversation>);
 impl Action for Move {
     const TYPE: Type = Type("move_conversations");
     const VERSION: u32 = 1;
-    type VersionConverter = SingleVersionConverter<Self>;
+    type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
 

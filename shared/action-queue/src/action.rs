@@ -163,24 +163,6 @@ impl<T: Action> VersionConverter for DefaultVersionConverter<T> {
     }
 }
 
-/// Useful for when it's not worth it to have a full migration.
-/// Will error out on older versions.
-pub struct SingleVersionConverter<T>(PhantomData<T>);
-
-impl<T: Action> VersionConverter for SingleVersionConverter<T> {
-    type Output = T;
-
-    fn convert(old_version: u32, current_version: u32, data: &[u8]) -> FactoryResult<Self::Output> {
-        if current_version != T::VERSION && old_version != T::VERSION {
-            return Err(FactoryError::VersionConverter(
-                VersionConverterError::InvalidVersion(current_version),
-            ));
-        }
-
-        Ok(deserialize::<T>(data)?)
-    }
-}
-
 /// A dependency key is automatic dependency tracking key which will be used to assign
 /// dependencies to this action when it is saved.
 ///

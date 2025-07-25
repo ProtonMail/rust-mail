@@ -4,7 +4,7 @@ use crate::actions::{ActionMoveData, LabelAsData, MailActionError};
 use crate::models::{Message, MessageCounters};
 use anyhow::Context;
 use proton_action_queue::action::{
-    Action, ActionId, Handler as ActionHandler, MetadataBuilder, SingleVersionConverter, Type,
+    Action, ActionId, DefaultVersionConverter, Handler as ActionHandler, MetadataBuilder, Type,
     WriterGuard,
 };
 use proton_action_queue::queue::Queue;
@@ -20,7 +20,7 @@ pub struct LabelAs(pub LabelAsData<Message>);
 impl Action for LabelAs {
     const TYPE: Type = Type("label_messages_as");
     const VERSION: u32 = 2;
-    type VersionConverter = SingleVersionConverter<Self>;
+    type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
 

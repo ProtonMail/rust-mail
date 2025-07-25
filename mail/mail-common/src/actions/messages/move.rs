@@ -2,7 +2,7 @@ use crate::actions::{ActionMoveData, MailActionError};
 use crate::models::Message;
 use crate::{AppError, MailUserContext};
 use anyhow::Context;
-use proton_action_queue::action::{Action, SingleVersionConverter, Type, WriterGuard};
+use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
 use proton_action_queue::action::{ActionId, Handler as ActionHandler};
 use proton_action_queue::queue::Queue;
 use serde::{Deserialize, Serialize};
@@ -14,7 +14,7 @@ pub struct Move(pub ActionMoveData<Message>);
 impl Action for Move {
     const TYPE: Type = Type("move_messages");
     const VERSION: u32 = 1;
-    type VersionConverter = SingleVersionConverter<Self>;
+    type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = Handler;
     type RemoteOutput = ();
 
