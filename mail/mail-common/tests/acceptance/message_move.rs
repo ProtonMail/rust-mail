@@ -10,12 +10,14 @@ use proton_core_common::test_utils::addresses::ApiAddressTestUtils;
 use proton_crypto_account::keys::{ArmoredPrivateKey, KeyId, LockedKey, UserKeys as ApiUserKeys};
 use proton_mail_api::services::proton::common::{ConversationId, MessageId};
 use proton_mail_api::services::proton::response_data::{
+    Conversation as ApiConversation, ConversationCount as ApiConversationCount,
     MailSettings as ApiMailSettings, Message as ApiMessage, MessageBody as ApiMessageBody,
-    MessageFlags as ApiMessageFlags, MessageMetadata as ApiMessageMetadata,
-    MimeType as ApiMimeType, ViewMode as ApiViewMode,
+    MessageCount as ApiMessageCount, MessageFlags as ApiMessageFlags,
+    MessageMetadata as ApiMessageMetadata, MimeType as ApiMimeType, ViewMode as ApiViewMode,
 };
 use proton_mail_common::datatypes::SystemLabelId;
 use proton_mail_common::models::{Conversation, ConversationCounters, Message, MessageCounters};
+use proton_mail_common::test_utils::conversations::ApiConversationTestUtils;
 use proton_mail_common::test_utils::init::Params as TestParams;
 use proton_mail_common::test_utils::scroller::StoreLabeledModelMap as _;
 use proton_mail_common::test_utils::test_context::{
@@ -35,6 +37,84 @@ const TEST_USER_ADDRESS_ID: &str =
 
 #[tokio::test]
 async fn move_between_folders() {
+    // Setup:
+    // * create 2 folder labels
+    // * create a message in one of those folders
+    let ctx = MailTestContext::new().await;
+
+    let source_label_id = LabelId::from("source");
+    let source_label = test_label(&source_label_id, ApiLabelType::Folder, "source");
+    let destination_label_id = LabelId::from("destination");
+    let destination_label = test_label(&destination_label_id, ApiLabelType::Folder, "destination");
+    let message = test_message(vec![source_label_id.clone()], false);
+    let labels = hash_map! {
+        ApiLabelType::Folder: vec![ source_label, destination_label ]
+    };
+    let params = test_init_params(labels);
+    ctx.setup_user(params.clone()).await;
+
+    // Initialize Mocking
+    ctx.mock_get_messages(vec![message.metadata.clone()]).await;
+    ctx.catch_all().await;
+
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
+
+    // Create a mailbox and sync.
+    let mailbox =
+        Mailbox::with_remote_id(&user_ctx.user_stash().connection(), source_label_id.clone())
+            .await
+            .unwrap();
+    mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
+
+    let source = Label::find_first("WHERE remote_id = ?", params!["source"], &tether)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let mut source_conv = ConversationCounters::new(source.id());
+    source_conv.total = 1;
+
+    let mut source_msg = MessageCounters::new(source.id());
+    source_msg.total = 1;
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            source_conv.save(tx).await.unwrap();
+            source_msg.save(tx).await.unwrap();
+            Ok(())
+        })
+        .await
+        .unwrap();
+
+    let destination = Label::find_first("WHERE remote_id = ?", params!["destination"], &tether)
+        .await
+        .unwrap()
+        .unwrap();
+
+    let mut message = Message::load(1.into(), &tether).await.unwrap().unwrap();
+    assert_eq!(message.label_ids, vec![source_label_id.clone()]);
+
+    // Action:
+    // * move message in the other folder
+    let undo = Message::action_move(
+        &tether,
+        user_ctx.action_queue(),
+        destination.id(),
+        vec![message.id()],
+    )
+    .await
+    .unwrap()
+    .unwrap();
+
+    message.reload(&tether).await.unwrap();
+    assert_eq!(message.label_ids, vec![destination_label_id.clone()]);
+}
+
+#[tokio::test]
+async fn move_between_folders_and_undo() {
     // Setup:
     // * create 2 folder labels
     // * create a message in one of those folders
@@ -515,7 +595,7 @@ async fn move_message_also_moves_conversation() {
     // Action:
     // * move message in the other folder
     Message::action_move(
-        &tether,
+        tether,
         user_ctx.action_queue(),
         local_spam,
         vec![message.id()],
@@ -561,6 +641,120 @@ async fn move_message_also_moves_conversation() {
             .iter()
             .all(|l| *l.remote_label_id.as_ref().unwrap() != LabelId::inbox())
     );
+}
+
+#[tokio::test]
+async fn move_conversation_between_folders_and_undo() {
+    let ctx = MailTestContext::new().await;
+
+    let conversation = ApiConversation::test_conversation_in_inbox("first", vec![]);
+
+    let conversation_count = vec![ApiConversationCount {
+        label_id: LabelId::inbox().clone(),
+        total: 1,
+        unread: 0,
+    }];
+    let message_count = vec![ApiMessageCount {
+        label_id: LabelId::inbox().clone(),
+        total: 1,
+        unread: 0,
+    }];
+    let params = TestParams {
+        addresses: vec![ApiAddress::test_address()],
+        conversations: vec![conversation.clone()],
+        conversation_count,
+        message_count,
+        ..Default::default()
+    };
+    ctx.setup_user(params).await;
+
+    ctx.mock_label_conversation(
+        &LabelId::inbox(),
+        vec![conversation.id.clone()],
+        None,
+        vec![],
+    )
+    .await;
+    ctx.mock_label_conversation(
+        &LabelId::archive(),
+        vec![conversation.id.clone()],
+        None,
+        vec![],
+    )
+    .await;
+
+    ctx.mock_get_conversations(vec![conversation], 1).await;
+    // ctx.catch_all().await;
+
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
+
+    // Create a mailbox and sync.
+    let mailbox = Mailbox::with_remote_id(&user_ctx.user_stash().connection(), LabelId::inbox())
+        .await
+        .unwrap();
+    mailbox
+        .sync(&mut user_ctx.user_stash().connection(), user_ctx.api(), 10)
+        .await
+        .unwrap();
+
+    let local_archive = Label::resolve_local_label_id(LabelId::archive(), &tether)
+        .await
+        .unwrap();
+
+    let mut conv = Conversation::load(1.into(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+
+    fn conv_is_labeled(conv: &Conversation, label: &LabelId) {
+        assert_eq!(conv.labels.len(), 1);
+        assert_eq!(conv.labels[0].remote_label_id.as_ref().unwrap(), label);
+    }
+
+    conv_is_labeled(&conv, &LabelId::inbox());
+
+    // Action:
+    // * move message in the other folder
+    let undo = Conversation::action_move(
+        &tether,
+        user_ctx.action_queue(),
+        local_archive,
+        vec![conv.id()],
+    )
+    .await
+    .unwrap()
+    .unwrap();
+
+    conv.reload(&tether).await.unwrap();
+    conv_is_labeled(&conv, &LabelId::archive());
+
+    undo.undo(user_ctx.action_queue(), &mut tether)
+        .await
+        .unwrap();
+    conv.reload(&tether).await.unwrap();
+    conv_is_labeled(&conv, &LabelId::inbox());
+
+    let undo = Conversation::action_move(
+        &tether,
+        user_ctx.action_queue(),
+        local_archive,
+        vec![conv.id()],
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
+
+    conv.reload(&tether).await.unwrap();
+    conv_is_labeled(&conv, &LabelId::archive());
+
+    undo.undo(user_ctx.action_queue(), &mut tether)
+        .await
+        .unwrap();
+    user_ctx.execute_single_action().await.unwrap();
+    conv.reload(&tether).await.unwrap();
+    conv_is_labeled(&conv, &LabelId::inbox());
 }
 
 fn test_label(label_id: &LabelId, label_type: ApiLabelType, name: &str) -> ApiLabel {
