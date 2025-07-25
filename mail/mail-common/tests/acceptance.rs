@@ -40,4 +40,5 @@ mod acceptance {
     mod sidebar_custom_labels;
     mod sidebar_system_labels;
     mod sign_out_all;
+    mod snooze;
 }

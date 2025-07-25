@@ -5,7 +5,8 @@ use proton_core_api::services::proton::{ProtonIdMarker, common::ApiErrorInfo};
 use proton_mail_api::services::proton::common::ConversationId;
 use proton_mail_api::services::proton::prelude::PutConversationsUnreadRequest;
 use proton_mail_api::services::proton::requests::{
-    PutConversationsLabelRequest, PutConversationsReadRequest, PutConversationsUnlabelRequest,
+    PutConversationsLabelRequest, PutConversationsReadRequest, PutConversationsSnoozeRequest,
+    PutConversationsUnlabelRequest,
 };
 use proton_mail_api::services::proton::response_data::{
     Conversation as ApiConversation, ConversationLabel as ApiConversationLabel, MessageMetadata,
@@ -13,7 +14,7 @@ use proton_mail_api::services::proton::response_data::{
 };
 use proton_mail_api::services::proton::responses::{
     GetConversationResponse, PutConversationsLabelResponse, PutConversationsReadResponse,
-    PutConversationsUnlabelResponse,
+    PutConversationsSnoozeResponse, PutConversationsUnlabelResponse,
 };
 use std::collections::HashSet;
 use wiremock::matchers::{body_json, method, path};
@@ -137,6 +138,38 @@ impl MailTestContext {
 
         Mock::given(method("PUT"))
             .and(path("/api/mail/v4/conversations/unread"))
+            .and(body_json(request))
+            .respond_with(ResponseTemplate::new(200).set_body_json(resp))
+            .expect(1)
+            .named(function_name!())
+            .mount(self.mock_server())
+            .await;
+    }
+
+    /// Generate new mock expectations for snoozing conversations.
+    ///
+    /// This function will mock the response for the given `ids` and `failed`
+    /// conversations.
+    ///
+    #[function_name::named]
+    pub async fn mock_put_conversations_snooze(
+        &self,
+        ids: Vec<ConversationId>,
+        snooze_time: u64,
+        failed: Vec<ConversationId>,
+    ) {
+        let ids = ids.into_iter().collect::<Vec<_>>();
+        let request = PutConversationsSnoozeRequest {
+            ids: ids.clone(),
+            snooze_time,
+        };
+        let resp = PutConversationsSnoozeResponse {
+            code: 1000,
+            responses: build_conv_responses(&ids, failed),
+        };
+
+        Mock::given(method("PUT"))
+            .and(path("/api/mail/v4/conversations/snooze"))
             .and(body_json(request))
             .respond_with(ResponseTemplate::new(200).set_body_json(resp))
             .expect(1)
