@@ -2040,6 +2040,8 @@ async fn test_conversation_mark_read_no_message_metadata() {
 
     tether
         .tx::<_, _, StashError>(async |tx| {
+            // Remove all messages
+            tx.execute("DELETE FROM messages", vec![]).await.unwrap();
             Conversation::mark_read(std::iter::once(local_conv_id), tx)
                 .await
                 .unwrap();
@@ -2055,7 +2057,6 @@ async fn test_conversation_mark_read_no_message_metadata() {
 
     // No more unread messages
     assert_eq!(db_conversation.num_unread, 0);
-    assert_eq!(db_conversation.num_messages, 4);
 
     // Check conversation counts
     {
@@ -2176,6 +2177,8 @@ async fn test_conversation_mark_unread_no_metadata() {
     let local_label_id2 = *state_map.labels.get(&MY_LABEL_ID2).unwrap();
     tether
         .tx::<_, _, StashError>(async |tx| {
+            // delete all messages.
+            tx.execute("DELETE FROM messages", vec![]).await.unwrap();
             Conversation::mark_read(std::iter::once(local_conv_id), tx)
                 .await
                 .unwrap();
@@ -2194,7 +2197,6 @@ async fn test_conversation_mark_unread_no_metadata() {
 
     // There should be 1 unread message.
     assert_eq!(db_conversation.num_unread, 1);
-    assert_eq!(db_conversation.num_messages, 4);
 
     // Check conversation counts match original values.
     {
@@ -2205,7 +2207,7 @@ async fn test_conversation_mark_unread_no_metadata() {
                 .get(&MY_LABEL_ID1.clone())
                 .unwrap();
             let label_counts = conv_counts.get(&local_label_id1).unwrap();
-            assert_eq!(label_counts.unread, start_label_counts.unread);
+            assert_eq!(label_counts.unread, 1);
             assert_eq!(label_counts.total, start_label_counts.total);
         }
         {
