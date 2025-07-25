@@ -1,5 +1,6 @@
 use crate::cli::read;
 use anyhow::Result;
+use proton_account_api::shared::challenge::Behavior;
 use proton_account_api::signup::state::StateKind;
 use proton_account_api::signup::{SignupError, SignupFlow};
 use proton_mail_common::MailContext;
@@ -43,8 +44,12 @@ impl Cmd {
         loop {
             let username = read("username")?;
             let domain = read("domain")?;
+            let behaviour = new_behaviour(&username);
 
-            match flow.submit_internal_username(username, domain, None).await {
+            match flow
+                .submit_internal_username(username, domain, Some(behaviour))
+                .await
+            {
                 Err(SignupError::UsernameUnavailable) => {
                     println!("Username unavailable, try again");
                 }
@@ -64,9 +69,7 @@ impl Cmd {
     }
 
     async fn on_want_recovery(flow: &mut SignupFlow) -> Result<()> {
-        let email = read("recovery email")?;
-
-        flow.submit_recovery_email(email, None).await?;
+        flow.skip_recovery().await?;
 
         Ok(())
     }
@@ -84,5 +87,15 @@ impl Cmd {
         println!("{addr:#?}");
 
         Ok(())
+    }
+}
+
+fn new_behaviour(username: &str) -> Behavior {
+    Behavior {
+        time: vec![6],
+        click: 0,
+        copy: vec![],
+        paste: vec![],
+        keydown: username.chars().map(|c| c.to_string()).collect(),
     }
 }

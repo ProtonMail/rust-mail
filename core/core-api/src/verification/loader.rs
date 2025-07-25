@@ -7,6 +7,10 @@ use futures::TryFutureExt;
 use muon::ProtonRequest;
 use muon::common::Server;
 use muon::{Method, ProtonResponse};
+use tracing::info;
+
+/// The type of a challenge loader result.
+pub type ChallengeLoaderResult<E = ApiServiceError> = Result<ChallengeLoaderResponse, E>;
 
 /// A response to an HTTP request sent by the loader.
 #[derive(Debug)]
@@ -90,7 +94,14 @@ impl ChallengeLoader {
         query: impl IntoIterator<Item = (String, Option<String>)>,
         header: impl IntoIterator<Item = (String, String)>,
     ) -> Result<ChallengeLoaderResponse, ApiServiceError> {
-        self.send(Method::GET, base.as_ref().parse()?, path, query, header)
+        let base = base.as_ref();
+        let path = path.as_ref();
+        let query = query.into_iter().collect::<Vec<_>>();
+        let header = header.into_iter().collect::<Vec<_>>();
+
+        info!(?base, ?path, ?query);
+
+        self.send(Method::GET, base.parse()?, path, query, header)
             .ok_into()
             .await
     }

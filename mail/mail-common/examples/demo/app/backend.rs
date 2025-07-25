@@ -3,8 +3,11 @@ use crate::notifier::HvMessage;
 use anyhow::Result;
 use cfg_if::cfg_if;
 use futures::FutureExt;
+use itertools::Itertools;
+use proton_core_api::services::proton::muon::util::IntoIterExt;
 use proton_core_api::verification::{ChallengeLoader, ChallengeResponse};
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::sync::mpsc;
 use tao::dpi::{LogicalPosition, PhysicalSize};
 use tao::event::{Event, WindowEvent};
@@ -13,8 +16,9 @@ use tao::window::{Window, WindowBuilder};
 use tokio::runtime::Handle;
 use tracing::{error, trace};
 use url::Url;
-use wry::http::{Request, Response, StatusCode};
-use wry::{Rect, WebView, WebViewBuilder, WebViewId};
+use wry::http::response::Builder;
+use wry::http::{Request, Response};
+use wry::{Rect, WebView, WebViewBuilder};
 
 pub struct App {
     loader: ChallengeLoader,
@@ -92,124 +96,26 @@ impl App {
     fn on_new_challenge_event(&mut self, event: NewChallengeEvent, _: &mut ControlFlow) {
         let proxy = self.proxy.clone();
         let loader = self.loader.clone();
-
-        const INIT: &str = r"
-            window.parent.postMessage = function(payload, origin) {
-                window.ipc.postMessage(payload);
-            };
-        ";
-
-        let on_req = move |_: WebViewId, req: Request<Vec<u8>>| -> Response<Cow<'static, [u8]>> {
-            let url = Url::parse(&req.uri().to_string()).unwrap();
-            let host = url.host_str().unwrap().to_owned();
-            let base = format!("{}://{host}", url.scheme());
-
-            let ((tx, rx), loader) = (mpsc::channel(), loader.clone());
-
-            Handle::current().spawn(async move {
-                let mut query = Vec::new();
-
-                for (k, v) in url.query_pairs() {
-                    let k = k.into_owned();
-                    let v = v.into_owned();
-
-                    query.push((k, Some(v)));
-                }
-
-                let mut header = Vec::new();
-
-                for (k, v) in req.headers() {
-                    let k = k.as_str().to_owned();
-                    let v = v.to_str().unwrap_or_default();
-
-                    header.push((k, rust_to_https(v)));
-                }
-
-                let _ = loader
-                    .get(rust_to_https(&base), url.path(), query, header)
-                    .map(|res| tx.send(res))
-                    .await;
-            });
-
-            match rx.recv() {
-                Ok(Ok(res)) => {
-                    let mut b = Response::builder().status(res.status);
-
-                    for (k, v) in res.headers {
-                        if k.eq_ignore_ascii_case("content-security-policy") {
-                            b = b.header(k, csp_to_rust(v, &host));
-                        } else {
-                            b = b.header(k, https_to_rust(v));
-                        }
-                    }
-
-                    b.body(res.contents.to_vec().into()).unwrap()
-                }
-
-                Ok(Err(err)) => Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .body(format!("{err:?}").into_bytes().into())
-                    .unwrap(),
-
-                Err(_) => Response::builder()
-                    .status(StatusCode::INTERNAL_SERVER_ERROR)
-                    .body("Request timeout".as_bytes().into())
-                    .unwrap(),
-            }
-        };
-
-        let on_ipc = move |req: Request<String>| {
-            let res = match serde_json::from_str(req.body()) {
-                Ok(HvMessage::HumanVerificationSuccess { ttype, token }) => EndChallengeEvent {
-                    response: ChallengeResponse::Success { token, ttype },
-                    tx: event.tx.clone(),
-                },
-
-                Ok(HvMessage::Error { .. }) => EndChallengeEvent {
-                    response: ChallengeResponse::Failure,
-                    tx: event.tx.clone(),
-                },
-
-                Ok(HvMessage::Close) => EndChallengeEvent {
-                    response: ChallengeResponse::Cancelled,
-                    tx: event.tx.clone(),
-                },
-
-                Ok(event) => {
-                    trace!(?event, "unhandled IPC event");
-                    return;
-                }
-
-                Err(e) => {
-                    error!(?e, "invalid IPC event");
-                    return;
-                }
-            };
-
-            if proxy.send_event(UserEvent::EndChallenge(res)).is_err() {
-                error!("failed to send event");
-            }
-        };
-
-        let builder = WebViewBuilder::new()
-            .with_initialization_script(INIT)
-            .with_url(https_to_rust(event.payload.web_url))
-            .with_custom_protocol("rust".to_owned(), on_req)
-            .with_ipc_handler(on_ipc);
+        let builder = new_webview_builder(loader, event, proxy);
 
         self.webview = new_webview(&self.window, builder).ok();
-
         self.window.set_visible(true);
     }
 
     fn on_end_challenge_event(&mut self, event: EndChallengeEvent, _: &mut ControlFlow) {
         self.webview = None;
-
         self.window.set_visible(false);
 
-        if event.tx.send(event.response).is_err() {
-            error!("failed to send response");
+        if let Err(e) = event.tx.send(event.response) {
+            error!(?e, "failed to send response");
         }
+    }
+}
+
+fn new_bounds(window: &Window, size: PhysicalSize<u32>) -> Rect {
+    Rect {
+        position: LogicalPosition::new(0.0, 0.0).into(),
+        size: size.to_logical::<u32>(window.scale_factor()).into(),
     }
 }
 
@@ -240,41 +146,150 @@ fn new_webview(window: &Window, builder: WebViewBuilder) -> Result<WebView> {
     }
 }
 
-fn new_bounds(window: &Window, size: PhysicalSize<u32>) -> Rect {
-    Rect {
-        position: LogicalPosition::new(0.0, 0.0).into(),
-        size: size.to_logical::<u32>(window.scale_factor()).into(),
+const WEBVIEW_INIT: &str = r"
+    window.parent.postMessage = function(payload, origin) {
+        window.ipc.postMessage(payload);
+    };
+";
+
+fn new_webview_builder<'a>(
+    c: ChallengeLoader,
+    event: NewChallengeEvent,
+    proxy: EventLoopProxy<UserEvent>,
+) -> WebViewBuilder<'a> {
+    WebViewBuilder::new()
+        .with_initialization_script(WEBVIEW_INIT)
+        .with_url(to_rust(event.payload.web_url))
+        .with_custom_protocol("rust".to_owned(), move |_, req| on_web_req(c.clone(), req))
+        .with_ipc_handler(move |req| on_ipc_req(&proxy, req, event.tx.clone()))
+}
+
+fn on_web_req(c: ChallengeLoader, req: Request<Vec<u8>>) -> Response<Cow<'static, [u8]>> {
+    let (tx, rx) = mpsc::channel();
+
+    Handle::current().spawn(async move {
+        let url = Url::parse(&req.uri().to_string()).unwrap();
+        let base = to_https(url.base());
+        let path = url.path();
+        let query = url.get_query();
+        let header = req.get_header();
+
+        c.get(base, path, query, header)
+            .map(|res| tx.send(res))
+            .await
+    });
+
+    let res = rx.recv().unwrap().unwrap();
+
+    Response::builder()
+        .status(res.status)
+        .headers(res.headers.into_iter().map(header_to_rust))
+        .body(res.contents.to_vec().into())
+        .unwrap()
+}
+
+fn on_ipc_req(
+    proxy: &EventLoopProxy<UserEvent>,
+    req: Request<String>,
+    tx: mpsc::Sender<ChallengeResponse>,
+) {
+    let response = match serde_json::from_str(req.body()) {
+        Ok(HvMessage::Success { ttype, token }) => ChallengeResponse::Success { token, ttype },
+        Ok(HvMessage::Error { .. }) => ChallengeResponse::Failure,
+        Ok(HvMessage::Close) => ChallengeResponse::Cancelled,
+        _ => return,
+    };
+
+    if let Err(e) = proxy.send_event(UserEvent::EndChallenge(EndChallengeEvent { response, tx })) {
+        error!(?e, "failed to send event");
     }
 }
 
-fn rust_to_https(url: impl AsRef<str>) -> String {
-    url.as_ref().replace("rust://", "https://")
+fn to_https(v: impl AsRef<str>) -> String {
+    v.as_ref().replace("rust://", "https://")
 }
 
-fn https_to_rust(url: impl AsRef<str>) -> String {
-    url.as_ref().replace("https://", "rust://")
+fn to_rust(v: impl AsRef<str>) -> String {
+    v.as_ref().replace("https://", "rust://")
 }
 
-fn csp_to_rust(mut csp: String, host: &str) -> String {
-    const FRAME_SRC: &str = "frame-src 'self' blob: ";
+fn header_to_rust((k, v): (String, String)) -> (String, String) {
+    if k.eq_ignore_ascii_case("content-security-policy") {
+        (k, csp_to_rust(&v))
+    } else {
+        (k, v)
+    }
+}
 
-    if let Some(pos) = csp.find(FRAME_SRC) {
-        csp.insert_str(pos + FRAME_SRC.len(), &format!("rust://{host} "));
+fn csp_to_rust(csp: &str) -> String {
+    let mut csp = parse_csp(csp);
+
+    for v in csp.values_mut() {
+        v.push("rust:");
     }
 
-    for directive in [
-        "script-src",
-        "style-src",
-        "img-src",
-        "frame-src",
-        "connect-src",
-        "font-src",
-        "media-src",
-    ] {
-        if let Some(pos) = csp.find(directive) {
-            csp.insert_str(pos + directive.len(), " rust:");
+    render_csp(&csp)
+}
+
+fn parse_csp(v: &str) -> HashMap<&str, Vec<&str>> {
+    let mut csp = HashMap::new();
+
+    for line in v.split(';') {
+        if let Some((head, tail)) = line.split_whitespace().into_head_tail() {
+            csp.insert(head, tail.collect_vec());
         }
     }
 
     csp
+}
+
+fn render_csp(csp: &HashMap<&str, Vec<&str>>) -> String {
+    csp.iter()
+        .map(|(k, v)| (k, v.join(" ")))
+        .map(|(k, v)| format!("{k} {v}"))
+        .join(";")
+}
+
+trait RequestExt {
+    fn get_header(&self) -> impl Iterator<Item = (String, String)>;
+}
+
+impl<T> RequestExt for Request<T> {
+    fn get_header(&self) -> impl Iterator<Item = (String, String)> {
+        self.headers()
+            .into_iter()
+            .map(|(k, v)| (k.as_str(), v.to_str().unwrap_or_default()))
+            .map(|(k, v)| (k.to_owned(), v.to_owned()))
+    }
+}
+
+trait UrlExt {
+    fn base(&self) -> Self;
+    fn get_query(&self) -> impl Iterator<Item = (String, Option<String>)>;
+}
+
+impl UrlExt for Url {
+    fn base(&self) -> Self {
+        let scheme = self.scheme();
+        let host = self.host_str().unwrap();
+        format!("{scheme}://{host}").parse().unwrap()
+    }
+
+    fn get_query(&self) -> impl Iterator<Item = (String, Option<String>)> {
+        self.query_pairs().into_owned().map(|(k, v)| (k, Some(v)))
+    }
+}
+
+trait BuilderExt {
+    fn headers(self, headers: impl IntoIterator<Item = (String, String)>) -> Self;
+}
+
+impl BuilderExt for Builder {
+    fn headers(mut self, headers: impl IntoIterator<Item = (String, String)>) -> Self {
+        for (k, v) in headers {
+            self = self.header(k, v);
+        }
+
+        self
+    }
 }

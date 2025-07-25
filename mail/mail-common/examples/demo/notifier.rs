@@ -25,7 +25,8 @@ pub enum HvMessage {
         text: String,
     },
 
-    HumanVerificationSuccess {
+    #[serde(rename = "HUMAN_VERIFICATION_SUCCESS")]
+    Success {
         #[serde(rename = "type")]
         ttype: String,
         token: String,
