@@ -1,4 +1,6 @@
-use crate::actions::{GenericActionData, MailActionError, filter_responses_by_codes};
+use crate::actions::{
+    ConversationOrMessage, GenericActionData, MailActionError, filter_responses_by_codes,
+};
 use crate::datatypes::{LocalMessageId, RollbackItemType};
 use crate::models::Message;
 use itertools::Itertools;

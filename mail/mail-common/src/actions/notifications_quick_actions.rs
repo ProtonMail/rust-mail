@@ -1,14 +1,15 @@
+use proton_core_common::{datatypes::SystemLabel, models::LabelError};
+use proton_mail_api::services::proton::common::MessageId;
+
 use crate::{
     MailContextResult, MailUserContext,
-    actions::messages::{Move, Read},
+    actions::{
+        ActionMoveData,
+        messages::{Move, Read},
+    },
     datatypes::mail_notifications::PushNotificationQuickAction,
     models::Message,
 };
-use proton_core_common::{
-    datatypes::SystemLabel,
-    models::{LabelError, ModelExtension},
-};
-use proton_mail_api::services::proton::common::MessageId;
 
 /// Insert the quick action into the queue and execute local part immediately.
 ///
@@ -41,24 +42,13 @@ async fn move_to_system_label(
     let local_id = Message::find_or_fetch_by_remote_id(ctx, remote_id).await?;
     let tether = ctx.user_stash().connection();
 
-    // SAFETY: We just received local id. Message must exist in the DB.
-    let source_label = Message::find_by_id(local_id, &tether)
-        .await?
-        .unwrap()
-        .exclusive_location
-        .expect("Exclusive location")
-        .local_id();
-
     let destination_label = system_label
         .local_id(&tether)
         .await?
         .ok_or_else(|| LabelError::CouldNotResolveLocalLabel(system_label.remote_id()))?;
 
-    ctx.queue_action(Move::new(
-        source_label,
-        destination_label,
-        std::iter::once(local_id),
-    ))
-    .await?;
+    if let Some(move_action) = ActionMoveData::new(&tether, destination_label, [local_id]).await? {
+        ctx.queue_action(Move(move_action)).await?;
+    }
     Ok(())
 }

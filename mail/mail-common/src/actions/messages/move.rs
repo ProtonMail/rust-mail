@@ -1,38 +1,20 @@
-use crate::actions::{ActionMoveData, MailActionError, filter_responses};
-use crate::datatypes::{LocalMessageId, RollbackItemType};
-use crate::models::{Message, RollbackItem};
-use itertools::Itertools;
+use crate::AppError;
+use crate::actions::{ActionMoveData, MailActionError};
+use crate::models::Message;
+use anyhow::Context;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
 use proton_action_queue::action::{ActionId, Handler};
+use proton_action_queue::queue::Queue;
 use proton_core_api::services::proton::Proton;
-use proton_core_common::datatypes::LocalLabelId;
-use proton_core_common::models::ModelIdExtension;
-use proton_mail_api::services::proton::ProtonMail;
 use serde::{Deserialize, Serialize};
-use stash::stash::Bond;
-use tracing::{error, info};
+use stash::stash::{Bond, Tether};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct Move(ActionMoveData<Message>);
-
-impl Move {
-    pub fn new(
-        source_label_id: LocalLabelId,
-        destination_label_id: LocalLabelId,
-        target_ids: impl IntoIterator<Item = LocalMessageId>,
-    ) -> Self {
-        Self(ActionMoveData::new(
-            source_label_id,
-            destination_label_id,
-            target_ids,
-        ))
-    }
-}
+pub struct Move(pub ActionMoveData<Message>);
 
 impl Action for Move {
     const TYPE: Type = Type("move_messages");
     const VERSION: u32 = 1;
-
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = MoveHandler;
     type RemoteOutput = ();
@@ -53,16 +35,7 @@ impl Handler for MoveHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        action.0.resolve_ids(tx).await?;
-
-        Message::move_messages(
-            action.0.source_label_id,
-            action.0.destination_label_id,
-            action.0.target_ids.clone(),
-            tx,
-        )
-        .await?;
-
+        action.0.move_to(tx).await?;
         Ok(())
     }
 
@@ -72,20 +45,10 @@ impl Handler for MoveHandler {
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), <Self::Action as Action>::Error> {
-        Message::move_messages(
-            action.0.destination_label_id,
-            action.0.source_label_id,
-            action.0.target_ids.clone(),
-            tx,
-        )
-        .await?;
-
-        for remote_id in &action.0.remote_target_ids {
-            RollbackItem::new(remote_id.to_string(), RollbackItemType::Message)
-                .save(tx)
-                .await?;
+        action.0.revert_local(tx).await?;
+        for reverse in action.0.reverse() {
+            reverse.move_to(tx).await?;
         }
-
         Ok(())
     }
 
@@ -93,48 +56,30 @@ impl Handler for MoveHandler {
         &self,
         _: ActionId,
         action: &mut Self::Action,
-        mut guard: WriterGuard<'_>,
+        guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        let message_ids = action
-            .0
-            .remote_target_ids
-            .clone()
-            .into_iter()
-            .map_into()
-            .collect();
+        action.0.apply_remote(&self.api, guard).await
+    }
+}
 
-        let label_id = action
-            .0
-            .remote_destination_label_id
-            .clone()
-            .expect("Should be set");
+pub struct UndoMoveToMessages {
+    pub action: Move,
+    pub id: ActionId,
+}
 
-        info!("Applying {label_id:?} to {message_ids:?}");
+impl UndoMoveToMessages {
+    pub async fn undo(self, queue: &Queue, _: &Tether) -> Result<(), AppError> {
+        if queue.cancel(self.id).await.is_ok() {
+            // The undoing is done by the revert_local of the action.
+            return Ok(());
+        };
+        // The queue couldn't revert. This means that we're on our own to undo this.
 
-        let response = self
-            .api
-            .put_messages_label(message_ids, label_id, None)
-            .await?
-            .responses;
+        _ = queue
+            .queue_actions(self.action.0.reverse().map(Move))
+            .await
+            .context("Error undoing")?;
 
-        let failed_ids = filter_responses(response);
-
-        if !failed_ids.is_empty() {
-            error!("Move messages operation failed for: {failed_ids:?}");
-            guard
-                .tx::<_, _, <Self::Action as Action>::Error>(async |tx| {
-                    let local_ids = Message::remote_ids_counterpart(failed_ids.clone(), tx).await?;
-                    Message::move_messages(
-                        action.0.destination_label_id,
-                        action.0.source_label_id,
-                        local_ids,
-                        tx,
-                    )
-                    .await?;
-                    Ok(())
-                })
-                .await?;
-        }
         Ok(())
     }
 }

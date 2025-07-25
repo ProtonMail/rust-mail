@@ -23,8 +23,6 @@ use proton_core_common::models::LabelError;
 use proton_core_common::pin_code::PinError;
 use proton_event_loop::EventLoopError;
 use proton_event_loop::subscriber::SubscriberError;
-#[cfg(feature = "proton_mail_error_log")]
-use tracing::error;
 
 /// Categories of errors that can be returned by the ProtonMail SDK.
 ///
@@ -86,7 +84,7 @@ thread_local! {
 fn log_error<T: std::error::Error>(value: &T) -> LogStackGuard {
     let guard = LogStackGuard::new();
     if guard.can_log() {
-        error!("ProtonMailError::From: {value:?}");
+        tracing::error!("ProtonMailError::From: {value:?}");
     }
     guard
 }

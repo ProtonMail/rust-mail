@@ -317,6 +317,42 @@ impl Queue {
             .await
     }
 
+    /// Queue actions of the same type sequentially, where each action is a dependency of the next.
+    ///
+    /// If one fails, everything is rolled back.
+    ///
+    /// A default [`Metadata`] type is assigned to this `action`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if action could not be executed locally.
+    pub async fn queue_actions<T: Action>(
+        &self,
+        actions: impl IntoIterator<Item = T>,
+    ) -> Result<Vec<QueuedActionOutput<T>>, ActionError<T>> {
+        self.shared
+            .stash
+            .connection()
+            .tx(async |tx| {
+                let mut res: Vec<QueuedActionOutput<T>> = vec![];
+
+                for action in actions {
+                    let meta = if let Some(last) = res.last() {
+                        Metadata::with_dependency(last.id)
+                    } else {
+                        Metadata::default()
+                    };
+
+                    let action = self
+                        .queue_action_with_metadata_in_tx(action, meta, tx)
+                        .await?;
+                    res.push(action);
+                }
+                Ok(res)
+            })
+            .await
+    }
+
     /// Queue an `action` for execution at a later time with a custom `metadata`.
     ///
     /// # Errors
@@ -324,8 +360,29 @@ impl Queue {
     /// Returns error if action could not be executed locally.
     pub async fn queue_action_with_metadata<T: Action>(
         &self,
+        action: T,
+        metadata: Metadata,
+    ) -> LocalOutput<T> {
+        self.shared
+            .stash
+            .connection()
+            .tx(async |tx| {
+                self.queue_action_with_metadata_in_tx(action, metadata, tx)
+                    .await
+            })
+            .await
+    }
+
+    /// Queue an `action` for execution at a later time with a custom `metadata`.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if action could not be executed locally.
+    async fn queue_action_with_metadata_in_tx<T: Action>(
+        &self,
         mut action: T,
         metadata: Metadata,
+        tx: &Bond<'_>,
     ) -> LocalOutput<T> {
         let span = tracing::debug_span!("queue::queue", type=T::TYPE.0);
 
@@ -338,7 +395,7 @@ impl Queue {
             })?;
 
             let (local_output, id) =
-                execute_action_local(&self.shared, &mut action, &handler, metadata, None).await?;
+                execute_action_local(&mut action, &handler, metadata, None, tx).await?;
 
             info!("Action queued with id={id}");
 
@@ -393,15 +450,15 @@ impl Queue {
                 Error::UnknownAction(T::TYPE.to_string())
             })?;
 
-            let (local_output, id) = execute_action_local(
-                &self.shared,
-                &mut action,
-                &handler,
-                metadata,
-                Some(existing_id),
-            )
-            .await?;
-
+            let (local_output, id) = self
+                .shared
+                .stash
+                .connection()
+                .tx(async |tx| {
+                    execute_action_local(&mut action, &handler, metadata, Some(existing_id), tx)
+                        .await
+                })
+                .await?;
             if existing_id == id {
                 info!("Action has been updated");
                 // We don't want to notify executors in this case.
@@ -1076,85 +1133,72 @@ impl QueueAutoExecutorPool {
 }
 
 async fn execute_action_local<T: Action>(
-    shared: &Shared,
     action: &mut T,
     handler: &T::Handler,
     metadata: Metadata,
     existing_id: Option<ActionId>,
+    tx: &Bond<'_>,
 ) -> Result<(T::LocalOutput, ActionId), ActionError<T>> {
-    let mut tether = shared.stash.connection();
-
-    tether
-        .tx::<_, _, ActionError<T>>(async |tx| {
-            let mut stored_action =
-                StoredAction::without_state::<T>(action.dependency_keys(), metadata);
-
-            if let Some(exising_id) = existing_id {
-                stored_action
-                    .create_or_update(exising_id, tx)
-                    .await
-                    .map_err(|e| {
-                        error!("Failed to create or update action: {e:?}");
-                        e
-                    })?;
-            } else {
-                stored_action.save(tx).await.map_err(|e| {
-                    error!("Failed to store action: {e:?}");
-                    e
-                })?;
-            }
-
-            // Validate action dependencies for circular deps
-            {
-                let mut sorter = TopologicalSort::<ActionId>::new();
-                let mut pending_action_ids = vec![stored_action.id.unwrap()];
-                let mut visited = HashSet::new();
-
-                while let Some(action_id) = pending_action_ids.pop() {
-                    let deps = StoredAction::all_dependencies(tx, action_id).await?;
-
-                    if !visited.insert(action_id) {
-                        continue;
-                    }
-                    if deps.is_empty() {
-                        continue;
-                    }
-
-                    for dep in &deps {
-                        sorter.add_dependency(action_id, dep.dependency_id);
-                    }
-
-                    pending_action_ids.extend(deps.into_iter().map(|dep| dep.dependency_id));
-                }
-
-                if sorter.pop().is_none() && !sorter.is_empty() {
-                    return Err(Error::CyclicDependency.into());
-                }
-            }
-
-            let local_output = handler
-                .apply_local(stored_action.id.unwrap(), action, tx)
-                .await
-                .map_err(|e| {
-                    error!("Failed to apply local changes: {e:?}");
-                    ActionError::Action(e)
-                })?;
-
-            stored_action.set_action_state(action).map_err(|e| {
-                error!("Failed to set action state: {e:?}");
-                Error::from(e)
+    let mut stored_action = StoredAction::without_state::<T>(action.dependency_keys(), metadata);
+    if let Some(exising_id) = existing_id {
+        stored_action
+            .create_or_update(exising_id, tx)
+            .await
+            .map_err(|e| {
+                error!("Failed to create or update action: {e:?}");
+                e
             })?;
+    } else {
+        stored_action.save(tx).await.map_err(|e| {
+            error!("Failed to store action: {e:?}");
+            e
+        })?;
+    }
 
-            stored_action
-                .update_action_state(tx)
-                .await
-                .inspect_err(|e| {
-                    error!("Failed to update action state: {e:?}");
-                })?;
+    // Validate action dependencies for circular deps
+    {
+        let mut sorter = TopologicalSort::<ActionId>::new();
+        let mut pending_action_ids = vec![stored_action.id.unwrap()];
+        let mut visited = HashSet::new();
+        while let Some(action_id) = pending_action_ids.pop() {
+            let deps = StoredAction::all_dependencies(tx, action_id).await?;
+            if !visited.insert(action_id) {
+                continue;
+            }
+            if deps.is_empty() {
+                continue;
+            }
+            for dep in &deps {
+                sorter.add_dependency(action_id, dep.dependency_id);
+            }
+            pending_action_ids.extend(deps.into_iter().map(|dep| dep.dependency_id));
+        }
+        if sorter.pop().is_none() && !sorter.is_empty() {
+            return Err(Error::CyclicDependency.into());
+        }
+    }
 
-            Ok((local_output, stored_action.id.unwrap()))
-        })
+    // Execute the local changes
+    let local_output = handler
+        .apply_local(stored_action.id.unwrap(), action, tx)
         .await
+        .map_err(|e| {
+            error!("Failed to apply local changes: {e:?}");
+            ActionError::Action(e)
+        })?;
+
+    // Update action state.
+    stored_action.set_action_state(action).map_err(|e| {
+        error!("Failed to set action state: {e:?}");
+        Error::from(e)
+    })?;
+    stored_action
+        .update_action_state(tx)
+        .await
+        .inspect_err(|e| {
+            error!("Failed to update action state: {e:?}");
+        })?;
+    Ok((local_output, stored_action.id.unwrap()))
 }
 
 async fn execute_action_remote<T: Action>(

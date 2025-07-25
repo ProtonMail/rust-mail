@@ -2373,19 +2373,19 @@ async fn test_conversation_marks_only_the_last_message_with_the_same_label_as_un
         .expect("should have value");
 
     let messages = Message::find(
-        "WHERE local_conversation_id=?
-                AND unread=1",
+        "WHERE local_conversation_id=?",
         params![local_conv_id],
         &tether,
     )
     .await
     .unwrap();
-    assert_eq!(messages.len(), 1);
-    let message = &messages[0];
-    // newest message has time at 400.
-    assert_eq!(message.time, 100.into());
+    let read_message = &messages[0];
+    let unread_message = &messages[1];
+    assert_eq!(read_message.time, 100.into());
+    assert_eq!(unread_message.time, 200.into());
 
-    assert_eq!(message.label_ids[0], *MY_LABEL_ID1);
+    assert_eq!(read_message.label_ids[0], *MY_LABEL_ID1);
+    assert_eq!(unread_message.label_ids[0], *MY_LABEL_ID2);
 
     // There should be 1 unread message.
     assert_eq!(db_conversation.num_unread, 1);
