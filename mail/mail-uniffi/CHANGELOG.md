@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixes
 
+- Marking conversation unread without messages
+
+
+## [mail-uniffi-v0.105.8] - 2025-07-24
+
+### Fixes
+
 - Mail-common: drop `saveaspdf` and `print` actions
 - [ET-3920] Sync missing dependencies in mail scrollers
 
