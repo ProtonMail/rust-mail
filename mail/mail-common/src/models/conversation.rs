@@ -1440,7 +1440,7 @@ impl Conversation {
     ///
     /// Returns an error if the data could not be written to the database.
     ///
-    pub async fn mark_unread_by_label(
+    pub async fn mark_unread(
         local_label_id: LocalLabelId,
         conversation_ids: impl IntoIterator<Item = LocalConversationId>,
         bond: &Bond<'_>,
@@ -1547,119 +1547,6 @@ impl Conversation {
 
             // update conversation
             conversation.num_unread += 1;
-            conversation.save(bond).await?;
-        }
-        Ok(())
-    }
-
-    /// Mark multiple conversations as unread.
-    /// For each conversation only the last read message gets marked as unread.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be written to the database.
-    ///
-    pub async fn mark_unread(
-        conversation_ids: impl IntoIterator<Item = LocalConversationId>,
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        for conversation_id in conversation_ids {
-            info!("Marking {conversation_id:?} as unread");
-            let Some(mut conversation) = Conversation::find_by_id(conversation_id, bond).await?
-            else {
-                warn!("Conversation with id {conversation_id} does not exist!");
-                continue;
-            };
-            // Find all messages that need to be marked as read.
-            let message = Message::find_first(
-                "
-                JOIN message_labels AS ml ON messages.local_id = ml.local_message_id
-                WHERE local_conversation_id=?
-                AND unread=0
-                ORDER BY time DESC",
-                params![conversation_id],
-                bond,
-            )
-            .await?;
-
-            let total_conversation_message_count = bond
-                .query_value::<_, u64>(
-                    "SELECT COUNT(local_id) AS value FROM messages WHERE local_conversation_id=?",
-                    params![conversation_id],
-                )
-                .await?;
-
-            let Some(mut message) = message else {
-                if total_conversation_message_count == 0 {
-                    // These conversations where asked to be marked as read, but had
-                    // no messages. Either the messages were already mark as read or
-                    // there was no metadata. For these we need to set the unread
-                    // count to 1 and update the current label count. We let the
-                    // event loop take care of the rest.
-
-                    let conv_labels = ConversationLabel::find(
-                        "WHERE local_conversation_id=?",
-                        params![conversation_id],
-                        bond,
-                    )
-                    .await?;
-                    for mut conv_label in conv_labels {
-                        conv_label.context_num_unread += 1;
-                        conv_label.save(bond).await?;
-
-                        if let Some(local_label_id) = conv_label.local_label_id
-                            && let Some(mut counter) =
-                                ConversationCounters::find_by_id(local_label_id, bond).await?
-                        {
-                            counter.unread += 1;
-                            counter.save(bond).await?;
-                        }
-                    }
-
-                    conversation.num_unread += 1;
-                    conversation.save(bond).await?;
-                }
-                continue;
-            };
-
-            // Update the message
-
-            message.unread = true;
-            message.save(bond).await?;
-
-            // Update the label counts
-
-            let label_ids = bond
-                .query_values::<_, LocalLabelId>(
-                    "SELECT local_label_id AS value
-                     FROM message_labels
-                     WHERE local_message_id=?",
-                    params![message.id_value()?],
-                )
-                .await?;
-
-            for label_id in label_ids {
-                if let Some(mut counter) = MessageCounters::find_by_id(label_id, bond).await? {
-                    // Always update the message count
-                    counter.unread += 1;
-                    counter.save(bond).await?;
-                }
-                if let Some(mut counter) = ConversationCounters::find_by_id(label_id, bond).await? {
-                    // Only update conversation unread count if we really marked
-                    // all messages as unread. If we have mixture, this value
-                    // should not be modified
-                    if total_conversation_message_count == 1 {
-                        counter.unread += 1;
-                        counter.save(bond).await?;
-                    }
-                }
-            }
-
-            // update conversations
-            conversation.num_unread += 1;
-            for conversation_label in &mut conversation.labels {
-                conversation_label.context_num_unread += 1;
-            }
             conversation.save(bond).await?;
         }
         Ok(())
@@ -2711,13 +2598,6 @@ impl ConversationOrMessage for Conversation {
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         Self::mark_read(ids, bond).await
-    }
-
-    async fn mark_unread(
-        ids: impl IntoIterator<Item = Self::IdType>,
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        Self::mark_unread(ids, bond).await
     }
 
     async fn remove_all_labels_except_all_mail(

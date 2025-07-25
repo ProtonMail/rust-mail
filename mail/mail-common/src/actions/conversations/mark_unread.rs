@@ -58,8 +58,7 @@ impl Handler for MarkUnreadHandler {
 
         action.0.resolve_ids(tx).await?;
 
-        Conversation::mark_unread_by_label(action.0.label_id, action.0.data.target_ids.clone(), tx)
-            .await?;
+        Conversation::mark_unread(action.0.label_id, action.0.data.target_ids.clone(), tx).await?;
         Ok(())
     }
 

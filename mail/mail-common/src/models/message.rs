@@ -2453,6 +2453,13 @@ impl Message {
                 || *label_id == LabelId::all_drafts()
         })
     }
+
+    pub async fn mark_unread(
+        ids: impl IntoIterator<Item = LocalMessageId>,
+        bond: &Bond<'_>,
+    ) -> Result<(), StashError> {
+        Self::mark_read_or_unread(false, ids, bond).await
+    }
 }
 
 impl ConversationOrMessage for Message {
@@ -2511,13 +2518,6 @@ impl ConversationOrMessage for Message {
         bond: &Bond<'_>,
     ) -> Result<(), StashError> {
         Self::mark_read_or_unread(true, ids, bond).await
-    }
-
-    async fn mark_unread(
-        ids: impl IntoIterator<Item = Self::IdType>,
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        Self::mark_read_or_unread(false, ids, bond).await
     }
 
     async fn remove_all_labels_except_all_mail(

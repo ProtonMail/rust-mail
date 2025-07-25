@@ -538,11 +538,6 @@ pub trait ConversationOrMessage:
         bond: &Bond<'_>,
     ) -> Result<(), StashError>;
 
-    async fn mark_unread(
-        ids: impl IntoIterator<Item = Self::IdType>,
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError>;
-
     async fn remove_all_labels_except_all_mail(
         ids: &[Self::IdType],
         bond: &Bond<'_>,

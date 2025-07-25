@@ -2182,7 +2182,7 @@ async fn test_conversation_mark_unread_no_metadata() {
             Conversation::mark_read(std::iter::once(local_conv_id), tx)
                 .await
                 .unwrap();
-            Conversation::mark_unread_by_label(local_label_id1, std::iter::once(local_conv_id), tx)
+            Conversation::mark_unread(local_label_id1, std::iter::once(local_conv_id), tx)
                 .await
                 .unwrap();
             Ok(())
@@ -2266,7 +2266,7 @@ async fn test_conversation_mark_unread() {
     tether
         .tx::<_, _, StashError>(async |tx| {
             // Mark last one as unread
-            Conversation::mark_unread_by_label(local_label_id1, [local_conv_id], tx)
+            Conversation::mark_unread(local_label_id1, [local_conv_id], tx)
                 .await
                 .unwrap();
             Ok(())
@@ -2359,7 +2359,7 @@ async fn test_conversation_marks_only_the_last_message_with_the_same_label_as_un
     tether
         .tx::<_, _, StashError>(async |tx| {
             // Mark last one as unread
-            Conversation::mark_unread_by_label(local_label_id1, [local_conv_id], tx)
+            Conversation::mark_unread(local_label_id1, [local_conv_id], tx)
                 .await
                 .unwrap();
             Ok(())
