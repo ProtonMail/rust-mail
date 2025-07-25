@@ -43,6 +43,7 @@ enum TestActions {
     PermanentDelete,
     Star,
     Unstar,
+    Snooze,
 }
 
 impl PartialEq<BottomBarActions> for TestActions {
@@ -70,6 +71,7 @@ impl PartialEq<BottomBarActions> for TestActions {
             Self::PermanentDelete => matches!(other, BottomBarActions::PermanentDelete),
             Self::Star => matches!(other, BottomBarActions::Star),
             Self::Unstar => matches!(other, BottomBarActions::Unstar),
+            Self::Snooze => matches!(other, BottomBarActions::Snooze),
         }
     }
 }
@@ -465,6 +467,7 @@ mod conversation {
         expected_hidden: vec![
             TestActions::MoveTo,
             TestActions::LabelAs,
+            TestActions::Snooze,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
@@ -494,6 +497,7 @@ mod conversation {
             TestActions::Star,
             TestActions::MoveTo,
             TestActions::LabelAs,
+            TestActions::Snooze,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
@@ -523,6 +527,7 @@ mod conversation {
             TestActions::Star,
             TestActions::MoveTo,
             TestActions::LabelAs,
+            TestActions::Snooze,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
@@ -553,6 +558,7 @@ mod conversation {
             TestActions::Star,
             TestActions::MoveTo,
             TestActions::LabelAs,
+            TestActions::Snooze,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
@@ -574,6 +580,7 @@ mod conversation {
         expected_hidden: vec![
             TestActions::MoveTo,
             TestActions::LabelAs,
+            TestActions::Snooze,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
@@ -598,6 +605,7 @@ mod conversation {
             TestActions::MarkUnread,
             TestActions::MoveTo,
             TestActions::LabelAs,
+            TestActions::Snooze,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
@@ -623,6 +631,7 @@ mod conversation {
             TestActions::Unstar,
             TestActions::MoveTo,
             TestActions::LabelAs,
+            TestActions::Snooze,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
@@ -651,6 +660,7 @@ mod conversation {
             TestActions::Unstar,
             TestActions::MoveTo,
             TestActions::LabelAs,
+            TestActions::Snooze,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
@@ -678,6 +688,7 @@ mod conversation {
             TestActions::Star,
             TestActions::MoveTo,
             TestActions::LabelAs,
+            TestActions::Snooze,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
         ],
         ..Default::default()
@@ -688,6 +699,7 @@ mod conversation {
         expected_hidden: vec![
             TestActions::MoveTo,
             TestActions::LabelAs,
+            TestActions::Snooze,
             TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
@@ -709,7 +721,10 @@ mod conversation {
             TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
             TestActions::More,
         ],
-        expected_hidden: vec![TestActions::MoveToSystemFolder(MovableSystemFolder::Trash)],
+        expected_hidden: vec![
+            TestActions::Snooze,
+            TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+        ],
         ..Default::default()
     });
     static TOO_MANY_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
@@ -721,6 +736,7 @@ mod conversation {
             "trash".to_owned(),
             "toggle_read".to_owned(),
             "toggle_star".to_owned(),
+            "snooze".to_owned(),
         ],
         is_custom: true,
         expected_visible: vec![
@@ -731,7 +747,7 @@ mod conversation {
             TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
             TestActions::More,
         ],
-        expected_hidden: vec![],
+        expected_hidden: vec![TestActions::Snooze],
         ..Default::default()
     });
     static ARCHIVE_CASE: LazyLock<TestCase<Conversation>> = LazyLock::new(|| TestCase {
@@ -779,6 +795,50 @@ mod conversation {
         ],
         ..Default::default()
     });
+    static CUSTOM_SNOOZE_AT_THE_BOTTOM_CASE: LazyLock<TestCase<Conversation>> =
+        LazyLock::new(|| TestCase {
+            toolbar_actions: vec![
+                "archive".to_owned(),
+                "label".to_owned(),
+                "move".to_owned(),
+                "snooze".to_owned(),
+            ],
+            is_custom: true,
+            expected_visible: vec![
+                TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+                TestActions::LabelAs,
+                TestActions::MoveTo,
+                TestActions::Snooze,
+                TestActions::More,
+            ],
+            expected_hidden: vec![
+                TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+                TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            ],
+            ..Default::default()
+        });
+    static CUSTOM_SNOOZE_AT_THE_TOP_CASE: LazyLock<TestCase<Conversation>> =
+        LazyLock::new(|| TestCase {
+            toolbar_actions: vec![
+                "snooze".to_owned(),
+                "archive".to_owned(),
+                "label".to_owned(),
+                "move".to_owned(),
+            ],
+            is_custom: true,
+            expected_visible: vec![
+                TestActions::Snooze,
+                TestActions::MoveToSystemFolder(MovableSystemFolder::Archive),
+                TestActions::LabelAs,
+                TestActions::MoveTo,
+                TestActions::More,
+            ],
+            expected_hidden: vec![
+                TestActions::MoveToSystemFolder(MovableSystemFolder::Spam),
+                TestActions::MoveToSystemFolder(MovableSystemFolder::Trash),
+            ],
+            ..Default::default()
+        });
 
     #[test_case(&DEFAULT_CASE; "default")]
     #[test_case(&ALL_UNREAD_CASE; "unread")]
@@ -795,6 +855,8 @@ mod conversation {
     #[test_case(&TRASH_CASE; "trash")]
     #[test_case(&SPAM_CASE; "spam")]
     #[test_case(&TOO_MANY_CASE; "too_many")]
+    #[test_case(&CUSTOM_SNOOZE_AT_THE_BOTTOM_CASE; "custom_snooze_at_the_bottom")]
+    #[test_case(&CUSTOM_SNOOZE_AT_THE_TOP_CASE; "custom_snooze_at_the_top")]
     #[tokio::test]
     async fn bottom_bar_actions(test_case: &TestCase<Conversation>) {
         // Setup

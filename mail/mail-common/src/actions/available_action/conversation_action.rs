@@ -26,4 +26,5 @@ pub enum ConversationAction {
     MarkRead,
     MarkUnread,
     Delete,
+    Snooze,
 }

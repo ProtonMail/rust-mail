@@ -376,6 +376,7 @@ impl ContextualConversation {
         let any_unstarred = conversations.iter().any(|m| !m.is_starred);
 
         BottomBarActions::hidden_bottom_bar_actions(
+            true,
             current_label,
             any_unread,
             any_read,

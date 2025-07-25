@@ -58,14 +58,19 @@ impl SystemLabel {
     pub fn new(label: &Label) -> Option<Self> {
         match label.label_type {
             LabelType::Label | LabelType::ContactGroup | LabelType::Folder => None,
-            LabelType::System => Self::from_rid(label.remote_id.as_ref()),
+            LabelType::System => Self::from_opt_rid(label.remote_id.as_ref()),
         }
     }
 
     #[must_use]
-    pub fn from_rid(label_id: Option<&LabelId>) -> Option<Self> {
+    pub fn from_opt_rid(label_id: Option<&LabelId>) -> Option<Self> {
         let remote_id = label_id?.parse::<u8>().ok()?;
         Self::try_from(remote_id).ok()
+    }
+
+    #[must_use]
+    pub fn from_rid(label_id: &LabelId) -> Option<Self> {
+        Self::from_opt_rid(Some(label_id))
     }
 
     #[must_use]
@@ -101,6 +106,11 @@ impl SystemLabel {
     #[must_use]
     pub fn is_starred(&self) -> bool {
         *self == Self::Starred
+    }
+
+    #[must_use]
+    pub fn is_snooze_location(&self) -> bool {
+        matches!(self, Self::Snoozed | Self::AllMail | Self::Inbox)
     }
 
     #[must_use]
