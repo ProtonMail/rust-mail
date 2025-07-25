@@ -1,3 +1,5 @@
+use anyhow::{Context, anyhow};
+use chrono::{DateTime, Local, MappedLocalTime, NaiveDateTime, TimeZone};
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_mail_common::datatypes::{
     MessageRecipient, MessageRecipients, MessageSender, MessageSenders,
@@ -60,9 +62,21 @@ pub fn format_recipients(senders: &MessageRecipients) -> String {
         .join(", ")
 }
 
-pub fn format_flags(starred: bool, rsvp: bool) -> String {
+pub fn format_flags(starred: bool, rsvp: bool, expiration_time: UnixTimestamp) -> String {
     iter::once("")
         .chain(starred.then_some("*"))
         .chain(rsvp.then_some("R"))
+        .chain((expiration_time.as_u64() != 0).then_some("E"))
         .collect()
+}
+
+/// Parse a date time string in the format `DD/MM/YYYY HH:MM` into local time.
+pub fn parse_date_time(dt: &str) -> anyhow::Result<DateTime<Local>> {
+    let dt =
+        NaiveDateTime::parse_from_str(dt, "%d/%m/%Y %H:%M").context("Failed to parse date time")?;
+
+    match Local.from_local_datetime(&dt) {
+        MappedLocalTime::Single(dt) | MappedLocalTime::Ambiguous(dt, _) => Ok(dt),
+        MappedLocalTime::None => Err(anyhow!("No local time found")),
+    }
 }

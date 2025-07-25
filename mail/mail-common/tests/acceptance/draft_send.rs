@@ -10,6 +10,7 @@ use proton_core_api::services::proton::{
     AddressStatus as ApiAddressStatus, AddressType as ApiAddressType,
 };
 use proton_core_api::services::proton::{AddressId, LabelId, UserId};
+use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::ModelExtension;
 use proton_crypto_account::keys::{ArmoredPrivateKey, EncryptedKeyToken, KeyTokenSignature};
 use proton_crypto_inbox::keys::PackageCryptoType;
@@ -1458,6 +1459,152 @@ async fn send_external_with_password() {
         .await
         .unwrap();
     user_ctx.execute_all_send_actions().await.unwrap();
+}
+
+#[tokio::test]
+async fn send_with_expiration() {
+    // Check :
+    // * Draft is saved before sent
+    // * Send API endpoint is updated
+    // * Draft is moved to sent folder
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+    let expiration_time = Local::now().checked_add_days(Days::new(10)).unwrap();
+    let expiration_timestamp = UnixTimestamp::from(expiration_time);
+
+    let mut message = message_body_test_message_simple();
+    message.metadata.to_list.push(MessageRecipient {
+        address: "foo@bar.com".into(),
+        is_proton: false,
+        name: "".into(),
+        group: None,
+    });
+    let mut sent_message = message.clone();
+    message.metadata.label_ids.push(LabelId::drafts());
+    sent_message.metadata.label_ids.push(LabelId::sent());
+    sent_message.metadata.flags.set(MessageFlags::SENT, true);
+    sent_message.body.header = "Fancy new header".to_owned();
+    sent_message.metadata.expiration_time = expiration_timestamp.as_u64();
+
+    let sent_conversation = ApiConversation {
+        id: message.metadata.conversation_id.clone(),
+        attachment_info: Default::default(),
+        attachments_metadata: vec![],
+        display_snooze_reminder: false,
+        expiration_time: expiration_timestamp.as_u64(),
+        labels: vec![ConversationLabel {
+            id: LabelId::sent(),
+            context_expiration_time: expiration_timestamp.as_u64(),
+            context_num_attachments: 0,
+            context_num_messages: 1,
+            context_num_unread: 0,
+            context_size: 0,
+            context_snooze_time: 0,
+            context_time: 0,
+        }],
+        num_attachments: 0,
+        num_messages: 1,
+        subject: sent_message.metadata.subject.clone(),
+        ..ApiConversation::test_default()
+    };
+
+    let expected_draft_params = expected_create_draft_params();
+    let mut send_params = default_mock_send_params();
+    send_params.expiration_time = Some(expiration_timestamp.as_u64());
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_create_draft(
+        expected_draft_params.clone(),
+        None,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+    ctx.mock_update_draft(
+        message.metadata.id.clone(),
+        expected_draft_params,
+        message.clone(),
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+    ctx.mock_send_draft(
+        message.metadata.id.clone(),
+        send_params,
+        sent_message.clone(),
+        sent_conversation,
+        (Utc::now().timestamp() + SEND_DELAY_SECONDS as i64).unsigned_abs(),
+    )
+    .await;
+    ctx.core_test_context()
+        .mock_get_keys_all(
+            "foo@bar.com",
+            GetKeysAllResponse {
+                address_keys: Default::default(),
+                catch_all_keys: None,
+                is_proton: false,
+                proton_mx: false,
+                unverified_keys: None,
+                warnings: vec![],
+            },
+        )
+        .await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+    let mut tether = user_ctx.user_stash().connection();
+
+    // Create draft.
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    draft
+        .to_list
+        .add_single(RecipientEntry {
+            email: "foo@bar.com".into(),
+            display_name: None,
+        })
+        .unwrap();
+
+    draft
+        .set_expiration_time(&mut tether, expiration_time)
+        .await
+        .unwrap();
+
+    draft
+        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
+
+    // Save at least once so we can retrieve the message id.
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    // get draft message id.
+    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+
+    // Check expiration is set
+    let draft_message = Message::load(draft_message_id, &tether)
+        .await
+        .unwrap()
+        .expect("failed to load message");
+
+    assert_eq!(draft_message.expiration_time, expiration_timestamp);
+
+    draft
+        .send(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .await
+        .unwrap();
+
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    // Check draft is in outbox.
+    let draft_message = Message::load(draft_message_id, &tether)
+        .await
+        .unwrap()
+        .expect("failed to load message");
+    assert_eq!(draft_message.expiration_time, expiration_timestamp);
 }
 
 async fn send_fails_if_recipient_is_not_valid_impl(

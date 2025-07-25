@@ -16,6 +16,7 @@ pub enum MailErrorReason {
     DraftCancelScheduleSendReason(DraftCancelScheduleSendErrorReason),
     DraftSenderAddressChangeReason(DraftSenderAddressChangeErrorReason),
     DraftPasswordReason(DraftPasswordErrorReason),
+    DraftExpirationReason(DraftExpirationErrorReason),
     EventReason(EventErrorReason),
     PinSetReason(PinSetErrorReason),
     PinAuthReason(PinAuthErrorReason),
@@ -232,6 +233,12 @@ pub enum DraftSenderAddressChangeErrorReason {
 #[derive(Debug)]
 pub enum DraftPasswordErrorReason {
     PasswordTooShort,
+}
+
+#[derive(Debug)]
+pub enum DraftExpirationErrorReason {
+    ExpirationTimeInThePast,
+    ExpirationTimeExceeds30Days,
 }
 
 /// Specific Reason for error occurrence within Event Loop.

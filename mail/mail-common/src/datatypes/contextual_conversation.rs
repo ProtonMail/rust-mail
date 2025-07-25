@@ -114,6 +114,7 @@ impl ScrollerEq for ContextualConversation {
             && self.display_snooze_reminder == other.display_snooze_reminder
             && self.is_starred == other.is_starred
             && self.num_attachments == other.num_attachments
+            && self.expiration_time == other.expiration_time
             && self.num_messages == other.num_messages
             && self.num_unread == other.num_unread
             && self.total_messages == other.total_messages

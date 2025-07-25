@@ -27,7 +27,7 @@ use proton_core_api::consts::Mail;
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::{AddressId, PrivateEmail};
 use proton_core_api::session::{CoreSession, Session};
-use proton_core_common::datatypes::LocalAddressId;
+use proton_core_common::datatypes::{LocalAddressId, UnixTimestamp};
 use proton_core_common::db::account::EncryptedPassword;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::attachment::{AttachmentDecryptionError, AttachmentEncryptionError};
@@ -89,6 +89,8 @@ pub enum Error {
     SenderAddressChange(#[from] SenderAddressChangeError),
     #[error(transparent)]
     Password(PasswordError),
+    #[error(transparent)]
+    Expiration(ExpirationError),
 }
 
 /// Errors that occur during draft creation or opening an existing draft.
@@ -370,6 +372,22 @@ pub enum PasswordError {
 impl From<PasswordError> for MailContextError {
     fn from(err: PasswordError) -> Self {
         MailContextError::Draft(Error::Password(err))
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ExpirationError {
+    #[error("Draft metadata {0} not found")]
+    MetadataNotFound(MetadataId),
+    #[error("Expiration time is older than the current time")]
+    ExpirationTimeInThePast,
+    #[error("Expiration time exceeded 30 days")]
+    ExpirationTimeExceeds30Days,
+}
+
+impl From<ExpirationError> for MailContextError {
+    fn from(err: ExpirationError) -> Self {
+        MailContextError::Draft(Error::Expiration(err))
     }
 }
 
@@ -1701,6 +1719,73 @@ impl Draft {
             info!("Password protection removed from draft {metadata_id}");
         }
         Ok(())
+    }
+
+    pub async fn set_expiration_time(
+        &self,
+        tether: &mut Tether,
+        expiration_time: DateTime<Local>,
+    ) -> Result<(), MailContextError> {
+        Self::set_expiration_time_by_id(tether, self.metadata_id, expiration_time).await
+    }
+
+    pub async fn set_expiration_time_by_id(
+        tether: &mut Tether,
+        metadata_id: MetadataId,
+        expiration_time: DateTime<Local>,
+    ) -> Result<(), MailContextError> {
+        let now = UnixTimestamp::now();
+        if now > expiration_time.into() {
+            return Err(ExpirationError::ExpirationTimeInThePast.into());
+        }
+
+        let in_30_days =
+            ScheduleSendOptions::calculate_next(expiration_time, 30).map_err(|_| {
+                tracing::error!("Failed to calculate 30 days into the future");
+                ExpirationError::ExpirationTimeExceeds30Days
+            })?;
+
+        if expiration_time > in_30_days {
+            return Err(ExpirationError::ExpirationTimeExceeds30Days.into());
+        }
+
+        let mut metadata = DraftMetadata::find_by_id(metadata_id, tether)
+            .await?
+            .ok_or(ExpirationError::MetadataNotFound(metadata_id))?;
+        metadata.expiration_time = Some(expiration_time.into());
+        tether.tx(async |tx| metadata.save(tx).await).await?;
+        info!("Expiration applied to draft {metadata_id}");
+        Ok(())
+    }
+
+    pub async fn remove_expiration_time(
+        &self,
+        tether: &mut Tether,
+    ) -> Result<(), MailContextError> {
+        Self::remove_expiration_time_by_id(tether, self.metadata_id).await
+    }
+
+    pub async fn remove_expiration_time_by_id(
+        tether: &mut Tether,
+        metadata_id: MetadataId,
+    ) -> Result<(), MailContextError> {
+        let mut metadata = DraftMetadata::find_by_id(metadata_id, tether)
+            .await?
+            .ok_or(ExpirationError::MetadataNotFound(metadata_id))?;
+        metadata.expiration_time = None;
+        tether.tx(async |tx| metadata.save(tx).await).await?;
+        info!("Expiration removed from draft {metadata_id}");
+        Ok(())
+    }
+
+    pub async fn expiration_time(
+        &self,
+        tether: &Tether,
+    ) -> Result<Option<UnixTimestamp>, MailContextError> {
+        let metadata = DraftMetadata::find_by_id(self.metadata_id, tether)
+            .await?
+            .ok_or(PasswordError::MetadataNotFound(self.metadata_id))?;
+        Ok(metadata.expiration_time)
     }
 }
 

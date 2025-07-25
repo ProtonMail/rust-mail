@@ -19,7 +19,7 @@ pub fn message_as_table(
     recipient_display_mode: MessageRecipientDisplayMode,
 ) -> IntoTable<'_> {
     let rows = messages.iter().map(|msg| {
-        let flags = format_flags(msg.is_starred(), msg.is_rsvp());
+        let flags = format_flags(msg.is_starred(), msg.is_rsvp(), msg.expiration_time);
         let date = date_from_timestamp(msg.time);
         let num_attachments = msg.num_attachments;
         let num_labels = msg.custom_labels.len();

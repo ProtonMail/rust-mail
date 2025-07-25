@@ -1,10 +1,12 @@
 mod address_list;
+mod expiration_time;
 mod password_protect;
 mod schedule_send;
 
 use crate::app::Command;
 use crate::app_model::YesNoPopup;
 use crate::app_model::mailbox::composer::address_list::AddressListPopup;
+use crate::app_model::mailbox::composer::expiration_time::ExpirationTimePopup;
 use crate::app_model::mailbox::composer::password_protect::PasswordProtectPopup;
 use crate::app_model::mailbox::composer::schedule_send::ScheduleSendPopup;
 use crate::app_model::mailbox::{ComposerMessage, Message};
@@ -521,6 +523,36 @@ impl Composer {
             }),
         ])
     }
+
+    fn set_expiration_time(
+        &mut self,
+        context: Arc<MailUserContext>,
+        expiration_time: DateTime<Local>,
+    ) -> Command<Messages> {
+        let id = self.draft.metadata_id;
+
+        Command::batch([
+            Command::message(Messages::DisplayBackgroundProgress(
+                "Setting Expiration Time".to_owned(),
+            )),
+            Command::task(async move {
+                let mut tether = context.user_stash().connection();
+                let cmd = match Draft::set_expiration_time_by_id(&mut tether, id, expiration_time)
+                    .await
+                {
+                    Ok(()) => Command::message(Messages::DisplayInfo(
+                        None,
+                        format!("Expiration time set to {expiration_time}"),
+                    )),
+                    Err(e) => Command::message(Messages::DisplayError(
+                        None,
+                        anyhow!("Failed to set expiration time: {e}"),
+                    )),
+                };
+                Command::batch([Command::message(Messages::DismissBackgroundProgress), cmd])
+            }),
+        ])
+    }
 }
 
 struct AttachmentInfo {
@@ -806,6 +838,11 @@ impl Composer {
                         return PasswordProtectPopup::open();
                     }
                 }
+                KeyCode::Char('e') => {
+                    if key.modifiers.contains(KeyModifiers::CONTROL) {
+                        return ExpirationTimePopup::open();
+                    }
+                }
                 _ => {}
             }
         }
@@ -883,6 +920,9 @@ impl Composer {
             }
             ComposerMessage::SetPasswordProtection(password, hint) => {
                 self.apply_password_protection(user_ctx.to_owned(), password, hint)
+            }
+            ComposerMessage::SetExpirationTime(dt) => {
+                self.set_expiration_time(user_ctx.to_owned(), dt)
             }
         }
     }

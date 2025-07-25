@@ -244,6 +244,7 @@ impl Handler for SaveHandler {
                 attachment_metadata.clone(),
                 attachments.len() as u64,
                 action.subject.clone(),
+                metadata.expiration_time(),
             );
 
             conversation
@@ -283,6 +284,7 @@ impl Handler for SaveHandler {
                 attachment_metadata,
                 body_len,
                 time,
+                metadata.expiration_time(),
             );
 
             message.save(bond).await.inspect_err(|e| {
@@ -319,6 +321,7 @@ impl Handler for SaveHandler {
                 body_len,
                 time,
                 display_order,
+                metadata.expiration_time(),
             );
 
             message.local_conversation_id = Some(conversation_id);
@@ -784,6 +787,7 @@ impl Save {
         body_len: u64,
         time: UnixTimestamp,
         display_order: u64,
+        expiration_time: UnixTimestamp,
     ) -> Message {
         debug_assert!(
             attachments
@@ -802,7 +806,7 @@ impl Save {
             bcc_list: self.bcc_list.to_message_recipients().into(),
             deleted: false,
             exclusive_location: None,
-            expiration_time: 0.into(),
+            expiration_time,
             external_id: None,
             flags: Default::default(),
             is_forwarded: false,
@@ -836,6 +840,7 @@ impl Save {
         attachments: Vec<AttachmentMetadata>,
         body_len: u64,
         time: UnixTimestamp,
+        expiration_time: UnixTimestamp,
     ) {
         message.local_address_id = address.id();
         message.remote_address_id = address.remote_id.clone().unwrap();
@@ -855,6 +860,7 @@ impl Save {
         message.size = body_len;
         message.subject = self.subject.clone();
         message.time = time;
+        message.expiration_time = expiration_time;
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -867,6 +873,7 @@ impl Save {
         attachments: Vec<AttachmentMetadata>,
         total_attachment_count: u64,
         subject: String,
+        expiration_time: UnixTimestamp,
     ) -> Conversation {
         debug_assert!(
             attachments
@@ -881,7 +888,7 @@ impl Save {
             deleted: false,
             display_snooze_reminder: false,
             exclusive_location: None,
-            expiration_time: 0.into(),
+            expiration_time,
             labels: vec![],
             num_attachments: total_attachment_count,
             num_messages: 0,

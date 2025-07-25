@@ -180,8 +180,17 @@ impl ScrollerEq for Message {
             && self.num_attachments == other.num_attachments
             && self.snooze_time == other.snooze_time
             && self.unread == other.unread
+            && self.expiration_time == other.expiration_time
+            && self.is_replied == other.is_replied
+            && self.is_replied_all == other.is_replied_all
+            && self.is_forwarded == other.is_forwarded
+            && self.time == other.time
+            && self.subject == other.subject
             && self.custom_labels == other.custom_labels
             && self.attachments_metadata == other.attachments_metadata
+            && self.to_list == other.to_list
+            && self.cc_list == other.cc_list
+            && self.bcc_list == other.bcc_list
     }
 }
 

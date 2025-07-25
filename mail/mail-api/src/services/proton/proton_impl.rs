@@ -440,9 +440,10 @@ impl ProtonMail for Proton {
         auto_save_contacts: Option<bool>,
         delay: Option<Duration>,
         delivery_time: Option<u64>,
+        expiration_time: Option<u64>,
     ) -> ApiServiceResult<PostSendMessageResponse> {
         let send_request = PostSendRequest {
-            expiration_time: None,
+            expiration_time,
             expires_in: None,
             auto_save_contacts,
             delay_seconds: delay.map(|v| v.as_secs()),

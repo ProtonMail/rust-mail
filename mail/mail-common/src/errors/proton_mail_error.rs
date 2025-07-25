@@ -1,17 +1,18 @@
 use super::mail_error_reason::*;
 use crate::actions::MailActionError;
 use crate::draft::{
-    AttachmentRemoveError, AttachmentUploadError, CancelScheduleSendError, Error, PackageError,
-    PasswordError, SenderAddressChangeError,
+    AttachmentRemoveError, AttachmentUploadError, CancelScheduleSendError, ExpirationError,
+    PackageError, PasswordError, SenderAddressChangeError,
 };
 use crate::errors::api_service_error::UserApiServiceError;
 use crate::errors::unexpected::Unexpected;
 use crate::mail_scroller::MailScrollerError;
 use crate::{
     AppError, MailContextError, SidebarError, draft::DiscardError as DraftDiscardError,
-    draft::Error as DraftError, draft::OpenError as DraftOpenError,
-    draft::PasswordError as DraftPasswordError, draft::SaveError as DraftSaveError,
-    draft::SendError as DraftSendError, draft::UndoError as DraftUndoError,
+    draft::Error as DraftError, draft::ExpirationError as DraftExpirationError,
+    draft::OpenError as DraftOpenError, draft::PasswordError as DraftPasswordError,
+    draft::SaveError as DraftSaveError, draft::SendError as DraftSendError,
+    draft::UndoError as DraftUndoError,
 };
 use proton_action_queue::action::Action;
 use proton_action_queue::queue::ActionError as InternalActionError;
@@ -291,7 +292,8 @@ impl From<DraftError> for ProtonMailError {
             },
             DraftError::CancelScheduleSend(v) => v.into(),
             DraftError::SenderAddressChange(v) => v.into(),
-            Error::Password(v) => v.into(),
+            DraftError::Password(v) => v.into(),
+            DraftError::Expiration(v) => v.into(),
         }
     }
 }
@@ -687,6 +689,25 @@ impl From<RegisteredDeviceTaskError> for ProtonMailError {
             RegisteredDeviceTaskError::SessionStreamEnded => Self::Unexpected(Unexpected::Internal),
             RegisteredDeviceTaskError::Crypto => Self::Unexpected(Unexpected::Crypto),
             RegisteredDeviceTaskError::API(_) => Self::Unexpected(Unexpected::Api),
+        }
+    }
+}
+
+impl From<DraftExpirationError> for ProtonMailError {
+    fn from(error: DraftExpirationError) -> Self {
+        let _guard = log_error(&error);
+        match error {
+            ExpirationError::MetadataNotFound(_) => ProtonMailError::Unexpected(Unexpected::Draft),
+            ExpirationError::ExpirationTimeInThePast => {
+                ProtonMailError::Reason(MailErrorReason::DraftExpirationReason(
+                    DraftExpirationErrorReason::ExpirationTimeInThePast,
+                ))
+            }
+            ExpirationError::ExpirationTimeExceeds30Days => {
+                ProtonMailError::Reason(MailErrorReason::DraftExpirationReason(
+                    DraftExpirationErrorReason::ExpirationTimeExceeds30Days,
+                ))
+            }
         }
     }
 }

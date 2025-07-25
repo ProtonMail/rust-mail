@@ -5,10 +5,11 @@ mod recipients;
 use crate::core::datatypes::{Id, UnixTimestamp};
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{
-    DraftCancelScheduleSendError, DraftDiscardError, DraftOpenError, DraftPasswordError,
-    DraftSaveError, DraftSendError, DraftSenderAddressChangeError, DraftUndoSendError,
-    EmbeddedAttachmentInfoResult, ProtonError, VoidDraftDiscardResult, VoidDraftPasswordResult,
-    VoidDraftSaveResult, VoidDraftSendResult, VoidDraftUndoSendResult,
+    DraftCancelScheduleSendError, DraftDiscardError, DraftExpirationError, DraftOpenError,
+    DraftPasswordError, DraftSaveError, DraftSendError, DraftSenderAddressChangeError,
+    DraftUndoSendError, EmbeddedAttachmentInfoResult, ProtonError, VoidDraftDiscardResult,
+    VoidDraftExpirationResult, VoidDraftPasswordResult, VoidDraftSaveResult, VoidDraftSendResult,
+    VoidDraftUndoSendResult,
 };
 use crate::mail::MailUserSession;
 use crate::mail::datatypes::MimeType;
@@ -656,6 +657,73 @@ impl Draft {
         .await
         .map_err(DraftPasswordError::from)
         .into()
+    }
+
+    #[returns(VoidDraftExpirationResult)]
+    pub async fn set_expiration_time(
+        self: Arc<Self>,
+        expiration_time: UnixTimestamp,
+    ) -> Result<(), DraftExpirationError> {
+        let expiration_time = proton_core_common::datatypes::UnixTimestamp::from(expiration_time)
+            .to_date_time()
+            .ok_or(DraftExpirationError::Other(ProtonError::Unexpected(
+                UnexpectedError::Internal,
+            )))?;
+        let Some(ctx) = self.ctx.upgrade() else {
+            return Err(DraftExpirationError::Other(ProtonError::Unexpected(
+                UnexpectedError::Internal,
+            )));
+        };
+        uniffi_async(async move {
+            let instance = self.instance.read().await;
+            let mut tether = ctx.user_stash().connection();
+            instance
+                .set_expiration_time(&mut tether, expiration_time)
+                .await
+                .map_err(RealProtonMailError::from)?;
+
+            Result::<_, RealProtonMailError>::Ok(())
+        })
+        .await
+        .map_err(DraftExpirationError::from)
+        .into()
+    }
+
+    #[returns(VoidDraftExpirationResult)]
+    pub async fn remove_expiration_time(self: Arc<Self>) -> Result<(), DraftExpirationError> {
+        let Some(ctx) = self.ctx.upgrade() else {
+            return Err(DraftExpirationError::Other(ProtonError::Unexpected(
+                UnexpectedError::Internal,
+            )));
+        };
+        uniffi_async(async move {
+            let instance = self.instance.read().await;
+            let mut tether = ctx.user_stash().connection();
+            instance
+                .remove_expiration_time(&mut tether)
+                .await
+                .map_err(RealProtonMailError::from)?;
+
+            Result::<_, RealProtonMailError>::Ok(())
+        })
+        .await
+        .map_err(DraftExpirationError::from)
+        .into()
+    }
+
+    pub fn expiration_time(&self) -> Result<Option<UnixTimestamp>, ProtonError> {
+        let Some(ctx) = self.ctx.upgrade() else {
+            return Err(ProtonError::Unexpected(UnexpectedError::Internal));
+        };
+        Ok(async_runtime().block_on(async move {
+            let instance = self.instance.read().await;
+            let tether = ctx.user_stash().connection();
+            instance
+                .expiration_time(&tether)
+                .await
+                .map(|v| v.map(Into::into))
+                .map_err(RealProtonMailError::from)
+        })?)
     }
 }
 

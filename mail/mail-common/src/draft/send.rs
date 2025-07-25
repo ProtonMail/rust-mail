@@ -699,7 +699,7 @@ impl<Tz: chrono::TimeZone> ScheduleSendOptions<Tz> {
         Self::calculate_next(now, days as u64)
     }
 
-    fn calculate_next(
+    pub(super) fn calculate_next(
         now: DateTime<Tz>,
         days: u64,
     ) -> Result<DateTime<Tz>, ScheduleSendOptionsDateTimeError> {

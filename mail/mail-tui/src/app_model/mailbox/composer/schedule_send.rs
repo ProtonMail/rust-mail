@@ -2,8 +2,9 @@ use crate::app::Command;
 use crate::app_model::Popup;
 use crate::app_model::mailbox::ComposerMessage;
 use crate::messages::Messages;
+use crate::widgets::utils::parse_date_time;
 use crate::widgets::{TextInput, TextInputState};
-use chrono::{Local, NaiveDateTime, TimeZone};
+use chrono::Local;
 use crossterm::event::{Event, KeyCode, KeyEvent};
 use proton_mail_common::draft::ScheduleSendOptions;
 use ratatui::Frame;
@@ -171,15 +172,11 @@ impl CustomOptions {
         self.text_input_state.handle_event(event);
         if let Event::Key(KeyEvent { code, .. }) = event {
             if matches!(code, KeyCode::Enter) {
-                match NaiveDateTime::parse_from_str(self.text_input_state.value(), "%d/%m/%Y %H:%M")
-                {
+                match parse_date_time(self.text_input_state.value()) {
                     Ok(date_time) => {
                         return Command::batch([
                             Command::message(Messages::DismissPopup),
-                            Command::message(
-                                ComposerMessage::ScheduleSend(Local.from_utc_datetime(&date_time))
-                                    .into(),
-                            ),
+                            Command::message(ComposerMessage::ScheduleSend(date_time).into()),
                         ]);
                     }
                     Err(e) => {

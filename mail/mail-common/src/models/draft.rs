@@ -340,6 +340,10 @@ impl DraftMetadata {
             password_hint: self.password_hint.clone(),
         }))
     }
+
+    pub fn expiration_time(&self) -> UnixTimestamp {
+        self.expiration_time.unwrap_or(UnixTimestamp::new(0))
+    }
 }
 
 /// Due to architectural differences on some of the platforms we need to store the
