@@ -1,7 +1,5 @@
 use super::avatar::AvatarInformation;
-use crate::datatypes::{
-    LabelType, LocalContactEmailId, LocalContactId, LocalLabelId, UnixTimestamp,
-};
+use crate::datatypes::{LabelType, LocalContactId, LocalLabelId, UnixTimestamp};
 use crate::models::{Contact, ContactEmail, Label};
 use crate::utils::MapVec as _;
 use itertools::Itertools;
@@ -179,7 +177,7 @@ pub struct ContactGroupItem {
 /// This is the main data structure that is used to represent the contact email.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContactEmailItem {
-    pub local_id: LocalContactEmailId,
+    pub local_contact_id: LocalContactId,
     pub email: PrivateEmail,
     /// The field represents if the email is a proton email like foo@pm.me
     pub is_proton: bool,
@@ -190,7 +188,6 @@ pub struct ContactEmailItem {
 
 impl From<ContactEmail> for ContactEmailItem {
     fn from(value: ContactEmail) -> Self {
-        let local_id = value.id();
         let name = if value.name.is_empty() {
             value.email.clone().into_clear_text_string()
         } else {
@@ -198,7 +195,8 @@ impl From<ContactEmail> for ContactEmailItem {
         };
 
         Self {
-            local_id,
+            // UNWRAP SAFETY: see ContactEmail::local_contact_id comment.
+            local_contact_id: value.local_contact_id.expect("This should always be set"),
             email: value.email,
             is_proton: value.is_proton,
             last_used_time: value.last_used_time,
@@ -454,7 +452,7 @@ impl ContactSuggestion {
 
     fn new_contact(contact: Contact, email: ContactEmailItem) -> Self {
         Self {
-            key: format!("contact/{}", email.local_id),
+            key: format!("contact/{}", email.local_contact_id),
             avatar_information: AvatarInformation::from(&contact.name),
             name: contact.name,
             kind: ContactSuggestionKind::ContactItem(email),

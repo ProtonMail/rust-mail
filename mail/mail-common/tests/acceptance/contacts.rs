@@ -68,7 +68,7 @@ async fn contact_list() {
                         text: "M".to_string(),
                         color: "#52CD96".to_string()
                     },
-                    local_id: 1.into(),
+                    local_contact_id: 1.into(),
                     email: "banksy@proton.me".into(),
                     is_proton: true,
                     last_used_time: 0.into()

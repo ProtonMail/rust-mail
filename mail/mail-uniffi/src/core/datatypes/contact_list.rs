@@ -104,7 +104,7 @@ impl From<RealContactGroupItem> for ContactGroupItem {
 /// This is the main data structure that is used to represent the contact email.
 #[derive(Clone, Debug, Eq, PartialEq, UniffiRecord)]
 pub struct ContactEmailItem {
-    pub id: Id,
+    pub contact_id: Id,
     pub email: String,
     /// The field represents if the email is a proton email like foo@pm.me
     pub is_proton: bool,
@@ -116,7 +116,7 @@ pub struct ContactEmailItem {
 impl From<RealContactEmailItem> for ContactEmailItem {
     fn from(value: RealContactEmailItem) -> Self {
         Self {
-            id: value.local_id.into(),
+            contact_id: value.local_contact_id.into(),
             email: value.email.into_clear_text_string(),
             is_proton: value.is_proton,
             last_used_time: value.last_used_time.into(),
