@@ -9,27 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Features
 
-- [ET-3120] Fido2 support
-- [ET-463] Add api call for snooze action
-- [ET-3627] Change temporary password during login flow
-- Add 'addresses' command to proton-mail-common demo
-- [ET-1450] Derive debug for observabilityrecorder
-- [ET-1450] Map apierror to apiserviceobservabilityresponse
-- [ET-1450] Record observability metrics for users/available endpoint
-- [ET-1450] Record observability metrics for users endpoint
-
-### Fixes
-
-- Fix migration filename
-- Present a clear fork api
-- Make observabilityrecorder.record sync
-- Correct error mapping for duplicatecontext variant
-- [ET-3706] Prevent duplicate account login
-- Fix implementation of first_graphem_uppercase to support emoji.
-- Fix snapshot tests.
+- [ET-3867] Add snooze to bottom bar & conversation actions
+- [ET-3631] Expiring messages
 
 
-## [mail-uniffi-v0.105.7] - 2025-07-24
+## [mail-uniffi-v0.105.9] - 2025-07-25
 
 ### Fixes
 
@@ -50,6 +34,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Marking conversations unread
 - [ET-2992] Open pgp attachments via `get_attachment`
+
+
+## [mail-uniffi-v0.107.0] - 2025-07-24
+
+### Features
+
+- [ET-3120] Fido2 support
+- [ET-463] Add api call for snooze action
+- [ET-3627] Change temporary password during login flow
+- Add 'addresses' command to proton-mail-common demo
+- [ET-1450] Derive debug for observabilityrecorder
+- [ET-1450] Map apierror to apiserviceobservabilityresponse
+- [ET-1450] Record observability metrics for users/available endpoint
+- [ET-1450] Record observability metrics for users endpoint
+
+### Fixes
+
+- Fix migration filename
+- Present a clear fork api
+- Make observabilityrecorder.record sync
+- Correct error mapping for duplicatecontext variant
+- [ET-3706] Prevent duplicate account login
+- Fix implementation of first_graphem_uppercase to support emoji.
+- Fix snapshot tests.
 
 
 ## [mail-uniffi-v0.105.6] - 2025-07-23
