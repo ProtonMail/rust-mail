@@ -146,6 +146,30 @@ impl ConversationsState {
 
         Command::None
     }
+
+    fn on_next_page(&mut self, conversations: Vec<ContextualConversation>) -> Command<Messages> {
+        self.fetching = false;
+        self.conversations.extend(conversations);
+        self.try_select_non_empty_list()
+    }
+
+    fn on_replace_from(
+        &mut self,
+        idx: usize,
+        conversations: Vec<ContextualConversation>,
+    ) -> Command<Messages> {
+        self.conversations.splice(idx.., conversations);
+        self.try_select_non_empty_list()
+    }
+
+    fn on_replace_before(
+        &mut self,
+        idx: usize,
+        conversations: Vec<ContextualConversation>,
+    ) -> Command<Messages> {
+        self.conversations.splice(..idx, conversations);
+        self.try_select_non_empty_list()
+    }
 }
 
 impl ConversationsState {
@@ -225,6 +249,20 @@ impl ConversationsState {
         message: Message,
         mbox: &Mailbox,
     ) -> Command<Messages> {
+        // Apply the scroller updates always, as changes can still happen
+        // when the message view is open.
+        let message = match message {
+            Message::ConversationState(ConversationMessage::NextPage(conversations)) => {
+                return self.on_next_page(conversations);
+            }
+            Message::ConversationState(ConversationMessage::ReplaceFrom(idx, conversations)) => {
+                return self.on_replace_from(idx, conversations);
+            }
+            Message::ConversationState(ConversationMessage::ReplaceBefore(idx, conversations)) => {
+                return self.on_replace_before(idx, conversations);
+            }
+            m => m,
+        };
         match &mut self.messages {
             MessagesStatus::None => {
                 let Message::ConversationState(message) = message else {
@@ -253,17 +291,13 @@ impl ConversationsState {
                     ConversationMessage::Star(id) => star_conversation(user_ctx.to_owned(), id),
                     ConversationMessage::Unstar(id) => unstar_conversation(user_ctx.to_owned(), id),
                     ConversationMessage::NextPage(conversations) => {
-                        self.fetching = false;
-                        self.conversations.extend(conversations);
-                        self.try_select_non_empty_list()
+                        self.on_next_page(conversations)
                     }
                     ConversationMessage::ReplaceFrom(idx, conversations) => {
-                        self.conversations.splice(idx.., conversations);
-                        self.try_select_non_empty_list()
+                        self.on_replace_from(idx, conversations)
                     }
                     ConversationMessage::ReplaceBefore(idx, conversations) => {
-                        self.conversations.splice(..idx, conversations);
-                        self.try_select_non_empty_list()
+                        self.on_replace_before(idx, conversations)
                     }
                     ConversationMessage::HasMore => {
                         let paginator = self.paginator.clone_inner();
