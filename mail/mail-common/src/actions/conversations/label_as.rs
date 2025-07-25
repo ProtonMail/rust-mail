@@ -1,20 +1,19 @@
 use std::collections::HashSet;
 use std::mem;
 
+use crate::AppError;
 use crate::actions::conversations::Move as MoveAction;
 use crate::actions::{ActionMoveData, LabelAsData, MailActionError};
 use crate::models::{Conversation, ConversationCounters};
 use anyhow::Context;
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Handler as ActionHandler, MetadataBuilder, Type,
-    WriterGuard,
+    Action, ActionId, DefaultVersionConverter, Handler, MetadataBuilder, Type, WriterGuard,
 };
 use proton_action_queue::queue::Queue;
+use proton_core_api::services::proton::Proton;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{Bond, Tether};
-use std::collections::HashSet;
-use std::mem;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LabelAs(pub LabelAsData<Conversation>);
@@ -23,7 +22,7 @@ impl Action for LabelAs {
     const TYPE: Type = Type("label_conversation_as");
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
+    type Handler = LabelAsHandler;
     type RemoteOutput = ();
     type LocalOutput = bool;
     type Error = MailActionError;
@@ -98,7 +97,7 @@ impl UndoLabelAsConversations {
             }
 
             if let Some(move_action_data) =
-                ActionMoveData::new(&tether, action.0.source_label_id, all).await?
+                ActionMoveData::new(tether, action.0.source_label_id, all).await?
             {
                 let queued_move = queue
                     .queue_action(action)

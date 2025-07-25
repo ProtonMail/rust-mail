@@ -5,7 +5,7 @@ use crate::{
     MailContextResult, MailUserContext,
     actions::{
         ActionMoveData,
-        messages::{r#move::Move, read::Read},
+        messages::{Move, Read},
     },
     datatypes::mail_notifications::PushNotificationQuickAction,
     models::Message,

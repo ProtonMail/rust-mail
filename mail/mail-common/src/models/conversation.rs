@@ -9,8 +9,8 @@ use crate::actions::conversations::r#move::UndoMoveToConversations;
 use crate::actions::conversations::{Label as ActionLabel, MarkRead, MarkUnread, Move, Unlabel};
 use crate::actions::{
     ActionMoveData, ConversationAction, ConversationAvailableActions, ConversationOrMessage,
-    GeneralActions, LabelAsAction, LabelAsData, LabelAsOutput, LabelPair, MailActionError,
-    MoveAction, MoveItemAction, Undo, filter_responses,
+    LabelAsAction, LabelAsData, LabelAsOutput, LabelPair, MailActionError, MoveAction,
+    MoveItemAction, Undo, filter_responses,
 };
 use crate::datatypes::dependencies::MessageOrConversationDependencyFetcher;
 use crate::datatypes::{

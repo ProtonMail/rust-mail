@@ -4,7 +4,7 @@ mod tests;
 
 use crate::action::{
     Action, ActionGroup, ActionId, Error as ActionErrorTrait, Factory, FactoryError, FactoryResult,
-    Handler, LocalOutput, Metadata, Priority, Resources, Type, WriterGuard, WriterGuardError,
+    Handler, LocalOutput, Metadata, Priority, Resources, WriterGuard, WriterGuardError,
 };
 use crate::db::{
     self, ActionDependency, DEFAULT_LOCK_TIMEOUT, DependencyType, ExecutionGuard, StoredAction,
@@ -389,9 +389,13 @@ impl Queue {
         async {
             debug!("Dependencies: {:?}", metadata.dependencies);
 
+            let handler = self.shared.handler::<T>().ok_or_else(|| {
+                error!("Tried to enqueue an unknown action: {}", T::TYPE);
+                Error::UnknownAction(T::TYPE.to_string())
+            })?;
+
             let (local_output, id) =
-                execute_action_local(context.as_ref(), &handler, &mut action, metadata, None, tx)
-                    .await?;
+                execute_action_local(&mut action, &handler, metadata, None, tx).await?;
 
             info!("Action queued with id={id}");
 
@@ -446,19 +450,13 @@ impl Queue {
                 Error::UnknownAction(T::TYPE.to_string())
             })?;
 
-            let (local_output, id) = shared
+            let (local_output, id) = self
+                .shared
                 .stash
                 .connection()
                 .tx(async |tx| {
-                    execute_action_local(
-                        context.as_ref(),
-                        &handler,
-                        &mut action,
-                        metadata,
-                        Some(existing_id),
-                        tx,
-                    )
-                    .await
+                    execute_action_local(&mut action, &handler, metadata, Some(existing_id), tx)
+                        .await
                 })
                 .await?;
             if existing_id == id {
@@ -1135,8 +1133,6 @@ impl QueueAutoExecutorPool {
 }
 
 async fn execute_action_local<T: Action>(
-    context: &T::Context,
-    handler: &T::Handler,
     action: &mut T,
     handler: &T::Handler,
     metadata: Metadata,
@@ -1184,7 +1180,7 @@ async fn execute_action_local<T: Action>(
 
     // Execute the local changes
     let local_output = handler
-        .apply_local(stored_action.id.unwrap(), context, action, tx)
+        .apply_local(stored_action.id.unwrap(), action, tx)
         .await
         .map_err(|e| {
             error!("Failed to apply local changes: {e:?}");

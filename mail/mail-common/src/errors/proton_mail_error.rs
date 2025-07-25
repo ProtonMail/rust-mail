@@ -23,8 +23,6 @@ use proton_core_common::models::LabelError;
 use proton_core_common::pin_code::PinError;
 use proton_event_loop::EventLoopError;
 use proton_event_loop::subscriber::SubscriberError;
-#[cfg(feature = "proton_mail_error_log")]
-use tracing::error;
 
 /// Categories of errors that can be returned by the ProtonMail SDK.
 ///

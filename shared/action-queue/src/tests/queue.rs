@@ -284,9 +284,11 @@ async fn check_action_only_executed_without_dependencies() {
 }
 
 async fn new_queue() -> Queue {
-    let mut factory = Factory::new();
-    factory.register::<TestAction>().unwrap();
-    factory.register::<Action2>().unwrap();
+    let mut factory = Factory::default();
+    factory
+        .register::<TestAction>(NoopActionHandler::default())
+        .unwrap();
+    factory.register::<Action2>(ActionHandler2).unwrap();
     let pool = Stash::new(StashConfiguration::test()).unwrap();
 
     Queue::with_factory(pool, factory).await.unwrap()
@@ -302,26 +304,22 @@ impl Action for Action2 {
     const TYPE: Type = Type("test_action_2");
     const VERSION: u32 = 1;
     type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = ActionHandler;
+    type Handler = ActionHandler2;
 
     type RemoteOutput = ();
     type LocalOutput = ();
 
     type Error = NoopError;
-
-    type Context = ();
 }
 
 #[derive(Default)]
-struct ActionHandler;
-impl Handler for ActionHandler {
+struct ActionHandler2;
+impl Handler for ActionHandler2 {
     type Action = Action2;
-    type Context = ();
 
     async fn apply_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         action: &mut Self::Action,
         tx: &Bond<'_>,
     ) -> Result<(), NoopError> {
@@ -348,7 +346,6 @@ impl Handler for ActionHandler {
     async fn revert_local(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: &Bond<'_>,
     ) -> Result<(), NoopError> {
@@ -358,7 +355,6 @@ impl Handler for ActionHandler {
     async fn apply_remote(
         &self,
         _: ActionId,
-        _: &Self::Context,
         _: &mut Self::Action,
         _: WriterGuard<'_>,
     ) -> Result<(), NoopError> {
@@ -376,9 +372,7 @@ async fn queue_actions() {
         .map(|num| Action2 { num, die: false })
         .chain([Action2 { num: 10, die: true }]);
 
-    if queue.queue_actions(actions).await.is_ok() {
-        panic!("should fail")
-    }
+    assert!(queue.queue_actions(actions).await.is_err(), "should fail");
 
     tether
         .execute("SELECT * FROM foo", vec![])

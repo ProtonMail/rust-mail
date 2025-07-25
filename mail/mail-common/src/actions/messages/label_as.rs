@@ -4,10 +4,10 @@ use crate::actions::{ActionMoveData, LabelAsData, MailActionError};
 use crate::models::{Message, MessageCounters};
 use anyhow::Context;
 use proton_action_queue::action::{
-    Action, ActionId, DefaultVersionConverter, Handler as ActionHandler, MetadataBuilder, Type,
-    WriterGuard,
+    Action, ActionId, DefaultVersionConverter, Handler, MetadataBuilder, Type, WriterGuard,
 };
 use proton_action_queue::queue::Queue;
+use proton_core_api::services::proton::Proton;
 use serde::{Deserialize, Serialize};
 use stash::orm::Model;
 use stash::stash::{Bond, Tether};
@@ -21,10 +21,6 @@ impl Action for LabelAs {
     const TYPE: Type = Type("label_messages_as");
     const VERSION: u32 = 2;
     type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
-    type RemoteOutput = ();
-
-    type VersionConverter = Converter;
     type Handler = LabelAsHandler;
     type RemoteOutput = ();
     type LocalOutput = bool;
@@ -102,7 +98,7 @@ impl UndoLabelAsMessages {
             }
 
             if let Some(move_action_data) =
-                ActionMoveData::new(&tether, action.0.source_label_id, all).await?
+                ActionMoveData::new(tether, action.0.source_label_id, all).await?
             {
                 let queued_move = queue
                     .queue_action(action)

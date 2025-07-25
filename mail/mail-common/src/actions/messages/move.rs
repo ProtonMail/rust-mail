@@ -1,10 +1,11 @@
+use crate::AppError;
 use crate::actions::{ActionMoveData, MailActionError};
 use crate::models::Message;
-use crate::{AppError, MailUserContext};
 use anyhow::Context;
 use proton_action_queue::action::{Action, DefaultVersionConverter, Type, WriterGuard};
-use proton_action_queue::action::{ActionId, Handler as ActionHandler};
+use proton_action_queue::action::{ActionId, Handler};
 use proton_action_queue::queue::Queue;
+use proton_core_api::services::proton::Proton;
 use serde::{Deserialize, Serialize};
 use stash::stash::{Bond, Tether};
 
@@ -14,10 +15,6 @@ pub struct Move(pub ActionMoveData<Message>);
 impl Action for Move {
     const TYPE: Type = Type("move_messages");
     const VERSION: u32 = 1;
-    type VersionConverter = DefaultVersionConverter<Self>;
-    type Handler = Handler;
-    type RemoteOutput = ();
-
     type VersionConverter = DefaultVersionConverter<Self>;
     type Handler = MoveHandler;
     type RemoteOutput = ();
@@ -61,7 +58,7 @@ impl Handler for MoveHandler {
         action: &mut Self::Action,
         guard: WriterGuard<'_>,
     ) -> Result<<Self::Action as Action>::RemoteOutput, <Self::Action as Action>::Error> {
-        action.0.apply_remote(ctx, guard).await
+        action.0.apply_remote(&self.api, guard).await
     }
 }
 

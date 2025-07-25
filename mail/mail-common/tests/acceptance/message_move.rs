@@ -99,7 +99,7 @@ async fn move_between_folders() {
 
     // Action:
     // * move message in the other folder
-    let undo = Message::action_move(
+    Message::action_move(
         &tether,
         user_ctx.action_queue(),
         destination.id(),

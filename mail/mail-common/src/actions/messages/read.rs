@@ -1,4 +1,3 @@
-use crate::MailUserContext;
 use crate::actions::{
     ConversationOrMessage, GenericActionData, MailActionError, filter_responses_by_codes,
 };

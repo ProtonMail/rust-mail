@@ -11,8 +11,8 @@ pub mod rollback;
 pub use self::available_action::*;
 use crate::actions::conversations::label_as::UndoLabelAsConversations;
 use crate::actions::conversations::r#move::UndoMoveToConversations;
-use crate::actions::messages::label_as::UndoLabelAsMessages;
-use crate::actions::messages::r#move::UndoMoveToMessages;
+use crate::actions::messages::UndoLabelAsMessages;
+use crate::actions::messages::UndoMoveToMessages;
 use crate::datatypes::{RollbackItemType, SystemLabelId};
 use crate::models::{MailLabel, RollbackItem};
 use crate::{AppError, MailUserContext};
@@ -40,6 +40,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
 use std::hash::Hash;
 use std::marker::PhantomData;
+use std::sync::Weak;
 use tracing::{error, info, warn};
 
 #[derive(Debug, thiserror::Error)]
@@ -442,10 +443,9 @@ where
 
     async fn apply_remote(
         &self,
-        ctx: &MailUserContext,
+        api: &Proton,
         mut guard: WriterGuard<'_>,
     ) -> Result<(), MailActionError> {
-        let api = ctx.api();
         let tether = guard.tether();
 
         let dest_label = Label::resolve_remote_label_id(self.destination, tether).await?;

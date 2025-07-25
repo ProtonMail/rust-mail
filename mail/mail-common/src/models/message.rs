@@ -2,16 +2,16 @@
 #[path = "../tests/models/messages.rs"]
 mod messages;
 
-use crate::actions::messages::delete::Delete;
-use crate::actions::messages::delete_all::DeleteAllMessagesInLabel;
-use crate::actions::messages::ham::Ham;
-use crate::actions::messages::label::Label as ActionLabel;
-use crate::actions::messages::label_as::{LabelAs, UndoLabelAsMessages};
-use crate::actions::messages::r#move::{Move, UndoMoveToMessages};
-use crate::actions::messages::phishing::ReportPhishing;
-use crate::actions::messages::read::Read;
-use crate::actions::messages::unlabel::Unlabel;
-use crate::actions::messages::unread::Unread;
+use crate::actions::messages::Delete;
+use crate::actions::messages::DeleteAllMessagesInLabel;
+use crate::actions::messages::Ham;
+use crate::actions::messages::Label as ActionLabel;
+use crate::actions::messages::Read;
+use crate::actions::messages::ReportPhishing;
+use crate::actions::messages::Unlabel;
+use crate::actions::messages::Unread;
+use crate::actions::messages::{LabelAs, UndoLabelAsMessages};
+use crate::actions::messages::{Move, UndoMoveToMessages};
 use crate::actions::{
     ActionMoveData, AllBottomBarMessageActions, BottomBarActions, GeneralActions, LabelAsData,
     LabelAsOutput, LabelPair, MailActionError, MovableSystemFolderAction, Undo,
