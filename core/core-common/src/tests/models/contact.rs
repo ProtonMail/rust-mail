@@ -9,7 +9,7 @@ use std::fmt::Write as _;
 
 fn display_email_item(
     ContactEmailItem {
-        local_id,
+        local_contact_id,
         email,
         is_proton,
         last_used_time,
@@ -23,7 +23,11 @@ fn display_email_item(
         "{} ({})",
         avatar_information.text, avatar_information.color
     );
-    write!(out, ": {name} <{email}>,  local_id: {local_id}");
+    write!(out, ": {name} <{email}>");
+
+    if local_contact_id != 0.into() {
+        write!(out, ",  local_contact_id: {local_contact_id}");
+    }
     if is_proton {
         write!(out, ", Proton address");
     }
@@ -586,7 +590,7 @@ mod contact_suggestions {
                             text: "M".to_string(),
                             color: "#213474".to_string()
                         },
-                        local_id: 234.into(),
+                        local_contact_id: 234.into(),
                         email: "m.scott@pm.me".into(),
                         is_proton: true,
                         last_used_time: 2.into()
@@ -605,7 +609,7 @@ mod contact_suggestions {
                             text: "B".to_string(),
                             color: "#A839A4".to_string()
                         },
-                        local_id: 123.into(),
+                        local_contact_id: 123.into(),
                         email: "barbara@pm.me".into(),
                         is_proton: true,
                         last_used_time: 1.into()
@@ -628,7 +632,7 @@ mod contact_suggestions {
                            text: "M".to_string(),
                            color: "#213474".to_string()
                        },
-                       local_id: 234.into(),
+                       local_contact_id: 234.into(),
                        email: "m.scott@pm.me".into(),
                        is_proton: true,
                        last_used_time: 2.into()
@@ -647,7 +651,7 @@ mod contact_suggestions {
                            text: "B".to_string(),
                            color: "#A839A4".to_string()
                        },
-                       local_id: 123.into(),
+                       local_contact_id: 123.into(),
                        email: "barbara@pm.me".into(),
                        is_proton: true,
                        last_used_time: 1.into()
@@ -672,7 +676,7 @@ mod contact_suggestions {
                             text: "M".to_string(),
                             color: "#213474".to_string()
                         },
-                        local_id: 234.into(),
+                        local_contact_id: 234.into(),
                         email: "m.brogile@pm.me".into(),
                         is_proton: true,
                         last_used_time: 2.into()
@@ -691,7 +695,7 @@ mod contact_suggestions {
                             text: "B".to_string(),
                             color: "#A839A4".to_string()
                         },
-                        local_id: 123.into(),
+                        local_contact_id: 123.into(),
                         email: "barbara@pm.me".into(),
                         is_proton: true,
                         last_used_time: 1.into()
@@ -714,7 +718,7 @@ mod contact_suggestions {
                             text: "M".to_string(),
                             color: "#213474".to_string()
                         },
-                        local_id: 234.into(),
+                        local_contact_id: 234.into(),
                         email: "m.scott@pm.me".into(),
                         is_proton: true,
                         last_used_time: 2.into()
@@ -733,7 +737,7 @@ mod contact_suggestions {
                             color: "#A839A4".to_string()
                         },
                         name: "Barbara Lox".into(),
-                        local_id: 123.into(),
+                        local_contact_id: 123.into(),
                         email: "barbara@pm.me".into(),
                         is_proton: true,
                         last_used_time: 1.into()

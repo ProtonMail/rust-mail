@@ -26,6 +26,9 @@ pub struct ContactEmail {
     #[DbField]
     pub remote_contact_id: Option<ContactId>,
 
+    // The seeming optionality in this field exists only for syncing with the API, to make
+    // it less awkward, in theory it could be removed.
+    // This is always safe to unwrap except when converting this from an API type.
     #[DbField]
     pub local_contact_id: Option<LocalContactId>,
 
@@ -91,10 +94,10 @@ impl ContactEmail {
     #[must_use]
     pub fn test_default() -> Self {
         Self {
+            local_contact_id: Some(0.into()),
             local_id: Default::default(),
             remote_id: Default::default(),
             remote_contact_id: Default::default(),
-            local_contact_id: Default::default(),
             canonical_email: Default::default(),
             contact_type: Default::default(),
             defaults: ContactSendingPreferences::Default,

@@ -428,6 +428,7 @@ impl Contact {
     ///
     /// when querying the database fails.
     ///
+    #[tracing::instrument(skip_all)]
     pub async fn contact_list(tether: &Tether) -> Result<Vec<GroupedContacts>, StashError> {
         // TODO (ET-2028): Use pagination
         let (mut contacts, contact_groups) = try_join!(
@@ -446,6 +447,10 @@ impl Contact {
     }
 
     // This is not necessary but android wants this.
+    //
+    // This is particularly inefficient because we're getting all contacts just to get one
+    // group, given our data model (labels being serialized into the contacts) we need to do a full scan.
+    #[tracing::instrument(skip(tether))]
     pub async fn contact_group_by_id(
         tether: &Tether,
         id: LocalLabelId,
@@ -456,7 +461,25 @@ impl Contact {
 
         debug_assert_eq!(l.label_type, LabelType::ContactGroup);
 
-        let res = ContactEmail::find("WHERE local_contact_id = ?", params![id], tether).await?;
+        let remote = Label::resolve_remote_label_id(id, tether)
+            .await
+            .with_context(|| "Local contact groups are not yet implemented: Trying to resolve nonexistent remote label for local label {id}")?;
+
+        let mut res = ContactEmail::load_inner(
+            "SELECT contact_emails.* FROM contact_emails
+             JOIN contacts ON contact_emails.remote_contact_id = contacts.remote_id
+             WHERE contacts.deleted = 0 
+             AND EXISTS (
+                 SELECT 1 FROM json_each(contacts.label_ids) 
+                 WHERE json_each.value = ?
+             )
+             ORDER BY contact_emails.display_order, contact_emails.local_id",
+            params![remote],
+            tether,
+        )
+        .await?;
+
+        res.sort_unstable_by_key(|x| (x.display_order, x.id()));
 
         Ok(ContactGroupItem {
             local_id: l.id(),
