@@ -780,17 +780,20 @@ fn extract_recurrence_yearly(recur: &ical::Recur) -> RsvpRecurrence {
 }
 
 fn extract_occurrence(event: &ical::VEvent) -> RsvpResult<RsvpOccurrence> {
-    let dtstart = event.dtstart.as_ref().ok_or(RsvpError::MissingDtStart)?;
-    let dtend = event.dtend.as_ref().ok_or(RsvpError::MissingDtEnd)?;
+    let dtstart = event
+        .dtstart
+        .as_ref()
+        .map(|dtstart| &dtstart.value)
+        .ok_or(RsvpError::MissingDtStart)?;
 
-    let dtstart = &dtstart.value;
-    let dtend = &dtend.value;
+    let dtend = event.dtend.as_ref().map(|dtend| &dtend.value);
 
     match (dtstart, dtend) {
-        (ical::DateOrDt::Date(dtstart), ical::DateOrDt::Date(dtend)) => {
+        (ical::DateOrDt::Date(dtstart), Some(ical::DateOrDt::Date(dtend))) => {
             let starts_at = Date::from(*dtstart);
 
-            // `DTEND` is exclusive, so e.g. for a single-day event we get:
+            // iCal's `DTEND` is exclusive, so e.g. for a single-day event we
+            // get:
             //
             // ```
             // DTSTART;VALUE=DATE:20180101
@@ -805,12 +808,22 @@ fn extract_occurrence(event: &ical::VEvent) -> RsvpResult<RsvpOccurrence> {
             Ok(RsvpOccurrence::Date { starts_at, ends_at })
         }
 
-        (ical::DateOrDt::DateTime(dtstart), ical::DateOrDt::DateTime(dtend)) => {
+        (ical::DateOrDt::Date(date), None) => Ok(RsvpOccurrence::Date {
+            starts_at: (*date).into(),
+            ends_at: (*date).into(),
+        }),
+
+        (ical::DateOrDt::DateTime(dtstart), Some(ical::DateOrDt::DateTime(dtend))) => {
             Ok(RsvpOccurrence::DateTime {
                 starts_at: Zoned::try_from(dtstart.clone())?,
                 ends_at: Zoned::try_from(dtend.clone())?,
             })
         }
+
+        (ical::DateOrDt::DateTime(date), None) => Ok(RsvpOccurrence::DateTime {
+            starts_at: Zoned::try_from(date.clone())?,
+            ends_at: Zoned::try_from(date.clone())?,
+        }),
 
         _ => Err(RsvpError::MixedDtStartAndDtEnd),
     }
@@ -1676,6 +1689,114 @@ mod tests {
             let actual = extract_recurrence(&event, Weekday::Monday);
 
             assert_eq!(Some((case.expected)()), actual);
+        }
+    }
+
+    mod extract_occurrence {
+        use super::*;
+        use test_case::test_case;
+
+        struct TestCase {
+            given_dtstart: fn() -> Option<ical::DateOrDt>,
+            given_dtend: fn() -> Option<ical::DateOrDt>,
+            expected: fn() -> RsvpResult<RsvpOccurrence>,
+        }
+
+        const TEST_DATE: TestCase = TestCase {
+            given_dtstart: || Some(ical::DateOrDt::Date(ical::utils::d("20180101"))),
+            given_dtend: || Some(ical::DateOrDt::Date(ical::utils::d("20180108"))),
+            expected: || {
+                Ok(RsvpOccurrence::Date {
+                    starts_at: "20180101".parse().unwrap(),
+                    ends_at: "20180107".parse().unwrap(),
+                })
+            },
+        };
+
+        const TEST_DATETIME: TestCase = TestCase {
+            given_dtstart: || {
+                Some(ical::DateOrDt::DateTime(ical::utils::dt(
+                    "20180101T123456Z",
+                )))
+            },
+            given_dtend: || {
+                Some(ical::DateOrDt::DateTime(ical::utils::dt(
+                    "20180108T120000Z",
+                )))
+            },
+            expected: || {
+                Ok(RsvpOccurrence::DateTime {
+                    starts_at: "20180101T123456[UTC]".parse().unwrap(),
+                    ends_at: "20180108T120000Z[UTC]".parse().unwrap(),
+                })
+            },
+        };
+
+        const TEST_MIXED: TestCase = TestCase {
+            given_dtstart: || Some(ical::DateOrDt::Date(ical::utils::d("20180101"))),
+            given_dtend: || {
+                Some(ical::DateOrDt::DateTime(ical::utils::dt(
+                    "20180108T120000Z",
+                )))
+            },
+            expected: || Err(RsvpError::MixedDtStartAndDtEnd),
+        };
+
+        const TEST_MISSING_DTSTART: TestCase = TestCase {
+            given_dtstart: || None,
+            given_dtend: || Some(ical::DateOrDt::Date(ical::utils::d("20180108"))),
+            expected: || Err(RsvpError::MissingDtStart),
+        };
+
+        const TEST_MISSING_DTEND_DATE: TestCase = TestCase {
+            given_dtstart: || Some(ical::DateOrDt::Date(ical::utils::d("20180101"))),
+            given_dtend: || None,
+            expected: || {
+                Ok(RsvpOccurrence::Date {
+                    starts_at: "20180101".parse().unwrap(),
+                    ends_at: "20180101".parse().unwrap(),
+                })
+            },
+        };
+
+        const TEST_MISSING_DTEND_DATETIME: TestCase = TestCase {
+            given_dtstart: || {
+                Some(ical::DateOrDt::DateTime(ical::utils::dt(
+                    "20180101T120000Z",
+                )))
+            },
+            given_dtend: || None,
+            expected: || {
+                Ok(RsvpOccurrence::DateTime {
+                    starts_at: "20180101T120000[UTC]".parse().unwrap(),
+                    ends_at: "20180101T120000[UTC]".parse().unwrap(),
+                })
+            },
+        };
+
+        #[test_case(TEST_DATE)]
+        #[test_case(TEST_DATETIME)]
+        #[test_case(TEST_MIXED)]
+        #[test_case(TEST_MISSING_DTSTART)]
+        #[test_case(TEST_MISSING_DTEND_DATE)]
+        #[test_case(TEST_MISSING_DTEND_DATETIME)]
+        #[allow(clippy::needless_pass_by_value)]
+        fn test(case: TestCase) {
+            let event = {
+                let dtstart = (case.given_dtstart)().map(|value| ical::DtStart { value });
+                let dtend = (case.given_dtend)().map(|value| ical::DtEnd { value });
+
+                ical::VEvent {
+                    dtstart,
+                    dtend,
+                    ..ical::VEvent::default()
+                }
+            };
+
+            let expected = (case.expected)().map_err(|err| err.to_string());
+            let actual = extract_occurrence(&event).map_err(|err| err.to_string());
+
+            assert_eq!(expected, actual);
         }
     }
 
