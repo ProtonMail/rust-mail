@@ -25,6 +25,8 @@ use proton_crypto_account::keys::{
 use proton_crypto_account::salts::KeySalt;
 use proton_crypto_calendar::{CalendarEventEncryptor, KeyPacket, UnlockedCalendarKey};
 use proton_ical as ical;
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 const EVENT_ID: &str = "pFmwNlJp";
@@ -114,7 +116,7 @@ where
     sess: Session,
     pgp: P,
     address_keys: UnlockedAddressKeys<P>,
-    calendar_key: UnlockedCalendarKey<P>,
+    calendar_keys: RefCell<HashMap<CalendarId, UnlockedCalendarKey<P>>>,
     cache: DummyRsvpCache,
     contacts: DummyRsvpContacts,
     now: Zoned,
@@ -158,14 +160,12 @@ async fn world() -> World<impl PGPProviderSync> {
         .unwrap(),
     );
 
-    let calendar_key = UnlockedCalendarKey::generate(&pgp).unwrap();
-
     World {
         ctx,
         sess,
         pgp,
         address_keys,
-        calendar_key,
+        calendar_keys: RefCell::default(),
         cache: DummyRsvpCache,
         contacts: DummyRsvpContacts,
         now: "20180101T100000[UTC]".parse().unwrap(),
@@ -177,26 +177,33 @@ where
     P: PGPProviderSync,
 {
     fn bootstrap(&self) -> CalendarBootstrap {
+        self.bootstrap_ex(CALENDAR_ID)
+    }
+
+    fn bootstrap_ex(&self, id: &str) -> CalendarBootstrap {
         let key = self
-            .calendar_key
+            .calendar_keys
+            .borrow_mut()
+            .entry(CalendarId::from(id))
+            .or_insert_with(|| UnlockedCalendarKey::generate(&self.pgp).unwrap())
             .export(&self.pgp, &self.address_keys[0])
             .unwrap();
 
         CalendarBootstrap {
             keys: vec![CalendarKey {
-                id: "msY6Hh3D".into(),
+                id: id.into(),
                 private_key: key.key().into(),
                 flags: CalendarKeyFlags::ActiveAndPrimary,
             }],
             passphrase: CalendarPassphrase {
                 member_passphrases: vec![CalendarMemberPassphrase {
-                    member_id: "qyomV2nX".into(),
+                    member_id: id.into(),
                     passphrase: key.passphrase().into(),
                     signature: key.signature().into(),
                 }],
             },
             members: [CalendarMember {
-                id: "qyomV2nX".into(),
+                id: id.into(),
                 name: "My calendar".into(),
                 color: "#273EB2".into(),
             }],
@@ -215,6 +222,7 @@ where
     world: &'a World<P>,
     encryption: &'static str,
     id: Option<&'static str>,
+    calendar_id: Option<&'static str>,
     shared_event: Option<&'static str>,
     attendees_event: Option<&'static str>,
     calendar_event: Option<&'static str>,
@@ -229,6 +237,7 @@ where
         Self {
             world,
             id: None,
+            calendar_id: None,
             encryption: "calendar-key",
             shared_event: None,
             attendees_event: None,
@@ -239,6 +248,7 @@ where
 
     fn basic(self) -> Self {
         self.with_id(EVENT_ID)
+            .with_calendar_id(CALENDAR_ID)
             .with_shared_event(SHARED_EVENT)
             .with_attendees_event(ATTENDEES_EVENT)
             .with_attendees(ATTENDEES())
@@ -246,6 +256,11 @@ where
 
     fn with_id(mut self, id: &'static str) -> Self {
         self.id = Some(id);
+        self
+    }
+
+    fn with_calendar_id(mut self, calendar_id: &'static str) -> Self {
+        self.calendar_id = Some(calendar_id);
         self
     }
 
@@ -285,18 +300,28 @@ where
     }
 
     fn build(self) -> CalendarEvent {
+        let mut calendar_keys = self.world.calendar_keys.borrow_mut();
+
         let encryptor = match self.encryption {
             "address-key" => {
                 CalendarEventEncryptor::for_address(&self.world.pgp, &self.world.address_keys)
                     .unwrap()
             }
 
-            "calendar-key" => CalendarEventEncryptor::for_calendar(
-                &self.world.pgp,
-                &self.world.address_keys,
-                &self.world.calendar_key,
-            )
-            .unwrap(),
+            "calendar-key" => {
+                let calendar_id = CalendarId::from(self.calendar_id.unwrap());
+
+                let calendar_key = calendar_keys
+                    .entry(calendar_id)
+                    .or_insert_with(|| UnlockedCalendarKey::generate(&self.world.pgp).unwrap());
+
+                CalendarEventEncryptor::for_calendar(
+                    &self.world.pgp,
+                    &self.world.address_keys,
+                    calendar_key,
+                )
+                .unwrap()
+            }
 
             _ => unreachable!(),
         };
@@ -336,7 +361,7 @@ where
             }],
             calendar_events,
             id: self.id.unwrap().into(),
-            calendar_id: CALENDAR_ID.into(),
+            calendar_id: self.calendar_id.unwrap().into(),
             address_key_packet,
             shared_key_packet,
             attendees_events: [CalendarEventPayload {
