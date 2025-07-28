@@ -52,18 +52,18 @@ mod contact_list;
 mod issue_report;
 mod timestamp;
 
-pub use account_details::*;
-pub use app_settings::*;
-pub use avatar::*;
-pub use connection_status::*;
-pub use contact_list::*;
-pub use issue_report::*;
+pub use self::account_details::*;
+pub use self::app_settings::*;
+pub use self::avatar::*;
+pub use self::connection_status::*;
+pub use self::contact_list::*;
+pub use self::issue_report::*;
+pub use self::timestamp::*;
 use itertools::Itertools;
 use muon::common::ParseEndpointErr;
 use proton_mail_api::services::proton::common::MessageId;
 use stash::orm::Model;
 use stash::stash::Tether;
-pub use timestamp::*;
 use tracing::error;
 
 use core::fmt;
