@@ -2,9 +2,9 @@ use super::want_change::WantChange;
 use super::{State, StateData};
 use crate::password::PasswordError;
 use crate::password::state::acquire_password_scope;
-use crate::requests::Fido2AuthData;
 use crate::shared::SecureString;
 use derive_more::Deref;
+use muon::rest::auth::v4::fido2;
 use proton_crypto_account::proton_crypto::new_srp_provider;
 
 /// Represents the password change flow state where we're waiting for 2FA authentication.
@@ -38,7 +38,7 @@ impl WantTfa {
         Ok(WantChange::new(data).into())
     }
 
-    pub async fn submit_fido(self, fido: Fido2AuthData) -> Result<State, PasswordError> {
+    pub async fn submit_fido(self, fido_data: fido2::Request) -> Result<State, PasswordError> {
         let Self { data, password } = self;
 
         acquire_password_scope(
@@ -47,7 +47,7 @@ impl WantTfa {
             &data.username,
             &password,
             None,
-            Some(fido),
+            Some(fido_data),
         )
         .await?;
 

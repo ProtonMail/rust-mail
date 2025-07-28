@@ -2,6 +2,7 @@ use crate::ApiError;
 use crate::password::observability::{ObservableResult, ObservableState};
 use crate::password::state::{State, StateKind};
 use crate::shared::SecureString;
+use muon::rest::auth::v4::fido2;
 use proton_core_api::auth::KeySecret;
 use proton_core_api::service::{ApiServiceError, ServiceError};
 use proton_core_api::services::observability::ObservabilityRecorder;
@@ -86,6 +87,7 @@ impl PasswordFlow {
     /// * `key_secret` - The key secret
     /// * `tfa_mode` - The 2FA mode
     /// * `mbp_mode` - The mailbox password mode
+    /// * `fido_details` - Optional FIDO2 details
     #[must_use]
     pub fn new(
         session: impl Borrow<Session>,
@@ -94,11 +96,19 @@ impl PasswordFlow {
         key_secret: KeySecret,
         tfa_mode: TfaStatus,
         mbp_mode: PasswordMode,
+        fido_details: Option<fido2::Response>,
     ) -> Self {
         let (client, parts) = session.borrow().to_parts();
 
         let state = State::new(
-            client, parts, username, user_keys, key_secret, tfa_mode, mbp_mode,
+            client,
+            parts,
+            username,
+            user_keys,
+            key_secret,
+            tfa_mode,
+            mbp_mode,
+            fido_details,
         );
 
         Self {
@@ -140,6 +150,19 @@ impl PasswordFlow {
             .submit_totp(totp)
             .await
             .observe(&self.recorder, observable_data)?;
+
+        self.state.push(next);
+
+        Ok(())
+    }
+
+    /// Submit FIDO2 data for 2FA authentication.
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the FIDO2 submission fails.
+    pub async fn submit_fido(&mut self, fido_data: fido2::Request) -> Result<(), PasswordError> {
+        let next = self.state()?.submit_fido(fido_data).await?;
 
         self.state.push(next);
 
@@ -201,6 +224,11 @@ impl PasswordFlow {
     /// Get whether the account has FIDO2 enabled.
     pub fn has_fido(&self) -> Result<bool, PasswordError> {
         self.state()?.has_fido()
+    }
+
+    /// Get the FIDO2 details for authentication.
+    pub fn get_fido_details(&self) -> Result<Option<fido2::Response>, PasswordError> {
+        Ok(self.state()?.fido_details()?.cloned())
     }
 
     /// Get whether the account has a mailbox password.
