@@ -1,3 +1,5 @@
+use std::{borrow::Borrow, fmt, ops::Deref};
+
 /// New type wrapper which hides all but the first character of the email address from Display and
 /// Debug formatters to preserve user privacy.
 ///
@@ -34,14 +36,14 @@ impl PrivateEmail {
     }
 }
 
-impl std::fmt::Display for PrivateEmail {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+impl fmt::Display for PrivateEmail {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", sanitize_email(&self.0))
     }
 }
 
-impl std::fmt::Debug for PrivateEmail {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+impl fmt::Debug for PrivateEmail {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", sanitize_email(&self.0))
     }
 }
@@ -58,7 +60,13 @@ impl From<&str> for PrivateEmail {
     }
 }
 
-impl std::ops::Deref for PrivateEmail {
+impl Borrow<str> for PrivateEmail {
+    fn borrow(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl Deref for PrivateEmail {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
@@ -100,14 +108,14 @@ impl<'s> PrivateEmailRef<'s> {
     }
 }
 
-impl std::fmt::Display for PrivateEmailRef<'_> {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+impl fmt::Display for PrivateEmailRef<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> ::std::fmt::Result {
         write!(f, "{}", sanitize_email(self.0))
     }
 }
 
-impl std::fmt::Debug for PrivateEmailRef<'_> {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+impl fmt::Debug for PrivateEmailRef<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> ::std::fmt::Result {
         write!(f, "{}", sanitize_email(self.0))
     }
 }
@@ -167,14 +175,14 @@ impl PrivateString {
     }
 }
 
-impl std::fmt::Display for PrivateString {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+impl fmt::Display for PrivateString {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", sanitize_string(&self.0))
     }
 }
 
-impl std::fmt::Debug for PrivateString {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+impl fmt::Debug for PrivateString {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", sanitize_string(&self.0))
     }
 }
@@ -191,7 +199,7 @@ impl From<&str> for PrivateString {
     }
 }
 
-impl std::ops::Deref for PrivateString {
+impl Deref for PrivateString {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
