@@ -100,7 +100,7 @@ async fn basic(case: fn() -> TestCase) {
         .mock_update_calendar_event_attendee_status(
             CALENDAR_ID,
             EVENT_ID,
-            "gWfsHvDg",
+            BAR_ATTENDEE_ID,
             case.expected_status,
             &world.now,
         )
@@ -211,6 +211,7 @@ async fn recurring_with_single_edits() {
 
         event
             .with_id(PARENT_EVENT_ID)
+            .with_calendar_id(CALENDAR_ID)
             .with_attendee(
                 BAR_ATTENDEE_ID,
                 BAR_ATTENDEE_TOKEN,
@@ -247,6 +248,7 @@ async fn recurring_with_single_edits() {
 
         event
             .with_id(CHILD0_EVENT_ID)
+            .with_calendar_id(CALENDAR_ID)
             .with_attendee(
                 BAR_ATTENDEE_ID,
                 BAR_ATTENDEE_TOKEN,
@@ -283,6 +285,7 @@ async fn recurring_with_single_edits() {
 
         event
             .with_id(CHILD1_EVENT_ID)
+            .with_calendar_id(CALENDAR_ID)
             .with_attendee(
                 BAR_ATTENDEE_ID,
                 BAR_ATTENDEE_TOKEN,
@@ -319,6 +322,7 @@ async fn recurring_with_single_edits() {
 
         event
             .with_id(CHILD2_EVENT_ID)
+            .with_calendar_id(CALENDAR_ID)
             .with_attendee(
                 BAR_ATTENDEE_ID,
                 BAR_ATTENDEE_TOKEN,
@@ -367,6 +371,7 @@ async fn recurring_with_single_edits() {
 
         event
             .with_id(CHILD3_EVENT_ID)
+            .with_calendar_id(CALENDAR_ID)
             .with_attendee(
                 BAR_ATTENDEE_ID,
                 BAR_ATTENDEE_TOKEN,
@@ -638,6 +643,147 @@ async fn recurring_with_single_edits() {
         event.children[3]
             .attendee_status(&FOO_ATTENDEE_TOKEN.into())
             .unwrap()
+    );
+}
+
+/// Make sure we can correctly reply when one UID resolves to events across
+/// different calendars.
+///
+/// This can happen for Proton-to-Proton invites when:
+///
+/// - organizer creates a shared calendar,
+/// - organizer invites an attendee to this shared calendar,
+/// - organizer creates an event in the shared calendar, inviting attendee to
+///   it.
+///
+/// When the invitation is sent, the backend auto-imports it into attendee's
+/// *default* calendar ("My calendar") - this means that there are, in a way,
+/// two events now: one within the shared calendar and another in the attendee's
+/// default calendar.
+///
+/// When replying, we can choose any event as the backend keeps them in sync -
+/// what is important for us is that we don't try to reply to both events at
+/// once.
+#[tokio::test]
+#[allow(clippy::too_many_lines)]
+async fn multiple_calendars() {
+    const FIRST_CALENDAR_ID: &str = "xI8emESw";
+    const FIRST_EVENT_ID: &str = "Tnld9DeP";
+
+    const SECOND_CALENDAR_ID: &str = "9NQ8rRCB";
+    const SECOND_EVENT_ID: &str = "DMTwRgJT";
+
+    let world = world().await;
+
+    let first_event = world.event(|event| {
+        event
+            .basic()
+            .with_id(FIRST_EVENT_ID)
+            .with_calendar_id(FIRST_CALENDAR_ID)
+    });
+
+    let second_event = world.event(|event| {
+        event
+            .basic()
+            .with_id(SECOND_EVENT_ID)
+            .with_calendar_id(SECOND_CALENDAR_ID)
+    });
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_bootstrap_ex(
+            FIRST_CALENDAR_ID,
+            world.bootstrap_ex(FIRST_CALENDAR_ID),
+            |mock| mock.expect(2),
+        )
+        .await;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_find_calendar_events(EVENT_UID, None, vec![first_event, second_event])
+        .await;
+
+    let mut event = RsvpEventId::invite(INVITE)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            &world.contacts,
+            &world.now,
+            "bar@localhost",
+            Weekday::Monday,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+    // ---
+
+    let mut mail = None;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_update_calendar_event_attendee_status(
+            FIRST_CALENDAR_ID,
+            FIRST_EVENT_ID,
+            BAR_ATTENDEE_ID,
+            CalendarAttendeeStatus::Yes,
+            &world.now,
+        )
+        .await;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_update_calendar_event_personal_part(
+            FIRST_CALENDAR_ID,
+            FIRST_EVENT_ID,
+            Some("#aabbcc"),
+            CalendarNotificationsUpdate::SetToDefault,
+        )
+        .await;
+
+    let sender = FakeRsvpMailSender(&mut mail);
+
+    event
+        .answer(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            sender,
+            &world.now,
+            RsvpAnswer::Yes,
+        )
+        .await
+        .unwrap();
+
+    pa::assert_eq!(
+        Some(FakeRsvpMail {
+            to: "foo@localhost".into(),
+            body: "bar@localhost accepted your invitation to some title".into(),
+            ics: ics! {"
+                BEGIN:VCALENDAR
+                METHOD:REPLY
+                VERSION:2.0
+                CALSCALE:GREGORIAN
+                BEGIN:VEVENT
+                UID:8maQ3qBa
+                DTSTAMP:20180101T100000Z
+                DTSTART:20180101T120000Z
+                DTEND:20180101T133000Z
+                SUMMARY:some title
+                LOCATION:some location
+                ATTENDEE;PARTSTAT=ACCEPTED:mailto:bar@localhost
+                END:VEVENT
+                END:VCALENDAR
+            "}
+        }),
+        mail
     );
 }
 
