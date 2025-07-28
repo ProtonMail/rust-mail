@@ -12,8 +12,8 @@ use proton_calendar_api::{
     CalendarMember, CalendarMemberPassphrase, CalendarPassphrase,
 };
 use proton_calendar_common::{
-    RsvpAttendee, RsvpCache, RsvpCalendar, RsvpEvent, RsvpEventId, RsvpIntent, RsvpOccurrence,
-    RsvpOrganizer, RsvpProgress, RsvpRecency,
+    RsvpAttendee, RsvpCache, RsvpCalendar, RsvpContacts, RsvpEvent, RsvpEventId, RsvpIntent,
+    RsvpOccurrence, RsvpOrganizer, RsvpProgress, RsvpRecency,
 };
 use proton_core_api::session::{Config, Session};
 use proton_core_common::test_utils::test_context::{MockApiEnv, TestContext};
@@ -116,6 +116,7 @@ where
     address_keys: UnlockedAddressKeys<P>,
     calendar_key: UnlockedCalendarKey<P>,
     cache: DummyRsvpCache,
+    contacts: DummyRsvpContacts,
     now: Zoned,
 }
 
@@ -166,6 +167,7 @@ async fn world() -> World<impl PGPProviderSync> {
         address_keys,
         calendar_key,
         cache: DummyRsvpCache,
+        contacts: DummyRsvpContacts,
         now: "20180101T100000[UTC]".parse().unwrap(),
     }
 }
@@ -367,6 +369,18 @@ impl RsvpCache for DummyRsvpCache {
     }
 }
 
+struct DummyRsvpContacts;
+
+impl RsvpContacts for DummyRsvpContacts {
+    async fn get_display_name(&self, email: &str) -> Option<String> {
+        match email {
+            "bar@localhost" => Some("Bar Localhosty".into()),
+            "foo@localhost" => Some("Foo Localhosty".into()),
+            _ => None,
+        }
+    }
+}
+
 fn expected_event(intent: RsvpIntent, raw: CalendarEvent) -> RsvpEvent {
     RsvpEvent {
         intent,
@@ -385,12 +399,14 @@ fn expected_event(intent: RsvpIntent, raw: CalendarEvent) -> RsvpEvent {
             ),
         },
         organizer: RsvpOrganizer {
+            name: Some("Foo Localhosty".into()),
             email: "foo@localhost".into(),
         },
         attendees: vec![
             RsvpAttendee {
                 id: Some(BAR_ATTENDEE_ID.into()),
                 token: Some(BAR_ATTENDEE_TOKEN.into()),
+                name: Some("Bar Localhosty".into()),
                 email: "bar@localhost".into(),
                 status: Some(CalendarAttendeeStatus::Unanswered),
                 role: ical::Role::ReqParticipant,
@@ -398,6 +414,7 @@ fn expected_event(intent: RsvpIntent, raw: CalendarEvent) -> RsvpEvent {
             RsvpAttendee {
                 id: Some(ZAR_ATTENDEE_ID.into()),
                 token: Some(ZAR_ATTENDEE_TOKEN.into()),
+                name: None,
                 email: "zar@localhost".into(),
                 status: Some(CalendarAttendeeStatus::Yes),
                 role: ical::Role::OptParticipant,
@@ -434,12 +451,14 @@ fn expected_offline_event() -> RsvpEvent {
             ),
         },
         organizer: RsvpOrganizer {
+            name: Some("Foo Localhosty".into()),
             email: "foo@localhost".into(),
         },
         attendees: vec![
             RsvpAttendee {
                 id: None,
                 token: None,
+                name: Some("Bar Localhosty".into()),
                 email: "bar@localhost".into(),
                 status: None,
                 role: ical::Role::ReqParticipant,
@@ -447,6 +466,7 @@ fn expected_offline_event() -> RsvpEvent {
             RsvpAttendee {
                 id: None,
                 token: None,
+                name: None,
                 email: "zar@localhost".into(),
                 status: None,
                 role: ical::Role::OptParticipant,

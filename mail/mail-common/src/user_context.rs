@@ -9,7 +9,7 @@ use crate::draft::attachments::DraftStagingAreaCleaner;
 use crate::events::MailEvent;
 use crate::models::{Conversation, Message};
 use crate::prefetch::{Prefetch, PrefetchJob, PrefetchNotify};
-use crate::rsvp::RsvpCache;
+use crate::rsvp::{RsvpCache, RsvpContacts};
 use crate::user_context::events::subscriber::MailEventSubscriber;
 use crate::user_context::initialization::InitializationMediator;
 use crate::{AppError, MailContext, MailContextError, MailContextResult};
@@ -60,6 +60,7 @@ pub struct MailUserContext {
     prefetch: PrefetchNotify,
     initialization_mediator: InitializationMediator,
     rsvp_cache: RsvpCache,
+    rsvp_contacts: RsvpContacts,
     pub is_cleanup_cache_running: Arc<AtomicBool>,
 }
 
@@ -90,6 +91,7 @@ impl MailUserContext {
         );
 
         let initialization_mediator = InitializationMediator::new(task_service);
+        let rsvp_contacts = RsvpContacts::new(user_context.stash());
 
         let this = Arc::new_cyclic(|this| {
             register_mail_actions(user_context.queue(), this, user_context.session().api());
@@ -103,6 +105,7 @@ impl MailUserContext {
                 send_queue_executors,
                 initialization_mediator,
                 rsvp_cache: Default::default(),
+                rsvp_contacts,
                 is_cleanup_cache_running: Default::default(),
             }
         });
@@ -263,6 +266,10 @@ impl MailUserContext {
 
     pub(crate) fn rsvp_cache(&self) -> &RsvpCache {
         &self.rsvp_cache
+    }
+
+    pub(crate) fn rsvp_contacts(&self) -> &RsvpContacts {
+        &self.rsvp_contacts
     }
 
     pub async fn user(&self) -> MailContextResult<User> {

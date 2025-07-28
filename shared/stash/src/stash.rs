@@ -561,19 +561,20 @@ impl Stash {
     }
 }
 
-/// A handle to a database connection watcher.
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct WatcherHandle {
-    /// The receiver for the notifications.
     pub receiver: QueueReceiver<()>,
-    /// The handle to stop the watcher.
     pub handle: DropRemoveTableObserverHandle,
 }
 
 impl WatcherHandle {
     pub fn new(receiver: QueueReceiver<()>, handle: DropRemoveTableObserverHandle) -> Self {
         Self { receiver, handle }
+    }
+
+    pub async fn next(&self) -> Result<(), flume::RecvError> {
+        self.receiver.recv_async().await
     }
 }
 
