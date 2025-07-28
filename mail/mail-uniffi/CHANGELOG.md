@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Contactemailitem::id -> contactemailitem::contact_id
+
+### Features
+
+- Implement undo actions for move_to
+
+### Fixes
+
+- Fully rework how move_to works + several move_to bugfixes
+- `contact_group_by_id` now returns all emails, and emails are always properly sorted in groups in the list.
+- Use muon for demo hv webview
+- Better hv
+
+
+## [mail-uniffi-v0.108.0] - 2025-07-25
+
 ### Features
 
 - [ET-3867] Add snooze to bottom bar & conversation actions
@@ -26,14 +44,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Mail-common: drop `saveaspdf` and `print` actions
 - [ET-3920] Sync missing dependencies in mail scrollers
-
-
-## [mail-uniffi-v0.105.7] - 2025-07-24
-
-### Fixes
-
-- Marking conversations unread
-- [ET-2992] Open pgp attachments via `get_attachment`
 
 
 ## [mail-uniffi-v0.107.0] - 2025-07-24
@@ -58,6 +68,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-3706] Prevent duplicate account login
 - Fix implementation of first_graphem_uppercase to support emoji.
 - Fix snapshot tests.
+
+
+## [mail-uniffi-v0.105.7] - 2025-07-24
+
+### Fixes
+
+- Marking conversations unread
+- [ET-2992] Open pgp attachments via `get_attachment`
 
 
 ## [mail-uniffi-v0.105.6] - 2025-07-23
