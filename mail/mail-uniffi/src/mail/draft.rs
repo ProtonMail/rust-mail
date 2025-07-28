@@ -22,6 +22,8 @@ use chrono::Local;
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::draft::{
     Draft as RealDraft, DraftSyncStatus as RealDraftSyncStatus, ReplyMode, ScheduleSendOptions,
+    compose::DraftAddressValidationError as RealDraftAddressValidationError,
+    compose::DraftAddressValidationResult as RealDraftAddressValidationResult,
 };
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::DraftMetadata;
@@ -61,7 +63,6 @@ pub struct HtmlForComposer {
     /// and replied quote.
     pub initial_body: String,
 }
-
 impl From<ScheduleSendOptions<Local>> for DraftScheduleSendOptions {
     fn from(value: ScheduleSendOptions<Local>) -> Self {
         Self {
@@ -70,6 +71,39 @@ impl From<ScheduleSendOptions<Local>> for DraftScheduleSendOptions {
             monday_time: proton_core_common::datatypes::UnixTimestamp::from(value.time_next_monday)
                 .into(),
             is_custom_option_available: value.is_custom_datetime_available,
+        }
+    }
+}
+
+#[derive(Debug, uniffi::Enum)]
+pub enum DraftAddressValidationError {
+    SubscriptionRequired,
+    Disabled,
+    CanNotSend,
+    CanNotReceive,
+}
+
+impl From<RealDraftAddressValidationError> for DraftAddressValidationError {
+    fn from(value: RealDraftAddressValidationError) -> Self {
+        match value {
+            RealDraftAddressValidationError::SubscriptionRequired => Self::SubscriptionRequired,
+            RealDraftAddressValidationError::Disabled => Self::Disabled,
+            RealDraftAddressValidationError::CanNotSend => Self::CanNotSend,
+            RealDraftAddressValidationError::CanNotReceive => Self::CanNotReceive,
+        }
+    }
+}
+#[derive(Debug, uniffi::Record)]
+pub struct DraftAddressValidationResult {
+    pub email: String,
+    pub error: DraftAddressValidationError,
+}
+
+impl From<RealDraftAddressValidationResult> for DraftAddressValidationResult {
+    fn from(value: RealDraftAddressValidationResult) -> Self {
+        Self {
+            email: value.email,
+            error: value.error.into(),
         }
     }
 }
@@ -724,6 +758,20 @@ impl Draft {
                 .map(|v| v.map(Into::into))
                 .map_err(RealProtonMailError::from)
         })?)
+    }
+
+    pub fn address_validation_result(&self) -> Option<DraftAddressValidationResult> {
+        async_runtime().block_on(async move {
+            let instance = self.instance.read().await;
+            instance.address_validation_result.clone().map(Into::into)
+        })
+    }
+
+    pub fn clear_address_validation_error(&self) {
+        async_runtime().block_on(async move {
+            let mut instance = self.instance.write().await;
+            instance.address_validation_result = None;
+        });
     }
 }
 

@@ -58,9 +58,10 @@ pub mod recipients;
 pub(crate) mod send;
 
 use crate::draft::compose::{
-    DraftAddressChangeOutput, DraftAddressChangeRequest, PM_SIGNATURE_DIV_CLASS,
-    encrypt_draft_body, get_full_signature, inject_dark_mode, patch_draft_with_reply_mode,
-    prepare_html_reply, prepare_plain_text_reply, resolve_sender_alias,
+    DraftAddressChangeOutput, DraftAddressChangeRequest, DraftAddressValidationResult,
+    PM_SIGNATURE_DIV_CLASS, encrypt_draft_body, find_default_sender_address, get_full_signature,
+    inject_dark_mode, patch_draft_with_reply_mode, prepare_html_reply, prepare_plain_text_reply,
+    resolve_sender_alias, validate_sender_address,
 };
 pub use send::ScheduleSendOptions;
 
@@ -462,6 +463,9 @@ pub struct Draft {
     body: String,
     /// Message mime type
     mime_type: MimeType,
+    /// This is only present when we detect the choice of address in the draft
+    /// does not satisfy some requirements that would prevent the message from being sent.
+    pub address_validation_result: Option<DraftAddressValidationResult>,
 }
 
 /// Indicates the status of syncing a draft.
@@ -644,6 +648,8 @@ impl Draft {
             send_result,
             body: decrypted.body,
             mime_type: decrypted.metadata.mime_type,
+            //TODO(ET-3932): handle verification open,
+            address_validation_result: None,
         };
         draft.sanitize_body();
 
@@ -662,18 +668,10 @@ impl Draft {
         info!("Creating new empty draft");
         let mut tether = context.user_stash().connection();
         // Default address should have display_order 0
-        let addresses = Address::find("ORDER BY display_order ASC LIMIT 1", vec![], &tether)
-            .await
-            .inspect_err(|e| {
-                error!("Failed to load addresses: {e:?}");
-            })?;
-
-        if addresses.is_empty() {
-            error!("No addresses found for current user");
-            return Err(OpenError::UserHasNoAddresses.into());
-        }
-
-        let address = &addresses[0];
+        let address = find_default_sender_address(&tether)
+            .await?
+            .ok_or(OpenError::UserHasNoAddresses)
+            .inspect_err(|_| error!("No suitable address found"))?;
         let mail_settings = MailSettings::get(&tether).await?.unwrap_or_default();
 
         let metadata = tether
@@ -682,9 +680,12 @@ impl Draft {
                     .await
                     .inspect_err(|e| error!("Failed to create new empty draft metadata: {e:?}"))?;
                 if mail_settings.attach_public_key {
-                    let public_key_attachment = Attachment::create_public_key(context, address, tx)
-                        .await
-                        .inspect_err(|e| error!("Failed to create public key attachment: {e:?}"))?;
+                    let public_key_attachment =
+                        Attachment::create_public_key(context, &address, tx)
+                            .await
+                            .inspect_err(|e| {
+                                error!("Failed to create public key attachment: {e:?}")
+                            })?;
 
                     DraftAttachmentMetadata::pending(
                         metadata.id.unwrap(),
@@ -702,7 +703,7 @@ impl Draft {
         info!("New draft created with id = {}", metadata.id.unwrap());
         Ok(Self::new_empty_draft(
             metadata.id.unwrap(),
-            address,
+            &address,
             &mail_settings,
         ))
     }
@@ -728,6 +729,7 @@ impl Draft {
             send_result: None,
             mime_type: mail_settings.draft_mime_type,
             body,
+            address_validation_result: None,
         }
     }
 
@@ -766,14 +768,30 @@ impl Draft {
             return Err(AppError::MessageHasNoRemoteId(message_id).into());
         }
 
+        let user = context.user().await?;
+
         // Find out which address this message has and use that to craft te reply.
-        let Some(address) =
-            Address::find_by_remote_id(source_message.remote_address_id.clone(), &tether).await?
-        else {
-            return Err(
-                OpenError::AddressNotFound(source_message.remote_address_id.clone()).into(),
-            );
-        };
+        let address = Address::find_by_remote_id(source_message.remote_address_id.clone(), &tether)
+            .await?
+            .ok_or(OpenError::AddressNotFound(
+                source_message.remote_address_id.clone(),
+            ))?;
+
+        let (address, address_validation_error) =
+            if let Some(e) = validate_sender_address(&address, &user) {
+                tracing::warn!("Sender address ({}) is not valid: {}", e.email, e.error);
+
+                let addr = find_default_sender_address(&tether)
+                    .await?
+                    .ok_or(OpenError::UserHasNoAddresses)
+                    .inspect_err(|_| error!("Failed to locate default sender address"))?;
+
+                tracing::info!("Sender address changed to: {}", addr.email);
+
+                (addr, Some(e))
+            } else {
+                (address, None)
+            };
 
         // Message body must be present to create a reply.
         let Some(source_message_body) = Message::load_decrypted_message_from_cache(
@@ -818,6 +836,7 @@ impl Draft {
                     source_message_body,
                     use_utc,
                     mime_type_override,
+                    address_validation_error,
                 )
                 .await;
 
@@ -908,6 +927,7 @@ impl Draft {
         mut source_message_body: DecryptedMessageBody,
         use_utc: bool,
         mime_type_override: Option<MimeType>,
+        address_validation_result: Option<DraftAddressValidationResult>,
     ) -> (Self, Vec<Attachment>) {
         let mime_type = if let Some(mime_type) = mime_type_override {
             mime_type
@@ -946,7 +966,13 @@ impl Draft {
             attachments.retain(|attachment| attachment.disposition == Disposition::Inline);
         };
 
-        let sender_email = resolve_sender_alias(&address.email, &source_message_body.metadata);
+        // Only resolve alias if we passed the validation. If we didn't we are not on the same
+        // address.
+        let sender_email = if address_validation_result.is_none() {
+            resolve_sender_alias(&address.email, &source_message_body.metadata)
+        } else {
+            address.email.clone()
+        };
 
         let mut draft = Self {
             metadata_id,
@@ -959,6 +985,7 @@ impl Draft {
             send_result: None,
             body,
             mime_type,
+            address_validation_result,
         };
 
         patch_draft_with_reply_mode(

@@ -3,7 +3,7 @@ use itertools::Itertools;
 use proton_action_queue::queue::{ActionError, AsActionError, QueuedError};
 use proton_core_api::consts::{CoreBundle, Mail};
 use proton_core_api::services::proton::common::ApiErrorInfo;
-use proton_core_api::services::proton::{LabelId, UserId};
+use proton_core_api::services::proton::{AddressStatus, LabelId, UserId};
 use proton_core_common::datatypes::UnixTimestamp;
 use proton_core_common::models::{Address, ModelExtension, ModelIdExtension};
 use proton_crypto_inbox::attachment::KeyPackets;
@@ -17,6 +17,7 @@ use proton_mail_common::MailContextError;
 use proton_mail_common::datatypes::attachment::ContentId;
 use proton_mail_common::datatypes::{MimeType, RollbackItemType, SystemLabelId};
 use proton_mail_common::decrypted_message::DecryptedMessageBody;
+use proton_mail_common::draft::compose::DraftAddressValidationError;
 use proton_mail_common::draft::{Draft, DraftSyncStatus, Error, OpenError, ReplyMode, SaveError};
 use proton_mail_common::models::{
     Attachment, Conversation, DraftAttachmentMetadata, DraftAttachmentUploadState, DraftMetadata,
@@ -1269,6 +1270,76 @@ async fn open_draft_resets_password() {
     assert!(metadata.password_hint.is_none());
     assert!(metadata.password.is_none());
     assert!(metadata.expiration_time.is_none());
+}
+
+#[tokio::test]
+async fn create_draft_reply_with_invalid_address_produces_address_validation_error() {
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let mut params = draft_test_params_with_mime_type(MimeType::TextHtml);
+    params.addresses[0].status = AddressStatus::Disabled;
+
+    // Create one message we can reply to.
+    let mut remote_existing_message = draft_message_with_attachments();
+    remote_existing_message.metadata.sender.address = "me@proton.me".into();
+    remote_existing_message.body.reply_to.address = "me@proton.me".into();
+    remote_existing_message.metadata.id = "FancyRemoteId".into();
+    remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
+
+    ctx.setup_user(params.clone()).await;
+    let user_ctx = ctx.mail_user_context().await;
+
+    let mut tether = user_ctx.user_stash().connection();
+    let (mut existing_message, _, _) =
+        Message::from_api_data(remote_existing_message.clone(), &tether)
+            .await
+            .unwrap();
+    tether
+        .tx(async |tx| existing_message.save(tx).await)
+        .await
+        .unwrap();
+    let existing_message = existing_message;
+
+    ctx.mock_get_message(
+        &remote_existing_message.metadata.id,
+        remote_existing_message.clone(),
+    )
+    .await;
+    ctx.catch_all().await;
+
+    // Get the message body - required to reply to draft.
+    Message::force_sync_message_and_body(
+        &user_ctx,
+        existing_message.remote_id.unwrap(),
+        false,
+        &mut tether,
+    )
+    .await
+    .unwrap();
+
+    // Create draft.
+    let mut draft = Draft::reply(
+        &user_ctx,
+        existing_message.local_id.unwrap(),
+        ReplyMode::Sender,
+        true,
+        None,
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(draft.address_id, params.addresses[1].id);
+    let validation_result = draft.address_validation_result.take().unwrap();
+
+    assert_eq!(validation_result.email, params.addresses[0].email);
+    assert_eq!(
+        validation_result.error,
+        DraftAddressValidationError::Disabled
+    );
 }
 
 async fn prepare_draft_reply_attach_public_key(
