@@ -636,7 +636,6 @@ impl Draft {
             RecipientList::from_message_recipients(&contact_group_resolver, message.bcc_list.value),
         )
         .await;
-
         let mut draft = Self {
             metadata_id: metadata.id.unwrap(),
             sender: message.sender.address.into_clear_text_string(),
@@ -652,6 +651,38 @@ impl Draft {
             address_validation_result: None,
         };
         draft.sanitize_body();
+
+        // When syncing the draft from the server  we need to re-check address validity in
+        // case something changes.
+        if sync_status == DraftSyncStatus::Synced {
+            let address = Address::find_by_remote_id(draft.address_id.clone(), tether)
+                .await?
+                .ok_or(OpenError::AddressNotFound(draft.address_id.clone()))?;
+            let user = context.user().await?;
+            if let Some(result) = validate_sender_address(&address, &user) {
+                tracing::warn!(
+                    "Address {} is no longer valid: {}",
+                    result.email,
+                    result.error
+                );
+
+                let new_address = find_default_sender_address(tether)
+                    .await?
+                    .ok_or(OpenError::UserHasNoAddresses)?;
+                tracing::info!("Draft address changed to {}", new_address.email);
+                draft.address_id = new_address.remote_id.unwrap();
+                draft.address_validation_result = Some(result);
+
+                // If this operation fails we should not prevent the draft from being opened, some things
+                // may not be correct (signature, public key attachments) but the draft will still be usable.
+                if let Err(e) = draft
+                    .change_sender_address_by_id(context, draft.address_id.clone())
+                    .await
+                {
+                    tracing::error!("Failed to change sender address: {e}")
+                }
+            }
+        }
 
         info!("Draft loaded with id = {}", draft.metadata_id);
         Ok((draft, sync_status))
