@@ -584,9 +584,6 @@ pub enum RsvpError {
     #[error("*.ics contains an event without dtstart")]
     MissingDtStart,
 
-    #[error("*.ics contains an event without dtend")]
-    MissingDtEnd,
-
     #[error("*.ics contains an event with mixed-type dtstart and dtend")]
     MixedDtStartAndDtEnd,
 
