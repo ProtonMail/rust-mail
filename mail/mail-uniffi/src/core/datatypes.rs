@@ -569,6 +569,24 @@ impl From<RealWeekStart> for WeekStart {
     }
 }
 
+#[repr(u8)]
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, UniffiEnum)]
+pub enum NonDefaultWeekStart {
+    Monday = 1,
+    Saturday = 6,
+    Sunday = 7,
+}
+
+impl From<NonDefaultWeekStart> for RealWeekStart {
+    fn from(week_start: NonDefaultWeekStart) -> Self {
+        match week_start {
+            NonDefaultWeekStart::Monday => Self::Monday,
+            NonDefaultWeekStart::Saturday => Self::Saturday,
+            NonDefaultWeekStart::Sunday => Self::Sunday,
+        }
+    }
+}
+
 /// In which environment are we going to register the device
 /// for the push notification.
 ///

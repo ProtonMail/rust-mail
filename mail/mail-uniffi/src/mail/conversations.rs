@@ -9,12 +9,12 @@
 //! won't.
 //!
 
-use crate::core::datatypes::Id;
+use crate::core::datatypes::{Id, NonDefaultWeekStart, UnixTimestamp};
 use crate::errors::{ActionError, VoidActionResult};
 use crate::mail::datatypes::{
     AllBottomBarMessageActions, AutoDeleteBanner, Conversation, ConversationAvailableActions,
     ConversationSearchOptions, LabelAsAction, LabelAsOutput, Message, MoveAction, SnoozeActions,
-    SnoozeTime, Undo,
+    Undo,
 };
 use crate::mail::mail_scroller::{
     ConversationScroller, ConversationScrollerLiveQueryCallback, ReadFilter,
@@ -226,6 +226,7 @@ pub async fn available_move_to_actions_for_conversations(
 #[uniffi_export]
 pub fn available_snooze_actions_for_conversation(
     session: Arc<MailUserSession>,
+    week_start: NonDefaultWeekStart,
     id: Id,
 ) -> Result<SnoozeActions, ActionError> {
     // TODO: Implement this
@@ -241,7 +242,7 @@ pub fn available_snooze_actions_for_conversation(
 pub fn snooze_conversations(
     session: Arc<MailUserSession>,
     ids: Vec<Id>,
-    snooze_time: SnoozeTime,
+    snooze_time: UnixTimestamp,
 ) -> Result<Option<Arc<Undo>>, ActionError> {
     // TODO: Implement this
     Ok(None)
