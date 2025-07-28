@@ -13,7 +13,8 @@ use crate::core::datatypes::Id;
 use crate::errors::{ActionError, VoidActionResult};
 use crate::mail::datatypes::{
     AllBottomBarMessageActions, AutoDeleteBanner, Conversation, ConversationAvailableActions,
-    ConversationSearchOptions, LabelAsAction, LabelAsOutput, Message, MoveAction, Undo,
+    ConversationSearchOptions, LabelAsAction, LabelAsOutput, Message, MoveAction, SnoozeActions,
+    SnoozeTime, Undo,
 };
 use crate::mail::mail_scroller::{
     ConversationScroller, ConversationScrollerLiveQueryCallback, ReadFilter,
@@ -213,6 +214,48 @@ pub async fn available_move_to_actions_for_conversations(
     })
     .await
     .map_err(ActionError::from)
+}
+
+/// Returns available snooze actions for conversation.
+///
+/// This function will return options depending on current day of the week.
+/// If the conversation is already snoozed, it will return the unsnooze option.
+///
+#[allow(unused_variables)]
+#[allow(clippy::needless_pass_by_value)]
+#[uniffi_export]
+pub fn available_snooze_actions_for_conversation(
+    session: Arc<MailUserSession>,
+    id: Id,
+) -> Result<SnoozeActions, ActionError> {
+    // TODO: Implement this
+    Ok(SnoozeActions {
+        options: vec![],
+        show_unsnooze: false,
+    })
+}
+
+#[allow(unused_variables)]
+#[allow(clippy::needless_pass_by_value)]
+#[uniffi_export]
+pub fn snooze_conversations(
+    session: Arc<MailUserSession>,
+    ids: Vec<Id>,
+    snooze_time: SnoozeTime,
+) -> Result<Option<Arc<Undo>>, ActionError> {
+    // TODO: Implement this
+    Ok(None)
+}
+
+#[allow(unused_variables)]
+#[allow(clippy::needless_pass_by_value)]
+#[uniffi_export]
+pub fn unsnooze_conversations(
+    session: Arc<MailUserSession>,
+    ids: Vec<Id>,
+) -> Result<Option<Arc<Undo>>, ActionError> {
+    // TODO: Implement this
+    Ok(None)
 }
 
 /// Returns available actions for conversation bottom bar.
