@@ -148,7 +148,6 @@ impl UserContext {
         Ok(this)
     }
 
-    #[allow(clippy::missing_panics_doc)]
     pub fn as_arc(&self) -> Arc<Self> {
         self.this.upgrade().expect("Should never fail")
     }
