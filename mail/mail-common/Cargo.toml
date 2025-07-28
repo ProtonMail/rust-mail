@@ -70,6 +70,7 @@ thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
 typed-builder = { workspace = true }
+url = { workspace = true }
 uuid = { workspace = true }
 sqlite-watcher = { workspace = true }
 
