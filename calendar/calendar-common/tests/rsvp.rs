@@ -372,7 +372,7 @@ impl RsvpCache for DummyRsvpCache {
 struct DummyRsvpContacts;
 
 impl RsvpContacts for DummyRsvpContacts {
-    fn lookup_name(&self, email: &str) -> Option<String> {
+    async fn get_display_name(&self, email: &str) -> Option<String> {
         match email {
             "bar@localhost" => Some("Bar Localhosty".into()),
             "foo@localhost" => Some("Foo Localhosty".into()),

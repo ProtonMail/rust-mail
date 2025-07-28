@@ -97,6 +97,7 @@ where
         children,
         decryptor.as_ref(),
     )
+    .await
     .map(Some)
 }
 
@@ -235,7 +236,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-fn extract<P>(
+async fn extract<P>(
     pgp: &P,
     contacts: &impl RsvpContacts,
     now: &Zoned,
@@ -243,9 +244,9 @@ fn extract<P>(
     week_start: Weekday,
     id: &RsvpEventId,
     calendar: Option<CalendarBootstrap>,
-    source: Source,
+    source: Source<'_>,
     children: Vec<CalendarEvent>,
-    decryptor: Option<&CalendarEventDecryptor<P>>,
+    decryptor: Option<&CalendarEventDecryptor<'_, P>>,
 ) -> RsvpResult<RsvpEvent>
 where
     P: PGPProviderSync,
@@ -253,8 +254,8 @@ where
     let metadata = extract_metadata(source.invite_or_event());
     let recurrence = extract_recurrence(source.invite_or_event(), week_start);
     let occurrence = extract_occurrence(source.invite_or_event())?;
-    let organizer = extract_organizer(contacts, &source)?;
-    let attendees = extract_attendees(pgp, contacts, &source, decryptor, &organizer)?;
+    let organizer = extract_organizer(contacts, &source).await?;
+    let attendees = extract_attendees(pgp, contacts, &source, decryptor, &organizer).await?;
     let calendar = extract_calendar(calendar, &source);
     let progress = extract_progress(now, &source, &occurrence);
     let recency = extract_recency(source.invite(), source.event());
@@ -815,7 +816,10 @@ fn extract_occurrence(event: &ical::VEvent) -> RsvpResult<RsvpOccurrence> {
     }
 }
 
-fn extract_organizer(contacts: &impl RsvpContacts, source: &Source) -> RsvpResult<RsvpOrganizer> {
+async fn extract_organizer(
+    contacts: &impl RsvpContacts,
+    source: &Source<'_>,
+) -> RsvpResult<RsvpOrganizer> {
     // If we have access to the raw calendar event, pull organizer from there -
     // it's validated by the backend thus guaranteed to be a correct e-mail
     // address.
@@ -832,7 +836,7 @@ fn extract_organizer(contacts: &impl RsvpContacts, source: &Source) -> RsvpResul
             .clone();
 
         Ok(RsvpOrganizer {
-            name: contacts.lookup_name(&email),
+            name: contacts.get_display_name(&email).await,
             email,
         })
     } else {
@@ -846,7 +850,7 @@ fn extract_organizer(contacts: &impl RsvpContacts, source: &Source) -> RsvpResul
             let email = email.value().as_str();
 
             Ok(RsvpOrganizer {
-                name: contacts.lookup_name(email),
+                name: contacts.get_display_name(email).await,
                 email: email.into(),
             })
         } else {
@@ -855,11 +859,11 @@ fn extract_organizer(contacts: &impl RsvpContacts, source: &Source) -> RsvpResul
     }
 }
 
-fn extract_attendees<P>(
+async fn extract_attendees<P>(
     pgp: &P,
     contacts: &impl RsvpContacts,
-    source: &Source,
-    decryptor: Option<&CalendarEventDecryptor<P>>,
+    source: &Source<'_>,
+    decryptor: Option<&CalendarEventDecryptor<'_, P>>,
     organizer: &RsvpOrganizer,
 ) -> RsvpResult<Vec<RsvpAttendee>>
 where
@@ -868,20 +872,17 @@ where
     debug!("Extracting event's attendees");
 
     if let (Some(event), Some(decryptor)) = (source.raw_event(), decryptor) {
-        extract_attendees_from_event(pgp, contacts, event, decryptor, organizer)
+        extract_attendees_from_event(pgp, contacts, event, decryptor, organizer).await
     } else {
-        Ok(extract_attendees_from_invite(
-            contacts,
-            source.invite_or_event(),
-        ))
+        Ok(extract_attendees_from_invite(contacts, source.invite_or_event()).await)
     }
 }
 
-fn extract_attendees_from_event<P>(
+async fn extract_attendees_from_event<P>(
     pgp: &P,
     contacts: &impl RsvpContacts,
     event: &CalendarEvent,
-    decryptor: &CalendarEventDecryptor<P>,
+    decryptor: &CalendarEventDecryptor<'_, P>,
     organizer: &RsvpOrganizer,
 ) -> RsvpResult<Vec<RsvpAttendee>>
 where
@@ -890,27 +891,36 @@ where
     // Attendees are split between `event.attendees` (which contains statuses
     // and ids used by the API) and `event.attendees_event` (which contains
     // just the e-mail addresses and tokens)
-    let attendees: HashMap<_, _> = event
+    let attendees_meta: HashMap<_, _> = event
         .attendees
         .iter()
         .map(|att| (att.token.as_str(), (&att.id, att.status)))
         .collect();
 
-    let event = event.attendees_event().decrypt_and_parse(pgp, decryptor)?;
-
-    event
+    let event_attendees = event
+        .attendees_event()
+        .decrypt_and_parse(pgp, decryptor)?
         .attendees
         .into_iter()
-        .enumerate()
-        .filter_map(|(idx, attendee)| {
-            debug!(?idx, "Processing attendee");
+        .enumerate();
 
-            extract_attendee_from_event(contacts, organizer, &attendees, attendee).transpose()
-        })
-        .collect()
+    let mut attendees = Vec::new();
+
+    for (idx, attendee) in event_attendees {
+        debug!(?idx, "Processing attendee");
+
+        let attendee =
+            extract_attendee_from_event(contacts, organizer, &attendees_meta, attendee).await?;
+
+        if let Some(attendee) = attendee {
+            attendees.push(attendee);
+        }
+    }
+
+    Ok(attendees)
 }
 
-fn extract_attendee_from_event(
+async fn extract_attendee_from_event(
     contacts: &impl RsvpContacts,
     organizer: &RsvpOrganizer,
     attendees: &HashMap<&str, (&CalendarAttendeeId, CalendarAttendeeStatus)>,
@@ -943,7 +953,7 @@ fn extract_attendee_from_event(
 
     Ok(Some(RsvpAttendee {
         id: Some((*id).clone()),
-        name: contacts.lookup_name(&email),
+        name: contacts.get_display_name(&email).await,
         email,
         status: Some(*status),
         token: Some(token.into()),
@@ -951,30 +961,28 @@ fn extract_attendee_from_event(
     }))
 }
 
-fn extract_attendees_from_invite(
+async fn extract_attendees_from_invite(
     contacts: &impl RsvpContacts,
     invite: &ical::VEvent,
 ) -> Vec<RsvpAttendee> {
-    invite
-        .attendees
-        .iter()
-        .filter_map(|attendee| {
-            if let ical::CalAddress::Email(email) = &attendee.address {
-                let email = email.value().as_str();
+    let mut attendees = Vec::new();
 
-                Some(RsvpAttendee {
-                    id: None,
-                    token: None,
-                    name: contacts.lookup_name(email),
-                    email: email.into(),
-                    status: None,
-                    role: attendee.role.unwrap_or_default(),
-                })
-            } else {
-                None
-            }
-        })
-        .collect()
+    for attendee in &invite.attendees {
+        if let ical::CalAddress::Email(email) = &attendee.address {
+            let email = email.value().as_str();
+
+            attendees.push(RsvpAttendee {
+                id: None,
+                token: None,
+                name: contacts.get_display_name(email).await,
+                email: email.into(),
+                status: None,
+                role: attendee.role.unwrap_or_default(),
+            });
+        }
+    }
+
+    attendees
 }
 
 fn extract_calendar(calendar: Option<CalendarBootstrap>, source: &Source) -> Option<RsvpCalendar> {

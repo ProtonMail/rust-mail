@@ -91,10 +91,7 @@ impl MailUserContext {
         );
 
         let initialization_mediator = InitializationMediator::new(task_service);
-
-        let rsvp_contacts = RsvpContacts::new(&user_context).await.inspect_err(|err| {
-            error!("Couldn't initialize RsvpContacts: {err:?}");
-        })?;
+        let rsvp_contacts = RsvpContacts::new(user_context.stash());
 
         let this = Arc::new_cyclic(|this| {
             register_mail_actions(user_context.queue(), this, user_context.session().api());

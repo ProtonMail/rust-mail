@@ -538,7 +538,7 @@ impl From<RsvpAnswer> for ical::PartStat {
 }
 
 pub trait RsvpContacts {
-    fn lookup_name(&self, email: &str) -> Option<String>;
+    fn get_display_name(&self, email: &str) -> impl Future<Output = Option<String>> + Send;
 }
 
 pub trait RsvpCache {
