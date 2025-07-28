@@ -21,6 +21,8 @@ parking_lot = { workspace = true }
 proton-account-api = { workspace = true }
 proton-account-uniffi = { workspace = true }
 proton-action-queue = { workspace = true }
+proton-calendar-api = { workspace = true }
+proton-calendar-common = { workspace = true }
 proton-core-api = { workspace = true }
 proton-core-common = { workspace = true }
 proton-crypto-account = { workspace = true }
@@ -28,6 +30,7 @@ proton-event-loop = { workspace = true }
 proton-mail-api = { workspace = true }
 proton-mail-common = { workspace = true, features = ["proton_mail_error_log"] }
 proton-task-service = { workspace = true }
+proton-ical = { workspace = true }
 proton-vcard = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -46,6 +49,7 @@ uniffi-macros = { workspace = true }
 uniffi-runtime = { workspace = true }
 sqlite-watcher = { workspace = true }
 non-empty-string = { workspace = true }
+jiff = { workspace = true }
 
 [target.'cfg(target_os = "ios")'.dependencies]
 tracing-oslog = "0.3.0"

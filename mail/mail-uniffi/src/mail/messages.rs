@@ -11,7 +11,7 @@
 use super::datatypes::{AllBottomBarMessageActions, Message};
 use super::datatypes::{LabelAsAction, MessageAvailableActions, MimeType, MoveAction};
 use super::state::MailUserContextPtr;
-use super::{MailUserSession, Mailbox};
+use super::{MailUserSession, Mailbox, RsvpEventServiceProvider};
 use crate::PaginatorSearchOptions;
 use crate::core::datatypes::{Id, RemoteId, UnixTimestamp};
 use crate::errors::{
@@ -49,6 +49,7 @@ use proton_mail_common::models::default_location::IncomingDefaultLocation;
 use proton_mail_common::models::{self, Message as RealMessage, MessageBodyMetadata};
 use stash::orm::Model as _;
 use std::sync::Arc;
+use tracing::warn;
 
 #[derive(uniffi::Object)]
 pub struct DecryptedMessage {
@@ -151,6 +152,37 @@ impl DecryptedMessage {
         .await
         .map_err(ProtonError::from)
         .into()
+    }
+
+    /// Checks if this mail contains an invitation and, if so, returns its
+    /// identifier - you can then use this identifier to fetch event details.
+    ///
+    /// [1] TODO (NGC-57) implement support for offline-mode
+    ///     (this function probably will probably not have to be adjusted, but
+    ///     I'm leaving a comment so that we know to update the docs above)
+    pub async fn identify_rsvp(self: Arc<Self>) -> Option<Arc<RsvpEventServiceProvider>> {
+        uniffi_async(async move {
+            let ctx = self.ctx()?;
+
+            let rsvp = self
+                .body
+                .identify_rsvp(&ctx)
+                .await
+                .map_err(RealProtonMailError::from)?;
+
+            if let Some(rsvp) = rsvp {
+                Ok(Some(Arc::new(RsvpEventServiceProvider::new(
+                    self.ctx.clone(),
+                    rsvp,
+                ))))
+            } else {
+                Ok(None)
+            }
+        })
+        .await
+        .map_err(|err: RealProtonMailError| warn!(?err, "Couldn't identify RSVP"))
+        .ok()
+        .flatten()
     }
 }
 
