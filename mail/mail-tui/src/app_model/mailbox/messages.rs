@@ -1226,9 +1226,23 @@ impl DecryptedMessage {
             .as_ref()
             .map(|recur| Text::from(format!("% {recur}")).fg(fg));
 
-        let rsvp_organizer = Text::from(format!("- <{}> (organizer)", rsvp.organizer.email)).fg(fg);
+        let rsvp_organizer = {
+            let name = if let Some(name) = &rsvp.organizer.name {
+                format!("{name} <{}>", rsvp.organizer.email)
+            } else {
+                format!("<{}>", rsvp.organizer.email)
+            };
+
+            Text::from(format!("- {name} (organizer)")).fg(fg)
+        };
 
         let rsvp_attendees = rsvp.attendees.iter().map(|att| {
+            let name = if let Some(name) = &att.name {
+                format!("{name} <{}>", att.email)
+            } else {
+                format!("<{}>", att.email)
+            };
+
             let status = att.status.map(|status| match status {
                 CalendarAttendeeStatus::Unanswered => "unanswered",
                 CalendarAttendeeStatus::Maybe => "maybe",
@@ -1237,9 +1251,9 @@ impl DecryptedMessage {
             });
 
             if let Some(status) = status {
-                Text::from(format!("- <{}> ({status})", att.email))
+                Text::from(format!("- {name} ({status})"))
             } else {
-                Text::from(format!("- <{}>", att.email))
+                Text::from(format!("- {name}"))
             }
             .fg(fg)
         });

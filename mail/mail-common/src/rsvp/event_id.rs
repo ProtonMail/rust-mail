@@ -45,6 +45,8 @@ impl RsvpEventId {
                 err
             })?;
 
+        let cache = ctx.rsvp_cache();
+        let contacts = ctx.rsvp_contacts();
         let now = ctx.mail_context().core_context().clock().now();
 
         let email = {
@@ -73,7 +75,8 @@ impl RsvpEventId {
                 ctx.api(),
                 &pgp,
                 &keys,
-                ctx.rsvp_cache(),
+                cache,
+                contacts,
                 &now,
                 email.as_clear_text_str(),
                 week_start,
