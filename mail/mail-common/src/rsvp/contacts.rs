@@ -20,15 +20,16 @@ impl cal::RsvpContacts for RsvpContacts {
     async fn get_display_name(&self, email: &str) -> Option<String> {
         let tether = self.stash.connection();
 
-        let contact = ContactEmail::find(
-            "WHERE canonical_email = ? LIMIT 1",
+        let contact = ContactEmail::find_first(
+            "WHERE canonical_email = ?",
             vec![Box::new(email.to_string())],
             &tether,
         )
         .await;
 
         match contact {
-            Ok(contact) => contact.into_iter().next().map(|contact| contact.name),
+            Ok(Some(contact)) => Some(contact.name),
+            Ok(None) => None,
 
             Err(err) => {
                 warn!("Couldn't get display name for contact: {err:?}");
