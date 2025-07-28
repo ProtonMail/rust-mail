@@ -1342,6 +1342,67 @@ async fn create_draft_reply_with_invalid_address_produces_address_validation_err
     );
 }
 
+#[tokio::test]
+async fn open_draft_catches_invalid_address() {
+    // Check that open draft successfully reports synced status when synced from server.
+
+    // Set up a user and initialise the inbox
+    let ctx = MailTestContext::with_user_secret_and_user_id(
+        message_body_test_user_secret(),
+        UserId::from(TEST_USER_ID),
+    )
+    .await;
+    let params = draft_test_params();
+    let message = draft_message();
+
+    let expected_draft_params = expected_create_draft_params();
+
+    ctx.setup_user(params.clone()).await;
+    ctx.mock_create_draft(
+        expected_draft_params,
+        None,
+        message.clone(),
+        None,
+        DraftAttachmentKeyPackets::new(),
+    )
+    .await;
+    // Draft open always loads message from remote.
+    ctx.mock_get_message(&message.metadata.id, message.clone())
+        .await;
+    ctx.catch_all().await;
+    let user_ctx = ctx.mail_user_context().await;
+
+    // Create draft.
+    let mut tether = user_ctx.user_stash().connection();
+    let mut draft = Draft::empty(&user_ctx).await.unwrap();
+    draft.save(user_ctx.action_queue(), &tether).await.unwrap();
+
+    // Execute action.
+    user_ctx.execute_all_send_actions().await.unwrap();
+
+    // Change the address to invalid
+    let mut address = Address::find_by_remote_id(draft.address_id.clone(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    address.status = AddressStatus::Disabled.into();
+    tether.tx(async |tx| address.save(tx).await).await.unwrap();
+
+    // Load the draft.
+    let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+
+    // Opening this draft again should trigger the address change invalidation
+    let (draft, sync_status) = Draft::open(&user_ctx, draft_message_id).await.unwrap();
+    assert_eq!(sync_status, DraftSyncStatus::Synced);
+    assert_ne!(draft.address_id, address.remote_id.unwrap());
+    let validation_result = draft.address_validation_result.unwrap();
+    assert_eq!(validation_result.email, address.email);
+    assert_eq!(
+        validation_result.error,
+        DraftAddressValidationError::Disabled
+    );
+}
+
 async fn prepare_draft_reply_attach_public_key(
     pre_attach_public_key: bool,
     reply_mode: ReplyMode,
