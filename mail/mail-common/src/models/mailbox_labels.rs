@@ -6,7 +6,7 @@
 mod mailbox_labels;
 
 use proton_core_api::services::proton::LabelId;
-use proton_core_common::datatypes::LabelType;
+use proton_core_common::datatypes::{LabelType, SystemLabel};
 use proton_core_common::{datatypes::LocalLabelId, models::Label};
 use stash::stash::Tether;
 use stash::{macros::Model, stash::StashError};
@@ -49,6 +49,8 @@ pub trait MailLabel {
     fn is_movable_folder(&self) -> bool;
 
     fn recipient_display_mode(&self) -> MessageRecipientDisplayMode;
+
+    fn is_snooze_location(&self) -> bool;
 }
 
 impl MailLabel for Label {
@@ -90,5 +92,9 @@ impl MailLabel for Label {
         } else {
             MessageRecipientDisplayMode::Sender
         }
+    }
+
+    fn is_snooze_location(&self) -> bool {
+        SystemLabel::new(self).is_some_and(|label| label.is_snooze_location())
     }
 }

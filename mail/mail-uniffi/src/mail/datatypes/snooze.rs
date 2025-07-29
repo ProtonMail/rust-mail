@@ -13,5 +13,5 @@ pub enum SnoozeTime {
     LaterThisWeek(UnixTimestamp),
     ThisWeekend(UnixTimestamp),
     NextWeek(UnixTimestamp),
-    Custom(UnixTimestamp),
+    Custom,
 }

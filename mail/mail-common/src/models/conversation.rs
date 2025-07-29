@@ -1697,9 +1697,7 @@ impl Conversation {
 
         let now = UnixTimestamp::now();
         if snooze_until <= now {
-            return Err(AppError::InvalidSnoozeRequest(anyhow::anyhow!(
-                "Requested snooze time {snooze_until} is in the past",
-            )));
+            return Err(AppError::SnoozeTimeInThePast);
         }
         let local_inbox_id = SystemLabel::Inbox
             .local_id(bond)
@@ -1766,13 +1764,8 @@ impl Conversation {
             .await?
             .ok_or(AppError::LabelNotFound(local_label_id))?;
 
-        if SystemLabel::new(&label)
-            .filter(|label| label.is_snooze_location())
-            .is_none()
-        {
-            return Err(AppError::InvalidSnoozeRequest(anyhow::anyhow!(
-                "Snooze cannot be performed in label {local_label_id}",
-            )));
+        if !label.is_snooze_location() {
+            return Err(AppError::InvalidSnoozeLocation(label.name.clone()));
         }
 
         Ok(())

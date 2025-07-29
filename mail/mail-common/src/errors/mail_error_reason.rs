@@ -21,6 +21,7 @@ pub enum MailErrorReason {
     PinSetReason(PinSetErrorReason),
     PinAuthReason(PinAuthErrorReason),
     MailScrollerReason(MailScrollerErrorReason),
+    SnoozeReason(SnoozeErrorReason),
     OtherReason(OtherErrorReason),
 }
 
@@ -75,6 +76,12 @@ impl From<PinAuthErrorReason> for MailErrorReason {
 impl From<MailScrollerErrorReason> for MailErrorReason {
     fn from(reason: MailScrollerErrorReason) -> Self {
         Self::MailScrollerReason(reason)
+    }
+}
+
+impl From<SnoozeErrorReason> for MailErrorReason {
+    fn from(reason: SnoozeErrorReason) -> Self {
+        Self::SnoozeReason(reason)
     }
 }
 
@@ -278,6 +285,12 @@ pub enum PinAuthErrorReason {
 #[derive(Debug)]
 pub enum MailScrollerErrorReason {
     Dirty,
+}
+
+#[derive(Debug)]
+pub enum SnoozeErrorReason {
+    SnoozeTimeInThePast,
+    InvalidSnoozeLocation,
 }
 
 /// Specific Reason for error occurrence within the application.

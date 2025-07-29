@@ -1,3 +1,4 @@
+use crate::AppError;
 use crate::actions::{GenericLabelRelatedActionData, MailActionError, filter_responses};
 use crate::datatypes::LocalConversationId;
 use crate::models::Conversation;
@@ -106,9 +107,7 @@ impl proton_action_queue::action::Handler for SnoozeHandler {
 
         let now = UnixTimestamp::now();
         if action.snooze_until <= now {
-            return Err(MailActionError::App(AppError::InvalidSnoozeRequest(
-                anyhow::anyhow!("Snooze time is in the past"),
-            )));
+            return Err(MailActionError::App(AppError::SnoozeTimeInThePast));
         }
 
         let response = self
