@@ -10,7 +10,7 @@ use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::{CoreSession, Session};
 use proton_core_api::store::MbpMode;
 use proton_core_api::store::{StoreError, UserData};
-use proton_core_common::post_login_check::PostLoginCheckError;
+use proton_core_common::post_login_check::PostLoginValidationError;
 use proton_core_common::post_login_check::PostLoginValidator;
 use secrecy::SecretString;
 use std::fmt::Debug;
@@ -136,7 +136,7 @@ pub enum LoginError {
     NewPasswordSetupAborted,
 
     #[error("Post-login check failed: {0}")]
-    PostLoginCheckFailed(#[from] PostLoginCheckError),
+    PostLoginCheckFailed(#[from] PostLoginValidationError),
 }
 
 impl ServiceError for LoginError {}

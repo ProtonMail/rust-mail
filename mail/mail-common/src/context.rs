@@ -24,7 +24,7 @@ use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::{LabelError, ModelExtension};
 use proton_core_common::os::{KeyChain, KeyChainError};
 use proton_core_common::pin_code::{PinCode, PinError};
-use proton_core_common::post_login_check::FreeAccountCountValidator;
+use proton_core_common::post_login_check::DefaultPostLoginValidator;
 use proton_core_common::{
     ContactError, Context, CoreAccountState, CoreContextError, CoreContextResult, CoreSessionState,
     KeyHandlingError, UserContext,
@@ -338,7 +338,7 @@ impl MailContext {
             username_behavior: None,
         };
         // Create a new login flow
-        let post_login_validator = Box::new(FreeAccountCountValidator::new(
+        let post_login_validator = Box::new(DefaultPostLoginValidator::new(
             Some(1),
             Arc::clone(&self.core_context),
         ));
@@ -381,7 +381,7 @@ impl MailContext {
             .new_api_session(Some(&session), None)
             .await?;
 
-        let post_login_validator = Box::new(FreeAccountCountValidator::new(
+        let post_login_validator = Box::new(DefaultPostLoginValidator::new(
             Some(1),
             Arc::clone(&self.core_context),
         ));

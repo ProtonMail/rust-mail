@@ -7,7 +7,7 @@ use proton_core_common::Context;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::os::{InMemoryKeyChain, KeyChainExt as _};
-use proton_core_common::post_login_check::FreeAccountCountValidator;
+use proton_core_common::post_login_check::DefaultPostLoginValidator;
 use proton_log_service::LogService;
 use proton_mail_api::services::proton::ProtonMail;
 use proton_mail_api::services::proton::requests::{GetConversationsOptions, GetMessagesOptions};
@@ -37,7 +37,7 @@ async fn main() {
     let session = Session::new().await.unwrap();
     let context = create_context().await;
 
-    let post_login_validator = Box::new(FreeAccountCountValidator::new(
+    let post_login_validator = Box::new(DefaultPostLoginValidator::new(
         Some(1),
         Arc::clone(&context),
     ));
