@@ -1,10 +1,7 @@
-#![allow(non_snake_case)]
-
+use super::*;
 use file::embedded_migrations;
 use include_dir::{Dir, include_dir};
 use stash::stash::Stash;
-
-use super::*;
 
 #[tokio::test]
 async fn test_migration() {
@@ -22,6 +19,44 @@ async fn test_migration() {
         .migrate(&mut tether)
         .await
         .expect("Failed to run migration");
+}
+
+#[tokio::test]
+async fn test_verification() {
+    const TABLE: &str = "test_table_version";
+
+    let stash = Stash::new(None).expect("failed to create stash");
+    let mut tether = stash.connection();
+
+    // ---
+
+    let migrator = Migrator::new(TABLE, vec![Box::new(M1)]);
+    let actual = migrator.verify(&mut tether).await.unwrap_err();
+
+    let expected = MigratorError::VersionMismatch {
+        got: None,
+        expected: 1,
+    };
+
+    assert_eq!(expected.to_string(), actual.to_string());
+
+    migrator.migrate(&mut tether).await.unwrap();
+    migrator.verify(&mut tether).await.unwrap();
+
+    // ---
+
+    let migrator = Migrator::new(TABLE, vec![Box::new(M1), Box::new(M2)]);
+    let actual = migrator.verify(&mut tether).await.unwrap_err();
+
+    let expected = MigratorError::VersionMismatch {
+        got: Some(1),
+        expected: 2,
+    };
+
+    assert_eq!(expected.to_string(), actual.to_string());
+
+    migrator.migrate(&mut tether).await.unwrap();
+    migrator.verify(&mut tether).await.unwrap();
 }
 
 #[tokio::test]

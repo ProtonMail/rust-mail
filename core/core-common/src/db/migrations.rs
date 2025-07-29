@@ -17,6 +17,10 @@ pub async fn migrate_account_db(stash: &Stash) -> Result<usize, MigratorError> {
     account_db().migrate(&mut stash.connection()).await
 }
 
+pub async fn verify_account_db(stash: &Stash) -> Result<(), MigratorError> {
+    account_db().verify(&mut stash.connection()).await
+}
+
 fn core_db() -> Migrator {
     const TABLE: &str = "proton_core_version";
     const MIGRATIONS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/db/migrations/core");
@@ -33,4 +37,8 @@ pub async fn migrate_core_db(stash: &Stash) -> Result<usize, MigratorError> {
     proton_action_queue::db::migrate(&mut tether).await?;
 
     core_db().migrate(&mut tether).await
+}
+
+pub async fn verify_core_db(stash: &Stash) -> Result<(), MigratorError> {
+    core_db().verify(&mut stash.connection()).await
 }

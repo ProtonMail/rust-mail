@@ -91,6 +91,27 @@ impl Migrator {
             })
             .await
     }
+
+    /// Verifies that the database is exactly at the newest version; if that's
+    /// not the case, returns an error;
+    ///
+    /// Note that this function does not run any migrations.
+    ///
+    /// See: [`Self::migrate()`].
+    pub async fn verify(&self, tether: &mut Tether) -> Result<(), MigratorError> {
+        tether
+            .tx(async |tx| {
+                let got = get_current_version(tx, &self.table).await?;
+                let expected = get_expected_version(&self.migrations);
+
+                if got == Some(expected) {
+                    Ok(())
+                } else {
+                    Err(MigratorError::VersionMismatch { got, expected })
+                }
+            })
+            .await
+    }
 }
 
 fn get_expected_version(m: &[Box<dyn Migration>]) -> usize {
