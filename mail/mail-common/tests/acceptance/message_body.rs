@@ -1,4 +1,5 @@
 use proton_core_api::services::proton::{LabelId, UserId};
+use std::collections::HashSet;
 use std::str::FromStr;
 
 use indoc::formatdoc;
@@ -235,6 +236,19 @@ async fn mailbox_message_retains_pgp_attachments() {
 
     // Now they exist :)
     assert_eq!(decrypted_message.metadata.attachments.len(), 3);
+
+    // Check attachments with disposition attachment are properly linked.
+    let linked_attachments = Attachment::for_message(saved_message.id(), &tether)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|a| a.id())
+        .collect::<HashSet<_>>();
+
+    assert_eq!(linked_attachments.len(), 3);
+    for attachment in &decrypted_message.metadata.attachments {
+        assert!(linked_attachments.contains(&attachment.id()));
+    }
 
     let Err(MailContextError::App(AppError::UnknownCid(_, cids))) = decrypted_message
         .get_embedded_attachment(&user_ctx, &ContentId::from("fail"))

@@ -8,7 +8,7 @@ use crate::actions::{
     MoveItemAction,
 };
 use crate::datatypes::{
-    ContextualConversation, ExclusiveLocation, MessageFlags, MessageLabelsCount,
+    ContextualConversation, ExclusiveLocation, LocalAttachmentId, MessageFlags, MessageLabelsCount,
     MovableSystemFolder, SystemLabelId, attachment,
 };
 use crate::label;
@@ -3302,4 +3302,181 @@ async fn message_save_updates_local_ids_for_attachment_metadata() {
         })
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn message_save_preserves_pgp_attachments() {
+    let (stash, _db_dir) = new_test_connection_file().await;
+    let mut tether = stash.connection();
+    let address = create_address(&mut tether).await;
+    let mut conv = conversation!(remote_id: conv_id!("my_conv"));
+    let mut message = message!(remote_id: msg_id!("my-msg"), remote_conversation_id:conv.remote_id.clone(), remote_address_id: address.remote_id.clone().unwrap(), local_address_id:address.id());
+    let mut message_body = MessageBodyMetadata {
+        local_message_id: None,
+        remote_message_id: message.remote_id.clone(),
+        header: "".to_string(),
+        mime_type: Default::default(),
+        parsed_headers: Default::default(),
+        attachments: vec![],
+        reply_to: Default::default(),
+        reply_tos: vec![],
+    };
+    let mut attachment = Attachment {
+        local_id: None,
+        attachment_type: AttachmentType::Pgp,
+        local_address_id: address.local_id,
+        remote_address_id: address.remote_id.clone(),
+        local_conversation_id: None,
+        remote_conversation_id: None,
+        local_message_id: None,
+        remote_message_id: message.remote_id.clone(),
+        disposition: Default::default(),
+        enc_signature: None,
+        is_auto_forwardee: false,
+        key_packets: None,
+        mime_type: Default::default(),
+        filename: "".to_string(),
+        sender: None,
+        signature: None,
+        size: 0,
+        content_id: None,
+        transfer_encoding: None,
+        image_width: None,
+        image_height: None,
+    };
+
+    tether
+        .tx::<_, _, StashError>(async |tx| {
+            conv.save(tx).await?;
+            message.save(tx).await?;
+            message_body.save(tx).await?;
+            //Simulate pgp attachment added
+            attachment.save(tx).await?;
+            tx.execute("INSERT INTO message_attachments (local_message_id, local_attachment_id) VALUES (?,?)", params![message.id(), attachment.id()]).await
+        })
+        .await
+        .unwrap();
+
+    // Message and Message body metadata should report that it has one attachment.
+    check_message_and_body_metadata_for_single_attachment(&tether, message.id(), attachment.id())
+        .await;
+
+    // Simulate saving the original message again (e.g.: event update)
+    tether
+        .tx::<_, _, StashError>(async |tx| message.save(tx).await)
+        .await
+        .unwrap();
+
+    check_message_and_body_metadata_for_single_attachment(&tether, message.id(), attachment.id())
+        .await;
+
+    // Simulate saving the original message body again (e.g.: prefetch)
+    tether
+        .tx::<_, _, StashError>(async |tx| message_body.save(tx).await)
+        .await
+        .unwrap();
+
+    check_message_and_body_metadata_for_single_attachment(&tether, message.id(), attachment.id())
+        .await;
+
+    // Simulate message now having a normal attachment.
+    message.attachments_metadata.push(AttachmentMetadata {
+        local_id: None,
+        attachment_type: AttachmentType::Remote(Some(AttachmentId::from("regular-att"))),
+        disposition: Default::default(),
+        mime_type: Default::default(),
+        filename: "".to_string(),
+        size: 0,
+    });
+
+    tether
+        .tx::<_, _, StashError>(async |tx| message.save(tx).await)
+        .await
+        .unwrap();
+
+    let msg = Message::find_by_id(message.id(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(msg.attachments_metadata.len(), 2);
+    assert_eq!(
+        msg.attachments_metadata[0].local_id.unwrap(),
+        attachment.id()
+    );
+    assert_ne!(
+        msg.attachments_metadata[1].local_id.unwrap(),
+        attachment.id()
+    );
+
+    let mut msg_body_metadata = MessageBodyMetadata::for_message(message.id(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(msg_body_metadata.attachments.len(), 2);
+    assert_eq!(msg_body_metadata.attachments[0].id(), attachment.id());
+    assert_ne!(
+        msg_body_metadata.attachments[1].local_id.unwrap(),
+        attachment.id()
+    );
+
+    // Add an inline attachment to the message body metadata, by replacing the pgp attachment
+    // simulating an update.
+    msg_body_metadata.attachments[0].local_id = None;
+    msg_body_metadata.attachments[0].attachment_type =
+        AttachmentType::Remote(Some(AttachmentId::from("inline")));
+    msg_body_metadata.attachments[0].disposition = Disposition::Inline;
+
+    tether
+        .tx::<_, _, StashError>(async |tx| msg_body_metadata.save(tx).await)
+        .await
+        .unwrap();
+
+    let msg = Message::find_by_id(message.id(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(msg.attachments_metadata.len(), 2);
+    assert_eq!(
+        msg.attachments_metadata[0].local_id.unwrap(),
+        attachment.id()
+    );
+    assert_ne!(
+        msg.attachments_metadata[1].local_id.unwrap(),
+        attachment.id()
+    );
+
+    let msg_body_metadata2 = MessageBodyMetadata::for_message(message.id(), &tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(msg_body_metadata2.attachments.len(), 3);
+    assert_eq!(msg_body_metadata2.attachments[0].id(), attachment.id());
+    assert_eq!(
+        msg_body_metadata.attachments[1].local_id.unwrap(),
+        msg_body_metadata2.attachments[1].local_id.unwrap(),
+    );
+    assert_eq!(
+        msg_body_metadata2.attachments[2].local_id.unwrap(),
+        msg_body_metadata.attachments[0].local_id.unwrap(),
+    );
+}
+
+async fn check_message_and_body_metadata_for_single_attachment(
+    tether: &Tether,
+    message_id: LocalMessageId,
+    attachment_id: LocalAttachmentId,
+) {
+    let msg = Message::find_by_id(message_id, tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(msg.attachments_metadata.len(), 1);
+    assert_eq!(msg.attachments_metadata[0].local_id.unwrap(), attachment_id);
+
+    let msg_body_metadata = MessageBodyMetadata::for_message(message_id, tether)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(msg_body_metadata.attachments.len(), 1);
+    assert_eq!(msg_body_metadata.attachments[0].id(), attachment_id);
 }

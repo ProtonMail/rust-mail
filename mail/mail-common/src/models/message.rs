@@ -2635,7 +2635,7 @@ impl ModelHooks for Message {
         }
 
         // Remove any attachments that are no longer associated with this conversation.
-        if !self.attachments_metadata.is_empty() {
+        let attachment_ids = if !self.attachments_metadata.is_empty() {
             let local_ids = Attachment::create_or_update_from_message_metadata(self, bond).await?;
 
             for id in &local_ids {
@@ -2646,7 +2646,12 @@ impl ModelHooks for Message {
                 .await?;
             }
 
-            #[allow(trivial_casts)]
+            local_ids
+        } else {
+            vec![]
+        };
+
+        #[allow(trivial_casts)]
             bond.execute(
                 formatdoc!("
                     DELETE FROM message_attachments WHERE
@@ -2654,30 +2659,15 @@ impl ModelHooks for Message {
                                 SELECT local_id FROM attachments
                                 JOIN message_attachments ON message_attachments.local_message_id = ? AND
                                     message_attachments.local_attachment_id = attachments.local_id
-                                WHERE attachments.disposition = ?
+                                WHERE attachments.disposition = ? AND attachments.attachment_type <> ?
                                 AND attachments.local_id NOT IN ({})
 
                             )",
-                    stash::utils::placeholders_n(local_ids.len()),
+                    stash::utils::placeholders_n(attachment_ids.len()),
                 ),
-               (self.local_id, Disposition::Attachment).to_sql_extend(&*local_ids)
+               (self.local_id, Disposition::Attachment, AttachmentType::Pgp).to_sql_extend(&*attachment_ids),
             )
             .await?;
-        } else {
-            bond.execute(
-                formatdoc!("
-                    DELETE FROM message_attachments WHERE
-                            local_attachment_id IN (
-                                SELECT local_id FROM attachments
-                                JOIN message_attachments ON message_attachments.local_message_id = ? AND
-                                    message_attachments.local_attachment_id = attachments.local_id
-                                WHERE attachments.disposition = ?
-                            )"
-                ),
-                params![self.local_id, Disposition::Attachment],
-            )
-            .await?;
-        }
 
         // If exclusive location is not set, we try to calculate it now.
         if self.exclusive_location.is_none() && !self.label_ids.is_empty() {
@@ -2977,20 +2967,25 @@ impl ModelHooks for MessageBodyMetadata {
         }
         // Update all attachment links - When creating drafts we can update
         // and create new ones.
+        // PGP attachments should never be deleted.
         bond.execute(
-            "DELETE FROM message_attachments WHERE local_message_id=?",
-            params![self.local_message_id],
+            indoc! {"DELETE FROM message_attachments
+                WHERE local_message_id=?1
+               AND local_attachment_id NOT IN (
+                    SELECT local_attachment_id FROM attachments WHERE local_message_id=?1 AND attachment_type = ?2
+               )"},
+            params![self.local_message_id, AttachmentType::Pgp],
         )
         .await?;
 
         for attachment in &mut self.attachments {
             attachment.save(bond).await?;
             bond
-                .execute(
-                    "INSERT OR IGNORE INTO message_attachments (local_attachment_id, local_message_id) VALUES (?,?)",
-                    params![attachment.id(), self.local_message_id],
-                )
-                .await?;
+                    .execute(
+                        "INSERT OR IGNORE INTO message_attachments (local_attachment_id, local_message_id) VALUES (?,?)",
+                        params![attachment.id(), self.local_message_id],
+                    )
+                    .await?;
         }
 
         self.reply_to.store_reply_to(self.id(), bond).await?;
