@@ -3,6 +3,7 @@ use proton_core_api::{
     services::observability::{ObservabilityMetric, ObservabilityRecorder},
 };
 use serde::{Deserialize, Serialize};
+use uniffi_runtime::async_runtime;
 
 #[derive(Debug, Serialize, Deserialize, uniffi::Enum)]
 #[serde(rename_all = "camelCase")]
