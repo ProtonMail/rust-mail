@@ -1847,8 +1847,6 @@ impl Draft {
     }
 }
 
-/// Utility type to disconnect queueing of the action from the [`Draft`] type in multithreaded
-/// context.
 pub struct DraftSaveActionQueuer {
     id: MetadataId,
     address_id: AddressId,
@@ -1864,7 +1862,6 @@ impl DraftSaveActionQueuer {
         }
     }
 
-    /// Consume and queue this action.
     #[tracing::instrument(name = "draft::save", skip_all)]
     pub async fn queue(
         self,
@@ -1932,8 +1929,6 @@ impl DraftSaveActionQueuer {
     }
 }
 
-/// Utility type to disconnect queueing of the action from the [`Draft`] type in multithreaded
-/// context.
 pub struct DraftSendActionQueuer {
     id: MetadataId,
     save_action: DraftSaveActionQueuer,
@@ -1949,7 +1944,6 @@ impl DraftSendActionQueuer {
         }
     }
 
-    /// Consume and queue this action.
     #[tracing::instrument(name = "draft::send", skip_all)]
     pub async fn queue(
         self,
@@ -1968,8 +1962,6 @@ impl DraftSendActionQueuer {
     }
 }
 
-/// Utility type to disconnect queueing of the action from the [`Draft`] type in multithreaded
-/// context.
 pub struct DraftDiscardActionQueuer {
     id: MetadataId,
     action: Discard,
@@ -1980,7 +1972,6 @@ impl DraftDiscardActionQueuer {
         Self { id, action }
     }
 
-    /// Consume and queue this action.
     #[tracing::instrument(name = "draft::discard", skip_all)]
     pub async fn queue(
         self,
@@ -2027,7 +2018,6 @@ impl DraftAttachmentUploadQueuer {
         }
     }
 
-    /// Consume and queue this action.
     #[tracing::instrument(name = "draft::attachment_upload", skip_all)]
     pub async fn queue(
         self,
@@ -2110,7 +2100,6 @@ enum AttachmentRemovalId {
     Cid(ContentId),
 }
 
-/// Utility type to wrap the queueing of attachment removal.
 pub struct DraftAttachmentRemovalQueuer {
     id: MetadataId,
     attachment_id: AttachmentRemovalId,
@@ -2121,7 +2110,6 @@ impl DraftAttachmentRemovalQueuer {
         Self { id, attachment_id }
     }
 
-    /// Consume and queue this action.
     #[tracing::instrument(name = "draft::attachment_remove", skip_all)]
     pub async fn queue(
         self,

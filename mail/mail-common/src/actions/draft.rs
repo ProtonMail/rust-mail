@@ -21,7 +21,6 @@ pub use undo_send::*;
 
 pub const SEND_ACTION_GROUP: ActionGroup = ActionGroup::new("MAIL_SEND");
 
-/// Resolve the Drafts folder local label id.
 async fn local_draft_label_id(tether: &Tether) -> Result<LocalLabelId, MailContextError> {
     let Some(local_draft_label_id) =
         Label::remote_id_counterpart(LabelId::drafts(), tether).await?
@@ -32,7 +31,6 @@ async fn local_draft_label_id(tether: &Tether) -> Result<LocalLabelId, MailConte
     Ok(local_draft_label_id)
 }
 
-/// Resolve the AllDrafts folder local label id.
 async fn local_all_draft_label_id(tether: &Tether) -> Result<LocalLabelId, MailContextError> {
     let Some(local_all_draft_label_id) =
         Label::remote_id_counterpart(LabelId::all_drafts(), tether).await?
@@ -43,7 +41,6 @@ async fn local_all_draft_label_id(tether: &Tether) -> Result<LocalLabelId, MailC
     Ok(local_all_draft_label_id)
 }
 
-/// Resolve the AllMail folder local label id.
 async fn local_all_mail_label_id(tether: &Tether) -> Result<LocalLabelId, MailContextError> {
     let Some(local_all_mail_label_id) =
         Label::remote_id_counterpart(LabelId::all_mail(), tether).await?
@@ -54,7 +51,6 @@ async fn local_all_mail_label_id(tether: &Tether) -> Result<LocalLabelId, MailCo
     Ok(local_all_mail_label_id)
 }
 
-/// Resolve the Sent folder local label id.
 async fn local_sent_label_id(tether: &Tether) -> Result<LocalLabelId, MailContextError> {
     let Some(local_draft_label_id) = Label::remote_id_counterpart(LabelId::sent(), tether).await?
     else {
@@ -64,7 +60,6 @@ async fn local_sent_label_id(tether: &Tether) -> Result<LocalLabelId, MailContex
     Ok(local_draft_label_id)
 }
 
-/// Resolve the Outbox folder local label id.
 async fn local_outbox_label_id(tether: &Tether) -> Result<LocalLabelId, MailContextError> {
     let Some(local_draft_label_id) =
         Label::remote_id_counterpart(LabelId::outbox(), tether).await?

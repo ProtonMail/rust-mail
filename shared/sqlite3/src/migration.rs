@@ -1,5 +1,3 @@
-//! Utilities to facility migration of the database.
-
 #[cfg(test)]
 #[path = "tests/migration.rs"]
 mod tests;
@@ -15,15 +13,10 @@ use stash::stash::{Bond, StashError, Tether};
 use thiserror::Error;
 use tracing::{Instrument, debug};
 
-/// Migration Unit.
 #[async_trait::async_trait]
 pub trait Migration: Send + Sync + 'static {
-    /// Migration name.
     fn name(&self) -> &str;
 
-    /// Migration order string. A part of the name.
-    /// Used to determine order of migrations.
-    ///
     fn order_number(&self) -> &str {
         let Some((order, _)) = self.name().split_once('_') else {
             panic!(
@@ -34,32 +27,19 @@ pub trait Migration: Send + Sync + 'static {
         order
     }
 
-    /// Perform the migration of from the previous version to the current version.
-    ///
-    /// # Params
-    /// * `tx`: transaction on which to run the migration.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the migration failed to run.
     async fn migrate(&self, tx: &Bond<'_>) -> Result<(), StashError>;
 }
 
-/// Possible errors that may occur during a migration.
 #[derive(Debug, Error)]
 pub enum MigratorError {
-    /// Database has an invalid version.
     #[error("Found invalid version {0}")]
     InvalidVersion(usize),
-    /// Migration step failed.
     #[error("Migration error: {0}")]
     Migration(#[from] rusqlite::Error),
     #[error("Stash error: {0}")]
     Stash(#[from] StashError),
 }
 
-/// Utility to class to migrate sqlite database between version. See [`Migrator::migrate`] for more
-/// info.
 #[derive(Default)]
 pub struct Migrator {}
 
