@@ -40,7 +40,7 @@ async fn using_address_key() {
             &world.cache,
             &world.contacts,
             &world.now,
-            "bar@localhost",
+            "bar@pm.me",
             Weekday::Monday,
         )
         .await
@@ -79,7 +79,7 @@ async fn using_calendar_key() {
             &world.cache,
             &world.contacts,
             &world.now,
-            "bar@localhost",
+            "bar@pm.me",
             Weekday::Monday,
         )
         .await
@@ -139,7 +139,7 @@ async fn recurring() {
             &world.cache,
             &world.contacts,
             &world.now,
-            "bar@localhost",
+            "bar@pm.me",
             Weekday::Monday,
         )
         .await
@@ -174,7 +174,43 @@ async fn reminder() {
             &world.cache,
             &world.contacts,
             &world.now,
-            "bar@localhost",
+            "bar@pm.me",
+            Weekday::Monday,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(RsvpIntent::Reminder, actual.intent);
+}
+
+#[tokio::test]
+#[allow(clippy::redundant_closure_for_method_calls, reason = "false-positive")]
+async fn alias() {
+    let world = world().await;
+    let event = world.event(|event| event.basic());
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_bootstrap(CALENDAR_ID, world.bootstrap())
+        .await;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_event(EVENT_UID, EVENT_ID, event.clone())
+        .await;
+
+    let actual = RsvpEventId::reminder(EVENT_UID, EVENT_ID)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            &world.contacts,
+            &world.now,
+            "bar+spam@pm.me",
             Weekday::Monday,
         )
         .await
@@ -226,7 +262,7 @@ async fn outdated() {
             &world.cache,
             &world.contacts,
             &world.now,
-            "bar@localhost",
+            "bar@pm.me",
             Weekday::Monday,
         )
         .await
@@ -275,7 +311,7 @@ async fn cancelled() {
             &world.cache,
             &world.contacts,
             &world.now,
-            "bar@localhost",
+            "bar@pm.me",
             Weekday::Monday,
         )
         .await
@@ -310,7 +346,7 @@ async fn unknown() {
             &world.cache,
             &world.contacts,
             &world.now,
-            "bar@localhost",
+            "bar@pm.me",
             Weekday::Monday,
         )
         .await
@@ -344,7 +380,7 @@ async fn offline() {
             &world.cache,
             &world.contacts,
             &world.now,
-            "bar@localhost",
+            "bar@pm.me",
             Weekday::Monday,
         )
         .await
@@ -383,7 +419,7 @@ async fn party_crasher() {
             &world.cache,
             &world.contacts,
             &world.now,
-            "root@localhost",
+            "root@pm.me",
             Weekday::Monday,
         )
         .await
@@ -399,9 +435,9 @@ async fn err_unknown_attendee() {
         VERSION:2.0
         BEGIN:VEVENT
         UID:8maQ3qBa
-        ATTENDEE;CN=foo@localhost;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=245902dc:mailto:foo@localhost
-        ATTENDEE;CN=bar@localhost;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=d15cf90c:mailto:bar@localhost
-        ATTENDEE;CN=zar@localhost;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=a06bf6c2:mailto:zar@localhost
+        ATTENDEE;CN=foo@pm.me;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=245902dc:mailto:foo@pm.me
+        ATTENDEE;CN=bar@pm.me;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=d15cf90c:mailto:bar@pm.me
+        ATTENDEE;CN=zar@pm.me;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=a06bf6c2:mailto:zar@pm.me
         END:VEVENT
         END:VCALENDAR
     "};
@@ -429,13 +465,13 @@ async fn err_unknown_attendee() {
             &world.cache,
             &world.contacts,
             &world.now,
-            "bar@localhost",
+            "bar@pm.me",
             Weekday::Monday,
         )
         .await
         .unwrap_err();
 
-    // Attendee `zar@localhost` is not present in the `CalendarEvent`
+    // Attendee `zar@pm.me` is not present in the `CalendarEvent`
     assert_eq!(RsvpError::UnknownAttendee.to_string(), actual.to_string());
 }
 
@@ -446,7 +482,7 @@ async fn err_missing_x_pm_token() {
         VERSION:2.0
         BEGIN:VEVENT
         UID:8maQ3qBa
-        ATTENDEE;CN=bar@localhost;ROLE=REQ-PARTICIPANT;RSVP=TRUE:mailto:bar@localhost
+        ATTENDEE;CN=bar@pm.me;ROLE=REQ-PARTICIPANT;RSVP=TRUE:mailto:bar@pm.me
         END:VEVENT
         END:VCALENDAR
     "};
@@ -474,7 +510,7 @@ async fn err_missing_x_pm_token() {
             &world.cache,
             &world.contacts,
             &world.now,
-            "bar@localhost",
+            "bar@pm.me",
             Weekday::Monday,
         )
         .await
@@ -523,7 +559,7 @@ async fn err_many_events_in_ics() {
             &world.cache,
             &world.contacts,
             &world.now,
-            "bar@localhost",
+            "bar@pm.me",
             Weekday::Monday,
         )
         .await

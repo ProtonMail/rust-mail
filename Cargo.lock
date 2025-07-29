@@ -5591,6 +5591,7 @@ dependencies = [
  "jiff",
  "pretty_assertions",
  "proton-calendar-api",
+ "proton-canonical-email",
  "proton-core-api",
  "proton-core-common",
  "proton-crypto",
