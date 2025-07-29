@@ -2,9 +2,7 @@
 #[path = "../../tests/db/types.rs"]
 mod tests;
 
-use crate::datatypes::{
-    AccountDetails, AuthScopes, AvatarInformation, PasswordMode, TfaStatus, Timestamp,
-};
+use crate::datatypes::{AccountDetails, AuthScopes, AvatarInformation, PasswordMode, TfaStatus};
 use crate::models::ModelExtension;
 use crate::os::StoreInKeyChain;
 use aes_gcm::aead::Nonce;
@@ -62,7 +60,7 @@ pub struct CoreAccount {
     pub primary_addr: Option<String>,
 
     #[DbField]
-    pub primary_at: Option<Timestamp>,
+    pub primary_seq: i64,
 
     #[DbField]
     pub is_ready: bool,
@@ -75,6 +73,7 @@ impl CoreAccount {
         Self {
             remote_id,
             name_or_addr,
+            primary_seq: 0,
             is_ready: false,
 
             // --- Optional fields ---
@@ -84,17 +83,26 @@ impl CoreAccount {
             primary_addr: None,
             second_factor_mode: None,
             password_mode: None,
-            primary_at: None,
         }
     }
 
-    /// List all accounts, ordered by the primary timestamp.
+    /// List all accounts, ordered by the primary sequence number.
     ///
     /// # Errors
     ///
     /// Returns error if the retrieval fails.
-    pub async fn by_primary_at(tether: &Tether) -> Result<Vec<Self>, StashError> {
-        Self::find("ORDER BY primary_at DESC", vec![], tether).await
+    pub async fn by_primary_seq(tether: &Tether) -> Result<Vec<Self>, StashError> {
+        Self::find("ORDER BY primary_seq DESC", vec![], tether).await
+    }
+
+    /// Get the largest primary sequence number.
+    pub async fn primary_seq_max(tether: &Tether) -> Result<i64, StashError> {
+        let query = format!(
+            "SELECT MAX(primary_seq) AS value FROM {}",
+            Self::table_name()
+        );
+
+        tether.query_value(query, vec![]).await
     }
 
     /// Update the username of the account.
@@ -191,11 +199,11 @@ impl CoreAccount {
         }
     }
 
-    /// Update the primary timestamp to now.
+    /// Set the primary sequence number.
     #[must_use]
-    pub fn with_primary_now(self) -> Self {
+    pub fn with_primary_seq(self, primary_seq: i64) -> Self {
         Self {
-            primary_at: Some(Timestamp::now()),
+            primary_seq,
 
             // --- preserve ---
             ..self
