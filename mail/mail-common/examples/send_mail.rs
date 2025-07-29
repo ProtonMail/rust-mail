@@ -130,6 +130,7 @@ async fn main() {
         .await
         .unwrap()
         .id;
+
     ActionAwaiter::new(user_ctx.action_queue(), id)
         .wait()
         .await
@@ -154,7 +155,9 @@ async fn main() {
         .await
         .unwrap()
         .id;
+
     let send_awaiter = ActionAwaiter::new(user_ctx.action_queue(), id);
+
     match send_awaiter.wait().await.unwrap() {
         BroadcastMessage::Success(_) => {
             info!("Message successfully sent.");

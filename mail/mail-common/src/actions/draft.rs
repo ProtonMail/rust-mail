@@ -5,19 +5,19 @@ mod save;
 mod send;
 mod undo_send;
 
+pub use self::attachment_remove::*;
+pub use self::attachment_upload::*;
+pub use self::discard::*;
+pub use self::save::*;
+pub use self::send::*;
+pub use self::undo_send::*;
 use crate::datatypes::SystemLabelId;
 use crate::{AppError, MailContextError};
-pub use attachment_remove::*;
-pub use attachment_upload::*;
-pub use discard::*;
 use proton_action_queue::action::ActionGroup;
 use proton_core_api::services::proton::LabelId;
 use proton_core_common::datatypes::LocalLabelId;
 use proton_core_common::models::{Label, ModelIdExtension};
-pub use save::*;
-pub use send::*;
 use stash::stash::Tether;
-pub use undo_send::*;
 
 pub const SEND_ACTION_GROUP: ActionGroup = ActionGroup::new("MAIL_SEND");
 

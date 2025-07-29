@@ -481,9 +481,11 @@ impl DraftAddressChangeRequest {
         tether: &mut Tether,
     ) -> MailContextResult<Option<DraftAddressChangeOutput>> {
         tracing::info!("Updating sender address");
+
         if address_id == self.current_address_id {
             return Ok(None);
         }
+
         let address = Address::find_by_remote_id(address_id.clone(), tether)
             .await?
             .ok_or(SenderAddressChangeError::AddressNotFound(
@@ -513,11 +515,14 @@ impl DraftAddressChangeRequest {
         }
 
         let mail_settings = MailSettings::get_or_default(tether).await;
+
         if mail_settings.attach_public_key {
             let old_public_key_attachment =
                 Attachment::gen_public_key(context, &old_address, tether).await?;
+
             let public_key_attachment =
                 Attachment::gen_public_key(context, &address, tether).await?;
+
             let draft_attachments =
                 DraftAttachmentMetadata::public_key_attachments(self.metadata_id, tether).await?;
 
@@ -528,6 +533,7 @@ impl DraftAddressChangeRequest {
                     "Removing public key for old address ({})",
                     attachment.local_id.unwrap()
                 );
+
                 DraftAttachmentRemovalQueuer::new(
                     self.metadata_id,
                     AttachmentRemovalId::Local(attachment.local_id.unwrap()),
@@ -542,9 +548,11 @@ impl DraftAddressChangeRequest {
                     && attachment.filename == public_key_attachment.attachment.filename
             }) {
                 tracing::info!("Public key for new address is not present, attaching");
+
                 tether
                     .tx::<_, _, MailContextError>(async |tx| {
                         let attachment = public_key_attachment.store(context, tx).await?;
+
                         DraftAttachmentMetadata::pending(
                             self.metadata_id,
                             attachment.local_id.unwrap(),
@@ -553,6 +561,7 @@ impl DraftAddressChangeRequest {
                         )
                         .save(tx)
                         .await?;
+
                         Ok(())
                     })
                     .await?;

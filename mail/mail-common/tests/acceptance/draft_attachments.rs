@@ -40,15 +40,14 @@ async fn attachment_not_removed_on_error() {
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let params = draft_test_params();
-
     let attachment_file = tempfile::NamedTempFile::new().unwrap();
-
     let message = draft_message();
-
     let expected_draft_params = expected_create_draft_params();
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft(
         expected_draft_params,
         None,
@@ -57,6 +56,7 @@ async fn attachment_not_removed_on_error() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     ctx.mock_create_attachment(
         new_attachment_params(attachment_file.path(), message.metadata.id.clone()),
         Err((
@@ -69,14 +69,18 @@ async fn attachment_not_removed_on_error() {
         )),
     )
     .await;
+
     // Draft open always loads message from remote.
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -87,6 +91,7 @@ async fn attachment_not_removed_on_error() {
 
     // Create attachment
     let mut tether = user_ctx.user_stash().connection();
+
     let local_attachment = create_and_add_attachment(
         &user_ctx,
         attachment_file.path(),
@@ -133,14 +138,17 @@ async fn remove_attachment_updates_attachment_list() {
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let params = draft_test_params();
 
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -149,6 +157,7 @@ async fn remove_attachment_updates_attachment_list() {
     // Create attachment
     let attachment_file = tempfile::NamedTempFile::new().unwrap();
     let mut tether = user_ctx.user_stash().connection();
+
     let attachment = create_and_add_attachment(
         &user_ctx,
         attachment_file.path(),
@@ -182,14 +191,17 @@ async fn remove_attachment_by_cid() {
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let params = draft_test_params();
 
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -198,6 +210,7 @@ async fn remove_attachment_by_cid() {
     // Create attachment
     let attachment_file = tempfile::NamedTempFile::new().unwrap();
     let mut tether = user_ctx.user_stash().connection();
+
     let attachment = create_and_add_attachment(
         &user_ctx,
         attachment_file.path(),
@@ -230,6 +243,7 @@ async fn remove_attachment_by_cid() {
         .remove_attachment_with_cid(&user_ctx, ContentId::new())
         .await
         .unwrap_err();
+
     assert!(matches!(
         err,
         MailContextError::Draft(draft::Error::AttachmentUpload(
@@ -260,15 +274,14 @@ async fn removing_non_uploaded_attachment() {
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let params = draft_test_params();
-
     let attachment_file = tempfile::NamedTempFile::new().unwrap();
-
     let message = draft_message();
-
     let expected_draft_params = expected_create_draft_params();
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft(
         expected_draft_params,
         None,
@@ -277,6 +290,7 @@ async fn removing_non_uploaded_attachment() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     ctx.mock_create_attachment(
         new_attachment_params(attachment_file.path(), message.metadata.id.clone()),
         Err((
@@ -289,11 +303,14 @@ async fn removing_non_uploaded_attachment() {
         )),
     )
     .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -304,6 +321,7 @@ async fn removing_non_uploaded_attachment() {
 
     // Create attachment
     let mut tether = user_ctx.user_stash().connection();
+
     let local_attachment = create_and_add_attachment(
         &user_ctx,
         attachment_file.path(),
@@ -346,16 +364,15 @@ async fn removing_uploaded_attachment() {
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let params = draft_test_params();
-
     let attachment_file = tempfile::NamedTempFile::new().unwrap();
-
     let message = draft_message();
-
     let expected_draft_params = expected_create_draft_params();
     let new_attachment_id = AttachmentId::from("REMOTE_ATTACHMENT");
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft(
         expected_draft_params,
         None,
@@ -364,6 +381,7 @@ async fn removing_uploaded_attachment() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     ctx.mock_create_attachment(
         new_attachment_params(attachment_file.path(), message.metadata.id.clone()),
         Ok(PostAttachmentResponse {
@@ -387,12 +405,15 @@ async fn removing_uploaded_attachment() {
         }),
     )
     .await;
+
     ctx.mock_delete_attachment(new_attachment_id).await;
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -403,6 +424,7 @@ async fn removing_uploaded_attachment() {
 
     // Create attachment
     let mut tether = user_ctx.user_stash().connection();
+
     let local_attachment = create_and_add_attachment(
         &user_ctx,
         attachment_file.path(),
@@ -441,25 +463,27 @@ async fn removing_uploaded_attachment() {
 async fn draft_reply_or_forward_creates_new_attachments() {
     let mime_type = MimeType::TextHtml;
     let reply_mode = ReplyMode::Forward;
+
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let params = draft_test_params_with_mime_type(mime_type);
 
     // Create one message we can reply to.
     let mut remote_existing_message = message_body_test_message_mime();
     remote_existing_message.metadata.sender.address = "me@proton.me".into();
     remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
-
     remote_existing_message.body.attachments.reverse();
 
     ctx.setup_user(params.clone()).await;
-    let user_ctx = ctx.mail_user_context().await;
 
+    let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
+
     let (mut existing_message, _, _) =
         Message::from_api_data(remote_existing_message.clone(), &tether)
             .await
@@ -468,22 +492,26 @@ async fn draft_reply_or_forward_creates_new_attachments() {
         .tx(async |tx| existing_message.save(tx).await)
         .await
         .unwrap();
-    let existing_message = existing_message;
 
     let expected_draft_params =
         expected_create_reply_draft_params(&existing_message, mime_type, reply_mode);
+
     let mut message = draft_message();
+
     message.body.attachments = remote_existing_message.body.attachments.clone();
+
     if reply_mode != ReplyMode::Forward {
         message.body.attachments.retain(|a| {
             a.disposition == proton_mail_api::services::proton::prelude::Disposition::Inline
         })
     }
+
     ctx.mock_get_message(
         &remote_existing_message.metadata.id,
         remote_existing_message.clone(),
     )
     .await;
+
     ctx.mock_create_draft(
         expected_draft_params.clone(),
         Some(DraftAction::from(reply_mode)),
@@ -492,6 +520,7 @@ async fn draft_reply_or_forward_creates_new_attachments() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     // Get the message body - required to reply to draft.
     let (_, remote_body) = Message::force_sync_message_and_body(
         &user_ctx,
@@ -503,10 +532,13 @@ async fn draft_reply_or_forward_creates_new_attachments() {
     .unwrap();
 
     let mut attachment_key_packets = DraftAttachmentKeyPackets::new();
+
     for attachment in &remote_body.metadata.attachments {
         let id = AttachmentId::from(uuid::Uuid::new_v4().to_string());
         let new_key_packets = KeyPackets::from(format!("{id}-key-packets"));
+
         attachment_key_packets.insert(id.clone(), new_key_packets.clone());
+
         ctx.mock_create_attachment(
             NewAttachmentParams {
                 filename: attachment.filename.clone(),
@@ -550,6 +582,7 @@ async fn draft_reply_or_forward_creates_new_attachments() {
             }),
         )
         .await;
+
         message.body.attachments.push(MessageAttachment {
             id,
             disposition: proton_mail_api::services::proton::response_data::Disposition::Attachment,
@@ -568,6 +601,7 @@ async fn draft_reply_or_forward_creates_new_attachments() {
             signature: None,
         });
     }
+
     ctx.mock_update_draft(
         message.metadata.id.clone(),
         expected_draft_params,
@@ -575,12 +609,14 @@ async fn draft_reply_or_forward_creates_new_attachments() {
         attachment_key_packets,
     )
     .await;
+
     ctx.catch_all().await;
 
     // Create draft.
     let mut draft = Draft::reply(&user_ctx, existing_message.id(), reply_mode, true, None)
         .await
         .unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -596,7 +632,9 @@ async fn draft_reply_or_forward_creates_new_attachments() {
     )
     .await
     .unwrap();
+
     assert_eq!(attachments.len(), 3);
+
     for attachment in attachments {
         assert!(matches!(
             attachment.state(),
@@ -609,47 +647,54 @@ async fn draft_reply_or_forward_creates_new_attachments() {
 async fn deleting_draft_metadata_cleans_not_uploaded_attachments() {
     let mime_type = MimeType::TextHtml;
     let reply_mode = ReplyMode::Forward;
+
     // Set up a user and initialise the inbox
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let params = draft_test_params_with_mime_type(mime_type);
 
     // Create one message we can reply to.
     let mut remote_existing_message = message_body_test_message_mime();
+
     remote_existing_message.metadata.sender.address = "me@proton.me".into();
     remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
-
     remote_existing_message.body.attachments.reverse();
 
     ctx.setup_user(params.clone()).await;
-    let user_ctx = ctx.mail_user_context().await;
 
+    let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
+
     let (mut existing_message, _, _) =
         Message::from_api_data(remote_existing_message.clone(), &tether)
             .await
             .unwrap();
+
     tether
         .tx(async |tx| existing_message.save(tx).await)
         .await
         .unwrap();
-    let existing_message = existing_message;
 
     let mut message = draft_message();
+
     message.body.attachments = remote_existing_message.body.attachments.clone();
+
     if reply_mode != ReplyMode::Forward {
         message.body.attachments.retain(|a| {
             a.disposition == proton_mail_api::services::proton::prelude::Disposition::Inline
         })
     }
+
     ctx.mock_get_message(
         &remote_existing_message.metadata.id,
         remote_existing_message.clone(),
     )
     .await;
+
     ctx.catch_all().await;
 
     Message::force_sync_message_and_body(
@@ -660,6 +705,7 @@ async fn deleting_draft_metadata_cleans_not_uploaded_attachments() {
     )
     .await
     .unwrap();
+
     // Create draft.
     let draft = Draft::reply(&user_ctx, existing_message.id(), reply_mode, true, None)
         .await
@@ -672,6 +718,7 @@ async fn deleting_draft_metadata_cleans_not_uploaded_attachments() {
     )
     .await
     .unwrap();
+
     assert_eq!(attachments.len(), 3);
 
     // delete draft.
@@ -701,6 +748,7 @@ async fn override_attachment_name() {
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let params = draft_test_params();
 
     ctx.setup_user(params.clone()).await;
@@ -708,12 +756,14 @@ async fn override_attachment_name() {
 
     let user_ctx = ctx.mail_user_context().await;
     let attachment_file = tempfile::NamedTempFile::new().unwrap();
+
     tokio::fs::write(attachment_file.path(), "Hello World")
         .await
         .unwrap();
 
     let filename_override = "OverriddenFileName.exe";
     let draft = Draft::empty(&user_ctx).await.unwrap();
+
     let local_attachment = Attachment::create_local(
         &user_ctx,
         draft.address_id,

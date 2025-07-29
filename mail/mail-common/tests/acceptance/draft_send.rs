@@ -60,16 +60,19 @@ async fn basic_send_check() {
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let params = draft_test_params();
 
+    let params = draft_test_params();
     let mut message = message_body_test_message_simple();
+
     message.metadata.to_list.push(MessageRecipient {
         address: "foo@bar.com".into(),
         is_proton: false,
         name: "".into(),
         group: None,
     });
+
     let mut sent_message = message.clone();
+
     message.metadata.label_ids.push(LabelId::drafts());
     sent_message.metadata.label_ids.push(LabelId::sent());
     sent_message.metadata.flags.set(MessageFlags::SENT, true);
@@ -100,6 +103,7 @@ async fn basic_send_check() {
     let expected_draft_params = expected_create_draft_params();
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft(
         expected_draft_params.clone(),
         None,
@@ -108,6 +112,7 @@ async fn basic_send_check() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     ctx.mock_update_draft(
         message.metadata.id.clone(),
         expected_draft_params,
@@ -115,6 +120,7 @@ async fn basic_send_check() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     ctx.mock_send_draft(
         message.metadata.id.clone(),
         default_mock_send_params(),
@@ -123,6 +129,7 @@ async fn basic_send_check() {
         (Utc::now().timestamp() + SEND_DELAY_SECONDS as i64).unsigned_abs(),
     )
     .await;
+
     ctx.core_test_context()
         .mock_get_keys_all(
             "foo@bar.com",
@@ -136,12 +143,15 @@ async fn basic_send_check() {
             },
         )
         .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection();
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .to_list
         .add_single(RecipientEntry {
@@ -149,6 +159,7 @@ async fn basic_send_check() {
             display_name: None,
         })
         .unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -177,7 +188,9 @@ async fn basic_send_check() {
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
+
     let tether = user_ctx.user_stash().connection();
+
     let draft_message = Message::load(draft_message_id, &tether)
         .await
         .unwrap()
@@ -198,14 +211,15 @@ async fn basic_send_check() {
         .await
         .unwrap()
         .unwrap();
+
     assert_eq!(body_metadata.header, sent_message.body.header);
 
     // Check send result was created.
-
     let send_result = DraftSendResult::find_by_id(draft_message_id, &tether)
         .await
         .unwrap()
         .unwrap();
+
     assert!(send_result.is_success());
     assert_eq!(
         send_result.remote_message_id,
@@ -229,25 +243,31 @@ async fn basic_schedule_send_check() {
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let params = draft_test_params();
 
+    let params = draft_test_params();
     let mut message = message_body_test_message_simple();
+
     message.metadata.to_list.push(MessageRecipient {
         address: "foo@bar.com".into(),
         is_proton: false,
         name: "".into(),
         group: None,
     });
+
     let mut sent_message = message.clone();
+
     message.metadata.label_ids.push(LabelId::drafts());
+
     sent_message
         .metadata
         .label_ids
         .push(LabelId::all_scheduled());
+
     sent_message
         .metadata
         .flags
         .set(MessageFlags::SCHEDULED_SEND, true);
+
     sent_message.body.header = "Fancy new header".to_owned();
 
     let sent_conversation = ApiConversation {
@@ -276,6 +296,7 @@ async fn basic_schedule_send_check() {
     let delivery_time = Local::now().checked_add_months(Months::new(1)).unwrap();
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft(
         expected_draft_params.clone(),
         None,
@@ -284,6 +305,7 @@ async fn basic_schedule_send_check() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     ctx.mock_update_draft(
         message.metadata.id.clone(),
         expected_draft_params,
@@ -291,6 +313,7 @@ async fn basic_schedule_send_check() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     ctx.mock_send_draft(
         message.metadata.id.clone(),
         default_mock_schedule_send_params(delivery_time.timestamp().unsigned_abs()),
@@ -299,6 +322,7 @@ async fn basic_schedule_send_check() {
         delivery_time.timestamp().unsigned_abs(),
     )
     .await;
+
     ctx.core_test_context()
         .mock_get_keys_all(
             "foo@bar.com",
@@ -312,12 +336,15 @@ async fn basic_schedule_send_check() {
             },
         )
         .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection();
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .to_list
         .add_single(RecipientEntry {
@@ -325,6 +352,7 @@ async fn basic_schedule_send_check() {
             display_name: None,
         })
         .unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -355,6 +383,7 @@ async fn basic_schedule_send_check() {
     assert!(!draft_message.label_ids.contains(&LabelId::outbox()));
     assert!(!draft_message.label_ids.contains(&LabelId::drafts()));
     assert!(!draft_message.label_ids.contains(&LabelId::all_drafts()));
+
     // Time of the message should match the delivery time.
     assert_eq!(draft_message.time, delivery_time.into());
 
@@ -379,14 +408,15 @@ async fn basic_schedule_send_check() {
         .await
         .unwrap()
         .unwrap();
+
     assert_eq!(body_metadata.header, sent_message.body.header);
 
     // Check send result was created.
-
     let send_result = DraftSendResult::find_by_id(draft_message_id, &tether)
         .await
         .unwrap()
         .unwrap();
+
     assert!(send_result.is_success());
     assert_eq!(
         send_result.remote_message_id,
@@ -406,31 +436,38 @@ async fn schedule_send_with_old_delivery_time_fails() {
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let params = draft_test_params();
 
+    let params = draft_test_params();
     let mut message = message_body_test_message_simple();
+
     message.metadata.to_list.push(MessageRecipient {
         address: "foo@bar.com".into(),
         is_proton: false,
         name: "".into(),
         group: None,
     });
+
     let mut sent_message = message.clone();
+
     message.metadata.label_ids.push(LabelId::drafts());
+
     sent_message
         .metadata
         .label_ids
         .push(LabelId::all_scheduled());
+
     sent_message
         .metadata
         .flags
         .set(MessageFlags::SCHEDULED_SEND, true);
+
     sent_message.body.header = "Fancy new header".to_owned();
 
     let expected_draft_params = expected_create_draft_params();
     let delivery_time = Local::now().checked_sub_days(Days::new(2)).unwrap();
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft(
         expected_draft_params.clone(),
         None,
@@ -439,12 +476,15 @@ async fn schedule_send_with_old_delivery_time_fails() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection();
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .to_list
         .add_single(RecipientEntry {
@@ -467,9 +507,11 @@ async fn schedule_send_with_old_delivery_time_fails() {
     else {
         unreachable!();
     };
+
     let schedule_send_error = schedule_send_error
         .as_action_error::<proton_mail_common::actions::draft::Send>()
         .unwrap();
+
     assert!(matches!(
         schedule_send_error,
         ActionError::Action(MailContextError::Draft(draft::Error::Send(
@@ -496,6 +538,7 @@ async fn schedule_send_with_old_delivery_time_fails() {
         .await
         .unwrap()
         .unwrap();
+
     assert!(!send_result.is_success());
     assert!(matches!(
         send_result.error,
@@ -512,6 +555,7 @@ async fn send_fails_if_recipient_is_not_valid() {
     let err = err
         .as_action_error::<proton_mail_common::actions::draft::Send>()
         .unwrap();
+
     assert!(matches!(
         err,
         ActionError::Action(MailContextError::Draft(draft::Error::Send(
@@ -528,6 +572,7 @@ async fn send_fails_if_recipient_is_not_a_known_proton_address() {
     let err = err
         .as_action_error::<proton_mail_common::actions::draft::Send>()
         .unwrap();
+
     assert!(matches!(
         err,
         ActionError::Action(MailContextError::Draft(draft::Error::Send(
@@ -545,6 +590,7 @@ async fn send_fail_recorded_to_db() {
         .await
         .unwrap()
         .unwrap();
+
     assert!(!send_result.is_success());
     assert!(!send_result.seen);
     assert!(
@@ -568,7 +614,6 @@ async fn send_fail_puts_message_back_in_drafts() {
             .await
             .unwrap()
             .unwrap();
-    assert!(draft_message.label_ids.contains(&LabelId::drafts()));
 
     assert!(draft_message.label_ids.contains(&LabelId::drafts()));
     assert!(!draft_message.label_ids.contains(&LabelId::outbox()));
@@ -586,14 +631,16 @@ async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_be
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let params = draft_test_params();
 
+    let params = draft_test_params();
     let mut message = message_body_test_message_simple();
+
     message.metadata.label_ids.push(LabelId::drafts());
 
     let expected_draft_params = expected_create_draft_params();
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft_failure(
         expected_draft_params,
         None,
@@ -602,11 +649,14 @@ async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_be
         CoreBundle::AppVersionInvalid as u32,
     )
     .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .to_list
         .add_single(RecipientEntry {
@@ -614,6 +664,7 @@ async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_be
             display_name: None,
         })
         .unwrap();
+
     draft
         .send(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -621,6 +672,7 @@ async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_be
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap_err();
+
     let tether = user_ctx.user_stash().connection();
 
     let send_result =
@@ -628,6 +680,7 @@ async fn draft_save_failure_creates_send_result_with_correct_origin_when_used_be
             .await
             .unwrap()
             .unwrap();
+
     assert!(!send_result.is_success());
     assert_eq!(send_result.origin, DraftSendResultOrigin::SaveBeforeSend);
 }
@@ -640,9 +693,10 @@ async fn save_after_send_is_an_error() {
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let params = draft_test_params();
 
+    let params = draft_test_params();
     let mut message = message_body_test_message_simple();
+
     message.metadata.to_list.push(MessageRecipient {
         address: "foo@bar.com".into(),
         is_proton: false,
@@ -652,10 +706,12 @@ async fn save_after_send_is_an_error() {
 
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .to_list
         .add_single(RecipientEntry {
@@ -663,6 +719,7 @@ async fn save_after_send_is_an_error() {
             display_name: None,
         })
         .unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -677,9 +734,11 @@ async fn save_after_send_is_an_error() {
     let result = draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await;
+
     let Err(e) = result else {
         panic!("Should have failed");
     };
+
     assert!(matches!(
         e,
         MailContextError::Draft(draft::Error::Save(draft::SaveError::AlreadySent))
@@ -698,9 +757,10 @@ async fn already_sent_error_does_not_produce_error() {
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let params = draft_test_params();
 
+    let params = draft_test_params();
     let mut message = message_body_test_message_simple();
+
     message.metadata.to_list.push(MessageRecipient {
         address: "foo@bar.com".into(),
         is_proton: false,
@@ -711,6 +771,7 @@ async fn already_sent_error_does_not_produce_error() {
     let expected_draft_params = expected_create_draft_params();
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft(
         expected_draft_params.clone(),
         None,
@@ -719,6 +780,7 @@ async fn already_sent_error_does_not_produce_error() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     ctx.mock_send_draft_failure(
         message.metadata.id.clone(),
         ApiErrorInfo {
@@ -728,6 +790,7 @@ async fn already_sent_error_does_not_produce_error() {
         },
     )
     .await;
+
     ctx.core_test_context()
         .mock_get_keys_all(
             "foo@bar.com",
@@ -741,11 +804,14 @@ async fn already_sent_error_does_not_produce_error() {
             },
         )
         .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .to_list
         .add_single(RecipientEntry {
@@ -753,6 +819,7 @@ async fn already_sent_error_does_not_produce_error() {
             display_name: None,
         })
         .unwrap();
+
     draft
         .send(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -772,6 +839,7 @@ async fn already_sent_error_does_not_produce_error() {
         .await
         .unwrap()
         .unwrap();
+
     assert_eq!(result.len(), 1);
     assert!(result[0].is_success());
     // We have no send delivery time so we can't undo this.
@@ -785,13 +853,16 @@ async fn cancel_schedule_send_on_non_scheduled_message() {
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let params = draft_test_params();
+
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
-    let user_ctx = ctx.mail_user_context().await;
 
+    let user_ctx = ctx.mail_user_context().await;
     let message = message_body_test_message_simple();
     let mut tether = user_ctx.user_stash().connection();
+
     let message = tether
         .tx::<_, _, MailContextError>(async |tx: &Bond<'_>| {
             let mut message = Message::from_api_metadata(message.metadata, tx).await?;
@@ -804,6 +875,7 @@ async fn cancel_schedule_send_on_non_scheduled_message() {
     let err = Draft::cancel_schedule_send(&user_ctx, message.id())
         .await
         .unwrap_err();
+
     matches!(
         err,
         MailContextError::Draft(draft::Error::CancelScheduleSend(
@@ -811,6 +883,7 @@ async fn cancel_schedule_send_on_non_scheduled_message() {
         ))
     );
 }
+
 #[tokio::test]
 async fn cancel_schedule_send_on_queued_send() {
     // Set up a user and initialise the inbox
@@ -819,36 +892,44 @@ async fn cancel_schedule_send_on_queued_send() {
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let params = draft_test_params();
 
+    let params = draft_test_params();
     let mut message = message_body_test_message_simple();
+
     message.metadata.to_list.push(MessageRecipient {
         address: "foo@bar.com".into(),
         is_proton: false,
         name: "".into(),
         group: None,
     });
+
     let mut sent_message = message.clone();
+
     message.metadata.label_ids.push(LabelId::drafts());
+
     sent_message
         .metadata
         .label_ids
         .push(LabelId::all_scheduled());
+
     sent_message
         .metadata
         .flags
         .set(MessageFlags::SCHEDULED_SEND, true);
+
     sent_message.body.header = "Fancy new header".to_owned();
 
     let delivery_time = Local::now().checked_add_months(Months::new(1)).unwrap();
 
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection();
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .to_list
         .add_single(RecipientEntry {
@@ -856,6 +937,7 @@ async fn cancel_schedule_send_on_queued_send() {
             display_name: None,
         })
         .unwrap();
+
     draft
         .schedule_send(
             delivery_time,
@@ -894,19 +976,24 @@ async fn cancel_schedule_send_after_api_request_succeeded() {
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let delivery_time = Local
         .from_local_datetime(&NaiveDateTime::new(
             NaiveDate::from_ymd_opt(2025, 5, 2).unwrap(),
             NaiveTime::from_hms_opt(14, 10, 0).unwrap(),
         ))
         .unwrap();
+
     let mut api_message = message_body_test_message_simple();
     let mut undo_sent_response_message = api_message.clone();
+
     api_message.metadata.time = delivery_time.timestamp().unsigned_abs();
+
     undo_sent_response_message
         .metadata
         .label_ids
         .push(LabelId::drafts());
+
     undo_sent_response_message
         .metadata
         .label_ids
@@ -914,6 +1001,7 @@ async fn cancel_schedule_send_after_api_request_succeeded() {
 
     let params = draft_test_params();
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_undo_send(
         api_message.metadata.id.clone(),
         Ok(PostCancelSendResponse {
@@ -921,15 +1009,20 @@ async fn cancel_schedule_send_after_api_request_succeeded() {
         }),
     )
     .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     api_message
         .metadata
         .label_ids
         .push(LabelId::all_scheduled());
+
     api_message.metadata.flags |= MessageFlags::SCHEDULED_SEND;
+
     let mut tether = user_ctx.user_stash().connection();
+
     let message = tether
         .tx::<_, _, MailContextError>(async |tx: &Bond<'_>| {
             let mut message = Message::from_api_metadata(api_message.metadata, tx).await?;
@@ -942,7 +1035,9 @@ async fn cancel_schedule_send_after_api_request_succeeded() {
     let previous_send_time = Draft::cancel_schedule_send(&user_ctx, message.id())
         .await
         .unwrap();
+
     let message = Message::load(message.id(), &tether).await.unwrap().unwrap();
+
     assert!(message.label_ids.contains(&LabelId::drafts()));
     assert!(message.label_ids.contains(&LabelId::all_drafts()));
     assert!(!message.label_ids.contains(&LabelId::all_scheduled()));
@@ -957,10 +1052,12 @@ async fn cancel_schedule_send_on_already_sent_message() {
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let mut api_message = message_body_test_message_simple();
 
+    let mut api_message = message_body_test_message_simple();
     let params = draft_test_params();
+
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_undo_send(
         api_message.metadata.id.clone(),
         Err(ApiErrorInfo {
@@ -970,15 +1067,20 @@ async fn cancel_schedule_send_on_already_sent_message() {
         }),
     )
     .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     api_message
         .metadata
         .label_ids
         .push(LabelId::all_scheduled());
+
     api_message.metadata.flags |= MessageFlags::SCHEDULED_SEND;
+
     let mut tether = user_ctx.user_stash().connection();
+
     let message = tether
         .tx::<_, _, MailContextError>(async |tx: &Bond<'_>| {
             let mut message = Message::from_api_metadata(api_message.metadata, tx).await?;
@@ -991,6 +1093,7 @@ async fn cancel_schedule_send_on_already_sent_message() {
     let err = Draft::cancel_schedule_send(&user_ctx, message.id())
         .await
         .unwrap_err();
+
     matches!(
         err,
         MailContextError::Draft(draft::Error::CancelScheduleSend(
@@ -1007,7 +1110,9 @@ async fn schedule_send_message_limit() {
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let mut params = draft_test_params();
+
     params.message_count.push(
         proton_mail_api::services::proton::response_data::MessageCount {
             label_id: LabelId::all_scheduled(),
@@ -1017,32 +1122,40 @@ async fn schedule_send_message_limit() {
     );
 
     let mut message = message_body_test_message_simple();
+
     message.metadata.to_list.push(MessageRecipient {
         address: "foo@bar.com".into(),
         is_proton: false,
         name: "".into(),
         group: None,
     });
+
     let mut sent_message = message.clone();
+
     message.metadata.label_ids.push(LabelId::drafts());
+
     sent_message
         .metadata
         .label_ids
         .push(LabelId::all_scheduled());
+
     sent_message
         .metadata
         .flags
         .set(MessageFlags::SCHEDULED_SEND, true);
+
     sent_message.body.header = "Fancy new header".to_owned();
 
     let delivery_time = Local::now().checked_sub_days(Days::new(2)).unwrap();
 
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .to_list
         .add_single(RecipientEntry {
@@ -1075,13 +1188,13 @@ async fn message_sent_from_another_session_should_move_draft_to_sent_folder() {
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let params = drafts_common::draft_test_params();
-
     let message = draft_message();
-
     let expected_draft_params = drafts_common::expected_create_draft_params();
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft(
         expected_draft_params,
         None,
@@ -1090,12 +1203,15 @@ async fn message_sent_from_another_session_should_move_draft_to_sent_folder() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     // Add some other label ids to this message to make sure they are skipped.
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -1106,10 +1222,12 @@ async fn message_sent_from_another_session_should_move_draft_to_sent_folder() {
 
     // Simulate event loop update
     let mut sent_message = message.clone();
+
     sent_message.metadata.label_ids.clear();
     sent_message.metadata.label_ids.push(LabelId::sent());
     sent_message.metadata.label_ids.push(LabelId::all_mail());
     sent_message.metadata.flags = MessageFlags::SENT;
+
     user_ctx
         .apply_event(
             MailEvent {
@@ -1136,10 +1254,12 @@ async fn message_sent_from_another_session_should_move_draft_to_sent_folder() {
     // Load the draft.
     let tether = user_ctx.user_stash().connection();
     let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+
     let draft_message = Message::load(draft_message_id, &tether)
         .await
         .unwrap()
         .expect("failed to load message");
+
     assert_eq!(draft_message.remote_id, Some(message.metadata.id));
 
     // Check the draft has the draft label.
@@ -1158,8 +1278,8 @@ async fn message_sent_from_another_session_should_refetch_message() {
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let mut params = drafts_common::draft_test_params();
 
+    let mut params = drafts_common::draft_test_params();
     let mut message1 = draft_message();
 
     // Remove the signature and make message plain so that message body is not contaminated
@@ -1206,6 +1326,7 @@ M+PK763FJHYgYm3oeXPv+VayrM8lkwLiiSwaxHXtzh2HhR5k0nhjgoozQuMoupUz
     let body = Message::message_body(&user_ctx, draft_message_id)
         .await
         .unwrap();
+
     assert_eq!(body.body, "Nobody expects");
 
     // Execute action.
@@ -1213,10 +1334,12 @@ M+PK763FJHYgYm3oeXPv+VayrM8lkwLiiSwaxHXtzh2HhR5k0nhjgoozQuMoupUz
 
     // Simulate event loop update
     let mut sent_message = message1.clone();
+
     sent_message.metadata.label_ids.clear();
     sent_message.metadata.label_ids.push(LabelId::sent());
     sent_message.metadata.label_ids.push(LabelId::all_mail());
     sent_message.metadata.flags = MessageFlags::SENT;
+
     user_ctx
         .apply_event(
             MailEvent {
@@ -1245,11 +1368,13 @@ M+PK763FJHYgYm3oeXPv+VayrM8lkwLiiSwaxHXtzh2HhR5k0nhjgoozQuMoupUz
         .await
         .unwrap()
         .expect("failed to load message");
+
     assert_eq!(draft_message.remote_id, Some(message1.metadata.id));
 
     let body = Message::message_body(&user_ctx, draft_message_id)
         .await
         .unwrap();
+
     assert_eq!(body.body, "Nobody expects the spanish inquisition");
 }
 
@@ -1261,16 +1386,19 @@ async fn already_sent_from_even_update() {
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let params = draft_test_params();
 
+    let params = draft_test_params();
     let mut message = message_body_test_message_simple();
+
     message.metadata.to_list.push(MessageRecipient {
         address: "foo@bar.com".into(),
         is_proton: false,
         name: "".into(),
         group: None,
     });
+
     let mut sent_message = message.clone();
+
     message.metadata.label_ids.push(LabelId::drafts());
     sent_message.metadata.label_ids.push(LabelId::sent());
     sent_message.metadata.flags.set(MessageFlags::SENT, true);
@@ -1279,6 +1407,7 @@ async fn already_sent_from_even_update() {
     let expected_draft_params = expected_create_draft_params();
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft(
         expected_draft_params.clone(),
         None,
@@ -1287,6 +1416,7 @@ async fn already_sent_from_even_update() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     ctx.mock_update_draft(
         message.metadata.id.clone(),
         expected_draft_params,
@@ -1294,11 +1424,14 @@ async fn already_sent_from_even_update() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .to_list
         .add_single(RecipientEntry {
@@ -1306,6 +1439,7 @@ async fn already_sent_from_even_update() {
             display_name: None,
         })
         .unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -1350,29 +1484,35 @@ async fn already_sent_from_even_update() {
 #[tokio::test]
 async fn send_external_with_password() {
     let modulus = "-----BEGIN PGP SIGNED MESSAGE-----\nHash: SHA256\n\nK1PSamH/akNYFuWcErjkcbASp3Cot0Y6HfefGGbuHNKNlBTcv+SaLxZOSj8cV0A2N/NsNit7DUBiBGcKVNvk/0zSDWWFWKYcE9EPs4vSTbf/dqW5GYyIo1l8wBzIItivnTD5xQC4smJSYBIFJpVGuvtbDrDZI0xb0P+FVB5iFDTyPRE1J+ugZK+4QZczLJcv2/UG50gu9pi7R+rhYE/Q/4xCNpBZLp8mpFHpIVgj95auS2mILKkQS6xN7DyNLDuJjZF6++Qg1hxi38/d6NiFbMFgKlVHhKAFj5TPfKtVnqmlJmzeVgOCPc52cRfLRTDjEnDsoaa4MmsKC5gT9kNanQ==\n-----BEGIN PGP SIGNATURE-----\nVersion: ProtonMail\nComment: https://protonmail.com\n\nwl4EARYIABAFAlwB1j4JEDUFhcTpUY8mAACghgEAotYZ/7iVaLKe52tP4CGF\nmdAAq2Dc6a7YLOnr4QLxC/8A/1UdoQQ/8PCueC41KEsrVktWSp1rB4lF4IvT\ntPvUc50G\n=+Zbf\n-----END PGP SIGNATURE-----\n";
+
     let modulus_id =
         "3ZJQXMBeonVrGHGEnuWG5zs0NHn8UNH8UH0TNswNWQYZJ10Fwp8vQVBGMHnmpWKmHKF6VlyMXCiMagSh8CGhkg==";
+
     let ctx = MailTestContext::with_user_secret_and_user_id(
         message_body_test_user_secret(),
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let params = draft_test_params();
 
+    let params = draft_test_params();
     let mut message = message_body_test_message_simple();
+
     message.metadata.to_list.push(MessageRecipient {
         address: "foo@bar.com".into(),
         is_proton: false,
         name: "".into(),
         group: None,
     });
+
     let mut sent_message = message.clone();
+
     message.metadata.label_ids.push(LabelId::drafts());
     sent_message.metadata.label_ids.push(LabelId::sent());
     sent_message.metadata.flags.set(MessageFlags::SENT, true);
     sent_message.body.header = "Fancy new header".to_owned();
 
     let mut send_params = default_mock_send_params();
+
     send_params.packages.push(TestDraftSendPackage {
         addresses: hash_map! {"foo@bar.com".to_string(): TestDraftSendAddressSubPackage{
                 address_type: PackageCryptoType::EncryptedOutside,
@@ -1405,6 +1545,7 @@ async fn send_external_with_password() {
     let expected_draft_params = expected_create_draft_params();
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft(
         expected_draft_params.clone(),
         None,
@@ -1413,6 +1554,7 @@ async fn send_external_with_password() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     ctx.mock_send_draft(
         message.metadata.id.clone(),
         send_params,
@@ -1421,9 +1563,11 @@ async fn send_external_with_password() {
         (Utc::now().timestamp() + SEND_DELAY_SECONDS as i64).unsigned_abs(),
     )
     .await;
+
     ctx.core_test_context()
         .mock_get_auth(modulus_id.to_owned(), modulus.to_owned())
         .await;
+
     ctx.core_test_context()
         .mock_get_keys_all(
             "foo@bar.com",
@@ -1437,11 +1581,14 @@ async fn send_external_with_password() {
             },
         )
         .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .to_list
         .add_single(RecipientEntry {
@@ -1449,6 +1596,7 @@ async fn send_external_with_password() {
             display_name: None,
         })
         .unwrap();
+
     draft
         .set_password(&user_ctx, "password", None)
         .await
@@ -1458,6 +1606,7 @@ async fn send_external_with_password() {
         .send(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
         .unwrap();
+
     user_ctx.execute_all_send_actions().await.unwrap();
 }
 
@@ -1473,18 +1622,22 @@ async fn send_with_expiration() {
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let params = draft_test_params();
     let expiration_time = Local::now().checked_add_days(Days::new(10)).unwrap();
     let expiration_timestamp = UnixTimestamp::from(expiration_time);
 
     let mut message = message_body_test_message_simple();
+
     message.metadata.to_list.push(MessageRecipient {
         address: "foo@bar.com".into(),
         is_proton: false,
         name: "".into(),
         group: None,
     });
+
     let mut sent_message = message.clone();
+
     message.metadata.label_ids.push(LabelId::drafts());
     sent_message.metadata.label_ids.push(LabelId::sent());
     sent_message.metadata.flags.set(MessageFlags::SENT, true);
@@ -1518,6 +1671,7 @@ async fn send_with_expiration() {
     send_params.expiration_time = Some(expiration_timestamp.as_u64());
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft(
         expected_draft_params.clone(),
         None,
@@ -1526,6 +1680,7 @@ async fn send_with_expiration() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     ctx.mock_update_draft(
         message.metadata.id.clone(),
         expected_draft_params,
@@ -1533,6 +1688,7 @@ async fn send_with_expiration() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     ctx.mock_send_draft(
         message.metadata.id.clone(),
         send_params,
@@ -1541,6 +1697,7 @@ async fn send_with_expiration() {
         (Utc::now().timestamp() + SEND_DELAY_SECONDS as i64).unsigned_abs(),
     )
     .await;
+
     ctx.core_test_context()
         .mock_get_keys_all(
             "foo@bar.com",
@@ -1554,12 +1711,15 @@ async fn send_with_expiration() {
             },
         )
         .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .to_list
         .add_single(RecipientEntry {
@@ -1604,6 +1764,7 @@ async fn send_with_expiration() {
         .await
         .unwrap()
         .expect("failed to load message");
+
     assert_eq!(draft_message.expiration_time, expiration_timestamp);
 }
 
@@ -1615,16 +1776,19 @@ async fn send_fails_if_recipient_is_not_valid_impl(
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let params = draft_test_params();
 
+    let params = draft_test_params();
     let mut message = message_body_test_message_simple();
+
     message.metadata.to_list.push(MessageRecipient {
         address: "foo@bar.com".into(),
         is_proton: false,
         name: "".into(),
         group: None,
     });
+
     let mut sent_message = message.clone();
+
     message.metadata.label_ids.push(LabelId::drafts());
     sent_message.metadata.label_ids.push(LabelId::sent());
     sent_message.metadata.flags.set(MessageFlags::SENT, true);
@@ -1633,6 +1797,7 @@ async fn send_fails_if_recipient_is_not_valid_impl(
     let expected_draft_params = expected_create_draft_params();
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft(
         expected_draft_params.clone(),
         None,
@@ -1641,6 +1806,7 @@ async fn send_fails_if_recipient_is_not_valid_impl(
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     ctx.core_test_context()
         .mock_get_keys_all_failure(
             "foo@bar.com",
@@ -1652,11 +1818,14 @@ async fn send_fails_if_recipient_is_not_valid_impl(
             },
         )
         .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .to_list
         .add_single(RecipientEntry {
@@ -1672,6 +1841,7 @@ async fn send_fails_if_recipient_is_not_valid_impl(
 
     // Execute action.
     let err = MailContextError::from(user_ctx.execute_all_send_actions().await.unwrap_err());
+
     let MailContextError::QueuedAction(QueuedError::Action(err, _)) = err else {
         panic!("invalid error");
     };
@@ -1690,6 +1860,7 @@ async fn send_fails_if_recipient_is_not_valid_impl(
 fn draft_test_params() -> TestParams {
     draft_test_params_impl(None)
 }
+
 fn draft_test_params_impl(mime_type: Option<MimeType>) -> TestParams {
     let mut mail_settings = message_body_test_mail_settings();
     if let Some(mime_type) = mime_type {

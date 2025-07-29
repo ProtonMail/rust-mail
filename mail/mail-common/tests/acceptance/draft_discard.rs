@@ -23,13 +23,14 @@ async fn discard_before_save_only_deletes_metadata() {
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let params = draft_test_params();
-
     let mut message = message_body_test_message_simple();
-    message.metadata.label_ids.push(LabelId::drafts());
 
+    message.metadata.label_ids.push(LabelId::drafts());
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
@@ -55,13 +56,14 @@ async fn discard_by_message_id() {
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let params = draft_test_params();
-
     let mut message = message_body_test_message_simple();
-    message.metadata.label_ids.push(LabelId::drafts());
 
+    message.metadata.label_ids.push(LabelId::drafts());
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
@@ -87,15 +89,17 @@ async fn discard_draft_after_save_marks_message_deleted() {
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let params = draft_test_params();
 
+    let params = draft_test_params();
     let mut message = message_body_test_message_simple();
+
     message.metadata.label_ids.clear();
     message.metadata.label_ids.push(LabelId::drafts());
 
     let expected_draft_params = expected_create_draft_params();
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft(
         expected_draft_params,
         None,
@@ -104,6 +108,7 @@ async fn discard_draft_after_save_marks_message_deleted() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     ctx.mock_message_delete(
         [message.metadata.id.clone()],
         Some(LabelId::drafts()),
@@ -119,11 +124,14 @@ async fn discard_draft_after_save_marks_message_deleted() {
         },
     )
     .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -136,7 +144,6 @@ async fn discard_draft_after_save_marks_message_deleted() {
     draft.discard(user_ctx.action_queue()).await.unwrap();
 
     // Check the message is marked as deleted.
-
     let message = Message::find_by_remote_id(
         message.metadata.id.clone(),
         &user_ctx.user_stash().connection(),
@@ -144,6 +151,7 @@ async fn discard_draft_after_save_marks_message_deleted() {
     .await
     .unwrap()
     .unwrap();
+
     assert!(message.deleted);
 
     // Execute action.
@@ -163,15 +171,17 @@ async fn discard_draft_by_message_id() {
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let params = draft_test_params();
 
+    let params = draft_test_params();
     let mut message = message_body_test_message_simple();
+
     message.metadata.label_ids.clear();
     message.metadata.label_ids.push(LabelId::drafts());
 
     let expected_draft_params = expected_create_draft_params();
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft(
         expected_draft_params,
         None,
@@ -180,6 +190,7 @@ async fn discard_draft_by_message_id() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     ctx.mock_message_delete(
         [message.metadata.id.clone()],
         Some(LabelId::drafts()),
@@ -196,10 +207,12 @@ async fn discard_draft_by_message_id() {
     )
     .await;
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -231,6 +244,7 @@ async fn discard_draft_by_message_id() {
     .await
     .unwrap()
     .unwrap();
+
     assert!(message.deleted);
 
     // Execute action.
@@ -253,20 +267,23 @@ async fn discard_new_draft_after_cancelled_or_failed_save_action_deletes_local_d
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let params = draft_test_params();
 
     let mut message = message_body_test_message_simple();
+
     message.metadata.label_ids.clear();
     message.metadata.label_ids.push(LabelId::drafts());
 
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
-    let user_ctx = ctx.mail_user_context().await;
 
+    let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection();
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     let action_id = draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -287,6 +304,7 @@ async fn discard_new_draft_after_cancelled_or_failed_save_action_deletes_local_d
         .await
         .unwrap()
         .unwrap();
+
     assert!(draft_message.deleted);
 
     // Execute action.
@@ -296,12 +314,14 @@ async fn discard_new_draft_after_cancelled_or_failed_save_action_deletes_local_d
     let draft_message = Message::find_by_id(local_message_id, &tether)
         .await
         .unwrap();
+
     assert!(draft_message.is_none());
 
     // Conversation is deleted.
     let conv_message = Conversation::find_by_id(local_conversation_id, &tether)
         .await
         .unwrap();
+
     assert!(conv_message.is_none());
 
     Draft::open(&user_ctx, local_message_id)
@@ -324,20 +344,22 @@ async fn delete_new_draft_after_cancelled_or_failed_save_action_deletes_local_da
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let params = draft_test_params();
 
+    let params = draft_test_params();
     let mut message = message_body_test_message_simple();
+
     message.metadata.label_ids.clear();
     message.metadata.label_ids.push(LabelId::drafts());
 
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
-    let user_ctx = ctx.mail_user_context().await;
 
+    let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection();
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     let action_id = draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -355,6 +377,7 @@ async fn delete_new_draft_after_cancelled_or_failed_save_action_deletes_local_da
         .await
         .unwrap()
         .unwrap();
+
     Message::action_delete(
         user_ctx.action_queue(),
         local_draft_label_id,
@@ -368,6 +391,7 @@ async fn delete_new_draft_after_cancelled_or_failed_save_action_deletes_local_da
         .await
         .unwrap()
         .unwrap();
+
     assert!(draft_message.deleted);
 
     // Execute action.
@@ -377,12 +401,14 @@ async fn delete_new_draft_after_cancelled_or_failed_save_action_deletes_local_da
     let draft_message = Message::find_by_id(local_message_id, &tether)
         .await
         .unwrap();
+
     assert!(draft_message.is_none());
 
     // Conversation is deleted.
     let conv_message = Conversation::find_by_id(local_conversation_id, &tether)
         .await
         .unwrap();
+
     assert!(conv_message.is_none());
 
     Draft::open(&user_ctx, local_message_id)
@@ -402,37 +428,41 @@ async fn discard_reply_draft_after_cancelled_or_failed_save_action_only_deletes_
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let params = draft_test_params();
 
+    let params = draft_test_params();
     let mut message = message_body_test_message_simple();
+
     message.metadata.label_ids.clear();
     message.metadata.label_ids.push(LabelId::drafts());
 
     let mut remote_existing_message = draft_message();
+
     remote_existing_message.metadata.sender.address = "me@proton.me".to_owned().into();
     remote_existing_message.metadata.id = "FancyRemoteId".into();
     remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_get_message(
         &remote_existing_message.metadata.id,
         remote_existing_message.clone(),
     )
     .await;
-    ctx.catch_all().await;
-    let user_ctx = ctx.mail_user_context().await;
 
+    ctx.catch_all().await;
+
+    let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
 
     let (mut existing_message, _, _) =
         Message::from_api_data(remote_existing_message.clone(), &tether)
             .await
             .unwrap();
+
     tether
         .tx(async |tx| existing_message.save(tx).await)
         .await
         .unwrap();
-    let existing_message = existing_message;
 
     // Get the message body - required to reply to draft.
     Message::message_body(&user_ctx, existing_message.id())
@@ -443,6 +473,7 @@ async fn discard_reply_draft_after_cancelled_or_failed_save_action_only_deletes_
     let mut draft = Draft::reply(&user_ctx, existing_message.id(), ReplyMode::All, true, None)
         .await
         .unwrap();
+
     let action_id = draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -463,6 +494,7 @@ async fn discard_reply_draft_after_cancelled_or_failed_save_action_only_deletes_
         .await
         .unwrap()
         .unwrap();
+
     assert!(draft_message.deleted);
 
     // Execute action.
@@ -472,12 +504,14 @@ async fn discard_reply_draft_after_cancelled_or_failed_save_action_only_deletes_
     let draft_message = Message::find_by_id(local_message_id, &tether)
         .await
         .unwrap();
+
     assert!(draft_message.is_none());
 
     // Conversation is not deleted.
     let conv_message = Conversation::find_by_id(local_conversation_id, &tether)
         .await
         .unwrap();
+
     assert!(conv_message.is_some());
 
     Draft::open(&user_ctx, local_message_id)
@@ -500,42 +534,46 @@ async fn delete_reply_draft_after_cancelled_or_failed_save_action_only_deletes_m
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let params = draft_test_params();
 
+    let params = draft_test_params();
     let mut message = message_body_test_message_simple();
+
     message.metadata.label_ids.clear();
     message.metadata.label_ids.push(LabelId::drafts());
 
     let mut remote_existing_message = draft_message_with_attachments();
+
     remote_existing_message.metadata.sender.address = "me@proton.me".to_owned().into();
     remote_existing_message.metadata.id = "FancyRemoteId".into();
     remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_get_message(
         &remote_existing_message.metadata.id,
         remote_existing_message.clone(),
     )
     .await;
+
     for attachment in &remote_existing_message.body.attachments {
         ctx.mock_maybe_get_attachment_data(attachment.id.clone(), vec![])
             .await;
     }
-    ctx.catch_all().await;
-    let user_ctx = ctx.mail_user_context().await;
 
+    ctx.catch_all().await;
+
+    let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
 
     let (mut existing_message, _, _) =
         Message::from_api_data(remote_existing_message.clone(), &tether)
             .await
             .unwrap();
+
     tether
         .tx(async |tx| existing_message.save(tx).await)
         .await
         .unwrap();
-    // Decrypted message downloads attachments.
-    let existing_message = existing_message;
 
     // Get the message body - required to reply to draft.
     Message::message_body(&user_ctx, existing_message.id())
@@ -546,6 +584,7 @@ async fn delete_reply_draft_after_cancelled_or_failed_save_action_only_deletes_m
     let mut draft = Draft::reply(&user_ctx, existing_message.id(), ReplyMode::All, true, None)
         .await
         .unwrap();
+
     let action_id = draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -563,6 +602,7 @@ async fn delete_reply_draft_after_cancelled_or_failed_save_action_only_deletes_m
         .await
         .unwrap()
         .unwrap();
+
     Message::action_delete(
         user_ctx.action_queue(),
         local_draft_label_id,
@@ -576,6 +616,7 @@ async fn delete_reply_draft_after_cancelled_or_failed_save_action_only_deletes_m
         .await
         .unwrap()
         .unwrap();
+
     assert!(draft_message.deleted);
 
     // Execute action.
@@ -585,12 +626,14 @@ async fn delete_reply_draft_after_cancelled_or_failed_save_action_only_deletes_m
     let draft_message = Message::find_by_id(local_message_id, &tether)
         .await
         .unwrap();
+
     assert!(draft_message.is_none());
 
     // Conversation is not deleted.
     let conv_message = Conversation::find_by_id(local_conversation_id, &tether)
         .await
         .unwrap();
+
     assert!(conv_message.is_some());
 
     Draft::open(&user_ctx, local_message_id)
@@ -606,15 +649,17 @@ async fn discard_draft_failure_undeletes_message() {
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let params = draft_test_params();
 
+    let params = draft_test_params();
     let mut message = message_body_test_message_simple();
+
     message.metadata.label_ids.clear();
     message.metadata.label_ids.push(LabelId::drafts());
 
     let expected_draft_params = expected_create_draft_params();
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft(
         expected_draft_params,
         None,
@@ -623,6 +668,7 @@ async fn discard_draft_failure_undeletes_message() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     ctx.mock_message_delete(
         [message.metadata.id.clone()],
         Some(LabelId::drafts()),
@@ -638,11 +684,14 @@ async fn discard_draft_failure_undeletes_message() {
         },
     )
     .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -662,6 +711,7 @@ async fn discard_draft_failure_undeletes_message() {
     .await
     .unwrap()
     .unwrap();
+
     assert!(local_message.deleted);
 
     // Execute action.
@@ -674,5 +724,6 @@ async fn discard_draft_failure_undeletes_message() {
     .await
     .unwrap()
     .unwrap();
+
     assert!(!message.deleted);
 }

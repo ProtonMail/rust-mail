@@ -29,6 +29,7 @@ enum MailUserContextLoadingStage {
 
 impl MailUserContext {
     pub const CONTEXT_INIT_KEY: InitializationKey = InitializationKey::new("mail_user_context");
+
     /// Initialize the mail user context, running all the necessary syncs to ensure the context is ready to be used.
     /// Syncs are mostly run in the parallel, but updating message & conversation count are dependent on labels, so it is run in sequence.
     ///
