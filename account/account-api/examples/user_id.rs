@@ -10,7 +10,7 @@ use proton_core_common::Context;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::os::{InMemoryKeyChain, KeyChainExt as _};
-use proton_core_common::post_login_check::FreeAccountCountValidator;
+use proton_core_common::post_login_check::DefaultPostLoginValidator;
 use proton_log_service::LogService;
 use tempdir::TempDir;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
@@ -48,7 +48,7 @@ async fn main() {
     let mut login_flow = LoginFlow::new(
         session.clone(),
         ChallengeInfo::default(),
-        Box::new(FreeAccountCountValidator::new(Some(2), context)),
+        Box::new(DefaultPostLoginValidator::new(Some(2), context)),
     );
     login_flow
         .login_with_credentials(user_email, user_password, None)
