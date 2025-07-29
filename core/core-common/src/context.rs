@@ -269,7 +269,7 @@ impl Context {
         account_db_path: impl Into<PathBuf>,
         user_db_path: impl Into<PathBuf>,
         key_chain: Arc<dyn KeyChain>,
-        initializers: impl IntoIterator<Item = Box<dyn UserDatabaseInitializer>>,
+        initializers: Vec<Box<dyn UserDatabaseInitializer>>,
         api_config: ApiConfig,
         hv_notifier: Option<DynChallengeNotifier>,
         device_info_provider: Option<DynDeviceInfoProvider>,
@@ -278,7 +278,6 @@ impl Context {
         log_service: LogService,
         event_poll_mode: EventPollMode,
     ) -> CoreContextResult<Arc<Self>> {
-        let initializers = initializers.into_iter().collect::<Vec<_>>();
         let account_db_path = account_db_path.into();
         let user_db_path = user_db_path.into();
         std::fs::create_dir_all(&account_db_path)?;
