@@ -8,11 +8,12 @@ mod v007_proton_mail_message_counters;
 mod v016_proton_mail_new_system_labels;
 mod v019_proton_mail_draft_send_result_refactor;
 
-const VERSION_TABLE_NAME: &str = "proton_mail_db_version";
-
 pub async fn migrate_db(stash: &Stash) -> Result<usize, MigratorError> {
-    static DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/db/migrations");
-    let mut migrations = embedded_migrations(&DIR);
+    const TABLE: &str = "proton_mail_db_version";
+    const MIGRATIONS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/db/migrations");
+
+    let mut migrations = embedded_migrations(&MIGRATIONS);
+
     migrations.push(Box::new(
         v001_proton_mail_default_labels::DefaultLabelsMigration,
     ));
@@ -28,11 +29,10 @@ pub async fn migrate_db(stash: &Stash) -> Result<usize, MigratorError> {
     migrations.push(Box::new(
         v019_proton_mail_draft_send_result_refactor::DraftSendResultMigration,
     ));
+
     let mut tether = stash.connection();
-    let migrator = Migrator::new();
-    migrator
-        .migrate(&mut tether, VERSION_TABLE_NAME, &mut migrations)
-        .await
+
+    Migrator::new(TABLE, migrations).migrate(&mut tether).await
 }
 
 #[cfg(test)]
@@ -43,6 +43,7 @@ mod tests {
     #[tokio::test]
     async fn test_migration_on_empty_data_set() {
         let stash = Stash::new(None).expect("Failed to create Stash");
+
         migrate_core_db(&stash).await.expect("failed to migrate");
         migrate_db(&stash).await.expect("failed to migrate");
     }

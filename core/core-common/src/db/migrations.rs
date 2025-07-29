@@ -1,45 +1,44 @@
-use include_dir::{Dir, include_dir};
-use proton_sqlite3::{Migration, Migrator, MigratorError, file::embedded_migrations};
-use stash::stash::Stash;
-
 #[cfg(test)]
 #[path = "../tests/db/migrations.rs"]
 mod tests;
 
-/// Migrate the accounts database.
-///
-/// # Errors
-/// Returns error if the migration failed.
-pub async fn migrate_account_db(stash: &Stash) -> Result<usize, MigratorError> {
-    const VERSION_TABLE_NAME: &str = "proton_account_version";
-    static DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/db/migrations/account");
-    let mut migrations: Vec<Box<dyn Migration>> = embedded_migrations(&DIR);
+use include_dir::{Dir, include_dir};
+use proton_sqlite3::{Migrator, MigratorError, file::embedded_migrations};
+use stash::stash::Stash;
 
-    let mut tether = stash.connection();
-    let migrator = Migrator::new();
-    migrator
-        .migrate(&mut tether, VERSION_TABLE_NAME, &mut migrations)
-        .await
+fn account_db() -> Migrator {
+    const TABLE: &str = "proton_account_version";
+    const MIGRATIONS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/db/migrations/account");
+
+    Migrator::new(TABLE, embedded_migrations(&MIGRATIONS))
 }
 
-/// Migrate the core database.
-///
-/// # Errors
-/// Returns error if the migration failed.
-pub async fn migrate_core_db(stash: &Stash) -> Result<usize, MigratorError> {
-    const VERSION_TABLE_NAME: &str = "proton_core_version";
-    static DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/db/migrations/core");
-    let mut migrations: Vec<Box<dyn Migration>> = embedded_migrations(&DIR);
+pub async fn migrate_account_db(stash: &Stash) -> Result<usize, MigratorError> {
+    account_db().migrate(&mut stash.connection()).await
+}
 
+pub async fn verify_account_db(stash: &Stash) -> Result<(), MigratorError> {
+    account_db().verify(&mut stash.connection()).await
+}
+
+fn core_db() -> Migrator {
+    const TABLE: &str = "proton_core_version";
+    const MIGRATIONS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/db/migrations/core");
+
+    Migrator::new(TABLE, embedded_migrations(&MIGRATIONS))
+}
+
+pub async fn migrate_core_db(stash: &Stash) -> Result<usize, MigratorError> {
     let mut tether = stash.connection();
 
     // Create action queue tables first as we can have items that depend on this.
     // This is safe to call multiple times as the migration code guarantees that
     // this will only run once per new version.
-    proton_action_queue::db::create_tables(&mut tether).await?;
+    proton_action_queue::db::migrate(&mut tether).await?;
 
-    let migrator = Migrator::new();
-    migrator
-        .migrate(&mut tether, VERSION_TABLE_NAME, &mut migrations)
-        .await
+    core_db().migrate(&mut tether).await
+}
+
+pub async fn verify_core_db(stash: &Stash) -> Result<(), MigratorError> {
+    core_db().verify(&mut stash.connection()).await
 }

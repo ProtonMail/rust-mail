@@ -526,6 +526,6 @@ async fn new_test_connection() -> Stash {
     ));
     let stash = Stash::new(StashConfiguration::test()).unwrap();
     let mut tether = stash.connection();
-    create_tables(&mut tether).await.unwrap();
+    migrate(&mut tether).await.unwrap();
     stash
 }

@@ -276,7 +276,7 @@ impl Queue {
     pub async fn with_factory(stash: Stash, factory: Factory) -> Result<Self> {
         let mut tether = stash.connection();
 
-        db::create_tables(&mut tether).await?;
+        db::migrate(&mut tether).await?;
 
         let (sender, _) = tokio::sync::broadcast::channel(32);
 
