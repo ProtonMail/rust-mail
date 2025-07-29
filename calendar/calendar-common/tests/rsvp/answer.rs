@@ -26,7 +26,7 @@ struct TestCase {
 const TEST_YES: fn() -> TestCase = || TestCase {
     answer: RsvpAnswer::Yes,
     expected_ics: "ACCEPTED",
-    expected_mail: "bar@localhost accepted your invitation to some title",
+    expected_mail: "bar@pm.me accepted your invitation to some title",
     expected_notifs: CalendarNotificationsUpdate::SetToDefault,
     expected_status: CalendarAttendeeStatus::Yes,
 };
@@ -34,7 +34,7 @@ const TEST_YES: fn() -> TestCase = || TestCase {
 const TEST_MAYBE: fn() -> TestCase = || TestCase {
     answer: RsvpAnswer::Maybe,
     expected_ics: "TENTATIVE",
-    expected_mail: "bar@localhost tentatively accepted your invitation to some title",
+    expected_mail: "bar@pm.me tentatively accepted your invitation to some title",
     expected_notifs: CalendarNotificationsUpdate::SetToDefault,
     expected_status: CalendarAttendeeStatus::Maybe,
 };
@@ -42,7 +42,7 @@ const TEST_MAYBE: fn() -> TestCase = || TestCase {
 const TEST_NO: fn() -> TestCase = || TestCase {
     answer: RsvpAnswer::No,
     expected_ics: "DECLINED",
-    expected_mail: "bar@localhost declined your invitation to some title",
+    expected_mail: "bar@pm.me declined your invitation to some title",
     expected_notifs: CalendarNotificationsUpdate::Skip,
     expected_status: CalendarAttendeeStatus::No,
 };
@@ -77,7 +77,7 @@ async fn basic(case: fn() -> TestCase) {
             &world.cache,
             &world.contacts,
             &world.now,
-            "bar@localhost",
+            "bar@pm.me",
             Weekday::Monday,
         )
         .await
@@ -134,7 +134,7 @@ async fn basic(case: fn() -> TestCase) {
 
     pa::assert_eq!(
         Some(FakeRsvpMail {
-            to: "foo@localhost".into(),
+            to: "foo@pm.me".into(),
             body: case.expected_mail.into(),
             ics: ics! {"
                 BEGIN:VCALENDAR
@@ -148,7 +148,7 @@ async fn basic(case: fn() -> TestCase) {
                 DTEND:20180101T133000Z
                 SUMMARY:some title
                 LOCATION:some location
-                ATTENDEE;PARTSTAT=%partstat%:mailto:bar@localhost
+                ATTENDEE;PARTSTAT=%partstat%:mailto:bar@pm.me
                 END:VEVENT
                 END:VCALENDAR
             "}
@@ -421,8 +421,8 @@ async fn recurring_with_single_edits() {
         DTEND:20180101T133000Z
         RRULE:FREQ=DAILY
         SUMMARY:ice bucket challenge
-        ORGANIZER:mailto:foo@localhost
-        ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION:mailto:bar@localhost
+        ORGANIZER:mailto:foo@pm.me
+        ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION:mailto:bar@pm.me
         END:VEVENT
         END:VCALENDAR
     "};
@@ -435,7 +435,7 @@ async fn recurring_with_single_edits() {
             &world.cache,
             &world.contacts,
             &world.now,
-            "bar@localhost",
+            "bar@pm.me",
             Weekday::Monday,
         )
         .await
@@ -528,8 +528,8 @@ async fn recurring_with_single_edits() {
 
     pa::assert_eq!(
         Some(FakeRsvpMail {
-            to: "foo@localhost".into(),
-            body: "bar@localhost accepted your invitation to ice bucket challenge".into(),
+            to: "foo@pm.me".into(),
+            body: "bar@pm.me accepted your invitation to ice bucket challenge".into(),
             ics: ics! {"
                 BEGIN:VCALENDAR
                 METHOD:REPLY
@@ -541,7 +541,7 @@ async fn recurring_with_single_edits() {
                 DTSTART:20180101T120000Z
                 DTEND:20180101T133000Z
                 SUMMARY:ice bucket challenge
-                ATTENDEE;PARTSTAT=ACCEPTED:mailto:bar@localhost
+                ATTENDEE;PARTSTAT=ACCEPTED:mailto:bar@pm.me
                 RRULE:FREQ=DAILY
                 END:VEVENT
                 END:VCALENDAR
@@ -713,7 +713,7 @@ async fn multiple_calendars() {
             &world.cache,
             &world.contacts,
             &world.now,
-            "bar@localhost",
+            "bar@pm.me",
             Weekday::Monday,
         )
         .await
@@ -764,8 +764,8 @@ async fn multiple_calendars() {
 
     pa::assert_eq!(
         Some(FakeRsvpMail {
-            to: "foo@localhost".into(),
-            body: "bar@localhost accepted your invitation to some title".into(),
+            to: "foo@pm.me".into(),
+            body: "bar@pm.me accepted your invitation to some title".into(),
             ics: ics! {"
                 BEGIN:VCALENDAR
                 METHOD:REPLY
@@ -778,7 +778,7 @@ async fn multiple_calendars() {
                 DTEND:20180101T133000Z
                 SUMMARY:some title
                 LOCATION:some location
-                ATTENDEE;PARTSTAT=ACCEPTED:mailto:bar@localhost
+                ATTENDEE;PARTSTAT=ACCEPTED:mailto:bar@pm.me
                 END:VEVENT
                 END:VCALENDAR
             "}

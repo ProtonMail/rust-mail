@@ -45,9 +45,9 @@ const INVITE: &str = indoc! {"
     DESCRIPTION:some description
     SUMMARY:some title
     LOCATION:some location
-    ORGANIZER:mailto:foo@localhost
-    ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION:mailto:bar@localhost
-    ATTENDEE;ROLE=OPT-PARTICIPANT:mailto:zar@localhost
+    ORGANIZER:mailto:foo@pm.me
+    ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION:mailto:bar@pm.me
+    ATTENDEE;ROLE=OPT-PARTICIPANT:mailto:zar@pm.me
     END:VEVENT
     END:VCALENDAR
 "};
@@ -72,9 +72,9 @@ const ATTENDEES_EVENT: &str = indoc! {"
     VERSION:2.0
     BEGIN:VEVENT
     UID:8maQ3qBa
-    ATTENDEE;CN=foo@localhost;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=245902dc:mailto:foo@localhost
-    ATTENDEE;CN=bar@localhost;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=d15cf90c:mailto:bar@localhost
-    ATTENDEE;CN=zar@localhost;ROLE=OPT-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=fdec9604:mailto:zar@localhost
+    ATTENDEE;CN=foo@pm.me;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=245902dc:mailto:foo@pm.me
+    ATTENDEE;CN=bar@pm.me;ROLE=REQ-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=d15cf90c:mailto:bar@pm.me
+    ATTENDEE;CN=zar@pm.me;ROLE=OPT-PARTICIPANT;RSVP=TRUE;X-PM-TOKEN=fdec9604:mailto:zar@pm.me
     END:VEVENT
     END:VCALENDAR
 "};
@@ -149,7 +149,7 @@ async fn world() -> World<impl PGPProviderSync> {
     let address_keys = UnlockedAddressKeys::from(
         LocalAddressKey::generate(
             &pgp,
-            "someone@localhost",
+            "someone@pm.me",
             KeyGeneratorAlgorithm::default(),
             KeyFlag::default(),
             true,
@@ -348,7 +348,7 @@ where
                 ty: CalendarEventPayloadType::ClearText,
                 data: data.into(),
                 signature: None,
-                author: "foo@localhost".into(),
+                author: "foo@pm.me".into(),
             })
             .collect();
 
@@ -357,7 +357,7 @@ where
                 ty: CalendarEventPayloadType::Encrypted,
                 data: shared_event.into_base64(),
                 signature: None,
-                author: "foo@localhost".into(),
+                author: "foo@pm.me".into(),
             }],
             calendar_events,
             id: self.id.unwrap().into(),
@@ -368,7 +368,7 @@ where
                 ty: CalendarEventPayloadType::Encrypted,
                 data: attendees_event.into_base64(),
                 signature: None,
-                author: "foo@localhost".into(),
+                author: "foo@pm.me".into(),
             }],
             attendees: self.attendees,
             notifications: None,
@@ -399,8 +399,8 @@ struct DummyRsvpContacts;
 impl RsvpContacts for DummyRsvpContacts {
     async fn get_display_name(&self, email: &str) -> Option<String> {
         match email {
-            "bar@localhost" => Some("Bar Localhosty".into()),
-            "foo@localhost" => Some("Foo Localhosty".into()),
+            "bar@pm.me" => Some("Bar Localhosty".into()),
+            "foo@pm.me" => Some("Foo Localhosty".into()),
             _ => None,
         }
     }
@@ -425,14 +425,14 @@ fn expected_event(intent: RsvpIntent, raw: CalendarEvent) -> RsvpEvent {
         },
         organizer: RsvpOrganizer {
             name: Some("Foo Localhosty".into()),
-            email: "foo@localhost".into(),
+            email: "foo@pm.me".into(),
         },
         attendees: vec![
             RsvpAttendee {
                 id: Some(BAR_ATTENDEE_ID.into()),
                 token: Some(BAR_ATTENDEE_TOKEN.into()),
                 name: Some("Bar Localhosty".into()),
-                email: "bar@localhost".into(),
+                email: "bar@pm.me".into(),
                 status: Some(CalendarAttendeeStatus::Unanswered),
                 role: ical::Role::ReqParticipant,
             },
@@ -440,7 +440,7 @@ fn expected_event(intent: RsvpIntent, raw: CalendarEvent) -> RsvpEvent {
                 id: Some(ZAR_ATTENDEE_ID.into()),
                 token: Some(ZAR_ATTENDEE_TOKEN.into()),
                 name: None,
-                email: "zar@localhost".into(),
+                email: "zar@pm.me".into(),
                 status: Some(CalendarAttendeeStatus::Yes),
                 role: ical::Role::OptParticipant,
             },
@@ -477,14 +477,14 @@ fn expected_offline_event() -> RsvpEvent {
         },
         organizer: RsvpOrganizer {
             name: Some("Foo Localhosty".into()),
-            email: "foo@localhost".into(),
+            email: "foo@pm.me".into(),
         },
         attendees: vec![
             RsvpAttendee {
                 id: None,
                 token: None,
                 name: Some("Bar Localhosty".into()),
-                email: "bar@localhost".into(),
+                email: "bar@pm.me".into(),
                 status: None,
                 role: ical::Role::ReqParticipant,
             },
@@ -492,7 +492,7 @@ fn expected_offline_event() -> RsvpEvent {
                 id: None,
                 token: None,
                 name: None,
-                email: "zar@localhost".into(),
+                email: "zar@pm.me".into(),
                 status: None,
                 role: ical::Role::OptParticipant,
             },
