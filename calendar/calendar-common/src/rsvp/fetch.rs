@@ -11,6 +11,7 @@ use jiff::{
 use proton_calendar_api::{
     CalendarAttendeeId, CalendarAttendeeStatus, CalendarBootstrap, CalendarEvent, ProtonCalendar,
 };
+use proton_canonical_email::{self as email, CanonicalEmail};
 use proton_core_api::services::proton::Proton;
 use proton_crypto::crypto::PGPProviderSync;
 use proton_crypto_account::keys::UnlockedAddressKeys;
@@ -85,11 +86,13 @@ where
         return Ok(None);
     };
 
+    let email = email::canonicalize_auto(email);
+
     extract(
         pgp,
         contacts,
         now,
-        email,
+        &email,
         week_start,
         id,
         calendar,
@@ -240,7 +243,7 @@ async fn extract<P>(
     pgp: &P,
     contacts: &impl RsvpContacts,
     now: &Zoned,
-    email: &str,
+    email: &CanonicalEmail,
     week_start: Weekday,
     id: &RsvpEventId,
     calendar: Option<CalendarBootstrap>,
@@ -263,11 +266,13 @@ where
     let user_attendee_idx = attendees
         .iter()
         .enumerate()
-        .find_map(
-            |(idx, att)| {
-                if att.email == email { Some(idx) } else { None }
-            },
-        )
+        .find_map(|(idx, att)| {
+            if email::canonicalize_auto(&att.email) == *email {
+                Some(idx)
+            } else {
+                None
+            }
+        })
         .ok_or({
             // This can happen whan an attendee forwards their own invite to
             // another user that hasn't been invited by the organizer; this is
