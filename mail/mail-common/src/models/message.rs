@@ -26,6 +26,8 @@ use proton_action_queue::queue::{ActionError as QueueActionError, Queue, QueuedA
 use proton_core_common::utils::MapVec as _;
 use proton_mail_api::services::proton::prelude::DirectAttachment;
 use sqlite_watcher::watcher::TableObserver;
+use stash::utils::IterMapToSql;
+use stash::utils::placeholders_n;
 use stash::utils::{MapToSql, placeholders};
 
 use crate::MailContextResult;
@@ -1437,43 +1439,48 @@ impl Message {
         mark_read: bool,
         ids: impl IntoIterator<Item = LocalMessageId>,
         bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
+    ) -> Result<Vec<LocalMessageId>, StashError> {
         struct IdPair {
             local_message_id: LocalMessageId,
             local_conversation_id: LocalConversationId,
         }
 
-        let ids = ids.into_iter();
-
-        let mut updated: Vec<IdPair> = Vec::with_capacity(ids.size_hint().1.unwrap_or(0));
         let mut conversation_count_changed = HashMap::new();
 
+        let params = ids.bridge_sql_extend([if mark_read { 1 } else { 0 }]);
+        let num_ids = params.len() - 1;
+
+        let mut updated: Vec<IdPair> = Vec::with_capacity(num_ids);
+
+        let msgs = Message::find(
+            format!(
+                "WHERE local_id IN ({}) and unread = ?",
+                placeholders_n(num_ids)
+            ),
+            params,
+            bond,
+        )
+        .await?;
+
         // update unread flag
-        for id in ids {
+        for mut msg in msgs {
             info!(
-                "Marking {id:?} as {}",
+                "Marking {:?} as {}",
+                msg.id(),
                 if mark_read { "read" } else { "unread" }
             );
-            if let Some(mut message) = Message::find_first(
-                "WHERE local_id=? AND unread=?",
-                params![id, if mark_read { 1 } else { 0 }],
-                bond,
-            )
-            .await?
-            {
-                message.unread = !mark_read;
-                if mark_read {
-                    message.display_snooze_reminder = false;
-                }
-                message.save(bond).await?;
-                updated.push(IdPair {
-                    local_message_id: message.id(),
-                    local_conversation_id: message.local_conversation_id.unwrap(),
-                });
-                *conversation_count_changed
-                    .entry(message.local_conversation_id.expect("Should be set"))
-                    .or_insert(0) += 1;
+            msg.unread = !mark_read;
+            if mark_read {
+                msg.display_snooze_reminder = false;
             }
+            msg.save(bond).await?;
+            updated.push(IdPair {
+                local_message_id: msg.id(),
+                local_conversation_id: msg.local_conversation_id.unwrap(),
+            });
+            *conversation_count_changed
+                .entry(msg.local_conversation_id.expect("Should be set"))
+                .or_insert(0) += 1;
         }
 
         for (conversation_id, count) in conversation_count_changed {
@@ -1490,7 +1497,7 @@ impl Message {
 
         if updated.is_empty() {
             // Nothing was changed.
-            return Ok(());
+            return Ok(vec![]);
         }
 
         // Publish updates for all affected ids.
@@ -1561,7 +1568,7 @@ impl Message {
             }
         }
 
-        Ok(())
+        Ok(updated.into_iter().map(|x| x.local_message_id).collect())
     }
 
     /// Converts an [`ApiMessage`] into its components.
@@ -2469,7 +2476,7 @@ impl Message {
     pub async fn mark_unread(
         ids: impl IntoIterator<Item = LocalMessageId>,
         bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
+    ) -> Result<Vec<LocalMessageId>, StashError> {
         Self::mark_read_or_unread(false, ids, bond).await
     }
 }
@@ -2528,45 +2535,21 @@ impl ConversationOrMessage for Message {
     async fn mark_read(
         ids: impl IntoIterator<Item = Self::IdType>,
         bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
+    ) -> Result<Vec<Self::IdType>, StashError> {
         Self::mark_read_or_unread(true, ids, bond).await
     }
 
-    async fn remove_all_labels_except_all_mail(
-        ids: &[LocalMessageId],
-        bond: &Bond<'_>,
-    ) -> Result<(), StashError> {
-        let label_ids: Vec<LocalLabelId> = bond
-            .query_values(
-                formatdoc! {"
-                SELECT DISTINCT local_label_id AS value
-                FROM message_labels
-                WHERE
-                    local_message_id in ({})"
-                    , placeholders(ids)
-                },
-                ids.to_sql(),
-            )
-            .await?;
-
-        let all_mail_id = Label::remote_id_counterpart(LabelId::all_mail(), bond)
-            .await?
-            .expect("AllMail should be set");
-
-        // It's a good moment to apply all mail label to messages in the case that it slipped by
-        if !label_ids.contains(&all_mail_id) {
-            Self::apply_label(all_mail_id, ids.iter().cloned(), bond).await?;
+    fn remove_all_labels_except_all_mail_query(placeholders: usize) -> String {
+        formatdoc! {"
+            SELECT 
+                local_label_id,
+                GROUP_CONCAT(local_message_id)
+            FROM message_labels
+            WHERE local_message_id IN ({})
+            GROUP BY local_label_id
+            ",
+            placeholders_n(placeholders)
         }
-
-        for label_id in label_ids {
-            if label_id == all_mail_id {
-                continue;
-            }
-
-            Self::remove_label(label_id, ids.iter().cloned(), bond).await?;
-        }
-
-        Ok(())
     }
 }
 

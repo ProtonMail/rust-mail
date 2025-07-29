@@ -13,13 +13,17 @@ use crate::actions::conversations::label_as::UndoLabelAsConversations;
 use crate::actions::conversations::r#move::UndoMoveToConversations;
 use crate::actions::messages::UndoLabelAsMessages;
 use crate::actions::messages::UndoMoveToMessages;
+use crate::datatypes::LocalMessageId;
 use crate::datatypes::{RollbackItemType, SystemLabelId};
+use crate::models::Message;
 use crate::models::{MailLabel, RollbackItem};
 use crate::{AppError, MailUserContext};
 use addresses::{block, unblock, update_incoming_defaults};
 use anyhow::Context;
+use fallible_iterator::FallibleIterator;
 use futures::future::{join, join_all};
 use indoc::formatdoc;
+use itertools::Itertools;
 use proton_action_queue::action::{
     self, ActionDependencyKey, ActionDependencyKeys, ActionGroup, FactoryError, Handler,
     WriterGuard, WriterGuardError,
@@ -40,8 +44,10 @@ use proton_mail_api::services::proton::response_data::OperationResult;
 use proton_sqlite3::rusqlite::ToSql;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use stash::exports::FromSql;
 use stash::orm::Model;
 use stash::stash::{Bond, StashError, Tether};
+use stash::utils::MapToSql;
 use std::any::type_name;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Display;
@@ -434,6 +440,10 @@ where
 {
     sources: HashMap<LocalLabelId, Vec<T::IdType>>,
     destination: LocalLabelId,
+
+    // These 2 exist solely for the revert and undo
+    marked_read: Vec<LocalMessageId>,
+    removed_labels: Vec<LabelPair<T::IdType>>,
 }
 
 impl<T> ActionMoveData<T>
@@ -473,15 +483,17 @@ where
         Ok(Some(Self {
             sources,
             destination,
+            marked_read: vec![],
+            removed_labels: vec![],
         }))
     }
 
-    async fn move_to(&self, bond: &Bond<'_>) -> anyhow::Result<()> {
+    async fn move_to(&mut self, bond: &Bond<'_>) -> anyhow::Result<()> {
         let spam = Label::resolve_local_label_id(LabelId::spam(), bond).await?;
         let trash = Label::resolve_local_label_id(LabelId::trash(), bond).await?;
 
         if self.destination == trash {
-            T::mark_read(self.sources.values().flatten().copied(), bond).await?;
+            self.marked_read = T::mark_read(self.sources.values().flatten().copied(), bond).await?;
         }
 
         for (&source_id, ids) in &self.sources {
@@ -491,7 +503,7 @@ where
 
             if [trash, spam].contains(&self.destination) {
                 // When moving to trash or spam we delete all labels except all mail.
-                T::remove_all_labels_except_all_mail(ids, bond).await?;
+                self.removed_labels = T::remove_all_labels_except_all_mail(ids, bond).await?;
             } else if source_label.is_movable_folder() {
                 T::remove_label(source_id, ids.iter().cloned(), bond)
                     .await
@@ -554,13 +566,20 @@ where
             Self {
                 destination: source,
                 sources,
+                marked_read: vec![],
+                removed_labels: vec![],
             }
         })
     }
 
-    async fn revert_local(&self, tx: &Bond<'_>) -> Result<(), MailActionError> {
-        for reverse in self.reverse() {
+    async fn revert_local(&mut self, tx: &Bond<'_>) -> Result<(), MailActionError> {
+        for mut reverse in self.reverse() {
             reverse.move_to(tx).await?;
+        }
+
+        Message::mark_unread(self.marked_read.iter().copied(), tx).await?;
+        for pair in &self.removed_labels {
+            T::apply_label(pair.label, [pair.id], tx).await?;
         }
         self.queue_rollback_items(tx).await?;
         Ok(())
@@ -598,7 +617,7 @@ where
 #[allow(async_fn_in_trait, reason = "not used across threads")]
 pub trait ConversationOrMessage:
     ModelIdExtension<
-        IdType: Copy + Hash + Eq + DeserializeOwned + Serialize + LocalIdActionDepExt,
+        IdType: Copy + Hash + Eq + DeserializeOwned + Serialize + LocalIdActionDepExt + From<u64>,
         RemoteId: Display,
     >
 {
@@ -630,15 +649,63 @@ pub trait ConversationOrMessage:
 
     fn get_exclusive_location(&self) -> Option<LocalLabelId>;
 
+    // Returns the messages that actually were marked as read
     async fn mark_read(
         ids: impl IntoIterator<Item = Self::IdType>,
         bond: &Bond<'_>,
-    ) -> Result<(), StashError>;
+    ) -> Result<Vec<LocalMessageId>, StashError>;
 
+    // Returns the items that were removed
     async fn remove_all_labels_except_all_mail(
         ids: &[Self::IdType],
         bond: &Bond<'_>,
-    ) -> Result<(), StashError>;
+    ) -> Result<Vec<LabelPair<Self::IdType>>, StashError> {
+        let all_mail_id = Label::remote_id_counterpart(LabelId::all_mail(), bond)
+            .await?
+            .expect("AllMail should be set");
+
+        let labels_and_messages: Vec<(LocalLabelId, String)> = bond
+            .do_query(
+                Self::remove_all_labels_except_all_mail_query(ids.len()),
+                ids.to_sql(),
+                |rows| rows.map(|x| Ok((x.get(0)?, x.get(1)?))).collect(),
+            )
+            .await?
+            .map_err(StashError::ExecutionError)?;
+
+        let mut res = vec![];
+        for (label_id, unparsed_ids) in labels_and_messages {
+            let parsed_ids: Vec<Self::IdType> = unparsed_ids
+                .split(',')
+                .filter_map(|x| x.parse::<u64>().ok())
+                .map_into()
+                .collect();
+
+            if label_id == all_mail_id {
+                // It's a good moment to apply all mail label to messages in the case that it slipped by
+                let mut missing = vec![];
+                for id in parsed_ids {
+                    if !ids.contains(&id) {
+                        missing.push(id);
+                    }
+                }
+                if !missing.is_empty() {
+                    Self::apply_label(all_mail_id, missing, bond).await?;
+                }
+            } else {
+                Self::remove_label(label_id, parsed_ids.iter().copied(), bond).await?;
+                for id in parsed_ids {
+                    res.push(LabelPair {
+                        id,
+                        label: label_id,
+                    })
+                }
+            }
+        }
+        Ok(res)
+    }
+
+    fn remove_all_labels_except_all_mail_query(placeholders: usize) -> String;
 }
 
 #[derive(Debug, Copy, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]

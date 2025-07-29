@@ -472,7 +472,7 @@ where
             id = Self::id_field_name(),
         );
 
-        let values = values.bridge_sql_extend([id]).collect();
+        let values = values.bridge_sql_extend([id]);
         let affected: usize = bond.execute(&query, values).await?;
 
         if affected == 0 {

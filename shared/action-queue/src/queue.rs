@@ -259,6 +259,10 @@ pub struct QueuedActionOutput<T: Action> {
 }
 
 impl Queue {
+    pub fn tether(&self) -> Tether {
+        self.shared.stash.connection()
+    }
+
     /// Create a new queue with the given `stash`;
     ///
     /// # Errors
@@ -321,14 +325,11 @@ impl Queue {
     ///
     /// If one fails, everything is rolled back.
     ///
-    /// A default [`Metadata`] type is assigned to this `action`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if action could not be executed locally.
+    /// Additionally, a last_id arg can be provided to say what this should depend on.
     pub async fn queue_actions<T: Action>(
         &self,
         actions: impl IntoIterator<Item = T>,
+        mut last_id: Option<ActionId>,
     ) -> Result<Vec<QueuedActionOutput<T>>, ActionError<T>> {
         self.shared
             .stash
@@ -337,8 +338,8 @@ impl Queue {
                 let mut res: Vec<QueuedActionOutput<T>> = vec![];
 
                 for action in actions {
-                    let meta = if let Some(last) = res.last() {
-                        Metadata::with_dependency(last.id)
+                    let meta = if let Some(last) = last_id {
+                        Metadata::with_dependency(last)
                     } else {
                         Metadata::default()
                     };
@@ -346,6 +347,7 @@ impl Queue {
                     let action = self
                         .queue_action_with_metadata_in_tx(action, meta, tx)
                         .await?;
+                    last_id = Some(action.id);
                     res.push(action);
                 }
                 Ok(res)
@@ -378,7 +380,7 @@ impl Queue {
     /// # Errors
     ///
     /// Returns error if action could not be executed locally.
-    async fn queue_action_with_metadata_in_tx<T: Action>(
+    pub async fn queue_action_with_metadata_in_tx<T: Action>(
         &self,
         mut action: T,
         metadata: Metadata,
@@ -1344,4 +1346,40 @@ fn decode_action(
         error!("Failed to decode action: {e:?}");
         QueuedError::Factory(action_id, e)
     })
+}
+
+#[macro_export]
+// Returns a closure that enqueues actions of potentially different types.
+macro_rules! enqueue {
+    ($($action:expr),+ $(,)?) => {{
+
+        use ::proton_action_queue::queue::Queue;
+        use ::proton_action_queue::action::{ActionId, Metadata};
+
+        async |queue: &Queue| -> ::anyhow::Result<ActionId> {
+
+            queue.tether().tx::<_,_, anyhow::Error>(async |tx| {
+
+                let mut last = None;
+
+                $(
+                    let meta = if let Some(last) = last {
+                        Metadata::with_dependency(last)
+                    } else {
+                        Metadata::default()
+                    };
+
+                    let action = queue
+                        .queue_action_with_metadata_in_tx($action, meta, tx)
+                        .await
+                        .context("Error queueing action")?;
+                    last = Some(action.id);
+                )+
+
+                // This is safe to do because we'd short circuit if this would be None, and this requires
+                // 1+ params.
+                Ok(last.unwrap())
+            }).await
+        }
+    }}
 }
