@@ -52,6 +52,7 @@ mod attachment;
 mod available_action;
 mod folder_banner;
 pub(crate) mod labels;
+mod snooze;
 mod system_folder;
 mod system_label;
 
@@ -100,6 +101,7 @@ use proton_mail_common::models::{
     MessageReplyTo as RealMessageReplyTo,
 };
 use smart_default::SmartDefault;
+pub use snooze::*;
 use stash::orm::Model;
 use stash::stash::{StashError, Tether};
 use std::fmt::{Display, Formatter};
