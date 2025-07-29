@@ -21,6 +21,7 @@ pub(crate) mod connection_manager;
 pub mod orm;
 pub mod stash;
 pub mod utils;
+pub mod watcher;
 
 /// Re-exported proc macros.
 ///

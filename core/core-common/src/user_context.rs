@@ -4,7 +4,7 @@ use crate::datatypes::AccountDetails;
 use crate::db::account::CoreAccount;
 use crate::db::migrations::{migrate_account_db, migrate_core_db};
 use crate::event_loop::{EventLoopActionIds, EventPollMode};
-use crate::models::{InitializationWatcher, UserSettings};
+use crate::models::{Address, InitializationWatcher, Label, User, UserSettings};
 use crate::{Context, CoreContextError, CoreContextResult, OnSessionDeletedResponse};
 pub use event_loop::subscriber::CoreEventLoopContext;
 use proton_action_queue::queue::Queue;
@@ -16,7 +16,8 @@ use proton_log_service::LogService;
 use proton_sqlite3::MigratorError;
 use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use stash::orm::Model;
-use stash::stash::{Stash, StashConfiguration};
+use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
+use stash::watcher::TableWatcher;
 use std::fmt::{Debug, Formatter};
 use std::fs::{self};
 use std::future::Future;
@@ -326,6 +327,22 @@ impl UserContext {
         } else {
             Ok(())
         }
+    }
+
+    pub fn watch_addresses(&self) -> Result<WatcherHandle, StashError> {
+        TableWatcher::<Address>::watch(&self.user_stash)
+    }
+
+    pub fn watch_user(&self) -> Result<WatcherHandle, StashError> {
+        TableWatcher::<User>::watch(&self.user_stash)
+    }
+
+    pub fn watch_user_settings(&self) -> Result<WatcherHandle, StashError> {
+        TableWatcher::<UserSettings>::watch(&self.user_stash)
+    }
+
+    pub fn watch_labels(&self) -> Result<WatcherHandle, StashError> {
+        TableWatcher::<Label>::watch(&self.user_stash)
     }
 }
 

@@ -10,7 +10,10 @@ use crate::core::datatypes::{
 use crate::errors::unexpected::UnexpectedError;
 use crate::errors::{ActionError, ProtonError, UserContextError, VoidSessionResult};
 use crate::mail::state::MailUserContextPtr;
-use crate::{LiveQueryCallback, async_runtime, spawn_async, uniffi_async};
+use crate::{
+    AsyncLiveQueryCallback, LiveQueryCallback, WatchHandle, async_runtime, spawn_async,
+    uniffi_async, watch_channel_async,
+};
 use futures::TryFutureExt;
 use proton_account_api::login::state::want_qr_confirmation::process_target_device_qr_code;
 use proton_account_uniffi::login::ProcessTargetDeviceQrError;
@@ -18,10 +21,11 @@ use proton_account_uniffi::password::PasswordFlow;
 use proton_account_uniffi::password_validator::PasswordValidatorService;
 use proton_core_api::services::observability::ObservabilityRecorder;
 use proton_core_api::services::proton::{ProtonAuth, ProtonPayments};
+use proton_core_common::UserContext;
 use proton_mail_common::MailUserContext;
 use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::models::Attachment;
-use stash::stash::Stash;
+use stash::stash::{Stash, StashError, WatcherHandle};
 use std::sync::Arc;
 use tracing::error;
 
@@ -74,6 +78,19 @@ impl MailUserSession {
     pub(crate) fn user_stash(&self) -> Result<Stash, ProtonError> {
         Ok(self.ctx()?.user_stash().to_owned())
     }
+
+    pub fn watch_table(
+        &self,
+        callback: Arc<dyn AsyncLiveQueryCallback>,
+        watch_fn: fn(&UserContext) -> Result<WatcherHandle, StashError>,
+    ) -> Result<Arc<WatchHandle>, ProtonError> {
+        let ctx = self.ctx()?;
+        let watcher_handle = watch_fn(ctx.user_context())
+            .inspect_err(|err| error!("Error while getting user_context: {err:?}"))
+            .map_err(|_| ProtonError::Unexpected(UnexpectedError::Database))?;
+        let watch_handle = watch_channel_async(ctx, watcher_handle, callback);
+        Ok(watch_handle)
+    }
 }
 
 #[uniffi_export]
@@ -103,6 +120,37 @@ impl MailUserSession {
         .await
         .map_err(UserContextError::from)
         .into()
+    }
+}
+
+#[uniffi_export]
+impl MailUserSession {
+    pub fn watch_addresses(
+        &self,
+        callback: Arc<dyn AsyncLiveQueryCallback>,
+    ) -> Result<Arc<WatchHandle>, ProtonError> {
+        self.watch_table(callback, UserContext::watch_addresses)
+    }
+
+    pub fn watch_user(
+        &self,
+        callback: Arc<dyn AsyncLiveQueryCallback>,
+    ) -> Result<Arc<WatchHandle>, ProtonError> {
+        self.watch_table(callback, UserContext::watch_user)
+    }
+
+    pub fn watch_user_settings(
+        &self,
+        callback: Arc<dyn AsyncLiveQueryCallback>,
+    ) -> Result<Arc<WatchHandle>, ProtonError> {
+        self.watch_table(callback, UserContext::watch_user_settings)
+    }
+
+    pub fn watch_labels(
+        &self,
+        callback: Arc<dyn AsyncLiveQueryCallback>,
+    ) -> Result<Arc<WatchHandle>, ProtonError> {
+        self.watch_table(callback, UserContext::watch_labels)
     }
 }
 
