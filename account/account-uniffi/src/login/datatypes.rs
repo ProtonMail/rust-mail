@@ -10,37 +10,17 @@ use uniffi::Record;
 /// of the app
 #[derive(uniffi::Record)]
 pub struct MigrationData {
-    /// The name of the user.
     pub username: String,
-
-    /// The user's display name.
     pub display_name: String,
-
-    /// The user's primary email address.
     pub primary_addr: String,
-
-    /// The user's **unecrypted** key secret.
-    /// In Base64 format.
-    ///
-    pub key_secret: String,
-
-    /// The user's ID.
+    pub key_secret: String, // base64'd
     pub user_id: String,
-
-    /// The user's unique session ID.
     pub session_id: String,
-
-    /// The passwords mode.
     pub password_mode: PasswordMode,
-
-    /// The refresh token. This token must be refreshed before use;
-    /// once refreshed, it becomes an access token.
     pub refresh_token: String,
 }
 
 impl MigrationData {
-    /// Splits the migration data into internal parts
-    ///
     #[must_use]
     pub fn into_parts(self) -> (UserData, LoginFlowData, SecretString) {
         let Self {

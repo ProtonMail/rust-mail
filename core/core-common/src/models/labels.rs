@@ -93,21 +93,12 @@ impl ModelIdExtension for Label {
 }
 
 impl Label {
-    /// Key used to distinguish between components in the initialization.
-    /// It is a string, not an enum for making it open for additional changes from different BU.
-    ///
     pub const INIT_KEY: InitializationKey = InitializationKey::new("labels");
 
     /// Save or update a Label.
     ///
     /// It's imperative that you use this method over [`Model::save()`] to
     /// ensure that the information is update correctly in the database.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the local conversation id is not set, the remote
-    /// `label_id` is not set, the local label can not be found or the query
-    /// failed.
     pub async fn save(&mut self, bond: &Bond<'_>) -> Result<(), StashError> {
         if let Some(remote_id) = self.remote_id.clone() {
             if let Some(label) =
@@ -121,12 +112,6 @@ impl Label {
         <Self as Model>::save(self, bond).await
     }
 
-    /// TODO: Document this function.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
-    ///
     pub async fn create<API: ProtonCore>(
         name: String,
         color: String,
@@ -146,12 +131,6 @@ impl Label {
             .into())
     }
 
-    /// Fetches all labels from the API.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed
-    ///
     pub async fn all_labels<API>(api: &API) -> Result<Vec<Label>, LabelError>
     where
         API: ProtonCore,
@@ -159,12 +138,6 @@ impl Label {
         Self::fetch_labels(api, &ALL_LABEL_TYPES).await
     }
 
-    /// Fetches mail labels from the API.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed
-    ///
     pub async fn fetch_mail_labels<API>(api: &API) -> Result<Vec<Label>, LabelError>
     where
         API: ProtonCore,
@@ -172,12 +145,6 @@ impl Label {
         Self::fetch_labels(api, &MAIL_LABEL_TYPES).await
     }
 
-    /// Fetches contact labels from the API.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed
-    ///
     pub async fn fetch_contact_labels<API>(api: &API) -> Result<Vec<Label>, LabelError>
     where
         API: ProtonCore,
@@ -212,12 +179,6 @@ impl Label {
             .collect())
     }
 
-    /// Fetches the given labels from the API.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
-    ///
     pub async fn get_labels_by_ids<API>(
         api: &API,
         ids: Vec<LabelId>,
@@ -234,12 +195,6 @@ impl Label {
             .collect())
     }
 
-    /// Stores given labels in the database.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be written to the database.
-    ///
     pub async fn store_labels(
         tx: &Bond<'_>,
         labels: Vec<Label>,
@@ -254,12 +209,6 @@ impl Label {
         Ok(label_ids)
     }
 
-    /// Function to update the label's expanded state in remote.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the API request failed.
-    ///
     pub async fn patch_expanded<API: ProtonCore>(
         id: LabelId,
         expanded: bool,
@@ -276,12 +225,6 @@ impl Label {
         .map(|r| r.label.into())
     }
 
-    /// Get all labels with given kind
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be read from the database.
-    ///
     pub async fn find_by_kind(kind: LabelType, tether: &Tether) -> Result<Vec<Self>, StashError> {
         Label::find(
             "WHERE label_type = ? ORDER BY display_order ASC",
@@ -298,13 +241,6 @@ impl Label {
         Label::find_local_id_by(tether, "WHERE label_type = ?", params![kind]).await
     }
 
-    /// Get all labels with given kinds
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the data could not be read from the database.
-    ///
-    #[allow(trivial_casts)]
     pub async fn find_by_kinds(
         kinds: &[LabelType],
         tether: &Tether,
@@ -318,36 +254,18 @@ impl Label {
         .await
     }
 
-    /// Get all mail labels
-    ///
     pub async fn all_mail(tether: &Tether) -> Result<Vec<Self>, StashError> {
         Self::find_by_kinds(&MAIL_LABEL_TYPES, tether).await
     }
 
-    /// Get all contact labels
-    ///
     pub async fn all_contact_groups(tether: &Tether) -> Result<Vec<Self>, StashError> {
         Self::find_by_kinds(&CONTACT_LABEL_TYPES, tether).await
     }
 
-    /// Watch a label with the given `local_id` for changes.
-    ///
-    /// When a change occurs a message is produced in the returned receiver.
-    ///
-    /// Returns `None` if the label was not found.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the query failed.
     pub fn watch(stash: &Stash) -> Result<WatcherHandle, StashError> {
         stash.subscribe_to(|sender| Box::new(LabelWatcher { sender }))
     }
 
-    /// Resolve the remote id for a label with `local_id`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the resolution failed.
     pub async fn resolve_remote_label_id(
         local_id: LocalLabelId,
         tether: &Tether,
@@ -359,11 +277,6 @@ impl Label {
         Ok(label_id)
     }
 
-    /// Resolve the local id for a label with `label_id`.
-    ///
-    /// # Errors
-    ///
-    /// Returns error if the resolution failed.
     pub async fn resolve_local_label_id(
         label_id: LabelId,
         tether: &Tether,

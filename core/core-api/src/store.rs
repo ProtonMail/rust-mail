@@ -10,47 +10,24 @@ use tokio::sync::RwLock;
 use crate::auth::{Auth, UserKeySecret};
 use crate::services::proton::{SessionId, UserId};
 
-/// A shared store.
 pub type BoxStore = Box<dyn Store>;
-
-/// A thread-safe, shared store.
 pub type DynStore = Arc<RwLock<Box<dyn Store>>>;
-
-/// The error type returned by the store.
 pub type StoreError = anyhow::Error;
 
-/// The info known about the user's authentication.
 #[derive(Debug, Clone)]
 pub struct AuthInfo {
-    /// The user's ID.
     pub user_id: UserId,
-
-    /// The session ID.
     pub session_id: SessionId,
-
-    /// The 2FA mode.
     pub tfa_mode: TfaMode,
-
-    /// The mailbox password mode.
     pub mbp_mode: MbpMode,
-
-    /// TFA Fido details for a user.
     pub fido_details: Option<fido2::Response>,
 }
 
-/// The data known about the user.
 #[derive(Debug, Clone)]
 pub struct UserData {
-    /// The name of the user.
     pub username: String,
-
-    /// The user's display name.
     pub display_name: String,
-
-    /// The user's primary email address.
     pub primary_addr: String,
-
-    /// The user's key secret.
     pub key_secret: UserKeySecret,
 }
 
@@ -65,12 +42,10 @@ pub struct TfaMode {
 }
 
 impl TfaMode {
-    /// Create a new TFA mode with the given TOTP and FIDO2 settings.
     pub fn new(totp: bool, fido: bool) -> Self {
         Self { totp, fido }
     }
 
-    /// Create a new TFA mode with no TOTP or FIDO2 enabled.
     pub fn none() -> Self {
         Self {
             totp: false,
@@ -98,49 +73,24 @@ impl From<PasswordMode> for MbpMode {
     }
 }
 
-/// Authentication storage abstraction trait in order to store or load auth data.
 #[async_trait]
 pub trait Store: Send + Sync + 'static {
-    /// Set the name or address used to authenticate.
     fn set_name_or_addr(&mut self, name_or_addr: &str);
-
-    /// Get the current auth session data.
     async fn get_auth(&self) -> Auth;
-
-    /// Set the auth session data.
     async fn set_auth(&mut self, auth: Auth) -> Result<(), StoreError>;
-
-    /// Set the auth info.
     async fn set_auth_info(&mut self, info: AuthInfo) -> Result<(), StoreError>;
-
-    /// Set the temporary encrypted username/password.
     async fn set_temp_pass(&mut self, pass: &str) -> Result<(), StoreError>;
-
-    /// Set the user data.
     async fn set_user_data(&mut self, data: UserData) -> Result<(), StoreError>;
-
-    /// Set the key secret.
     async fn set_key_secret(&mut self, secret: UserKeySecret) -> Result<(), StoreError>;
-
-    /// Get the user's key secret.
     async fn expose_key_secret(&self) -> Option<UserKeySecret>;
-
-    /// Clear the temporary password.
     async fn clear_temp_pass(&mut self) -> Result<(), StoreError>;
-
-    /// Clear all session data.
     async fn clear_session(&mut self) -> Result<(), StoreError>;
-
-    /// Clear all account data.
     async fn clear_account(&mut self) -> Result<(), StoreError>;
-
-    /// Get the session ID for the given user id.
     async fn get_session_id(&self, user_id: &UserId) -> Result<Option<SessionId>, StoreError>;
 }
 
 #[async_trait]
 impl<S: ?Sized + Store> Store for Box<S> {
-    /// Set the name or address used to authenticate.
     fn set_name_or_addr(&mut self, name_or_addr: &str) {
         self.deref_mut().set_name_or_addr(name_or_addr);
     }

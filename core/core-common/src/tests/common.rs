@@ -2,7 +2,6 @@
 
 use stash::stash::{Stash, StashConfiguration};
 
-/// Macro wrapping u64 into Option<LocalId> for easier model definition.
 #[macro_export]
 macro_rules! lid {
     ($id:expr) => {{ Some($id.into()) }};
