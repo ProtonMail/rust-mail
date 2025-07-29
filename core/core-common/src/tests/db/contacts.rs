@@ -1,5 +1,3 @@
-#![allow(non_snake_case)]
-
 use crate::datatypes::{ContactSendingPreferences, ContactTypes, Labels};
 use crate::models::{Contact, ContactCard, ContactEmail};
 use crate::tests::common::new_core_test_connection;

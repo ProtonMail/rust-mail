@@ -1,5 +1,3 @@
-#![allow(clippy::module_name_repetitions)]
-
 #[cfg(test)]
 #[path = "tests/subscriber.rs"]
 mod tests;

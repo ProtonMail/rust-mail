@@ -1,5 +1,3 @@
-#![allow(non_snake_case)]
-
 use stash::params;
 use stash::stash::{Bond, Stash, Tether};
 use std::thread::spawn;

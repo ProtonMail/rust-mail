@@ -1,5 +1,3 @@
-#![allow(non_snake_case)]
-
 use crate::datatypes::{AddressKeys, AddressSignedKeyList, AddressStatus, AddressType};
 use crate::models::Address;
 use crate::tests::common::new_core_test_connection;

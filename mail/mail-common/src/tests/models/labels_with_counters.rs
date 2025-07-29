@@ -1,6 +1,3 @@
-#![allow(clippy::module_inception)]
-#![allow(non_snake_case)]
-
 use crate::datatypes::ConversationLabelsCount;
 use crate::datatypes::MessageLabelsCount;
 use crate::models::LabelWithCounters;

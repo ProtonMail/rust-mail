@@ -1,5 +1,3 @@
-#![allow(non_snake_case)]
-
 use super::*;
 use crate::AppError;
 use proton_core_common::datatypes::{AddressKeys, AddressStatus, AddressType};

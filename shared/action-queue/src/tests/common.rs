@@ -1,6 +1,3 @@
-#![allow(non_snake_case)]
-#![allow(clippy::ignored_unit_patterns)]
-
 use crate::action::{Action, ActionId, Error, Handler, WriterGuard, WriterGuardError};
 use crate::queue::ActionRequeueReason;
 use stash::stash::{Bond, StashError};

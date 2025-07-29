@@ -1,3 +1,4 @@
+#![allow(clippy::module_inception)]
 #![allow(clippy::struct_excessive_bools)]
 
 #[cfg(test)]

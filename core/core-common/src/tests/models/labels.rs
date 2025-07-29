@@ -1,6 +1,3 @@
-#![allow(clippy::module_inception)]
-#![allow(non_snake_case)]
-
 use super::*;
 use crate::models::Label;
 use crate::models::ModelExtension as _;

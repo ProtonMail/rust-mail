@@ -1,5 +1,3 @@
-#![allow(non_snake_case)]
-
 use stash::stash::{Stash, StashConfiguration};
 
 #[macro_export]
