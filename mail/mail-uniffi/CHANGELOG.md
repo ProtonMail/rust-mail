@@ -5,7 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [mail-uniffi-v0.110.0] - 2025-07-29
+
+### Features
+
+- [ET-3674] Add change password observability events
+- [ET-2067] Replace `primary_at` with `primary_seq`
+
+### Fixes
+
+- [ET-3324] Do not allow replies with invalid addresses
+- [ET-3932] Handle invalid address on `draft::open`
+- Add format to with_context
+
+
+## [mail-uniffi-v0.109.0] - 2025-07-28
 
 ### Changed
 
@@ -46,6 +60,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-3920] Sync missing dependencies in mail scrollers
 
 
+## [mail-uniffi-v0.105.7] - 2025-07-24
+
+### Fixes
+
+- Marking conversations unread
+- [ET-2992] Open pgp attachments via `get_attachment`
+
+
 ## [mail-uniffi-v0.107.0] - 2025-07-24
 
 ### Features
@@ -68,14 +90,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ET-3706] Prevent duplicate account login
 - Fix implementation of first_graphem_uppercase to support emoji.
 - Fix snapshot tests.
-
-
-## [mail-uniffi-v0.105.7] - 2025-07-24
-
-### Fixes
-
-- Marking conversations unread
-- [ET-2992] Open pgp attachments via `get_attachment`
 
 
 ## [mail-uniffi-v0.105.6] - 2025-07-23
