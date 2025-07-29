@@ -463,7 +463,9 @@ impl Contact {
 
         let remote = Label::resolve_remote_label_id(id, tether)
             .await
-            .with_context(|| "Local contact groups are not yet implemented: Trying to resolve nonexistent remote label for local label {id}")?;
+            .with_context(||
+                format!("Local contact groups are not yet implemented: Trying to resolve nonexistent remote label for local label {id}")
+            )?;
 
         let mut res = ContactEmail::load_inner(
             "SELECT contact_emails.* FROM contact_emails
