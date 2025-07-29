@@ -22,7 +22,7 @@ use core::future::Future;
 use indoc::formatdoc;
 use itertools::Itertools as _;
 use rusqlite::types::FromSql;
-use rusqlite::{Error as SqliteError, Row, Rows, ToSql};
+use rusqlite::{Error as SqliteError, Row, ToSql};
 use serde::de::Error as DeserializationError;
 use serde::ser::Error as SerializationError;
 use std::vec::IntoIter;
@@ -607,26 +607,4 @@ pub trait ModelHooks {
     fn after_save(&mut self, _: &Bond<'_>) -> impl Future<Output = Result<(), StashError>> + Send {
         async { Ok(()) }
     }
-}
-
-/// Converts [`Rows`] into a [`Vec`] of `T` record types.
-///
-/// This function is used to convert the results of a database query into a set
-/// of records. It expects `T` to be a type that implements the [`DbRecord`]
-/// trait and provides a [`from_row`](DbRecord::from_row()) method. This will be
-/// called for each row in the query results to convert the row into a record.
-/// The key point of this function is to provide contextual information in the
-/// form of columns along with the row data.
-///
-/// # Errors
-///
-/// This function will return a [`ConversionError`] if there is a problem
-/// converting the row.
-///
-pub fn from_rows<T: DbRecord>(mut rows: Rows<'_>) -> Result<Vec<T>, ConversionError> {
-    let mut results = vec![];
-    while let Some(row) = rows.next()? {
-        results.push(T::from_row(row)?);
-    }
-    Ok(results)
 }
