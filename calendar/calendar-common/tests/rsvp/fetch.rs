@@ -186,6 +186,42 @@ async fn reminder() {
 
 #[tokio::test]
 #[allow(clippy::redundant_closure_for_method_calls, reason = "false-positive")]
+async fn alias() {
+    let world = world().await;
+    let event = world.event(|event| event.basic());
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_bootstrap(CALENDAR_ID, world.bootstrap())
+        .await;
+
+    world
+        .ctx
+        .mock_web_server
+        .mock_get_calendar_event(EVENT_UID, EVENT_ID, event.clone())
+        .await;
+
+    let actual = RsvpEventId::reminder(EVENT_UID, EVENT_ID)
+        .fetch(
+            &world.sess,
+            &world.pgp,
+            &world.address_keys,
+            &world.cache,
+            &world.contacts,
+            &world.now,
+            "bar+spam@pm.me",
+            Weekday::Monday,
+        )
+        .await
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(RsvpIntent::Reminder, actual.intent);
+}
+
+#[tokio::test]
+#[allow(clippy::redundant_closure_for_method_calls, reason = "false-positive")]
 async fn outdated() {
     const INVITE: &str = indoc! {"
         BEGIN:VCALENDAR
