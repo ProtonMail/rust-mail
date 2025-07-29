@@ -24,7 +24,7 @@ use std::collections::HashSet;
 use std::hash::RandomState;
 use std::ops::Add;
 use std::time::Duration;
-use tracing::{debug, error};
+use tracing::error;
 
 pub(crate) const DEFAULT_LOCK_TIMEOUT: Duration = Duration::from_secs(60);
 
@@ -727,25 +727,17 @@ impl ExecutionGuard {
     }
 }
 
-/// Create the action queue tables.
-///
-/// # Errors
-///
-/// Returns errors if the query or migration failed.
 #[tracing::instrument(name = "Action Table Setup", skip(conn))]
-pub async fn create_tables(conn: &mut Tether) -> Result<(), MigratorError> {
-    static DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/db/migrations");
-    let migrator = proton_sqlite3::Migrator::new();
-    let mut migrations = embedded_migrations(&DIR);
+pub async fn migrate(conn: &mut Tether) -> Result<(), MigratorError> {
+    const TABLE: &str = "action_queue_version";
+    const MIGRATIONS: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/src/db/migrations");
 
-    let version = migrator
-        .migrate(conn, ACTION_VERSION_TABLE_NAME, &mut migrations)
+    proton_sqlite3::Migrator::new(TABLE, embedded_migrations(&MIGRATIONS))
+        .migrate(conn)
         .await?;
-    debug!("Current version={version}");
+
     Ok(())
 }
-
-const ACTION_VERSION_TABLE_NAME: &str = "action_queue_version";
 
 pub struct ActionDependencyKeysTable {}
 

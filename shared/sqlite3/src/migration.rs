@@ -14,7 +14,7 @@ use thiserror::Error;
 use tracing::{Instrument, debug};
 
 #[async_trait::async_trait]
-pub trait Migration: Send + Sync + 'static {
+pub trait Migration: Send + Sync {
     fn name(&self) -> &str;
 
     fn order_number(&self) -> &str {
@@ -34,107 +34,88 @@ pub trait Migration: Send + Sync + 'static {
 pub enum MigratorError {
     #[error("Found invalid version {0}")]
     InvalidVersion(usize),
+
+    #[error("Version mismatch - got {got:?}, expected {expected}")]
+    VersionMismatch { got: Option<usize>, expected: usize },
+
     #[error("Migration error: {0}")]
     Migration(#[from] rusqlite::Error),
+
     #[error("Stash error: {0}")]
     Stash(#[from] StashError),
 }
 
-#[derive(Default)]
-pub struct Migrator {}
+pub struct Migrator {
+    table: String,
+    migrations: Vec<Box<dyn Migration>>,
+}
 
 impl Migrator {
     #[must_use]
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(table: &str, mut migrations: Vec<Box<dyn Migration>>) -> Self {
+        sort_migrations_and_check_for_conflicts(&mut migrations);
+
+        Self {
+            table: table.into(),
+            migrations,
+        }
     }
 
-    /// In order to migrate a set of table, the migrator requires a table name where it will record
-    /// the current version. If this table does not exist, it is assumed that the database is empty
-    /// and needs to be initialized. If this table exists, the migrations are run until the version
-    /// reaches the latest version.
+    /// Migrates database to the newest version.
     ///
-    /// Migration version is determined by the number of migrations present in the `migrations`
-    /// parameter. E.g.:
-    /// ```rust,ignore
-    ///  let migrations  = [
-    ///     Migration_v1,
-    ///     Migration_v2,
-    ///     ...
-    ///     Migration_vN
-    ///   ];
-    /// ```
-    ///
-    /// # Parameters
-    ///
-    /// * `conn`: sqlite connection for the migration
-    /// * `version_table_name`: unique name under which to identify the version data
-    /// * `migrations`: list of migrations to run
-    ///
-    /// # Errors
-    ///
-    /// Return error if the migration fails.
-    ///
-    pub async fn migrate(
-        &self,
-        tether: &mut Tether,
-        version_table_name: &str,
-        migrations: &mut [Box<dyn Migration>],
-    ) -> Result<usize, MigratorError> {
-        sort_migrations_and_check_for_conflicts(migrations);
+    /// See: [`Self::verify()`].
+    pub async fn migrate(&self, tether: &mut Tether) -> Result<usize, MigratorError> {
         tether
             .tx(async |tx| {
-                let expected_version = version_from_migration_list(migrations);
-                // Check if version table exists, if not we are at version 0.
-                let current_version = if let Some(version) =
-                    get_current_table_version(tx, version_table_name).await?
-                {
-                    debug!("Found current version={version}");
-                    if version > expected_version {
-                        return Err(MigratorError::InvalidVersion(version));
-                    }
-                    version
-                } else {
-                    debug!("No version table found, initializing");
-                    create_version_table(tx).await?;
-                    set_version_table_version(tx, version_table_name, 0).await?;
-                    0
-                };
+                let expected_version = get_expected_version(&self.migrations);
 
-                debug!("Running migrations");
-                run_migrations(tx, version_table_name, current_version, migrations).await?;
-                debug!("Migrations complete");
-                let version = version_from_migration_list(migrations);
-                Ok(version)
+                let current_version =
+                    if let Some(version) = get_current_version(tx, &self.table).await? {
+                        debug!("Found current version={version}");
+                        if version > expected_version {
+                            return Err(MigratorError::InvalidVersion(version));
+                        }
+                        version
+                    } else {
+                        debug!("No version table found, initializing");
+                        create_version_table(tx).await?;
+                        set_current_version(tx, &self.table, 0).await?;
+                        0
+                    };
+
+                debug!(?current_version, ?expected_version, "Running migrations");
+                run_migrations(tx, &self.table, current_version, &self.migrations).await?;
+                debug!(?current_version, "Migrations complete");
+
+                Ok(expected_version)
             })
             .await
     }
 }
 
-fn version_from_migration_list(m: &[Box<dyn Migration>]) -> usize {
+fn get_expected_version(m: &[Box<dyn Migration>]) -> usize {
     m.len()
 }
-async fn get_current_table_version(
-    tx: &Bond<'_>,
-    table_name: &str,
-) -> Result<Option<usize>, StashError> {
+
+async fn get_current_version(tx: &Bond<'_>, table_name: &str) -> Result<Option<usize>, StashError> {
     let query = "SELECT COUNT(DISTINCT `name`) AS value FROM sqlite_master WHERE `type`='table' AND name= ?";
+
     let count = tx
         .query_value::<_, u64>(query, params![VERSION_TABLE_NAME])
         .await?;
+
     if count == 0 {
         return Ok(None);
     }
 
-    read_current_table_version(tx, table_name).await.map(Some)
+    read_current_version(tx, table_name).await.map(Some)
 }
 
 const VERSION_TABLE_FIELD_ID: &str = "id";
 const VERSION_TABLE_FIELD_VERSION: &str = "version";
-
 const VERSION_TABLE_NAME: &str = "proton_sqlite3_db_version";
 
-async fn read_current_table_version(tx: &Bond<'_>, id: &str) -> Result<usize, StashError> {
+async fn read_current_version(tx: &Bond<'_>, id: &str) -> Result<usize, StashError> {
     let query = format!(
         "SELECT {VERSION_TABLE_FIELD_VERSION} AS value FROM {VERSION_TABLE_NAME} WHERE {VERSION_TABLE_FIELD_ID}=?"
     );
@@ -167,11 +148,7 @@ async fn create_version_table(tx: &Bond<'_>) -> Result<(), StashError> {
     Ok(())
 }
 
-async fn set_version_table_version(
-    tx: &Bond<'_>,
-    id: &str,
-    version: usize,
-) -> Result<(), StashError> {
+async fn set_current_version(tx: &Bond<'_>, id: &str, version: usize) -> Result<(), StashError> {
     let query = format!(
         "INSERT INTO {VERSION_TABLE_NAME} ({VERSION_TABLE_FIELD_ID}, {VERSION_TABLE_FIELD_VERSION}) VALUES (?,?) \
 ON CONFLICT({VERSION_TABLE_FIELD_ID}) DO UPDATE SET {VERSION_TABLE_FIELD_VERSION}=excluded.{VERSION_TABLE_FIELD_VERSION}"
@@ -193,7 +170,7 @@ async fn run_migrations(
             m.migrate(tx).await?;
             debug!("Migration complete");
             let next_version = i + 1;
-            set_version_table_version(tx, table_name, next_version).await?;
+            set_current_version(tx, table_name, next_version).await?;
             debug!("Version updated to {next_version}");
             Ok::<_, StashError>(())
         }
@@ -212,7 +189,7 @@ async fn run_migrations(
 /// This function sorts by the order number and panics, if there are `0001_a.sql` and `0001_b.sql`. Such a conflict indicates, that the
 /// ordering is undecidable and it's developer's responsibility to rename one of the files.
 ///
-pub fn sort_migrations_and_check_for_conflicts(migrations: &mut [Box<dyn Migration>]) {
+fn sort_migrations_and_check_for_conflicts(migrations: &mut [Box<dyn Migration>]) {
     migrations.sort_by_key(|m| m.order_number().to_string());
 
     for (a, b) in migrations.iter().tuple_windows() {
