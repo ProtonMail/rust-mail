@@ -55,19 +55,12 @@ pub struct MailSession {
 /// Configuration parameters for the [`MailSession`]
 #[derive(uniffi::Record)]
 pub struct MailSessionParams {
-    /// Directory where the session database should be stored.
     pub session_dir: String,
-    /// Directory where the user databases should be stored.
     pub user_dir: String,
-    /// Directory where the mail cache should be stored.
     pub mail_cache_dir: String,
-    /// Size of the mail cache.
     pub mail_cache_size: u64,
-    /// Directory where the logs should be stored.
     pub log_dir: String,
-    /// Whether to enable debug and trace logs.
     pub log_debug: bool,
-    /// API Environment configuration.
     pub api_env_config: Option<ApiConfig>,
 }
 

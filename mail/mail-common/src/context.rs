@@ -234,19 +234,11 @@ impl From<JoinError> for MailContextError {
 pub struct MailContext {
     core_context: Arc<Context>,
     mail_cache_path: PathBuf,
-    /// This will get used in the near future.
     pub attachment_cache_size: u64,
     active_user_contexts: Mutex<HashMap<UserId, Weak<MailUserContext>>>,
 }
 
 impl MailContext {
-    /// Create a new mail context.
-    ///
-    /// Note this function currently also creates a core context.
-    ///
-    /// # Error
-    ///
-    /// Returns error if the context creation failed.
     #[allow(clippy::too_many_arguments)]
     #[tracing::instrument("MailContextNew", skip_all)]
     pub async fn new(
@@ -307,7 +299,6 @@ impl MailContext {
         Ok(ctx)
     }
 
-    /// Creates MailContext instance based on provided core Context.
     pub async fn new_with_core_context(
         core_context: Arc<Context>,
         mail_cache_path: PathBuf,

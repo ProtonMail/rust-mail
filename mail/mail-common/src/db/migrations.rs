@@ -1,4 +1,3 @@
-//! Migrations for the data model.
 use include_dir::{Dir, include_dir};
 use proton_sqlite3::{Migrator, MigratorError, file::embedded_migrations};
 use stash::stash::Stash;

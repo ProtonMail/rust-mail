@@ -37,13 +37,13 @@ async fn create_empty_draft() {
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let params = draft_test_params();
-
     let mut message = draft_message();
-
     let expected_draft_params = expected_create_draft_params();
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft(
         expected_draft_params,
         None,
@@ -52,17 +52,21 @@ async fn create_empty_draft() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     // Add some other label ids to this message to make sure they are skipped.
     message.metadata.label_ids.push(LabelId::starred());
 
     // Draft open always loads message from remote.
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -71,7 +75,6 @@ async fn create_empty_draft() {
     // Load the draft.
     let tether = user_ctx.user_stash().connection();
     let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
-
     let draft_conversation_id = draft.conversation_id(&tether).await.unwrap().unwrap();
 
     // Execute action.
@@ -81,6 +84,7 @@ async fn create_empty_draft() {
         .await
         .unwrap()
         .expect("failed to load message");
+
     assert_eq!(draft_message.remote_id, Some(message.metadata.id));
 
     // Check the draft has the draft label.
@@ -117,6 +121,7 @@ async fn create_empty_draft() {
         conversation.remote_id.unwrap(),
         message.metadata.conversation_id
     );
+
     // Conversation should also have the draft label.
     assert!(
         conversation
@@ -140,9 +145,10 @@ async fn create_empty_draft_and_save_twice() {
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let params = draft_test_params();
 
+    let params = draft_test_params();
     let mut message = draft_message();
+
     message.metadata.label_ids.push(LabelId::drafts());
 
     let new_subject = "My New Subject";
@@ -152,17 +158,21 @@ async fn create_empty_draft_and_save_twice() {
     let new_bcc_list = new_recipient_list_with_single_address("bcc@list.info".to_owned());
 
     let mut updated_message = message.clone();
+
     updated_message.metadata.subject = new_subject.into();
+
     updated_message.metadata.to_list = new_to_list
         .to_message_recipients()
         .into_iter()
         .map_into()
         .collect();
+
     updated_message.metadata.cc_list = new_cc_list
         .to_message_recipients()
         .into_iter()
         .map_into()
         .collect();
+
     updated_message.metadata.bcc_list = new_bcc_list
         .to_message_recipients()
         .into_iter()
@@ -185,9 +195,12 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
     .to_owned();
 
     let expected_draft_params = expected_create_draft_params();
+
     let expected_update_draft_params = {
         let mut params = expected_create_draft_params();
+
         params.subject = new_subject.to_owned();
+
         params.to_list = new_to_list
             .to_message_recipients()
             .into_iter()
@@ -197,6 +210,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
                 group: v.group.into_option(),
             })
             .collect();
+
         params.cc_list = new_cc_list
             .to_message_recipients()
             .into_iter()
@@ -206,6 +220,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
                 group: v.group.into_option(),
             })
             .collect();
+
         params.bcc_list = new_bcc_list
             .to_message_recipients()
             .into_iter()
@@ -215,10 +230,12 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
                 group: v.group.into_option(),
             })
             .collect();
+
         params
     };
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft(
         expected_draft_params,
         None,
@@ -227,6 +244,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     ctx.mock_update_draft(
         updated_message.metadata.id.clone(),
         expected_update_draft_params,
@@ -234,14 +252,18 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     // Draft open always loads message from remote.
     ctx.mock_get_message(&updated_message.metadata.id, updated_message.clone())
         .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -256,10 +278,12 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
     draft.to_list = new_to_list.clone();
     draft.cc_list = new_cc_list.clone();
     draft.bcc_list = new_bcc_list.clone();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
         .unwrap();
+
     user_ctx.execute_all_send_actions().await.unwrap();
 
     let tether = user_ctx.user_stash().connection();
@@ -279,6 +303,7 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
         .await
         .unwrap()
         .unwrap();
+
     assert_eq!(conv.subject, new_subject);
 }
 
@@ -290,6 +315,7 @@ async fn create_draft_reply_without_body_is_error() {
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let params = draft_test_params();
 
     // Create one message we can reply to.
@@ -298,16 +324,18 @@ async fn create_draft_reply_without_body_is_error() {
     remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
 
     ctx.setup_user(params.clone()).await;
+
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
+
     let (mut existing_message, _, _) = Message::from_api_data(remote_existing_message, &tether)
         .await
         .unwrap();
+
     tether
         .tx(async |tx| existing_message.save(tx).await)
         .await
         .unwrap();
-    let existing_message = existing_message;
 
     ctx.catch_all().await;
 
@@ -337,26 +365,30 @@ async fn create_draft_reply_should_fail_for_drafts() {
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let params = draft_test_params();
 
     // Create one message we can reply to.
     let mut remote_existing_message = message_body_test_message_simple();
     remote_existing_message.metadata.id = "Fancy Remote Id".into();
+
     // is draft checks whether received or sent flags are present
     // set to empty to consider it as a draft.
     remote_existing_message.metadata.flags = MessageFlags::empty();
 
     ctx.setup_user(params.clone()).await;
+
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
+
     let (mut existing_message, _, _) = Message::from_api_data(remote_existing_message, &tether)
         .await
         .unwrap();
+
     tether
         .tx(async |tx| existing_message.save(tx).await)
         .await
         .unwrap();
-    let existing_message = existing_message;
 
     ctx.catch_all().await;
 
@@ -389,17 +421,22 @@ async fn metadata_is_create_for_existing_not_opened_draft() {
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let params = draft_test_params();
 
+    let params = draft_test_params();
     let mut message = draft_message();
+
     message.metadata.label_ids.push(LabelId::drafts());
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_get_message_with_expected(&message.metadata.id, message.clone(), 2)
         .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
+
     let mut message = Message::from_api_metadata(message.metadata, &tether)
         .await
         .unwrap();
@@ -421,7 +458,9 @@ async fn metadata_is_create_for_existing_not_opened_draft() {
         .await
         .unwrap()
         .unwrap();
+
     assert_eq!(draft.metadata_id, draft_by_message_id.id.unwrap());
+
     drop(draft);
 
     // Opening this draft again should not create new metadata;
@@ -482,14 +521,16 @@ async fn draft_save_failure_creates_send_result_with_correct_origin() {
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let params = draft_test_params();
 
+    let params = draft_test_params();
     let mut message = message_body_test_message_simple();
+
     message.metadata.label_ids.push(LabelId::drafts());
 
     let expected_draft_params = expected_create_draft_params();
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft_failure(
         expected_draft_params,
         None,
@@ -498,11 +539,14 @@ async fn draft_save_failure_creates_send_result_with_correct_origin() {
         CoreBundle::AppVersionInvalid as u32,
     )
     .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -510,6 +554,7 @@ async fn draft_save_failure_creates_send_result_with_correct_origin() {
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap_err();
+
     let tether = user_ctx.user_stash().connection();
 
     let send_result =
@@ -517,6 +562,7 @@ async fn draft_save_failure_creates_send_result_with_correct_origin() {
             .await
             .unwrap()
             .unwrap();
+
     assert!(!send_result.is_success());
     assert_eq!(send_result.origin, DraftSendResultOrigin::Save);
 }
@@ -559,12 +605,14 @@ fn compare_inline_attachment(attachment: &Attachment, inline_attachment: Message
         inline_attachment.headers.content_id.map(ContentId::from)
     );
 }
+
 async fn create_draft_reply_impl(
     mime_type: MimeType,
     reply_mode: ReplyMode,
 ) -> DecryptedMessageBody {
     create_draft_reply_with_override_impl(mime_type, reply_mode, None, None).await
 }
+
 async fn create_draft_reply_with_override(
     mime_type: MimeType,
     reply_mode: ReplyMode,
@@ -602,36 +650,40 @@ async fn create_draft_reply_with_override_impl(
     }
 
     remote_existing_message.body.attachments.reverse();
-
     ctx.setup_user(params.clone()).await;
-    let user_ctx = ctx.mail_user_context().await;
 
+    let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
+
     let (mut existing_message, _, _) =
         Message::from_api_data(remote_existing_message.clone(), &tether)
             .await
             .unwrap();
+
     tether
         .tx(async |tx| existing_message.save(tx).await)
         .await
         .unwrap();
-    let existing_message = existing_message;
 
     let mut expected_draft_params =
         expected_create_reply_draft_params(&existing_message, mime_type, reply_mode);
+
     // override alias if present
     if let Some(alias_override) = &alias_override {
         expected_draft_params.sender.address = alias_override.clone().into();
     }
 
     let mut message = draft_message();
+
     message.body.attachments = remote_existing_message.body.attachments.clone();
+
     if reply_mode != ReplyMode::Forward {
         message
             .body
             .attachments
             .retain(|a| a.disposition == Disposition::Inline)
     }
+
     // Inherited attachments get new remote ids
     for attachment in &mut message.body.attachments {
         attachment.id = AttachmentId::from(Uuid::new_v4().to_string());
@@ -651,11 +703,13 @@ async fn create_draft_reply_with_override_impl(
             })
             .map(|a| (a.id.clone(), a.key_packets.clone())),
     );
+
     ctx.mock_get_message(
         &remote_existing_message.metadata.id,
         remote_existing_message.clone(),
     )
     .await;
+
     ctx.mock_create_draft(
         expected_draft_params,
         Some(DraftAction::from(reply_mode)),
@@ -664,14 +718,17 @@ async fn create_draft_reply_with_override_impl(
         key_packets,
     )
     .await;
+
     // Decrypted message downloads attachments.
     for attachment in &message.body.attachments {
         ctx.mock_maybe_get_attachment_data(attachment.id.clone(), vec![])
             .await;
     }
+
     // Opening a draft always syncs the message.
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
+
     ctx.catch_all().await;
 
     // Get the message body - required to reply to draft.
@@ -693,6 +750,7 @@ async fn create_draft_reply_with_override_impl(
                         .await
                         .unwrap()
                         .unwrap();
+
                 Attachment::store_in_cache(
                     &user_ctx,
                     &attachment.name,
@@ -718,6 +776,7 @@ async fn create_draft_reply_with_override_impl(
     )
     .await
     .unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -727,7 +786,6 @@ async fn create_draft_reply_with_override_impl(
     user_ctx.execute_all_send_actions().await.unwrap();
 
     let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
-
     let draft_conversation_id = draft.conversation_id(&tether).await.unwrap().unwrap();
 
     // Load the draft.
@@ -809,13 +867,13 @@ async fn open_draft_sync_status_success() {
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let params = draft_test_params();
-
     let message = draft_message();
-
     let expected_draft_params = expected_create_draft_params();
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft(
         expected_draft_params,
         None,
@@ -824,14 +882,18 @@ async fn open_draft_sync_status_success() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     // Draft open always loads message from remote.
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -846,6 +908,7 @@ async fn open_draft_sync_status_success() {
 
     // Opening this draft should work;
     let (_, sync_status) = Draft::open(&user_ctx, draft_message_id).await.unwrap();
+
     assert_eq!(sync_status, DraftSyncStatus::Synced);
 }
 
@@ -860,14 +923,16 @@ async fn open_draft_sync_status_cached() {
         UserId::from(TEST_USER_ID),
     )
     .await;
-    let params = draft_test_params();
 
+    let params = draft_test_params();
     let mut message = draft_message();
+
     message.metadata.label_ids.push(LabelId::drafts());
 
     let expected_draft_params = expected_create_draft_params();
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft(
         expected_draft_params,
         None,
@@ -876,6 +941,7 @@ async fn open_draft_sync_status_cached() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     // Draft open always loads message from remote.
     ctx.mock_get_message_failure(
         &message.metadata.id,
@@ -887,11 +953,14 @@ async fn open_draft_sync_status_cached() {
         },
     )
     .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -906,6 +975,7 @@ async fn open_draft_sync_status_cached() {
 
     // Opening this draft should work;
     let (_, sync_status) = Draft::open(&user_ctx, draft_message_id).await.unwrap();
+
     assert_eq!(sync_status, DraftSyncStatus::Cached);
 }
 
@@ -920,17 +990,19 @@ async fn open_new_draft_which_was_not_saved_on_server_should_not_report_cached_s
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let params = draft_test_params();
-
     let mut message = message_body_test_message_simple();
-    message.metadata.label_ids.push(LabelId::drafts());
 
+    message.metadata.label_ids.push(LabelId::drafts());
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -942,6 +1014,7 @@ async fn open_new_draft_which_was_not_saved_on_server_should_not_report_cached_s
 
     // Opening this draft should work;
     let (_, sync_status) = Draft::open(&user_ctx, draft_message_id).await.unwrap();
+
     assert_eq!(sync_status, DraftSyncStatus::Synced);
 }
 
@@ -955,13 +1028,13 @@ async fn new_draft_conversation_remote_id_updated_externally() {
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let params = draft_test_params();
-
     let mut message = draft_message();
-
     let expected_draft_params = expected_create_draft_params();
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft(
         expected_draft_params,
         None,
@@ -970,14 +1043,16 @@ async fn new_draft_conversation_remote_id_updated_externally() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     // Add some other label ids to this message to make sure they are skipped.
     message.metadata.label_ids.push(LabelId::starred());
-
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -986,7 +1061,6 @@ async fn new_draft_conversation_remote_id_updated_externally() {
     // Load the draft.
     let mut tether = user_ctx.user_stash().connection();
     let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
-
     let draft_conversation_id = draft.conversation_id(&tether).await.unwrap().unwrap();
 
     // Simulate the new conversation being created via other means.
@@ -994,7 +1068,9 @@ async fn new_draft_conversation_remote_id_updated_externally() {
         .await
         .unwrap()
         .unwrap();
+
     assert!(fetched_conv.remote_id.is_none());
+
     fetched_conv.remote_id = Some(message.metadata.conversation_id.clone());
     fetched_conv.local_id = None;
 
@@ -1020,11 +1096,13 @@ async fn new_draft_conversation_remote_id_updated_externally() {
             .unwrap()
             .is_some()
     );
+
     // Local conversation id should have been assigned with the existing message.
     assert_eq!(
         draft_message.local_conversation_id.unwrap(),
         draft_conversation_id,
     );
+
     assert_eq!(
         draft.conversation_id(&tether).await.unwrap().unwrap(),
         draft_conversation_id
@@ -1039,15 +1117,16 @@ async fn already_sent_error_move_draft_to_sent_and_schedules_rollback() {
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let params = draft_test_params();
-
     let message = draft_message();
-
     let expected_draft_params = expected_create_draft_params();
     let mut updated_draft_params = expected_draft_params.clone();
+
     updated_draft_params.subject = "Modified".to_string();
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft(
         expected_draft_params,
         None,
@@ -1056,6 +1135,7 @@ async fn already_sent_error_move_draft_to_sent_and_schedules_rollback() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     ctx.mock_update_draft_failure(
         message.metadata.id.clone(),
         updated_draft_params,
@@ -1067,15 +1147,19 @@ async fn already_sent_error_move_draft_to_sent_and_schedules_rollback() {
         },
     )
     .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
         .unwrap();
+
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
@@ -1084,28 +1168,33 @@ async fn already_sent_error_move_draft_to_sent_and_schedules_rollback() {
     let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
 
     draft.subject = "Modified".to_owned();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
         .unwrap();
 
     let err = user_ctx.execute_all_send_actions().await.unwrap_err();
+
     let QueuedError::Action(err, _) = err else {
         panic!("unexpected error")
     };
+
     let err = err
         .as_action_error::<proton_mail_common::actions::draft::Save>()
         .unwrap();
+
     assert!(matches!(
         err,
         ActionError::Action(MailContextError::Draft(Error::Save(SaveError::AlreadySent)))
     ));
+
     let draft_message = Message::load(draft_message_id, &tether)
         .await
         .unwrap()
         .expect("failed to load message");
-    assert_eq!(draft_message.remote_id, Some(message.metadata.id.clone()));
 
+    assert_eq!(draft_message.remote_id, Some(message.metadata.id.clone()));
     assert!(!draft_message.label_ids.contains(&LabelId::drafts()));
     assert!(!draft_message.label_ids.contains(&LabelId::all_drafts()));
     assert!(draft_message.label_ids.contains(&LabelId::sent()));
@@ -1115,6 +1204,7 @@ async fn already_sent_error_move_draft_to_sent_and_schedules_rollback() {
         .await
         .unwrap()
         .unwrap();
+
     assert_eq!(rollback_item.item_type, RollbackItemType::Message);
 }
 
@@ -1128,10 +1218,13 @@ async fn attach_public_key_empty_draft() {
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let mut params = draft_test_params();
+
     params.mail_settings.as_mut().unwrap().attach_public_key = true;
     ctx.setup_user(params.clone()).await;
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
     let tether = user_ctx.user_stash().connection();
 
@@ -1142,6 +1235,7 @@ async fn attach_public_key_empty_draft() {
         DraftAttachmentMetadata::attachment_for_draft(draft.metadata_id, &tether)
             .await
             .unwrap();
+
     assert_eq!(draft_attachments.len(), 1);
     assert!(draft_attachments[0].is_public_key_attachment());
     assert_eq!(
@@ -1158,17 +1252,20 @@ async fn attach_public_key_reply_draft() {
             DraftAttachmentMetadata::attachment_for_draft(draft.metadata_id, tether)
                 .await
                 .unwrap();
+
         assert_eq!(draft_attachments.len(), 1);
         assert!(draft_attachments[0].is_public_key_attachment());
         assert_eq!(
             draft_attachments[0].disposition,
             Disposition::Attachment.into()
         );
+
         let attachment_metadata =
             DraftAttachmentMetadata::find_by_id(draft_attachments[0].id(), tether)
                 .await
                 .unwrap()
                 .unwrap();
+
         // Upload state should be pending since this was created.
         assert_eq!(
             attachment_metadata.state(),
@@ -1188,17 +1285,20 @@ async fn attach_public_key_reply_draft_does_not_duplicate_if_already_there() {
             DraftAttachmentMetadata::attachment_for_draft(draft.metadata_id, tether)
                 .await
                 .unwrap();
+
         assert_eq!(draft_attachments.len(), 1);
         assert!(draft_attachments[0].is_public_key_attachment());
         assert_eq!(
             draft_attachments[0].disposition,
             Disposition::Attachment.into()
         );
+
         let attachment_metadata =
             DraftAttachmentMetadata::find_by_id(draft_attachments[0].id(), tether)
                 .await
                 .unwrap()
                 .unwrap();
+
         // Upload state should be uploaded since it already exists.
         assert_eq!(
             attachment_metadata.state(),
@@ -1217,13 +1317,13 @@ async fn open_draft_resets_password() {
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let params = draft_test_params();
-
     let mut message = draft_message();
-
     let expected_draft_params = expected_create_draft_params();
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft(
         expected_draft_params,
         None,
@@ -1232,21 +1332,26 @@ async fn open_draft_resets_password() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     // Add some other label ids to this message to make sure they are skipped.
     message.metadata.label_ids.push(LabelId::starred());
 
     // Draft open always loads message from remote.
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
+
     draft
         .set_password(&user_ctx, "foo_bar_and_some", Some("foo".to_string()))
         .await
         .unwrap();
+
     draft
         .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
         .await
@@ -1255,11 +1360,13 @@ async fn open_draft_resets_password() {
     // Load the draft.
     let tether = user_ctx.user_stash().connection();
     let draft_message_id = draft.message_id(&tether).await.unwrap().unwrap();
+
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();
 
     // Opening this draft should work;
     let (draft, status) = Draft::open(&user_ctx, draft_message_id).await.unwrap();
+
     assert_eq!(status, DraftSyncStatus::Synced);
     assert!(!draft.is_password_protected(&tether).await.unwrap());
 
@@ -1280,35 +1387,39 @@ async fn create_draft_reply_with_invalid_address_produces_address_validation_err
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let mut params = draft_test_params_with_mime_type(MimeType::TextHtml);
     params.addresses[0].status = AddressStatus::Disabled;
 
     // Create one message we can reply to.
     let mut remote_existing_message = draft_message_with_attachments();
+
     remote_existing_message.metadata.sender.address = "me@proton.me".into();
     remote_existing_message.body.reply_to.address = "me@proton.me".into();
     remote_existing_message.metadata.id = "FancyRemoteId".into();
     remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
 
     ctx.setup_user(params.clone()).await;
-    let user_ctx = ctx.mail_user_context().await;
 
+    let user_ctx = ctx.mail_user_context().await;
     let mut tether = user_ctx.user_stash().connection();
+
     let (mut existing_message, _, _) =
         Message::from_api_data(remote_existing_message.clone(), &tether)
             .await
             .unwrap();
+
     tether
         .tx(async |tx| existing_message.save(tx).await)
         .await
         .unwrap();
-    let existing_message = existing_message;
 
     ctx.mock_get_message(
         &remote_existing_message.metadata.id,
         remote_existing_message.clone(),
     )
     .await;
+
     ctx.catch_all().await;
 
     // Get the message body - required to reply to draft.
@@ -1333,6 +1444,7 @@ async fn create_draft_reply_with_invalid_address_produces_address_validation_err
     .unwrap();
 
     assert_eq!(draft.address_id, params.addresses[1].id);
+
     let validation_result = draft.address_validation_result.take().unwrap();
 
     assert_eq!(validation_result.email, params.addresses[0].email);
@@ -1352,12 +1464,13 @@ async fn open_draft_catches_invalid_address() {
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let params = draft_test_params();
     let message = draft_message();
-
     let expected_draft_params = expected_create_draft_params();
 
     ctx.setup_user(params.clone()).await;
+
     ctx.mock_create_draft(
         expected_draft_params,
         None,
@@ -1366,10 +1479,13 @@ async fn open_draft_catches_invalid_address() {
         DraftAttachmentKeyPackets::new(),
     )
     .await;
+
     // Draft open always loads message from remote.
     ctx.mock_get_message(&message.metadata.id, message.clone())
         .await;
+
     ctx.catch_all().await;
+
     let user_ctx = ctx.mail_user_context().await;
 
     // Create draft.
@@ -1385,7 +1501,9 @@ async fn open_draft_catches_invalid_address() {
         .await
         .unwrap()
         .unwrap();
+
     address.status = AddressStatus::Disabled.into();
+
     tether.tx(async |tx| address.save(tx).await).await.unwrap();
 
     // Load the draft.
@@ -1393,9 +1511,12 @@ async fn open_draft_catches_invalid_address() {
 
     // Opening this draft again should trigger the address change invalidation
     let (draft, sync_status) = Draft::open(&user_ctx, draft_message_id).await.unwrap();
+
     assert_eq!(sync_status, DraftSyncStatus::Synced);
     assert_ne!(draft.address_id, address.remote_id.unwrap());
+
     let validation_result = draft.address_validation_result.unwrap();
+
     assert_eq!(validation_result.email, address.email);
     assert_eq!(
         validation_result.error,
@@ -1414,6 +1535,7 @@ async fn prepare_draft_reply_attach_public_key(
         UserId::from(TEST_USER_ID),
     )
     .await;
+
     let mut params = draft_test_params();
     params.mail_settings.as_mut().unwrap().attach_public_key = true;
 
@@ -1421,10 +1543,10 @@ async fn prepare_draft_reply_attach_public_key(
 
     // Create one message we can reply to.
     let mut remote_existing_message = draft_message();
+
     remote_existing_message.metadata.sender.address = "me@proton.me".into();
     remote_existing_message.metadata.id = "FancyRemoteId".into();
     remote_existing_message.metadata.flags |= MessageFlags::RECEIVED;
-
     remote_existing_message.body.attachments.reverse();
 
     let user_ctx = ctx.mail_user_context().await;
@@ -1434,10 +1556,13 @@ async fn prepare_draft_reply_attach_public_key(
         let addresses = Address::find("ORDER BY display_order ASC LIMIT 1", vec![], &tether)
             .await
             .unwrap();
+
         let address = addresses.first().unwrap();
+
         let public_key = Attachment::gen_public_key(&user_ctx, address, &tether)
             .await
             .unwrap();
+
         remote_existing_message
             .body
             .attachments
@@ -1464,20 +1589,23 @@ async fn prepare_draft_reply_attach_public_key(
         Message::from_api_data(remote_existing_message.clone(), &tether)
             .await
             .unwrap();
+
     tether
         .tx(async |tx| existing_message.save(tx).await)
         .await
         .unwrap();
-    let existing_message = existing_message;
 
     let mut message = draft_message();
+
     message.body.attachments = remote_existing_message.body.attachments.clone();
+
     if reply_mode != ReplyMode::Forward {
         message
             .body
             .attachments
             .retain(|a| a.disposition == Disposition::Inline)
     }
+
     // Inherited attachments get new remote ids
     for attachment in &mut message.body.attachments {
         attachment.id = AttachmentId::from(Uuid::new_v4().to_string());
@@ -1488,11 +1616,13 @@ async fn prepare_draft_reply_attach_public_key(
         remote_existing_message.clone(),
     )
     .await;
+
     // Decrypted message downloads attachments.
     for attachment in &message.body.attachments {
         ctx.mock_maybe_get_attachment_data(attachment.id.clone(), vec![])
             .await;
     }
+
     ctx.catch_all().await;
 
     // Get the message body - required to reply to draft.
@@ -1514,6 +1644,7 @@ async fn prepare_draft_reply_attach_public_key(
                         .await
                         .unwrap()
                         .unwrap();
+
                 Attachment::store_in_cache(
                     &user_ctx,
                     &attachment.name,

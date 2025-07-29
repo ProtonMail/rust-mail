@@ -238,14 +238,8 @@ impl CoreSessionState {
     }
 }
 
-/// Result for core operations.
 pub type CoreContextResult<T> = Result<T, CoreContextError>;
 
-/// Context for core operations.
-///
-/// Acronyms used in the fields:
-/// - `db`: Database
-/// - `hv`: Human Verification
 #[allow(dead_code)]
 pub struct Context {
     this: Weak<Self>,
@@ -270,30 +264,12 @@ pub struct Context {
 const SESSION_OBSERVER_BROADCAST_CAPACITY: usize = 8;
 
 impl Context {
-    /// Create a new context by specifying the `account_db_path` where the account database will be created,
-    /// an `user_db_path` for user databases, a`key_chain` implementation and a list of `initializers`
-    /// for the user database.
-    ///
-    /// # Params
-    /// * `account_db_path`: Path where the account db will be written.
-    /// * `user_db_path`: Path where each user db will be written.
-    /// * `key_chain`: Implementation of a keychain store.
-    /// * `initializers`: List of user database initializers that should be called.
-    /// * `api_config`: Configuration for any constructed API sessions.
-    /// * `hv_notifier`: Optional notifier to handle human verification challenges.
-    /// * `device_info_provider`: Optional provider to handle device info.
-    /// * `cache_path`: Cache path for cached data.
-    /// * `connection_pool_size`: Maximum size of DB connection pool for the account DB. If `None`, the default value is used.
-    ///
-    /// # Errors
-    /// Returns an error if the context failed to initialize correctly.
-    ///
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
         account_db_path: impl Into<PathBuf>,
         user_db_path: impl Into<PathBuf>,
         key_chain: Arc<dyn KeyChain>,
-        initializers: impl IntoIterator<Item = Box<dyn UserDatabaseInitializer>>,
+        initializers: Vec<Box<dyn UserDatabaseInitializer>>,
         api_config: ApiConfig,
         hv_notifier: Option<DynChallengeNotifier>,
         device_info_provider: Option<DynDeviceInfoProvider>,
@@ -302,7 +278,6 @@ impl Context {
         log_service: LogService,
         event_poll_mode: EventPollMode,
     ) -> CoreContextResult<Arc<Self>> {
-        let initializers = initializers.into_iter().collect::<Vec<_>>();
         let account_db_path = account_db_path.into();
         let user_db_path = user_db_path.into();
         std::fs::create_dir_all(&account_db_path)?;
@@ -357,14 +332,11 @@ impl Context {
         Ok(ctx)
     }
 
-    /// Get the current Arc instance for this context.
-    ///
     #[must_use]
     pub fn as_arc(&self) -> Arc<Self> {
         self.this.upgrade().expect("Should never fail")
     }
 
-    /// Get a weak reference to this context.
     #[must_use]
     pub fn as_weak(&self) -> Weak<Self> {
         Weak::clone(&self.this)
@@ -838,20 +810,14 @@ impl Context {
         Ok(StoredDevicePublicKey::from(public_key))
     }
 
-    /// Interact with `KeyChain` to store a secret
-    ///
     pub fn store_secret<S: StoreInKeyChain>(&self, secret: S) -> Result<(), KeyChainError> {
         self.key_chain.store::<S>(secret)
     }
 
-    /// Interact with `KeyChain` to load a secret
-    ///
     pub fn load_secret<S: StoreInKeyChain>(&self) -> Result<Option<S>, KeyChainError> {
         self.key_chain.load::<S>()
     }
 
-    /// Interact with `KeyChain` to delete a secret
-    ///
     pub fn delete_secret<S: StoreInKeyChain>(&self) -> Result<(), KeyChainError> {
         self.key_chain.delete::<S>()
     }
@@ -860,7 +826,6 @@ impl Context {
         get_user_db_path(&self.user_db_path, user_id)
     }
 
-    /// Initializes a new API session, optionally pre-configured to use a specific core session.
     pub async fn new_api_session(
         &self,
         session: Option<&CoreSession>,

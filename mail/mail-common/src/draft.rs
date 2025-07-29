@@ -1847,8 +1847,6 @@ impl Draft {
     }
 }
 
-/// Utility type to disconnect queueing of the action from the [`Draft`] type in multithreaded
-/// context.
 pub struct DraftSaveActionQueuer {
     id: MetadataId,
     address_id: AddressId,
@@ -1864,7 +1862,6 @@ impl DraftSaveActionQueuer {
         }
     }
 
-    /// Consume and queue this action.
     #[tracing::instrument(name = "draft::save", skip_all)]
     pub async fn queue(
         self,
@@ -1893,6 +1890,7 @@ impl DraftSaveActionQueuer {
             uploading_attachment_ids.clone(),
         )
         .await?;
+
         // Pending attachments require a draft save first so that we can get a remote id to
         // upload the message.
         if !pending_attachment_ids.is_empty() {
@@ -1916,6 +1914,7 @@ impl DraftSaveActionQueuer {
                     .await?;
                 uploading_attachment_ids.push(output.id);
             }
+
             // Schedule another save to include the newly scheduled attachments.
             Ok(queue_or_replace_draft_save(
                 queue,
@@ -1932,8 +1931,6 @@ impl DraftSaveActionQueuer {
     }
 }
 
-/// Utility type to disconnect queueing of the action from the [`Draft`] type in multithreaded
-/// context.
 pub struct DraftSendActionQueuer {
     id: MetadataId,
     save_action: DraftSaveActionQueuer,
@@ -1949,7 +1946,6 @@ impl DraftSendActionQueuer {
         }
     }
 
-    /// Consume and queue this action.
     #[tracing::instrument(name = "draft::send", skip_all)]
     pub async fn queue(
         self,
@@ -1957,19 +1953,18 @@ impl DraftSendActionQueuer {
         tether: &Tether,
     ) -> Result<QueuedActionOutput<draft::Send>, MailContextError> {
         let save_output = self.save_action.queue(queue, tether).await?;
-        let send_metadata = MetadataBuilder::new()
+
+        let metadata = MetadataBuilder::new()
             .with_resource(&self.id)
             .expect("This should never fail")
-            .with_dependency(save_output.id)
-            .build();
+            .with_dependency(save_output.id);
+
         Ok(queue
-            .queue_action_with_metadata(self.send_action, send_metadata)
+            .queue_action_with_metadata(self.send_action, metadata.build())
             .await?)
     }
 }
 
-/// Utility type to disconnect queueing of the action from the [`Draft`] type in multithreaded
-/// context.
 pub struct DraftDiscardActionQueuer {
     id: MetadataId,
     action: Discard,
@@ -1980,7 +1975,6 @@ impl DraftDiscardActionQueuer {
         Self { id, action }
     }
 
-    /// Consume and queue this action.
     #[tracing::instrument(name = "draft::discard", skip_all)]
     pub async fn queue(
         self,
@@ -2027,7 +2021,6 @@ impl DraftAttachmentUploadQueuer {
         }
     }
 
-    /// Consume and queue this action.
     #[tracing::instrument(name = "draft::attachment_upload", skip_all)]
     pub async fn queue(
         self,
@@ -2054,6 +2047,7 @@ impl DraftAttachmentUploadQueuer {
                 // we create a new one ourselves.
                 last_draft_save_action_id =
                     DraftMetadata::last_save_action_id(self.id, tether).await?;
+
                 if last_draft_save_action_id.is_none() {
                     last_draft_save_action_id =
                         Some(self.save_action.queue(queue, tether).await?.id)
@@ -2064,6 +2058,7 @@ impl DraftAttachmentUploadQueuer {
         let mut metadata = MetadataBuilder::new()
             .with_resource(&self.id)
             .expect("This should never fail");
+
         if let Some(last_draft_save_action_id) = last_draft_save_action_id {
             metadata = metadata.with_dependency(last_draft_save_action_id)
         }
@@ -2110,7 +2105,6 @@ enum AttachmentRemovalId {
     Cid(ContentId),
 }
 
-/// Utility type to wrap the queueing of attachment removal.
 pub struct DraftAttachmentRemovalQueuer {
     id: MetadataId,
     attachment_id: AttachmentRemovalId,
@@ -2121,7 +2115,6 @@ impl DraftAttachmentRemovalQueuer {
         Self { id, attachment_id }
     }
 
-    /// Consume and queue this action.
     #[tracing::instrument(name = "draft::attachment_remove", skip_all)]
     pub async fn queue(
         self,
@@ -2154,6 +2147,7 @@ impl DraftAttachmentRemovalQueuer {
         let mut metadata = MetadataBuilder::new()
             .with_resource(&self.id)
             .expect("This should never fail");
+
         // The removal action can only run when the current action completes.
         if let Some(action_id) = attachment_metadata.action_id {
             // Try to cancel the existing action if it hasn't run yet.
@@ -2194,13 +2188,15 @@ async fn queue_or_replace_draft_save(
     other_direct_dependencies: impl IntoIterator<Item = ActionId>,
     other_sequential_dependencies: impl IntoIterator<Item = ActionId>,
 ) -> Result<QueuedActionOutput<Save>, ActionError<Save>> {
-    let mut metadata_builder = MetadataBuilder::new()
+    let mut metadata = MetadataBuilder::new()
         .with_resource(&metadata_id)
         .expect("This should never fail");
+
     if let Some(action_id) = last_draft_save_action_id {
-        metadata_builder = metadata_builder.with_dependency(action_id);
+        metadata = metadata.with_dependency(action_id);
     }
-    let metadata = metadata_builder
+
+    let metadata = metadata
         .with_dependencies(other_direct_dependencies)
         .with_sequential_dependencies(other_sequential_dependencies)
         .build();
@@ -2214,6 +2210,7 @@ async fn queue_or_replace_draft_save(
             .await
         {
             Ok(v) => Ok(v),
+
             //TODO: More elegant solution
             // It is possible under certain circumstances to issue a replace
             // that can end of up in a cyclic dependency. E.g: Save(A) -> Upload Attachment (B) ->
@@ -2225,6 +2222,7 @@ async fn queue_or_replace_draft_save(
                     .queue_action_with_metadata(save_action, metadata)
                     .await
             }
+
             Err(e) => Err(e),
         }
     } else {
