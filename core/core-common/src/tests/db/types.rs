@@ -16,7 +16,7 @@ impl Default for CoreAccount {
             primary_addr: Option::default(),
             second_factor_mode: None,
             password_mode: None,
-            primary_at: None,
+            primary_seq: 0,
             is_ready: false,
         }
     }

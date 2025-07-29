@@ -581,7 +581,7 @@ impl Context {
     /// Returns an error if the database operation fails.
     pub async fn get_primary_account(&self) -> CoreContextResult<Option<CoreAccount>> {
         let tether = self.account_stash().connection();
-        for account in CoreAccount::by_primary_at(&tether).await? {
+        for account in CoreAccount::by_primary_seq(&tether).await? {
             let Some(state) = self.get_account_state(account.remote_id.clone()).await? else {
                 continue;
             };
@@ -601,12 +601,16 @@ impl Context {
     /// Returns an error if the account is not found.
     pub async fn set_primary_account(&self, user_id: UserId) -> CoreContextResult<()> {
         let mut tether = self.account_stash().connection();
-        let mut account = CoreAccount::find_by_id(user_id, &tether)
-            .await?
-            .ok_or(CoreContextError::Other(anyhow!("account not found")))?
-            .with_primary_now();
 
-        tether.tx(async |tx| account.save(tx).await).await?;
+        let seq_max = CoreAccount::primary_seq_max(&tether).await?;
+
+        let account = CoreAccount::find_by_id(user_id.clone(), &tether)
+            .await?
+            .ok_or(CoreContextError::AccountMissing(user_id))?;
+
+        tether
+            .tx(async |tx| account.with_primary_seq(seq_max + 1).save(tx).await)
+            .await?;
 
         Ok(())
     }
