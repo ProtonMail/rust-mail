@@ -1,3 +1,4 @@
+use crate::Origin;
 use crate::db::account::{CoreAccount, CoreSession};
 use crate::event_loop::EventPollMode;
 use crate::events::CoreEvent;
@@ -189,6 +190,7 @@ impl TestContext {
 
         // Create core test context
         let context = Context::new(
+            Origin::App,
             tmp_dir.path(),
             tmp_dir.path(),
             keychain.clone(),
@@ -197,7 +199,6 @@ impl TestContext {
             None,
             None,
             tmp_dir.path().join("core-cache"),
-            None,
             LogService::new(log_config),
             EventPollMode::Manual,
         )

@@ -1,9 +1,7 @@
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-
 use crate::models::default_location::IncomingDefaultLocation;
 use crate::models::{LabelWithCounters, MailSettings, StoreLabelCounters};
 use crate::{MailContextError, MailContextResult, MailUserContext};
+use anyhow::anyhow;
 use futures::try_join;
 use proton_core_common::datatypes::{InitializationKey, InitializedComponentState};
 use proton_core_common::models::{
@@ -12,6 +10,8 @@ use proton_core_common::models::{
 };
 use proton_event_loop::EventLoopError;
 use proton_task_service::{AsyncTaskResult, TaskService};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::task::JoinHandle;
 use tracing::{debug, error, warn};
 
@@ -48,7 +48,17 @@ impl MailUserContext {
     ///
     pub async fn initialize_async(ctx: Arc<Self>) -> Result<(), MailContextError> {
         let ctx_cloned = Arc::clone(&ctx);
-        ctx.initialization_mediator.initialize(ctx_cloned).await
+
+        ctx.init
+            .as_ref()
+            .ok_or_else(|| {
+                // This can happen if someone tries to initialize the context
+                // from within the share extension - that's illegal, because
+                // share extension assumes the context is already initialized
+                anyhow!("Initialization mediator is missing")
+            })?
+            .initialize(ctx_cloned)
+            .await
     }
 
     /// Checks whether initialization process finished suscesfully.

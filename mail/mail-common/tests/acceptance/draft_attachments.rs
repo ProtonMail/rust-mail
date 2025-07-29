@@ -82,7 +82,11 @@ async fn attachment_not_removed_on_error() {
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -150,7 +154,11 @@ async fn remove_attachment_updates_attachment_list() {
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -203,7 +211,11 @@ async fn remove_attachment_by_cid() {
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -312,7 +324,11 @@ async fn removing_non_uploaded_attachment() {
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -415,7 +431,11 @@ async fn removing_uploaded_attachment() {
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -618,7 +638,11 @@ async fn draft_reply_or_forward_creates_new_attachments() {
         .unwrap();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -722,7 +746,10 @@ async fn deleting_draft_metadata_cleans_not_uploaded_attachments() {
     assert_eq!(attachments.len(), 3);
 
     // delete draft.
-    draft.discard(user_ctx.action_queue()).await.unwrap();
+    draft
+        .discard(user_ctx.action_queue(), user_ctx.origin())
+        .await
+        .unwrap();
 
     // Execute actions.
     user_ctx.execute_all_send_actions().await.unwrap();

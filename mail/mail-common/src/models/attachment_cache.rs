@@ -6,10 +6,10 @@ use crate::{AppError, DecryptedAttachment, MailContextError, MailContextResult, 
 use anyhow::Context as _;
 use indoc::indoc;
 use proton_core_api::services::proton::LabelId;
-use proton_core_common::DeleteFilesSafeError;
 use proton_core_common::datatypes::SystemLabel;
 use proton_core_common::models::ModelExtension as _;
 use proton_core_common::os::{safe_write_async, sanitize_filename};
+use proton_core_common::{DeleteFilesSafeError, Origin};
 use proton_crypto_inbox::attachment::DecryptableAttachment as _;
 use proton_crypto_inbox::proton_crypto::crypto::{
     PGPProvider, PGPProviderSync, VerificationResult,
@@ -568,6 +568,10 @@ impl Attachment {
     /// This function ensures that this is called at most once concurrently, and spawns the
     /// cleanup routine in the background if it's not being currently executed.
     pub async fn cleanup_cache(ctx: &MailUserContext) {
+        if ctx.origin() != Origin::App {
+            return;
+        }
+
         // TODO: Possibly run this in a background task instead of once-per.
         pub struct G(Arc<AtomicBool>);
         impl Drop for G {

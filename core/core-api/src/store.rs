@@ -145,7 +145,7 @@ impl<S: ?Sized + Store> Store for Box<S> {
 
 /// A dummy store implementation, used when no store is provided.
 #[derive(Debug, Default)]
-pub(crate) struct TempStore {
+pub struct TempStore {
     auth: Auth,
     info: Option<AuthInfo>,
     data: Option<UserData>,
@@ -153,6 +153,7 @@ pub(crate) struct TempStore {
 }
 
 impl TempStore {
+    #[must_use]
     pub fn boxed() -> Box<dyn Store> {
         Box::new(Self::default())
     }

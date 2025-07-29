@@ -135,8 +135,7 @@ impl MailTestContext {
             .expect("failed to create user context");
 
         // Disable auto queue executor as we don't want these to interfere with our test execution.
-        ctx.terminate_queue_executors();
-
+        ctx.queues().terminate();
         ctx
     }
 
@@ -165,8 +164,7 @@ impl MailTestContext {
             .expect("failed to create user context");
 
         // Disable auto queue executor as we don't want these to interfere with our test execution.
-        ctx.terminate_queue_executors();
-
+        ctx.queues().terminate();
         ctx
     }
 
@@ -187,7 +185,7 @@ impl MailTestContext {
             .await?;
 
         // Disable auto queue executor as we don't want these to interfere with our test execution.
-        ctx.terminate_queue_executors();
+        ctx.queues().terminate();
 
         Ok(ctx)
     }
@@ -205,7 +203,7 @@ impl MailTestContext {
             .unwrap()?;
 
         // Disable auto queue executor as we don't want these to interfere with our test execution.
-        ctx.terminate_queue_executors();
+        ctx.queues().terminate();
 
         Some(ctx)
     }

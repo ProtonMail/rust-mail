@@ -68,7 +68,11 @@ async fn create_empty_draft() {
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -265,7 +269,11 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -280,7 +288,11 @@ dJyN3/sZg/QCLSAKstzw1RgqWAoUdWL9p04IvSDmb7fwbUspBOpZMBZfJp6OfrHt
     draft.bcc_list = new_bcc_list.clone();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -548,7 +560,11 @@ async fn draft_save_failure_creates_send_result_with_correct_origin() {
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -778,7 +794,11 @@ async fn create_draft_reply_with_override_impl(
     .unwrap();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -895,7 +915,11 @@ async fn open_draft_sync_status_success() {
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -962,7 +986,11 @@ async fn open_draft_sync_status_cached() {
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -1004,7 +1032,11 @@ async fn open_new_draft_which_was_not_saved_on_server_should_not_report_cached_s
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -1054,7 +1086,11 @@ async fn new_draft_conversation_remote_id_updated_externally() {
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -1156,7 +1192,11 @@ async fn already_sent_error_move_draft_to_sent_and_schedules_rollback() {
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -1170,7 +1210,11 @@ async fn already_sent_error_move_draft_to_sent_and_schedules_rollback() {
     draft.subject = "Modified".to_owned();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -1353,7 +1397,11 @@ async fn open_draft_resets_password() {
         .unwrap();
 
     draft
-        .save(user_ctx.action_queue(), &user_ctx.user_stash().connection())
+        .save(
+            user_ctx.action_queue(),
+            &user_ctx.user_stash().connection(),
+            user_ctx.origin(),
+        )
         .await
         .unwrap();
 
@@ -1374,6 +1422,7 @@ async fn open_draft_resets_password() {
         .await
         .unwrap()
         .unwrap();
+
     assert!(metadata.password_hint.is_none());
     assert!(metadata.password.is_none());
     assert!(metadata.expiration_time.is_none());
@@ -1491,7 +1540,11 @@ async fn open_draft_catches_invalid_address() {
     // Create draft.
     let mut tether = user_ctx.user_stash().connection();
     let mut draft = Draft::empty(&user_ctx).await.unwrap();
-    draft.save(user_ctx.action_queue(), &tether).await.unwrap();
+
+    draft
+        .save(user_ctx.action_queue(), &tether, user_ctx.origin())
+        .await
+        .unwrap();
 
     // Execute action.
     user_ctx.execute_all_send_actions().await.unwrap();

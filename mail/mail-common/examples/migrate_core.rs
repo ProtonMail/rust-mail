@@ -4,6 +4,7 @@ use proton_core_api::auth::UserKeySecret;
 use proton_core_api::services::proton::muon::client::flow::LoginFlowData;
 use proton_core_api::session::{Config, CoreSession as _};
 use proton_core_api::store::UserData;
+use proton_core_common::Origin;
 use proton_core_common::db::account::SessionEncryptionKey;
 use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::Label;
@@ -43,12 +44,12 @@ async fn prepare_context(tmp_dir: &TempDir) -> (Arc<MailContext>, Arc<dyn KeyCha
         .build();
 
     let context = MailContext::new(
+        Origin::App,
         tmp_dir.path().join("session"),
         tmp_dir.path().join("user"),
         tmp_dir.path().join("core_cache"),
         tmp_dir.path().join("mail_cache"),
         50 * 1204 * 1024,
-        None,
         Arc::clone(&keychain),
         Config::atlas(),
         None,

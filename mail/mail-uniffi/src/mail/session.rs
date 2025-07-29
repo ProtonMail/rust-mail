@@ -25,18 +25,35 @@ use proton_core_common::event_loop::EventPollMode;
 use proton_core_common::models::{AppSettings as RealAppSettings, PinProtection};
 use proton_core_common::os::KeyChainExt;
 use proton_core_common::pin_code::PinCode;
-use proton_core_common::{CoreContextError, OnSessionDeletedResponse};
+use proton_core_common::{CoreContextError, OnSessionDeletedResponse, Origin as RealOrigin};
 use proton_log_service::LogService;
-use proton_mail_common::MailContext;
 use proton_mail_common::context::ShouldInitializeMailUserContext;
-use proton_mail_common::errors::ProtonMailError as RealProtonMailError;
 use proton_mail_common::errors::unexpected::Unexpected;
+use proton_mail_common::errors::{
+    ContextErrorReason, MailErrorReason, ProtonMailError as RealProtonMailError,
+};
+use proton_mail_common::{MailContext, MailContextError};
 use stash::orm::Model;
 use stash::stash::{Stash, WatcherHandle};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, uniffi::Enum)]
+pub enum Origin {
+    App,
+    ShareExt,
+}
+
+impl From<Origin> for RealOrigin {
+    fn from(origin: Origin) -> Self {
+        match origin {
+            Origin::App => Self::App,
+            Origin::ShareExt => Self::ShareExt,
+        }
+    }
+}
 
 /// Mail context is the entry point for the application. It contains important state such as
 /// database connection pools and the async runtime for rust.
@@ -55,6 +72,7 @@ pub struct MailSession {
 /// Configuration parameters for the [`MailSession`]
 #[derive(uniffi::Record)]
 pub struct MailSessionParams {
+    pub origin: Origin,
     pub session_dir: String,
     pub user_dir: String,
     pub mail_cache_dir: String,
@@ -76,47 +94,22 @@ pub fn create_mail_session(
     hv_notifier: Option<DynChallengeNotifier>,
     device_info_provider: Option<DynDeviceInfoProvider>,
 ) -> Result<Arc<MailSession>, UserContextError> {
-    async_runtime()
+    let runtime = match params.origin {
+        Origin::App => async_runtime,
+        Origin::ShareExt => async_runtime_slim,
+    };
+
+    runtime()
         .block_on(async move {
-            create_mail_session_inner(params, None, key_chain, hv_notifier, device_info_provider)
-                .await
+            create_mail_session_inner(params, key_chain, hv_notifier, device_info_provider).await
         })
         .map_err(UserContextError::from)
 }
 
 // NOTE: Callbacks can not be stored in record types, which is why they are still in the
 // constructor.
-/// Create a new mail session with a slim async runtime.
-///
-/// Comparing to [`create_mail_session`] it uses less async task workers and blocking threads, and
-/// operates on lower number of connections, lowering memory consumption in more resource
-/// constrained devices and applications.
-///
-/// # Warning
-///
-/// This function is designed for extension. Do not use it in the main application without thorough testing!
-///
-#[must_use]
-#[uniffi_export]
-pub fn create_mail_ios_extension_session(
-    params: MailSessionParams,
-    key_chain: Box<dyn OSKeyChain>,
-) -> Result<Arc<MailSession>, UserContextError> {
-    // This number is arbitrary
-    async_runtime_slim()
-        .block_on(
-            async move { create_mail_session_inner(params, Some(4), key_chain, None, None).await },
-        )
-        .map_err(UserContextError::from)
-}
-
-// NOTE: Callbacks can not be stored in record types, which is why they are still in the
-// constructor.
-/// Create a new mail session.
-///
 async fn create_mail_session_inner(
     params: MailSessionParams,
-    connection_pool_size: Option<u32>,
     key_chain: Box<dyn OSKeyChain>,
     hv_notifier: Option<DynChallengeNotifier>,
     device_info_provider: Option<DynDeviceInfoProvider>,
@@ -180,27 +173,32 @@ async fn create_mail_session_inner(
     let hv_notifier = hv_notifier.map(ChallengeNotifierWrap::wrap);
     let device_info_provider = device_info_provider.map(DeviceInfoProviderWrap::wrap);
 
-    debug!("Creating Context");
+    debug!(origin = ?params.origin, "Creating Context");
+
+    let poll = match params.origin {
+        Origin::App => EventPollMode::Automatic(Duration::from_secs(30)),
+        Origin::ShareExt => EventPollMode::Manual,
+    };
+
     let mail_ctx = MailContext::new(
+        params.origin.into(),
         session_path,
         user_path,
         core_cache_path,
         mail_cache_path,
         params.mail_cache_size,
-        connection_pool_size,
         Arc::new(key_chain),
         api_env_config,
         hv_notifier,
         device_info_provider,
         log_service,
-        EventPollMode::Automatic(Duration::from_secs(30)),
+        poll,
     )
     .await?;
 
     let user_ctx_map = MailUserContextMap::new();
     let weak_user_ctx_map = Arc::downgrade(&user_ctx_map);
 
-    // Register session cleanup
     mail_ctx
         .core_context()
         .on_session_deleted(move |_session_id, user_id| {
@@ -916,7 +914,6 @@ impl MailSession {
     }
 
     /// When the flow is considered logged in, transform it into a `MailUserContext`.
-    #[must_use]
     pub async fn to_user_context(
         &self,
         ffi_flow: Arc<LoginFlow>,
@@ -933,6 +930,96 @@ impl MailSession {
                     .await
             })
             .map_err(UserContextError::from)
+    }
+
+    /// Converts this session into a [`MailUserSession`] for the primary user.
+    ///
+    /// This is meant to be used only within extensions - in particular, it
+    /// assumes that the primary user is already logged in.
+    pub async fn to_primary_user_context(&self) -> Result<Arc<MailUserSession>, UserContextError> {
+        let ctx = self.mail_ctx.clone();
+        let user_ctxs = self.user_ctx.clone();
+
+        uniffi_async(async move {
+            let Some(account) = ctx
+                .core_context()
+                .get_primary_account()
+                .await
+                .map_err(MailContextError::from)?
+            else {
+                return Err(RealProtonMailError::Reason(MailErrorReason::ContextReason(
+                    ContextErrorReason::UserContextNotInitialized(
+                        "Primary account not found".into(),
+                    ),
+                )));
+            };
+
+            debug!(
+                id=?account.remote_id,
+                "Primary account found, looking for the primary session",
+            );
+
+            let mut primary_session = None;
+
+            let sessions = ctx
+                .core_context()
+                .get_account_sessions(account.remote_id.clone())
+                .await
+                .map_err(MailContextError::from)?;
+
+            for session in sessions {
+                debug!(id=?session.remote_id, "Checking session");
+
+                let Ok(Some(_)) = ctx
+                    .core_context()
+                    .get_session_state(session.remote_id.clone())
+                    .await
+                else {
+                    continue;
+                };
+
+                primary_session = Some(session);
+                break;
+            }
+
+            let Some(primary_session) = primary_session else {
+                warn!("Couldn't find primary session");
+
+                return Err(RealProtonMailError::Reason(MailErrorReason::ContextReason(
+                    ContextErrorReason::UserContextNotInitialized(
+                        "Primary session not found".into(),
+                    ),
+                )));
+            };
+
+            debug!(
+                id=?primary_session.remote_id,
+                "Primary session found, looking for the context",
+            );
+
+            let user_ctx = ctx
+                .initialized_user_context_from_session(&primary_session, None)
+                .await?;
+
+            let Some(user_ctx) = user_ctx else {
+                warn!(
+                    session_id=?primary_session.remote_id,
+                    "Couldn't find initialized context for primary session",
+                );
+
+                return Err(RealProtonMailError::Reason(MailErrorReason::ContextReason(
+                    ContextErrorReason::UserContextNotInitialized(
+                        "Primary session's context is not initialized".into(),
+                    ),
+                )));
+            };
+
+            let ctx = user_ctxs.insert(user_ctx);
+
+            Ok::<_, RealProtonMailError>(MailUserSession::new(ctx))
+        })
+        .await
+        .map_err(UserContextError::from)
     }
 }
 

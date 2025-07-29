@@ -531,7 +531,7 @@ impl DraftAddressChangeRequest {
                     self.metadata_id,
                     AttachmentRemovalId::Local(attachment.local_id.unwrap()),
                 )
-                .queue(context.action_queue(), tether)
+                .queue(context.action_queue(), tether, context.origin())
                 .await
                 .inspect_err(|e| error!("Failed to remove old public key attachment: {e:?}"))?;
             }

@@ -11,7 +11,7 @@ use crate::db::account::{
     CoreAccount, CoreSession, CoreSessionObserver, CoreSessionObserverNotification,
     SessionEncryptionKey,
 };
-use crate::db::migrations::migrate_account_db;
+use crate::db::migrations::{migrate_account_db, verify_account_db};
 use crate::device::{DeviceInfo, DynDeviceInfoProvider};
 use crate::event_loop::EventPollMode;
 use crate::models::{AppSettings, ModelExtension};
@@ -29,6 +29,7 @@ use proton_action_queue::action::{self, Action, WriterGuardError};
 use proton_action_queue::queue::{
     ActionError as QueueActionError, ActionRequeueReason, QueuedError,
 };
+use proton_core_api::auth::{Auth, Tokens};
 use proton_core_api::service::ApiServiceError;
 use proton_core_api::services::proton::muon::client::{Fingerprint, InfoProvider};
 use proton_core_api::services::proton::{BuildError, PrivateEmail};
@@ -36,6 +37,7 @@ use proton_core_api::services::proton::{SessionId, UserId};
 use proton_core_api::session::Config as ApiConfig;
 use proton_core_api::session::Session as ApiSession;
 use proton_core_api::status_watcher::StatusWatcher;
+use proton_core_api::store::TempStore;
 use proton_core_api::verification::DynChallengeNotifier;
 use proton_crypto_account::keys::PGPDeviceKey;
 use proton_crypto_account::proton_crypto::crypto::PGPProviderSync;
@@ -46,11 +48,12 @@ use proton_sqlite3::MigratorError;
 use proton_task_service::{AsyncTaskResult, DefaultTaskSpawner, TaskSpawner};
 use proton_task_service::{BackgroundAwareTaskService, TaskService};
 use proton_vcard::VcardValidationError;
-use secrecy::SecretVec;
+use secrecy::{ExposeSecret, SecretVec};
 use serde_json::json;
 use stash::orm::Model as _;
 use stash::stash::{Stash, StashConfiguration, StashError, WatcherHandle};
 use std::collections::HashMap;
+use std::fs;
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Weak};
@@ -243,6 +246,7 @@ pub type CoreContextResult<T> = Result<T, CoreContextError>;
 #[allow(dead_code)]
 pub struct Context {
     this: Weak<Self>,
+    origin: Origin,
     user_db_path: PathBuf,
     account_db_path: PathBuf,
     account_stash: Stash,
@@ -266,6 +270,7 @@ const SESSION_OBSERVER_BROADCAST_CAPACITY: usize = 8;
 impl Context {
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
+        origin: Origin,
         account_db_path: impl Into<PathBuf>,
         user_db_path: impl Into<PathBuf>,
         key_chain: Arc<dyn KeyChain>,
@@ -274,29 +279,59 @@ impl Context {
         hv_notifier: Option<DynChallengeNotifier>,
         device_info_provider: Option<DynDeviceInfoProvider>,
         cache_path: impl Into<PathBuf>,
-        connection_pool_size: Option<u32>,
         log_service: LogService,
         event_poll_mode: EventPollMode,
     ) -> CoreContextResult<Arc<Self>> {
         let account_db_path = account_db_path.into();
         let user_db_path = user_db_path.into();
-        std::fs::create_dir_all(&account_db_path)?;
-        std::fs::create_dir_all(&user_db_path)?;
+
+        match origin {
+            Origin::App => {
+                fs::create_dir_all(&account_db_path)?;
+                fs::create_dir_all(&user_db_path)?;
+            }
+
+            Origin::ShareExt => {
+                if !account_db_path.exists() {
+                    return Err(anyhow!(
+                        "Account database not found: {}",
+                        account_db_path.display()
+                    )
+                    .into());
+                }
+
+                if !user_db_path.exists() {
+                    return Err(
+                        anyhow!("User database not found: {}", user_db_path.display()).into(),
+                    );
+                }
+            }
+        }
+
         let account_stash_path = get_account_db_path(&account_db_path);
+
         let stash_config = StashConfiguration {
             path: Some(&account_stash_path),
-            pool_size: connection_pool_size,
             ..Default::default()
         };
+
         let account_stash = Stash::new(stash_config)?;
-        migrate_account_db(&account_stash).await?;
+
+        match origin {
+            Origin::App => {
+                migrate_account_db(&account_stash).await?;
+            }
+            Origin::ShareExt => {
+                verify_account_db(&account_stash).await?;
+            }
+        }
 
         let task_service = TaskService::new()?;
-
         let event_service = EventService::new();
 
         let ctx = Arc::new_cyclic(|this| Self {
             this: Weak::clone(this),
+            origin,
             user_db_path,
             account_db_path,
             log_service,
@@ -340,6 +375,11 @@ impl Context {
     #[must_use]
     pub fn as_weak(&self) -> Weak<Self> {
         Weak::clone(&self.this)
+    }
+
+    #[must_use]
+    pub fn origin(&self) -> Origin {
+        self.origin
     }
 
     /// Get all available accounts.
@@ -835,6 +875,17 @@ impl Context {
         session: Option<&CoreSession>,
         status: Option<StatusWatcher>,
     ) -> CoreContextResult<ApiSession> {
+        match self.origin {
+            Origin::App => self.new_api_session_app(session, status).await,
+            Origin::ShareExt => self.new_api_session_ext(session, status).await,
+        }
+    }
+
+    async fn new_api_session_app(
+        &self,
+        session: Option<&CoreSession>,
+        status: Option<StatusWatcher>,
+    ) -> CoreContextResult<ApiSession> {
         let user_id = session.map(|s| &s.account_id).cloned();
         let session_id = session.map(|s| &s.remote_id).cloned();
         let account_stash = self.account_stash().to_owned();
@@ -867,6 +918,48 @@ impl Context {
         }
 
         Ok(builder.build().await?)
+    }
+
+    async fn new_api_session_ext(
+        &self,
+        session: Option<&CoreSession>,
+        status: Option<StatusWatcher>,
+    ) -> CoreContextResult<ApiSession> {
+        let session = session.ok_or_else(|| anyhow!("Missing core session"))?;
+        let user_id = session.account_id.clone();
+        let session_id = session.remote_id.clone();
+
+        let key = self
+            .key_chain
+            .load::<SessionEncryptionKey>()?
+            .ok_or_else(|| anyhow!("Missing session encryption key"))?;
+
+        let tokens = {
+            let acc_tok = session.access_token.decrypt_to_string(&key)?;
+            // TODO explain
+            let ref_tok = "";
+            let scopes = session.auth_scopes.clone().into_inner();
+
+            Tokens::access(acc_tok.expose_secret(), ref_tok, scopes)
+        };
+
+        let auth = Auth::internal(user_id.into_inner(), session_id.into_inner(), tokens);
+
+        let store = {
+            let mut store = TempStore::boxed();
+
+            store.set_auth(auth).await?;
+            store
+        };
+
+        let mut session = ApiSession::builder().with_store(store);
+
+        if let Some(status) = status {
+            session = session.with_status(status);
+        }
+
+        // TODO fork (?)
+        Ok(session.build().await?)
     }
 
     /// Get the stash in use
@@ -1069,6 +1162,15 @@ impl Context {
         });
         Ok(())
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Origin {
+    /// We're running as the application.
+    App,
+
+    /// We're running as the share extension.
+    ShareExt,
 }
 
 #[derive(Error, Debug)]
